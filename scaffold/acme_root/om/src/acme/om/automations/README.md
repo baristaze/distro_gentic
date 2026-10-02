@@ -9,7 +9,9 @@ is made of](../../../../README.md).
   action (start a session, or message a standing one), and limits of its
   own: a cost cap over a period and the share one run may take, a rate,
   a concurrency, whether to queue when limited, and a hop limit. It runs
-  as its creator.
+  as its creator, or as the tenant's automation principal.
+- **Automation principal**: a service principal the tenant grants, one a
+  tenant, holding one role.
 - **Run**: the record of one firing: started, queued, or refused, and
   why; its place in a chain; the session it started or messaged; and the
   budget that holds a started session to its share.
@@ -17,10 +19,15 @@ is made of](../../../../README.md).
 ## What can happen
 
 - **Create** an automation, by a person in person.
+- **Grant** the automation principal a role, by a person who manages the
+  tenant's members, in person, never above their own role. A second
+  grant changes the role and keeps the principal.
 - **Fire.** An event the router placed fires every enabled automation
   whose filters it passes. Each firing is a run.
-- **Tick.** A schedule that is due fires, and queued runs start while
-  the limits let them.
+- **Tick.** Every worker's sweep ticks each tenant once a pass. A
+  schedule fires once for the slot it is in, its creation time and every
+  period after it, whichever worker ticks first; a slot no tick reached
+  is not fired late. Queued runs start while the limits let them.
 
 ## The rules
 
@@ -40,7 +47,12 @@ is made of](../../../../README.md).
 - **A run keeps the event's text only while it is queued.** The
   session it starts holds it from then on.
 - **It runs as its creator,** read live at each firing: a creator who
-  left fires nothing.
+  left fires nothing. **Or as the automation principal,** whose grant is
+  read at each firing and at each call its sessions make: they hold that
+  role's authority and no more, never the creator's and never the
+  service role's. With no principal granted, it fires nothing.
+- **A slot fires once.** Its run's id is derived from the automation and
+  the slot, so several workers at once make one run.
 - **The brief is the creator's word; the event is data.**
 - **Every firing is a recorded run,** and one event makes one run.
 
@@ -48,7 +60,10 @@ is made of](../../../../README.md).
 The limits are asked inside the write that records a run
 (`AutomationStorageInterface.admit`, which holds the automation's row in
 Postgres), from `rules.admitted`. A started session's tree gets a
-`LIFE` budget of `run_cap_micros` before its brief wakes it.
+`LIFE` budget of `run_cap_micros` before its brief wakes it. The
+principal's live context is `root.automation_principals`, the transition
+a root hands `build_managers` too, so its sessions' calls are answered by
+the grant. A slot is `rules.slot`; ADR 2017 has the reasons.
 -->
 
 ## How another namespace composes it

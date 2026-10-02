@@ -10,10 +10,11 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.intake import Wired, wired
-from contracts.loops import reply, said
+from contracts.intake import WORKER, Wired, wired
+from contracts.loops import reply, said, use
 
 from acme.om.agents.types.run import RunEnd
+from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.automations.types.automation import (
     Action,
     ActionKind,
@@ -22,13 +23,15 @@ from acme.om.automations.types.automation import (
     Firing,
     Limits,
     Refusal,
+    RunsAs,
     RunStatus,
     Trigger,
     TriggerKind,
 )
 from acme.om.base import new_id, utcnow
 from acme.om.budgets.types.budget import BudgetScopeKind, WindowKind
-from acme.om.context import Role, TenantContext
+from acme.om.context import RequestContext, Role, TenantContext
+from acme.om.evidence.types.provenance import Provenance
 from acme.om.exceptions import NotAuthorized
 from acme.om.intake.rules import described
 from acme.om.intake.types.event import (
@@ -42,6 +45,7 @@ from acme.om.intake.types.event import (
 from acme.om.intake.types.link import HandleKind
 from acme.om.steps.types.header import InputHeader, ParkReason
 from acme.om.steps.types.step import Actor, StepType
+from acme.om.tenancy.rules import permissions_of
 
 DOLLAR = 1_000_000  # micros
 
@@ -353,6 +357,7 @@ def act_event(path: str, ref: str) -> FeedbackEvent:
     return FeedbackEvent(
         id=new_id(),
         integration="forge",
+        provenance=Provenance.TWIN,
         arrival=arrival,
         author=author,
         names=names,
@@ -427,6 +432,7 @@ async def test_a_failing_check_on_a_sessions_branch_follows_that_session_with_no
     check = FeedbackEvent(
         id=new_id(),
         integration="forge",
+        provenance=Provenance.TWIN,
         arrival=Arrival.CHECK,
         author=Author(kind=AuthorKind.BOT, external_id="ci", name="ci"),
         names=WorkNames(branch=branch),
@@ -436,3 +442,92 @@ async def test_a_failing_check_on_a_sessions_branch_follows_that_session_with_no
     runs_by = await deliver(platform, check)
     assert runs_by[starter.id].refusal is Refusal.OWN_EVENT
     assert (runs_by[other.id].status, runs_by[other.id].hop) == (RunStatus.STARTED, 2)
+
+
+# Schedules, and the automation principal.
+
+
+def scheduled(creator: TenantContext, **changes: object) -> Automation:
+    return automation(
+        created_by=creator.user_id,
+        trigger=Trigger(kind=TriggerKind.SCHEDULE, every=timedelta(hours=1)),
+        **changes,
+    )
+
+
+async def test_a_schedule_fires_once_a_slot_however_often_it_is_ticked(
+    platform: Wired, creator: TenantContext
+) -> None:
+    mine = await platform.automations.create_automation(creator, scheduled(creator))
+    (first,) = await platform.automations.tick(platform.service)
+    assert first.status is RunStatus.STARTED and first.session_id is not None
+    platform.clock.now += timedelta(minutes=59)
+    assert await platform.automations.tick(platform.service) == ()
+    platform.clock.now += timedelta(minutes=1)
+    (second,) = await platform.automations.tick(platform.service)
+    assert second.id != first.id
+    # A slot no tick reached is not fired late: three hours on, one run.
+    platform.clock.now += timedelta(hours=3)
+    assert len(await platform.automations.tick(platform.service)) == 1
+    assert len(await platform.automations.get_runs(platform.owner, mine.id, 10)) == 3
+
+
+async def test_the_automation_principal_is_granted_in_person_up_to_the_granters_role(
+    platform: Wired,
+) -> None:
+    admin = platform.person(Role.ADMIN)
+    with pytest.raises(NotAuthorized):
+        await platform.automations.grant_principal(platform.person(Role.MEMBER), Role.VIEWER)
+    with pytest.raises(NotAuthorized):
+        await platform.automations.grant_principal(await platform.agents_call(admin), Role.VIEWER)
+    for above in (Role.OWNER, Role.SERVICE):
+        with pytest.raises(NotAuthorized):
+            await platform.automations.grant_principal(admin, above)
+    granted = await platform.automations.grant_principal(admin, Role.MEMBER)
+    again = await platform.automations.grant_principal(admin, Role.VIEWER)
+    assert (again.id, again.role, again.granted_by) == (granted.id, Role.VIEWER, admin.user_id)
+    assert await platform.automations.get_principal(platform.owner) == again
+
+
+async def test_an_automation_run_as_the_principal_holds_its_role_alone(
+    platform: Wired, creator: TenantContext
+) -> None:
+    """Its session is the principal's, its calls run as the principal, and
+    the transition answers for it with the granted role, never the
+    creator's and never the service role's. A role that cannot start the
+    work starts none, though its creator could."""
+    granted = await platform.automations.grant_principal(platform.owner, Role.MEMBER)
+    await platform.automations.create_automation(
+        creator, scheduled(creator, runs_as=RunsAs.AUTOMATION_PRINCIPAL)
+    )
+    (run,) = await platform.automations.tick(platform.service)
+    assert run.status is RunStatus.STARTED and run.session_id is not None
+    session = await platform.managers.agent_sessions.get_session(platform.owner, run.session_id)
+    assert session.created_by == granted.id != creator.user_id
+    platform.anthropic.add(reply(use("lookup")), reply(said("Looked it up.")))
+    assert (await platform.loops.run(platform.service, run.session_id)).end is RunEnd.ENDED
+    assert platform.lookup.ran_as == [granted.id]
+    live = await platform.principals(
+        RequestContext(request_id=new_id(), app=WORKER),
+        platform.owner.org_id,
+        Principal(kind=PrincipalKind.PERSON, id=granted.id),
+    )
+    assert (live.role, live.security.permissions) == (Role.MEMBER, permissions_of(Role.MEMBER))
+    await platform.automations.grant_principal(platform.owner, Role.VIEWER)
+    platform.clock.now += timedelta(hours=1)
+    (refused,) = await platform.automations.tick(platform.service)
+    assert (refused.status, refused.refusal, refused.session_id) == (
+        RunStatus.REFUSED,
+        Refusal.ACTION,
+        None,
+    )
+
+
+async def test_an_automation_run_as_no_granted_principal_fires_nothing(
+    platform: Wired, creator: TenantContext
+) -> None:
+    await platform.automations.create_automation(
+        creator, scheduled(creator, runs_as=RunsAs.AUTOMATION_PRINCIPAL)
+    )
+    (run,) = await platform.automations.tick(platform.service)
+    assert (run.status, run.refusal) == (RunStatus.REFUSED, Refusal.PRINCIPAL)

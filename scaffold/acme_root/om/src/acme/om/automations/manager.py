@@ -1,7 +1,7 @@
 """The automations swimlane: events turned into bounded work. A trigger, an
 event with filters or a schedule, leads to an action: start a session, or
-message a standing one. An automation runs as its creator, inside limits
-of its own: a cost cap, a rate, a concurrency, and whether to queue when
+message a standing one. An automation runs as its creator or as the
+tenant's automation principal, inside limits of its own: a cost cap, a rate, a concurrency, and whether to queue when
 limited. It ignores the events its own sessions caused unless it declares
 otherwise, and a chain of automations stops at a hop limit. Every firing
 is a recorded run."""
@@ -9,8 +9,13 @@ is a recorded run."""
 from abc import ABC, abstractmethod
 from uuid import UUID
 
-from acme.om.automations.types.automation import Automation, AutomationRun, Firing
-from acme.om.context import TenantContext
+from acme.om.automations.types.automation import (
+    Automation,
+    AutomationPrincipal,
+    AutomationRun,
+    Firing,
+)
+from acme.om.context import Role, TenantContext
 
 
 class AutomationsManagerInterface(ABC):
@@ -20,6 +25,20 @@ class AutomationsManagerInterface(ABC):
         agent's call runs under is `NotAuthorized`, so no agent sets work
         going for itself. Its creator is the caller, whom it runs as. An id
         written already answers the automation as stored."""
+        ...
+
+    @abstractmethod
+    async def grant_principal(self, ctx: TenantContext, role: Role) -> AutomationPrincipal:
+        """The tenant's automation principal granted `role`, by a person who
+        manages its members, in person: a context an agent's call runs under
+        is `NotAuthorized`, and so is a role above the granter's own or the
+        service role. One a tenant: a grant over a standing one changes its
+        role and keeps its id, and the next firing reads the new role."""
+        ...
+
+    @abstractmethod
+    async def get_principal(self, ctx: TenantContext) -> AutomationPrincipal:
+        """The tenant's automation principal; `NotFound` when none is granted."""
         ...
 
     @abstractmethod
@@ -46,9 +65,12 @@ class AutomationsManagerInterface(ABC):
 
     @abstractmethod
     async def tick(self, ctx: TenantContext) -> tuple[AutomationRun, ...]:
-        """Fires the tenant's schedules that are due, and takes up every
-        automation's queued runs while its limits let them start; answers
-        the runs it made or moved."""
+        """Fires each of the tenant's schedules once for the slot it is in, and
+        takes up every automation's queued runs while its limits let them
+        start; answers the runs it made or moved. A slot's run takes an id
+        derived from the automation and the slot, so the ticks of several
+        workers in one slot make one run, and a slot fired already fires
+        nothing."""
         ...
 
     @abstractmethod

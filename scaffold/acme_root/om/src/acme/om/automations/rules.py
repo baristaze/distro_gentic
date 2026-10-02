@@ -132,9 +132,12 @@ def tally(runs: list[AutomationRun], since: datetime) -> Tally:
     )
 
 
-def due(trigger: Trigger, last: datetime | None, now: datetime) -> bool:
-    """Whether a schedule fires now: it never has, or `every` has passed
-    since it last did."""
-    if trigger.kind is not TriggerKind.SCHEDULE or trigger.every is None:
-        return False
-    return last is None or now - last >= trigger.every
+def slot(trigger: Trigger, anchor: datetime, now: datetime) -> datetime | None:
+    """The time a schedule fires for at `now`: the latest of `anchor` and
+    every `every` after it, at or before `now`. Every worker's tick in one
+    slot names the same time, so the slot fires once however many ask; a
+    slot that passed while no tick came is not fired late. None for an event
+    trigger, or before the anchor."""
+    if trigger.kind is not TriggerKind.SCHEDULE or trigger.every is None or now < anchor:
+        return None
+    return anchor + ((now - anchor) // trigger.every) * trigger.every
