@@ -39,7 +39,11 @@ class PrivacyManagerInterface(ABC):
         """Erases the session's content: every version of its key is
         destroyed, and the session takes no content again. Its steps keep
         their place, their type, and their shape, and read as absent. Once,
-        and announced; a revoked session is answered as it is."""
+        and announced; a revoked session is answered as it is. A session
+        marked deleted is hidden from every read, and its content is still
+        the tenant's to erase: it is revoked while the tenant holds the
+        record of its key. `NotFound` when the tenant holds neither the
+        session nor such a record."""
         ...
 
     @abstractmethod

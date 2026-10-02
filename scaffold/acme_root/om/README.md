@@ -207,6 +207,9 @@ arrive twice, so the second copy gets the first one's answer.
 - A project names its org and binds one repository. A session belongs
   to at most one project, of its own org, set before it exists and
   never moved; a session it spawns or hands work to belongs to the same.
+- A session takes its tenant's retention policy as a snapshot when it is
+  created, so a tightening reaches it and a loosening never does. A
+  policy names its org, one each, and a snapshot its session.
 - Every model call passes the gate first, charged to the scopes it
   serves: its session, its tree, the person who pays, a project, a team,
   or the org. A budget, its holds, and their settlements name their org.
@@ -231,6 +234,7 @@ arrive twice, so the second copy gets the first one's answer.
 - [Attribution](src/acme/om/attribution/README.md)
 - [Privacy](src/acme/om/privacy/README.md)
 - [Projects](src/acme/om/projects/README.md)
+- [Retention](src/acme/om/retention/README.md)
 - [Budgets](src/acme/om/budgets/README.md)
 - [Models](src/acme/om/models/README.md)
 - [Windows](src/acme/om/windows/README.md)

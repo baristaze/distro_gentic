@@ -24,6 +24,7 @@ from acme.om.models.impl.manager import ModelsOptions
 from acme.om.orchestrations.impl.manager import OrchestrationsOptions
 from acme.om.placement.impl.manager import PlacementOptions
 from acme.om.projects.impl.manager import ProjectsOptions
+from acme.om.retention.impl.manager import RetentionOptions
 from acme.om.root import Managers, build_managers
 from acme.om.steps.impl.manager import StepsOptions
 from acme.om.storage.impl.postgres import StoragePostgresImpl
@@ -48,6 +49,11 @@ AGENT_SESSION_PURGE_BATCH = 100
 """Sessions one purge across tenants takes up. Each costs a claim, a batch of
 its history, and its row, three statements apiece, so the batch is smaller
 than the rows'."""
+
+RETENTION_SWEEP_BATCH = 100
+"""Sessions one retention sweep takes up. A session past its content's life
+costs a call to its tenant's key service, the engine's revocation, and an
+audit entry, so the batch is smaller than the rows'."""
 
 
 def events_options(settings: MaintenanceSettings) -> EventsOptions:
@@ -104,6 +110,7 @@ def worker_managers(
         budgets_options=BudgetsOptions(purge_batch=batch),
         models_options=ModelsOptions(purge_batch=batch),
         tools_options=ToolsOptions(purge_batch=batch),
+        retention_options=RetentionOptions(sweep_batch=RETENTION_SWEEP_BATCH, purge_batch=batch),
         placement_options=PlacementOptions(purge_batch=batch),
         projects_options=ProjectsOptions(purge_batch=batch),
     )
