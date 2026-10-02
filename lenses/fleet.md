@@ -254,7 +254,9 @@ signals missing.
 
 **Severity.** medium
 
-**Check.** review
+**Check.** `distro-check` decides that no metric is labelled by a
+tenant, a host, a session, a person, a request, a workspace, a station,
+or a project; the rest is judged.
 
 ## FLT-13 One run's request id crosses the runner, the host, and its steps
 
