@@ -11,6 +11,7 @@ from uuid import UUID
 
 import pytest
 from contracts.agent_session_storage import make_session
+from unit.test_placement import exec_on
 
 from acme.infra.impl.local import InfraLocalImpl
 from acme.om.base import new_id, utcnow
@@ -383,7 +384,7 @@ async def test_a_host_is_handed_only_the_work_pinned_to_its_pool(
         owner, an_item(owner, WorkKind.WORKSPACE, prepare_in(theirs.id))
     )
     on_their_host = await managers.work.enqueue(
-        owner, an_item(owner, WorkKind.EXEC, {"host_id": str(theirs_host.host_id)})
+        owner, an_item(owner, WorkKind.EXEC, exec_on(theirs_host.host_id))
     )
     from_another_tenant = await managers.work.enqueue(
         other, an_item(other, WorkKind.WORKSPACE, prepare_in(foreign.id))

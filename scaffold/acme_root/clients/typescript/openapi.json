@@ -568,6 +568,19 @@
         "title": "ControlCommand",
         "type": "string"
       },
+      "ControlKind": {
+        "description": "What one line of a host's control stream says.",
+        "enum": [
+          "wake",
+          "ping",
+          "cancel",
+          "interrupt",
+          "deadline",
+          "revoke"
+        ],
+        "title": "ControlKind",
+        "type": "string"
+      },
       "ControlRequest": {
         "additionalProperties": false,
         "description": "A control. An interrupt names the seq of the tool request it stops,\nand no other control names one.",
@@ -592,6 +605,43 @@
           "command"
         ],
         "title": "ControlRequest",
+        "type": "object"
+      },
+      "ControlView": {
+        "description": "One line of a host's control stream. `wake` asks it to claim now,\n`ping` keeps the stream open, and the rest end the item named at once.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "item_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Id"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ControlKind"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "ControlView",
         "type": "object"
       },
       "CreateLabRequest": {
@@ -787,6 +837,43 @@
           "internal"
         ],
         "title": "CredentialKind",
+        "type": "string"
+      },
+      "CrossingBody": {
+        "additionalProperties": false,
+        "description": "What the sender declares of the bytes it sends: what they are, their\nSHA-256 in hex, and their size.",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/CrossingKind"
+          },
+          "sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          },
+          "size": {
+            "minimum": 0.0,
+            "title": "Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "sha256",
+          "size"
+        ],
+        "title": "CrossingBody",
+        "type": "object"
+      },
+      "CrossingKind": {
+        "enum": [
+          "enrollment",
+          "claim",
+          "stream_part",
+          "artifact",
+          "result"
+        ],
+        "title": "CrossingKind",
         "type": "string"
       },
       "DecisionRequest": {
@@ -1135,6 +1222,93 @@
           "org_id"
         ],
         "title": "ExchangeSessionRequest",
+        "type": "object"
+      },
+      "ExecDetailView": {
+        "description": "An item the host holds: the call, the workspace, and the operation.",
+        "properties": {
+          "call_id": {
+            "format": "uuid",
+            "title": "Call Id",
+            "type": "string"
+          },
+          "deadline": {
+            "format": "date-time",
+            "title": "Deadline",
+            "type": "string"
+          },
+          "effect": {
+            "title": "Effect",
+            "type": "string"
+          },
+          "epoch": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Epoch"
+          },
+          "item_id": {
+            "format": "uuid",
+            "title": "Item Id",
+            "type": "string"
+          },
+          "location": {
+            "title": "Location",
+            "type": "string"
+          },
+          "org_id": {
+            "format": "uuid",
+            "title": "Org Id",
+            "type": "string"
+          },
+          "request": {
+            "additionalProperties": true,
+            "title": "Request",
+            "type": "object"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "spec": {
+            "additionalProperties": true,
+            "title": "Spec",
+            "type": "object"
+          }
+        },
+        "required": [
+          "item_id",
+          "call_id",
+          "org_id",
+          "session_id",
+          "effect",
+          "deadline",
+          "epoch",
+          "spec",
+          "location",
+          "request"
+        ],
+        "title": "ExecDetailView",
+        "type": "object"
+      },
+      "ExecLeaseView": {
+        "properties": {
+          "lease_expires_at": {
+            "format": "date-time",
+            "title": "Lease Expires At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "lease_expires_at"
+        ],
+        "title": "ExecLeaseView",
         "type": "object"
       },
       "FilePageView": {
@@ -2837,6 +3011,14 @@
         "title": "Origin",
         "type": "string"
       },
+      "OutputStream": {
+        "enum": [
+          "stdout",
+          "stderr"
+        ],
+        "title": "OutputStream",
+        "type": "string"
+      },
       "OwnedOrgRef": {
         "description": "An org named in a refusal: enough to find it and to say which.",
         "properties": {
@@ -2906,6 +3088,36 @@
           "retry_at"
         ],
         "title": "ParkView",
+        "type": "object"
+      },
+      "PartRequest": {
+        "additionalProperties": false,
+        "description": "One part of an item's output, in the order the host read it.",
+        "properties": {
+          "crossing": {
+            "$ref": "#/components/schemas/CrossingBody"
+          },
+          "data": {
+            "maxLength": 90000,
+            "title": "Data",
+            "type": "string"
+          },
+          "seq": {
+            "minimum": 0.0,
+            "title": "Seq",
+            "type": "integer"
+          },
+          "stream": {
+            "$ref": "#/components/schemas/OutputStream"
+          }
+        },
+        "required": [
+          "seq",
+          "stream",
+          "data",
+          "crossing"
+        ],
+        "title": "PartRequest",
         "type": "object"
       },
       "Permission": {
@@ -3170,6 +3382,26 @@
           "before"
         ],
         "title": "ReorderRequest",
+        "type": "object"
+      },
+      "ResultRequest": {
+        "additionalProperties": false,
+        "description": "How an item ended: the JSON of an exec result, in base64.",
+        "properties": {
+          "crossing": {
+            "$ref": "#/components/schemas/CrossingBody"
+          },
+          "data": {
+            "maxLength": 16000000,
+            "title": "Data",
+            "type": "string"
+          }
+        },
+        "required": [
+          "data",
+          "crossing"
+        ],
+        "title": "ResultRequest",
         "type": "object"
       },
       "RevokedDaemonView": {
@@ -8582,6 +8814,106 @@
         ]
       }
     },
+    "/v1/hosts/me/control": {
+      "get": {
+        "description": "The host's control stream, after the message `after` names.",
+        "operationId": "control_v1_hosts_me_control_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlView"
+                }
+              },
+              "application/x-ndjson": {}
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Control",
+        "tags": [
+          "relay"
+        ]
+      }
+    },
     "/v1/hosts/me/credentials": {
       "post": {
         "description": "The host's next credential; the one it called with ends after a short\ngrace.",
@@ -8661,6 +8993,380 @@
         "summary": "Rotate",
         "tags": [
           "hosts"
+        ]
+      }
+    },
+    "/v1/hosts/me/exec/{item_id}": {
+      "get": {
+        "description": "What the host runs for an item it holds: the command or the file\noperation, opened, with its deadline, its writer epoch, and where the\nworkspace is.",
+        "operationId": "detail_v1_hosts_me_exec__item_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecDetailView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Detail",
+        "tags": [
+          "relay"
+        ]
+      }
+    },
+    "/v1/hosts/me/exec/{item_id}/lease": {
+      "post": {
+        "description": "Renews the host's lease on the item while it runs.",
+        "operationId": "extend_v1_hosts_me_exec__item_id__lease_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecLeaseView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Extend",
+        "tags": [
+          "relay"
+        ]
+      }
+    },
+    "/v1/hosts/me/exec/{item_id}/parts": {
+      "post": {
+        "description": "One part of the item's output. A part sent again lands once.",
+        "operationId": "push_part_v1_hosts_me_exec__item_id__parts_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Push Part",
+        "tags": [
+          "relay"
+        ]
+      }
+    },
+    "/v1/hosts/me/exec/{item_id}/result": {
+      "post": {
+        "description": "How the item ended, stored under its call's key. The first\nsettlement wins: one its lease or a stop settled already is refused.",
+        "operationId": "push_result_v1_hosts_me_exec__item_id__result_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResultRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Push Result",
+        "tags": [
+          "relay"
         ]
       }
     },

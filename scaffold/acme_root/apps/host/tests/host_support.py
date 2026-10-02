@@ -1,7 +1,9 @@
 """The whole API in-process behind a host: the app runs inside its lifespan,
-and the host's client reaches it through a transport that stamps each
-answer's `Date`, as the server in front of it does."""
+and the host's client reaches it through a transport that streams each
+answer as the app sends it, as a server does, and stamps its `Date`, as the
+server in front of it does."""
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -22,6 +24,79 @@ from acme.om.context import TenantContext
 from acme.om.hosts.types.pool import HostPool
 from acme.services.api.app import create_app
 from acme.services.api.container import AppContainer
+
+
+class Streamed(httpx.AsyncBaseTransport):
+    """The app in-process, its answer handed over once it starts and its
+    body as it is sent: httpx's own ASGI transport holds an answer until the
+    app ends it, which a control stream never does by itself. Closing the
+    answer is the client going away."""
+
+    def __init__(self, app: FastAPI) -> None:
+        self._app = app
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        body = b"".join([chunk async for chunk in request.stream])  # type: ignore[union-attr]
+        scope = {
+            "type": "http",
+            "asgi": {"version": "3.0"},
+            "http_version": "1.1",
+            "method": request.method,
+            "headers": [(key.lower(), value) for key, value in request.headers.raw],
+            "scheme": request.url.scheme,
+            "path": request.url.path,
+            "raw_path": request.url.raw_path.split(b"?")[0],
+            "query_string": request.url.query,
+            "server": (request.url.host, request.url.port),
+            "client": ("127.0.0.1", 123),
+            "root_path": "",
+        }
+        chunks: asyncio.Queue[bytes | None] = asyncio.Queue()
+        started: asyncio.Future[tuple[int, list[tuple[bytes, bytes]]]] = (
+            asyncio.get_running_loop().create_future()
+        )
+        gone = asyncio.Event()
+        asked = False
+
+        async def receive() -> dict[str, object]:
+            nonlocal asked
+            if not asked:
+                asked = True
+                return {"type": "http.request", "body": body, "more_body": False}
+            await gone.wait()
+            return {"type": "http.disconnect"}
+
+        async def send(message: dict[str, object]) -> None:
+            if message["type"] == "http.response.start":
+                started.set_result((message["status"], message.get("headers", [])))  # type: ignore[arg-type]
+            elif message["type"] == "http.response.body":
+                if message.get("body"):
+                    await chunks.put(message["body"])  # type: ignore[arg-type]
+                if not message.get("more_body"):
+                    await chunks.put(None)
+
+        async def serve() -> None:
+            try:
+                await self._app(scope, receive, send)  # type: ignore[arg-type]
+            except Exception as error:
+                if not started.done():
+                    started.set_exception(error)
+            finally:
+                await chunks.put(None)
+
+        task = asyncio.ensure_future(serve())
+        status, headers = await started
+
+        class Body(httpx.AsyncByteStream):
+            async def __aiter__(self) -> AsyncIterator[bytes]:
+                while (chunk := await chunks.get()) is not None:
+                    yield chunk
+
+            async def aclose(self) -> None:
+                gone.set()
+                task.cancel()
+
+        return httpx.Response(status, headers=headers, stream=Body())
 
 
 class Dated(httpx.AsyncBaseTransport):
@@ -103,5 +178,5 @@ async def stack(tmp_path: Path) -> AsyncIterator[Stack]:
         owner, _ = await container.managers.tenancy.bootstrap(
             seed_request(), "Ajax", "ajax", "ann@example.test", "Ann"
         )
-        transport = Dated(httpx.ASGITransport(app=app, raise_app_exceptions=False))
+        transport = Dated(Streamed(app))
         yield Stack(container=container, transport=transport, owner=owner)
