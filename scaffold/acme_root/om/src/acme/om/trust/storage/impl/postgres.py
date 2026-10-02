@@ -109,6 +109,30 @@ class TrustStoragePostgresImpl(PgStorageBase, TrustStorageInterface):
             rows = (await session.execute(stmt)).scalars().all()
             return [to_model(row, ProviderKey) for row in rows]
 
+    async def refuse_key(self, org_id: UUID, key: ProviderKey) -> bool:
+        # Live at the version read, in the WHERE: a key rotated or refused
+        # meanwhile stays as it is.
+        stmt = (
+            update(ProviderKeys)
+            .where(
+                ProviderKeys.id == key.id,
+                ProviderKeys.org_id == org_id,
+                ProviderKeys.status == KeyStatus.LIVE.value,
+                ProviderKeys.version == key.version - 1,
+            )
+            .values(
+                status=key.status.value,
+                version=key.version,
+                updated_at=key.updated_at,
+                updated_by=key.updated_by,
+            )
+            .returning(ProviderKeys.id)
+        )
+        async with self._session_for(stmt, org_id=org_id) as session:
+            landed = (await session.execute(stmt)).scalar_one_or_none() is not None
+            await session.commit()
+            return landed
+
     async def touch_key(self, org_id: UUID, key_id: UUID, at: datetime) -> None:
         stmt = (
             update(ProviderKeys)

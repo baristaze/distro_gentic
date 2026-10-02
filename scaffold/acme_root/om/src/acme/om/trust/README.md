@@ -43,8 +43,13 @@ of](../../../../README.md).
   the key. A key saved gets a new reference and becomes the live one;
   the key it replaces is marked rotated, and its value leaves the store.
 - **Serve a client.** A client built on a key is kept by the key's
-  reference. The live reference is read on every call, so a client
-  built on a rotated key is never served again.
+  reference, and served with it. The live reference is read on every
+  call, so a client built on a rotated key is never served again.
+- **Refuse a key.** A key the provider does not authenticate on a call
+  is marked refused and its client closed; its value is kept. Every
+  session that needs it waits until the tenant saves a new one. A
+  permission the key lacks refuses nothing: only the session that met it
+  waits.
 - **Read as an operator.** An operator with `read` reads a session's
   shape: its steps' places, types, and headers. Opening what it says
   takes a content grant in that tenant, and each opening lands in the
@@ -65,7 +70,7 @@ of](../../../../README.md).
   reaches a customer's host. A secret held inside the wall never crosses
   into the cloud. A secret never declared is a cloud secret.
 - **A station's secret stays on its host.**
-- **A rotated key is never served.**
+- **A rotated key is never served,** and neither is a refused one.
 - **The tenant sees its key, never its value.**
 - **`read` never opens content**, and neither does `write`. Only a
   grant the grant job writes does ([ADR

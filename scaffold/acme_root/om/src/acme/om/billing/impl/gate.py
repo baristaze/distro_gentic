@@ -95,14 +95,19 @@ class MoneyGateImpl(MoneyGateInterface):
         return answer if isinstance(answer, Refusal) else answer.hold
 
     async def authorize_priced(
-        self, ctx: TenantContext, request: HoldRequest, priced: PricedAt | None
+        self,
+        ctx: TenantContext,
+        request: HoldRequest,
+        priced: PricedAt | None,
+        *,
+        credential: str | None = None,
     ) -> FundedHold | Refusal:
         ctx.require(Permission.WRITE)
         if request.spender_id is None:
             raise SpenderUnknown("the engine cannot tell who pays for this call; nothing is spent")
         now = self._clock()
         account = await self._account(ctx)
-        funding = funding_of(account, self._plans, self._units, now)
+        funding = funding_of(account, self._plans, self._units, now, carried=credential)
         assert account is not None
         bound = self._options.max_lines
         found = await self._budgets.read_budgets_for(ctx.org_id, request.scopes, bound + 1)
@@ -262,6 +267,8 @@ class MoneyCallGateImpl(CallGateInterface):
         role: ModelRole,
         fill: Fill,
         call: ModelCall,
+        *,
+        credential: str,
     ) -> UUID:
         session = await self._sessions.get_session(ctx, session_id)
         priced = PricedAt(
@@ -275,7 +282,7 @@ class MoneyCallGateImpl(CallGateInterface):
             session_id=session_id,
             purpose=role,
         )
-        answer = await self._gate.authorize_priced(ctx, request, priced)
+        answer = await self._gate.authorize_priced(ctx, request, priced, credential=credential)
         if isinstance(answer, Refusal):
             raise BudgetRefused(answer)
         return answer.id

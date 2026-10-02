@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from uuid import UUID
@@ -9,10 +10,17 @@ from acme.om.base import utcnow
 from acme.om.context import Permission, TenantContext
 from acme.om.exceptions import NotFound, Unavailable
 from acme.om.trust.exceptions import KeyRefused
-from acme.om.trust.keys import ClientFactory, KeyProbeInterface, ProviderClientsInterface
+from acme.om.trust.keys import (
+    ClientFactory,
+    KeyProbeInterface,
+    ProviderClientsInterface,
+    TenantClient,
+)
 from acme.om.trust.rules import used_since
 from acme.om.trust.storage import TrustStorageInterface
-from acme.om.trust.types.provider_key import key_secret_name
+from acme.om.trust.types.provider_key import KeyStatus, key_secret_name
+
+log = logging.getLogger(__name__)
 
 
 class KeyProbeAbsentImpl(KeyProbeInterface):
@@ -64,9 +72,7 @@ class ProviderClientsCachedImpl(ProviderClientsInterface):
         self._clients: dict[UUID, ModelProviderInterface] = {}
         self._live: dict[tuple[UUID, ProviderName], UUID] = {}
 
-    async def client_for(
-        self, ctx: TenantContext, provider: ProviderName
-    ) -> ModelProviderInterface:
+    async def client_for(self, ctx: TenantContext, provider: ProviderName) -> TenantClient:
         ctx.require(Permission.WRITE)
         key = await self._storage.read_live_key(ctx.org_id, provider)
         if key is None:
@@ -88,4 +94,28 @@ class ProviderClientsCachedImpl(ProviderClientsInterface):
         now = self._clock()
         if used_since(key.last_used_at, now, self._use_grain):
             await self._storage.touch_key(ctx.org_id, key.id, now)
-        return client
+        return TenantClient(reference=key.id, client=client)
+
+    async def refuse(self, ctx: TenantContext, provider: ProviderName, reference: UUID) -> None:
+        ctx.require(Permission.WRITE)
+        key = await self._storage.read_live_key(ctx.org_id, provider)
+        if key is None or key.id != reference:
+            return
+        refused = key.model_copy(
+            update={
+                "status": KeyStatus.REFUSED,
+                "version": key.version + 1,
+                "updated_at": self._clock(),
+                "updated_by": ctx.user_id,
+            }
+        )
+        if not await self._storage.refuse_key(ctx.org_id, refused):
+            return
+        log.warning("%s refused the key %s of org %s", provider.value, key.id, ctx.org_id)
+        # Its client closes, and nothing offers it to a call again. Its value
+        # stays where it is until the tenant replaces the key.
+        if self._live.get((ctx.org_id, provider)) == key.id:
+            del self._live[(ctx.org_id, provider)]
+        stale = self._clients.pop(key.id, None)
+        if stale is not None:
+            await stale.close()

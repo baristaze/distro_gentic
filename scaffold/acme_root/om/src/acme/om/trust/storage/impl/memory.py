@@ -79,6 +79,18 @@ class TrustStorageMemoryImpl(MemoryStorageBase, TrustStorageInterface):
         rows = self._rows(self._keys, org_id)
         return sorted(rows, key=lambda k: (k.created_at, k.id), reverse=True)[:limit]
 
+    async def refuse_key(self, org_id: UUID, key: ProviderKey) -> bool:
+        async with self._lock:
+            found = self._get(self._keys, org_id, key.id)
+            if (
+                found is None
+                or found.status is not KeyStatus.LIVE
+                or found.version != key.version - 1
+            ):
+                return False
+            self._put(self._keys, org_id, key)
+            return True
+
     async def touch_key(self, org_id: UUID, key_id: UUID, at: datetime) -> None:
         async with self._lock:
             found = self._get(self._keys, org_id, key_id)
