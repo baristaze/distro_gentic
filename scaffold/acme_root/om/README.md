@@ -98,6 +98,17 @@ and says which budgets are in the way and when each resets. A refused
 loop waits, never fails, until the budget is raised or resets. After
 the call, the hold is settled at what the call really cost.
 
+## Billing
+
+An **account** says who pays for an org's agents: the platform's key,
+billed to the org, or the org's own key. Every hold, settlement, and
+**charge** is an entry of one **ledger**, written once. A call on the
+platform's key is paid from **buckets** in a fixed order: the plan's
+included units, granted units, prepaid **credits**, and a line of credit.
+A credit counts only once the payment provider confirms it. A limit's
+day and week follow the org's time zone, and its month the billing
+period.
+
 ## Models
 
 A **model role** is a job an agent session hands a model: the agent's
@@ -157,6 +168,26 @@ item waits for that place.
 An org's **fair share** says which lane its loops wait in, its plan's or
 one of its own, and how many of them run at once. The platform's
 operators set it. A loop over it waits its turn and never fails.
+
+## The agents the platform ships
+
+The platform ships four kinds of agent. The **engineer** takes an
+objective to a validated, reviewable change in a workspace of its own.
+**Analysis** reads what a run produced and turns it into findings. The
+**planner** turns findings into tasks, and hands new work to an
+engineer. The **platform assistant** answers the people who set up and
+run their part of the platform: it explains the product from its
+documentation and cites it, reads where a session stands, drafts the
+tool policy for a person to apply, and hands engineering work to an
+engineer. It acts on a person's own permissions, and it has no
+workspace, no repository, no shell, and no station.
+
+Nothing chooses an agent for a message: a person chooses by choosing
+the session they type in.
+
+A **validation session** runs one check on a station, with no agent and
+no model. Its work waits in its lab's lane like any station work, and
+its run is recorded like any other run.
 
 ## Where tools work
 
@@ -234,6 +265,8 @@ arrive twice, so the second copy gets the first one's answer.
   policy names its org and its project, one each.
 - A fair share names its org, one each, and the lane of every loop the
   org asks for is read off it.
+- A validation session names its org, and its station work is a work
+  item that names the session.
 - A session's workspace names its org and its session, one each, and an
   egress allowlist its org and its project, one each.
 
@@ -248,12 +281,14 @@ arrive twice, so the second copy gets the first one's answer.
 - [Privacy](src/acme/om/privacy/README.md)
 - [Retention](src/acme/om/retention/README.md)
 - [Budgets](src/acme/om/budgets/README.md)
+- [Billing](src/acme/om/billing/README.md)
 - [Models](src/acme/om/models/README.md)
 - [Windows](src/acme/om/windows/README.md)
 - [Tools](src/acme/om/tools/README.md)
 - [Evidence](src/acme/om/evidence/README.md)
 - [Placement](src/acme/om/placement/README.md)
 - [Trust](src/acme/om/trust/README.md)
+- [The platform's agents](src/acme/om/platform_agents/README.md)
 - [Workspaces](src/acme/om/workspaces/README.md)
 - [Events](src/acme/om/events/README.md)
 - [Outbox rows](src/acme/om/outbox/README.md)

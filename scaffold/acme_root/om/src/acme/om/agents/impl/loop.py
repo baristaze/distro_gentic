@@ -40,11 +40,13 @@ from acme.om.exceptions import (
     BudgetRefused,
     CompactionFailed,
     ContextOverflow,
+    GateParked,
     NoSpender,
     NotAuthorized,
     NotFound,
     PlatformException,
     PrincipalLapsed,
+    SpenderUnknown,
     StaleWriter,
     Unavailable,
     UnpricedModel,
@@ -413,13 +415,15 @@ class LoopManagerImpl(LoopManagerInterface):
 
     async def _refused(self, run: _Run, refused: PlatformException) -> LoopRun:
         """What stops a model turn before its call is made: the gate's refusal
-        parks on the budget, nobody to pay parks for a person, and a window
-        that cannot be read ends the loop. Anything else is not the loop's to
-        answer."""
+        parks on the budget, a gate that parks the call parks where it says,
+        nobody to pay parks for a person, and a window that cannot be read
+        ends the loop. Anything else is not the loop's to answer."""
         match refused:
             case BudgetRefused():
                 return await self._park(run, budget_park(refused.refusal, self._clock()))
-            case NoSpender():
+            case GateParked():
+                return await self._park(run, refused.park)
+            case NoSpender() | SpenderUnknown():
                 park = Park(reason=ParkReason.PERSON, unlock=rules.SPENDER_UNLOCK)
                 return await self._park(run, park)
             case CompactionFailed() | ContextOverflow() | Unavailable():

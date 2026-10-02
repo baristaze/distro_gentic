@@ -42,6 +42,7 @@ from acme.om.tenancy.rules import permissions_of
 from acme.om.tools.tool import ToolInterface, ToolRuntime
 from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule, Target
 from acme.om.tools.types.tool import Effect, ToolClass, ToolInput, ToolSpec
+from acme.om.windows.gate import CallGateInterface
 from acme.om.windows.impl.gate import CallGateBudgetImpl
 from contracts.doubles import APP, context
 from contracts.factories import make_org
@@ -252,6 +253,7 @@ def loop_over(
     result_gate: ResultGateInterface | None = None,
     executor: ExecutorInterface | None = None,
     work_product: WorkProductInterface | None = None,
+    call_gate: Callable[[Managers, Clock], CallGateInterface] | None = None,
     **roots: Any,
 ) -> Loop:
     """`storage` None is the memory storage, and `owner` None a fresh
@@ -259,7 +261,9 @@ def loop_over(
     the loop draws its retry waits from. `result_gate` None is the engine's
     null gate, which accepts a result and marks it unverified, as the
     engine's suites read it; `executor` and `work_product` go to the root as
-    they are, and `roots` is what else the managers are built with."""
+    they are. `call_gate` None is the budgets' gate behind the call gate; a
+    suite of a gate of its own builds it from the managers and the clock;
+    and `roots` is what else the managers are built with."""
     infra = InfraLocalImpl(tmp_path)
     anthropic = ModelProviderScriptedImpl(ProviderName.ANTHROPIC)
     openai = ModelProviderScriptedImpl(ProviderName.OPENAI)
@@ -297,7 +301,11 @@ def loop_over(
         managers.models,
         managers.windows,
         managers.tools,
-        CallGateBudgetImpl(managers.budget_gate, managers.pricing, managers.agent_sessions),
+        (
+            CallGateBudgetImpl(managers.budget_gate, managers.pricing, managers.agent_sessions)
+            if call_gate is None
+            else call_gate(managers, clock)
+        ),
         providers,
         outages or infra.get_outages(),
         sink,

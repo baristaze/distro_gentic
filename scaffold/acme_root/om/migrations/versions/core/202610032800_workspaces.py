@@ -2,14 +2,14 @@
 with their fences.
 
 Revision ID: 202610032800
-Revises: 202610032200
+Revises: 202610032500
 """
 
 from acme.om.storage.migrate import run_sql
 from acme.om.storage.roles import DatabaseRole
 
 revision = "202610032800"
-down_revision = "202610032200"
+down_revision = "202610032500"
 branch_labels = None
 depends_on = None
 

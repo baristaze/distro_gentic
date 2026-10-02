@@ -16,6 +16,11 @@ from acme.om.agents.storage import AgentStorageInterface
 from acme.om.agents.storage.impl.postgres import AgentStoragePostgresImpl
 from acme.om.attribution.storage import AttributionStorageInterface
 from acme.om.attribution.storage.impl.postgres import AttributionStoragePostgresImpl
+from acme.om.billing.storage import AccountStorageInterface, MoneyLedgerStorageInterface
+from acme.om.billing.storage.impl.postgres import (
+    AccountStoragePostgresImpl,
+    MoneyLedgerStoragePostgresImpl,
+)
 from acme.om.budgets.storage import BudgetStorageInterface, LedgerStorageInterface
 from acme.om.budgets.storage.impl.postgres import (
     BudgetStoragePostgresImpl,
@@ -37,6 +42,8 @@ from acme.om.outbox.storage import OutboxStorageInterface
 from acme.om.outbox.storage.impl.postgres import OutboxStoragePostgresImpl
 from acme.om.placement.storage import PlacementStorageInterface
 from acme.om.placement.storage.impl.postgres import PlacementStoragePostgresImpl
+from acme.om.platform_agents.storage import PlatformAgentsStorageInterface
+from acme.om.platform_agents.storage.impl.postgres import PlatformAgentsStoragePostgresImpl
 from acme.om.privacy.storage import PrivacyStorageInterface
 from acme.om.privacy.storage.impl.postgres import PrivacyStoragePostgresImpl
 from acme.om.retention.storage import RetentionStorageInterface
@@ -198,12 +205,15 @@ class StoragePostgresImpl(StorageInterface):
         self._retention = RetentionStoragePostgresImpl(sessions)
         self._budgets = BudgetStoragePostgresImpl(sessions)
         self._ledger = LedgerStoragePostgresImpl(sessions)
+        self._accounts = AccountStoragePostgresImpl(sessions)
+        self._money_ledger = MoneyLedgerStoragePostgresImpl(sessions)
         self._fill_sets = FillSetStoragePostgresImpl(sessions)
         self._windows = WindowStoragePostgresImpl(sessions)
         self._tools = ToolStoragePostgresImpl(sessions)
         self._evidence = EvidenceStoragePostgresImpl(sessions)
         self._placement = PlacementStoragePostgresImpl(sessions)
         self._trust = TrustStoragePostgresImpl(sessions)
+        self._platform_agents = PlatformAgentsStoragePostgresImpl(sessions)
         self._workspaces = WorkspaceStoragePostgresImpl(sessions)
 
     def get_tenancy_storage(self) -> TenancyStorageInterface:
@@ -251,6 +261,12 @@ class StoragePostgresImpl(StorageInterface):
     def get_ledger_storage(self) -> LedgerStorageInterface:
         return self._ledger
 
+    def get_account_storage(self) -> AccountStorageInterface:
+        return self._accounts
+
+    def get_money_ledger_storage(self) -> MoneyLedgerStorageInterface:
+        return self._money_ledger
+
     def get_fill_set_storage(self) -> FillSetStorageInterface:
         return self._fill_sets
 
@@ -268,6 +284,9 @@ class StoragePostgresImpl(StorageInterface):
 
     def get_trust_storage(self) -> TrustStorageInterface:
         return self._trust
+
+    def get_platform_agents_storage(self) -> PlatformAgentsStorageInterface:
+        return self._platform_agents
 
     def get_workspace_storage(self) -> WorkspaceStorageInterface:
         return self._workspaces
