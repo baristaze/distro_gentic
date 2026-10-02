@@ -8,6 +8,11 @@ from acme.om.attribution.storage import AttributionStorageInterface
 from acme.om.attribution.storage.impl.memory import AttributionStorageMemoryImpl
 from acme.om.automations.storage import AutomationStorageInterface
 from acme.om.automations.storage.impl.memory import AutomationStorageMemoryImpl
+from acme.om.billing.storage import AccountStorageInterface, MoneyLedgerStorageInterface
+from acme.om.billing.storage.impl.memory import (
+    AccountStorageMemoryImpl,
+    MoneyLedgerStorageMemoryImpl,
+)
 from acme.om.budgets.storage import BudgetStorageInterface, LedgerStorageInterface
 from acme.om.budgets.storage.impl.memory import BudgetStorageMemoryImpl, LedgerStorageMemoryImpl
 from acme.om.events.storage import EventStorageInterface
@@ -34,6 +39,8 @@ from acme.om.playbooks.storage import PlaybookStorageInterface
 from acme.om.playbooks.storage.impl.memory import PlaybookStorageMemoryImpl
 from acme.om.privacy.storage import PrivacyStorageInterface
 from acme.om.privacy.storage.impl.memory import PrivacyStorageMemoryImpl
+from acme.om.retention.storage import RetentionStorageInterface
+from acme.om.retention.storage.impl.memory import RetentionStorageMemoryImpl
 from acme.om.steps.storage import StepStorageInterface
 from acme.om.steps.storage.impl.memory import StepStorageMemoryImpl
 from acme.om.storage.root import StorageInterface
@@ -66,8 +73,11 @@ class StorageMemoryImpl(StorageInterface):
         self._agents = AgentStorageMemoryImpl(self._outbox)
         self._attribution = AttributionStorageMemoryImpl(self._outbox)
         self._privacy = PrivacyStorageMemoryImpl(self._outbox)
+        self._retention = RetentionStorageMemoryImpl(self._outbox)
         self._budgets = BudgetStorageMemoryImpl(self._outbox)
         self._ledger = LedgerStorageMemoryImpl()
+        self._accounts = AccountStorageMemoryImpl(self._outbox)
+        self._money_ledger = MoneyLedgerStorageMemoryImpl()
         self._fill_sets = FillSetStorageMemoryImpl()
         self._windows = WindowStorageMemoryImpl()
         self._tools = ToolStorageMemoryImpl(self._outbox)
@@ -115,11 +125,20 @@ class StorageMemoryImpl(StorageInterface):
     def get_privacy_storage(self) -> PrivacyStorageInterface:
         return self._privacy
 
+    def get_retention_storage(self) -> RetentionStorageInterface:
+        return self._retention
+
     def get_budget_storage(self) -> BudgetStorageInterface:
         return self._budgets
 
     def get_ledger_storage(self) -> LedgerStorageInterface:
         return self._ledger
+
+    def get_account_storage(self) -> AccountStorageInterface:
+        return self._accounts
+
+    def get_money_ledger_storage(self) -> MoneyLedgerStorageInterface:
+        return self._money_ledger
 
     def get_fill_set_storage(self) -> FillSetStorageInterface:
         return self._fill_sets

@@ -18,6 +18,11 @@ from acme.om.attribution.storage import AttributionStorageInterface
 from acme.om.attribution.storage.impl.postgres import AttributionStoragePostgresImpl
 from acme.om.automations.storage import AutomationStorageInterface
 from acme.om.automations.storage.impl.postgres import AutomationStoragePostgresImpl
+from acme.om.billing.storage import AccountStorageInterface, MoneyLedgerStorageInterface
+from acme.om.billing.storage.impl.postgres import (
+    AccountStoragePostgresImpl,
+    MoneyLedgerStoragePostgresImpl,
+)
 from acme.om.budgets.storage import BudgetStorageInterface, LedgerStorageInterface
 from acme.om.budgets.storage.impl.postgres import (
     BudgetStoragePostgresImpl,
@@ -47,6 +52,8 @@ from acme.om.playbooks.storage import PlaybookStorageInterface
 from acme.om.playbooks.storage.impl.postgres import PlaybookStoragePostgresImpl
 from acme.om.privacy.storage import PrivacyStorageInterface
 from acme.om.privacy.storage.impl.postgres import PrivacyStoragePostgresImpl
+from acme.om.retention.storage import RetentionStorageInterface
+from acme.om.retention.storage.impl.postgres import RetentionStoragePostgresImpl
 from acme.om.steps.storage import StepStorageInterface
 from acme.om.steps.storage.impl.postgres import StepStoragePostgresImpl
 from acme.om.storage.impl.pg_base import LoginSessions, ScopedConnection, SessionFactory
@@ -199,8 +206,11 @@ class StoragePostgresImpl(StorageInterface):
         self._agents = AgentStoragePostgresImpl(sessions)
         self._attribution = AttributionStoragePostgresImpl(sessions)
         self._privacy = PrivacyStoragePostgresImpl(sessions)
+        self._retention = RetentionStoragePostgresImpl(sessions)
         self._budgets = BudgetStoragePostgresImpl(sessions)
         self._ledger = LedgerStoragePostgresImpl(sessions)
+        self._accounts = AccountStoragePostgresImpl(sessions)
+        self._money_ledger = MoneyLedgerStoragePostgresImpl(sessions)
         self._fill_sets = FillSetStoragePostgresImpl(sessions)
         self._windows = WindowStoragePostgresImpl(sessions)
         self._tools = ToolStoragePostgresImpl(sessions)
@@ -248,11 +258,20 @@ class StoragePostgresImpl(StorageInterface):
     def get_privacy_storage(self) -> PrivacyStorageInterface:
         return self._privacy
 
+    def get_retention_storage(self) -> RetentionStorageInterface:
+        return self._retention
+
     def get_budget_storage(self) -> BudgetStorageInterface:
         return self._budgets
 
     def get_ledger_storage(self) -> LedgerStorageInterface:
         return self._ledger
+
+    def get_account_storage(self) -> AccountStorageInterface:
+        return self._accounts
+
+    def get_money_ledger_storage(self) -> MoneyLedgerStorageInterface:
+        return self._money_ledger
 
     def get_fill_set_storage(self) -> FillSetStorageInterface:
         return self._fill_sets

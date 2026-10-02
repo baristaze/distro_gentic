@@ -6,6 +6,7 @@ from acme.om.agent_sessions.storage import AgentSessionStorageInterface
 from acme.om.agents.storage import AgentStorageInterface
 from acme.om.attribution.storage import AttributionStorageInterface
 from acme.om.automations.storage import AutomationStorageInterface
+from acme.om.billing.storage import AccountStorageInterface, MoneyLedgerStorageInterface
 from acme.om.budgets.storage import BudgetStorageInterface, LedgerStorageInterface
 from acme.om.events.storage import EventStorageInterface
 from acme.om.evidence.storage import EvidenceStorageInterface
@@ -19,6 +20,7 @@ from acme.om.outbox.storage import OutboxStorageInterface
 from acme.om.placement.storage import PlacementStorageInterface
 from acme.om.playbooks.storage import PlaybookStorageInterface
 from acme.om.privacy.storage import PrivacyStorageInterface
+from acme.om.retention.storage import RetentionStorageInterface
 from acme.om.steps.storage import StepStorageInterface
 from acme.om.tenancy.storage import TenancyStorageInterface
 from acme.om.tools.storage import ToolStorageInterface
@@ -65,10 +67,19 @@ class StorageInterface(ABC):
     def get_privacy_storage(self) -> PrivacyStorageInterface: ...
 
     @abstractmethod
+    def get_retention_storage(self) -> RetentionStorageInterface: ...
+
+    @abstractmethod
     def get_budget_storage(self) -> BudgetStorageInterface: ...
 
     @abstractmethod
     def get_ledger_storage(self) -> LedgerStorageInterface: ...
+
+    @abstractmethod
+    def get_account_storage(self) -> AccountStorageInterface: ...
+
+    @abstractmethod
+    def get_money_ledger_storage(self) -> MoneyLedgerStorageInterface: ...
 
     @abstractmethod
     def get_fill_set_storage(self) -> FillSetStorageInterface: ...

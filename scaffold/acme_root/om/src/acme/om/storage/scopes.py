@@ -111,6 +111,8 @@ TABLE_SCOPES: dict[str, TableScope] = {
     "step_cursors": TableScope(ScopeKind.ORG),
     "session_privacy": TableScope(ScopeKind.ORG),
     "session_keys": TableScope(ScopeKind.ORG),
+    "retention_policies": TableScope(ScopeKind.ORG),
+    "session_retention": TableScope(ScopeKind.ORG),
     "budgets": TableScope(ScopeKind.ORG),
     "budget_tallies": TableScope(ScopeKind.ORG),
     "budget_holds": TableScope(ScopeKind.ORG),
@@ -133,6 +135,9 @@ TABLE_SCOPES: dict[str, TableScope] = {
     "playbooks": TableScope(ScopeKind.ORG),
     "playbook_invocations": TableScope(ScopeKind.ORG),
     "knowledge_entries": TableScope(ScopeKind.ORG),
+    "billing_accounts": TableScope(ScopeKind.ORG),
+    "ledger_entries": TableScope(ScopeKind.ORG),
+    "ledger_counts": TableScope(ScopeKind.ORG),
     # A tenant's rows that also belong to one person in it. A user's person
     # is the identity behind it, so it narrows on `app.identity_id`; every
     # other row here names the user and narrows on `app.user_id`.

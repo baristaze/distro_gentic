@@ -21,6 +21,7 @@ import inspect
 import pkgutil
 
 from contracts import (
+    account_storage,
     agent_session_storage,
     agent_storage,
     attribution_storage,
@@ -34,11 +35,13 @@ from contracts import (
     knowledge_storage,
     ledger_storage,
     media_storage,
+    money_ledger_storage,
     orchestration_storage,
     outbox_storage,
     placement_storage,
     playbook_storage,
     privacy_storage,
+    retention_storage,
     step_storage,
     tenancy_storage,
     tool_storage,
@@ -105,6 +108,11 @@ STORAGE_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         # The sessions marked deleted past their retention, each named with
         # its tenant: the claim and the deletes that follow run under it.
         ("AgentSessionStorageInterface", "read_purgeable"),
+        # The retention sweep's two reads: the snapshots behind their
+        # tenant's policy and those past an expiry, each named with its
+        # tenant, whose service context the sweep then works it under.
+        ("RetentionStorageInterface", "read_behind"),
+        ("RetentionStorageInterface", "read_due"),
         ("EventStorageInterface", "trim"),
         ("OrchestrationsStorageInterface", "purge_settled"),
         # The sweep's gauges: one read each across every tenant's rows.
@@ -119,6 +127,7 @@ STORAGE_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
 )
 
 CROSS_TENANT_CASES: dict[str, frozenset[str]] = {
+    "AccountStorageInterface": account_storage.CROSS_TENANT_CASES,
     "AgentSessionStorageInterface": agent_session_storage.CROSS_TENANT_CASES,
     "AgentStorageInterface": agent_storage.CROSS_TENANT_CASES,
     "AttributionStorageInterface": attribution_storage.CROSS_TENANT_CASES,
@@ -129,10 +138,12 @@ CROSS_TENANT_CASES: dict[str, frozenset[str]] = {
     "IdempotencyStorageInterface": idempotency_storage.CROSS_TENANT_CASES,
     "LedgerStorageInterface": ledger_storage.CROSS_TENANT_CASES,
     "MediaStorageInterface": media_storage.CROSS_TENANT_CASES,
+    "MoneyLedgerStorageInterface": money_ledger_storage.CROSS_TENANT_CASES,
     "OrchestrationsStorageInterface": orchestration_storage.CROSS_TENANT_CASES,
     "OutboxStorageInterface": outbox_storage.CROSS_TENANT_CASES,
     "PlacementStorageInterface": placement_storage.CROSS_TENANT_CASES,
     "PrivacyStorageInterface": privacy_storage.CROSS_TENANT_CASES,
+    "RetentionStorageInterface": retention_storage.CROSS_TENANT_CASES,
     "StepStorageInterface": step_storage.CROSS_TENANT_CASES,
     "TenancyStorageInterface": tenancy_storage.CROSS_TENANT_CASES,
     "WindowStorageInterface": window_storage.CROSS_TENANT_CASES,
@@ -232,6 +243,9 @@ REQUEST_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
         # as the claim mints one.
         ("WorkManagerInterface", "requeue_stale"),
         ("WorkManagerInterface", "maintenance_contexts"),
+        # The retention sweep across tenants: each due session's tenant is
+        # worked under the service context minted from this stage.
+        ("RetentionManagerInterface", "sweep"),
         # The service context a purge across tenants works a tenant's rows
         # under, minted from this stage, as the requeue's dead letter is.
     }

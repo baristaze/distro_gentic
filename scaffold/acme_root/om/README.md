@@ -98,6 +98,17 @@ and says which budgets are in the way and when each resets. A refused
 loop waits, never fails, until the budget is raised or resets. After
 the call, the hold is settled at what the call really cost.
 
+## Billing
+
+An **account** says who pays for an org's agents: the platform's key,
+billed to the org, or the org's own key. Every hold, settlement, and
+**charge** is an entry of one **ledger**, written once. A call on the
+platform's key is paid from **buckets** in a fixed order: the plan's
+included units, granted units, prepaid **credits**, and a line of credit.
+A credit counts only once the payment provider confirms it. A limit's
+day and week follow the org's time zone, and its month the billing
+period.
+
 ## Models
 
 A **model role** is a job an agent session hands a model: the agent's
@@ -204,6 +215,9 @@ arrive twice, so the second copy gets the first one's answer.
   deadline as the whole tree. A tree names its org, as its sessions do.
 - A step's content is sealed under its session's key, so revoking one
   key erases what one session said and nothing else.
+- A session takes its tenant's retention policy as a snapshot when it is
+  created, so a tightening reaches it and a loosening never does. A
+  policy names its org, one each, and a snapshot its session.
 - Every model call passes the gate first, charged to the scopes it
   serves: its session, its tree, the person who pays, a project, a team,
   or the org. A budget, its holds, and their settlements name their org.
@@ -227,7 +241,9 @@ arrive twice, so the second copy gets the first one's answer.
 - [Agents](src/acme/om/agents/README.md)
 - [Attribution](src/acme/om/attribution/README.md)
 - [Privacy](src/acme/om/privacy/README.md)
+- [Retention](src/acme/om/retention/README.md)
 - [Budgets](src/acme/om/budgets/README.md)
+- [Billing](src/acme/om/billing/README.md)
 - [Models](src/acme/om/models/README.md)
 - [Windows](src/acme/om/windows/README.md)
 - [Tools](src/acme/om/tools/README.md)

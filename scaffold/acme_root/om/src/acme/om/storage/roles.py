@@ -36,6 +36,8 @@ TABLE_ROLES: dict[str, DatabaseRole] = {
     "step_cursors": DatabaseRole.ACTIVITY,
     "session_privacy": DatabaseRole.CORE,
     "session_keys": DatabaseRole.CORE,
+    "retention_policies": DatabaseRole.CORE,
+    "session_retention": DatabaseRole.CORE,
     "budgets": DatabaseRole.CORE,
     "budget_tallies": DatabaseRole.ACTIVITY,
     "budget_holds": DatabaseRole.ACTIVITY,
@@ -58,6 +60,9 @@ TABLE_ROLES: dict[str, DatabaseRole] = {
     "playbooks": DatabaseRole.CORE,
     "playbook_invocations": DatabaseRole.CORE,
     "knowledge_entries": DatabaseRole.CORE,
+    "billing_accounts": DatabaseRole.CORE,
+    "ledger_entries": DatabaseRole.ACTIVITY,
+    "ledger_counts": DatabaseRole.ACTIVITY,
 }
 
 APPEND_ONLY_TABLES: frozenset[str] = frozenset(
@@ -69,6 +74,7 @@ APPEND_ONLY_TABLES: frozenset[str] = frozenset(
         "execution_records",
         "validations",
         "inferences",
+        "ledger_entries",
     }
 )
 """Tables whose rows are written once: the serving logins hold SELECT and
