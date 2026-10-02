@@ -127,6 +127,8 @@ class StorageInterface(ABC):
 
     @abstractmethod
     def get_stations_storage(self) -> StationsStorageInterface: ...
+
+    @abstractmethod
     def get_workspace_storage(self) -> WorkspaceStorageInterface: ...
 
     @abstractmethod

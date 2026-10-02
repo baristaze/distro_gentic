@@ -196,6 +196,7 @@ class StorageMemoryImpl(StorageInterface):
 
     def get_stations_storage(self) -> StationsStorageInterface:
         return self._stations
+
     def get_workspace_storage(self) -> WorkspaceStorageInterface:
         return self._workspaces
 
