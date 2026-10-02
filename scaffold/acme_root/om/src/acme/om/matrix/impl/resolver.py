@@ -111,14 +111,38 @@ class MatrixResolverImpl(MatrixResolverInterface):
         roles: Sequence[ModelRole],
         eligibility: Eligibility,
     ) -> tuple[RoleFill, ...]:
-        version = await self._pinned(ctx, session_id)
+        pin = await self._tenants.read_pin(ctx.org_id, session_id)
+        version = await (self._current() if pin is None else self._version(pin.matrix_version))
         retired = await self.retired()
         ask = await self._asking(ctx, session_id)
         tenant = await self._tenant(ctx)
-        return tuple(
-            self._answer(version, ask(role), eligibility, retired, tenant)
-            for role in sorted(set(roles))
+
+        def answers(at: MatrixVersion) -> tuple[RoleFill, ...]:
+            return tuple(
+                self._answer(at, ask(role), eligibility, retired, tenant)
+                for role in sorted(set(roles))
+            )
+
+        answered = answers(version)
+        if pin is not None:
+            return answered
+        # Pinned only once the version answers: a resolution that answers
+        # nothing pins nothing, and the next publication may answer it.
+        pin = await self._tenants.write_pin(
+            ctx.org_id,
+            MatrixPin(
+                id=new_id(),
+                created_at=self._clock(),
+                session_id=session_id,
+                fill_set_version=1,
+                matrix_version=version.number,
+            ),
         )
+        if pin.matrix_version == version.number:
+            return answered
+        # A resolution that raced this one pinned another version first:
+        # the session keeps that one.
+        return answers(await self._version(pin.matrix_version))
 
     async def renewal(
         self, ctx: TenantContext, session_id: UUID, head: FillSet, required: Eligibility
@@ -178,25 +202,12 @@ class MatrixResolverImpl(MatrixResolverInterface):
             self.check(fill)
         return RoleFill(role=role, fill=fills[0], fallbacks=fills[1:])
 
-    async def _pinned(self, ctx: TenantContext, session_id: UUID) -> MatrixVersion:
-        """The version the session is pinned to: the one published when its
-        fills were first resolved, kept across every later publication."""
-        pin = await self._tenants.read_pin(ctx.org_id, session_id)
-        if pin is None:
-            current = await self._current()
-            pin = await self._tenants.write_pin(
-                ctx.org_id,
-                MatrixPin(
-                    id=new_id(),
-                    created_at=self._clock(),
-                    session_id=session_id,
-                    fill_set_version=1,
-                    matrix_version=current.number,
-                ),
-            )
-        version = await self._matrix.read_version(pin.matrix_version)
+    async def _version(self, number: int) -> MatrixVersion:
+        """The version a session is pinned to, kept across every later
+        publication."""
+        version = await self._matrix.read_version(number)
         if version is None:
-            raise UnresolvedRole(f"matrix version {pin.matrix_version} is not stored")
+            raise UnresolvedRole(f"matrix version {number} is not stored")
         return version
 
     async def _current(self) -> MatrixVersion:

@@ -33,11 +33,15 @@ class MatrixOperatorManagerImpl(MatrixOperatorManagerInterface):
         matrix: MatrixStorageInterface,
         prices: ModelPricesInterface,
         options: MatrixOptions,
+        required: frozenset[ModelRole],
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
+        """`required` is every model role a version must serve: those the
+        engine calls and those of each kind the platform runs."""
         self._matrix = matrix
         self._prices = prices
         self._options = options
+        self._required = required
         self._clock = clock
 
     async def stage(
@@ -88,6 +92,7 @@ class MatrixOperatorManagerImpl(MatrixOperatorManagerInterface):
             priced=lambda model: self._prices.priced(model.provider, model.model),
             qualified=qualified,
             retired=lambda model: model in retired,
+            required=self._required,
         )
         if refusals:
             raise ValidationFailed(

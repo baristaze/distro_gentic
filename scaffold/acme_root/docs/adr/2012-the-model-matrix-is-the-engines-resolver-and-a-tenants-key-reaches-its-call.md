@@ -40,13 +40,16 @@ fill left gets the matrix's fill alone, whose call parks until a key is
 saved, never a fallback on a key it lacks.
 
 **Qualified by model and role.** A version is published only with the
-row that matches everything, and with every fill priced by a row of its
-own, not retired, and qualified by the latest recorded result of its
+row that matches everything, serving every model role the engine and
+each kind the platform runs call, and with every fill priced by a row of
+its own, not retired, and qualified by the latest recorded result of its
 model for every role its row serves. A row that names no role serves
 every role the version serves. Results are written once.
 
-**A session is pinned.** Its first resolution pins it to the version
-published then; a later publication changes nothing it holds. At the
+**A session is pinned.** Its first resolution that answers pins it to
+the version published then, and one that answers nothing pins nothing,
+so the next publication can answer it; a later publication changes
+nothing a pinned session holds. At the
 start of each loop, and never inside one, a fill whose model was retired,
 or that a tightened retention no longer admits, switches to what the
 latest version answers, and the session is pinned to that version. A
@@ -59,9 +62,14 @@ The gate is told the credential the call carries. Billing holds an
 account on its own key only for a call that carries a tenant key's
 reference, which is a UUID, and an account the platform pays only for a
 call that does not. The outage signal is kept under the credential the
-call carried. A credential error on a tenant's key marks it refused and
-takes its value out of the store, so every session that needs it parks
-on the provider, naming the key, until a new one is saved.
+call carried, and a compaction's failure names the key its call carried,
+whichever is live by then. Only an authentication failure, a 401 or the
+provider's own authentication error, refuses a tenant's key: it is marked
+refused and its value kept, so every session that needs it parks on the
+provider, naming the key, until the tenant saves a new one. Any other
+credential error, such as a permission the key lacks, a region it
+refuses, or a model its project cannot reach, parks only the session that
+met it, naming a permission.
 
 ## Consequences
 

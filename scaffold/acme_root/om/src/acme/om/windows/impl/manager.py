@@ -375,6 +375,9 @@ class WindowsManagerImpl(WindowsManagerInterface):
         try:
             reply = await reply_of(used.client.stream(call))
         except ModelCallFailed as failed:
+            # The failure names the key the call went out on, so whatever it
+            # says of a key is said of that one, whichever is live by then.
+            failed.credential = used.credential
             # Nothing streamed back: the call was never sent, or the provider
             # refused it before processing it, so the hold is released. A
             # stream that broke after it began is billed.

@@ -91,6 +91,9 @@ Sleep = Callable[[float], Awaitable[None]]
 """How the loop waits, injected beside its clock, so a test never sleeps."""
 
 HANDOVER_UNLOCK = "give_back"
+PERMISSION = "permission"
+"""The cause a park names for a credential error that is no refusal of the
+key: a permission, a region, or a model the key cannot reach."""
 NO_JOBS = (
     "this engine starts no job: a job tool's work and its completion are not wired to its loop yet"
 )
@@ -383,14 +386,10 @@ class LoopManagerImpl(LoopManagerInterface):
                 )
         except ModelCallFailed as failed:
             # The compaction's call to the summarizer failed: its own
-            # provider's error, on its own credential, which no switch of the
-            # main role mends.
+            # provider's error, on the key that call went out on, which no
+            # switch of the main role mends.
             summarizer = fill_set.fill_for(SUMMARIZER) or fill
-            try:
-                its = await self._credentials.client_for(ctx, summarizer.provider)
-            except PlatformException as refused:
-                return await self._refused(run, refused)
-            return await self._failed(run, summarizer, None, failed, its.credential)
+            return await self._failed(run, summarizer, None, failed, failed.credential)
         except PlatformException as refused:
             return await self._refused(run, refused)
         try:
@@ -512,13 +511,14 @@ class LoopManagerImpl(LoopManagerInterface):
         fill: Fill,
         rendered: RenderedRequest | None,
         failed: ModelCallFailed,
-        credential: str,
+        credential: str | None,
     ) -> LoopRun | None:
         """A provider error, handled by its kind. `rendered` is the main
         request that failed, or None when the compaction's call did, which
         neither falls back nor compacts again; `credential` names the key the
-        call went out on, so an outage or a refusal is that key's alone. None
-        goes on to the next model turn."""
+        call went out on, so an outage or a refusal is that key's alone, and
+        None, when no call says, reports neither. None goes on to the next
+        model turn."""
         answer = failed.kind.answer
         now = self._clock()
         main = rendered is not None
@@ -535,13 +535,14 @@ class LoopManagerImpl(LoopManagerInterface):
             # parks at once until the retry time; this one falls back to its
             # next declared fallback when it has one, and parks too when not.
             retry_at = now + max(wait, self._options.outage_wait)
-            outage = Outage(
-                provider=fill.provider.value,
-                credential=credential,
-                kind=failed.kind.value,
-                retry_at=retry_at,
-            )
-            await self._outages.report(outage, now)
+            if credential is not None:
+                outage = Outage(
+                    provider=fill.provider.value,
+                    credential=credential,
+                    kind=failed.kind.value,
+                    retry_at=retry_at,
+                )
+                await self._outages.report(outage, now)
             if main and await self._fall_back(run, fill):
                 return None
             return await self._park(run, provider_park(fill, retry_at))
@@ -555,11 +556,16 @@ class LoopManagerImpl(LoopManagerInterface):
                 return None
             return await self._end(run, LoopOutcome.ERRORED)
         if answer is ErrorAnswer.PARK:
-            if failed.kind is ErrorKind.CREDENTIAL:
-                # The key is refused: every session that needs it waits for a
-                # new one, and no other session moves.
+            cause = failed.kind.value
+            if failed.key_refused and credential is not None:
+                # The provider did not take the key itself: every session
+                # that needs it waits for a new one, and no other moves.
                 await self._credentials.refused(run.ctx, fill.provider, credential)
-            unlock = f"{fill.provider.value}:{failed.kind.value}"
+            elif failed.kind is ErrorKind.CREDENTIAL:
+                # A permission the key lacks, a region it refuses, a model it
+                # cannot reach: this call's alone, so this session alone waits.
+                cause = PERMISSION
+            unlock = f"{fill.provider.value}:{cause}"
             return await self._park(run, Park(reason=ParkReason.PROVIDER, unlock=unlock))
         log.warning("session %s: %s", run.session_id, failed)
         return await self._end(run, LoopOutcome.ERRORED)

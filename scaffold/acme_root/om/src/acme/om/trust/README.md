@@ -45,9 +45,11 @@ of](../../../../README.md).
 - **Serve a client.** A client built on a key is kept by the key's
   reference, and served with it. The live reference is read on every
   call, so a client built on a rotated key is never served again.
-- **Refuse a key.** A key the provider refuses on a call is marked
-  refused, its value leaves the store, and its client is closed. Every
-  session that needs it waits for a new one.
+- **Refuse a key.** A key the provider does not authenticate on a call
+  is marked refused and its client closed; its value is kept. Every
+  session that needs it waits until the tenant saves a new one. A
+  permission the key lacks refuses nothing: only the session that met it
+  waits.
 - **Read as an operator.** An operator with `read` reads a session's
   shape: its steps' places, types, and headers. Opening what it says
   takes a content grant in that tenant, and each opening lands in the

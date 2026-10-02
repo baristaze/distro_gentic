@@ -40,8 +40,9 @@ class CallCredentialsInterface(ABC):
 
     @abstractmethod
     async def refused(self, ctx: TenantContext, provider: ProviderName, credential: str) -> None:
-        """The provider refused `credential` on a call, as a credential
-        error. A tenant's key is offered to no call again, so every session
-        that needs it waits for a new one; the platform's own is no
-        tenant's to refuse."""
+        """The provider did not authenticate `credential` on a call: a 401,
+        or its own authentication error, never a permission the key lacks. A
+        tenant's key is offered to no call again, so every session that
+        needs it waits for a new one; the platform's own is no tenant's to
+        refuse."""
         ...

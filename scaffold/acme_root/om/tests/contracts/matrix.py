@@ -113,6 +113,8 @@ class Fleet:
     layer: MatrixLayer
     admin: OperatorContext
     probe: KeyProbeTwinImpl
+    trust_infra: InfraLocalImpl
+    """The infra the trust swimlane keeps a tenant's key values in."""
     keyed: dict[str, ModelProviderScriptedImpl] = field(
         default_factory=dict[str, ModelProviderScriptedImpl]
     )
@@ -179,9 +181,10 @@ async def fleet_over(
 
     runner = Executor(kind=ExecutorKind.CLOUD, credential_id=new_id(), label="session-runner-1")
     probe = KeyProbeTwinImpl()
+    trust_infra = InfraLocalImpl(tmp_path / "trust")
     trust = TrustLayer(
         storage,
-        InfraLocalImpl(tmp_path / "trust"),
+        trust_infra,
         placement=PlacementCloudImpl(runner),
         probe=probe,
         clients=client,
@@ -205,4 +208,4 @@ async def fleet_over(
     await money.open(
         funding=funding, key_ref=None if funding is FundingMode.PLATFORM else "own-keys"
     )
-    return Fleet(money, trusted, built, layer, operator(), probe, keyed)
+    return Fleet(money, trusted, built, layer, operator(), probe, trust_infra, keyed)

@@ -11,11 +11,12 @@ over its models manager that resolves within the tenant's retention and
 switches a retired model at the next loop, and the key each call goes out
 on, the tenant's own when it pays its providers."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
 from acme.integrations.model_providers import ModelProvidersInterface
+from acme.om.agents.types.kind import AgentKind
 from acme.om.base import utcnow
 from acme.om.matrix.impl.credentials import CallCredentialsByFundingImpl
 from acme.om.matrix.impl.manager import MatrixManagerImpl, MatrixOperatorManagerImpl
@@ -28,6 +29,8 @@ from acme.om.models.impl.prices import ModelPricesFromPricingImpl
 from acme.om.models.layer import ModelsLayer
 from acme.om.models.manager import ModelsManagerInterface
 from acme.om.models.prices import ModelPricesInterface
+from acme.om.models.types.fill import MAIN, SUMMARIZER
+from acme.om.platform_agents.kinds import SHIPPED
 from acme.om.root import Managers
 from acme.om.storage.root import StorageInterface
 from acme.om.tenancy import TenancyManagerInterface
@@ -44,7 +47,9 @@ class MatrixLayer:
     """`clients` serves a tenant's clients on its own keys, the trust
     layer's, bound at call time; None builds none, so a tenant on its own
     keys runs no call. `workload` names a session's workload class; None
-    names every one `standard`."""
+    names every one `standard`. `kinds` are the product's own agent kinds,
+    beside the ones the platform ships: a version of the matrix serves every
+    model role any of them calls, and the engine's own two."""
 
     def __init__(
         self,
@@ -53,9 +58,13 @@ class MatrixLayer:
         options: MatrixOptions | None = None,
         clients: Callable[[], ProviderClientsInterface] | None = None,
         workload: Workload | None = None,
+        kinds: Sequence[AgentKind] = (),
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._storage = storage
+        self._required = frozenset(
+            {MAIN, SUMMARIZER, *(role for kind in (*SHIPPED, *kinds) for role in kind.roles)}
+        )
         self.options = options or MatrixOptions()
         self._clients = clients
         self._workload = workload
@@ -131,6 +140,7 @@ class MatrixLayer:
                 storage.get_matrix_storage(),
                 prices,
                 self.options,
+                self._required,
                 self._clock,
             ),
         )

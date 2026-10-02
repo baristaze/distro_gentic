@@ -33,7 +33,8 @@ of](../../../../README.md).
 - **Record.** An operator records a benchmark's result, or a provider's
   retirement of a model. No code change waits on either.
 - **Resolve.** A session's first loop resolves its fills at the version
-  published then, and pins the session to it. What the session may not
+  published then, and pins the session to it once it answers; one that
+  answers nothing pins nothing. What the session may not
   run on is taken out first: a fill its tenant's retention does not
   admit, a retired model, and, for a tenant on its own keys, a provider
   it holds no key for. The most specific row with a fill left answers.
@@ -42,15 +43,17 @@ of](../../../../README.md).
   and the session is pinned to that version.
 - **Call on the tenant's key.** Each model call of a tenant on its own
   keys goes out on its live key for the provider, read per call. A key
-  the provider refuses is marked refused, so every session that needs it
-  waits for a new one.
+  the provider does not authenticate is marked refused, so every session
+  that needs it waits for a new one; a permission the key lacks parks only
+  the session that met it.
 - **Choose.** A tenant on its own keys chooses a fill for a model role,
   or drops its choice.
 
 ## The rules
 
 - **Every question has an answer.** No version is published without the
-  row that matches everything. Of the rows that match, the one that names
+  row that matches everything, or without a model role the engine or a
+  kind the platform runs calls. Of the rows that match, the one that names
   the most keys wins, and of two that name as many, the one that names the
   earlier key, in the order above.
 - **A model enters priced and qualified.** Each fill of a published

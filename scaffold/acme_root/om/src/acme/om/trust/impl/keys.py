@@ -112,9 +112,8 @@ class ProviderClientsCachedImpl(ProviderClientsInterface):
         if not await self._storage.refuse_key(ctx.org_id, refused):
             return
         log.warning("%s refused the key %s of org %s", provider.value, key.id, ctx.org_id)
-        # Its value leaves the store and its client closes: nothing can
-        # offer it to a call again.
-        await self._secrets.delete(ctx.org_id, key_secret_name(key.id), deadline=ctx.deadline)
+        # Its client closes, and nothing offers it to a call again. Its value
+        # stays where it is until the tenant replaces the key.
         if self._live.get((ctx.org_id, provider)) == key.id:
             del self._live[(ctx.org_id, provider)]
         stale = self._clients.pop(key.id, None)

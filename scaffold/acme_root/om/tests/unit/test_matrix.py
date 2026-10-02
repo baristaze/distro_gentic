@@ -5,12 +5,14 @@ publication and switches off a retired model at its next loop, and a tenant
 on its own keys calls on them, alone."""
 
 import itertools
+from collections.abc import AsyncIterator, Awaitable, Callable
 from pathlib import Path
 from uuid import UUID
 
 import pytest
 from contracts.doubles import context
 from contracts.factories import make_org
+from contracts.histories import History
 from contracts.loops import reply, said
 from contracts.matrix import (
     CATCH_ALL,
@@ -25,9 +27,10 @@ from contracts.matrix import (
     fleet_over,
     kept_in,
 )
+from pydantic import SecretStr
 
-from acme.integrations.model_providers.calls import ModelCall
-from acme.integrations.model_providers.scripted import ScriptedFailure
+from acme.integrations.model_providers.calls import ModelCall, StreamPart
+from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl, ScriptedFailure
 from acme.integrations.model_providers.types import ErrorKind, ProviderName
 from acme.om.agents.types.request import Start
 from acme.om.agents.types.run import RunEnd
@@ -55,9 +58,9 @@ from acme.om.models.types.fill import MAIN, SUMMARIZER, Eligibility, Fill, Switc
 from acme.om.privacy.types.session_privacy import StorageMode
 from acme.om.retention import rules as retention_rules
 from acme.om.retention.types.policy import RetentionPolicy
-from acme.om.steps.types.header import LoopOutcome, ParkReason, SwitchedHeader
+from acme.om.steps.types.header import ControlCommand, LoopOutcome, ParkReason, SwitchedHeader
 from acme.om.steps.types.step import StepType
-from acme.om.trust.types.provider_key import KeyStatus
+from acme.om.trust.types.provider_key import KeyStatus, key_secret_name
 
 
 def anywhere(_: Fill) -> bool:
@@ -147,6 +150,19 @@ def test_every_question_resolves_to_its_most_specific_matching_row() -> None:
 
 
 # A model enters a role's fills only priced, and only qualified for it.
+
+
+async def test_a_version_that_serves_not_every_role_its_kinds_call_is_refused(
+    tmp_path: Path,
+) -> None:
+    fleet = await fleet_over(tmp_path)
+    rows = (CATCH_ALL[0], CATCH_ALL[2])
+
+    with pytest.raises(ValidationFailed, match="serves no model role summarizer"):
+        await fleet.publish(rows, roles=(MAIN,))
+
+    with pytest.raises(NotFound):
+        await fleet.matrix.matrix_operator.get_version(fleet.admin, None)
 
 
 async def test_a_model_without_a_price_row_of_its_own_enters_no_version(tmp_path: Path) -> None:
@@ -295,6 +311,38 @@ async def test_a_tightened_retention_reaches_a_running_sessions_fills_at_its_nex
 
 # A running session keeps its version, and a retired model switches at the
 # next loop.
+
+
+async def test_a_session_that_resolves_nothing_is_pinned_to_nothing(tmp_path: Path) -> None:
+    """A tenant that keeps nothing in one region finds no fill in the first
+    version, and its loop ends; the next version answers it."""
+    fleet = await fleet_over(tmp_path)
+    await fleet.publish()
+    current = await fleet.loop.managers.retention.get_policy(fleet.owner)
+    kept = RetentionPolicy(
+        storage_mode=StorageMode.MEMORY_ONLY, zero_retention=True, region="eu-central-1"
+    )
+    await fleet.loop.managers.retention.write_policy(
+        fleet.owner, current.model_copy(update={"policy": kept})
+    )
+    session_id = await fleet.loop.start()
+    assert await loop_once(fleet, session_id) is RunEnd.ENDED, "no fill it may run on"
+    with pytest.raises(NotFound):
+        await fleet.matrix.matrix.get_pin(fleet.owner, session_id)
+
+    second = await fleet.publish(
+        (
+            MatrixRow(key=MatrixKey(role=MAIN), fills=(kept_in(SONNET, EU),)),
+            MatrixRow(key=MatrixKey(role=SUMMARIZER), fills=(kept_in(HAIKU, EU),)),
+            MatrixRow(fills=(SONNET,)),
+        )
+    )
+    fleet.loop.anthropic.add(reply(said("The total is 12.")))
+    assert await loop_once(fleet, session_id, "And now?") is RunEnd.ENDED
+
+    pin = await fleet.matrix.matrix.get_pin(fleet.owner, session_id)
+    assert pin.matrix_version == second.number
+    assert [call.model for call in fleet.loop.anthropic.calls] == [SONNET.model]
 
 
 async def test_a_running_session_keeps_its_matrix_version_across_a_publish(
@@ -510,7 +558,82 @@ async def test_a_refused_key_parks_only_the_sessions_that_need_it(tmp_path: Path
     )
     keys = {k.id: k for k in await fleet.trust.trust.get_provider_keys(fleet.owner, 10)}
     assert keys[a.id].status is KeyStatus.REFUSED
+    secrets = fleet.trust_infra.get_secrets()
+    assert await secrets.has(fleet.owner.org_id, key_secret_name(a.id)), "its value is kept"
     assert len(fleet.loop.anthropic.calls) == 1, "the other tenant's call ran on the platform's"
+
+
+async def test_a_permission_the_key_lacks_parks_only_the_session_that_met_it(
+    tmp_path: Path,
+) -> None:
+    """A 403 is the call's: a permission, a region, a model the key cannot
+    reach. The key stays live, and its other sessions run on it."""
+    fleet, saved = await own_keys(tmp_path, ProviderName.ANTHROPIC)
+    await fleet.publish()
+    met, other = await fleet.loop.start(), await fleet.loop.start()
+    client = fleet.on_key("sk-anthropic", ProviderName.ANTHROPIC)
+    client.add(
+        ScriptedFailure(kind=ErrorKind.CREDENTIAL, status=403, message="permission_error"),
+        reply(said("The total is 12.")),
+    )
+
+    assert await loop_once(fleet, met) is RunEnd.PARKED
+    assert await loop_once(fleet, other) is RunEnd.ENDED
+
+    session = await fleet.loop.managers.agent_sessions.get_session(fleet.owner, met)
+    assert session.park is not None and session.park.unlock == "anthropic:permission"
+    (key,) = await fleet.trust.trust.get_provider_keys(fleet.owner, 10)
+    assert key.id == saved["sk-anthropic"] and key.status is KeyStatus.LIVE
+    secrets = fleet.trust_infra.get_secrets()
+    assert await secrets.has(fleet.owner.org_id, key_secret_name(key.id))
+    assert len(client.calls) == 2, "the other session called on the same key"
+
+
+class RotatingClient(ModelProviderScriptedImpl):
+    """A tenant's client whose summarizer call sees the key rotated before it
+    fails: what a rotation between a call and its failure looks like."""
+
+    def __init__(self, provider: ProviderName, rotate: Callable[[], Awaitable[object]]) -> None:
+        super().__init__(provider)
+        self._rotate = rotate
+
+    async def stream(
+        self, call: ModelCall, *, credential: SecretStr | None = None
+    ) -> AsyncIterator[StreamPart]:
+        if call.model == HAIKU.model:
+            await self._rotate()
+        async for part in super().stream(call, credential=credential):
+            yield part
+
+
+async def test_a_compactions_failure_refuses_the_key_its_call_carried_and_no_other(
+    tmp_path: Path,
+) -> None:
+    fleet, _ = await own_keys(tmp_path)
+    trust = fleet.trust.trust
+
+    async def rotate() -> object:
+        return await trust.save_provider_key(fleet.owner, ProviderName.ANTHROPIC, "sk-second")
+
+    first = await trust.save_provider_key(fleet.owner, ProviderName.ANTHROPIC, "sk-first")
+    client = RotatingClient(ProviderName.ANTHROPIC, rotate)
+    fleet.keyed["sk-first"] = client
+    await fleet.publish()
+    session_id = await fleet.loop.start()
+    client.add(reply(said("The total is 12.")), reply(said("The average is 3.")))
+    assert await loop_once(fleet, session_id) is RunEnd.ENDED
+    assert await loop_once(fleet, session_id, "And the average?") is RunEnd.ENDED
+    client.add(ScriptedFailure(kind=ErrorKind.CREDENTIAL, status=401))
+    compact = History(session_id).control(ControlCommand.COMPACT)
+    await fleet.loop.managers.steps.append_inputs(fleet.owner, session_id, [compact])
+
+    assert await loop_once(fleet, session_id, "And the median?") is RunEnd.PARKED
+
+    assert [call.model for call in client.calls][-1] == HAIKU.model, "the summarizer's call"
+    keys = {k.id: k for k in await trust.get_provider_keys(fleet.owner, 10)}
+    assert keys[first.id].status is KeyStatus.ROTATED
+    (live,) = [k for k in keys.values() if k.id != first.id]
+    assert live.status is KeyStatus.LIVE, "the key saved after the call stays valid"
 
 
 async def test_an_own_key_tenants_outage_signal_is_its_own(tmp_path: Path) -> None:

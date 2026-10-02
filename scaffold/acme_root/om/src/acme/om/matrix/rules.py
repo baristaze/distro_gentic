@@ -2,7 +2,7 @@
 session may run on, and why a version may not be published. Values in,
 values out; no clock, no storage."""
 
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Collection, Iterable, Sequence
 
 from acme.integrations.model_providers.types import ProviderName
 from acme.om.matrix.types.matrix import MatrixQuery, MatrixRow, MatrixVersion
@@ -101,14 +101,20 @@ def publish_refusals(
     priced: Callable[[ModelRef], bool],
     qualified: Callable[[ModelRef, ModelRole], bool],
     retired: Callable[[ModelRef], bool],
+    required: Collection[ModelRole],
 ) -> list[str]:
     """Why `version` may not be published, every reason, or none. It needs
-    the row that matches every question. Each fill of each row needs a price
-    row of its own, a passing benchmark for every model role the row serves,
-    and a model no provider has retired."""
+    the row that matches every question, and it serves every model role in
+    `required`, the roles the kinds it answers call. Each fill of each row
+    needs a price row of its own, a passing benchmark for every model role
+    the row serves, and a model no provider has retired."""
     refusals: list[str] = []
     if not any(row.key.everything for row in version.rows):
         refusals.append("no row matches every question")
+    refusals.extend(
+        f"it serves no model role {role}, which a kind it answers calls"
+        for role in sorted(set(required) - set(version.roles))
+    )
     for row in version.rows:
         for fill in row.fills:
             model = ModelRef.of(fill)

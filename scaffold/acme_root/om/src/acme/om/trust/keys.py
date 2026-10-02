@@ -47,8 +47,9 @@ class ProviderClientsInterface(ABC):
 
     @abstractmethod
     async def refuse(self, ctx: TenantContext, provider: ProviderName, reference: UUID) -> None:
-        """The provider refused the tenant's key `reference` on a call: the
-        key is marked refused, its value leaves the store, and its client is
-        closed, so no call is offered it again and every session that needs
-        it waits for a new one. A key no longer live changes nothing."""
+        """The provider did not authenticate the tenant's key `reference` on
+        a call: the key is marked refused and its client closed, so no call
+        is offered it again and every session that needs it waits until the
+        tenant saves a new one. Its value is kept. A key no longer live
+        changes nothing."""
         ...
