@@ -250,6 +250,7 @@ class StoragePostgresImpl(StorageInterface):
 
     def get_evidence_storage(self) -> EvidenceStorageInterface:
         return self._evidence
+
     def get_placement_storage(self) -> PlacementStorageInterface:
         return self._placement
 

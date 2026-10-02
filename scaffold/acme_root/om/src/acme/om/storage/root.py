@@ -76,6 +76,8 @@ class StorageInterface(ABC):
 
     @abstractmethod
     def get_evidence_storage(self) -> EvidenceStorageInterface: ...
+
+    @abstractmethod
     def get_placement_storage(self) -> PlacementStorageInterface: ...
 
     @abstractmethod
