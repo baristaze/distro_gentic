@@ -353,10 +353,6 @@ class HostsManagerImpl(HostsManagerInterface):
         )
         return await self._placement.claim_for(rctx, claimant, self._options.claim_lease)
 
-    async def inside_wall(self, org_id: UUID, session_id: UUID) -> bool:
-        placed = await self._storage.read_placement(org_id, session_id)
-        return placed is not None and placed.pool_id is not None
-
     # Helpers.
 
     async def _pool(self, ctx: TenantContext, pool_id: UUID) -> HostPool:

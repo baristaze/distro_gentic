@@ -131,13 +131,3 @@ class HostsManagerInterface(ABC):
         version it reads is below the floor. Renews the host as a heartbeat
         does. None when nothing is ready."""
         ...
-
-    # The trust swimlane's question, answered where placement is kept.
-
-    @abstractmethod
-    async def inside_wall(self, org_id: UUID, session_id: UUID) -> bool:
-        """Platform-internal: whether the session is placed on one of its
-        tenant's pools, so its calls run on a host inside the tenant's wall,
-        rather than in the platform's cloud. Asked under the tenant it names,
-        for no principal."""
-        ...

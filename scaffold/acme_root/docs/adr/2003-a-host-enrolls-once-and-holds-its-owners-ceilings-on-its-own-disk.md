@@ -39,7 +39,9 @@ count as online.
 
 **A pinned session waits.** A principal places a session on a pool or in
 the cloud, and nothing else moves it. Its placement reads `waiting`
-while no host of its pool is online.
+while no host of its pool is online. The trust swimlane reads it as
+inside the wall, and a call of it that no host is named to run is
+refused, never run on the runner instead.
 
 **The ceilings live on the host.** Its owner writes them in a file on the
 host, which the host reads at startup and holds frozen. No answer of the

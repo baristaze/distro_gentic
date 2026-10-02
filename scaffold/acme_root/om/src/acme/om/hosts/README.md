@@ -61,8 +61,10 @@ of](../../../../README.md).
 
 <!-- agents-only
 Trust's `PlacementInterface` (inside the wall, and the executor of a
-session's next call) is answered here: `inside_wall` is this manager's,
-and `executor_of` needs the workspace binding, which the relay adds. The
+session's next call) is answered here, by `impl/placement.PlacementHostsImpl`,
+which the session runner wires. A pinned session's call is refused
+(`PinnedToHosts`, a `NotAuthorized` the loop answers as denied) until the
+relay names the host that holds its workspace. The
 manager methods a host calls take `RequestContext` and a `HostIdentity`
 that only `authenticate` builds, at the gateway (`gateway/hosts.py`).
 What a host reads of an item it claims is the owner's ceilings' business,

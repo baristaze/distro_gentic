@@ -17,8 +17,9 @@ from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext, Role, TenantContext
 from acme.om.exceptions import CredentialExpired, InvalidCredential, NotAuthorized, NotFound
 from acme.om.hosts import rules
-from acme.om.hosts.exceptions import VersionBelowFloor
+from acme.om.hosts.exceptions import PinnedToHosts, VersionBelowFloor
 from acme.om.hosts.impl.manager import HostsManagerImpl, HostsOptions
+from acme.om.hosts.impl.placement import PlacementHostsImpl
 from acme.om.hosts.rules import ENROLLMENT_PREFIX, HOST_CREDENTIAL_PREFIX, WireType
 from acme.om.hosts.types.credential import IssuedHostCredential
 from acme.om.hosts.types.host import Advertisement, Enrollment, HostReport, IsolationMode
@@ -29,6 +30,7 @@ from acme.om.placement.types.work import WorkspaceOperation
 from acme.om.root import Managers, build_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import CREDENTIAL_PREFIXES, credential_kind_of
+from acme.om.trust.types.identities import Executor, ExecutorKind
 from acme.om.work.types.work_item import WorkItem, WorkKind
 
 APP = AppContext(type=AppType.PORTAL, version="portal@test")
@@ -387,9 +389,7 @@ async def test_a_pinned_session_with_no_host_online_waits_and_never_moves_to_the
     pool = await hosts.create_pool(owner, a_pool())
     session = await managers.agent_sessions.create_session(owner, make_session())
     assert not (await hosts.placement_of(owner, session.id)).waiting  # the cloud, unplaced
-    assert not await hosts.inside_wall(owner.org_id, session.id)
     await hosts.place_session(owner, session.id, pool.id)
-    assert await hosts.inside_wall(owner.org_id, session.id)
     state = await hosts.placement_of(owner, session.id)
     assert state.pool == pool and state.hosts_online == 0 and state.waiting
     # Its workspace is asked of its pool, and no cloud host is handed it,
@@ -432,7 +432,6 @@ async def test_only_a_principal_with_write_moves_a_session(
     assert (moved.id, moved.version, moved.pool_id) == (placed.id, 2, None)
     state = await hosts.placement_of(owner, session.id)
     assert state.pool is None and not state.waiting and state.version == 2
-    assert not await hosts.inside_wall(owner.org_id, session.id)
     other = await an_owner(managers, "fabrikam")
     with pytest.raises(NotFound):
         await hosts.place_session(other, session.id, None)
@@ -448,3 +447,24 @@ async def test_purge_tenant_waits_for_the_retention(
     await hosts.create_pool(owner, a_pool())
     assert await hosts.purge_tenant(owner) == 0
     assert len(await hosts.get_pools(owner)) == 1
+
+
+async def test_trust_reads_a_pinned_session_inside_the_wall_and_runs_none_of_its_calls_in_the_cloud(
+    managers: Managers, hosts: HostsManagerImpl, storage: StorageMemoryImpl
+) -> None:
+    owner = await an_owner(managers)
+    pool = await hosts.create_pool(owner, a_pool())
+    session = await managers.agent_sessions.create_session(owner, make_session())
+    runner = Executor(kind=ExecutorKind.CLOUD, credential_id=new_id(), label="runner-1")
+    placement = PlacementHostsImpl(storage.get_hosts_storage(), runner)
+    assert not await placement.inside_wall(owner.org_id, session.id)
+    assert await placement.executor_of(owner.org_id, session.id) == runner
+    await hosts.place_session(owner, session.id, pool.id)
+    assert await placement.inside_wall(owner.org_id, session.id)
+    # Refused as the loop answers a call it may not make, never run on the
+    # runner instead.
+    with pytest.raises(PinnedToHosts) as refused:
+        await placement.executor_of(owner.org_id, session.id)
+    assert isinstance(refused.value, NotAuthorized)
+    await hosts.place_session(owner, session.id, None)
+    assert await placement.executor_of(owner.org_id, session.id) == runner

@@ -189,9 +189,6 @@ MANAGER_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         # And the lane an item is enqueued on, which both enqueues ask under
         # the tenant they name, the relayed one with no stage.
         ("PlacementManagerInterface", "lane_for"),
-        # And whether a session runs inside its tenant's wall, which trust
-        # asks under the tenant it names, for no principal.
-        ("HostsManagerInterface", "inside_wall"),
     }
 )
 
