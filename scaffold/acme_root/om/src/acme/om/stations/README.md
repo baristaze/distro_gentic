@@ -40,7 +40,9 @@ the kinds of thing [Acme is made of](../../../../README.md).
 - **Make a lab, a pool, a station; issue or revoke a daemon's
   credential.** An owner or an admin.
 - **Join a line.** A session asks, and is told its place and an
-  estimate. It waits once it is parked on the line.
+  estimate. It waits once it is parked on the line, and its park offers
+  every station that serves a line it stands in: the sessions every
+  namespace is handed carry the offer.
 - **Grant.** A free station goes to the first entry in line whose
   session waits. The grant is one conditional write on the station's
   row, and it wakes the session with an event naming the station and its

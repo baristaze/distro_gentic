@@ -296,6 +296,27 @@ class StationsManagerImpl(StationsManagerInterface):
             raise NotFound(f"no waiting entry {entry_id}")
         return await self._place(ctx, entry_id)
 
+    async def offer_parked(self, ctx: TenantContext, session_id: UUID) -> StationLease | None:
+        ctx.require(Permission.WRITE)
+        offered: set[UUID] = set()
+        waiting = await self._storage.read_waiting(ctx.org_id, session_id, self._options.max_line)
+        for entry in waiting:
+            if entry.station_id is not None:
+                named = await self._storage.read_station(ctx.org_id, entry.station_id)
+                stations = [] if named is None else [named]
+            else:
+                stations = await self._storage.read_stations(
+                    ctx.org_id, entry.pool_id, self._options.max_stations
+                )
+            for station in stations:
+                if station.id in offered or not serves(station, entry):
+                    continue
+                offered.add(station.id)
+                lease = await self._offer(ctx, station.id)
+                if lease is not None and lease.session_id == session_id:
+                    return lease
+        return None
+
     async def leave(self, ctx: TenantContext, session_id: UUID) -> int:
         ctx.require(Permission.WRITE)
         return await self._leave_every_line(ctx, session_id)

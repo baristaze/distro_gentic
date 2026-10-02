@@ -95,6 +95,15 @@ class StationsManagerInterface(ABC):
         ...
 
     @abstractmethod
+    async def offer_parked(self, ctx: TenantContext, session_id: UUID) -> StationLease | None:
+        """The session just parked on the line: every station that serves a
+        line it stands in is offered, so a free one goes to the first in
+        that line who waits. Called at the park, by the sessions the
+        platform hands every namespace. Returns the lease the session was
+        granted, if it was. Requires the write permission."""
+        ...
+
+    @abstractmethod
     async def leave(self, ctx: TenantContext, session_id: UUID) -> int:
         """The session leaves every line it stands in, as it does when it
         finishes or is cancelled. Returns how many places it left. Requires

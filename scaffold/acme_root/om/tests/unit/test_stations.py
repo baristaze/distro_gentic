@@ -309,6 +309,23 @@ async def test_a_session_that_no_longer_waits_is_never_granted_and_leaves_every_
     assert await stations.get_line(owner, lab.pool.id) == ()
 
 
+async def test_a_session_that_joins_while_it_runs_is_granted_a_free_station_at_its_park(
+    managers: Managers, stations: StationsManagerImpl
+) -> None:
+    owner = await an_owner(managers)
+    lab = await a_lab(stations, owner)
+    session, epoch, loop_id = await a_running_session(managers, owner)
+    placed = await join(stations, owner, session, lab.pool, lab.first)
+    assert placed.entry.state is EntryState.WAITING
+    assert await held_by(stations, owner, lab.first) is None
+    # Its loop parks on the line, through the sessions every namespace is
+    # handed: the park offers the station, and nobody else joins.
+    woken = await managers.agent_sessions.park(owner, session, epoch, loop_id, LINE_PARK)
+    lease = await held_by(stations, owner, lab.first)
+    assert lease is not None and (lease.session_id, lease.token) == (session, 1)
+    assert woken.status is SessionStatus.PENDING and woken.park is None
+
+
 async def test_a_session_that_leaves_leaves_every_line_and_is_granted_nothing(
     managers: Managers, stations: StationsManagerImpl
 ) -> None:

@@ -93,6 +93,7 @@ from acme.om.retention.keys import TenantKeysInterface
 from acme.om.retention.projects import SessionProjectInterface
 from acme.om.stations import StationsManagerInterface
 from acme.om.stations.impl.manager import StationsManagerImpl, StationsOptions
+from acme.om.stations.impl.sessions import AgentSessionsInLineImpl
 from acme.om.steps import StepsManagerInterface
 from acme.om.steps.impl.manager import StepsManagerImpl, StepsOptions
 from acme.om.steps.storage import StepStorageInterface
@@ -505,7 +506,14 @@ def build_managers(
     # the project of the session it came from. Every other namespace reaches
     # the sessions through the decorator, so no such session stands outside
     # its origin's project.
-    agent_sessions = AgentSessionsInProjectImpl(retained, storage.get_project_storage())
+    in_project = AgentSessionsInProjectImpl(retained, storage.get_project_storage())
+    # A session that parks on a station's line is offered the stations of
+    # every line it stands in, so one that joined while its loop ran is
+    # granted a free station once it waits. The stations are built below
+    # on this manager, so the edge is bound at call time.
+    agent_sessions = AgentSessionsInLineImpl(
+        in_project, lambda ctx, session_id: managers.stations.offer_parked(ctx, session_id)
+    )
     # The gate reads the budgets of a call's scopes and holds on the ledger.
     budgets = BudgetsManagerImpl(
         storage.get_budget_storage(),
