@@ -64,6 +64,7 @@ class GitTwin(WorkspaceGitInterface):
     pushed: dict[str, str] = field(default_factory=lambda: dict[str, str]())
     head: str = BASE
     diverged: bool = False  # the session's branch moved here and on the remote both
+    calls: list[str] = field(default_factory=lambda: list[str]())
     cuts: list[str] = field(default_factory=lambda: list[str]())
 
     async def sync(
@@ -75,8 +76,10 @@ class GitTwin(WorkspaceGitInterface):
     async def cut(
         self, ctx: TenantContext, workspace: Workspace, binding: RepositoryBinding, branch: str
     ) -> None:
+        self.calls.append("cut")
         self.cuts.append(branch)
         self.local.add(branch)
+        self.dirty = False  # what the checkout held is gone with the cut
 
     async def checkout(
         self, ctx: TenantContext, workspace: Workspace, binding: RepositoryBinding
@@ -85,8 +88,14 @@ class GitTwin(WorkspaceGitInterface):
         return Checkout(base=BASE, head=self.head, dirty=self.dirty, changed=changed)
 
     async def snapshot(
-        self, ctx: TenantContext, workspace: Workspace, branch: str, ref: str
+        self,
+        ctx: TenantContext,
+        workspace: Workspace,
+        binding: RepositoryBinding,
+        branch: str,
+        ref: str,
     ) -> Snapshot:
+        self.calls.append("snapshot")
         if not self.dirty:
             return Snapshot(ref=ref, remote_branch=branch in self.remote)
         if self.refuses_push:

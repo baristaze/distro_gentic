@@ -207,12 +207,19 @@ async def test_a_branch_the_remote_lost_fails_loudly_and_nothing_restarts_from_m
     assert git(here, "rev-parse", "HEAD") == head, "nothing was checked out from main"
     assert (here / "feature.txt").exists()
 
+    # Its pull request merged; the checkout still holds work a release
+    # could not keep.
+    (here / "feature.txt").write_text("the feature, changed\n")
+    (here / "notes.txt").write_text("half done\n")
     checkout.pull_requests.fates[branch] = PullRequestFate.MERGED
     rebuilt = await checkout.prepare(session_id)
 
     assert git(here, "rev-parse", "--abbrev-ref", "HEAD") == branch
     assert git(here, "rev-parse", "HEAD") == checkout.main, "cut again from main"
-    assert rebuilt.changed is not None and "merged" in rebuilt.changed
+    (ref,) = checkout.snapshots(branch)
+    assert git(checkout.remote, "show", f"{ref}:notes.txt") == "half done", "kept before the cut"
+    assert git(checkout.remote, "show", f"{ref}:feature.txt") == "the feature, changed"
+    assert rebuilt.changed is not None and "merged" in rebuilt.changed and ref in rebuilt.changed
 
 
 # The branch is brought up to what its repository holds.

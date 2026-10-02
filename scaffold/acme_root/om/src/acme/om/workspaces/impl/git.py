@@ -57,17 +57,18 @@ whether the remote and the checkout hold it, and whether the checkout
 reached the remote's branch."""
 
 CUT = """set -eu
-git checkout -q --force --no-track -B "$BRANCH" "origin/$BASE"
+git fetch -q --no-tags "$REPOSITORY" "+refs/heads/$BASE"
+git checkout -q --force --no-track -B "$BRANCH" FETCH_HEAD
 git clean -q -fd
 echo cut
 """
-"""Cuts the branch anew from the remote's default branch, over whatever the
-checkout held: what that was, the last release pushed."""
+"""Cuts the branch anew from the bound repository's default branch as it is
+fetched now, over whatever the checkout held: the caller keeps that first."""
 
 SNAPSHOT = """set -eu
 if [ ! -d .git ]; then echo "snapshot - no"; exit 0; fi
 remote=no
-if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then remote=yes; fi
+if git ls-remote --exit-code --heads "$REPOSITORY" "$BRANCH" >/dev/null 2>&1; then remote=yes; fi
 head=no
 if git rev-parse -q --verify HEAD >/dev/null; then head=yes; fi
 if [ -n "$(git status --porcelain --untracked-files=all)" ]; then
@@ -88,14 +89,13 @@ else
   echo "snapshot - $remote"
   exit 0
 fi
-git push -q origin "$commit:$REF"
+git push -q "$REPOSITORY" "$commit:$REF"
 echo "snapshot $commit $remote"
 """
 """Commits what the checkout holds uncommitted in an index of its own, or
 takes HEAD when only commits the remote lacks are new, and pushes it to the
-snapshot ref; prints the commit, or `-` when nothing was new, and whether
-the remote holds the branch."""
-
+snapshot ref on the bound repository; prints the commit, or `-` when
+nothing was new, and whether the repository holds the branch."""
 
 CHECKOUT = """set -eu
 git fetch -q --no-tags "$REPOSITORY" "refs/heads/$BASE"
@@ -154,9 +154,12 @@ class WorkspaceGitTransportImpl(WorkspaceGitInterface):
     async def cut(
         self, ctx: TenantContext, workspace: Workspace, binding: RepositoryBinding, branch: str
     ) -> None:
-        await self._run(
-            ctx, workspace, "cut", CUT, {"BRANCH": branch, "BASE": binding.default_branch}
-        )
+        env = {
+            "REPOSITORY": binding.repository,
+            "BRANCH": branch,
+            "BASE": binding.default_branch,
+        }
+        await self._run(ctx, workspace, "cut", CUT, env)
 
     async def checkout(
         self, ctx: TenantContext, workspace: Workspace, binding: RepositoryBinding
@@ -170,10 +173,16 @@ class WorkspaceGitTransportImpl(WorkspaceGitInterface):
         return Checkout(base=words[1], head=words[2], dirty=words[3] == "yes", changed=changed)
 
     async def snapshot(
-        self, ctx: TenantContext, workspace: Workspace, branch: str, ref: str
+        self,
+        ctx: TenantContext,
+        workspace: Workspace,
+        binding: RepositoryBinding,
+        branch: str,
+        ref: str,
     ) -> Snapshot:
         options = self._options
         env = {
+            "REPOSITORY": binding.repository,
             "BRANCH": branch,
             "REF": ref,
             "MESSAGE": options.message,

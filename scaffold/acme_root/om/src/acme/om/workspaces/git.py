@@ -27,8 +27,9 @@ class WorkspaceGitInterface(ABC):
     async def cut(
         self, ctx: TenantContext, workspace: Workspace, binding: RepositoryBinding, branch: str
     ) -> None:
-        """Checks `branch` out anew from the remote's default branch, over
-        whatever the checkout held of it."""
+        """Checks `branch` out anew from the bound repository's default
+        branch as it is fetched now, over whatever the checkout held: the
+        caller keeps that first (`snapshot`)."""
         ...
 
     @abstractmethod
@@ -44,10 +45,16 @@ class WorkspaceGitInterface(ABC):
 
     @abstractmethod
     async def snapshot(
-        self, ctx: TenantContext, workspace: Workspace, branch: str, ref: str
+        self,
+        ctx: TenantContext,
+        workspace: Workspace,
+        binding: RepositoryBinding,
+        branch: str,
+        ref: str,
     ) -> Snapshot:
         """Commits what the checkout holds uncommitted, beside its branch and
-        never on it, and pushes it to `ref` with any commit the remote lacks.
-        A clean checkout the remote holds whole pushes nothing. Raises when
-        the push does not land, so nothing is let go that is not kept."""
+        never on it, and pushes it to `ref` on the bound repository with any
+        commit the remote lacks. A clean checkout the remote holds whole
+        pushes nothing. Raises when the push does not land, so nothing is let
+        go, or cut over, that is not kept."""
         ...

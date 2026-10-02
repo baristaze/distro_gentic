@@ -45,7 +45,8 @@ rebuilt from.
   lost is rebuilt from the default branch only when its pull request was
   merged or closed, and the loop is told. One that moved on both sides,
   or vanished for no known reason, ends the loop, loudly; nothing
-  restarts silently from the default branch.
+  restarts silently from the default branch. Before any cut, what the
+  checkout holds is pushed to a snapshot ref, or nothing is cut.
 - **Release.** Before an instance goes, what its checkout holds that the
   remote lacks is committed to a snapshot ref beside the session's
   branch, never on it, and pushed. The branch, the index, and the files

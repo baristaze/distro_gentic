@@ -142,7 +142,7 @@ async def test_the_work_a_loop_left_is_recorded_and_told_over_postgres(
     storage: StoragePostgresImpl, tmp_path: Path
 ) -> None:
     owner = await an_owner(storage, tmp_path)
-    git = GitTwin(dirty=True)
+    git = GitTwin()
     loop = loop_over(
         tmp_path,
         storage=storage,
@@ -152,13 +152,14 @@ async def test_the_work_a_loop_left_is_recorded_and_told_over_postgres(
         workspace_git=git,
     )
     session_id = await loop.start("twinned")
-    for text in ("First.", "Second."):
+    for text, leaves_work in (("First.", False), ("Second.", True), ("Third.", False)):
+        git.dirty = leaves_work
         await loop.say(session_id, text)
         loop.anthropic.add(reply(said("Done.")))
         assert (await loop.loops.run(owner, session_id)).outcome is LoopOutcome.SUCCEEDED
 
-    first, second = list(git.pushed)
+    (kept,) = list(git.pushed)
     held = await loop.managers.workspaces.get_workspace(owner, session_id)
-    assert held.snapshot_ref == second and held.version > 1
+    assert held.snapshot_ref == kept and held.notice is None and held.version > 1
     told = [s for s in await loop.history(session_id) if s.type is StepType.ENVIRONMENT_CHANGED]
-    assert len(told) == 1 and first in told[0].as_text()
+    assert len(told) == 1 and kept in told[0].as_text()

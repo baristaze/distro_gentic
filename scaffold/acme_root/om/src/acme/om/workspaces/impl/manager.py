@@ -139,6 +139,7 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
             return workspace
         told = [] if held.notice is None else [held.notice]
         seen = held.branch_seen
+        kept: str | None = None
         binding = await self._binding(ctx, held)
         if binding is not None:
             state = await self._git.sync(ctx, workspace, binding, held.branch)
@@ -161,6 +162,13 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
                 )
                 raise WorkspaceLost(f"the branch {held.branch} of session {workspace.id} {why}")
             if plan in (BranchPlan.CUT, BranchPlan.REBUILD):
+                # What the checkout holds is kept before it is cut over: a
+                # push that does not land raises, and nothing is cut.
+                ref = rules.snapshot_ref(held.branch, self._clock())
+                snapshot = await self._git.snapshot(ctx, workspace, binding, held.branch, ref)
+                if snapshot.commit is not None:
+                    kept = snapshot.ref
+                    told.append(rules.told_of_snapshot(snapshot.ref, snapshot.commit))
                 await self._git.cut(ctx, workspace, binding, held.branch)
             if plan is BranchPlan.REBUILD and fate is not None:
                 told.append(rules.told_of_rebuild(held.branch, fate, binding.default_branch))
@@ -172,8 +180,8 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
                     fate.value,
                 )
             seen = state.remote
-        if held.notice is not None or seen != held.branch_seen:
-            await self._update(ctx, workspace.id, notice=None, branch_seen=seen)
+        if held.notice is not None or seen != held.branch_seen or kept is not None:
+            await self._update(ctx, workspace.id, notice=None, branch_seen=seen, snapshot_ref=kept)
         return workspace.model_copy(update={"changed": "\n\n".join(told) or None})
 
     async def detach(self, ctx: TenantContext, workspace: Workspace) -> None:
@@ -185,7 +193,7 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         if binding is None:
             return
         ref = rules.snapshot_ref(held.branch, self._clock())
-        snapshot = await self._git.snapshot(ctx, workspace, held.branch, ref)
+        snapshot = await self._git.snapshot(ctx, workspace, binding, held.branch, ref)
         seen = held.branch_seen or snapshot.remote_branch
         if snapshot.commit is None:
             if seen != held.branch_seen:

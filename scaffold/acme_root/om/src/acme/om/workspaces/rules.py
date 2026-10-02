@@ -232,7 +232,7 @@ def branch_plan(state: BranchState, *, seen: bool, fate: PullRequestFate | None)
 def told_of_rebuild(branch: str, fate: PullRequestFate, base: str) -> str:
     return (
         f"Your branch {branch} was deleted after its pull request was {fate.value}. "
-        f"It was cut again from {base}; what it held is in that pull request."
+        f"It was cut again from {base}; its commits are in that pull request."
     )
 
 

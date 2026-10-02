@@ -159,46 +159,92 @@ async def test_a_session_never_pinned_is_pinned_at_its_first_prepare_and_held_to
 async def test_the_work_a_loop_left_is_pushed_before_release_and_the_next_loop_is_told(
     tmp_path: Path,
 ) -> None:
-    git = GitTwin(dirty=True)
+    git = GitTwin()
     loop = loop_of(tmp_path, workspace_projects=ProjectsTwin(), workspace_git=git)
     session_id = await loop.start("twinned")
     branch = session_branch(session_id)
-
-    first = await one_loop(loop, session_id)
-
-    assert first.outcome is LoopOutcome.SUCCEEDED
+    assert (await one_loop(loop, session_id)).outcome is LoopOutcome.SUCCEEDED
     assert git.cuts == [branch], "its first loop cut the branch from the default branch"
-    (ref, commit) = next(iter(git.pushed.items()))
+    assert git.pushed == {}, "a clean checkout keeps nothing"
+    git.dirty = True  # the next loop leaves work uncommitted
+
+    second = await one_loop(loop, session_id, "Go on.")
+
+    assert second.outcome is LoopOutcome.SUCCEEDED
+    assert git.cuts == [branch], "the branch the checkout holds is kept"
+    ((ref, commit),) = git.pushed.items()
     assert ref.startswith(f"{SNAPSHOT_PREFIX}/{branch}/"), "beside the branch, never on it"
     held = await loop.managers.workspaces.get_workspace(loop.owner, session_id)
     assert held.snapshot_ref == ref and held.notice is not None and commit in held.notice
     assert provider(loop).live == set(), "kept, then let go"
 
     git.dirty = False
-    second = await one_loop(loop, session_id, "And now?")
+    third = await one_loop(loop, session_id, "And now?")
 
-    assert second.outcome is LoopOutcome.SUCCEEDED
+    assert third.outcome is LoopOutcome.SUCCEEDED
     steps = await loop.history(session_id)
     (told,) = of_type(steps, StepType.ENVIRONMENT_CHANGED)
     assert ref in told.as_text() and commit in told.as_text()
     requests = of_type(steps, StepType.MODEL_REQUEST)
-    assert requests[0].seq < told.seq < requests[1].seq, "told before the next loop's call"
-    assert told.id in requests[1].refs, "the call delivered it"
+    assert requests[1].seq < told.seq < requests[2].seq, "told before the next loop's call"
+    assert told.id in requests[2].refs, "the call delivered it"
     held = await loop.managers.workspaces.get_workspace(loop.owner, session_id)
     assert held.notice is None, "told once"
 
 
 async def test_a_workspace_whose_work_is_not_pushed_is_not_let_go(tmp_path: Path) -> None:
-    git = GitTwin(dirty=True, refuses_push=True)
+    git = GitTwin()
     loop = loop_of(tmp_path, workspace_projects=ProjectsTwin(), workspace_git=git)
     session_id = await loop.start("twinned")
+    assert (await one_loop(loop, session_id)).outcome is LoopOutcome.SUCCEEDED
+    git.dirty, git.refuses_push = True, True
 
-    run = await one_loop(loop, session_id)
+    run = await one_loop(loop, session_id, "Go on.")
 
     assert run.outcome is LoopOutcome.SUCCEEDED
     assert session_id in provider(loop).live, "the instance, and the work in it, stay"
     held = await loop.managers.workspaces.get_workspace(loop.owner, session_id)
     assert held.snapshot_ref is None and held.notice is None
+
+
+async def test_a_dirty_checkout_is_kept_before_it_is_cut_or_nothing_is_cut(
+    tmp_path: Path,
+) -> None:
+    git = GitTwin()
+    pull_requests = PullRequestsTwin()
+    loop = loop_of(
+        tmp_path,
+        workspace_projects=ProjectsTwin(),
+        workspace_git=git,
+        pull_requests=pull_requests,
+    )
+    session_id = await loop.start("twinned")
+    branch = session_branch(session_id)
+    git.remote.add(branch)
+    assert (await one_loop(loop, session_id)).outcome is LoopOutcome.SUCCEEDED
+    # Its pull request merged and its branch went, while the checkout still
+    # holds work a release could not push.
+    git.remote.discard(branch)
+    pull_requests.fates[branch] = PullRequestFate.MERGED
+    git.dirty, git.refuses_push = True, True
+    git.calls.clear()
+    await loop.say(session_id, "Next change.")
+    loop.anthropic.add(reply(said("Never asked.")))
+
+    with pytest.raises(Unavailable):
+        await loop.loops.run(loop.owner, session_id)
+
+    assert git.cuts == [] and git.calls == ["snapshot"], "nothing was cut over the work"
+    git.refuses_push = False
+    git.calls.clear()
+
+    rebuilt = await loop.loops.run(loop.owner, session_id)
+
+    assert rebuilt.outcome is LoopOutcome.SUCCEEDED
+    assert git.calls[:2] == ["snapshot", "cut"], "kept first, then cut"
+    ((ref, commit),) = git.pushed.items()
+    (told,) = of_type(await loop.history(session_id), StepType.ENVIRONMENT_CHANGED)
+    assert ref in told.as_text() and commit in told.as_text() and "merged" in told.as_text()
 
 
 async def test_a_branch_that_moved_here_and_on_its_repository_ends_the_loop_loudly(
@@ -376,7 +422,7 @@ async def test_the_sessions_own_branch_and_pull_request_are_work_product_and_all
 async def test_what_a_session_delivered_is_read_from_the_workspace_this_host_holds(
     tmp_path: Path,
 ) -> None:
-    git = GitTwin(dirty=True, head="c" * 40)
+    git = GitTwin(head="c" * 40)
     loop = loop_of(tmp_path, workspace_projects=ProjectsTwin(), workspace_git=git)
     assert isinstance(
         loop.managers.evidence._work_product,  # pyright: ignore[reportAttributeAccessIssue]
@@ -386,6 +432,7 @@ async def test_what_a_session_delivered_is_read_from_the_workspace_this_host_hol
     workspace = await loop.managers.tools.prepare_workspace(
         loop.owner, session_id, TWINNED.isolation
     )
+    git.dirty = True  # the loop's work, not yet committed
     held = HeldWorkspaces()
     products = WorkProductWorkspacesImpl(loop.managers.workspaces, held)
 
