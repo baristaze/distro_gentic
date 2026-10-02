@@ -4,9 +4,10 @@ owner's limits before the station's adapter; a refused command is in the
 run's record, and on the disk until the platform recorded it; a token
 below the highest it has seen is refused; a daemon cut off from the
 platform runs its job to its lease's end on its own clock, stops the
-station, and claims nothing, as one the platform fails does; a refused
-credential stops the station and keeps the report for the next one; and a
-revoked lease stops the station."""
+station, and claims nothing, as one the platform fails does; a report the
+platform fails holds the next claim until it lands; a refused credential
+stops the station and keeps the report for the next one; and a revoked
+lease stops the station."""
 
 import stat
 from datetime import timedelta
@@ -14,15 +15,17 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
+from api_support import seed_request
 from daemon_support import Monotonic, Stack
 
 from acme.apps.station_daemon.config import load_credential
 from acme.apps.station_daemon.daemon import CredentialRefused, LeaseClock, StationDaemon
 from acme.client.types import StationJobView
-from acme.om.base import new_id
+from acme.om.base import new_id, utcnow
 from acme.om.evidence.types.provenance import Provenance
 from acme.om.evidence.types.record import ExecutionRecord, RunOutcome
 from acme.om.platform_agents.types.validation import ValidationStart, ValidationStatus
+from acme.om.stations.types.job import JobState, StationJob
 from acme.om.stations.types.lease import StationLease
 from acme.om.work.storage.impl.memory import WorkStorageMemoryImpl
 from acme.om.work.types.work_item import WorkKind
@@ -175,6 +178,40 @@ async def test_a_failing_renewal_is_asked_again_and_the_job_runs_to_its_lease(
     assert run.outcome is RunOutcome.ABORTED and run.metrics["commands_run"] == 3
 
 
+async def test_a_report_the_platform_fails_holds_the_next_claim_until_it_lands(
+    api: Stack, tmp_path: Path
+) -> None:
+    daemon, _ = await api.daemon(tmp_path)
+    lease = await api.granted()
+    job_id = await api.job(lease, 0.1, 0.2)
+    # The platform fails every report with a 503; its claims still answer.
+    api.transport.failing = {"/reports": 503}
+    ran = await daemon.tick()
+    assert ran is not None and not ran.reported and ran.report["commands_run"] == 2
+    # The report waits past the job's claim: the sweep hands its item back.
+    work = api.container.storage.get_work_storage()
+    assert isinstance(work, WorkStorageMemoryImpl)
+    held = work._items  # pyright: ignore[reportPrivateUsage]
+    ((org_id, item),) = [row for row in held.values() if row[1].target_id == job_id]
+    lapsed = utcnow() - timedelta(seconds=1)
+    held[item.id] = (org_id, item.model_copy(update={"lease_expires_at": lapsed}))
+    assert await api.container.managers.work.requeue_stale(seed_request(), limit=10) == 1
+    # While the report waits on its disk, the daemon claims nothing, so
+    # nothing settles the running job without it.
+    assert await daemon.tick() is None and daemon.offline
+    assert len(daemon.journal.pending()) == 1
+    assert (await stored_job(api, job_id)).state is JobState.RUNNING
+    # The platform answers again: the report lands, and the run is the real one.
+    api.transport.failing = {}
+    assert await daemon.tick() is None
+    (run,) = await runs_of(api, lease)
+    assert str(run.id) == ran.report["run_id"] and run.outcome is RunOutcome.PASSED
+    assert run.metrics["commands_run"] == 2
+    finished = await stored_job(api, job_id)
+    assert finished.state is JobState.FINISHED and str(finished.run_id) == ran.report["run_id"]
+    assert daemon.journal.pending() == [] and list((tmp_path / "reports").iterdir()) == []
+
+
 async def test_a_refused_credential_mid_job_stops_the_station_and_keeps_the_report(
     api: Stack, tmp_path: Path
 ) -> None:
@@ -282,12 +319,18 @@ def clock_for(daemon: StationDaemon, seconds: float) -> LeaseClock:
     return LeaseClock(deadline=now + seconds, renew_at=now + seconds / 2)
 
 
-async def stale_job(api: Stack, daemon: StationDaemon, job_id: str) -> StationJobView:
-    """A job as the daemon was handed it, under the token it held then."""
+async def stored_job(api: Stack, job_id: UUID) -> StationJob:
+    """A job as the platform holds it."""
     job = await api.container.managers.stations._storage.read_job(  # pyright: ignore[reportAttributeAccessIssue]
-        api.owner.org_id, UUID(job_id)
+        api.owner.org_id, job_id
     )
     assert job is not None
+    return job
+
+
+async def stale_job(api: Stack, daemon: StationDaemon, job_id: str) -> StationJobView:
+    """A job as the daemon was handed it, under the token it held then."""
+    job = await stored_job(api, UUID(job_id))
     return StationJobView.model_validate(
         {
             **job.model_dump(mode="json"),

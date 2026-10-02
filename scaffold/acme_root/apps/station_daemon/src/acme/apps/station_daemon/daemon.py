@@ -29,7 +29,9 @@ The daemon holds logic, as the guard nearest the resource must (ADR
   credential its owner issues, it sends what the disk holds.
 - **The evidence.** A job's report, every refused command in it, is on
   the disk before it is sent, and stays there until the platform recorded
-  it (`journal.Journal`)."""
+  it (`journal.Journal`). While one waits there, the daemon claims no new
+  job: a job whose claim lapsed meanwhile, claimed again, would be settled
+  without its run."""
 
 import logging
 import time
@@ -161,10 +163,13 @@ class StationDaemon:
     async def tick(self) -> Ran | None:
         """One turn: rotate when due, send what the platform has not recorded
         yet, then claim one job and run it. A daemon that cannot reach the
-        platform claims nothing."""
+        platform claims nothing, and nor does one whose disk still holds a
+        report: it waits, and sends it again at the next turn."""
         try:
             await self._rotate_if_due()
             await self.flush()
+            if self._journal.pending():
+                return None
             async with self._client_for(self.credential.token) as client:
                 asked = self._monotonic()
                 answer = await client.claim_station_work(STATION_VERSION)
@@ -323,13 +328,15 @@ class StationDaemon:
         lease.renew_at = asked + left.seconds / 2
 
     async def _send(self, job_id: str, report: dict[str, Any]) -> bool:
-        """Sends one report. Recorded, it leaves the disk; refused for good,
-        it is set aside there. A transport failure is raised."""
+        """Sends one report. Recorded, it leaves the disk; failed by the
+        platform, it waits there; refused for good, it is set aside there. A
+        transport failure is raised."""
         try:
             async with self._client_for(self.credential.token) as client:
                 await client.report_station_job(UUID(job_id), report)
         except ApiError as error:
             if passing(error):
+                self._lost(error)
                 return False
             self._raise_if_refused(error)
             log.error("the report of job %s was refused: %s; it is set aside", job_id, error)

@@ -45,7 +45,7 @@ uv run acme-station-daemon run                            # every start after it
   owner issues, it sends what the disk holds.
 - **Keeps its evidence.** A job's report, every refused command in it,
   is on its disk before it is sent, and stays there until the platform
-  recorded it.
+  recorded it. While one waits there, it claims no new job.
 
 ```toml
 [[stations]]
