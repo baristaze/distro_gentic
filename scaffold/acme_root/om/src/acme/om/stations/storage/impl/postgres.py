@@ -122,9 +122,7 @@ class StationsStoragePostgresImpl(PgStorageBase, StationsStorageInterface):
         # a revocation at the same moment, the second reads what the first
         # wrote. The credential's own lock makes a rotation once.
         lab = (
-            select(Labs.id)
-            .where(Labs.org_id == org_id, Labs.id == minted.lab_id)
-            .with_for_update()
+            select(Labs.id).where(Labs.org_id == org_id, Labs.id == minted.lab_id).with_for_update()
         )
         held = (
             select(DaemonCredentials)

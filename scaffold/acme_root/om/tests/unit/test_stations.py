@@ -677,9 +677,7 @@ async def test_a_job_queued_behind_another_stations_job_is_claimed_with_its_hold
         await join(stations, owner, await a_waiting_session(managers, owner), lab.pool, station)
         lease = await held_by(stations, owner, station)
         assert lease is not None
-        await stations.submit_job(
-            owner, new_id(), lease.id, (StationCommand(operation="apply"),)
-        )
+        await stations.submit_job(owner, new_id(), lease.id, (StationCommand(operation="apply"),))
         leases.append(lease)
     first = await stations.claim(request(), daemon, 1)
     assert first is not None and first.lease_seconds > 0

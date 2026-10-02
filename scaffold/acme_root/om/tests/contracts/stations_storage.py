@@ -547,9 +547,7 @@ class StationsStorageContract:
         entry = await self.waiting(storage, org, pool, rank=2.0)
         assert await storage.grant(org, make_lease(held, entry, later), MARGIN, ())
         assert (
-            await storage.renew_lease(
-                org, lease.id, lease.token, later, later + HOLD, lapsed=True
-            )
+            await storage.renew_lease(org, lease.id, lease.token, later, later + HOLD, lapsed=True)
             is None
         )
 
