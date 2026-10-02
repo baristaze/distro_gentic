@@ -8,6 +8,7 @@ members = [
     "acme-checkers",
     "acme-cli",
     "acme-client",
+    "acme-host",
     "acme-infra",
     "acme-integrations",
     "acme-maintenance",
@@ -75,6 +76,21 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.12" },
     { name = "truststore", specifier = ">=0.10" },
     { name = "websockets", specifier = ">=15" },
+]
+
+[[package]]
+name = "acme-host"
+version = "0.1.0"
+source = { editable = "apps/host" }
+dependencies = [
+    { name = "acme-client" },
+    { name = "typer" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "acme-client", editable = "clients/python" },
+    { name = "typer", specifier = ">=0.15" },
 ]
 
 [[package]]

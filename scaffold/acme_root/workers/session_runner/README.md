@@ -46,7 +46,9 @@ The runner holds the model providers' keys and runs tools in the
 workspaces its settings name. It holds no purge login. Every call it
 runs passes the [trust](../../om/src/acme/om/trust/README.md) layer
 first: its audit entry is written with this runner as its executor, and
-a call whose secret would cross its session's wall is refused.
+a call whose secret would cross its session's wall is refused. Then the
+gates of the session's [playbooks](../../om/src/acme/om/playbooks/README.md)
+hold it, and only narrow what policy let through.
 
 ## What a product gives it
 

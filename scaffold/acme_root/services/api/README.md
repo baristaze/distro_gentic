@@ -15,8 +15,8 @@ A request passes four layers, each in its own folder under
   and the request's deadline, the credential, rate limits, idempotency,
   the error envelope, and the webhook's signed body.
 - **Routers** (`routers/`). One module per namespace: tenancy with the
-  operator plane, events, media, and webhooks. Each route makes one call
-  into a service.
+  operator plane, events, media, agent sessions, hosts, and webhooks.
+  Each route makes one call into a service.
 - **Services** (`services/`). One interface per namespace, and its impl in
   `services/impl/`. An impl translates the request, calls a manager or a
   provider, and returns a view from `types/`.
@@ -98,6 +98,23 @@ app, and `main.py` is the `acme-api` command: `serve`, `migrate`,
   loop. Another org's session answers as one that never existed. (`/v1/agent-sessions`,
   `/v1/agent-sessions/{session_id}`, `.../messages`, `.../controls`,
   `.../calls/{request_seq}/decision`, `.../steps`)
+- **Hosts.** An owner or an admin makes a host pool, under an
+  Idempotency-Key, and issues a token that enrolls hosts into it,
+  shown once; lists a pool's hosts with whether each is online; and
+  revokes a token or a host. A principal reads and sets where a
+  session runs: the cloud, or one of the org's pools; a pinned session
+  with no host online reads `waiting`. (`/v1/host-pools`,
+  `/v1/host-pools/{pool_id}/hosts`, `.../enrollment-tokens`,
+  `/v1/host-enrollment-tokens/{token_id}`, `/v1/hosts/{host_id}`,
+  `/v1/agent-sessions/{session_id}/placement`)
+- **A host's own calls.** A workspace host enrolls once, with an
+  enrollment token as its bearer, and gets a credential of its own kind
+  (`hst_`), which no tenant route accepts and which every other host
+  route requires: rotate it, beat, and claim. A claim states only the
+  version of `exec` work the host reads; below the floor it is `426
+  version_below_floor`, and what it is handed is read off the host's
+  identity. (`/v1/hosts/enrollments`, `/v1/hosts/me/credentials`,
+  `/v1/hosts/me/heartbeats`, `/v1/hosts/me/claims`, ADR 2003)
 - **The identity provider's deliveries.** Outside `/v1`, since their
   shape is the provider's. No credential: the route checks the provider's
   signature over the body and its timestamp, and queues the delivery for

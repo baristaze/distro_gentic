@@ -15,12 +15,14 @@ from acme.integrations.root import IntegrationsInterface
 from acme.om.agents.types.kind import AgentKind
 from acme.om.base import new_id
 from acme.om.evidence import ExecutorInterface, WorkProductInterface
+from acme.om.hosts.impl.placement import PlacementHostsImpl
+from acme.om.playbooks.root import PlaybooksLayer
 from acme.om.root import Managers, build_managers
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
+from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.tools.tool import ToolInterface
 from acme.om.trust.impl.keys import KeyProbeAbsentImpl
-from acme.om.trust.impl.placement import PlacementCloudImpl
 from acme.om.trust.root import TrustLayer
 from acme.om.trust.types.identities import Executor, ExecutorKind
 from acme.workers.session_runner.settings import SessionRunnerSettings
@@ -98,11 +100,24 @@ class RunnerContainer:
         """The managers over whichever roots the caller chose, every tool call
         held to the trust swimlane's rules: audited with its four answers,
         this runner its executor, and refused a secret that would cross its
-        session's wall."""
+        session's wall. A session pinned to its tenant's hosts is inside the
+        wall, its sub-agents with it, and none of their calls runs on this
+        runner."""
         runner = Executor(kind=ExecutorKind.CLOUD, credential_id=new_id(), label=settings.runner_id)
         trust = TrustLayer(
-            storage, infra, placement=PlacementCloudImpl(runner), probe=KeyProbeAbsentImpl()
+            storage,
+            infra,
+            placement=PlacementHostsImpl(
+                storage.get_hosts_storage(), storage.get_agent_session_storage(), runner
+            ),
+            probe=KeyProbeAbsentImpl(),
         )
+        playbooks = PlaybooksLayer(storage)
+
+        def layers(inner: ToolsManagerInterface) -> ToolsManagerInterface:
+            # The wall and the audit first, then the session's playbook gates.
+            return playbooks.tools(trust.tools(inner))
+
         managers = build_managers(
             storage,
             infra,
@@ -113,9 +128,10 @@ class RunnerContainer:
             domain_classes=domain_classes,
             executor=executor,
             work_product=work_product,
-            tools_layer=trust.tools,
+            tools_layer=layers,
         )
         trust.build(managers)
+        playbooks.build(managers)
         return cls(settings, storage, infra, integrations, managers)
 
     async def start(self) -> None:
