@@ -17,7 +17,12 @@ inside the API ([ADR 1011](../../docs/adr/1011-a-sessions-loop-runs-in-a-worker-
 - **The claim** takes the item under a lease, and the runner renews it
   while the loop runs. It is the maintenance worker's claim loop, taken
   whole: capacity, the renewal and its fence, liveness, and the drain on
-  stop.
+  stop. A runner serves one loop lane, a plan tier's or a tenant's own
+  ([placement](../../om/src/acme/om/placement/README.md)).
+- **The fair share** is the guard a claimed loop meets first: one over
+  its tenant's share goes back to its lane for a delay, with no attempt
+  spent, and never runs
+  ([ADR 2002](../../docs/adr/2002-a-tenants-loops-are-held-at-the-claim-in-the-claim-order.md)).
 - **The run** takes the session's next writer epoch before it reads the
   history. A run that lost its claim, to a lease that ran out or to a
   person who took the environment over, can append no step and send no
