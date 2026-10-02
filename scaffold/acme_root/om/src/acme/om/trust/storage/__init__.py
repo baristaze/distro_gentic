@@ -4,6 +4,7 @@ grants. No row holds a secret's value or a key's. Every operation takes
 org_id first."""
 
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
@@ -85,7 +86,19 @@ class TrustStorageInterface(ABC):
     # The sweep.
 
     @abstractmethod
-    async def purge_tenant(self, org_id: UUID, limit: int) -> int:
-        """At most `limit` rows of each kind of a deleted tenant past its
-        retention; returns how many went."""
+    async def purge_declarations(self, org_id: UUID, ids: Sequence[UUID]) -> int:
+        """The tenant's declarations named by `ids`, exactly those, once their
+        values are gone from the store; returns how many went."""
+        ...
+
+    @abstractmethod
+    async def purge_keys(self, org_id: UUID, ids: Sequence[UUID]) -> int:
+        """The tenant's key records named by `ids`, exactly those, once their
+        values are gone from the store; returns how many went."""
+        ...
+
+    @abstractmethod
+    async def purge_grants(self, org_id: UUID, limit: int) -> int:
+        """At most `limit` of a deleted tenant's content grants; returns how
+        many went."""
         ...

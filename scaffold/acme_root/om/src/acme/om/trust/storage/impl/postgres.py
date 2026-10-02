@@ -1,7 +1,8 @@
+from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 
@@ -166,11 +167,28 @@ class TrustStoragePostgresImpl(PgStorageBase, TrustStorageInterface):
 
     # The sweep.
 
-    async def purge_tenant(self, org_id: UUID, limit: int) -> int:
-        gone = 0
-        for table in (SecretDeclarations, ProviderKeys, ContentGrants):
-            stmt = delete_batch(table, table.org_id == org_id, limit=limit)
-            async with self._session_for(stmt, org_id=org_id) as session:
-                gone += deleted(await session.execute(stmt))
-                await session.commit()
-        return gone
+    async def purge_declarations(self, org_id: UUID, ids: Sequence[UUID]) -> int:
+        return await self._purge_named(SecretDeclarations, org_id, ids)
+
+    async def purge_keys(self, org_id: UUID, ids: Sequence[UUID]) -> int:
+        return await self._purge_named(ProviderKeys, org_id, ids)
+
+    async def purge_grants(self, org_id: UUID, limit: int) -> int:
+        stmt = delete_batch(ContentGrants, ContentGrants.org_id == org_id, limit=limit)
+        async with self._session_for(stmt, org_id=org_id) as session:
+            gone = deleted(await session.execute(stmt))
+            await session.commit()
+            return gone
+
+    async def _purge_named(
+        self, table: type[SecretDeclarations | ProviderKeys], org_id: UUID, ids: Sequence[UUID]
+    ) -> int:
+        """Exactly the rows named, the ones whose values the caller took out
+        of the store first, and none another batch would choose."""
+        if not ids:
+            return 0
+        stmt = delete(table).where(table.org_id == org_id, table.id.in_(list(ids)))
+        async with self._session_for(stmt, org_id=org_id) as session:
+            gone = deleted(await session.execute(stmt))
+            await session.commit()
+            return gone

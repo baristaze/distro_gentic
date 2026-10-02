@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
@@ -120,20 +121,25 @@ class TrustStorageMemoryImpl(MemoryStorageBase, TrustStorageInterface):
 
     # The sweep.
 
-    async def purge_tenant(self, org_id: UUID, limit: int) -> int:
+    async def purge_declarations(self, org_id: UUID, ids: Sequence[UUID]) -> int:
         async with self._lock:
-            return (
-                _drop(self._declarations, org_id, limit)
-                + _drop(self._keys, org_id, limit)
-                + _drop(self._grants, org_id, limit)
-            )
+            return _drop(self._declarations, org_id, ids)
+
+    async def purge_keys(self, org_id: UUID, ids: Sequence[UUID]) -> int:
+        async with self._lock:
+            return _drop(self._keys, org_id, ids)
+
+    async def purge_grants(self, org_id: UUID, limit: int) -> int:
+        async with self._lock:
+            ids = [grant.id for grant in self._rows(self._grants, org_id)][:limit]
+            return _drop(self._grants, org_id, ids)
 
 
 def _drop[E: SecretDeclaration | ProviderKey | ContentGrant](
-    table: MemoryTable[E], org_id: UUID, limit: int
+    table: MemoryTable[E], org_id: UUID, ids: Sequence[UUID]
 ) -> int:
-    """At most `limit` of the tenant's rows of one table, gone; how many."""
-    ids = [row.id for org, row in table.values() if org == org_id][:limit]
-    for row_id in ids:
+    """The tenant's rows of one table named by `ids`, gone; how many."""
+    gone = [row_id for row_id in ids if row_id in table and table[row_id][0] == org_id]
+    for row_id in gone:
         del table[row_id]
-    return len(ids)
+    return len(gone)
