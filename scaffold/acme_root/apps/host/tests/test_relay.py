@@ -13,6 +13,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import UUID
 
+import httpx
 import pytest
 from contracts.agent_session_storage import make_session
 from contracts.project_storage import make_binding, make_project
@@ -21,6 +22,7 @@ from host_support import Stack, probes
 from acme.apps.host.agent import HostAgent
 from acme.apps.host.ceilings import Ceilings
 from acme.apps.host.relay import ExecutorRelayImpl
+from acme.client.client import ApiClient
 from acme.client.types import IsolationMode as HostMode
 from acme.infra.secrets.local import SecretsLocalImpl
 from acme.infra.transports import CommandResult, CommandSpec, RecordSeal
@@ -63,12 +65,17 @@ async def relayed(api: Stack, tmp_path: Path) -> AsyncIterator[Relayed]:
 
 
 async def relay_to(
-    api: Stack, tmp_path: Path, project_id: UUID | None = None, serves: UUID | None = None
+    api: Stack,
+    tmp_path: Path,
+    project_id: UUID | None = None,
+    serves: UUID | None = None,
+    wire: httpx.AsyncBaseTransport | None = None,
 ) -> Relayed:
     """A host of the tenant's pool that holds a session's workspace, a
     directory it runs commands in through the engine's local transport, and
     the runner's relay to it. With `serves`, the host's ceilings serve that
-    project alone, and the session belongs to `project_id`."""
+    project alone, and the session belongs to `project_id`. With `wire`, the
+    host reaches the platform through it."""
     pool = await api.pool()
     where = tmp_path / "workspace"
     where.mkdir()
@@ -92,7 +99,13 @@ async def relay_to(
             readable=(str(where),),
         ),
         probes(HostMode.directory),
-        api.client,
+        lambda token: ApiClient(
+            "http://test",
+            app="api",
+            app_version="host@test",
+            token=token,
+            transport=wire or api.transport,
+        ),
         executor,
     )
     agents.append(host)
@@ -243,6 +256,41 @@ async def test_a_relayed_call_names_its_sessions_project_to_the_hosts_ceilings(
     else:
         with pytest.raises(Exception, match="a project this host does not serve"):
             await waiting
+
+
+class FailsOnceAt(httpx.AsyncBaseTransport):
+    """The stack, except that the first call whose path ends in `suffix`
+    fails as `failure` says: an answer with that status, or the connection
+    dropped."""
+
+    def __init__(self, inner: httpx.AsyncBaseTransport, suffix: str, failure: int | None) -> None:
+        self._inner = inner
+        self._suffix = suffix
+        self._failure = failure
+        self.failed = False
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        if not self.failed and request.url.path.endswith(self._suffix):
+            self.failed = True
+            if self._failure is None:
+                raise httpx.ConnectError("the connection was reset", request=request)
+            error = {"error": {"code": "unavailable", "message": "try again"}}
+            return httpx.Response(self._failure, json=error)
+        return await self._inner.handle_async_request(request)
+
+
+@pytest.mark.parametrize(("suffix", "failure"), [("/lease", 503), ("/result", None)])
+async def test_a_renewal_or_a_result_the_platform_fails_to_take_is_sent_again(
+    api: Stack, tmp_path: Path, suffix: str, failure: int | None
+) -> None:
+    wire = FailsOnceAt(api.transport, suffix, failure)
+    relayed = await relay_to(api, tmp_path, wire=wire)
+    spec = command(relayed.epoch, "sh", "-c", "sleep 0.5; echo done", seconds=5)
+    waiting = asyncio.ensure_future(relayed.runner.run(relayed.workspace, spec, seal=NO_SEAL))
+    handed = await asyncio.wait_for(claims(relayed.host, waiting), 10)
+    ran = await waiting
+    assert wire.failed
+    assert (ran.exit_code, ran.stdout, len(handed)) == (0, "done\n", 1)
 
 
 def _request() -> RequestContext:

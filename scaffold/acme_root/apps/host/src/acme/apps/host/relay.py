@@ -13,6 +13,7 @@ import asyncio
 import base64
 import json
 import logging
+import random
 import time
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
@@ -21,7 +22,7 @@ from uuid import UUID
 
 from acme.apps.host.agent import ExecutorInterface
 from acme.apps.host.ceilings import Ask
-from acme.client.client import ApiClient, ApiError
+from acme.client.client import WIRE_FAILURES, ApiClient, ApiError
 from acme.client.types import ClaimedWorkView, ExecDetailView, OutputStream
 from acme.infra.exceptions import InfraException
 from acme.infra.transports import CommandSpec, RecordSeal, TransportInterface
@@ -49,6 +50,14 @@ ClientFactory = Callable[[], ApiClient]
 Sink = Callable[[str, str], Awaitable[None]]
 
 
+def outlasted(error: Exception) -> bool:
+    """A failure the host waits out rather than reads as the platform's
+    decision: an answer the API could not serve, a 429, or the wire."""
+    if isinstance(error, ApiError):
+        return error.status >= 500 or error.status == 429
+    return isinstance(error, WIRE_FAILURES)
+
+
 @dataclass
 class Running:
     """One item while it is here: the operation in flight, what stopped it,
@@ -56,6 +65,7 @@ class Running:
 
     operation: asyncio.Future[dict[str, Any]] | None = None
     stopped: str | None = None
+    held_until: float = 0.0  # when its lease ends, by this host's clock
     printed: dict[str, list[str]] = field(default_factory=lambda: {"stdout": [], "stderr": []})
 
 
@@ -63,7 +73,10 @@ class ExecutorRelayImpl(ExecutorInterface):
     """`transports` names the transport that runs each isolation mode this
     host gives; an item at any other mode is refused, with nothing run.
     Output gathers for `flush_seconds`, or up to `part_bytes`, before it is
-    sent as a part, and the lease is renewed every `renew_seconds`."""
+    sent as a part, and the lease is renewed every `renew_seconds`, a
+    third of the lease a renewal holds. A renewal or a result the platform
+    fails to take is tried again within the lease, after a wait that starts
+    at a quarter of a renewal's period and doubles."""
 
     def __init__(
         self,
@@ -73,12 +86,15 @@ class ExecutorRelayImpl(ExecutorInterface):
         flush_seconds: float = 0.25,
         part_bytes: int = 32_000,
         renew_seconds: float = 20.0,
+        jitter: Callable[[], float] = random.random,
     ) -> None:
         self._client = client
         self._transports = dict(transports)
         self._flush_seconds = flush_seconds
         self._part_bytes = part_bytes
         self._renew_seconds = renew_seconds
+        self._lease_seconds = renew_seconds * 3
+        self._jitter = jitter
         self._running: dict[UUID, Running] = {}
 
     async def run(self, item: ClaimedWorkView, ask: Ask) -> None:
@@ -86,7 +102,7 @@ class ExecutorRelayImpl(ExecutorInterface):
             log.warning("item %s (%s) has no executor on this host yet", item.id, item.kind)
             return
         item_id = UUID(str(item.payload["item_id"]))
-        running = Running()
+        running = Running(held_until=time.monotonic() + self._lease_seconds)
         self._running[item_id] = running
         try:
             await self._run(item_id, running)
@@ -104,7 +120,10 @@ class ExecutorRelayImpl(ExecutorInterface):
             return
         item_id = UUID(str(item.payload["item_id"]))
         detail = "this host refused it: " + "; ".join(reasons)
-        await self._push(item_id, _result(refused=("refused_by_host", 403), detail=detail))
+        held_until = time.monotonic() + self._lease_seconds
+        await self._push(
+            item_id, _result(refused=("refused_by_host", 403), detail=detail), held_until
+        )
 
     def stop(self, item_id: UUID, kind: str) -> bool:
         """Ends the item at once if it is here: cancelling its operation ends
@@ -125,13 +144,14 @@ class ExecutorRelayImpl(ExecutorInterface):
         transport = self._transports.get(spec.mode)
         if transport is None:
             why = f"this host runs no {spec.mode.value} workspace"
-            await self._push(item_id, _result(refused=("capability_missing", 501), detail=why))
+            refused = _result(refused=("capability_missing", 501), detail=why)
+            await self._push(item_id, refused, running.held_until)
             return
         workspace = Workspace(
             id=detail.session_id, org_id=detail.org_id, spec=spec, location=detail.location
         )
         parts = _Parts(self._client, item_id, running, self._flush_seconds, self._part_bytes)
-        renewal = asyncio.ensure_future(self._renew(item_id))
+        renewal = asyncio.ensure_future(self._renew(item_id, running))
         result: dict[str, Any] | None = None
         try:
             if running.stopped is None:
@@ -152,31 +172,62 @@ class ExecutorRelayImpl(ExecutorInterface):
                 stdout="".join(running.printed["stdout"]),
                 stderr="".join(running.printed["stderr"]),
             )
-        await self._push(item_id, result)
+        await self._push(item_id, result, running.held_until)
 
-    async def _renew(self, item_id: UUID) -> None:
-        """Renews the lease while the item runs. A renewal refused means the
-        lease is no longer the host's: the command ends, and nothing is
-        pushed for it."""
+    async def _renew(self, item_id: UUID, running: Running) -> None:
+        """Renews the lease while the item runs. A failure the host outlasts
+        is tried again while the lease lasts. A renewal refused, or one that
+        still fails when the lease ends, means the lease is no longer the
+        host's: the command ends, and nothing is pushed for it."""
         while True:
             await asyncio.sleep(self._renew_seconds)
             try:
-                async with self._client() as client:
-                    await client.extend_exec_lease(item_id)
-            except ApiError as error:
+                await self._outlasting(
+                    lambda client: client.extend_exec_lease(item_id), running.held_until
+                )
+            except (ApiError, *WIRE_FAILURES) as error:
                 log.warning("item %s: its lease was not renewed: %s", item_id, error)
                 self.stop(item_id, "revoke")
                 return
+            running.held_until = time.monotonic() + self._lease_seconds
 
-    async def _push(self, item_id: UUID, result: dict[str, Any]) -> None:
+    async def _push(self, item_id: UUID, result: dict[str, Any], held_until: float) -> None:
+        """Pushes how the item ended, tried again while its lease lasts."""
         data = json.dumps(result, separators=(",", ":")).encode()
         try:
-            async with self._client() as client:
-                await client.push_exec_result(item_id, data)
-        except ApiError as error:
+            await self._outlasting(
+                lambda client: client.push_exec_result(item_id, data), held_until
+            )
+        except (ApiError, *WIRE_FAILURES) as error:
             # Settled already, by its lease, a stop, or the sweep: the first
-            # settlement stands.
-            log.warning("item %s: its result was refused: %s", item_id, error)
+            # settlement stands. One the platform never took is the sweep's.
+            log.warning("item %s: its result was not taken: %s", item_id, error)
+
+    async def _outlasting(
+        self, call: Callable[[ApiClient], Awaitable[object]], until: float
+    ) -> None:
+        """`call`, with the host's credential as it is at each attempt. A
+        failure the host outlasts is tried again after a wait that doubles,
+        half of it jitter, or longer when the server asked; one that would
+        land past `until`, by this host's clock, is raised, as a refusal is."""
+        failures = 0
+        while True:
+            try:
+                async with self._client() as client:
+                    await call(client)
+                return
+            except (ApiError, *WIRE_FAILURES) as error:
+                if not outlasted(error):
+                    raise
+                failures += 1
+                full = self._renew_seconds / 4 * 2 ** (failures - 1)
+                wait = full / 2 + (full / 2) * self._jitter()
+                if isinstance(error, ApiError) and error.retry_after is not None:
+                    wait = max(wait, error.retry_after)
+                if time.monotonic() + wait >= until:
+                    raise
+                log.info("a call failed (%s); trying again in %.1fs", error, wait)
+                await asyncio.sleep(wait)
 
 
 async def _operate(
