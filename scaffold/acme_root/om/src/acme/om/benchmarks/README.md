@@ -10,8 +10,8 @@ made of](../../../../README.md).
 - **Contender**: what an arm's sessions run: the agent kind, its
   version, and the fill set, each model role's fill.
 - **Trial**: one preserved run of the scenario: its arm, its session, the
-  station it ran on, the acceptance verdict that judged it, its judged
-  score, and its cost.
+  station it ran on, the acceptance verdict that judged it, kept whole
+  with the hidden suite's runs, and its cost. Its score is the verdict's.
 - **Benchmark**: one run of a scenario: the candidate, the baseline,
   every trial of both, each arm's score and cost, and whether the
   candidate regressed. It is written once and never changed.

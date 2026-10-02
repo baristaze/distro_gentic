@@ -5,6 +5,7 @@ case."""
 
 from collections.abc import Sequence
 from datetime import timedelta
+from uuid import UUID
 
 import pytest
 
@@ -20,6 +21,7 @@ from acme.om.benchmarks.types.benchmark import (
     Trial,
 )
 from acme.om.context import AppContext, AppType, CredentialKind, OperatorContext, OperatorRole
+from acme.om.evidence.types.acceptance import AcceptanceVerdict, Break, Link
 from acme.om.models.types.fill import MAIN, Fill, RoleFill
 from acme.om.tenancy.rules import operator_permissions_of
 
@@ -57,29 +59,28 @@ def operator(role: OperatorRole = OperatorRole.WRITE) -> OperatorContext:
 
 
 def make_trials(
-    candidate: Sequence[float],
-    baseline: Sequence[float],
+    candidate: Sequence[int],
+    baseline: Sequence[int],
     *,
     station: str = "station-1",
     order: Sequence[Arm] | None = None,
     cost_micros: int = 120_000,
 ) -> BenchmarkTrials:
-    """Trials of both arms, scored as given, run in `order` (the schedule's
+    """Trials of both arms, each judged with as many links of its chain
+    broken as given (0 is a whole chain), run in `order` (the schedule's
     interleaving unless a case names its own), one minute apart."""
-    scores = {Arm.CANDIDATE: list(candidate), Arm.BASELINE: list(baseline)}
+    broken = {Arm.CANDIDATE: list(candidate), Arm.BASELINE: list(baseline)}
     start = utcnow()
     trials = []
     for at, arm in enumerate(order or schedule(len(candidate))):
-        score = scores[arm].pop(0)
+        session = new_id()
         trials.append(
             Trial(
                 arm=arm,
-                session_id=new_id(),
+                session_id=session,
                 station=station,
                 started_at=start + timedelta(minutes=at),
-                verdict_id=new_id(),
-                passed=score == 1.0,
-                score=score,
+                verdict=judged(session, broken[arm].pop(0)),
                 cost_micros=cost_micros,
             )
         )
@@ -88,8 +89,20 @@ def make_trials(
     )
 
 
+def judged(session_id: UUID, broken: int) -> AcceptanceVerdict:
+    """A verdict on a session's chain with its first `broken` links broken."""
+    return AcceptanceVerdict(
+        id=new_id(),
+        created_at=utcnow(),
+        scenario="grip-slips",
+        session_id=session_id,
+        head="c0ffee",
+        breaks=tuple(Break(link=link, reason="it is missing") for link in list(Link)[:broken]),
+    )
+
+
 def make_benchmark(run: BenchmarkTrials | None = None, minutes: int = 0) -> Benchmark:
-    run = run or make_trials([1.0, 1.0], [1.0, 0.0])
+    run = run or make_trials([0, 0], [0, 7])
     candidate = arm_result(run.trials, Arm.CANDIDATE)
     baseline = arm_result(run.trials, Arm.BASELINE)
     return Benchmark(
@@ -125,7 +138,7 @@ class BenchmarkStorageContract:
         self, storage: BenchmarkStorageInterface
     ) -> None:
         older, newer = make_benchmark(minutes=-5), make_benchmark(minutes=-1)
-        other = make_benchmark(make_trials([1.0], [1.0]).model_copy(update={"scenario": "other"}))
+        other = make_benchmark(make_trials([0], [0]).model_copy(update={"scenario": "other"}))
         for benchmark in (older, newer, other):
             assert await storage.create_benchmark(benchmark)
         history = await storage.read_history("grip-slips", 10)

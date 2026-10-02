@@ -199,9 +199,7 @@ async def judged_trials(line: Line, ctx: TenantContext, pairs: int) -> tuple[Tri
                 session_id=run.session,
                 station=line.executor.name,
                 started_at=verdict.created_at,
-                verdict_id=verdict.id,
-                passed=verdict.passed,
-                score=verdict.score,
+                verdict=verdict,
                 cost_micros=0,
             )
         )
