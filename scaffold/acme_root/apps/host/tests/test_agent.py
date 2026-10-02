@@ -194,7 +194,7 @@ async def test_a_host_runs_only_its_pools_work_and_only_within_its_ceilings(
     assert set(by_id) == {fits.id, persons.id, silent.id}
     assert by_id[fits.id] == []
     assert by_id[persons.id] == ["a person's command, which this host does not accept"]
-    assert len(by_id[silent.id]) == 4
+    assert len(by_id[silent.id]) == 5
     assert [item.id for item in ran.ran] == [fits.id]
 
 
