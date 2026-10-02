@@ -8,7 +8,12 @@ from acme.infra.observability import OUTCOMES
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.base import Platform, new_id, utcnow
 from acme.om.context import AppContext, Permission, RequestContext, TenantContext
-from acme.om.exceptions import CredentialExpired, InvalidCredential, NotFound
+from acme.om.exceptions import (
+    CredentialExpired,
+    InvalidCredential,
+    NotFound,
+    ValidationFailed,
+)
 from acme.om.hosts.exceptions import VersionBelowFloor
 from acme.om.hosts.manager import HostsManagerInterface
 from acme.om.hosts.rules import (
@@ -26,6 +31,7 @@ from acme.om.hosts.types.credential import (
     HostCredential,
     IssuedEnrollmentToken,
     IssuedHostCredential,
+    Rotation,
 )
 from acme.om.hosts.types.host import Enrollment, Host, HostIdentity, HostReport, HostStatus
 from acme.om.hosts.types.placement import PlacementState, SessionPlacement
@@ -53,10 +59,12 @@ class HostsOptions(Platform):
     # short enough that one left in a script does not let hosts in for long.
     enrollment_ttl: timedelta = timedelta(days=1)
     # A host credential lives an hour, and the host rotates it at half its
-    # life, so one taken from a disk is worth an hour at most.
+    # life. It rotates once, and is refused past its grace once rotated: a
+    # copy taken from a disk lasts until the host or the copy presents a
+    # credential the other rotated, which ends the host and both.
     credential_ttl: timedelta = timedelta(hours=1)
-    # A rotated credential still works this long, so a host whose answer was
-    # lost rotates again with it.
+    # A rotated credential still works this long, so a call in flight with
+    # it lands. It never rotates again.
     rotation_grace: timedelta = timedelta(minutes=1)
     # A host that called within this window is online: three of its beats.
     online_window: timedelta = timedelta(seconds=90)
@@ -198,7 +206,12 @@ class HostsManagerImpl(HostsManagerInterface):
         self, ctx: TenantContext, session_id: UUID, pool_id: UUID | None
     ) -> SessionPlacement:
         ctx.require(Permission.WRITE)
-        await self._sessions.get_session(ctx, session_id)
+        session = await self._sessions.get_session(ctx, session_id)
+        if session.root_id != session.id:
+            raise ValidationFailed(
+                f"session {session_id} is a sub-agent: it runs where its root "
+                f"{session.root_id} runs, so place its root"
+            )
         if pool_id is not None:
             await self._pool(ctx, pool_id)
         stored = await self._storage.read_placement(ctx.org_id, session_id)
@@ -230,8 +243,9 @@ class HostsManagerImpl(HostsManagerInterface):
 
     async def placement_of(self, ctx: TenantContext, session_id: UUID) -> PlacementState:
         ctx.require(Permission.READ)
-        await self._sessions.get_session(ctx, session_id)
-        placed = await self._storage.read_placement(ctx.org_id, session_id)
+        session = await self._sessions.get_session(ctx, session_id)
+        # A sub-agent runs where its tree's root runs.
+        placed = await self._storage.read_placement(ctx.org_id, session.root_id)
         if placed is None:
             return PlacementState(session_id=session_id)
         if placed.pool_id is None:
@@ -306,8 +320,19 @@ class HostsManagerImpl(HostsManagerInterface):
         if found is None:
             raise InvalidCredential("unknown host credential")
         org_id, held, host = found
-        if held.expires_at <= self._clock() or host.revoked_at is not None:
-            raise CredentialExpired("host credential expired, rotated, or revoked")
+        now = self._clock()
+        if host.revoked_at is not None:
+            raise CredentialExpired("host revoked")
+        if held.expires_at <= now:
+            if held.rotated_at is not None:
+                # A rotated credential past its grace: the machine that
+                # rotated it holds the next one, so whoever presents this
+                # one is a second machine, or the first is.
+                await self._reused(rctx, org_id, host, now)
+                raise CredentialExpired(
+                    "host credential rotated already; the host and its credentials are revoked"
+                )
+            raise CredentialExpired("host credential expired")
         return HostIdentity(
             host_id=host.id,
             org_id=org_id,
@@ -317,13 +342,19 @@ class HostsManagerImpl(HostsManagerInterface):
         )
 
     async def rotate(self, rctx: RequestContext, host: HostIdentity) -> IssuedHostCredential:
-        await self._live(host)
+        stored = await self._live(host)
         now = self._clock()
         secret, minted = self._credential(host.host_id, now)
         retire_at = retired_at(host.expires_at, now, self._options.rotation_grace)
-        if not await self._storage.rotate_credential(
-            host.org_id, host.credential_id, retire_at, minted
-        ):
+        rotation = await self._storage.rotate_credential(
+            host.org_id, host.credential_id, now, retire_at, minted
+        )
+        if rotation is Rotation.REUSED:
+            await self._reused(rctx, host.org_id, stored, now)
+            raise CredentialExpired(
+                "host credential rotated already; the host and its credentials are revoked"
+            )
+        if rotation is Rotation.MISSING:
             raise CredentialExpired("host credential expired, rotated, or revoked")
         return IssuedHostCredential(
             credential=secret,
@@ -369,6 +400,26 @@ class HostsManagerImpl(HostsManagerInterface):
         if stored is None or stored.revoked_at is not None:
             raise CredentialExpired("host revoked")
         return stored
+
+    async def _reused(self, rctx: RequestContext, org_id: UUID, host: Host, at: datetime) -> None:
+        """A credential that rotated already, presented to rotate again or
+        after its grace: two machines hold the host's identity, the host and
+        a copy. Neither can be told from the other, so the host and every
+        credential it holds end, and its owner reads it revoked and enrolls
+        it again. The person who let it in answers for the revocation, as
+        for every write of the host's."""
+        rows = (
+            outbox_row(
+                provenance(rctx, org_id, host.created_by),
+                HOST_REVOKED_KIND,
+                host.id,
+                {"reason": "credential_reused"},
+            ),
+        )
+        await self._storage.revoke_host(org_id, host.id, at, host.created_by, rows)
+        await self._relay.relay_all(org_id, rows)
+        OUTCOMES.labels(subsystem="hosts", outcome="credential_reused").inc()
+        log.warning("host %s: a rotated credential was presented again; revoked", host.id)
 
     async def _seen(self, host: HostIdentity, report: HostReport) -> None:
         if not await self._storage.mark_seen(host.org_id, host.host_id, self._clock(), report):

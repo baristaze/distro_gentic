@@ -98,6 +98,17 @@ and says which budgets are in the way and when each resets. A refused
 loop waits, never fails, until the budget is raised or resets. After
 the call, the hold is settled at what the call really cost.
 
+## Billing
+
+An **account** says who pays for an org's agents: the platform's key,
+billed to the org, or the org's own key. Every hold, settlement, and
+**charge** is an entry of one **ledger**, written once. A call on the
+platform's key is paid from **buckets** in a fixed order: the plan's
+included units, granted units, prepaid **credits**, and a line of credit.
+A credit counts only once the payment provider confirms it. A limit's
+day and week follow the org's time zone, and its month the billing
+period.
+
 ## Models
 
 A **model role** is a job an agent session hands a model: the agent's
@@ -174,6 +185,26 @@ A call the agent may not repeat runs once, whatever crashes. The host
 holds one **control stream** open to the platform, which stops a command
 at once.
 
+## The agents the platform ships
+
+The platform ships four kinds of agent. The **engineer** takes an
+objective to a validated, reviewable change in a workspace of its own.
+**Analysis** reads what a run produced and turns it into findings. The
+**planner** turns findings into tasks, and hands new work to an
+engineer. The **platform assistant** answers the people who set up and
+run their part of the platform: it explains the product from its
+documentation and cites it, reads where a session stands, drafts the
+tool policy for a person to apply, and hands engineering work to an
+engineer. It acts on a person's own permissions, and it has no
+workspace, no repository, no shell, and no station.
+
+Nothing chooses an agent for a message: a person chooses by choosing
+the session they type in.
+
+A **validation session** runs one check on a station, with no agent and
+no model. Its work waits in its lab's lane like any station work, and
+its run is recorded like any other run.
+
 ## What the platform writes for itself
 
 No person creates these and no screen shows them, but each belongs to
@@ -220,6 +251,11 @@ arrive twice, so the second copy gets the first one's answer.
   deadline as the whole tree. A tree names its org, as its sessions do.
 - A step's content is sealed under its session's key, so revoking one
   key erases what one session said and nothing else.
+- A project names its org and binds one repository. A session started
+  under a project belongs to it, of its own org, from before it exists
+  and never moved; a session it spawns or hands work to belongs to the
+  same. A session the API starts names no project, and takes its org's
+  policies alone.
 - A session takes its tenant's retention policy as a snapshot when it is
   created, so a tightening reaches it and a loosening never does. A
   policy names its org, one each, and a snapshot its session.
@@ -242,6 +278,8 @@ arrive twice, so the second copy gets the first one's answer.
 - An exec item, its output, its control messages, and a session's
   workspace binding name their org. A host reads and answers only the
   items it holds.
+- A validation session names its org, and its station work is a work
+  item that names the session.
 
 ## One page per kind
 
@@ -252,8 +290,10 @@ arrive twice, so the second copy gets the first one's answer.
 - [Agents](src/acme/om/agents/README.md)
 - [Attribution](src/acme/om/attribution/README.md)
 - [Privacy](src/acme/om/privacy/README.md)
+- [Projects](src/acme/om/projects/README.md)
 - [Retention](src/acme/om/retention/README.md)
 - [Budgets](src/acme/om/budgets/README.md)
+- [Billing](src/acme/om/billing/README.md)
 - [Models](src/acme/om/models/README.md)
 - [Windows](src/acme/om/windows/README.md)
 - [Tools](src/acme/om/tools/README.md)
@@ -262,6 +302,11 @@ arrive twice, so the second copy gets the first one's answer.
 - [Trust](src/acme/om/trust/README.md)
 - [Hosts](src/acme/om/hosts/README.md)
 - [Relay](src/acme/om/relay/README.md)
+- [Intake](src/acme/om/intake/README.md)
+- [Automations](src/acme/om/automations/README.md)
+- [Playbooks](src/acme/om/playbooks/README.md)
+- [Knowledge](src/acme/om/knowledge/README.md)
+- [The platform's agents](src/acme/om/platform_agents/README.md)
 - [Events](src/acme/om/events/README.md)
 - [Outbox rows](src/acme/om/outbox/README.md)
 - [Work items](src/acme/om/work/README.md)

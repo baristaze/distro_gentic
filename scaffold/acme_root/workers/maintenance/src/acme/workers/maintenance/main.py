@@ -32,6 +32,7 @@ from acme.workers.maintenance.container import (
 from acme.workers.maintenance.deliveries import (
     DeliveryConsumer,
     DeliveryOptions,
+    FeedbackDeliveriesImpl,
     IdentityDeliveriesImpl,
 )
 from acme.workers.maintenance.handler import NoopHandlerImpl
@@ -95,6 +96,7 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             "evidence": managers.evidence.purge_tenant,
             "placement": managers.placement.purge_tenant,
             "hosts": managers.hosts.purge_tenant,
+            "validation_sessions": managers.platform_agents.purge_tenant,
             # Its exec items with their output, its controls, its bindings.
             "relay": managers.relay.purge_tenant,
             # Every artifact's object, then its record, under the purge login.
@@ -106,12 +108,20 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             # Each session's key versions, then its privacy record: the
             # content sealed under them is noise from the first batch.
             "privacy": managers.privacy.purge_tenant,
+            # Each session's project row, then the tenant's projects.
+            "projects": managers.projects.purge_tenant,
             # Each session's retention snapshot, then the tenant's policy.
             "retention": managers.retention.purge_tenant,
             "budgets": managers.budgets.purge_tenant,
             # Its secrets' names, its keys' records with their values in the
             # store, and its operators' content grants.
             "trust": container.trust.trust.purge_tenant,
+            # Its account links and work bindings, its automations and their
+            # runs, its playbooks and their invocations, and its knowledge.
+            "intake": container.intake.purge_tenant,
+            "automations": container.automations.purge_tenant,
+            "playbooks": container.playbooks.purge_tenant,
+            "knowledge": container.knowledge.purge_tenant,
             # Deletes nothing: what a call held and spent stays, so a
             # tenant whose ledger remains is never marked purged.
             "ledger": managers.budgets.purge_ledger,
@@ -176,7 +186,10 @@ def build_consumer(container: WorkerContainer) -> DeliveryConsumer:
     return DeliveryConsumer(
         queues=container.infra.get_queues(),
         tenancy=container.managers.tenancy,
-        providers={"identity": IdentityDeliveriesImpl(container.managers.events)},
+        providers={
+            "identity": IdentityDeliveriesImpl(container.managers.events),
+            "feedback": FeedbackDeliveriesImpl(container.intake, container.automations),
+        },
         options=DeliveryOptions(worker_id=container.settings.worker_id),
     )
 

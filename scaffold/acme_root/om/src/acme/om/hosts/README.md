@@ -27,8 +27,11 @@ of](../../../../README.md).
   probed, and gets its credential. The tenant and the pool are the
   token's; the host names neither.
 - **Rotate.** A host trades its credential for the next one. The one it
-  called with still works for a minute, so a host whose answer was lost
-  rotates again with it.
+  called with still works for a minute, so a call in flight with it
+  lands. A credential rotates once. A second rotation of it, or a call
+  with it past its grace, means two machines hold the host's identity,
+  and revokes the host and every credential it holds, for its owner to
+  see and to enroll it again.
 - **Beat.** A host says it is online, and what it probed. The platform
   keeps what it is told and adds nothing to it.
 - **Claim.** A host asks for work, stating the version of `exec` work it
@@ -38,7 +41,8 @@ of](../../../../README.md).
 - **Revoke.** An owner or an admin ends a token, or a host and every
   credential it holds, at once.
 - **Place a session.** A principal pins it to a pool, or moves it back to
-  the cloud. Nothing else moves it.
+  the cloud. Nothing else moves it. A sub-agent runs where its tree's
+  root runs, so only a root is placed.
 - **Purge.** A tenant deleted past its retention loses all of it.
 
 ## The rules

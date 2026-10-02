@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import func, select, update
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 
 from acme.om.base import EMPTY_UUID
@@ -12,7 +12,7 @@ from acme.om.hosts.storage.tables.host_enrollment_tokens import HostEnrollmentTo
 from acme.om.hosts.storage.tables.host_pools import HostPools
 from acme.om.hosts.storage.tables.hosts import Hosts
 from acme.om.hosts.storage.tables.session_placements import SessionPlacements
-from acme.om.hosts.types.credential import EnrollmentToken, HostCredential
+from acme.om.hosts.types.credential import EnrollmentToken, HostCredential, Rotation
 from acme.om.hosts.types.host import Host, HostReport
 from acme.om.hosts.types.placement import SessionPlacement
 from acme.om.hosts.types.pool import HostPool
@@ -149,23 +149,41 @@ class HostsStoragePostgresImpl(PgStorageBase, HostsStorageInterface):
         self,
         org_id: UUID,
         retiring_id: UUID,
+        at: datetime,
         retire_at: datetime,
         minted: HostCredential,
-    ) -> bool:
+    ) -> Rotation:
+        # The row lock makes a rotation once: of two rotations of one
+        # credential at the same moment, the second reads it rotated.
         stmt = (
-            update(HostCredentials)
+            select(HostCredentials)
             .where(
                 HostCredentials.org_id == org_id,
                 HostCredentials.id == retiring_id,
                 HostCredentials.host_id == minted.host_id,
             )
-            .values(expires_at=func.least(HostCredentials.expires_at, retire_at))
-            .returning(HostCredentials.id)
+            .with_for_update()
         )
         async with self._session_for(stmt, org_id=org_id) as session:
-            if (await session.execute(stmt)).scalar_one_or_none() is None:
+            retiring = (await session.execute(stmt)).scalar_one_or_none()
+            if retiring is None:
                 await session.rollback()
-                return False
+                return Rotation.MISSING
+            if retiring.rotated_at is not None:
+                await session.rollback()
+                return Rotation.REUSED
+            await session.execute(
+                update(HostCredentials)
+                .where(
+                    HostCredentials.org_id == org_id,
+                    HostCredentials.host_id == minted.host_id,
+                    HostCredentials.id != retiring_id,
+                    HostCredentials.expires_at > at,
+                )
+                .values(expires_at=at)
+            )
+            retiring.rotated_at = at
+            retiring.expires_at = min(retiring.expires_at, retire_at)
             session.add(to_row(minted, HostCredentials, org_id=org_id))
             try:
                 await session.commit()
@@ -175,7 +193,7 @@ class HostsStoragePostgresImpl(PgStorageBase, HostsStorageInterface):
                     f"host_credentials {minted.id}: "
                     f"{violated_constraint(error) or 'a unique key'} is taken"
                 ) from error
-            return True
+            return Rotation.ROTATED
 
     async def mark_seen(
         self, org_id: UUID, host_id: UUID, at: datetime, report: HostReport

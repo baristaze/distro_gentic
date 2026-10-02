@@ -60,6 +60,7 @@ CREATE TABLE core.host_credentials (
     host_id uuid NOT NULL,
     digest text NOT NULL,
     expires_at timestamptz NOT NULL,
+    rotated_at timestamptz,
     CONSTRAINT pk_host_credentials PRIMARY KEY (id)
 );
 CREATE UNIQUE INDEX uq_host_credentials_digest ON core.host_credentials (digest);

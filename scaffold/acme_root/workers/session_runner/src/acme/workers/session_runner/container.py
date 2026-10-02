@@ -18,11 +18,13 @@ from acme.om.base import new_id
 from acme.om.context import AppContext, AppType, RequestContext
 from acme.om.evidence import ExecutorInterface, WorkProductInterface
 from acme.om.hosts.impl.placement import PlacementHostsImpl
+from acme.om.playbooks.root import PlaybooksLayer
 from acme.om.relay.impl.placement import PlacementRelayedImpl
 from acme.om.relay.impl.transport import TransportPlacedImpl, TransportRelayImpl
 from acme.om.root import Managers, build_managers
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
+from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.tools.tool import ToolInterface
 from acme.om.trust.impl.keys import KeyProbeAbsentImpl
 from acme.om.trust.root import TrustLayer
@@ -103,16 +105,24 @@ class RunnerContainer:
         held to the trust swimlane's rules: audited with its four answers,
         and refused a secret that would cross its session's wall. A session
         in the cloud runs on this runner, its executor, through infra's
-        transport. A session pinned to its tenant's hosts is inside the wall:
-        none of its calls runs on this runner. Each travels as exec work to
-        the host that holds its workspace, its executor, and until one does
-        it is refused."""
+        transport. A session pinned to its tenant's hosts is inside the wall,
+        its sub-agents with it: none of their calls runs on this runner. Each
+        travels as exec work to the host that holds its workspace, its
+        executor, and until one does it is refused."""
         runner = Executor(kind=ExecutorKind.CLOUD, credential_id=new_id(), label=settings.runner_id)
         placement = PlacementRelayedImpl(
-            PlacementHostsImpl(storage.get_hosts_storage(), runner),
+            PlacementHostsImpl(
+                storage.get_hosts_storage(), storage.get_agent_session_storage(), runner
+            ),
             storage.get_relay_storage(),
         )
         trust = TrustLayer(storage, infra, placement=placement, probe=KeyProbeAbsentImpl())
+        playbooks = PlaybooksLayer(storage)
+
+        def layers(inner: ToolsManagerInterface) -> ToolsManagerInterface:
+            # The wall and the audit first, then the session's playbook gates.
+            return playbooks.tools(trust.tools(inner))
+
         app = AppContext(type=AppType.WORKER, version=f"{settings.service_name}@{settings.version}")
         built: list[Managers] = []
 
@@ -137,11 +147,12 @@ class RunnerContainer:
             domain_classes=domain_classes,
             executor=executor,
             work_product=work_product,
-            tools_layer=trust.tools,
+            tools_layer=layers,
             transport_layer=placed,
         )
         built.append(managers)
         trust.build(managers)
+        playbooks.build(managers)
         return cls(settings, storage, infra, integrations, managers)
 
     async def start(self) -> None:

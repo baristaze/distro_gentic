@@ -132,7 +132,9 @@ def ask_of(item: ClaimedWorkView) -> Ask:
         if isinstance(egress_raw, list) and all(isinstance(d, str) for d in egress_raw)
         else None
     )
-    reads_raw = payload.get("reads", [])
+    # An item that names no reads may read anything: an item that reads
+    # nothing says so with an empty list.
+    reads_raw = payload.get("reads")
     reads = (
         tuple(reads_raw)
         if isinstance(reads_raw, list) and all(isinstance(r, str) for r in reads_raw)

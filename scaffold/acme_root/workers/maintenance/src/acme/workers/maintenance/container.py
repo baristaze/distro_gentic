@@ -15,15 +15,25 @@ from acme.integrations.root import IntegrationsInterface
 from acme.om.agent_sessions.impl.manager import AgentSessionsOptions
 from acme.om.agents.impl.manager import AgentsOptions
 from acme.om.attribution.impl.manager import AttributionOptions
+from acme.om.automations.impl.manager import AutomationsOptions
+from acme.om.automations.root import build_automations
 from acme.om.base import new_id
 from acme.om.budgets.impl.manager import BudgetsOptions
 from acme.om.events.impl.manager import EventsOptions
 from acme.om.hosts.impl.manager import HostsOptions
 from acme.om.idempotency.impl.manager import IdempotencyOptions
+from acme.om.intake.impl.manager import IntakeOptions
+from acme.om.intake.root import build_intake
+from acme.om.knowledge.impl.manager import KnowledgeOptions
+from acme.om.knowledge.root import build_knowledge
 from acme.om.media.impl.manager import MediaOptions
 from acme.om.models.impl.manager import ModelsOptions
 from acme.om.orchestrations.impl.manager import OrchestrationsOptions
 from acme.om.placement.impl.manager import PlacementOptions
+from acme.om.platform_agents.impl.manager import PlatformAgentsOptions
+from acme.om.playbooks.impl.manager import PlaybooksOptions
+from acme.om.playbooks.root import PlaybooksLayer
+from acme.om.projects.impl.manager import ProjectsOptions
 from acme.om.relay.impl.manager import RelayOptions
 from acme.om.retention.impl.manager import RetentionOptions
 from acme.om.root import Managers, build_managers
@@ -114,6 +124,8 @@ def worker_managers(
         retention_options=RetentionOptions(sweep_batch=RETENTION_SWEEP_BATCH, purge_batch=batch),
         placement_options=PlacementOptions(purge_batch=batch),
         hosts_options=HostsOptions(purge_batch=batch),
+        platform_agents_options=PlatformAgentsOptions(purge_batch=batch),
+        projects_options=ProjectsOptions(purge_batch=batch),
         relay_options=RelayOptions(purge_batch=batch),
     )
 
@@ -144,6 +156,19 @@ class WorkerContainer:
             probe=KeyProbeAbsentImpl(),
             options=TrustOptions(purge_batch=settings.worker_purge_batch),
         ).build(managers)
+        # Where the world's events come in, and the work they set going; with
+        # playbooks and knowledge, for their purges.
+        batch = settings.worker_purge_batch
+        self.intake = build_intake(storage, managers, options=IntakeOptions(purge_batch=batch))
+        self.automations = build_automations(
+            storage, managers, options=AutomationsOptions(purge_batch=batch)
+        )
+        self.playbooks = PlaybooksLayer(storage, options=PlaybooksOptions(purge_batch=batch)).build(
+            managers
+        )
+        self.knowledge = build_knowledge(
+            storage, managers, options=KnowledgeOptions(purge_batch=batch)
+        )
 
     @property
     def identity_provider(self) -> IdentityProviderInterface:

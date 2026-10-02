@@ -13,6 +13,7 @@ item's lease runs out for the platform's sweep to take back."""
 
 import asyncio
 import logging
+import random
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -22,7 +23,7 @@ from uuid import UUID
 from acme.apps.host.ceilings import Ask, Ceilings, ask_of, refusals
 from acme.apps.host.config import Credential, Settings, load_credential, save_credential
 from acme.apps.host.probe import Probed, Probes, startup
-from acme.client.client import ApiClient, ApiError
+from acme.client.client import WIRE_FAILURES, ApiClient, ApiError
 from acme.client.types import (
     ClaimedWorkView,
     ControlKind,
@@ -34,6 +35,18 @@ log = logging.getLogger(__name__)
 
 EXEC_VERSION = 1
 """The version of `exec` work this build of the host reads."""
+
+ENDS_THE_HOST = frozenset({401, 403, 426})
+"""The answers a host does not outlast: its credential refused, ended, or
+revoked, and the work it reads below the floor. Every other failure, an
+answer the API could not serve, a 429, or the wire, the host waits out and
+calls again with the credential it holds."""
+
+BACKOFF_FIRST_SECONDS = 1.0
+"""The wait after a first failure. It doubles per failure in a row."""
+
+BACKOFF_MAX_SECONDS = 120.0
+"""However many failures in a row, no wait is longer, a 429's ask included."""
 
 
 class NotEnrolled(RuntimeError):
@@ -94,6 +107,7 @@ class HostAgent:
         client_for: ClientFactory,
         executor: ExecutorInterface | None = None,
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
+        jitter: Callable[[], float] = random.random,
     ) -> None:
         self._settings = settings
         self._ceilings = ceilings
@@ -101,11 +115,14 @@ class HostAgent:
         self._client_for = client_for
         self._executor = executor or ExecutorPendingImpl()
         self._now = now
+        self._jitter = jitter
+        self._failures = 0
         self._probed: Probed | None = None
         self._credential: Credential | None = None
         self.woken = asyncio.Event()
         """Set when the control stream says work reached this host's lanes."""
         self._seen: UUID | None = None  # the last control message the host saw
+        self._rotating = asyncio.Lock()
 
     @property
     def probed(self) -> Probed:
@@ -150,12 +167,16 @@ class HostAgent:
             await client.host_heartbeat(self.probed.advertisement, EXEC_VERSION)
 
     async def rotate_if_due(self) -> bool:
-        if not self.credential.due(self._now()):
-            return False
-        async with self._client_for(self.credential.token) as client:
-            issued = await client.rotate_host_credential()
-        self._keep(issued)
-        return True
+        """Rotates once when due. One rotation at a time: a credential
+        rotated a second time ends the host, so a loop that beats beside the
+        claims never rotates with the one a turn just rotated."""
+        async with self._rotating:
+            if not self.credential.due(self._now()):
+                return False
+            async with self._client_for(self.credential.token) as client:
+                issued = await client.rotate_host_credential()
+            self._keep(issued)
+            return True
 
     async def claim_once(self) -> Handled | None:
         """One claim. The item is held to the owner's ceilings, and to what
@@ -195,13 +216,37 @@ class HostAgent:
 
     async def tick(self) -> Handled | None:
         """One turn of the host's loop: rotate when due, beat, claim."""
+        await self.rotate_if_due()
+        await self.beat()
+        return await self.claim_once()
+
+    async def turn(self) -> float:
+        """One turn, and how long to wait before the next: none while there
+        is work, a beat when there is none, and a growing wait after a
+        failure the host outlasts, with the credential it holds. A refusal
+        in `ENDS_THE_HOST` is raised, and ends the host."""
         try:
-            await self.rotate_if_due()
-            await self.beat()
-            return await self.claim_once()
+            handled = await self.tick()
         except ApiError as error:
-            log.warning("the platform refused: %s %s", error.code, error.message)
-            raise
+            if error.status in ENDS_THE_HOST:
+                log.warning("the platform refused: %s %s", error.code, error.message)
+                raise
+            log.warning("the platform failed: %s %s", error.status, error.code)
+            return self._backoff(error.retry_after)
+        except WIRE_FAILURES as error:
+            log.warning("the platform is unreachable: %s", error)
+            return self._backoff(None)
+        self._failures = 0
+        return 0.0 if handled is not None else self._settings.beat_seconds
+
+    def _backoff(self, server_asked: float | None) -> float:
+        """The wait after one more failure in a row: the doubling curve, half
+        of it jitter so hosts that failed together do not return together,
+        or longer when the server asked, and never past the cap."""
+        self._failures += 1
+        full = min(BACKOFF_FIRST_SECONDS * 2 ** (self._failures - 1), BACKOFF_MAX_SECONDS)
+        curve = full / 2 + (full / 2) * self._jitter()
+        return min(max(curve, server_asked or 0.0), BACKOFF_MAX_SECONDS)
 
     def _modes(self) -> frozenset[IsolationMode]:
         return frozenset(self.probed.advertisement.isolation_modes or ())

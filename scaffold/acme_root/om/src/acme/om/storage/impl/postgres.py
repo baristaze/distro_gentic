@@ -16,6 +16,13 @@ from acme.om.agents.storage import AgentStorageInterface
 from acme.om.agents.storage.impl.postgres import AgentStoragePostgresImpl
 from acme.om.attribution.storage import AttributionStorageInterface
 from acme.om.attribution.storage.impl.postgres import AttributionStoragePostgresImpl
+from acme.om.automations.storage import AutomationStorageInterface
+from acme.om.automations.storage.impl.postgres import AutomationStoragePostgresImpl
+from acme.om.billing.storage import AccountStorageInterface, MoneyLedgerStorageInterface
+from acme.om.billing.storage.impl.postgres import (
+    AccountStoragePostgresImpl,
+    MoneyLedgerStoragePostgresImpl,
+)
 from acme.om.budgets.storage import BudgetStorageInterface, LedgerStorageInterface
 from acme.om.budgets.storage.impl.postgres import (
     BudgetStoragePostgresImpl,
@@ -29,6 +36,10 @@ from acme.om.hosts.storage import HostsStorageInterface
 from acme.om.hosts.storage.impl.postgres import HostsStoragePostgresImpl
 from acme.om.idempotency.storage import IdempotencyStorageInterface
 from acme.om.idempotency.storage.impl.postgres import IdempotencyStoragePostgresImpl
+from acme.om.intake.storage import IntakeStorageInterface
+from acme.om.intake.storage.impl.postgres import IntakeStoragePostgresImpl
+from acme.om.knowledge.storage import KnowledgeStorageInterface
+from acme.om.knowledge.storage.impl.postgres import KnowledgeStoragePostgresImpl
 from acme.om.media.storage import MediaStorageInterface
 from acme.om.media.storage.impl.postgres import MediaStoragePostgresImpl
 from acme.om.models.storage import FillSetStorageInterface
@@ -39,8 +50,14 @@ from acme.om.outbox.storage import OutboxStorageInterface
 from acme.om.outbox.storage.impl.postgres import OutboxStoragePostgresImpl
 from acme.om.placement.storage import PlacementStorageInterface
 from acme.om.placement.storage.impl.postgres import PlacementStoragePostgresImpl
+from acme.om.platform_agents.storage import PlatformAgentsStorageInterface
+from acme.om.platform_agents.storage.impl.postgres import PlatformAgentsStoragePostgresImpl
+from acme.om.playbooks.storage import PlaybookStorageInterface
+from acme.om.playbooks.storage.impl.postgres import PlaybookStoragePostgresImpl
 from acme.om.privacy.storage import PrivacyStorageInterface
 from acme.om.privacy.storage.impl.postgres import PrivacyStoragePostgresImpl
+from acme.om.projects.storage import ProjectStorageInterface
+from acme.om.projects.storage.impl.postgres import ProjectStoragePostgresImpl
 from acme.om.relay.storage import RelayStorageInterface
 from acme.om.relay.storage.impl.postgres import RelayStoragePostgresImpl
 from acme.om.retention.storage import RetentionStorageInterface
@@ -197,9 +214,12 @@ class StoragePostgresImpl(StorageInterface):
         self._agents = AgentStoragePostgresImpl(sessions)
         self._attribution = AttributionStoragePostgresImpl(sessions)
         self._privacy = PrivacyStoragePostgresImpl(sessions)
+        self._projects = ProjectStoragePostgresImpl(sessions)
         self._retention = RetentionStoragePostgresImpl(sessions)
         self._budgets = BudgetStoragePostgresImpl(sessions)
         self._ledger = LedgerStoragePostgresImpl(sessions)
+        self._accounts = AccountStoragePostgresImpl(sessions)
+        self._money_ledger = MoneyLedgerStoragePostgresImpl(sessions)
         self._fill_sets = FillSetStoragePostgresImpl(sessions)
         self._windows = WindowStoragePostgresImpl(sessions)
         self._tools = ToolStoragePostgresImpl(sessions)
@@ -207,6 +227,11 @@ class StoragePostgresImpl(StorageInterface):
         self._placement = PlacementStoragePostgresImpl(sessions)
         self._trust = TrustStoragePostgresImpl(sessions)
         self._hosts = HostsStoragePostgresImpl(sessions)
+        self._intake = IntakeStoragePostgresImpl(sessions)
+        self._automation = AutomationStoragePostgresImpl(sessions)
+        self._playbook = PlaybookStoragePostgresImpl(sessions)
+        self._knowledge = KnowledgeStoragePostgresImpl(sessions)
+        self._platform_agents = PlatformAgentsStoragePostgresImpl(sessions)
         self._relay = RelayStoragePostgresImpl(sessions)
 
     def get_tenancy_storage(self) -> TenancyStorageInterface:
@@ -245,6 +270,9 @@ class StoragePostgresImpl(StorageInterface):
     def get_privacy_storage(self) -> PrivacyStorageInterface:
         return self._privacy
 
+    def get_project_storage(self) -> ProjectStorageInterface:
+        return self._projects
+
     def get_retention_storage(self) -> RetentionStorageInterface:
         return self._retention
 
@@ -253,6 +281,12 @@ class StoragePostgresImpl(StorageInterface):
 
     def get_ledger_storage(self) -> LedgerStorageInterface:
         return self._ledger
+
+    def get_account_storage(self) -> AccountStorageInterface:
+        return self._accounts
+
+    def get_money_ledger_storage(self) -> MoneyLedgerStorageInterface:
+        return self._money_ledger
 
     def get_fill_set_storage(self) -> FillSetStorageInterface:
         return self._fill_sets
@@ -274,6 +308,21 @@ class StoragePostgresImpl(StorageInterface):
 
     def get_hosts_storage(self) -> HostsStorageInterface:
         return self._hosts
+
+    def get_intake_storage(self) -> IntakeStorageInterface:
+        return self._intake
+
+    def get_automation_storage(self) -> AutomationStorageInterface:
+        return self._automation
+
+    def get_playbook_storage(self) -> PlaybookStorageInterface:
+        return self._playbook
+
+    def get_knowledge_storage(self) -> KnowledgeStorageInterface:
+        return self._knowledge
+
+    def get_platform_agents_storage(self) -> PlatformAgentsStorageInterface:
+        return self._platform_agents
 
     def get_relay_storage(self) -> RelayStorageInterface:
         return self._relay

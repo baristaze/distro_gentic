@@ -21,21 +21,29 @@ import inspect
 import pkgutil
 
 from contracts import (
+    account_storage,
     agent_session_storage,
     agent_storage,
     attribution_storage,
+    automation_storage,
     budget_storage,
     event_storage,
     evidence_storage,
     fill_set_storage,
     hosts_storage,
     idempotency_storage,
+    intake_storage,
+    knowledge_storage,
     ledger_storage,
     media_storage,
+    money_ledger_storage,
     orchestration_storage,
     outbox_storage,
     placement_storage,
+    platform_agents_storage,
+    playbook_storage,
     privacy_storage,
+    project_storage,
     relay_storage,
     retention_storage,
     step_storage,
@@ -130,6 +138,7 @@ STORAGE_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
 )
 
 CROSS_TENANT_CASES: dict[str, frozenset[str]] = {
+    "AccountStorageInterface": account_storage.CROSS_TENANT_CASES,
     "AgentSessionStorageInterface": agent_session_storage.CROSS_TENANT_CASES,
     "AgentStorageInterface": agent_storage.CROSS_TENANT_CASES,
     "AttributionStorageInterface": attribution_storage.CROSS_TENANT_CASES,
@@ -141,10 +150,13 @@ CROSS_TENANT_CASES: dict[str, frozenset[str]] = {
     "IdempotencyStorageInterface": idempotency_storage.CROSS_TENANT_CASES,
     "LedgerStorageInterface": ledger_storage.CROSS_TENANT_CASES,
     "MediaStorageInterface": media_storage.CROSS_TENANT_CASES,
+    "MoneyLedgerStorageInterface": money_ledger_storage.CROSS_TENANT_CASES,
     "OrchestrationsStorageInterface": orchestration_storage.CROSS_TENANT_CASES,
     "OutboxStorageInterface": outbox_storage.CROSS_TENANT_CASES,
     "PlacementStorageInterface": placement_storage.CROSS_TENANT_CASES,
+    "PlatformAgentsStorageInterface": platform_agents_storage.CROSS_TENANT_CASES,
     "PrivacyStorageInterface": privacy_storage.CROSS_TENANT_CASES,
+    "ProjectStorageInterface": project_storage.CROSS_TENANT_CASES,
     "RelayStorageInterface": relay_storage.CROSS_TENANT_CASES,
     "RetentionStorageInterface": retention_storage.CROSS_TENANT_CASES,
     "StepStorageInterface": step_storage.CROSS_TENANT_CASES,
@@ -152,6 +164,10 @@ CROSS_TENANT_CASES: dict[str, frozenset[str]] = {
     "WindowStorageInterface": window_storage.CROSS_TENANT_CASES,
     "ToolStorageInterface": tool_storage.CROSS_TENANT_CASES,
     "TrustStorageInterface": trust_storage.CROSS_TENANT_CASES,
+    "IntakeStorageInterface": intake_storage.CROSS_TENANT_CASES,
+    "AutomationStorageInterface": automation_storage.CROSS_TENANT_CASES,
+    "PlaybookStorageInterface": playbook_storage.CROSS_TENANT_CASES,
+    "KnowledgeStorageInterface": knowledge_storage.CROSS_TENANT_CASES,
     "WorkStorageInterface": work_storage.CROSS_TENANT_CASES,
 }
 """Which contract suite carries the cross-tenant cases of each storage
@@ -187,14 +203,15 @@ MANAGER_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         # And the history of each session that purge has claimed, named with
         # its tenant: bookkeeping of the same step, for no principal.
         ("StepsManagerInterface", "purge_histories"),
-        # And the session's authority, its tree, its artifacts, and its
-        # workspace, named with the tenant, which the same purge takes before
-        # the session's row.
+        # And the session's authority, its tree, its artifacts, its
+        # workspace, and its project's row, named with the tenant, which the
+        # same purge takes before the session's row.
         ("AttributionManagerInterface", "purge_authority"),
         ("AgentsManagerInterface", "purge_tree"),
         ("WindowsManagerInterface", "purge_artifacts"),
         ("ToolsManagerInterface", "purge_workspace"),
         ("EvidenceManagerInterface", "purge_session"),
+        ("ProjectsManagerInterface", "purge_session"),
         ("RelayManagerInterface", "purge_session"),
         # The sweep's gauges of the queue, read across tenants like the purge.
         ("WorkManagerInterface", "oldest_ready_age"),

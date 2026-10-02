@@ -1,9 +1,9 @@
 """The host's commands. `probe` runs the startup probes and prints what the
 host would advertise. `run` starts the host: it probes, enrolls once or
-picks up its credential, then beats, rotates, and claims until stopped.
-Exit codes: 0 done, 1 the platform refused, 2 a setting or a file on the
-host is wrong, 3 not enrolled, 4 the platform is unreachable, 5 a startup
-probe failed."""
+picks up its credential, then beats, rotates, and claims until stopped,
+waiting out a failure it outlasts. Exit codes: 0 done, 1 the platform
+refused, 2 a setting or a file on the host is wrong, 3 not enrolled, 4 the
+platform is unreachable at startup, 5 a startup probe failed."""
 
 import asyncio
 import contextlib
@@ -22,7 +22,7 @@ from acme.apps.host.agent import HostAgent, NotEnrolled
 from acme.apps.host.config import BadSetting, Settings, settings_from_env
 from acme.apps.host.probe import Misconfigured, real_probes, startup
 from acme.apps.host.relay import ExecutorRelayImpl
-from acme.client.client import ApiClient, ApiError
+from acme.client.client import WIRE_FAILURES, ApiClient, ApiError
 from acme.infra.secrets.local import SecretsLocalImpl
 from acme.infra.transports import TransportInterface
 from acme.infra.transports.broker import BrokerNullImpl
@@ -117,9 +117,10 @@ def host_transports(settings: Settings) -> dict[IsolationMode, TransportInterfac
 
 
 async def serve(agent: HostAgent, settings: Settings) -> None:
-    """Claims while there is work, and waits when there is none: a beat, or
-    less when the control stream wakes it. It beats and rotates its
-    credential on a loop of its own, so a long command keeps the host
+    """Claims while there is work, waits a beat when there is none, and waits
+    out a failure the host outlasts (`HostAgent.turn`); the control stream
+    cuts a wait short when work reaches the host. It beats and rotates its
+    credential on a loop of its own too, so a long command keeps the host
     online and its credential live."""
     beside = [
         asyncio.ensure_future(listen(agent)),
@@ -127,11 +128,11 @@ async def serve(agent: HostAgent, settings: Settings) -> None:
     ]
     try:
         while True:
-            handled = await agent.claim_once()
-            if handled is None:
+            wait = await agent.turn()
+            if wait > 0:
                 agent.woken.clear()
                 with contextlib.suppress(TimeoutError):
-                    await asyncio.wait_for(agent.woken.wait(), settings.beat_seconds)
+                    await asyncio.wait_for(agent.woken.wait(), wait)
     finally:
         for task in beside:
             task.cancel()
@@ -144,7 +145,7 @@ async def keep_alive(agent: HostAgent, settings: Settings) -> None:
         try:
             await agent.rotate_if_due()
             await agent.beat()
-        except (ApiError, httpx.TransportError) as error:
+        except (ApiError, *WIRE_FAILURES) as error:
             log.warning("the beat failed: %s", error)
 
 
@@ -157,7 +158,7 @@ async def listen(agent: HostAgent) -> None:
         try:
             await agent.listen()
             wait = 1.0
-        except (ApiError, httpx.TransportError) as error:
+        except (ApiError, *WIRE_FAILURES) as error:
             log.warning("the control stream ended: %s", error)
             wait = min(wait * 2, 30.0)
         await asyncio.sleep(wait)

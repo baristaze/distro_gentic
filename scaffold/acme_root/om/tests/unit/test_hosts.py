@@ -16,7 +16,13 @@ from unit.test_placement import exec_on
 from acme.infra.impl.local import InfraLocalImpl
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext, Role, TenantContext
-from acme.om.exceptions import CredentialExpired, InvalidCredential, NotAuthorized, NotFound
+from acme.om.exceptions import (
+    CredentialExpired,
+    InvalidCredential,
+    NotAuthorized,
+    NotFound,
+    ValidationFailed,
+)
 from acme.om.hosts import rules
 from acme.om.hosts.exceptions import PinnedToHosts, VersionBelowFloor
 from acme.om.hosts.impl.manager import HostsManagerImpl, HostsOptions
@@ -232,17 +238,85 @@ async def test_a_credential_lives_an_hour_and_the_host_rotates_it(
     second = await hosts.rotate(request(), identity)
     assert second.credential != first.credential and second.host_id == first.host_id
     assert second.expires_at == clock.now + HostsOptions().credential_ttl
-    # The one it replaced works for the grace, so a lost answer is retried,
-    # and is refused after it.
+    # The one it replaced works for the grace, so a call in flight with it
+    # lands; past it, the host calls with the next one.
     await hosts.authenticate(request(), first.credential)
     clock.advance(HostsOptions().rotation_grace)
-    with pytest.raises(CredentialExpired):
-        await hosts.authenticate(request(), first.credential)
     await hosts.authenticate(request(), second.credential)
-    # Unrotated, a credential ends with its life.
+    # Unrotated, a credential ends with its life, and only it ends.
     clock.advance(HostsOptions().credential_ttl)
     with pytest.raises(CredentialExpired):
         await hosts.authenticate(request(), second.credential)
+    (status,) = await hosts.get_hosts(owner, pool.id)
+    assert status.host.revoked_at is None
+
+
+async def test_a_copy_rotated_after_the_hosts_own_rotation_ends_the_host(
+    managers: Managers, hosts: HostsManagerImpl, clock: Clock
+) -> None:
+    owner = await an_owner(managers)
+    pool = await hosts.create_pool(owner, a_pool())
+    issued = await enrolled(hosts, owner, pool)
+    copy = issued.credential  # taken from the host's disk
+    clock.advance(timedelta(minutes=30))
+    rotated = await hosts.rotate(request(), await hosts.authenticate(request(), issued.credential))
+    # The copy still authenticates in the grace, and rotates: refused, since
+    # a credential rotates once, and the host and its credentials end.
+    copied = await hosts.authenticate(request(), copy)
+    with pytest.raises(CredentialExpired):
+        await hosts.rotate(request(), copied)
+    for credential in (copy, rotated.credential):
+        with pytest.raises(CredentialExpired):
+            await hosts.authenticate(request(), credential)
+    (status,) = await hosts.get_hosts(owner, pool.id)
+    assert status.host.revoked_at == clock.now and not status.online
+
+
+async def test_a_copy_rotating_every_half_hour_does_not_outlive_its_hour(
+    managers: Managers, hosts: HostsManagerImpl, clock: Clock
+) -> None:
+    owner = await an_owner(managers)
+    pool = await hosts.create_pool(owner, a_pool())
+    issued = await enrolled(hosts, owner, pool)
+    copy = issued.credential
+    # The copy rotates first, at half the credential's life, for a fresh hour.
+    clock.advance(timedelta(minutes=30))
+    forked = await hosts.rotate(request(), await hosts.authenticate(request(), copy))
+    # The host rotates the same credential: two machines hold it, and both end.
+    with pytest.raises(CredentialExpired):
+        await hosts.rotate(request(), await hosts.authenticate(request(), issued.credential))
+    with pytest.raises(CredentialExpired):
+        await hosts.authenticate(request(), forked.credential)
+    # Every half hour after, the copy is refused, and past the hour nothing
+    # it ever held authenticates.
+    for _ in range(2):
+        clock.advance(timedelta(minutes=30))
+        for credential in (copy, forked.credential):
+            with pytest.raises(CredentialExpired):
+                await hosts.authenticate(request(), credential)
+
+
+async def test_a_copy_that_rotates_first_ends_at_the_hosts_next_beat(
+    managers: Managers, hosts: HostsManagerImpl, clock: Clock
+) -> None:
+    owner = await an_owner(managers)
+    pool = await hosts.create_pool(owner, a_pool())
+    issued = await enrolled(hosts, owner, pool)
+    # The copy rotates 10 minutes in and every 30 minutes after, while the
+    # host is silent, past the grace of the credential it holds.
+    clock.advance(timedelta(minutes=10))
+    held = await hosts.rotate(request(), await hosts.authenticate(request(), issued.credential))
+    for _ in range(2):
+        clock.advance(timedelta(minutes=30))
+        held = await hosts.rotate(request(), await hosts.authenticate(request(), held.credential))
+    # The host's next beat, with the credential the copy rotated away from:
+    # refused, and the host and every credential it holds are revoked.
+    with pytest.raises(CredentialExpired):
+        await hosts.authenticate(request(), issued.credential)
+    (status,) = await hosts.get_hosts(owner, pool.id)
+    assert status.host.revoked_at == clock.now and not status.online
+    with pytest.raises(CredentialExpired):
+        await hosts.authenticate(request(), held.credential)
 
 
 async def test_a_revoked_host_is_refused_and_handed_nothing(
@@ -457,7 +531,9 @@ async def test_trust_reads_a_pinned_session_inside_the_wall_and_runs_none_of_its
     pool = await hosts.create_pool(owner, a_pool())
     session = await managers.agent_sessions.create_session(owner, make_session())
     runner = Executor(kind=ExecutorKind.CLOUD, credential_id=new_id(), label="runner-1")
-    placement = PlacementHostsImpl(storage.get_hosts_storage(), runner)
+    placement = PlacementHostsImpl(
+        storage.get_hosts_storage(), storage.get_agent_session_storage(), runner
+    )
     assert not await placement.inside_wall(owner.org_id, session.id)
     assert await placement.executor_of(owner.org_id, session.id) == runner
     await hosts.place_session(owner, session.id, pool.id)
@@ -469,3 +545,30 @@ async def test_trust_reads_a_pinned_session_inside_the_wall_and_runs_none_of_its
     assert isinstance(refused.value, NotAuthorized)
     await hosts.place_session(owner, session.id, None)
     assert await placement.executor_of(owner.org_id, session.id) == runner
+
+
+async def test_a_sub_agent_runs_where_its_root_runs(
+    managers: Managers, hosts: HostsManagerImpl, storage: StorageMemoryImpl
+) -> None:
+    owner = await an_owner(managers)
+    pool = await hosts.create_pool(owner, a_pool())
+    root = await managers.agent_sessions.create_session(owner, make_session())
+    child = await managers.agent_sessions.create_session(owner, make_session(parent=root))
+    grandchild = await managers.agent_sessions.create_session(owner, make_session(parent=child))
+    runner = Executor(kind=ExecutorKind.CLOUD, credential_id=new_id(), label="runner-1")
+    placement = PlacementHostsImpl(
+        storage.get_hosts_storage(), storage.get_agent_session_storage(), runner
+    )
+    await hosts.place_session(owner, root.id, pool.id)
+    for sub in (child, grandchild):
+        assert await placement.inside_wall(owner.org_id, sub.id)
+        with pytest.raises(PinnedToHosts):
+            await placement.executor_of(owner.org_id, sub.id)
+        state = await hosts.placement_of(owner, sub.id)
+        assert state.session_id == sub.id and state.pool == pool and state.waiting
+    # A sub-agent is never placed apart from its root.
+    with pytest.raises(ValidationFailed):
+        await hosts.place_session(owner, child.id, None)
+    assert await placement.inside_wall(owner.org_id, child.id)
+    await hosts.place_session(owner, root.id, None)
+    assert await placement.executor_of(owner.org_id, grandchild.id) == runner

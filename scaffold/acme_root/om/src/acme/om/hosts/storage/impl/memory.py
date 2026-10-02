@@ -3,7 +3,7 @@ from uuid import UUID
 
 from acme.om.exceptions import PreconditionFailed, UniqueKeyTaken
 from acme.om.hosts.storage import HostsStorageInterface
-from acme.om.hosts.types.credential import EnrollmentToken, HostCredential
+from acme.om.hosts.types.credential import EnrollmentToken, HostCredential, Rotation
 from acme.om.hosts.types.host import Host, HostReport
 from acme.om.hosts.types.placement import SessionPlacement
 from acme.om.hosts.types.pool import HostPool
@@ -104,21 +104,33 @@ class HostsStorageMemoryImpl(MemoryStorageBase, HostsStorageInterface):
         self,
         org_id: UUID,
         retiring_id: UUID,
+        at: datetime,
         retire_at: datetime,
         minted: HostCredential,
-    ) -> bool:
+    ) -> Rotation:
         async with self._lock:
             retiring = self._get(self._credentials, org_id, retiring_id)
             if retiring is None or retiring.host_id != minted.host_id:
-                return False
+                return Rotation.MISSING
+            if retiring.rotated_at is not None:
+                return Rotation.REUSED
             if minted.id in self._credentials or any(
                 held.digest == minted.digest for held in self._every(self._credentials)
             ):
                 raise UniqueKeyTaken(f"host_credentials {minted.id}: the id or digest is taken")
-            ends = min(retiring.expires_at, retire_at)
-            self._put(self._credentials, org_id, retiring.model_copy(update={"expires_at": ends}))
+            for held in self._rows(self._credentials, org_id):
+                if (
+                    held.host_id == minted.host_id
+                    and held.id != retiring_id
+                    and held.expires_at > at
+                ):
+                    self._put(self._credentials, org_id, held.model_copy(update={"expires_at": at}))
+            rotated = retiring.model_copy(
+                update={"rotated_at": at, "expires_at": min(retiring.expires_at, retire_at)}
+            )
+            self._put(self._credentials, org_id, rotated)
             self._insert(self._credentials, org_id, minted)
-            return True
+            return Rotation.ROTATED
 
     async def mark_seen(
         self, org_id: UUID, host_id: UUID, at: datetime, report: HostReport

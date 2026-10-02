@@ -6,6 +6,13 @@ from acme.om.agents.storage import AgentStorageInterface
 from acme.om.agents.storage.impl.memory import AgentStorageMemoryImpl
 from acme.om.attribution.storage import AttributionStorageInterface
 from acme.om.attribution.storage.impl.memory import AttributionStorageMemoryImpl
+from acme.om.automations.storage import AutomationStorageInterface
+from acme.om.automations.storage.impl.memory import AutomationStorageMemoryImpl
+from acme.om.billing.storage import AccountStorageInterface, MoneyLedgerStorageInterface
+from acme.om.billing.storage.impl.memory import (
+    AccountStorageMemoryImpl,
+    MoneyLedgerStorageMemoryImpl,
+)
 from acme.om.budgets.storage import BudgetStorageInterface, LedgerStorageInterface
 from acme.om.budgets.storage.impl.memory import BudgetStorageMemoryImpl, LedgerStorageMemoryImpl
 from acme.om.events.storage import EventStorageInterface
@@ -16,6 +23,10 @@ from acme.om.hosts.storage import HostsStorageInterface
 from acme.om.hosts.storage.impl.memory import HostsStorageMemoryImpl
 from acme.om.idempotency.storage import IdempotencyStorageInterface
 from acme.om.idempotency.storage.impl.memory import IdempotencyStorageMemoryImpl
+from acme.om.intake.storage import IntakeStorageInterface
+from acme.om.intake.storage.impl.memory import IntakeStorageMemoryImpl
+from acme.om.knowledge.storage import KnowledgeStorageInterface
+from acme.om.knowledge.storage.impl.memory import KnowledgeStorageMemoryImpl
 from acme.om.media.storage import MediaStorageInterface
 from acme.om.media.storage.impl.memory import MediaStorageMemoryImpl
 from acme.om.models.storage import FillSetStorageInterface
@@ -26,8 +37,14 @@ from acme.om.outbox.storage import OutboxStorageInterface
 from acme.om.outbox.storage.impl.memory import OutboxStorageMemoryImpl
 from acme.om.placement.storage import PlacementStorageInterface
 from acme.om.placement.storage.impl.memory import PlacementStorageMemoryImpl
+from acme.om.platform_agents.storage import PlatformAgentsStorageInterface
+from acme.om.platform_agents.storage.impl.memory import PlatformAgentsStorageMemoryImpl
+from acme.om.playbooks.storage import PlaybookStorageInterface
+from acme.om.playbooks.storage.impl.memory import PlaybookStorageMemoryImpl
 from acme.om.privacy.storage import PrivacyStorageInterface
 from acme.om.privacy.storage.impl.memory import PrivacyStorageMemoryImpl
+from acme.om.projects.storage import ProjectStorageInterface
+from acme.om.projects.storage.impl.memory import ProjectStorageMemoryImpl
 from acme.om.relay.storage import RelayStorageInterface
 from acme.om.relay.storage.impl.memory import RelayStorageMemoryImpl
 from acme.om.retention.storage import RetentionStorageInterface
@@ -64,9 +81,12 @@ class StorageMemoryImpl(StorageInterface):
         self._agents = AgentStorageMemoryImpl(self._outbox)
         self._attribution = AttributionStorageMemoryImpl(self._outbox)
         self._privacy = PrivacyStorageMemoryImpl(self._outbox)
+        self._projects = ProjectStorageMemoryImpl(self._outbox)
         self._retention = RetentionStorageMemoryImpl(self._outbox)
         self._budgets = BudgetStorageMemoryImpl(self._outbox)
         self._ledger = LedgerStorageMemoryImpl()
+        self._accounts = AccountStorageMemoryImpl(self._outbox)
+        self._money_ledger = MoneyLedgerStorageMemoryImpl()
         self._fill_sets = FillSetStorageMemoryImpl()
         self._windows = WindowStorageMemoryImpl()
         self._tools = ToolStorageMemoryImpl(self._outbox)
@@ -74,6 +94,11 @@ class StorageMemoryImpl(StorageInterface):
         self._placement = PlacementStorageMemoryImpl()
         self._trust = TrustStorageMemoryImpl(self._outbox)
         self._hosts = HostsStorageMemoryImpl(self._outbox)
+        self._intake = IntakeStorageMemoryImpl()
+        self._automation = AutomationStorageMemoryImpl(self._outbox)
+        self._playbook = PlaybookStorageMemoryImpl(self._outbox)
+        self._knowledge = KnowledgeStorageMemoryImpl(self._outbox)
+        self._platform_agents = PlatformAgentsStorageMemoryImpl(self._outbox)
         self._relay = RelayStorageMemoryImpl(self._outbox)
 
     def get_tenancy_storage(self) -> TenancyStorageInterface:
@@ -112,6 +137,9 @@ class StorageMemoryImpl(StorageInterface):
     def get_privacy_storage(self) -> PrivacyStorageInterface:
         return self._privacy
 
+    def get_project_storage(self) -> ProjectStorageInterface:
+        return self._projects
+
     def get_retention_storage(self) -> RetentionStorageInterface:
         return self._retention
 
@@ -120,6 +148,12 @@ class StorageMemoryImpl(StorageInterface):
 
     def get_ledger_storage(self) -> LedgerStorageInterface:
         return self._ledger
+
+    def get_account_storage(self) -> AccountStorageInterface:
+        return self._accounts
+
+    def get_money_ledger_storage(self) -> MoneyLedgerStorageInterface:
+        return self._money_ledger
 
     def get_fill_set_storage(self) -> FillSetStorageInterface:
         return self._fill_sets
@@ -141,6 +175,21 @@ class StorageMemoryImpl(StorageInterface):
 
     def get_hosts_storage(self) -> HostsStorageInterface:
         return self._hosts
+
+    def get_intake_storage(self) -> IntakeStorageInterface:
+        return self._intake
+
+    def get_automation_storage(self) -> AutomationStorageInterface:
+        return self._automation
+
+    def get_playbook_storage(self) -> PlaybookStorageInterface:
+        return self._playbook
+
+    def get_knowledge_storage(self) -> KnowledgeStorageInterface:
+        return self._knowledge
+
+    def get_platform_agents_storage(self) -> PlatformAgentsStorageInterface:
+        return self._platform_agents
 
     def get_relay_storage(self) -> RelayStorageInterface:
         return self._relay

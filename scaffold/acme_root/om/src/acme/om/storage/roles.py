@@ -58,6 +58,20 @@ TABLE_ROLES: dict[str, DatabaseRole] = {
     "hosts": DatabaseRole.CORE,
     "host_credentials": DatabaseRole.CORE,
     "session_placements": DatabaseRole.CORE,
+    "account_links": DatabaseRole.CORE,
+    "work_bindings": DatabaseRole.CORE,
+    "platform_acts": DatabaseRole.CORE,
+    "automations": DatabaseRole.CORE,
+    "automation_runs": DatabaseRole.CORE,
+    "playbooks": DatabaseRole.CORE,
+    "playbook_invocations": DatabaseRole.CORE,
+    "knowledge_entries": DatabaseRole.CORE,
+    "billing_accounts": DatabaseRole.CORE,
+    "ledger_entries": DatabaseRole.ACTIVITY,
+    "ledger_counts": DatabaseRole.ACTIVITY,
+    "validation_sessions": DatabaseRole.CORE,
+    "projects": DatabaseRole.CORE,
+    "session_projects": DatabaseRole.CORE,
     "exec_items": DatabaseRole.CORE,
     "exec_parts": DatabaseRole.CORE,
     "exec_controls": DatabaseRole.CORE,
@@ -73,6 +87,8 @@ APPEND_ONLY_TABLES: frozenset[str] = frozenset(
         "execution_records",
         "validations",
         "inferences",
+        "ledger_entries",
+        "session_projects",
     }
 )
 """Tables whose rows are written once: the serving logins hold SELECT and
@@ -91,11 +107,12 @@ PURGED_TABLES: frozenset[str] = frozenset(
         "execution_records",
         "validations",
         "inferences",
+        "session_projects",
     }
 )
 """The tables the purge login reaches: a session, its history and its
-artifacts, its authority, and its tree, which go together when the session
-is purged. It holds SELECT and DELETE on them and nothing
+artifacts, its authority, its tree, its runs, and its project's row, which
+go together when the session is purged. It holds SELECT and DELETE on them and nothing
 else, granted by the migrations that admit it and again by the login
 command, and the tenant fence admits it within the tenant its transaction
 names and never under the system scope (ADR 1010)."""
