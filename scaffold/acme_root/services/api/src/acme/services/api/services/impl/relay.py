@@ -28,7 +28,7 @@ from acme.services.api.types.relay import (
     ControlView,
     CrossingBody,
     ExecDetailView,
-    LeaseView,
+    ExecLeaseView,
     PartRequest,
     ResultRequest,
 )
@@ -106,8 +106,10 @@ class RelayServiceImpl(RelayServiceInterface):
             rctx, host, item_id, crossing_of(body.crossing), decoded(body.data)
         )
 
-    async def extend(self, rctx: RequestContext, host: HostIdentity, item_id: UUID) -> LeaseView:
-        return LeaseView(lease_expires_at=await self._relay.extend(rctx, host, item_id))
+    async def extend(
+        self, rctx: RequestContext, host: HostIdentity, item_id: UUID
+    ) -> ExecLeaseView:
+        return ExecLeaseView(lease_expires_at=await self._relay.extend(rctx, host, item_id))
 
     async def control(
         self, rctx: RequestContext, host: HostIdentity, after: UUID | None

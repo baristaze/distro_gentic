@@ -11,7 +11,7 @@ from fastapi import APIRouter
 from acme.services.api.gateway.auth import Rctx
 from acme.services.api.gateway.hosts import Host
 from acme.services.api.gateway.resolve import RelayService
-from acme.services.api.types.relay import ExecDetailView, LeaseView, PartRequest, ResultRequest
+from acme.services.api.types.relay import ExecDetailView, ExecLeaseView, PartRequest, ResultRequest
 
 router = APIRouter(tags=["relay"])
 
@@ -41,7 +41,7 @@ async def push_result(
     await relay.push_result(rctx, host, item_id, body)
 
 
-@router.post("/hosts/me/exec/{item_id}/lease", response_model=LeaseView)
-async def extend(rctx: Rctx, relay: RelayService, host: Host, item_id: UUID) -> LeaseView:
+@router.post("/hosts/me/exec/{item_id}/lease", response_model=ExecLeaseView)
+async def extend(rctx: Rctx, relay: RelayService, host: Host, item_id: UUID) -> ExecLeaseView:
     """Renews the host's lease on the item while it runs."""
     return await relay.extend(rctx, host, item_id)

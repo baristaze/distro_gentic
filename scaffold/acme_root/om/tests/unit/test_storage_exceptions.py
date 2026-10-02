@@ -47,6 +47,7 @@ from contracts import (
     project_storage,
     relay_storage,
     retention_storage,
+    stations_storage,
     step_storage,
     tenancy_storage,
     tool_storage,
@@ -104,6 +105,8 @@ STORAGE_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         # The sweep's read of running exec items whose lease ended, each named
         # with its tenant, whose service context the sweep settles it under.
         ("RelayStorageInterface", "read_expired"),
+        # And a station daemon's, by its credential's digest, the same way.
+        ("StationsStorageInterface", "read_daemon_credential_by_digest"),
         # The sweep's requeue of expired leases: a named write in the system
         # scope, like the claim it undoes. A crashed worker's item waits one
         # pass for it, not the turn of its tenant in a ring of every tenant.
@@ -173,6 +176,7 @@ CROSS_TENANT_CASES: dict[str, frozenset[str]] = {
     "ProjectStorageInterface": project_storage.CROSS_TENANT_CASES,
     "RelayStorageInterface": relay_storage.CROSS_TENANT_CASES,
     "RetentionStorageInterface": retention_storage.CROSS_TENANT_CASES,
+    "StationsStorageInterface": stations_storage.CROSS_TENANT_CASES,
     "StepStorageInterface": step_storage.CROSS_TENANT_CASES,
     "TenancyStorageInterface": tenancy_storage.CROSS_TENANT_CASES,
     "WindowStorageInterface": window_storage.CROSS_TENANT_CASES,
@@ -295,6 +299,14 @@ REQUEST_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
         # And the sweep's settlement of the items whose lease ended, across
         # tenants, each under its tenant's service context.
         ("RelayManagerInterface", "settle_expired"),
+        # A station daemon's calls, for the same reason: its credential, its
+        # claim through placement, its renewal, and its report run from the
+        # request stage, the last two under its tenant's service context.
+        ("StationsManagerInterface", "authenticate"),
+        ("StationsManagerInterface", "rotate"),
+        ("StationsManagerInterface", "claim"),
+        ("StationsManagerInterface", "renew"),
+        ("StationsManagerInterface", "report"),
         # The sweep's requeue across tenants: a dead letter it makes is
         # written under its tenant's service context, minted from this stage
         # as the claim mints one.

@@ -26,6 +26,7 @@ from acme.om.privacy.storage import PrivacyStorageInterface
 from acme.om.projects.storage import ProjectStorageInterface
 from acme.om.relay.storage import RelayStorageInterface
 from acme.om.retention.storage import RetentionStorageInterface
+from acme.om.stations.storage import StationsStorageInterface
 from acme.om.steps.storage import StepStorageInterface
 from acme.om.tenancy.storage import TenancyStorageInterface
 from acme.om.tools.storage import ToolStorageInterface
@@ -128,6 +129,9 @@ class StorageInterface(ABC):
 
     @abstractmethod
     def get_relay_storage(self) -> RelayStorageInterface: ...
+
+    @abstractmethod
+    def get_stations_storage(self) -> StationsStorageInterface: ...
 
     @abstractmethod
     def get_workspace_storage(self) -> WorkspaceStorageInterface: ...

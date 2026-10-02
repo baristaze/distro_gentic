@@ -19,6 +19,7 @@ members = [
     "clients/python",
     "apps/cli",
     "apps/host",
+    "apps/station_daemon",
     "ops",
     "checkers",
 ]
@@ -33,6 +34,7 @@ acme-session-runner = { workspace = true }
 acme-client = { workspace = true }
 acme-cli = { workspace = true }
 acme-host = { workspace = true }
+acme-station-daemon = { workspace = true }
 acme-ops = { workspace = true }
 acme-checkers = { workspace = true }
 
@@ -59,6 +61,7 @@ pythonpath = [
     "clients/python/tests",
     "apps/cli/tests",
     "apps/host/tests",
+    "apps/station_daemon/tests",
     "ops/tests",
     "ops/audit",
     "checkers/tests",
@@ -74,6 +77,7 @@ testpaths = [
     "clients/python/tests",
     "apps/cli/tests",
     "apps/host/tests",
+    "apps/station_daemon/tests",
     "ops/tests",
     "checkers/tests",
 ]
@@ -90,6 +94,13 @@ markers = [
 # by `make openapi` and never hand-edited, are left out, as the linter
 # leaves them.
 [tool.agentic-check]
+package = "acme"
+exclude = ["clients/python/src/acme/client/schema.py"]
+
+# The platform's static checker (`make distro-check`), which `checkers/`
+# carries beside the engine's. The layout is the scaffold's, so only the
+# package is named, and the generated types are left out as above.
+[tool.distro-check]
 package = "acme"
 exclude = ["clients/python/src/acme/client/schema.py"]
 
@@ -151,6 +162,7 @@ tenantless = [
     "RelayStorageInterface.read_expired",
     "RetentionStorageInterface.read_behind",
     "RetentionStorageInterface.read_due",
+    "StationsStorageInterface.read_daemon_credential_by_digest",
     "TenancyStorageInterface.clear_failed_sign_ins",
     "TenancyStorageInterface.confirm_totp",
     "TenancyStorageInterface.count_orgs",
@@ -207,9 +219,9 @@ builders = ["build_context"]
 
 # The entities a reader with no tenant takes, which carry their org_id: the
 # guideline's two, the claimant the control plane claims for across
-# tenants, whose org_id is the wall it sits in, the identity a host's
-# credential resolves to, found by its digest across tenants, and what a
-# host reads of an exec item it holds, which names the host's own tenant
-# for the secret store it keys by tenant.
+# tenants, whose org_id is the wall it sits in, the identities a host's
+# and a station daemon's credentials resolve to, each found by its digest
+# across tenants, and what a host reads of an exec item it holds, which
+# names the host's own tenant for the secret store it keys by tenant.
 [tool.arch-check.options.OM-02]
-tenantless = ["OutboxRow", "Event", "Claimant", "HostIdentity", "ExecDetail"]
+tenantless = ["OutboxRow", "Event", "Claimant", "HostIdentity", "DaemonIdentity", "ExecDetail"]

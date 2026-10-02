@@ -10,7 +10,16 @@ from collections.abc import Sequence
 from fastapi import APIRouter
 
 from acme.services.api.realtime import control, socket
-from acme.services.api.routers import admin, agent_sessions, events, hosts, media, relay, tenancy
+from acme.services.api.routers import (
+    admin,
+    agent_sessions,
+    events,
+    hosts,
+    media,
+    relay,
+    stations,
+    tenancy,
+)
 
 HOSTED: dict[str, tuple[APIRouter, ...]] = {
     # The operator plane is tenancy's: it lists and deletes orgs.
@@ -26,6 +35,9 @@ HOSTED: dict[str, tuple[APIRouter, ...]] = {
     # The exec work a host holds and its control stream: a host's own calls,
     # each opened from inside its wall.
     "relay": (relay.router, control.router),
+    # A tenant's labs, pools, and stations, the line, leases, and jobs, and a
+    # lab daemon's own calls: rotate, claim, renew, and report.
+    "stations": (stations.router,),
 }
 """Every namespace this image hosts, and the routers that serve it."""
 

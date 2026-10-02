@@ -8,6 +8,8 @@ against:
   release (an `## Unreleased` heading above it is fine). Before the
   first release the changelog has no release heading, and the version
   is `0.0.0`.
+- `scaffold/acme_root/checkers/src/acme/distro_check/__init__.py`: the
+  `__version__` of the platform's checker the scaffold carries.
 
 Exit status is non-zero when any copy disagrees. Standard library only.
 """
@@ -24,10 +26,12 @@ from _common import ROOT, arguments
 PLUGIN = ROOT / ".claude-plugin" / "plugin.json"
 MARKETPLACE = ROOT / ".claude-plugin" / "marketplace.json"
 CHANGELOG = ROOT / "CHANGELOG.md"
+CHECKER_INIT = ROOT / "scaffold" / "acme_root" / "checkers" / "src" / "acme" / "distro_check" / "__init__.py"
 
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 RELEASE_HEADING = re.compile(r"^## (\d+\.\d+\.\d+)\b")
 UNRELEASED = "0.0.0"
+DUNDER_VERSION = re.compile(r'^__version__\s*=\s*"([^"]*)"', re.MULTILINE)
 
 
 def source() -> str:
@@ -48,6 +52,11 @@ def check(version: str, errors: list[str]) -> None:
     else:
         if version != UNRELEASED:
             errors.append(f"{CHANGELOG.relative_to(ROOT)}: no release heading, and plugin.json says {version}")
+    if CHECKER_INIT.is_file():
+        m = DUNDER_VERSION.search(CHECKER_INIT.read_text(encoding="utf-8"))
+        declared = m.group(1) if m else None
+        if declared != version:
+            errors.append(f"{CHECKER_INIT.relative_to(ROOT)}: __version__ is {declared!r}, plugin.json says {version!r}")
 
 
 def main(argv: Sequence[str] = ()) -> int:

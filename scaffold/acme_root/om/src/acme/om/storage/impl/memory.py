@@ -54,6 +54,8 @@ from acme.om.relay.storage import RelayStorageInterface
 from acme.om.relay.storage.impl.memory import RelayStorageMemoryImpl
 from acme.om.retention.storage import RetentionStorageInterface
 from acme.om.retention.storage.impl.memory import RetentionStorageMemoryImpl
+from acme.om.stations.storage import StationsStorageInterface
+from acme.om.stations.storage.impl.memory import StationsStorageMemoryImpl
 from acme.om.steps.storage import StepStorageInterface
 from acme.om.steps.storage.impl.memory import StepStorageMemoryImpl
 from acme.om.storage.root import StorageInterface
@@ -107,6 +109,7 @@ class StorageMemoryImpl(StorageInterface):
         self._knowledge = KnowledgeStorageMemoryImpl(self._outbox)
         self._platform_agents = PlatformAgentsStorageMemoryImpl(self._outbox)
         self._relay = RelayStorageMemoryImpl(self._outbox)
+        self._stations = StationsStorageMemoryImpl(self._outbox)
         self._workspaces = WorkspaceStorageMemoryImpl(self._outbox)
         self._matrix = MatrixStorageMemoryImpl()
         self._matrix_tenants = MatrixTenantStorageMemoryImpl()
@@ -203,6 +206,9 @@ class StorageMemoryImpl(StorageInterface):
 
     def get_relay_storage(self) -> RelayStorageInterface:
         return self._relay
+
+    def get_stations_storage(self) -> StationsStorageInterface:
+        return self._stations
 
     def get_workspace_storage(self) -> WorkspaceStorageInterface:
         return self._workspaces

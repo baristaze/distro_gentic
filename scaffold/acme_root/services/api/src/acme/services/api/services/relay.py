@@ -10,7 +10,7 @@ from acme.om.hosts.types.host import HostIdentity
 from acme.services.api.types.relay import (
     ControlView,
     ExecDetailView,
-    LeaseView,
+    ExecLeaseView,
     PartRequest,
     ResultRequest,
 )
@@ -35,7 +35,7 @@ class RelayServiceInterface(ABC):
     @abstractmethod
     async def extend(
         self, rctx: RequestContext, host: HostIdentity, item_id: UUID
-    ) -> LeaseView: ...
+    ) -> ExecLeaseView: ...
 
     @abstractmethod
     def control(

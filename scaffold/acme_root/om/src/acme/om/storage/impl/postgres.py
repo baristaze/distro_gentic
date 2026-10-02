@@ -67,6 +67,8 @@ from acme.om.relay.storage import RelayStorageInterface
 from acme.om.relay.storage.impl.postgres import RelayStoragePostgresImpl
 from acme.om.retention.storage import RetentionStorageInterface
 from acme.om.retention.storage.impl.postgres import RetentionStoragePostgresImpl
+from acme.om.stations.storage import StationsStorageInterface
+from acme.om.stations.storage.impl.postgres import StationsStoragePostgresImpl
 from acme.om.steps.storage import StepStorageInterface
 from acme.om.steps.storage.impl.postgres import StepStoragePostgresImpl
 from acme.om.storage.impl.pg_base import LoginSessions, ScopedConnection, SessionFactory
@@ -240,6 +242,7 @@ class StoragePostgresImpl(StorageInterface):
         self._knowledge = KnowledgeStoragePostgresImpl(sessions)
         self._platform_agents = PlatformAgentsStoragePostgresImpl(sessions)
         self._relay = RelayStoragePostgresImpl(sessions)
+        self._stations = StationsStoragePostgresImpl(sessions)
         self._workspaces = WorkspaceStoragePostgresImpl(sessions)
         self._matrix = MatrixStoragePostgresImpl(sessions)
         self._matrix_tenants = MatrixTenantStoragePostgresImpl(sessions)
@@ -336,6 +339,9 @@ class StoragePostgresImpl(StorageInterface):
 
     def get_relay_storage(self) -> RelayStorageInterface:
         return self._relay
+
+    def get_stations_storage(self) -> StationsStorageInterface:
+        return self._stations
 
     def get_workspace_storage(self) -> WorkspaceStorageInterface:
         return self._workspaces

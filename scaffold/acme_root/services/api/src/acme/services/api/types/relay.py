@@ -70,7 +70,7 @@ class ExecDetailView(View):
     request: dict[str, Any]
 
 
-class LeaseView(View):
+class ExecLeaseView(View):
     lease_expires_at: datetime
 
 

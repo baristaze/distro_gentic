@@ -46,3 +46,13 @@ def test_plugin_version_must_be_semver(repo, version, capsys):
     repo.write(".claude-plugin/plugin.json", '{"version": "v1.2"}\n')
     assert version.main() == 1
     assert "is not MAJOR.MINOR.PATCH" in capsys.readouterr().out
+
+
+def test_the_scaffolds_checker_carries_the_version(repo, version, capsys):
+    init = "scaffold/acme_root/checkers/src/acme/distro_check/__init__.py"
+    repo.write(init, '__version__ = "1.2.3"\n')
+    assert version.main() == 0
+    capsys.readouterr()
+    repo.edit(init, '"1.2.3"', '"1.2.4"')
+    assert version.main() == 1
+    assert f"{init}: __version__ is '1.2.4', plugin.json says '1.2.3'" in capsys.readouterr().out
