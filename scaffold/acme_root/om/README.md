@@ -228,6 +228,7 @@ arrive twice, so the second copy gets the first one's answer.
 - [Windows](src/acme/om/windows/README.md)
 - [Tools](src/acme/om/tools/README.md)
 - [Placement](src/acme/om/placement/README.md)
+- [Trust](src/acme/om/trust/README.md)
 - [Events](src/acme/om/events/README.md)
 - [Outbox rows](src/acme/om/outbox/README.md)
 - [Work items](src/acme/om/work/README.md)
