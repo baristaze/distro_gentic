@@ -75,7 +75,8 @@ follows by hand.
 - [workers/maintenance/](workers/maintenance/README.md): the work queue's worker and the sweep.
 - [workers/session_runner/](workers/session_runner/README.md): the worker that runs the loops of agent sessions.
 - `apps/`: the [portal](apps/portal/README.md), the [CLI](apps/cli/README.md), the
-  [workspace host](apps/host/README.md), and the [company site](apps/site/README.md).
+  [workspace host](apps/host/README.md), the [station daemon](apps/station_daemon/README.md),
+  and the [company site](apps/site/README.md).
 - `clients/`: [typescript/](clients/typescript/README.md), the one client every browser
   app imports, and [python/](clients/python/README.md), the one Python client.
 - [deployment/](deployment/README.md): compose, images, and Terraform.

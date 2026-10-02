@@ -166,6 +166,15 @@ own, which lasts an hour and which it renews itself. A session's
 org's pools. A session pinned to a pool with no host online waits, and
 says so; it never moves to the cloud unless a person moves it.
 
+A **station** is a scarce, located thing work needs, in a **lab** that
+one **station daemon** serves inside an org's wall, and in a **pool** of
+stations of its kind. A session that needs one joins a **line** and waits
+in it, parked. A free station goes to the first in line that waits, as a
+**lease** with a **fencing token** that grows with every grant, and the
+session sends **jobs** under it. The daemon fences every job by its
+token and holds the station's limits, which are its owner's and never
+the platform's.
+
 ## What the platform writes for itself
 
 No person creates these and no screen shows them, but each belongs to
@@ -231,6 +240,9 @@ arrive twice, so the second copy gets the first one's answer.
 - A pool, its tokens, its hosts, their credentials, and a session's
   placement name their org. A host is handed only the work of its own
   pool, whatever it asks for.
+- A lab, a pool, a station, a daemon's credentials, a line entry, a
+  lease, and a job name their org. A daemon is handed only its own lab's
+  work, and renews only the lease of a job it claimed.
 
 ## One page per kind
 
@@ -250,6 +262,7 @@ arrive twice, so the second copy gets the first one's answer.
 - [Placement](src/acme/om/placement/README.md)
 - [Trust](src/acme/om/trust/README.md)
 - [Hosts](src/acme/om/hosts/README.md)
+- [Stations](src/acme/om/stations/README.md)
 - [Events](src/acme/om/events/README.md)
 - [Outbox rows](src/acme/om/outbox/README.md)
 - [Work items](src/acme/om/work/README.md)
