@@ -121,6 +121,11 @@ STORAGE_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         # tenant, whose service context the sweep then works it under.
         ("RetentionStorageInterface", "read_behind"),
         ("RetentionStorageInterface", "read_due"),
+        # The sweep's duties' reads: the sessions pending with no loop, and
+        # the holds no settlement closed, each named with its tenant, whose
+        # service context the sweep then works it under.
+        ("AgentSessionStorageInterface", "read_stalled"),
+        ("LedgerStorageInterface", "read_open"),
         ("EventStorageInterface", "trim"),
         ("OrchestrationsStorageInterface", "purge_settled"),
         # The sweep's gauges: one read each across every tenant's rows.
@@ -192,6 +197,9 @@ MANAGER_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         # And each namespace's purge of its rows past their retention, the
         # same kind of step: it runs for no tenant and no principal.
         ("MediaManagerInterface", "purge_across_tenants"),
+        # The sweep's read of the sessions pending with no loop, for no
+        # tenant and no principal: each comes named with its tenant.
+        ("AgentSessionsManagerInterface", "pending_across_tenants"),
         ("TenancyManagerInterface", "purge_across_tenants"),
         ("IdempotencyManagerInterface", "purge_across_tenants"),
         ("EventsManagerInterface", "purge_across_tenants"),

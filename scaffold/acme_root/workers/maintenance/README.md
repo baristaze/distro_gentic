@@ -17,6 +17,13 @@ side, started in `main.py`.
 - **The sweep** (`loop.py`) runs on a timer, within a budget. It requeues
   expired leases, relays the outbox, purges every row past its retention
   (`settings.py`), counts the platform's size, and logs the queue's gauges.
+  It carries the platform's duties too, each its owner's, across tenants
+  (`across` in `main.py`): the keys and shape past their retention, a hold
+  nobody settled, settled through its gate, and a session pending with no
+  loop, whose run it asks for again (`sessions.py`;
+  [ADR 2015](../../docs/adr/2015-the-fleet-recovers-through-the-sweep.md)).
+  A host or a station's daemon never runs it: it holds no worker, no
+  manager, and no storage.
 
 `serve` runs the three; `health` asks the running process's `/healthz`.
 

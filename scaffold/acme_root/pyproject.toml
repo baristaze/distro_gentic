@@ -128,11 +128,13 @@ reason = "a static page with no script and no state; the portal and every app th
 [tool.arch-check.options.CTX-12]
 tenantless = [
     "AgentSessionStorageInterface.read_purgeable",
+    "AgentSessionStorageInterface.read_stalled",
     "EventStorageInterface.count_since",
     "EventStorageInterface.trim",
     "HostsStorageInterface.read_enrollment_token_by_digest",
     "HostsStorageInterface.read_host_by_credential_digest",
     "IdempotencyStorageInterface.purge_records",
+    "LedgerStorageInterface.read_open",
     "MediaStorageInterface.purge_files_across_tenants",
     "MediaStorageInterface.read_purgeable",
     "OrchestrationsStorageInterface.purge_settled",
