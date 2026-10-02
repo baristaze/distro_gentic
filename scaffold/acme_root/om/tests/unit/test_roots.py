@@ -13,6 +13,8 @@ from acme.om.budgets.pricing import PricingInterface
 from acme.om.budgets.storage import BudgetStorageInterface, LedgerStorageInterface
 from acme.om.events import EventsManagerInterface
 from acme.om.events.storage import EventStorageInterface
+from acme.om.evidence import EvidenceManagerInterface
+from acme.om.evidence.storage import EvidenceStorageInterface
 from acme.om.idempotency import IdempotencyManagerInterface
 from acme.om.idempotency.storage import IdempotencyStorageInterface
 from acme.om.media import MediaManagerInterface
@@ -68,6 +70,7 @@ async def test_memory_root_serves_every_storage() -> None:
     assert isinstance(root.get_fill_set_storage(), FillSetStorageInterface)
     assert isinstance(root.get_window_storage(), WindowStorageInterface)
     assert isinstance(root.get_tool_storage(), ToolStorageInterface)
+    assert isinstance(root.get_evidence_storage(), EvidenceStorageInterface)
     assert await root.healthcheck() is True
     await root.close()
 
@@ -142,6 +145,7 @@ def test_business_root_has_a_field_per_manager(tmp_path: Path) -> None:
     assert isinstance(managers.models, ModelsManagerInterface)
     assert isinstance(managers.windows, WindowsManagerInterface)
     assert isinstance(managers.tools, ToolsManagerInterface)
+    assert isinstance(managers.evidence, EvidenceManagerInterface)
 
 
 def test_the_tenancy_manager_carries_each_delegate(tmp_path: Path) -> None:

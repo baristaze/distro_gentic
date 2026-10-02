@@ -1,0 +1,164 @@
+"""What the evidence suites share: a scripted executor, which writes a
+results stream as a fresh executor would, and the manager and the gate
+over memory storage with a work product the case sets."""
+
+import json
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from datetime import timedelta
+from typing import Any
+
+from acme.infra.topics.memory import TopicsMemoryImpl
+from acme.om.base import utcnow
+from acme.om.context import TenantContext
+from acme.om.events.storage.impl.memory import EventStorageMemoryImpl
+from acme.om.evidence.collector import digest
+from acme.om.evidence.executor import ExecutorInterface
+from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
+from acme.om.evidence.impl.manager import EvidenceManagerImpl, EvidenceOptions
+from acme.om.evidence.impl.ports import WorkProductMemoryImpl
+from acme.om.evidence.storage.impl.memory import EvidenceStorageMemoryImpl
+from acme.om.evidence.types.contract import CheckDeclaration, Offer
+from acme.om.evidence.types.policy import Requirement, ValidationPolicy
+from acme.om.evidence.types.provenance import Provenance
+from acme.om.evidence.types.validation import Delivery, ExecutionRequest, ExecutorReport
+from acme.om.outbox.impl.relay import OutboxRelayImpl
+from acme.om.outbox.storage.impl.memory import OutboxStorageMemoryImpl
+from contracts.doubles import Members
+from contracts.evidence_storage import make_policy
+
+Outcome = Callable[[str, int], str]
+"""The outcome of a check's trial, by the check's name and the trial's
+number: `passed`, `failed`, `errored`, or `aborted`."""
+
+
+def all_pass(check: str, trial: int) -> str:
+    return "passed"
+
+
+@dataclass
+class ScriptedExecutor(ExecutorInterface):
+    """Runs nothing: writes the results stream a fresh executor would for the
+    checks it is asked, each trial's outcome as `outcome` says, every
+    dependency served as `provenance` says. `requests` keeps what it was
+    asked."""
+
+    name: str = "executor-1"
+    outcome: Outcome = all_pass
+    provenance: Provenance = Provenance.REAL
+    capabilities: frozenset[str] = frozenset({"arm"})
+    tamper: Callable[[bytes], bytes] | None = None
+    requests: list[ExecutionRequest] = field(default_factory=list)
+
+    async def offer(self, ctx: TenantContext) -> Offer:
+        return Offer(capabilities=self.capabilities, schemas=frozenset({1}))
+
+    async def run(self, ctx: TenantContext, request: ExecutionRequest) -> ExecutorReport:
+        self.requests.append(request)
+        lines: list[dict[str, Any]] = []
+        start = utcnow()
+        for check, trials in zip(request.checks, request.trials, strict=True):
+            for trial in range(trials):
+                outcome = self.outcome(check.name, trial)
+                lines.extend(
+                    stream(
+                        check.name, check.version, request.version, outcome, self.provenance, start
+                    )
+                )
+        results = "\n".join(json.dumps(line) for line in lines).encode()
+        signed = digest(results)
+        if self.tamper is not None:
+            results = self.tamper(results)
+        return ExecutorReport(executor=self.name, results=results, sha256=signed)
+
+
+def stream(
+    check: str,
+    check_version: str,
+    version: str,
+    outcome: str,
+    provenance: Provenance,
+    at: Any,
+) -> list[dict[str, Any]]:
+    """One run's lines, as the contract writes them."""
+    case = "failed" if outcome == "failed" else "passed"
+    return [
+        {
+            "kind": "start",
+            "schema_version": 1,
+            "check": check,
+            "check_version": check_version,
+            "version": version,
+            "dirty": False,
+            "environment": {"image": "sha256:" + "2" * 64, "toolchain": {"python": "3.14"}},
+            "host": "executor-host",
+            "isolation": "vm",
+            "dependencies": [{"name": "arm", "provenance": provenance.value}],
+            "started_at": at.isoformat(),
+        },
+        {"kind": "case", "name": f"{check}-case", "outcome": case, "seconds": 0.5},
+        {
+            "kind": "end",
+            "outcome": outcome,
+            "finished_at": (at + timedelta(seconds=1)).isoformat(),
+            "metrics": {"seconds": 1.0},
+            **({"abort": "the guard stopped it"} if outcome == "aborted" else {}),
+        },
+    ]
+
+
+@dataclass
+class Evidence:
+    manager: EvidenceManagerImpl
+    gate: ResultGateEvidenceImpl
+    storage: EvidenceStorageMemoryImpl
+    work: WorkProductMemoryImpl
+    executor: ScriptedExecutor
+    members: Members
+
+
+def evidence_over(executor: ScriptedExecutor | None = None) -> Evidence:
+    outbox = OutboxStorageMemoryImpl()
+    storage = EvidenceStorageMemoryImpl(outbox)
+    members = Members()  # pyright: ignore[reportAbstractUsage] (a partial double)
+    relay = OutboxRelayImpl(outbox, EventStorageMemoryImpl(), TopicsMemoryImpl())
+    work = WorkProductMemoryImpl()
+    executor = executor or ScriptedExecutor()
+    manager = EvidenceManagerImpl(storage, members, relay, executor, work, EvidenceOptions())
+    return Evidence(
+        manager, ResultGateEvidenceImpl(storage, work), storage, work, executor, members
+    )
+
+
+def arm_policy(
+    *requirements: Requirement, protected: tuple[str, ...] = ("tests/**",)
+) -> ValidationPolicy:
+    """The `arm` project's policy: the `unit` check and the `trials` check,
+    which needs the arm, declared; `unit` required for a change under
+    `src/` unless the case names its own requirements."""
+    policy = make_policy()
+    checks = (
+        *policy.checks,
+        CheckDeclaration(
+            name="trials",
+            version="1",
+            command=("run-trials", "{version}", "{out}"),
+            kind="scenario",
+            capabilities=("arm",),
+            schema_version=1,
+        ),
+    )
+    return ValidationPolicy.model_validate(
+        {
+            **dict(policy),
+            "checks": checks,
+            "requirements": requirements or (Requirement(check="unit", paths=("src/**",)),),
+            "protected": protected,
+        }
+    )
+
+
+def delivered(
+    head: str = "c0ffee", changed: tuple[str, ...] = ("src/grip.py",), dirty: bool = False
+) -> Delivery:
+    return Delivery(project="arm", base="base0", head=head, dirty=dirty, changed=changed)

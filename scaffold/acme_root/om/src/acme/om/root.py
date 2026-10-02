@@ -37,6 +37,14 @@ from acme.om.budgets.impl.pricing import PricingTableImpl
 from acme.om.budgets.pricing import PricingInterface
 from acme.om.events import EventsManagerInterface
 from acme.om.events.impl.manager import EventsManagerImpl, EventsOptions
+from acme.om.evidence import (
+    EvidenceManagerInterface,
+    ExecutorInterface,
+    WorkProductInterface,
+)
+from acme.om.evidence.impl.manager import EvidenceManagerImpl, EvidenceOptions
+from acme.om.evidence.impl.ports import ExecutorAbsentImpl, WorkProductAbsentImpl
+from acme.om.evidence.rules import PROTECTED_CEILING
 from acme.om.exceptions import UnsafeConfiguration
 from acme.om.idempotency import IdempotencyManagerInterface
 from acme.om.idempotency.impl.manager import IdempotencyManagerImpl, IdempotencyOptions
@@ -77,6 +85,7 @@ from acme.om.tools import ToolsManagerInterface
 from acme.om.tools.impl.manager import ToolsManagerImpl, ToolsOptions
 from acme.om.tools.seal import RecordSealInterface
 from acme.om.tools.tool import ToolInterface
+from acme.om.tools.types.policy import PolicyLayer
 from acme.om.windows import WindowsManagerInterface
 from acme.om.windows.gate import CallGateInterface
 from acme.om.windows.hashes import PromptHashInterface
@@ -113,6 +122,7 @@ class Managers:
     agents: AgentsManagerInterface
     tools: ToolsManagerInterface
     loop: LoopManagerInterface
+    evidence: EvidenceManagerInterface
 
 
 LOCAL = "local"
@@ -137,13 +147,14 @@ def refuse_quiet_spend(environment: str, *capabilities: object) -> None:
 async def purge_held(
     managers: Managers, org_id: UUID, session_id: UUID, tree_id: UUID | None
 ) -> None:
-    """What the windows, the tools, attribution, and the agents hold of a
-    session the sweep purges: its artifacts, and its workspace with its
-    transport's records, which go with its history, its authority, and its
-    tree when it was the tree's last session."""
+    """What the windows, the tools, attribution, the evidence, and the agents
+    hold of a session the sweep purges: its artifacts, and its workspace with
+    its transport's records, which go with its history, its authority, its
+    runs, and its tree when it was the tree's last session."""
     await managers.windows.purge_artifacts(org_id, session_id)
     await managers.tools.purge_workspace(org_id, session_id)
     await managers.attribution.purge_authority(org_id, session_id)
+    await managers.evidence.purge_session(org_id, session_id)
     if tree_id is not None:
         await managers.agents.purge_tree(org_id, tree_id)
 
@@ -245,6 +256,9 @@ def build_managers(
     domain_classes: tuple[str, ...] = (),
     loop_options: LoopOptions | None = None,
     environment: str = LOCAL,
+    evidence_options: EvidenceOptions | None = None,
+    executor: ExecutorInterface | None = None,
+    work_product: WorkProductInterface | None = None,
 ) -> Managers:
     """`integrations` is the root of the hosted services the managers front:
     the identity provider, which the tenancy manager signs people in and
@@ -282,7 +296,13 @@ def build_managers(
     session's registry holds those its kind names, with `domain_classes`,
     the classes the adopter declares; `stream_sink`, the carrier its parts
     go to, None the quiet null, which drops them; and `loop_options`. Its
-    outage signal is infra's, and its model providers the integrations'."""
+    outage signal is infra's, and its model providers the integrations'.
+
+    The evidence takes the platform's two ports: `executor`, the fresh
+    executor validation runs on, and `work_product`, which reads what a
+    session delivered. None wires the loud nulls, which refuse every
+    validation and every read. Whatever `tools_options` names, the tools
+    take the platform's ceiling on a protected path beside its ceilings."""
     # The relay every core-role manager hands its outbox rows to. It reaches
     # the work manager through the root below, because a row of kind
     # `work.<kind>` is enqueued there: the work manager needs the tenancy
@@ -438,6 +458,10 @@ def build_managers(
     # which answers whose authority each call runs under and the rule of
     # two. What a call keeps of its session's content goes under the
     # session's key: its input's hash, and its command's record.
+    tool_options = tools_options or ToolsOptions()
+    if PROTECTED_CEILING not in tool_options.ceilings.rules:
+        ceilings = PolicyLayer(rules=(*tool_options.ceilings.rules, PROTECTED_CEILING))
+        tool_options = tool_options.model_copy(update={"ceilings": ceilings})
     tools = ToolsManagerImpl(
         storage.get_tool_storage(),
         steps,
@@ -446,10 +470,20 @@ def build_managers(
         outbox,
         infra.get_workspaces(),
         infra.get_transport(),
-        tools_options or ToolsOptions(),
+        tool_options,
         keyed_hash=privacy.keyed_hash,
         record_seal=record_seal or RecordSealKeysImpl(session_keys, storage.get_privacy_storage()),
         attribution=attribution,
+    )
+    # What makes a result: the runs, the policies, and validation on the
+    # executor, apart from every agent's workspace.
+    evidence = EvidenceManagerImpl(
+        storage.get_evidence_storage(),
+        tenancy,
+        outbox,
+        executor or ExecutorAbsentImpl(),
+        work_product or WorkProductAbsentImpl(),
+        evidence_options or EvidenceOptions(),
     )
     idempotency = IdempotencyManagerImpl(
         storage.get_idempotency_storage(), idempotency_options or IdempotencyOptions()
@@ -506,5 +540,6 @@ def build_managers(
             loop_options or LoopOptions(),
             domain_classes=domain_classes,
         ),
+        evidence=evidence,
     )
     return managers
