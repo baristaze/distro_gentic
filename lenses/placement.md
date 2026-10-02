@@ -376,7 +376,8 @@ before the tenant.
 **Severity.** high
 
 **Check.** `distro-check` decides that no host module names a variable
-the cloud reads a secret or a database setting from, or a model
+the cloud's settings read a secret, a key, a token, a password, or a
+database setting from, a variable of its secret store, or a model
 provider's key; the rest is judged.
 
 ## PLC-17 A workspace's exec work goes to the host that holds it

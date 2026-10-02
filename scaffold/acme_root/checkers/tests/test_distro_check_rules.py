@@ -121,6 +121,32 @@ def test_plc16_a_host_that_names_a_cloud_secret_is_a_finding(tmp_path):
     ]
 
 
+CREDENTIALS = (
+    "import os\n\n"
+    'STORE = os.environ.get("ACME_S3_ACCESS_KEY"), os.environ.get("ACME_S3_SECRET_KEY")\n'
+    'GITHUB = os.environ.get("ACME_SECRET_GITHUB_TOKEN")\n'
+    'TENANTS = [v for k, v in os.environ.items() if k.startswith("ACME_SECRET_")]\n'
+    'KMS = os.environ.get("ACME_KMS_KEY_ID")\n'
+)
+
+
+def test_plc16_a_credential_typed_as_a_string_and_the_secret_stores_variables_are_findings(
+    tmp_path,
+):
+    write_project(tmp_path, {f"{HOST}/store.py": CREDENTIALS})
+    hits = found(tmp_path, "PLC-16")
+    assert [(line, m.split(",")[0]) for _, line, m in hits] == [
+        (3, "names ACME_S3_ACCESS_KEY"),
+        (3, "names ACME_S3_SECRET_KEY"),
+        (4, "names ACME_SECRET_GITHUB_TOKEN"),
+        (5, "names ACME_SECRET_"),
+    ]
+    assert "the cloud's InfraSettings.s3_secret_key;" in hits[1][2]
+    assert all(
+        "a variable of the cloud's secret store (ACME_SECRET_);" in m for _, _, m in hits[2:]
+    )
+
+
 def test_plc16_the_hosts_own_variables_and_its_docstrings_pass(tmp_path):
     write_project(tmp_path)
     assert found(tmp_path, "PLC-16") == []
@@ -149,6 +175,15 @@ def test_plc16_the_names_option_guards_a_variable_of_the_projects_own(tmp_path):
     write_project(tmp_path, files, pyproject=PYPROJECT + option)
     assert [(line, m.split(";")[0]) for _, line, m in found(tmp_path, "PLC-16")] == [
         (3, "names VENDOR_TOKEN, a secret's variable")
+    ]
+
+
+def test_plc16_the_names_option_adds_to_the_providers_keys(tmp_path):
+    files = {AGENT: 'import os\n\nKEY = os.environ.get("OPENAI_API_KEY")\n'}
+    option = '\n[tool.distro-check.options.PLC-16]\nnames = ["VENDOR_TOKEN"]\n'
+    write_project(tmp_path, files, pyproject=PYPROJECT + option)
+    assert [(line, m.split(";")[0]) for _, line, m in found(tmp_path, "PLC-16")] == [
+        (3, "names OPENAI_API_KEY, a model provider's key")
     ]
 
 

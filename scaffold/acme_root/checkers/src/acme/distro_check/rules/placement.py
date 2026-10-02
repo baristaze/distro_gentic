@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import re
 from collections.abc import Iterator
 
 from acme.agentic_check.model import Violation
@@ -25,8 +26,15 @@ REACHES = ["client"]
 SETTINGS = "pydantic_settings.BaseSettings"
 """The class every settings class of a process derives from, directly or through another."""
 SECRET_TYPES = frozenset({"SecretStr", "SecretBytes"})
+CREDENTIALS = frozenset(
+    {"secret", "key", "token", "password", "passphrase", "credential", "credentials"}
+)
+"""The last word of a setting that holds a credential, however it is typed: `s3_secret_key`, `edge_secret`."""
 DATABASE = "database"
 """The prefix of the settings that reach a database: its URLs, which carry a login's password, and its pools."""
+STORE_PREFIX = re.compile(r"^[A-Z_]*SECRET[A-Z_]*PREFIX$")
+"""A module constant that names the prefix of the variables the cloud's secret store reads, `SECRET_ENV_PREFIX`."""
+VARIABLE_PREFIX = re.compile(r"^[A-Z][A-Z0-9_]*_$")
 ALIASES = ("alias", "validation_alias")
 """The `Field` arguments that name a setting's variable in place of the prefix and the field."""
 PROVIDER_KEYS = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"]
@@ -172,66 +180,124 @@ def fields(project: Project, name: str) -> Iterator[tuple[ast.AnnAssign, str, li
         yield node, field, spelled or [f"{prefix}{field}".upper()], bool(spelled)
 
 
+def guarded_field(node: ast.AnnAssign, field: str) -> bool:
+    """Whether a setting holds a secret, a credential, or a database's setting: by its type or by its name."""
+    return (
+        bool(SECRET_TYPES.intersection(names_in(node.annotation)))
+        or field.rpartition("_")[2].lower() in CREDENTIALS
+        or field.startswith(DATABASE)
+    )
+
+
 def cloud_secrets(project: Project, settings: list[str], hosts: list[str]) -> dict[str, str]:
-    """Each variable the cloud's settings classes read a secret or a database setting from, to `Class.field`."""
+    """Each variable the cloud's settings classes read a secret, a credential, or a database setting from,
+    to `Class.field`."""
     out: dict[str, str] = {}
     for name in settings:
         file, cls = project.classes[name]
         if any(is_under(file.module, h) for h in hosts):
             continue
         for node, field, found, _ in fields(project, name):
-            if SECRET_TYPES.intersection(names_in(node.annotation)) or field.startswith(DATABASE):
+            if guarded_field(node, field):
                 for variable in found:
                     out.setdefault(variable, f"the cloud's {cls.name}.{field}")
     return out
+
+
+def store_prefixes(project: Project, hosts: list[str]) -> list[str]:
+    """The prefixes of the variables the cloud's secret store reads: each module constant outside the hosts
+    named like `SECRET_ENV_PREFIX` whose value is a variable's prefix, `ACME_SECRET_`."""
+    out: set[str] = set()
+    for file, tree in project.trees():
+        if any(is_under(file.module, h) for h in hosts):
+            continue
+        for node in tree.body:
+            target = (
+                node.targets[0]
+                if isinstance(node, ast.Assign) and len(node.targets) == 1
+                else (node.target if isinstance(node, ast.AnnAssign) else None)
+            )
+            value = string(node.value) if isinstance(node, ast.Assign | ast.AnnAssign) else None
+            if (
+                isinstance(target, ast.Name)
+                and STORE_PREFIX.match(target.id)
+                and value is not None
+                and VARIABLE_PREFIX.match(value)
+            ):
+                out.add(value)
+    return sorted(out)
+
+
+def store_variable(text: str, prefixes: list[str]) -> str | None:
+    """The secret store's prefix a variable starts with, case aside, or None."""
+    return next((p for p in prefixes if text.upper().startswith(p)), None)
 
 
 @rule(
     "PLC-16",
     coverage="partial",
     options=("modules", "names"),
-    summary="No host module names a variable the cloud reads a secret or a database setting from, "
-    "or a model provider's key.",
+    summary="No host module names a variable the cloud's settings read a secret, a key, a token, a password, "
+    "or a database setting from, a variable of its secret store, or a model provider's key.",
 )
 def a_host_holds_no_cloud_secret(project: Project) -> Iterator[Violation]:
     """The variables the cloud reads its secrets from are read off its
     settings classes: every class that derives from
     `pydantic_settings.BaseSettings`, directly or through another, and
     is not a host's. Each field whose annotation names `SecretStr` or
-    `SecretBytes`, or whose name starts with `database`, is read from
-    its `alias` or `validation_alias` (a string or `AliasChoices` of
-    strings), else from the class's `env_prefix`, its own or its
-    bases', followed by its name. Option `names` adds variables of its
-    own (default `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`, the
-    providers' own). In the modules the packages option `modules` names
-    (default `apps.host`), a string that is one of these variables, case
-    aside, is a finding, and so is a field of a host's own settings
+    `SecretBytes`, whose name ends in `secret`, `key`, `token`,
+    `password`, `passphrase`, or `credential(s)` whatever its type, or
+    whose name starts with `database`, is read from its `alias` or
+    `validation_alias` (a string or `AliasChoices` of strings), else from
+    the class's `env_prefix`, its own or its bases', followed by its
+    name. The variables the cloud's secret store reads start with the
+    value of a module constant named like `SECRET_ENV_PREFIX` (an
+    upper-case prefix ending in `_`). The model providers' own variables,
+    `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`, are always guarded, and
+    option `names` adds variables of the project's own. In the modules
+    the packages option `modules` names (default `apps.host`), a string
+    that is one of these variables, or starts with the store's prefix,
+    case aside, is a finding, and so is a field of a host's own settings
     class whose prefix and name spell one; a docstring is prose and
-    never a name. What a host caches, what the platform sends it, the
-    push token, and how its local store is keyed are judged."""
+    never a name. A secret a setting holds under any other name, what a
+    host caches, what the platform sends it, the push token, and how its
+    local store is keyed are judged."""
     keys = {"modules", "names"}
     hosts = [project.sub(m) for m in project.option("PLC-16", "modules", HOSTS, keys)]
-    extra = project.option("PLC-16", "names", PROVIDER_KEYS, keys)
+    extra: list[str] = project.option("PLC-16", "names", [], keys)
     if not hosts:
         return
     settings = sorted(project.subclasses(SETTINGS))
     guarded = cloud_secrets(project, settings, hosts)
+    for name in PROVIDER_KEYS:
+        guarded.setdefault(name, "a model provider's key")
     for name in extra:
-        what = "a model provider's key" if name in PROVIDER_KEYS else "a secret's variable"
-        guarded.setdefault(name.upper(), what)
+        guarded.setdefault(name.upper(), "a secret's variable")
+    prefixes = store_prefixes(project, hosts)
+
+    def what(variable: str) -> str | None:
+        """Why a host never names `variable`, or None when it may."""
+        if variable.upper() in guarded:
+            return guarded[variable.upper()]
+        prefix = store_variable(variable, prefixes)
+        return None if prefix is None else f"a variable of the cloud's secret store ({prefix})"
+
     why = "a host holds no database credential, model key, or integration's credential"
     for file, tree in project.trees(*hosts):
         prose = docstrings(tree)
         for node in ast.walk(tree):
             text = string(node)
-            if text is not None and id(node) not in prose and text.upper() in guarded:
-                yield Violation.at(file.rel, node, f"names {text}, {guarded[text.upper()]}; {why}")
+            found = what(text) if text is not None and id(node) not in prose else None
+            if text is not None and found is not None:
+                yield Violation.at(file.rel, node, f"names {text}, {found}; {why}")
         for name in settings:
             if project.classes[name][0].rel != file.rel:
                 continue
-            for node, field, found, aliased in fields(project, name):
-                hit = None if aliased else next((v for v in found if v in guarded), None)
-                if hit is not None:  # an alias is a string, which the walk above reads
+            for node, field, variables, aliased in fields(project, name):
+                if aliased:  # an alias is a string, which the walk above reads
+                    continue
+                hit = next(((v, w) for v in variables if (w := what(v)) is not None), None)
+                if hit is not None:
                     yield Violation.at(
-                        file.rel, node, f"reads {field} from {hit}, {guarded[hit]}; {why}"
+                        file.rel, node, f"reads {field} from {hit[0]}, {hit[1]}; {why}"
                     )

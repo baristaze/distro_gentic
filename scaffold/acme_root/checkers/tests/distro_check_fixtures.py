@@ -1,8 +1,9 @@
 """A tiny project in the platform's shape for the distro-check tests, and a way to run the CLI on one.
 
 `write_project` builds a product named `acme` with the parts the rules
-read: the settings of the cloud's processes, a database's and a
-provider key's among them, a bounded metric, the client of the gateway,
+read: the settings of the cloud's processes, a database's, a provider
+key's, and the object store's keys among them, the secret store's
+prefix, a bounded metric, the client of the gateway,
 and a workspace host that imports only the client and reads only its
 own variables. Every rule passes on it. Each test adds, overrides, or
 drops the files its rule reads. `check` runs `acme.distro_check.cli.main`
@@ -59,6 +60,16 @@ BASE: dict[str, str] = {
     ),
     # a metric with bounded labels
     "infra/src/acme/infra/__init__.py": "",
+    # the object store's keys, typed as plain strings, and the secret store's prefix
+    "infra/src/acme/infra/settings.py": (
+        "from pydantic_settings import BaseSettings, SettingsConfigDict\n\n"
+        'SECRET_ENV_PREFIX = "ACME_SECRET_"\n\n\n'
+        "class InfraSettings(BaseSettings):\n"
+        '    model_config = SettingsConfigDict(env_prefix="ACME_")\n\n'
+        "    s3_access_key: str | None = None\n"
+        "    s3_secret_key: str | None = None\n"
+        '    kms_key_id: str = "alias/sessions"\n'
+    ),
     OBSERVABILITY: (
         "from prometheus_client import Counter, Gauge\n\n"
         'HTTP = Counter("acme_http_total", "Requests", ["route", "method", "status"])\n'
