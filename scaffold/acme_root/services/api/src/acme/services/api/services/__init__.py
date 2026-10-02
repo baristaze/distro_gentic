@@ -57,4 +57,6 @@ class ServicesInterface(ABC):
 
     @abstractmethod
     def get_fleet_service(self) -> FleetServiceInterface: ...
+
+    @abstractmethod
     def get_stations_service(self) -> StationsServiceInterface: ...
