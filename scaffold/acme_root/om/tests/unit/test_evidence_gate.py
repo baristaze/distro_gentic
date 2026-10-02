@@ -4,6 +4,7 @@ results its executor wrote; a run that validated nothing is inconclusive.
 A double's run is never validation, and a twin's never stands for real.
 A change that touches a protected path voids validation."""
 
+from pathlib import Path
 from uuid import UUID
 
 import pytest
@@ -17,7 +18,12 @@ from contracts.evidence import (
 )
 from contracts.evidence_storage import make_record, make_validation
 from contracts.factories import make_org
+from contracts.loops import DELIVERY
 
+from acme.infra.impl.local import InfraLocalImpl
+from acme.om.agents.impl.gate import ResultGateNullImpl
+from acme.om.agents.impl.manager import AgentsManagerImpl
+from acme.om.agents.types.request import Start
 from acme.om.agents.types.result import Claim, Result, Verdict
 from acme.om.base import new_id
 from acme.om.context import Role, TenantContext
@@ -27,8 +33,10 @@ from acme.om.evidence.types.policy import Grade, Requirement
 from acme.om.evidence.types.provenance import Dependency, Provenance
 from acme.om.evidence.types.rate import AbortRule, RateRule
 from acme.om.evidence.types.record import RunPurpose
-from acme.om.exceptions import PreconditionFailed
+from acme.om.exceptions import PreconditionFailed, UnsafeConfiguration
+from acme.om.root import build_managers
 from acme.om.steps.types.header import LoopOutcome
+from acme.om.storage.impl.memory import StorageMemoryImpl
 
 
 class Case:
@@ -327,3 +335,44 @@ async def test_fewer_trials_than_declared_are_refused() -> None:
     moved = tuple(run.model_copy(update={"check": "trials"}) for run in runs)
     assert await storage.create_validation(org, validation, moved)
     assert refused(await case.submit(), "trials ran 3 of the 300 trials declared")
+
+
+# The root wires this gate, and a deployed root refuses the null one.
+
+
+@pytest.mark.parametrize("environment", ["staging", "production", "test"])
+def test_a_deployed_root_refuses_a_quiet_null_result_gate(environment: str, tmp_path: Path) -> None:
+    with pytest.raises(UnsafeConfiguration, match="ResultGateNullImpl"):
+        build_managers(
+            StorageMemoryImpl(),
+            InfraLocalImpl(tmp_path),
+            result_gate=ResultGateNullImpl(),
+            environment=environment,
+        )
+    local = build_managers(
+        StorageMemoryImpl(), InfraLocalImpl(tmp_path), result_gate=ResultGateNullImpl()
+    )
+    assert isinstance(local.agents, AgentsManagerImpl)
+
+
+async def test_a_root_given_no_gate_ends_every_success_through_the_evidence_gate(
+    tmp_path: Path,
+) -> None:
+    managers = build_managers(
+        StorageMemoryImpl(),
+        InfraLocalImpl(tmp_path),
+        agent_kinds=(DELIVERY,),
+        environment="staging",
+    )
+    ctx = context(Role.MEMBER)
+    session = await managers.agents.start_session(
+        ctx, Start(id=new_id(), kind="delivery", title="fix the grip")
+    )
+    run = make_record(session.id)
+    await managers.evidence.record_run(ctx, run)
+    verdict = await managers.agents.judge_result(
+        ctx, session.id, Result(claim=Claim.SUCCEEDED, evidence=(run.id,))
+    )
+    assert refused(verdict, "reads no work product")
+    bare = Result(claim=Claim.SUCCEEDED, evidence=(new_id(),))
+    assert refused(await managers.agents.judge_result(ctx, session.id, bare), "names no run")

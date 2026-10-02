@@ -19,6 +19,7 @@ from acme.integrations.model_providers.registry import ModelProvidersOverImpl
 from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl, ScriptedFailure
 from acme.integrations.model_providers.types import ErrorKind, ProviderName, StopReason, Usage
 from acme.om.agents.gate import ResultGateInterface
+from acme.om.agents.impl.gate import ResultGateNullImpl
 from acme.om.agents.impl.loop import LoopManagerImpl, LoopOptions
 from acme.om.agents.impl.sink import StreamSinkMemoryImpl
 from acme.om.agents.types.kind import AgentKind, AgentKindCatalog, DoneRule, TreeLimits
@@ -253,8 +254,10 @@ def loop_over(
 ) -> Loop:
     """`storage` None is the memory storage, and `owner` None a fresh
     tenant's owner; a suite over Postgres hands in both. `jitter` is what
-    the loop draws its retry waits from. `result_gate`, `executor`, and
-    `work_product` go to the root as they are; None keeps its defaults."""
+    the loop draws its retry waits from. `result_gate` None is the engine's
+    null gate, which accepts a result and marks it unverified, as the
+    engine's suites read it; `executor` and `work_product` go to the root as
+    they are."""
     infra = InfraLocalImpl(tmp_path)
     anthropic = ModelProviderScriptedImpl(ProviderName.ANTHROPIC)
     openai = ModelProviderScriptedImpl(ProviderName.OPENAI)
@@ -271,7 +274,7 @@ def loop_over(
         agent_kinds=kinds,
         principal_context=live,
         tool_catalog=tuple(catalog.values()),
-        result_gate=result_gate,
+        result_gate=result_gate or ResultGateNullImpl(),
         executor=executor,
         work_product=work_product,
     )

@@ -16,7 +16,6 @@ from acme.integrations.root import IntegrationsInterface
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.impl.manager import AgentSessionsManagerImpl, AgentSessionsOptions
 from acme.om.agents import AgentsManagerInterface, ResultGateInterface
-from acme.om.agents.impl.gate import ResultGateNullImpl
 from acme.om.agents.impl.loop import LoopManagerImpl, LoopOptions
 from acme.om.agents.impl.manager import AgentsManagerImpl, AgentsOptions
 from acme.om.agents.impl.sink import StreamSinkNullImpl
@@ -42,6 +41,7 @@ from acme.om.evidence import (
     ExecutorInterface,
     WorkProductInterface,
 )
+from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
 from acme.om.evidence.impl.manager import EvidenceManagerImpl, EvidenceOptions
 from acme.om.evidence.impl.ports import ExecutorAbsentImpl, WorkProductAbsentImpl
 from acme.om.evidence.rules import PROTECTED_CEILING
@@ -126,14 +126,15 @@ class Managers:
 
 
 LOCAL = "local"
-"""The one environment a root accepts a quiet null budget gate or ledger in."""
+"""The one environment a root accepts a quiet null budget gate, ledger, or
+result gate in."""
 
 
-def refuse_quiet_spend(environment: str, *capabilities: object) -> None:
-    """Outside `local`, a root refuses a quiet null budget gate or ledger at
-    boot: every model call would pass a gate that holds nothing, and spend
-    outside every budget. A loud null is no such risk: it refuses each call
-    itself."""
+def refuse_quiet_nulls(environment: str, *capabilities: object) -> None:
+    """Outside `local`, a root refuses a quiet null budget gate, ledger, or
+    result gate at boot: every model call would pass a gate that holds
+    nothing, and spend outside every budget, and every success would end
+    unverified. A loud null is no such risk: it refuses each call itself."""
     if environment == LOCAL:
         return
     for capability in capabilities:
@@ -290,7 +291,8 @@ def build_managers(
     every tool call asks; and `result_gate`, the gate a result passes. None
     wires the tenancy manager's own, which answers for a person by the
     membership they hold at the call and for no service principal, and the
-    null gate, which accepts a result and marks it unverified.
+    evidence's gate over `work_product`. Outside `environment` `local`, a
+    quiet null result gate is refused at boot (`UnsafeConfiguration`).
 
     The loop takes the rest: `tool_catalog`, the adopter's tools, of which a
     session's registry holds those its kind names, with `domain_classes`,
@@ -300,8 +302,9 @@ def build_managers(
 
     The evidence takes the platform's two ports: `executor`, the fresh
     executor validation runs on, and `work_product`, which reads what a
-    session delivered. None wires the loud nulls, which refuse every
-    validation and every read. Whatever `tools_options` names, the tools
+    session delivered, and which the result gate reads too. None wires the
+    loud nulls, which refuse every validation and every read, so no success
+    counts until a process wires a work product. Whatever `tools_options` names, the tools
     take the platform's ceiling on a protected path beside its ceilings."""
     # The relay every core-role manager hands its outbox rows to. It reaches
     # the work manager through the root below, because a row of kind
@@ -393,7 +396,7 @@ def build_managers(
     gate = budget_gate or BudgetGateImpl(
         storage.get_budget_storage(), storage.get_ledger_storage(), BudgetGateOptions()
     )
-    refuse_quiet_spend(environment, gate, storage.get_ledger_storage())
+    refuse_quiet_nulls(environment, gate, storage.get_ledger_storage())
     # The one source of prices, which the resolver asks before it answers a
     # fill and the gate prices every call by.
     pricing = PricingTableImpl()
@@ -418,12 +421,15 @@ def build_managers(
         attribution_options or AttributionOptions(),
     )
     kinds = AgentKindCatalog(kinds=agent_kinds)
+    products = work_product or WorkProductAbsentImpl()
+    results = result_gate or ResultGateEvidenceImpl(storage.get_evidence_storage(), products)
+    refuse_quiet_nulls(environment, results)
     agents = AgentsManagerImpl(
         storage.get_agent_storage(),
         agent_sessions,
         steps,
         attribution,
-        result_gate or ResultGateNullImpl(),
+        results,
         kinds,
         tenancy,
         outbox,
@@ -482,7 +488,7 @@ def build_managers(
         tenancy,
         outbox,
         executor or ExecutorAbsentImpl(),
-        work_product or WorkProductAbsentImpl(),
+        products,
         evidence_options or EvidenceOptions(),
     )
     idempotency = IdempotencyManagerImpl(

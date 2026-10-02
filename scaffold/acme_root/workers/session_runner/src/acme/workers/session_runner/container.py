@@ -13,6 +13,7 @@ from acme.infra.root import InfraInterface
 from acme.integrations.impl.configured import IntegrationsConfiguredImpl
 from acme.integrations.root import IntegrationsInterface
 from acme.om.agents.types.kind import AgentKind
+from acme.om.evidence import ExecutorInterface, WorkProductInterface
 from acme.om.root import Managers, build_managers
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
@@ -45,10 +46,15 @@ class RunnerContainer:
         agent_kinds: tuple[AgentKind, ...] = (),
         tool_catalog: tuple[ToolInterface, ...] = (),
         domain_classes: tuple[str, ...] = (),
+        executor: ExecutorInterface | None = None,
+        work_product: WorkProductInterface | None = None,
     ) -> RunnerContainer:
         """Over the database, the infra, and the providers the settings
         name. `agent_kinds`, `tool_catalog`, and `domain_classes` are the
-        product's, as every process that builds the managers passes them."""
+        product's, as every process that builds the managers passes them;
+        so are `executor` and `work_product`, the evidence's ports. The
+        result gate every success passes is the evidence's, over that work
+        product: with none wired, no success counts."""
         storage = StoragePostgresImpl(
             settings.role_urls(),
             settings.role_pools(),
@@ -66,6 +72,8 @@ class RunnerContainer:
             agent_kinds=agent_kinds,
             tool_catalog=tool_catalog,
             domain_classes=domain_classes,
+            executor=executor,
+            work_product=work_product,
         )
 
     @classmethod
@@ -79,6 +87,8 @@ class RunnerContainer:
         agent_kinds: tuple[AgentKind, ...] = (),
         tool_catalog: tuple[ToolInterface, ...] = (),
         domain_classes: tuple[str, ...] = (),
+        executor: ExecutorInterface | None = None,
+        work_product: WorkProductInterface | None = None,
     ) -> RunnerContainer:
         """The managers over whichever roots the caller chose."""
         managers = build_managers(
@@ -89,6 +99,8 @@ class RunnerContainer:
             agent_kinds=agent_kinds,
             tool_catalog=tool_catalog,
             domain_classes=domain_classes,
+            executor=executor,
+            work_product=work_product,
         )
         return cls(settings, storage, infra, integrations, managers)
 
