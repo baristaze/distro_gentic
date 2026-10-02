@@ -39,6 +39,8 @@ from acme.om.orchestrations.storage import OrchestrationsStorageInterface
 from acme.om.orchestrations.storage.impl.postgres import OrchestrationsStoragePostgresImpl
 from acme.om.outbox.storage import OutboxStorageInterface
 from acme.om.outbox.storage.impl.postgres import OutboxStoragePostgresImpl
+from acme.om.placement.storage import PlacementStorageInterface
+from acme.om.placement.storage.impl.postgres import PlacementStoragePostgresImpl
 from acme.om.playbooks.storage import PlaybookStorageInterface
 from acme.om.playbooks.storage.impl.postgres import PlaybookStoragePostgresImpl
 from acme.om.privacy.storage import PrivacyStorageInterface
@@ -200,6 +202,7 @@ class StoragePostgresImpl(StorageInterface):
         self._fill_sets = FillSetStoragePostgresImpl(sessions)
         self._windows = WindowStoragePostgresImpl(sessions)
         self._tools = ToolStoragePostgresImpl(sessions)
+        self._placement = PlacementStoragePostgresImpl(sessions)
         self._trust = TrustStoragePostgresImpl(sessions)
         self._intake = IntakeStoragePostgresImpl(sessions)
         self._automation = AutomationStoragePostgresImpl(sessions)
@@ -256,6 +259,9 @@ class StoragePostgresImpl(StorageInterface):
 
     def get_tool_storage(self) -> ToolStorageInterface:
         return self._tools
+
+    def get_placement_storage(self) -> PlacementStorageInterface:
+        return self._placement
 
     def get_trust_storage(self) -> TrustStorageInterface:
         return self._trust

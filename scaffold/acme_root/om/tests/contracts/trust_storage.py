@@ -29,7 +29,9 @@ CROSS_TENANT_CASES: frozenset[str] = frozenset(
         "write_grant",
         "read_grant",
         "delete_grant",
-        "purge_tenant",
+        "purge_declarations",
+        "purge_keys",
+        "purge_grants",
     }
 )
 """Every method of `TrustStorageInterface` that takes a tenant has a case in
@@ -272,24 +274,48 @@ class TrustStorageContract:
 
     # The sweep.
 
-    async def test_purge_tenant_takes_the_tenants_rows_and_no_other(
+    async def test_a_purge_takes_exactly_the_rows_named(
         self, storage: TrustStorageInterface
     ) -> None:
-        gone, kept, operator = new_id(), new_id(), new_id()
-        stays = make_declaration()
-        key = make_key()
-        grant = make_grant(operator)
-        assert await storage.create_declaration(gone, make_declaration(), ())
-        await storage.create_key(gone, make_key(), None, ())
+        gone, operator = new_id(), new_id()
+        named, left = make_declaration("a_token"), make_declaration("b_token")
+        key, other_key = make_key(), make_key(ProviderName.OPENAI)
+        assert await storage.create_declaration(gone, named, ())
+        assert await storage.create_declaration(gone, left, ())
+        await storage.create_key(gone, key, None, ())
+        await storage.create_key(gone, other_key, None, ())
         await storage.write_grant(gone, make_grant(operator))
-        assert await storage.create_declaration(kept, stays, ())
-        await storage.create_key(kept, key, None, ())
-        await storage.write_grant(kept, grant)
-        assert await storage.purge_tenant(gone, 10) == 3
-        assert await storage.purge_tenant(gone, 10) == 0
-        assert await storage.read_declarations(gone, None, 10) == []
-        assert await storage.read_keys(gone, 10) == []
+        assert await storage.purge_declarations(gone, [named.id]) == 1
+        assert await storage.purge_keys(gone, [key.id]) == 1
+        assert await storage.purge_grants(gone, 10) == 1
+        assert await storage.purge_declarations(gone, []) == 0
+        assert [d.id for d in await storage.read_declarations(gone, None, 10)] == [left.id]
+        assert [k.id for k in await storage.read_keys(gone, 10)] == [other_key.id]
         assert await storage.read_grant(gone, operator) is None
-        assert await storage.read_declaration(kept, stays.name) == stays
-        assert await storage.read_live_key(kept, ProviderName.ANTHROPIC) == key
-        assert await storage.read_grant(kept, operator) == grant
+
+    async def test_purge_declarations_of_another_tenant_changes_nothing(
+        self, storage: TrustStorageInterface
+    ) -> None:
+        org = new_id()
+        stays = make_declaration()
+        assert await storage.create_declaration(org, stays, ())
+        assert await storage.purge_declarations(new_id(), [stays.id]) == 0
+        assert await storage.read_declaration(org, stays.name) == stays
+
+    async def test_purge_keys_of_another_tenant_changes_nothing(
+        self, storage: TrustStorageInterface
+    ) -> None:
+        org = new_id()
+        stays = make_key()
+        await storage.create_key(org, stays, None, ())
+        assert await storage.purge_keys(new_id(), [stays.id]) == 0
+        assert await storage.read_live_key(org, ProviderName.ANTHROPIC) == stays
+
+    async def test_purge_grants_of_another_tenant_changes_nothing(
+        self, storage: TrustStorageInterface
+    ) -> None:
+        org, operator = new_id(), new_id()
+        stays = make_grant(operator)
+        await storage.write_grant(org, stays)
+        assert await storage.purge_grants(new_id(), 10) == 0
+        assert await storage.read_grant(org, operator) == stays

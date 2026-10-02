@@ -41,8 +41,10 @@ class TrustManagerInterface(ABC):
     async def assign_principal(self, ctx: TenantContext, session_id: UUID) -> SessionAuthority:
         """The caller takes a session over, as attribution's take-over does,
         and a session parked because its principal no longer held is woken,
-        so its calls run under the caller from its next run. A session parked
-        for anything else stays parked."""
+        so its calls run under the caller from its next run. The take-over
+        carries to its sub-agents parked so, at any depth: each follows its
+        parent's principal and wakes. A session parked for anything else
+        stays parked."""
         ...
 
     # Secrets by placement.
@@ -111,5 +113,7 @@ class TrustManagerInterface(ABC):
     async def purge_tenant(self, ctx: TenantContext) -> int:
         """The sweep, for one tenant past its own retention: its
         declarations, its keys' records, and its content grants, a batch at
-        most a call. Any other tenant returns 0 and reads nothing."""
+        most a call, each cloud secret's value and each key's value taken
+        out of the store before the row that names it. Any other tenant
+        returns 0 and reads nothing."""
         ...

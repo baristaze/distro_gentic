@@ -26,6 +26,8 @@ from acme.om.orchestrations.storage import OrchestrationsStorageInterface
 from acme.om.orchestrations.storage.impl.memory import OrchestrationsStorageMemoryImpl
 from acme.om.outbox.storage import OutboxStorageInterface
 from acme.om.outbox.storage.impl.memory import OutboxStorageMemoryImpl
+from acme.om.placement.storage import PlacementStorageInterface
+from acme.om.placement.storage.impl.memory import PlacementStorageMemoryImpl
 from acme.om.playbooks.storage import PlaybookStorageInterface
 from acme.om.playbooks.storage.impl.memory import PlaybookStorageMemoryImpl
 from acme.om.privacy.storage import PrivacyStorageInterface
@@ -67,6 +69,7 @@ class StorageMemoryImpl(StorageInterface):
         self._fill_sets = FillSetStorageMemoryImpl()
         self._windows = WindowStorageMemoryImpl()
         self._tools = ToolStorageMemoryImpl(self._outbox)
+        self._placement = PlacementStorageMemoryImpl()
         self._trust = TrustStorageMemoryImpl(self._outbox)
         self._intake = IntakeStorageMemoryImpl()
         self._automation = AutomationStorageMemoryImpl(self._outbox)
@@ -123,6 +126,9 @@ class StorageMemoryImpl(StorageInterface):
 
     def get_tool_storage(self) -> ToolStorageInterface:
         return self._tools
+
+    def get_placement_storage(self) -> PlacementStorageInterface:
+        return self._placement
 
     def get_trust_storage(self) -> TrustStorageInterface:
         return self._trust

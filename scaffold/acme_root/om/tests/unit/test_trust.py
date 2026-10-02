@@ -20,11 +20,12 @@ from acme.infra.transports.redaction import forms, marker
 from acme.integrations.model_providers.absent import ModelProviderAbsentImpl
 from acme.integrations.model_providers.types import ProviderName
 from acme.om.agents.loop_rules import PRINCIPAL_UNLOCK
+from acme.om.agents.types.request import Spawn
 from acme.om.agents.types.run import RunEnd
 from acme.om.attribution.types.principal import AgentRef, Principal, PrincipalKind
 from acme.om.base import new_id, utcnow
 from acme.om.context import Role
-from acme.om.exceptions import NotAuthorized, NotFound
+from acme.om.exceptions import NotAuthorized, NotFound, ValidationFailed
 from acme.om.steps.types.content import ToolResultBlock, ToolUseBlock
 from acme.om.steps.types.header import LoopOutcome, ParkReason, ToolFailure, ToolResponseHeader
 from acme.om.steps.types.step import Actor, Step, StepType
@@ -193,6 +194,41 @@ async def test_a_lapsed_principal_parks_the_call_until_a_person_takes_the_sessio
     assert platform.lookup.ran_as == [other.user_id], "under the person who took it over"
     (audit,) = await audits(platform)
     assert audit.principal == person(other.user_id)
+
+
+async def test_a_take_over_resumes_the_sessions_children_parked_on_its_principal(
+    tmp_path: Path,
+) -> None:
+    platform = trusted(tmp_path)
+    parent = await platform.start()
+    await platform.say(parent, "Split the work.")
+    platform.anthropic.add(reply(said("Splitting.")))
+    await platform.loops.run(platform.owner, parent)
+    child = await platform.managers.agents.spawn(
+        platform.owner,
+        parent,
+        Spawn(id=new_id(), kind="steady", title="a part", objective="Find the total."),
+    )
+    platform.anthropic.add(reply(said("Looking."), call("lookup")))
+    platform.transition.revoked.add(platform.owner.user_id)
+
+    parked = await platform.loops.run(platform.owner, child.id)
+
+    assert parked.park is not None and parked.park.unlock == PRINCIPAL_UNLOCK
+    other = platform.member()
+    with pytest.raises(ValidationFailed):
+        await platform.managers.attribution.assign_principal(other, child.id)
+    with pytest.raises(ValidationFailed):
+        await platform.managers.attribution.follow_parent(other, parent)
+
+    await platform.trust.trust.assign_principal(other, parent)
+
+    authority = await platform.managers.attribution.get_authority(other, child.id)
+    assert authority.principal == person(other.user_id), "the child follows its parent"
+    platform.anthropic.add(reply(said("It is 12.")))
+    resumed = await platform.loops.run(platform.owner, child.id)
+    assert resumed.outcome is LoopOutcome.SUCCEEDED
+    assert platform.lookup.ran_as == [other.user_id]
 
 
 # A secret's value never appears in a step, a log, a stream part,
@@ -366,20 +402,25 @@ async def test_a_key_the_provider_refuses_is_never_saved(tmp_path: Path) -> None
         await trust.save_provider_key(platform.member(), ProviderName.OPENAI, "sk-member")
 
 
-async def test_a_purged_tenants_keys_leave_the_store_with_their_records(
+async def test_a_purged_tenants_values_leave_the_store_with_their_records(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     platform = trusted(tmp_path)
     trust, owner = platform.trust.trust, platform.owner
+    secrets = platform.infra.get_secrets()
     key = await trust.save_provider_key(owner, ProviderName.ANTHROPIC, "sk-first")
     await trust.declare_secret(owner, declared())
+    await trust.put_secret(owner, INJECTED_TOKEN.name, SECRET)
+    await trust.declare_secret(owner, declared("held_inside", store=SecretStore.HOST))
     assert await trust.purge_tenant(owner) == 0, "a living tenant keeps everything"
 
     async def expired(ctx: object) -> bool:
         return True
 
     monkeypatch.setattr(platform.managers.tenancy, "tenant_expired", expired)
-    assert await trust.purge_tenant(owner) == 2
-    assert not await platform.infra.get_secrets().has(owner.org_id, key_secret_name(key.id))
+    assert await trust.purge_tenant(owner) == 3
+    assert not await secrets.has(owner.org_id, key_secret_name(key.id))
+    assert not await secrets.has(owner.org_id, INJECTED_TOKEN.name), "the cloud secret's value"
     assert await trust.get_provider_keys(owner, 10) == ()
     assert await trust.get_secrets(owner, None, 10) == ()
+    assert await trust.purge_tenant(owner) == 0

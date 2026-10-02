@@ -31,7 +31,8 @@ of](../../../../README.md).
   tenant's event stream, once.
 - **Take over.** A person takes over a steady session whose principal
   no longer holds its place. The session was waiting for exactly that,
-  and wakes; its calls now run under that person.
+  and wakes; its calls now run under that person. Its sub-agents waiting
+  the same way follow, and wake too.
 - **Declare a secret, and give a cloud secret its value.** One who
   writes the tenant's configuration does both. A secret held inside a
   customer's wall never takes its value here.
@@ -65,7 +66,8 @@ of](../../../../README.md).
 - **`read` never opens content**, and neither does `write`. Only a
   grant the grant job writes does ([ADR
   2010](../../../../../docs/adr/2010-content-opens-by-a-grant-of-its-own.md)).
-- **Every row belongs to one org,** and goes with the org.
+- **Every row belongs to one org,** and goes with the org: each value in
+  the store leaves before the row that names it.
 
 <!-- agents-only
 Placement is the hosts' concept: `placement.PlacementInterface` declares

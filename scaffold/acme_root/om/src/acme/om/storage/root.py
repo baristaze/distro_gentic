@@ -15,6 +15,7 @@ from acme.om.media.storage import MediaStorageInterface
 from acme.om.models.storage import FillSetStorageInterface
 from acme.om.orchestrations.storage import OrchestrationsStorageInterface
 from acme.om.outbox.storage import OutboxStorageInterface
+from acme.om.placement.storage import PlacementStorageInterface
 from acme.om.playbooks.storage import PlaybookStorageInterface
 from acme.om.privacy.storage import PrivacyStorageInterface
 from acme.om.steps.storage import StepStorageInterface
@@ -76,6 +77,9 @@ class StorageInterface(ABC):
 
     @abstractmethod
     def get_tool_storage(self) -> ToolStorageInterface: ...
+
+    @abstractmethod
+    def get_placement_storage(self) -> PlacementStorageInterface: ...
 
     @abstractmethod
     def get_trust_storage(self) -> TrustStorageInterface: ...

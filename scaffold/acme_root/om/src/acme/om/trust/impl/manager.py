@@ -118,14 +118,8 @@ class TrustManagerImpl(TrustManagerInterface):
     async def assign_principal(self, ctx: TenantContext, session_id: UUID) -> SessionAuthority:
         ctx.require(Permission.WRITE)
         taken = await self._attribution.assign_principal(ctx, session_id)
-        session = await self._sessions.get_session(ctx, session_id)
-        park = session.park
-        if (
-            park is not None
-            and park.reason is ParkReason.PERSON
-            and park.unlock == PRINCIPAL_UNLOCK
-        ):
-            await self._sessions.wake_session(ctx, session_id, park)
+        await self._wake_on_principal(ctx, session_id)
+        await self._carry_down(ctx, session_id)
         return taken
 
     # Secrets by placement.
@@ -254,12 +248,56 @@ class TrustManagerImpl(TrustManagerInterface):
         ctx.require(Permission.WRITE)
         if not await self._tenancy.tenant_expired(ctx):
             return 0
-        # The values its keys' records name leave the store with them.
-        for key in await self._storage.read_keys(ctx.org_id, self._options.purge_batch):
+        batch = self._options.purge_batch
+        # Each value leaves the store before the row that names it, and the
+        # rows that go are exactly the ones whose values went: a value is
+        # never left with nothing to find it by.
+        keys = await self._storage.read_keys(ctx.org_id, batch)
+        for key in keys:
             await self._secrets.delete(ctx.org_id, key_secret_name(key.id), deadline=ctx.deadline)
-        return await self._storage.purge_tenant(ctx.org_id, self._options.purge_batch)
+        gone = await self._storage.purge_keys(ctx.org_id, [key.id for key in keys])
+        declared = await self._storage.read_declarations(ctx.org_id, None, batch)
+        for declaration in declared:
+            if declaration.store is SecretStore.CLOUD:
+                await self._secrets.delete(ctx.org_id, declaration.name, deadline=ctx.deadline)
+        gone += await self._storage.purge_declarations(ctx.org_id, [d.id for d in declared])
+        return gone + await self._storage.purge_grants(ctx.org_id, batch)
 
     # Helpers.
+
+    async def _wake_on_principal(self, ctx: TenantContext, session_id: UUID) -> None:
+        """Wakes a session parked because its principal no longer held; one
+        parked for anything else stays parked."""
+        session = await self._sessions.get_session(ctx, session_id)
+        park = session.park
+        if (
+            park is not None
+            and park.reason is ParkReason.PERSON
+            and park.unlock == PRINCIPAL_UNLOCK
+        ):
+            await self._sessions.wake_session(ctx, session_id, park)
+
+    async def _carry_down(self, ctx: TenantContext, parent_id: UUID) -> None:
+        """A take-over carries to the parent's sub-agents parked on their
+        principal, and theirs: each follows its parent's principal and
+        wakes. A sub-agent at work keeps its own until it parks, and a
+        take-over of the parent again carries to it then."""
+        after: UUID | None = None
+        while True:
+            page = await self._sessions.get_children(ctx, parent_id, after, self._options.max_page)
+            for child in page.items:
+                park = child.park
+                if (
+                    park is not None
+                    and park.reason is ParkReason.PERSON
+                    and park.unlock == PRINCIPAL_UNLOCK
+                ):
+                    await self._attribution.follow_parent(ctx, child.id)
+                    await self._sessions.wake_session(ctx, child.id, park)
+                await self._carry_down(ctx, child.id)
+            if not page.has_more or not page.items:
+                return
+            after = page.items[-1].id
 
     async def _before(
         self, ctx: TenantContext, session_id: UUID, step_id: UUID, before_seq: int

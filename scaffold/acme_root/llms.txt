@@ -27,6 +27,7 @@ served to it. Exposure is by listing, never by folder.
 - [Models](om/src/acme/om/models/README.md): model roles, fills, fill sets and their switches, the resolver, and prices
 - [Windows](om/src/acme/om/windows/README.md): what a model reads: the request rendered from the history, the window sized for its model, the pinned zone, compaction into summaries, and artifacts
 - [Tools](om/src/acme/om/tools/README.md): the tool contract, the registry, policy by class and target, approvals bound to one call, failures, recovery by effect, jobs
+- [Placement](om/src/acme/om/placement/README.md): the lane each kind of a session's work runs from, the claim the control plane makes for a host or a daemon, and each tenant's fair share of the loops, held at the claim
 - [Trust](om/src/acme/om/trust/README.md): every call's audit entry with its executor, principal, spender, and actor apart; secrets by the store that holds them, refused across a session's wall; a tenant's provider keys by reference; and the grant that opens a session's content to an operator
 - [Intake](om/src/acme/om/intake/README.md): an outside event routed to the session it names by the routing table, outside text as data, a hand-over on a person's push, and approvals from chat as the mapped user
 - [Automations](om/src/acme/om/automations/README.md): events turned into bounded work: a cost cap held by each run's budget, a rate, a concurrency, a hop limit, and every firing a recorded run

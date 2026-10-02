@@ -1,9 +1,11 @@
 """The runner binary: settings, container, stop handlers, `serve`, and the
 `health` probe, which asks the serving process's `/healthz`.
 
-The runner claims one kind of work, `LOOP`, with the maintenance worker's
-claim loop: a lease it renews while the loop runs, a fence that cancels a
-run whose lease is lost, a liveness beat, and a drain on stop. Its sweep
+The runner claims one kind of work, `LOOP`, from one loop lane, with the
+maintenance worker's claim loop: a lease it renews while the loop runs, a
+fence that cancels a run whose lease is lost, a liveness beat, and a drain
+on stop. A claimed loop over its tenant's fair share goes back to its lane
+before it runs. Its sweep
 takes back the expired leases and relays the outbox a crash left, and
 purges nothing."""
 
@@ -30,6 +32,7 @@ from acme.om.work.types.work_item import WorkKind
 from acme.workers.maintenance.health import Probe, WorkerHttpServer
 from acme.workers.maintenance.loop import LoopOptions, WorkerLoop
 from acme.workers.session_runner.container import RunnerContainer
+from acme.workers.session_runner.fair_share import FairShareGuardImpl
 from acme.workers.session_runner.runs import LoopHandlerImpl
 from acme.workers.session_runner.settings import SessionRunnerSettings
 
@@ -51,13 +54,15 @@ def loop_options(settings: SessionRunnerSettings, lane: str | None = None) -> Lo
 
 def build_runner(container: RunnerContainer, lane: str | None = None) -> WorkerLoop:
     """The claim loop over one handler, `LOOP`'s, which calls the loop's one
-    operation. It purges nothing, so it has no purge of its own."""
+    operation once its tenant's fair share admits it. It purges nothing, so
+    it has no purge of its own."""
     managers = container.managers
+    loop = LoopHandlerImpl(managers.loop, managers.agent_sessions)
     return WorkerLoop(
         work=managers.work,
         outbox=managers.outbox,
         purges={},
-        handlers={WorkKind.LOOP: LoopHandlerImpl(managers.loop, managers.agent_sessions)},
+        handlers={WorkKind.LOOP: FairShareGuardImpl(loop, managers.placement)},
         topics=container.infra.get_topics(),
         liveness=container.infra.get_cache(CacheScope.WORKER_LIVENESS),
         options=loop_options(container.settings, lane),
@@ -150,7 +155,7 @@ def main(
     parser = argparse.ArgumentParser(prog="acme-session-runner")
     sub = parser.add_subparsers(dest="command", required=True)
     p_serve = sub.add_parser("serve", help="claim the loops of agent sessions and run them")
-    p_serve.add_argument("--lane", help="the lane to claim from; defaults to ACME_RUNNER_LANE")
+    p_serve.add_argument("--lane", help="the loop lane to claim from; defaults to ACME_RUNNER_LANE")
     sub.add_parser("health", help="exit 0 while the serving runner answers /healthz with 200")
     args = parser.parse_args(argv)
     if args.command == "health":
