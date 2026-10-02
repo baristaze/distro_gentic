@@ -35,6 +35,10 @@ call: the granted role's permissions and nothing else, whichever kind a
 step names it as. Every other principal falls through to the members'
 transition. A root that runs the sessions an automation starts hands the
 same transition to the managers, so their calls are answered by the grant.
+An automation that runs as the principal is made only by a person whose
+own role is at least the grant, and each firing holds the lower of the
+grant and its creator's role then: nobody lends themselves a role
+through the principal, and a creator who left fires nothing.
 
 ## Consequences
 
