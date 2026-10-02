@@ -26,6 +26,7 @@ CROSS_TENANT_CASES: frozenset[str] = frozenset(
         "read_live_key",
         "read_keys",
         "touch_key",
+        "refuse_key",
         "write_grant",
         "read_grant",
         "delete_grant",
@@ -230,6 +231,40 @@ class TrustStorageContract:
         await storage.touch_key(new_id(), key.id, utcnow())
         live = await storage.read_live_key(org, ProviderName.ANTHROPIC)
         assert live is not None and live.last_used_at is None
+
+    async def test_refuse_key_marks_a_live_key_once_and_reads_it_live_no_more(
+        self, storage: TrustStorageInterface
+    ) -> None:
+        org = new_id()
+        key = make_key()
+        await storage.create_key(org, key, None, ())
+        refused = key.model_copy(update={"status": KeyStatus.REFUSED, "version": 2})
+        assert await storage.refuse_key(org, refused)
+        assert not await storage.refuse_key(org, refused.model_copy(update={"version": 3}))
+        assert await storage.read_live_key(org, ProviderName.ANTHROPIC) is None
+        assert await storage.read_keys(org, 10) == [refused]
+
+    async def test_refuse_key_leaves_a_rotated_key_as_it_is(
+        self, storage: TrustStorageInterface
+    ) -> None:
+        org = new_id()
+        first = make_key()
+        await storage.create_key(org, first, None, ())
+        second = make_key()
+        await storage.create_key(org, second, rotated(first), ())
+        refused = rotated(first).model_copy(update={"status": KeyStatus.REFUSED, "version": 3})
+        assert not await storage.refuse_key(org, refused)
+        assert await storage.read_live_key(org, ProviderName.ANTHROPIC) == second
+
+    async def test_refuse_key_of_another_tenant_changes_nothing(
+        self, storage: TrustStorageInterface
+    ) -> None:
+        org = new_id()
+        key = make_key()
+        await storage.create_key(org, key, None, ())
+        refused = key.model_copy(update={"status": KeyStatus.REFUSED, "version": 2})
+        assert not await storage.refuse_key(new_id(), refused)
+        assert await storage.read_live_key(org, ProviderName.ANTHROPIC) == key
 
     # Content grants.
 

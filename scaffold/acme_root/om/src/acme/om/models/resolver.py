@@ -5,6 +5,7 @@ row in the one source of prices (`models.prices`)."""
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
+from uuid import UUID
 
 from acme.om.context import TenantContext
 from acme.om.models.types.fill import Eligibility, Fill, ModelRole, RoleFill
@@ -13,12 +14,17 @@ from acme.om.models.types.fill import Eligibility, Fill, ModelRole, RoleFill
 class ModelResolverInterface(ABC):
     @abstractmethod
     async def resolve(
-        self, ctx: TenantContext, roles: Sequence[ModelRole], eligibility: Eligibility
+        self,
+        ctx: TenantContext,
+        session_id: UUID,
+        roles: Sequence[ModelRole],
+        eligibility: Eligibility,
     ) -> tuple[RoleFill, ...]:
-        """Each role's fill and its declared fallbacks, in role order, every
-        one admitted by `eligibility`. A role it does not know, or one no
-        admitted fill serves, is `UnresolvedRole`; a fill whose model has no
-        price row is `UnpricedModel`."""
+        """Each role's fill and its declared fallbacks for the session
+        `session_id`, in role order, every one admitted by `eligibility`. A
+        role it does not know, or one no admitted fill serves, is
+        `UnresolvedRole`; a fill whose model has no price row is
+        `UnpricedModel`."""
         ...
 
     @abstractmethod

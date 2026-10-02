@@ -41,6 +41,18 @@ class ModelsManagerInterface(ABC):
         ...
 
     @abstractmethod
+    async def renew_fill_set(
+        self, ctx: TenantContext, session_id: UUID, epoch: int, loop_id: UUID
+    ) -> FillSet:
+        """At the start of the loop `loop_id`, before its first call, by the
+        run at `epoch`: each role whose fill is gone switches to the fill
+        that serves it now, by a `switched` step, as `switch_fill` makes it;
+        the latest version, unchanged, when none is. A switch lands between
+        loops and never inside one. The engine's own manager knows of no
+        model going, so it answers the latest version as it is."""
+        ...
+
+    @abstractmethod
     async def get_fill_set(self, ctx: TenantContext, session_id: UUID) -> FillSet:
         """The latest version of the session's fill set; `NotFound` before it
         was resolved, and for another tenant's session."""

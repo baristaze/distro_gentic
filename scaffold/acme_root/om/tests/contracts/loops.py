@@ -32,6 +32,8 @@ from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import Platform, new_id, utcnow
 from acme.om.context import CredentialKind, RequestContext, Role, TenantContext, build_context
 from acme.om.evidence import ExecutorInterface, WorkProductInterface
+from acme.om.models.impl.credentials import CallCredentialsPlatformImpl
+from acme.om.models.layer import ModelsLayer
 from acme.om.root import Managers, build_managers
 from acme.om.steps.types.content import TextBlock, ToolUseBlock
 from acme.om.steps.types.header import LoopOutcome, ParkReason
@@ -254,6 +256,7 @@ def loop_over(
     executor: ExecutorInterface | None = None,
     work_product: WorkProductInterface | None = None,
     call_gate: Callable[[Managers, Clock], CallGateInterface] | None = None,
+    models_layer: ModelsLayer | None = None,
     **roots: Any,
 ) -> Loop:
     """`storage` None is the memory storage, and `owner` None a fresh
@@ -262,8 +265,10 @@ def loop_over(
     null gate, which accepts a result and marks it unverified, as the
     engine's suites read it; `executor` and `work_product` go to the root as
     they are. `call_gate` None is the budgets' gate behind the call gate; a
-    suite of a gate of its own builds it from the managers and the clock;
-    and `roots` is what else the managers are built with."""
+    suite of a gate of its own builds it from the managers and the clock.
+    `models_layer` goes to the root as a platform's root hands it in, and
+    the loop takes the layer's call credentials; and `roots` is what else
+    the managers are built with."""
     infra = InfraLocalImpl(tmp_path)
     anthropic = ModelProviderScriptedImpl(ProviderName.ANTHROPIC)
     openai = ModelProviderScriptedImpl(ProviderName.OPENAI)
@@ -283,6 +288,7 @@ def loop_over(
         result_gate=result_gate or ResultGateNullImpl(),
         executor=executor,
         work_product=work_product,
+        models_layer=models_layer,
         **roots,
     )
     clock = Clock()
@@ -292,6 +298,7 @@ def loop_over(
         await asyncio.sleep(0)
 
     sink = sink or StreamSinkMemoryImpl()
+    options = options or LoopOptions(control_poll=timedelta(milliseconds=1))
     loops = LoopManagerImpl(
         managers.steps,
         managers.agent_sessions,
@@ -306,11 +313,15 @@ def loop_over(
             if call_gate is None
             else call_gate(managers, clock)
         ),
-        providers,
+        (
+            CallCredentialsPlatformImpl(providers, options.credential)
+            if models_layer is None
+            else models_layer.credentials(providers)
+        ),
         outages or infra.get_outages(),
         sink,
         tuple(catalog.values()),
-        options or LoopOptions(control_poll=timedelta(milliseconds=1)),
+        options,
         clock,
         sleep,
         jitter=jitter,

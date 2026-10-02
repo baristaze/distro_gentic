@@ -93,6 +93,11 @@ TABLE_SCOPES: dict[str, TableScope] = {
     # The operator plane's own: the platform's size as the sweep last counted
     # it, one row that is no tenant's.
     "platform_sizes": TableScope(ScopeKind.SYSTEM),
+    # The platform's model matrix and what its operators record of a model:
+    # a benchmark's result, a provider's retirement. No tenant's.
+    "matrix_versions": TableScope(ScopeKind.SYSTEM),
+    "benchmark_results": TableScope(ScopeKind.SYSTEM),
+    "model_retirements": TableScope(ScopeKind.SYSTEM),
     # A tenant's own rows. An org's `org_id` is its own id.
     "orgs": TableScope(ScopeKind.ORG),
     "invitations": TableScope(ScopeKind.ORG),
@@ -156,6 +161,8 @@ TABLE_SCOPES: dict[str, TableScope] = {
     "station_jobs": TableScope(ScopeKind.ORG),
     "session_workspaces": TableScope(ScopeKind.ORG),
     "egress_allowlists": TableScope(ScopeKind.ORG),
+    "matrix_pins": TableScope(ScopeKind.ORG),
+    "fill_overrides": TableScope(ScopeKind.ORG),
     # A tenant's rows that also belong to one person in it. A user's person
     # is the identity behind it, so it narrows on `app.identity_id`; every
     # other row here names the user and narrows on `app.user_id`.

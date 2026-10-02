@@ -3,6 +3,7 @@ from options a root sets. Every fill it answers, fallbacks included, has a
 price row of its own: it asks before it answers."""
 
 from collections.abc import Sequence
+from uuid import UUID
 
 from acme.integrations.model_providers.types import Effort, ProviderName
 from acme.om.base import Platform
@@ -80,7 +81,11 @@ class ModelResolverTableImpl(ModelResolverInterface):
             raise UnpricedModel(f"{fill.name} has no price row")
 
     async def resolve(
-        self, ctx: TenantContext, roles: Sequence[ModelRole], eligibility: Eligibility
+        self,
+        ctx: TenantContext,
+        session_id: UUID,
+        roles: Sequence[ModelRole],
+        eligibility: Eligibility,
     ) -> tuple[RoleFill, ...]:
         resolved: list[RoleFill] = []
         for role in sorted(set(roles)):
