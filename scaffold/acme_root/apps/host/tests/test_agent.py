@@ -270,10 +270,8 @@ async def test_a_host_waits_out_a_failed_beat_and_goes_on_with_its_credential(
     assert wait == (7.0 if failure is not None else 0.5)
     assert 0 < wait <= BACKOFF_MAX_SECONDS
     assert host.credential == held == load_credential(tmp_path / "credential.json")
-    host_id = held.host_id
-    item = await enqueue(
-        api, WorkKind.EXEC, {"host_id": host_id, **fitting()}, host_lane(UUID(host_id))
-    )
+    prepare = {"operation": WorkspaceOperation.PREPARE.value, "pool_id": str(pool.id)}
+    item = await enqueue(api, WorkKind.WORKSPACE, {**prepare, **fitting()}, pool_lane(pool.id))
     assert await host.turn() == 0.0
     assert [one.id for one in ran.ran] == [item.id]
     assert await host.turn() == api.settings(tmp_path, None).beat_seconds

@@ -493,7 +493,9 @@ async def test_a_pinned_session_runs_through_the_relay_on_the_host_that_holds_it
 ) -> None:
     runner = Executor(kind=ExecutorKind.CLOUD, credential_id=new_id(), label="runner-1")
     placement = PlacementRelayedImpl(
-        PlacementHostsImpl(wall.storage.get_hosts_storage(), runner),
+        PlacementHostsImpl(
+            wall.storage.get_hosts_storage(), wall.storage.get_agent_session_storage(), runner
+        ),
         wall.storage.get_relay_storage(),
     )
     executor = await placement.executor_of(wall.owner.org_id, wall.workspace.id)
