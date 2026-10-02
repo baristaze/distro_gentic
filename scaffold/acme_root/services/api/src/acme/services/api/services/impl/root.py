@@ -101,5 +101,5 @@ def build_services(
             managers.agent_sessions, managers.agents, managers.steps, managers.tools
         ),
         hosts=HostsServiceImpl(managers.hosts),
-        relay=RelayServiceImpl(managers.relay, managers.hosts, infra.get_topics()),
+        relay=RelayServiceImpl(managers.relay, infra.get_topics()),
     )

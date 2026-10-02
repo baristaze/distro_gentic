@@ -60,7 +60,10 @@ run sent, which no host took yet, is refused at its claim, and the host's
 own transport fences its workspace by epoch too.
 
 **The control stream is the host's.** The host opens it with its own
-credential, and it ends with that credential. A stop is a row first, and
+credential. It ends after a minute, or with that credential, and the host
+opens the next with the credential it holds then. So a credential the host
+rotated, or one revoked, is met at an open, as every call meets it: a
+stream never shows its credential again, and is never read as its reuse. A stop is a row first, and
 its outbox row's push wakes the stream wherever it is held open; work on
 the host's lanes wakes it to claim. The stream reads the rows again on a
 short timer, since a push is best effort. A host that reconnects is told

@@ -22,7 +22,8 @@ A request passes four layers, each in its own folder under
   provider, and returns a view from `types/`.
 - **Realtime** (`realtime/`). The socket, its ticket, its bounded send
   lanes, and the recheck that closes it when its credential ends; and a
-  host's control stream, which ends with its credential too.
+  host's control stream, which ends after a minute and is opened again
+  with the host's credential as it is then.
 
 `container.py` builds everything once per process, `app.py` assembles the
 app, and `main.py` is the `acme-api` command: `serve`, `migrate`,

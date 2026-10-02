@@ -39,11 +39,12 @@ class RelayServiceInterface(ABC):
 
     @abstractmethod
     def control(
-        self, rctx: RequestContext, host: HostIdentity, credential: str, after: UUID | None
+        self, rctx: RequestContext, host: HostIdentity, after: UUID | None
     ) -> AsyncIterator[ControlView]:
         """The host's control stream, from inside its wall: a wake when work
         reaches its lanes, each control message for an item it holds as it
-        is made, and a ping while nothing happens. It ends when the
-        credential it opened with ends or is revoked; the host opens it
-        again with the next."""
+        is made, and a ping while nothing happens. It ends after its span,
+        or when the credential it opened with ends; the host opens the next
+        with the credential it holds then, so a rotated or a revoked one is
+        met at that open, never inside a stream."""
         ...

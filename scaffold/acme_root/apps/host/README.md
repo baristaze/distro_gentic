@@ -45,8 +45,10 @@ uv run acme-host run          # every start after it
   with the hash of the bytes it sends. It renews its lease while the
   command runs, and waits out a renewal or a result the platform fails
   to take while the lease lasts. Items run side by side, so a long
-  command holds up no other call. It holds one control stream open to the platform, which
-  wakes it to claim at once and stops a command at once. An item past a
+  command holds up no other call. It holds one control stream open to
+  the platform, which wakes it to claim at once and stops a command at
+  once, and opens it again with the credential it holds whenever it
+  ends. An item past a
   ceiling is answered as refused, so the agent reads why. A bare
   directory runs only as the host's dedicated user, which no transport
   here does yet, so an item at that mode is refused.

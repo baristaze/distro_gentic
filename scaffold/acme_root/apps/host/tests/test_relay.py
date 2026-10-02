@@ -7,7 +7,7 @@ the command at once. A host's routes take its own credential alone."""
 
 import asyncio
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -19,6 +19,7 @@ from contracts.agent_session_storage import make_session
 from contracts.project_storage import make_binding, make_project
 from host_support import Stack, probes
 
+from acme.apps.host import main as host_main
 from acme.apps.host.agent import HostAgent
 from acme.apps.host.ceilings import Ceilings
 from acme.apps.host.relay import ExecutorRelayImpl
@@ -36,6 +37,7 @@ from acme.om.placement.types.work import ExecPayload
 from acme.om.relay.impl.transport import TransportRelayImpl
 from acme.om.relay.types.exec import ExecState, StopKind
 from acme.om.steps.types.header import ToolFailure
+from acme.services.api.services.impl import relay as relay_service
 
 RUNNER = AppContext(type=AppType.WORKER, version="runner@test")
 DIRECTORY = IsolationSpec(mode=IsolationMode.HOST, egress=EgressPolicy(mode=EgressMode.NONE))
@@ -70,12 +72,13 @@ async def relay_to(
     project_id: UUID | None = None,
     serves: UUID | None = None,
     wire: httpx.AsyncBaseTransport | None = None,
+    now: Callable[[], datetime] | None = None,
 ) -> Relayed:
     """A host of the tenant's pool that holds a session's workspace, a
     directory it runs commands in through the engine's local transport, and
     the runner's relay to it. With `serves`, the host's ceilings serve that
     project alone, and the session belongs to `project_id`. With `wire`, the
-    host reaches the platform through it."""
+    host reaches the platform through it, and with `now` it reads its time."""
     pool = await api.pool()
     where = tmp_path / "workspace"
     where.mkdir()
@@ -107,6 +110,7 @@ async def relay_to(
             transport=wire or api.transport,
         ),
         executor,
+        now=now or (lambda: datetime.now(UTC)),
     )
     agents.append(host)
     await host.start()
@@ -309,6 +313,87 @@ async def test_a_short_command_beside_a_long_one_runs_within_its_deadline(
     assert not long.done()
     assert (await long).exit_code == 0
     assert len(await looping) == 2
+
+
+class Bearers(httpx.AsyncBaseTransport):
+    """The stack, noting the credential each control stream opens with."""
+
+    def __init__(self, inner: httpx.AsyncBaseTransport) -> None:
+        self._inner = inner
+        self.opened: list[str] = []
+        self.again = asyncio.Event()
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/hosts/me/control"):
+            self.opened.append(request.headers.get("authorization", ""))
+            self.again.set()
+        return await self._inner.handle_async_request(request)
+
+
+class Clock:
+    def __init__(self) -> None:
+        self.now = datetime.now(UTC)
+
+    def __call__(self) -> datetime:
+        return self.now
+
+
+async def test_a_host_that_rotates_while_its_stream_is_open_keeps_its_stream_on_the_new_credential(
+    api: Stack, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(relay_service, "STREAM_SPAN", timedelta(milliseconds=200))
+    bearers = Bearers(api.transport)
+    clock = Clock()
+    relayed = await relay_to(api, tmp_path, wire=bearers, now=clock)
+    host = relayed.host
+    listening = asyncio.ensure_future(host_main.listen(host))
+    await asyncio.wait_for(bearers.again.wait(), 5)
+    first = f"Bearer {host.credential.token}"
+    clock.now += (host.credential.expires_at - host.credential.issued_at) / 2
+    assert await host.rotate_if_due()
+    rotated = len(bearers.opened)
+    renewed = f"Bearer {host.credential.token}"
+    while renewed not in bearers.opened[rotated:]:
+        bearers.again.clear()
+        await asyncio.wait_for(bearers.again.wait(), 5)
+    # The stream ended and was opened again on the new credential; the one
+    # rotated away was never shown again, so the host was never revoked.
+    assert first not in bearers.opened[rotated:]
+    statuses = await api.container.managers.hosts.get_hosts(api.owner, host_pool(host))
+    assert [status.host.revoked_at for status in statuses] == [None]
+    await host.beat()
+    # A stop still reaches the host over the stream it opened again.
+    spec = command(relayed.epoch, "sh", "-c", "echo started; sleep 30")
+    waiting = asyncio.ensure_future(relayed.runner.run(relayed.workspace, spec, seal=NO_SEAL))
+    running = asyncio.ensure_future(claims(host, waiting))
+    (item,) = await _items(relayed, spec)
+    await api.container.managers.relay.stop(
+        _request(), api.owner.org_id, item, StopKind.CANCEL, relayed.epoch
+    )
+    with pytest.raises(ToolFailed):
+        await asyncio.wait_for(waiting, 10)
+    await running
+    listening.cancel()
+
+
+def host_pool(host: HostAgent) -> UUID:
+    return UUID(host.credential.pool_id)
+
+
+async def _items(relayed: Relayed, spec: CommandSpec) -> list[UUID]:
+    """The relay's items under the call's key, once its host runs one."""
+    relay = relayed.api.container.managers.relay
+    storage = relayed.api.container.storage.get_relay_storage()
+    for _ in range(500):
+        items = await storage.read_items_by_key(
+            relayed.api.owner.org_id, relayed.workspace.id, spec.key, 10
+        )
+        if items:
+            progress = await relay.watch(_request(), relayed.api.owner.org_id, items[0].id, -1)
+            if progress.state is ExecState.RUNNING:
+                return [item.id for item in items]
+        await asyncio.sleep(0.01)
+    raise AssertionError("no host ran the command")
 
 
 def _request() -> RequestContext:

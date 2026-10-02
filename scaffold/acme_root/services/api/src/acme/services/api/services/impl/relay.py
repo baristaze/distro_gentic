@@ -15,8 +15,7 @@ from acme.infra.topics import (
 )
 from acme.om.base import utcnow
 from acme.om.context import RequestContext
-from acme.om.exceptions import PlatformException, ValidationFailed
-from acme.om.hosts import HostsManagerInterface
+from acme.om.exceptions import ValidationFailed
 from acme.om.hosts.types.host import HostIdentity
 from acme.om.placement.rules import host_lane, pool_lane
 from acme.om.relay import RelayManagerInterface
@@ -36,6 +35,10 @@ from acme.services.api.types.relay import (
 
 log = logging.getLogger(__name__)
 
+STREAM_SPAN = timedelta(seconds=60)
+"""How long one control stream lives. It ends then, and its host opens the
+next with the credential it holds at that moment."""
+
 
 def decoded(data: str) -> bytes:
     """The bytes a body carries in base64, exactly as they crossed."""
@@ -51,24 +54,19 @@ def crossing_of(body: CrossingBody) -> Crossing:
 
 class RelayServiceImpl(RelayServiceInterface):
     """`poll` is how long the control stream waits for a wake before it
-    reads the host's control messages again and pings; `recheck` how often
-    it asks whether the credential it opened with still holds."""
+    reads the host's control messages again and pings."""
 
     def __init__(
         self,
         relay: RelayManagerInterface,
-        hosts: HostsManagerInterface,
         topics: TopicsInterface,
         *,
         poll: timedelta = timedelta(seconds=5),
-        recheck: timedelta = timedelta(seconds=60),
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._relay = relay
-        self._hosts = hosts
         self._topics = topics
         self._poll = poll
-        self._recheck = recheck
         self._clock = clock
 
     async def detail(
@@ -112,7 +110,7 @@ class RelayServiceImpl(RelayServiceInterface):
         return LeaseView(lease_expires_at=await self._relay.extend(rctx, host, item_id))
 
     async def control(
-        self, rctx: RequestContext, host: HostIdentity, credential: str, after: UUID | None
+        self, rctx: RequestContext, host: HostIdentity, after: UUID | None
     ) -> AsyncIterator[ControlView]:
         woken = asyncio.Event()
         work: list[bool] = []
@@ -141,7 +139,7 @@ class RelayServiceImpl(RelayServiceInterface):
             # while it was away is not lost.
             yield ControlView(kind=ControlKind.WAKE)
             last = after
-            checked = self._clock()
+            opened = self._clock()
             while True:
                 for control in await self._relay.controls(rctx, host, last):
                     last = control.id
@@ -152,16 +150,15 @@ class RelayServiceImpl(RelayServiceInterface):
                     work.clear()
                     yield ControlView(kind=ControlKind.WAKE)
                 now = self._clock()
-                if now >= host.expires_at:
+                if now >= host.expires_at or now - opened >= STREAM_SPAN:
+                    # It ends, and the host opens the next with the credential
+                    # it holds then, which the gateway checks as it checks
+                    # every call. Nothing here shows a credential again: one
+                    # the host rotated meanwhile is never presented as reused.
                     return
-                if now - checked >= self._recheck:
-                    checked = now
-                    try:
-                        await self._hosts.authenticate(rctx, credential)
-                    except PlatformException:
-                        return  # revoked: the stream ends with the credential
+                wait = min(self._poll, opened + STREAM_SPAN - now)
                 try:
-                    await asyncio.wait_for(woken.wait(), self._poll.total_seconds())
+                    await asyncio.wait_for(woken.wait(), wait.total_seconds())
                 except TimeoutError:
                     yield ControlView(kind=ControlKind.PING)
                 woken.clear()
