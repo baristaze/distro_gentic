@@ -91,16 +91,36 @@ resolves it; any other prefix is a layer's beneath.
    `specs/architecture.md` there, which holds the rows the layers
    beneath brought. When there is no such table, there is no deviations
    table.
-6. A checker entry goes only with a finding the checker reports. The
-   lens's `Check` line says which part that is. A lens whose `Check`
-   line reads `review` gets no entry: no program reports it, and an
+6. A `distro-check` entry goes only with a finding the checker reports.
+   The lens's `Check` line says which part that is: the whole lens when
+   it reads "decides it", and only the part it names when it ends "the
+   rest is judged". The rule's docstring says exactly what it reads:
+   the function under `@rule("<LENS-ID>"` in
+   `../../scaffold/acme_root/checkers/src/acme/distro_check/rules/<group>.py`,
+   the group the lens's file names. Read it, and give an entry only
+   when the deviating code is what it reads, in the modules it reads. A
+   deviation in a judged part, or under a lens whose `Check` line reads
+   `review`, gets no entry: the checker reports nothing there, and an
    entry that matches no finding is itself a finding that fails the
    gate. The ADR, the Deviations row, and the citation beside the code
-   are its record. When the line names `distro-check`, a deviation in
-   the part it decides takes the entry the checker's README shows under
-   Exceptions, whose rule id is the lens id: append it to the root
-   `pyproject.toml` when that has the checker's table, and print it
-   otherwise.
+   are its record. For a deviation in the part the checker decides, the
+   ADR alone does not pass the gate: give it the entry that names the
+   ADR, in the shape the copy's `checkers/README.md` shows (Exceptions;
+   `scaffold/acme_root/checkers/README.md` in the platform's own
+   repository), whose rule id is the lens id. A whole rule turned off is
+   a `[[tool.distro-check.disable]]` entry with `rule`, `adr` (the ADR's
+   path), and `reason`. A rule broken in some files is a
+   `[[tool.distro-check.exception]]` entry with `rule`, `path`, `adr`,
+   and `reason`. Its `path` is a glob from the copy's root over the
+   files the scope covers and no more: a module is its own path; a
+   namespace is its folder followed by `/**`; a host, a runner, or an
+   agent kind is the module that defines it, and a scope of several
+   modules is one entry each. `*` stays inside one folder, and `**`
+   spans folders. Append it to the copy's `pyproject.toml`
+   (`scaffold/acme_root/pyproject.toml` in the platform's own
+   repository, the root's in a product) when that has a
+   `[tool.distro-check]` table, and print it otherwise. Write no inline
+   ignore comment: the checker reads none.
 7. Tell the person to cite `ADR-NNNN` in a comment beside the code that
    deviates. A review reports the code under Deviations, and not as a
    finding, only when the ADR is cited there.
