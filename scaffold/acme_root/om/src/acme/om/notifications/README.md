@@ -20,6 +20,7 @@ of thing [Acme is made of](../../../../README.md).
   | A call held for approval | Decide the call | The members the tenant's policy lets decide its class |
   | A budget a person must raise | Raise the budget | The members who set budgets |
   | The account's funds | Top up | The members who set budgets |
+  | A call far above its session's norm | Approve the call | The members who approve such calls |
   | Any other park on a person | Answer the session | Its requester, or the members who manage the tenant when the requester holds no place |
 
   Each is told on every channel of theirs: the platform's own list, and
@@ -33,7 +34,9 @@ of thing [Acme is made of](../../../../README.md).
 - **Exactly the people who can clear it.** Nobody else hears of a park,
   and nobody who can clear it is left out.
 - **One action, one link.** A notification names the one action that
-  clears its park and links to it.
+  clears its park and links to its route in the API. Raising a budget,
+  topping up, and approving a call have no route yet: their
+  notifications name the park and carry no link.
 - **Once a park.** A park tells each person once on each channel, however
   often it is asked.
 - **A channel that is down leaves the list.** A post an integration

@@ -1,9 +1,13 @@
 """Notifications, as the platform runs them: a park that needs a person
 tells exactly the people who can clear it, on the platform's own list and
 on every account of theirs an integration holds, with the link to the one
-action that clears it. One test per park: a call held for approval, a
-budget a person must raise, and any other park on a person."""
+action that clears it, and only to a route the API's document holds. One
+test per park: a call held for approval, a budget a person must raise, a
+call far above its session's norm, and any other park on a person."""
 
+import json
+import re
+from collections.abc import Iterable
 from datetime import timedelta
 from pathlib import Path
 from uuid import UUID
@@ -15,6 +19,8 @@ from contracts.loops import reply, said, use
 from acme.om.agents.types.request import Start
 from acme.om.agents.types.run import LoopRun, RunEnd
 from acme.om.base import new_id, utcnow
+from acme.om.billing.rules import ANOMALY_UNLOCK, FUNDS_UNLOCK
+from acme.om.budgets.rules import OWN_AMOUNT_UNLOCK
 from acme.om.budgets.types.budget import Budget, BudgetScopeKind, WindowKind
 from acme.om.context import Role, TenantContext
 from acme.om.evidence.types.provenance import Provenance
@@ -51,6 +57,29 @@ def told(notifications: tuple[Notification, ...]) -> set[tuple[UUID, str]]:
     return {(n.recipient, n.channel) for n in notifications}
 
 
+DOCUMENT = Path(__file__).resolve().parents[3] / "clients" / "typescript" / "openapi.json"
+"""The API's committed document: every route it serves."""
+
+
+def routed(notifications: Iterable[Notification]) -> bool:
+    """Every link the notifications carry is a route the API serves, each
+    path parameter filled."""
+    paths = json.loads(DOCUMENT.read_text())["paths"]
+    routes = [re.compile(re.sub(r"\{[^/}]+\}", "[^/]+", path)) for path in paths]
+    return all(any(route.fullmatch(n.link) for route in routes) for n in notifications if n.link)
+
+
+async def parked_on(platform: Wired, requester: TenantContext, park: Park) -> LoopRun:
+    """A session of `requester`'s that a run parked on `park`."""
+    session_id = await platform.start(requester)
+    platform.anthropic.add(reply(said("On it.")))
+    ended = await run_after(platform, requester, session_id)
+    await platform.managers.agent_sessions.park(
+        platform.service, session_id, ended.epoch, new_id(), park
+    )
+    return LoopRun(session_id=session_id, epoch=ended.epoch, end=RunEnd.PARKED, park=park)
+
+
 async def test_a_call_held_for_approval_tells_its_eligible_approvers(platform: Wired) -> None:
     found = await people(platform)
     policy = await platform.managers.tools.get_policy(platform.owner)
@@ -69,6 +98,7 @@ async def test_a_call_held_for_approval_tells_its_eligible_approvers(platform: W
     (request,) = [s for s in await platform.history(session_id) if s.type is StepType.TOOL_REQUEST]
     link = f"/v1/agent-sessions/{session_id}/calls/{request.seq}/decision"
     assert {(n.action, n.link) for n in notified} == {("decide_call", link)}
+    assert routed(notified)
     # The chat post is the twin's, and says so on the record and the post.
     (posted,) = platform.chat.posted
     (by_chat,) = [n for n in notified if n.channel == "chat"]
@@ -112,9 +142,9 @@ async def test_a_budget_park_tells_who_sets_budgets(platform: Wired) -> None:
     notified = await platform.notifications.notify_park(platform.service, run)
     owner, admin = found[Role.OWNER].user_id, found[Role.ADMIN].user_id
     assert told(notified) == {(owner, PORTAL), (admin, PORTAL), (admin, "chat")}
-    assert {(n.action, n.link) for n in notified} == {
-        ("raise_budget", f"/v1/budgets/{budget.id}/amount")
-    }
+    # No route raises a budget yet: the notification names the budget.
+    assert {(n.action, n.link) for n in notified} == {("raise_budget", "")}
+    assert all(str(budget.id) in n.text for n in notified)
 
 
 async def test_a_park_on_a_person_tells_its_requester_alone(platform: Wired) -> None:
@@ -138,6 +168,49 @@ async def test_a_park_on_a_person_tells_its_requester_alone(platform: Wired) -> 
     assert {(n.action, n.link) for n in notified} == {
         ("deadline", f"/v1/agent-sessions/{started.id}/controls")
     }
+    assert routed(notified)
+
+
+async def test_a_call_far_above_its_norm_tells_who_approves_it_never_its_requester(
+    platform: Wired,
+) -> None:
+    found = await people(platform)
+    run = await parked_on(
+        platform, found[Role.MEMBER], Park(reason=ParkReason.PERSON, unlock=ANOMALY_UNLOCK)
+    )
+    notified = await platform.notifications.notify_park(platform.service, run)
+    owner, admin = found[Role.OWNER].user_id, found[Role.ADMIN].user_id
+    assert told(notified) == {(owner, PORTAL), (admin, PORTAL), (admin, "chat")}
+    assert {(n.action, n.link) for n in notified} == {("approve_call", "")}
+    (posted,) = platform.chat.posted
+    assert posted.text == next(n.text for n in notified if n.channel == "chat")
+
+
+async def test_every_link_a_notification_carries_is_a_route_of_the_api(
+    platform: Wired,
+) -> None:
+    """A park whose action the API serves links to that route; one whose
+    action has no route yet carries no link at all."""
+    found = await people(platform)
+    requester = found[Role.MEMBER]
+    unlocks = {
+        ParkReason.PERSON: ("deadline", ANOMALY_UNLOCK),
+        ParkReason.BUDGET: (OWN_AMOUNT_UNLOCK, FUNDS_UNLOCK, str(new_id())),
+    }
+    notified: list[Notification] = []
+    for reason, each in unlocks.items():
+        for unlock in each:
+            run = await parked_on(platform, requester, Park(reason=reason, unlock=unlock))
+            notified.extend(await platform.notifications.notify_park(platform.service, run))
+    assert {n.action for n in notified} == {
+        "deadline",
+        "approve_call",
+        OWN_AMOUNT_UNLOCK,
+        "top_up",
+        "raise_budget",
+    }
+    assert routed(notified)
+    assert {n.action for n in notified if not n.link} == {"approve_call", "top_up", "raise_budget"}
 
 
 async def test_a_park_that_clears_by_itself_tells_nobody(platform: Wired) -> None:

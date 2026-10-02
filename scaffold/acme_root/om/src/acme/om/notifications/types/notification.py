@@ -1,5 +1,6 @@
 """A notification: one person told, on one channel, that a parked session
-waits on them, with the link to the one action that clears the park."""
+waits on them, with the link to the one action that clears the park, when
+a route of the API serves it."""
 
 from uuid import UUID
 
@@ -18,11 +19,12 @@ MAX_TEXT = 2_000
 
 
 class Ask(Platform):
-    """What a park asks of people: the one action that clears it, its link,
-    what the notification says, and exactly who may take the action."""
+    """What a park asks of people: the one action that clears it, its link
+    (empty while no route of the API serves the action), what the
+    notification says, and exactly who may take the action."""
 
     action: Stored = Field(min_length=1, max_length=MAX_NAME)
-    link: Stored = Field(min_length=1, max_length=MAX_NAME)
+    link: Stored = Field(default="", max_length=MAX_NAME)
     text: Stored = Field(min_length=1, max_length=MAX_TEXT)
     recipients: tuple[UUID, ...]
 
@@ -40,7 +42,7 @@ class Notification(Identifiable, Created):
     reason: ParkReason
     unlock: Stored = Field(min_length=1, max_length=MAX_NAME)
     action: Stored = Field(min_length=1, max_length=MAX_NAME)
-    link: Stored = Field(min_length=1, max_length=MAX_NAME)
+    link: Stored = Field(default="", max_length=MAX_NAME)
     channel: Stored = Field(min_length=1, max_length=MAX_NAME)
     address: Stored = Field(default="", max_length=MAX_NAME)
     provenance: Provenance | None = None

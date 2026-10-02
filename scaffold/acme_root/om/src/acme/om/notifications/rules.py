@@ -9,9 +9,14 @@ take it:
   tenant's policy lets decide the call's class.
 - A budget a person must raise: raise it; the members who set budgets.
 - The account's funds: top up; the members who set budgets.
+- A call far above its session's norm: approve it; the members who
+  approve such calls.
 - Any other park on a person, or a call past its own amount: answer the
   session; its requester, or, when they hold no place now, the members
   who manage the tenant.
+
+A link names a route the API serves. An action no route serves yet
+carries none, and its text names the park instead.
 
 A park on a price waits for the platform's operator, whom no tenant's
 member stands in for, and tells nobody here."""
@@ -33,6 +38,10 @@ NOTIFIED = frozenset({ParkReason.PERSON, ParkReason.BUDGET})
 
 SETS_BUDGETS = Permission.MANAGE_MEMBERS
 """What raising a budget asks, as the budgets swimlane holds it."""
+
+APPROVES_CALLS = Permission.MANAGE_MEMBERS
+"""What approving a call past its session's norm asks, as billing holds it
+(`approve_call`)."""
 
 
 def needs_person(park: Park) -> bool:
@@ -83,11 +92,10 @@ def answer_link(session_id: UUID) -> str:
     return f"/v1/agent-sessions/{session_id}/controls"
 
 
-def budget_link(budget_id: UUID) -> str:
-    return f"/v1/budgets/{budget_id}/amount"
-
-
-TOP_UP_LINK = "/v1/billing/top-ups"
+NO_ROUTE = ""
+"""The link of an action no route of the API serves yet: raising a budget,
+topping up the account, and approving a call past its norm. Each such ask
+names its park in its text; it takes a link when its route comes."""
 
 
 def parked_step(history: Sequence[Step], park: Park) -> Step | None:

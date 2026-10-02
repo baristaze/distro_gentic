@@ -12,17 +12,17 @@ from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agents.loop_rules import APPROVAL_UNLOCK
 from acme.om.agents.types.run import LoopRun, RunEnd
 from acme.om.base import Platform, utcnow
-from acme.om.billing.rules import FUNDS_UNLOCK
+from acme.om.billing.rules import ANOMALY_UNLOCK, FUNDS_UNLOCK
 from acme.om.context import Permission, TenantContext
 from acme.om.evidence.types.provenance import Provenance
 from acme.om.intake import IntakeManagerInterface
 from acme.om.notifications.manager import NotificationsManagerInterface
 from acme.om.notifications.rules import (
+    APPROVES_CALLS,
+    NO_ROUTE,
     SETS_BUDGETS,
-    TOP_UP_LINK,
     answer_link,
     as_budget,
-    budget_link,
     decision_link,
     held_calls,
     holding,
@@ -134,8 +134,8 @@ class NotificationsManagerImpl(NotificationsManagerInterface):
             return [
                 Ask(
                     action="raise_budget",
-                    link=budget_link(budget),
-                    text=f"{title} waits for a raise of its budget.",
+                    link=NO_ROUTE,
+                    text=f"{title} waits for a raise of budget {budget}.",
                     recipients=holding_permission(members, SETS_BUDGETS),
                 )
             ]
@@ -143,9 +143,23 @@ class NotificationsManagerImpl(NotificationsManagerInterface):
             return [
                 Ask(
                     action="top_up",
-                    link=TOP_UP_LINK,
+                    link=NO_ROUTE,
                     text=f"{title} waits for funds: the account is spent.",
                     recipients=holding_permission(members, SETS_BUDGETS),
+                )
+            ]
+        if park.reason is ParkReason.PERSON and park.unlock == ANOMALY_UNLOCK:
+            # The requester cannot clear it: approving a call past its
+            # session's norm is billing's, and takes its permission.
+            return [
+                Ask(
+                    action="approve_call",
+                    link=NO_ROUTE,
+                    text=(
+                        f"{title}: a call costs far more than the session's others,"
+                        " and waits for your approval."
+                    ),
+                    recipients=holding_permission(members, APPROVES_CALLS),
                 )
             ]
         # Any other park on a person waits on the person who asked; one who
@@ -193,7 +207,7 @@ class NotificationsManagerImpl(NotificationsManagerInterface):
             if channel != PORTAL:
                 try:
                     posted = await self._integrations(channel).post(
-                        address, f"{ask.text} {ask.link}"
+                        address, f"{ask.text} {ask.link}" if ask.link else ask.text
                     )
                 except InfraException:
                     log.warning(
