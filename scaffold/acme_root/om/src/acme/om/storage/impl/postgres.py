@@ -244,6 +244,7 @@ class StoragePostgresImpl(StorageInterface):
 
     def get_project_storage(self) -> ProjectStorageInterface:
         return self._projects
+
     def get_retention_storage(self) -> RetentionStorageInterface:
         return self._retention
 

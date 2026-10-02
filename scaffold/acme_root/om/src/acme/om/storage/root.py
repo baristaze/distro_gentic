@@ -64,6 +64,8 @@ class StorageInterface(ABC):
 
     @abstractmethod
     def get_project_storage(self) -> ProjectStorageInterface: ...
+
+    @abstractmethod
     def get_retention_storage(self) -> RetentionStorageInterface: ...
 
     @abstractmethod
