@@ -1,5 +1,5 @@
 import logging
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
@@ -49,6 +49,10 @@ class WorkOptions(Platform):
     purge_batch: int = 1000  # items one purge statement deletes at most
 
 
+Lanes = Callable[[UUID, WorkItem], Awaitable[str]]
+"""The lane an item of a tenant is enqueued on, asked at every enqueue."""
+
+
 def caused_by(rctx: RequestContext, item: WorkItem) -> RequestContext:
     """The request stage a claim runs under: the one the worker minted for this
     claim, now naming the request that caused the work, read off the item. The
@@ -81,12 +85,16 @@ class WorkManagerImpl(WorkManagerInterface):
         events: EventsManagerInterface,
         topics: TopicsInterface,
         options: WorkOptions,
+        lanes: Lanes | None = None,
     ) -> None:
+        """`lanes` answers the lane an item goes to, at every enqueue, so no
+        producer picks it; None keeps the lane the item came with."""
         self._storage = storage
         self._tenancy = tenancy
         self._events = events
         self._topics = topics
         self._options = options
+        self._lanes = lanes
 
     async def enqueue(self, ctx: TenantContext, item: WorkItem) -> WorkItem:
         """The direct create, under a context: work a CLI, a sweep, or an app asks
@@ -124,9 +132,10 @@ class WorkManagerImpl(WorkManagerInterface):
         row's id and the same on every run of the relay. The request that
         caused the work and its trace context come from the row too, which
         names the request that made the write: the row is the whole handoff,
-        so nothing here is minted afresh. The lane is the
-        default one; a row carries no routing of its own. A kind whose payload
-        is a `ScheduledPayload` waits in the queue until its `not_before`."""
+        so nothing here is minted afresh. A row carries no routing of its own:
+        the lane is the one `lanes` answers, else the default one. A kind
+        whose payload is a `ScheduledPayload` waits in the queue until its
+        `not_before`."""
         kind = row.kind.removeprefix(WORK_ROW_PREFIX)
         if kind not in {k.value for k in WorkKind}:
             raise ValidationFailed(f"outbox row {row.id} asks for unknown work {row.kind}")
@@ -153,7 +162,7 @@ class WorkManagerImpl(WorkManagerInterface):
 
     async def _land(self, org_id: UUID, queued: WorkItem) -> WorkItem:
         """The insert both enqueues share: the payload against the shape its kind
-        fixes, the create, and the wake. Ids are minted above storage, so the
+        fixes, the lane `lanes` answers, the create, and the wake. Ids are minted above storage, so the
         only way to present one twice is a retry, and a retry must not create
         twice: the insert reports an id, or an idempotency key, already
         written and nothing changes, a claim on the row included, so the row
@@ -162,6 +171,8 @@ class WorkManagerImpl(WorkManagerInterface):
             WORK_PAYLOADS[queued.kind].model_validate(queued.payload)
         except ValidationError as error:
             raise ValidationFailed(f"payload of {queued.kind.value} work: {error}"[:500]) from None
+        if self._lanes is not None:
+            queued = queued.model_copy(update={"lane": await self._lanes(org_id, queued)})
         outcome = await self._storage.create_item(org_id, queued)
         if outcome is not InsertOutcome.INSERTED:
             return await self._stored(org_id, queued, outcome)
@@ -217,6 +228,10 @@ class WorkManagerImpl(WorkManagerInterface):
 
     async def fail(self, ctx: TenantContext, item: WorkItem, error: str) -> WorkItem:
         return await self._fail(ctx, item, error, is_exhausted(item))
+
+    async def claimed_ahead(self, ctx: TenantContext, item: WorkItem) -> int:
+        ctx.require(Permission.READ)
+        return await self._storage.count_claimed_ahead(ctx.org_id, item, utcnow())
 
     async def fail_for_good(self, ctx: TenantContext, item: WorkItem, error: str) -> WorkItem:
         return await self._fail(ctx, item, error, True)
