@@ -4,11 +4,12 @@ authority its calls run under, its workspace, and its layer of policy; the
 engine runs every one of them the same way.
 
 - The engineer takes an objective to a validated, reviewable change in a
-  workspace of its own, and ends through the result gate.
-- Analysis reads what a run produced in a workspace and turns it into
-  findings, through the same gate.
+  workspace of its own: it validates its committed head on a fresh
+  executor, and ends through the result gate, citing those runs.
+- Analysis reads what a run produced in a workspace, changes nothing, and
+  answers with findings.
 - The planner turns findings into tasks: it reads where sessions stand,
-  hands new engineering work to an engineer, and submits its plan.
+  hands new engineering work to an engineer, and answers with its plan.
 - The platform assistant answers the people who run their part of the
   platform, on their own permissions: it reads the corpus and live state,
   drafts configuration a person applies, and hands engineering work to an
@@ -35,6 +36,7 @@ READ_FILE = "read_file"
 WRITE_FILE = "write_file"
 RUN_COMMAND = "run_command"
 SUBMIT_RESULT = "submit_result"
+VALIDATE = "validate"
 SEARCH_CORPUS = "search_corpus"
 READ_SESSION = "read_session"
 DRAFT_TOOL_POLICY = "draft_tool_policy"
@@ -56,17 +58,18 @@ def allowing(*classes: ToolClass) -> PolicyLayer:
 ENGINEER_KIND = AgentKind(
     name=ENGINEER,
     version=1,
-    tools=(LIST_FILES, READ_FILE, WRITE_FILE, RUN_COMMAND, SUBMIT_RESULT),
+    tools=(LIST_FILES, READ_FILE, WRITE_FILE, RUN_COMMAND, VALIDATE, SUBMIT_RESULT),
     done_rule=DoneRule.RESULT_TOOL,
     result_tool=SUBMIT_RESULT,
     authority=AuthorityMode.STEADY,
     tree=TreeLimits(height=1, count=0),
     prompts=(
         "You are an engineer. You take one objective to a validated, reviewable change "
-        "in your workspace. Run the checks before you change anything, so the change has "
-        "a baseline. Change what the objective needs and nothing else, run the checks "
-        "again, and submit the result with submit_result, citing the tool responses that "
-        "show it. A failure you can explain with evidence is a result too.",
+        "in your workspace. Take a baseline with validate before you change anything. "
+        "Change what the objective needs and nothing else, commit it, and validate the "
+        "committed head. Submit the result with submit_result, citing the runs validate "
+        "answered: a success counts only when the validation at your head passed. A "
+        "failure you explain with those runs is a result too.",
     ),
     policy=allowing(ToolClass.READ, ToolClass.WRITE, ToolClass.EXECUTE),
     isolation=WORKSPACE,
@@ -75,15 +78,14 @@ ENGINEER_KIND = AgentKind(
 ANALYSIS_KIND = AgentKind(
     name=ANALYSIS,
     version=1,
-    tools=(LIST_FILES, READ_FILE, RUN_COMMAND, SUBMIT_RESULT),
-    done_rule=DoneRule.RESULT_TOOL,
-    result_tool=SUBMIT_RESULT,
+    tools=(LIST_FILES, READ_FILE, RUN_COMMAND),
+    done_rule=DoneRule.ANSWER,
     authority=AuthorityMode.STEADY,
     tree=TreeLimits(height=1, count=0),
     prompts=(
         "You read what a run produced (its logs, its telemetry, its recordings, its sensor "
-        "data) in your workspace, and turn it into findings. Change nothing. Each finding "
-        "cites the files and the commands that show it. Submit them with submit_result.",
+        "data) in your workspace, and turn it into findings. Change nothing. Answer with "
+        "the findings, each citing the files and the commands that show it.",
     ),
     policy=allowing(ToolClass.READ, ToolClass.EXECUTE),
     isolation=WORKSPACE,
@@ -92,17 +94,16 @@ ANALYSIS_KIND = AgentKind(
 PLANNER_KIND = AgentKind(
     name=PLANNER,
     version=1,
-    tools=(READ_SESSION, HAND_OFF, SUBMIT_RESULT),
-    done_rule=DoneRule.RESULT_TOOL,
-    result_tool=SUBMIT_RESULT,
+    tools=(READ_SESSION, HAND_OFF),
+    done_rule=DoneRule.ANSWER,
     authority=AuthorityMode.STEADY,
     tree=TreeLimits(height=1, count=0),
     prompts=(
         "You turn findings into tasks. For each task, decide whether an existing session "
         "should continue it or a new one should start: read where a session stands with "
         "read_session, and hand new engineering work to an engineer with "
-        "hand_off_to_engineer, with an objective that stands on its own. Submit the plan, "
-        "each task and the session it goes to, with submit_result.",
+        "hand_off_to_engineer, with an objective that stands on its own. Answer with the "
+        "plan: each task and the session it goes to.",
     ),
     policy=allowing(ToolClass.READ, ToolClass.SPAWN),
 )

@@ -11,6 +11,7 @@ from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agents import AgentsManagerInterface
 from acme.om.agents.types.kind import AgentKind
 from acme.om.base import Platform
+from acme.om.evidence import EvidenceManagerInterface
 from acme.om.exceptions import UnsafeConfiguration
 from acme.om.platform_agents import kinds, rules
 from acme.om.platform_agents.tools import (
@@ -22,6 +23,7 @@ from acme.om.platform_agents.tools import (
     RunCommandImpl,
     SearchCorpusImpl,
     SubmitResultImpl,
+    ValidateImpl,
     WriteFileImpl,
 )
 from acme.om.platform_agents.types.corpus import Corpus, Document
@@ -63,6 +65,7 @@ def with_shipped(
     sessions: Callable[[], AgentSessionsManagerInterface],
     policies: Callable[[], ToolsManagerInterface],
     agents: Callable[[], AgentsManagerInterface],
+    evidence: Callable[[], EvidenceManagerInterface],
 ) -> tuple[ToolInterface, ...]:
     """The platform's tools, then the adopter's. The managers come late, as
     callables the root answers once it has built them."""
@@ -71,6 +74,7 @@ def with_shipped(
         ReadFileImpl.SPEC,
         WriteFileImpl.SPEC,
         RunCommandImpl.SPEC,
+        ValidateImpl.SPEC,
         SubmitResultImpl.SPEC,
         SearchCorpusImpl.SPEC,
         ReadSessionImpl.SPEC,
@@ -85,6 +89,7 @@ def with_shipped(
         ReadFileImpl(),
         WriteFileImpl(),
         RunCommandImpl(),
+        ValidateImpl(evidence),
         SubmitResultImpl(),
         SearchCorpusImpl(shipped.corpus),
         ReadSessionImpl(sessions),

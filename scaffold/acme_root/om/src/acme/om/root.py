@@ -345,6 +345,7 @@ def build_managers(
             sessions=lambda: managers.agent_sessions,
             policies=lambda: managers.tools,
             agents=lambda: managers.agents,
+            evidence=lambda: managers.evidence,
         )
         refuse_reach(agent_kinds, tool_catalog)
     # The relay every core-role manager hands its outbox rows to. It reaches

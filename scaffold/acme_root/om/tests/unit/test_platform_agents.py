@@ -11,13 +11,17 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
+from contracts.evidence import ScriptedExecutor
+from contracts.evidence_storage import make_policy
 from contracts.loops import reply, said
-from contracts.platform_agents import CORPUS, Platform, calls, platform_over
+from contracts.platform_agents import CORPUS, Later, Platform, calls, platform_over
 
 from acme.infra.impl.local import InfraLocalImpl
-from acme.infra.workspaces import IsolationMode
+from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
+from acme.integrations.model_providers.calls import ModelCall, ModelReply
 from acme.om.agent_sessions.types.agent_session import SessionStatus
-from acme.om.agents.types.kind import DoneRule
+from acme.om.agents.types.kind import AgentKind, DoneRule
+from acme.om.agents.types.result import Claim
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.base import new_id, utcnow
 from acme.om.context import (
@@ -30,6 +34,8 @@ from acme.om.context import (
     TenantContext,
     build_context,
 )
+from acme.om.evidence.impl.ports import WorkProductMemoryImpl
+from acme.om.evidence.types.validation import Delivery
 from acme.om.exceptions import NotAuthorized, NotFound, PreconditionFailed, UnsafeConfiguration
 from acme.om.placement.rules import lab_lane
 from acme.om.placement.types.claimant import Claimant, ClaimantKind
@@ -40,9 +46,15 @@ from acme.om.platform_agents.catalog import (
     refuse_reach,
     with_shipped,
 )
-from acme.om.platform_agents.kinds import ENGINEER_KIND, PLATFORM_ASSISTANT_KIND, SHIPPED
+from acme.om.platform_agents.kinds import (
+    ANALYSIS_KIND,
+    ENGINEER_KIND,
+    PLATFORM_ASSISTANT_KIND,
+    SHIPPED,
+)
 from acme.om.platform_agents.types.validation import ValidationStart, ValidationStatus
 from acme.om.root import build_managers
+from acme.om.steps.types.content import TextBlock, ToolResultBlock
 from acme.om.steps.types.header import LoopOutcome, ToolFailure
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import permissions_of
@@ -71,6 +83,7 @@ def shipped_catalog() -> tuple[ToolInterface, ...]:
         sessions=unbound,  # pyright: ignore[reportArgumentType]
         policies=unbound,  # pyright: ignore[reportArgumentType]
         agents=unbound,  # pyright: ignore[reportArgumentType]
+        evidence=unbound,  # pyright: ignore[reportArgumentType]
     )
 
 
@@ -121,9 +134,120 @@ def test_every_shipped_agent_is_a_profile_that_sets_its_powers() -> None:
         assert set(kind.tools) <= set(classes), f"{kind.name} names a tool the catalog lacks"
         assert kind.prompts, f"{kind.name} carries its prompts"
     delivering = {kind.name for kind in SHIPPED if kind.done_rule is DoneRule.RESULT_TOOL}
-    assert delivering == {"engineer", "analysis", "planner"}
+    assert delivering == {"engineer"}, "only the engineer changes a work product"
+    assert kinds.VALIDATE in ENGINEER_KIND.tools
     assert ENGINEER_KIND.isolation.mode is IsolationMode.CONTAINER
     assert {classes[tool] for tool in ENGINEER_KIND.tools} >= {"write", "execute"}
+
+
+# Each shipped kind reaches an accepted end; the engineer's success only on
+# a passing validation at its head.
+
+TWIN = IsolationSpec(mode=IsolationMode.TWIN, egress=EgressPolicy(mode=EgressMode.NONE))
+"""The workspace this suite prepares, in place of a container."""
+
+
+def on_the_twin(kind: AgentKind) -> AgentKind:
+    """The shipped profile, whole, in the workspace this suite can prepare."""
+    return kind.model_copy(update={"version": kind.version + 1, "isolation": TWIN})
+
+
+def all_fail(check: str, trial: int) -> str:
+    return "failed"
+
+
+def citing(claim: Claim) -> Later:
+    """The engineer's turn that submits `claim`, citing the runs the last
+    validation it read answered."""
+
+    def turn(call: ModelCall) -> ModelReply:
+        runs: list[str] = []
+        for message in call.messages:
+            for block in message.blocks:
+                if isinstance(block, ToolResultBlock):
+                    for part in block.parts:
+                        if isinstance(part, TextBlock) and '"runs"' in part.text:
+                            runs = json.loads(part.text)["runs"]
+        return reply(
+            calls(kinds.SUBMIT_RESULT, f"use_{claim.value}", claim=claim.value, evidence=runs)
+        )
+
+    return turn
+
+
+@pytest.fixture
+def evidenced(tmp_path: Path) -> tuple[Platform, ScriptedExecutor, WorkProductMemoryImpl]:
+    executor = ScriptedExecutor(capabilities=frozenset())
+    work = WorkProductMemoryImpl()
+    platform = platform_over(
+        tmp_path,
+        kinds=(on_the_twin(ENGINEER_KIND), on_the_twin(ANALYSIS_KIND)),
+        executor=executor,
+        work_product=work,
+    )
+    return platform, executor, work
+
+
+async def an_engineer(platform: Platform, work: WorkProductMemoryImpl) -> UUID:
+    """An engineer session whose work product changed `src/` and is
+    committed, in a project whose policy requires its unit check there."""
+    session_id = await platform.start(kinds.ENGINEER)
+    delivery = Delivery(project="reports", base="b1", head="c2", changed=("src/report.py",))
+    work.deliver(platform.owner.org_id, session_id, delivery)
+    await platform.say(session_id, "The weekly report misses its total. Fix it.")
+    return session_id
+
+
+async def test_the_engineers_success_needs_a_passing_validation_at_its_head(
+    evidenced: tuple[Platform, ScriptedExecutor, WorkProductMemoryImpl],
+) -> None:
+    platform, executor, work = evidenced
+    await platform.managers.evidence.write_policy(platform.owner, make_policy("reports"))
+
+    # No validation at its head, then a failing one: no success counts, and
+    # a failure explained by the runs is an accepted end.
+    executor.outcome = all_fail
+    failing = await an_engineer(platform, work)
+    platform.anthropic.add(
+        reply(calls(kinds.SUBMIT_RESULT, "use_bare", claim="succeeded", evidence=[])),
+        reply(calls(kinds.VALIDATE, "use_validate")),
+        citing(Claim.SUCCEEDED),
+        citing(Claim.FAILED),
+    )
+    run = await platform.managers.loop.run(platform.owner, failing)
+    assert run.outcome is LoopOutcome.FAILED
+    failure, text = await platform.answer(failing, "use_bare")
+    assert failure is ToolFailure.DENIED and "cites its evidence" in text
+    failure, text = await platform.answer(failing, "use_succeeded")
+    assert failure is ToolFailure.DENIED and "did not pass" in text
+
+    # A passing validation at its head: the success is accepted, verified.
+    executor.outcome = lambda check, trial: "passed"
+    passing = await an_engineer(platform, work)
+    platform.anthropic.add(reply(calls(kinds.VALIDATE, "use_validate")), citing(Claim.SUCCEEDED))
+    run = await platform.managers.loop.run(platform.owner, passing)
+    assert run.outcome is LoopOutcome.SUCCEEDED
+    failure, text = await platform.answer(passing, "use_succeeded")
+    assert failure is None and "verified" in text and "unverified" not in text
+    assert [request.version for request in executor.requests] == ["c2", "c2"]
+
+
+async def test_analysis_the_planner_and_the_assistant_end_by_their_answer(
+    evidenced: tuple[Platform, ScriptedExecutor, WorkProductMemoryImpl],
+) -> None:
+    platform, _, _ = evidenced
+    for kind, answer in (
+        (kinds.ANALYSIS, "Finding: the total is dropped when a week has no rows (report.log)."),
+        (kinds.PLANNER, "Plan: one task, a new engineer session for the dropped total."),
+        (kinds.PLATFORM_ASSISTANT, "A session waits while its tenant is at its share."),
+    ):
+        session_id = await platform.start(kind)
+        await platform.say(session_id, "Go on.")
+        platform.anthropic.add(reply(said(answer)))
+        run = await platform.managers.loop.run(platform.owner, session_id)
+        assert run.outcome is LoopOutcome.SUCCEEDED, kind
+        steps = await platform.history(session_id)
+        assert answer in [step.as_text() for step in steps], kind
 
 
 # Check 1: the assistant holds no workspace, repository, shell, or station

@@ -24,6 +24,8 @@ from acme.om.agents.types.request import MAX_TITLE, Handoff
 from acme.om.agents.types.result import Claim
 from acme.om.base import Platform
 from acme.om.context import TenantContext
+from acme.om.evidence import EvidenceManagerInterface
+from acme.om.evidence.types.record import RunPurpose
 from acme.om.exceptions import ToolFailed
 from acme.om.platform_agents import kinds, rules
 from acme.om.platform_agents.types.corpus import Corpus, Passage
@@ -203,8 +205,9 @@ class SubmitResultImpl(NativeToolImpl):
     SPEC = ToolSpec(
         name=kinds.SUBMIT_RESULT,
         description=(
-            "Submits the result: succeeded or failed, with the ids of the tool responses "
-            "that show it. A success with no evidence is refused."
+            "Submits the result: succeeded or failed, with the ids of the runs that show "
+            "it, the ones validate answered. The gate judges them: a success counts only "
+            "when the validation at your committed head passed."
         ),
         input_model=ResultInput,
         output_model=Text,
@@ -219,6 +222,52 @@ class SubmitResultImpl(NativeToolImpl):
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
     ) -> Platform:
         raise ToolFailed(ToolFailure.PERMANENT, "a result is judged by the loop, never run")
+
+
+class ValidateInput(ToolInput):
+    baseline: bool = False
+
+
+class Validated(Platform):
+    validation_id: UUID
+    version: str
+    runs: tuple[UUID, ...]
+
+
+class ValidateImpl(NativeToolImpl):
+    """Asks the evidence namespace to run the project's checks on a fresh
+    executor: at the base for a baseline, or at the committed head. It
+    answers the runs the executor wrote, which a result cites; the result
+    gate, never this tool, decides whether they pass."""
+
+    SPEC = ToolSpec(
+        name=kinds.VALIDATE,
+        description=(
+            "Runs the project's checks on a fresh executor, apart from your workspace: at "
+            "your committed head, or at the base with baseline set. Answers the ids of the "
+            "runs it wrote, which submit_result cites. Commit first: a dirty tree is refused."
+        ),
+        input_model=ValidateInput,
+        output_model=Validated,
+        timeout=timedelta(minutes=30),
+        authorization_class=ToolClass.EXECUTE,
+        effect=Effect.UNSAFE,
+        interruptible=False,
+        mode=ToolMode.SYNC,
+    )
+
+    def __init__(self, evidence: Callable[[], EvidenceManagerInterface]) -> None:
+        self._evidence = evidence
+
+    async def run(
+        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
+    ) -> Platform:
+        assert isinstance(call_input, ValidateInput)
+        purpose = RunPurpose.BASELINE if call_input.baseline else RunPurpose.VALIDATION
+        validation = await self._evidence().validate(ctx, runtime.session_id, purpose)
+        return Validated(
+            validation_id=validation.id, version=validation.version, runs=validation.records
+        )
 
 
 # The assistant's.

@@ -3,22 +3,29 @@ and tools, the scripted model of each provider, and what the suites read
 back. Nothing here reaches a network, and no case waits on the wall
 clock."""
 
+from collections import deque
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
 from uuid import UUID
 
+from pydantic import SecretStr
+
 from acme.infra.impl.local import InfraLocalImpl
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
 from acme.integrations.impl.configured import IntegrationsOverImpl
+from acme.integrations.model_providers.calls import ModelCall, ModelReply, StreamPart
 from acme.integrations.model_providers.registry import ModelProvidersOverImpl
-from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl
+from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl, ScriptedFailure
 from acme.integrations.model_providers.types import ProviderName
 from acme.om.agents.impl.loop import LoopOptions
+from acme.om.agents.types.kind import AgentKind
 from acme.om.agents.types.request import Start
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import new_id
 from acme.om.context import Role, TenantContext
+from acme.om.evidence import ExecutorInterface, WorkProductInterface
 from acme.om.platform_agents.catalog import PlatformAgents
 from acme.om.platform_agents.rules import TENANT_USERS
 from acme.om.platform_agents.types.corpus import Corpus, Document
@@ -45,11 +52,37 @@ SESSIONS_GUIDE = Document(
 CORPUS = Corpus(audience=TENANT_USERS, documents=(SESSIONS_GUIDE,))
 
 
+Later = Callable[[ModelCall], ModelReply]
+"""A turn made when its call comes, from what the model reads in it."""
+
+
+class ModelProviderReadingImpl(ModelProviderScriptedImpl):
+    """The scripted twin, whose turns may also be made when their call
+    comes: a turn that cites what a tool answered, which no script knows
+    before the tool runs."""
+
+    def __init__(self, provider: ProviderName) -> None:
+        super().__init__(provider)
+        self._turns: deque[ModelReply | ScriptedFailure | Later] = deque()
+
+    def add(self, *turns: ModelReply | ScriptedFailure | Later) -> None:
+        self._turns.extend(turns)
+
+    async def stream(
+        self, call: ModelCall, *, credential: SecretStr | None = None
+    ) -> AsyncIterator[StreamPart]:
+        if self._turns:
+            turn = self._turns.popleft()
+            ModelProviderScriptedImpl.add(self, turn if not callable(turn) else turn(call))
+        async for part in super().stream(call, credential=credential):
+            yield part
+
+
 @dataclass
 class Platform:
     storage: StorageInterface
     managers: Managers
-    anthropic: ModelProviderScriptedImpl
+    anthropic: ModelProviderReadingImpl
     openai: ModelProviderScriptedImpl
     owner: TenantContext
 
@@ -97,12 +130,17 @@ def platform_over(
     storage: StorageInterface | None = None,
     owner: TenantContext | None = None,
     corpus: Corpus = CORPUS,
+    kinds: tuple[AgentKind, ...] = (),
+    executor: ExecutorInterface | None = None,
+    work_product: WorkProductInterface | None = None,
 ) -> Platform:
     """The managers with the platform's agents shipped over `corpus`, each
     principal a member of the tenant at every call. `storage` None is the
     memory storage, and `owner` None a fresh tenant's owner; a suite over
-    Postgres hands in both."""
-    anthropic = ModelProviderScriptedImpl(ProviderName.ANTHROPIC)
+    Postgres hands in both. `kinds` are the adopter's beside the shipped
+    ones, and `executor` and `work_product` the evidence's ports, None the
+    root's own."""
+    anthropic = ModelProviderReadingImpl(ProviderName.ANTHROPIC)
     openai = ModelProviderScriptedImpl(ProviderName.OPENAI)
     providers = ModelProvidersOverImpl(
         {ProviderName.ANTHROPIC: anthropic, ProviderName.OPENAI: openai}
@@ -115,6 +153,9 @@ def platform_over(
         principal_context=live,
         loop_options=LoopOptions(control_poll=timedelta(milliseconds=1)),
         platform_agents=PlatformAgents(corpus=corpus),
+        agent_kinds=kinds,
+        executor=executor,
+        work_product=work_product,
     )
     owner = owner or context(Role.OWNER, make_org())
     return Platform(storage, managers, anthropic, openai, owner)
