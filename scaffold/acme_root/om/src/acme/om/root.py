@@ -84,6 +84,8 @@ from acme.om.retention.impl.projects import SessionProjectNullImpl
 from acme.om.retention.impl.sessions import AgentSessionsRetainedImpl
 from acme.om.retention.keys import TenantKeysInterface
 from acme.om.retention.projects import SessionProjectInterface
+from acme.om.stations import StationsManagerInterface
+from acme.om.stations.impl.manager import StationsManagerImpl, StationsOptions
 from acme.om.steps import StepsManagerInterface
 from acme.om.steps.impl.manager import StepsManagerImpl, StepsOptions
 from acme.om.steps.storage import StepStorageInterface
@@ -143,6 +145,7 @@ class Managers:
     placement: PlacementManagerInterface
     placement_operator: PlacementOperatorManagerInterface
     hosts: HostsManagerInterface
+    stations: StationsManagerInterface
 
 
 LOCAL = "local"
@@ -279,6 +282,7 @@ def build_managers(
     loop_options: LoopOptions | None = None,
     placement_options: PlacementOptions | None = None,
     hosts_options: HostsOptions | None = None,
+    stations_options: StationsOptions | None = None,
     environment: str = LOCAL,
     tenant_keys: TenantKeysInterface | None = None,
     session_projects: SessionProjectInterface | None = None,
@@ -342,6 +346,9 @@ def build_managers(
     and the delay a loop over its share waits; None keeps the defaults.
     `hosts_options` is the lives of a host's credentials, the window a host
     counts as online, and its claim's lease; None keeps the defaults.
+    `stations_options` is the lives of a daemon's credentials, the margin a
+    lease that ran out waits before its station is granted again, and how
+    long a renewal holds a station; None keeps the defaults.
 
     The platform's retention takes three. `tenant_keys` says whose key
     service holds each tenant's keys; None is infra's for every tenant, and
@@ -644,6 +651,19 @@ def build_managers(
             tenancy,
             outbox,
             hosts_options or HostsOptions(),
+        ),
+        # The line a session waits in for a station, the lease a grant gives,
+        # and a lab daemon's calls: its claims through placement, its
+        # renewals, and its runs' records through evidence.
+        stations=StationsManagerImpl(
+            storage.get_stations_storage(),
+            placement,
+            agent_sessions,
+            evidence,
+            work,
+            tenancy,
+            outbox,
+            stations_options or StationsOptions(),
         ),
     )
     return managers

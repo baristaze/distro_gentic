@@ -17,6 +17,7 @@ from acme.om.outbox.storage import OutboxStorageInterface
 from acme.om.placement.storage import PlacementStorageInterface
 from acme.om.privacy.storage import PrivacyStorageInterface
 from acme.om.retention.storage import RetentionStorageInterface
+from acme.om.stations.storage import StationsStorageInterface
 from acme.om.steps.storage import StepStorageInterface
 from acme.om.tenancy.storage import TenancyStorageInterface
 from acme.om.tools.storage import ToolStorageInterface
@@ -91,6 +92,9 @@ class StorageInterface(ABC):
 
     @abstractmethod
     def get_hosts_storage(self) -> HostsStorageInterface: ...
+
+    @abstractmethod
+    def get_stations_storage(self) -> StationsStorageInterface: ...
 
     @abstractmethod
     async def healthcheck(self) -> bool: ...
