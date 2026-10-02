@@ -79,8 +79,8 @@ and name the refresh the preamble gives.
    Any other code, or an answer that is empty or not JSON, ends the run
    the same way, naming it. The read is not made a second time.
 4. Find the cause: the first row of this table whose condition holds,
-   read top to bottom. `now` is the time of step 3, and a time compares
-   against it.
+   read top to bottom. `now` is this machine's clock when step 3 runs,
+   and a time compares against it.
 
    | Condition | Cause | Next |
    |---|---|---|
@@ -89,7 +89,7 @@ and name the refresh the preamble gives.
    | `loop.status` is `claimed`, `loop.lease_expires_at` before now | Its runner died holding the loop; the sweep requeues it under a new writer epoch at its next pass | `ops-investigate` if it lasts past a sweep interval |
    | `loop.status` is `failed` | The loop's item failed for good, a dead letter | a person runs `uv run acme-ops work requeue` |
    | `status` is `parked`, `park.retry_at` before now | Its retry time passed and nothing woke it | `ops-investigate`: the sweep's wake |
-   | `status` is `parked`, `park.reason` is `provider` | A provider fails for its credential; `park.unlock` names it, and `park.retry_at` is when it tries again by itself | `ops-provider-outage` |
+   | `status` is `parked`, `park.reason` is `provider` | A provider fails for the credential the session calls it with; `park.unlock` names the provider and the error's kind, and `park.retry_at` is when it tries again by itself | `ops-provider-outage` |
    | `status` is `parked`, `park.reason` is `budget` | The gate refused its spend; `park.unlock` names the funds or the limit | the tenant raises its limit or its funds, on its own screens |
    | `status` is `parked`, `park.reason` is `resource`, `pool_id` set, `hosts_online` is 0 | Its pool has no host online, so its workspace waits | `ops-host-idle` for the pool's hosts |
    | `status` is `parked`, `park.reason` is `resource`, `park.unlock` names a station | It waits in a station's line | `ops-station-idle` |
