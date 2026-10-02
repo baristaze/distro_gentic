@@ -34,6 +34,7 @@ from acme.om.platform_agents.impl.manager import PlatformAgentsOptions
 from acme.om.playbooks.impl.manager import PlaybooksOptions
 from acme.om.playbooks.root import PlaybooksLayer
 from acme.om.projects.impl.manager import ProjectsOptions
+from acme.om.relay.impl.manager import RelayOptions
 from acme.om.retention.impl.manager import RetentionOptions
 from acme.om.root import Managers, build_managers
 from acme.om.stations.impl.manager import StationsOptions
@@ -127,6 +128,7 @@ def worker_managers(
         hosts_options=HostsOptions(purge_batch=batch),
         platform_agents_options=PlatformAgentsOptions(purge_batch=batch),
         projects_options=ProjectsOptions(purge_batch=batch),
+        relay_options=RelayOptions(purge_batch=batch),
         stations_options=StationsOptions(purge_batch=batch),
         workspaces_options=WorkspacesOptions(purge_batch=batch),
     )

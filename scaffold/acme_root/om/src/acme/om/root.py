@@ -9,6 +9,7 @@ from uuid import UUID
 from acme.infra.base import QuietNull
 from acme.infra.cache import CacheInterface, CacheScope
 from acme.infra.root import InfraInterface
+from acme.infra.transports import TransportInterface
 from acme.integrations.identity import IdentityProviderInterface
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
 from acme.integrations.model_providers.registry import absent_model_providers
@@ -83,6 +84,9 @@ from acme.om.projects import ProjectsManagerInterface
 from acme.om.projects.impl.manager import ProjectsManagerImpl, ProjectsOptions
 from acme.om.projects.impl.retention import SessionProjectBoundImpl
 from acme.om.projects.impl.sessions import AgentSessionsInProjectImpl
+from acme.om.relay import RelayManagerInterface
+from acme.om.relay.impl.manager import RelayManagerImpl, RelayOptions
+from acme.om.relay.impl.placement import PlacementClaimsRelayedImpl
 from acme.om.retention import RetentionManagerInterface
 from acme.om.retention.impl.keys import (
     KeyServiceByTenantImpl,
@@ -167,6 +171,7 @@ class Managers:
     placement_operator: PlacementOperatorManagerInterface
     workspaces: WorkspacesManagerInterface
     hosts: HostsManagerInterface
+    relay: RelayManagerInterface
     platform_agents: PlatformAgentsManagerInterface
     projects: ProjectsManagerInterface
     stations: StationsManagerInterface
@@ -195,13 +200,15 @@ def refuse_quiet_nulls(environment: str, *capabilities: object) -> None:
 async def purge_held(
     managers: Managers, org_id: UUID, session_id: UUID, tree_id: UUID | None
 ) -> None:
-    """What the windows, the tools, attribution, the evidence, the projects,
-    and the agents hold of a session the sweep purges: its artifacts, and
-    its workspace with its transport's records, which go with its history,
+    """What the windows, the tools, the relay, attribution, the evidence, the
+    projects, and the agents hold of a session the sweep purges: its
+    artifacts, its workspace with its transport's records, and its relayed
+    exec items with their output, which go with its history,
     its authority, its runs, its project's row, and its tree when it was
     the tree's last session."""
     await managers.windows.purge_artifacts(org_id, session_id)
     await managers.tools.purge_workspace(org_id, session_id)
+    await managers.relay.purge_session(org_id, session_id)
     await managers.attribution.purge_authority(org_id, session_id)
     await managers.evidence.purge_session(org_id, session_id)
     await managers.projects.purge_session(org_id, session_id)
@@ -315,6 +322,8 @@ def build_managers(
     workspace_git: WorkspaceGitInterface | None = None,
     workspace_reader: RepositoryReaderInterface | None = None,
     hosts_options: HostsOptions | None = None,
+    relay_options: RelayOptions | None = None,
+    transport_layer: Callable[[TransportInterface], TransportInterface] | None = None,
     platform_agents_options: PlatformAgentsOptions | None = None,
     platform_agents: PlatformAgents | None = None,
     stations_options: StationsOptions | None = None,
@@ -390,6 +399,11 @@ def build_managers(
     and the delay a loop over its share waits; None keeps the defaults.
     `hosts_options` is the lives of a host's credentials, the window a host
     counts as online, and its claim's lease; None keeps the defaults.
+    `relay_options` is the lease a host renews on an `exec` item and the
+    bounds of its output; None keeps the defaults. `transport_layer` wraps
+    the transport infra chose before the tools take it: the session runner
+    puts the relay behind it for a session inside its tenant's wall. None
+    takes infra's transport as it is.
     `stations_options` is the lives of a daemon's credentials, the margin a
     lease that ran out waits before its station is granted again, and how
     long a renewal holds a station; None keeps the defaults.
@@ -672,6 +686,7 @@ def build_managers(
     if PROTECTED_CEILING not in tool_options.ceilings.rules:
         ceilings = PolicyLayer(rules=(*tool_options.ceilings.rules, PROTECTED_CEILING))
         tool_options = tool_options.model_copy(update={"ceilings": ceilings})
+    transport = infra.get_transport()
     engine_tools = ToolsManagerImpl(
         storage.get_tool_storage(),
         steps,
@@ -679,7 +694,7 @@ def build_managers(
         events,
         outbox,
         infra.get_workspaces(),
-        infra.get_transport(),
+        transport if transport_layer is None else transport_layer(transport),
         tool_options,
         keyed_hash=privacy.keyed_hash,
         record_seal=records,
@@ -721,6 +736,18 @@ def build_managers(
         work,
         tenancy,
         placement_options or PlacementOptions(),
+    )
+    # A host's credential, its claims through placement, and where each
+    # session runs. An exec item a claim takes is started by the relay before
+    # it reaches a host; the relay is built below, so the edge is bound at
+    # call time.
+    hosts = HostsManagerImpl(
+        storage.get_hosts_storage(),
+        PlacementClaimsRelayedImpl(placement, lambda: managers.relay),
+        agent_sessions,
+        tenancy,
+        outbox,
+        hosts_options or HostsOptions(),
     )
     # The validation sessions: station work on the queue, with no agent.
     platform = PlatformAgentsManagerImpl(
@@ -796,15 +823,20 @@ def build_managers(
             infra.get_topics(),
         ),
         workspaces=workspaces,
-        # A host's credential, its claims through placement, and where each
-        # session runs.
-        hosts=HostsManagerImpl(
-            storage.get_hosts_storage(),
-            placement,
-            agent_sessions,
+        hosts=hosts,
+        # A tool call into a customer's wall as keyed exec work: its items,
+        # their output sealed under the session's key as its commands' records
+        # are, and the control messages that stop them.
+        relay=RelayManagerImpl(
+            storage.get_relay_storage(),
+            work,
+            steps,
             tenancy,
+            hosts,
+            projects,
             outbox,
-            hosts_options or HostsOptions(),
+            records,
+            relay_options or RelayOptions(),
         ),
         platform_agents=platform,
         projects=projects,

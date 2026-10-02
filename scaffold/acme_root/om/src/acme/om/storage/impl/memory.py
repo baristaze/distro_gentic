@@ -50,6 +50,8 @@ from acme.om.privacy.storage import PrivacyStorageInterface
 from acme.om.privacy.storage.impl.memory import PrivacyStorageMemoryImpl
 from acme.om.projects.storage import ProjectStorageInterface
 from acme.om.projects.storage.impl.memory import ProjectStorageMemoryImpl
+from acme.om.relay.storage import RelayStorageInterface
+from acme.om.relay.storage.impl.memory import RelayStorageMemoryImpl
 from acme.om.retention.storage import RetentionStorageInterface
 from acme.om.retention.storage.impl.memory import RetentionStorageMemoryImpl
 from acme.om.stations.storage import StationsStorageInterface
@@ -106,6 +108,7 @@ class StorageMemoryImpl(StorageInterface):
         self._playbook = PlaybookStorageMemoryImpl(self._outbox)
         self._knowledge = KnowledgeStorageMemoryImpl(self._outbox)
         self._platform_agents = PlatformAgentsStorageMemoryImpl(self._outbox)
+        self._relay = RelayStorageMemoryImpl(self._outbox)
         self._stations = StationsStorageMemoryImpl(self._outbox)
         self._workspaces = WorkspaceStorageMemoryImpl(self._outbox)
         self._matrix = MatrixStorageMemoryImpl()
@@ -200,6 +203,9 @@ class StorageMemoryImpl(StorageInterface):
 
     def get_platform_agents_storage(self) -> PlatformAgentsStorageInterface:
         return self._platform_agents
+
+    def get_relay_storage(self) -> RelayStorageInterface:
+        return self._relay
 
     def get_stations_storage(self) -> StationsStorageInterface:
         return self._stations

@@ -10,13 +10,17 @@ import logging
 
 from acme.infra.impl.configured import InfraConfiguredImpl
 from acme.infra.root import InfraInterface
+from acme.infra.transports import TransportInterface
 from acme.integrations.impl.configured import IntegrationsConfiguredImpl
 from acme.integrations.root import IntegrationsInterface
 from acme.om.agents.types.kind import AgentKind
 from acme.om.base import new_id
+from acme.om.context import AppContext, AppType, RequestContext
 from acme.om.evidence import ExecutorInterface, WorkProductInterface
 from acme.om.hosts.impl.placement import PlacementHostsImpl
 from acme.om.playbooks.root import PlaybooksLayer
+from acme.om.relay.impl.placement import PlacementRelayedImpl
+from acme.om.relay.impl.transport import TransportPlacedImpl, TransportRelayImpl
 from acme.om.root import Managers, build_managers
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
@@ -99,24 +103,39 @@ class RunnerContainer:
     ) -> RunnerContainer:
         """The managers over whichever roots the caller chose, every tool call
         held to the trust swimlane's rules: audited with its four answers,
-        this runner its executor, and refused a secret that would cross its
-        session's wall. A session pinned to its tenant's hosts is inside the
-        wall, its sub-agents with it, and none of their calls runs on this
-        runner."""
+        and refused a secret that would cross its session's wall. A session
+        in the cloud runs on this runner, its executor, through infra's
+        transport. A session pinned to its tenant's hosts is inside the wall,
+        its sub-agents with it: none of their calls runs on this runner. Each
+        travels as exec work to the host that holds its workspace, its
+        executor, and until one does it is refused."""
         runner = Executor(kind=ExecutorKind.CLOUD, credential_id=new_id(), label=settings.runner_id)
-        trust = TrustLayer(
-            storage,
-            infra,
-            placement=PlacementHostsImpl(
+        placement = PlacementRelayedImpl(
+            PlacementHostsImpl(
                 storage.get_hosts_storage(), storage.get_agent_session_storage(), runner
             ),
-            probe=KeyProbeAbsentImpl(),
+            storage.get_relay_storage(),
         )
+        trust = TrustLayer(storage, infra, placement=placement, probe=KeyProbeAbsentImpl())
         playbooks = PlaybooksLayer(storage)
 
         def layers(inner: ToolsManagerInterface) -> ToolsManagerInterface:
             # The wall and the audit first, then the session's playbook gates.
             return playbooks.tools(trust.tools(inner))
+
+        app = AppContext(type=AppType.WORKER, version=f"{settings.service_name}@{settings.version}")
+        built: list[Managers] = []
+
+        def stage() -> RequestContext:
+            """The request stage each relayed operation runs under, minted
+            here at the runner's edge, as its claim loop mints one a claim."""
+            return RequestContext(request_id=new_id(), app=app)
+
+        def placed(direct: TransportInterface) -> TransportInterface:
+            # The relay is the managers', built below on this transport, so
+            # the edge is bound at call time.
+            relayed = TransportRelayImpl(lambda: built[0].relay, stage)
+            return TransportPlacedImpl(direct, relayed, placement)
 
         managers = build_managers(
             storage,
@@ -129,7 +148,9 @@ class RunnerContainer:
             executor=executor,
             work_product=work_product,
             tools_layer=layers,
+            transport_layer=placed,
         )
+        built.append(managers)
         trust.build(managers)
         playbooks.build(managers)
         return cls(settings, storage, infra, integrations, managers)
