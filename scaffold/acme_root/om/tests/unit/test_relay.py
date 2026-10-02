@@ -11,6 +11,7 @@ import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import cast
 from uuid import UUID
 
 import pytest
@@ -21,7 +22,7 @@ from acme.infra.transports import CommandResult, CommandSpec, RecordSeal, StaleC
 from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec, Workspace
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
-from acme.om.exceptions import ToolFailed
+from acme.om.exceptions import NotFound, ToolFailed, Unavailable
 from acme.om.hosts.exceptions import PinnedToHosts
 from acme.om.hosts.impl.manager import HostsOptions
 from acme.om.hosts.impl.placement import PlacementHostsImpl
@@ -30,6 +31,7 @@ from acme.om.hosts.types.host import IsolationMode as Mode
 from acme.om.hosts.types.pool import HostPool
 from acme.om.placement.rules import host_lane
 from acme.om.placement.types.work import ExecEffect, ExecPayload
+from acme.om.relay import RelayManagerInterface
 from acme.om.relay.exceptions import ItemNotHeld, NoWorkspaceHost, StaleExec
 from acme.om.relay.impl.manager import RelayOptions
 from acme.om.relay.impl.placement import PlacementRelayedImpl
@@ -39,6 +41,7 @@ from acme.om.relay.types.exec import (
     ExecCall,
     ExecOutcome,
     ExecOutput,
+    ExecProgress,
     ExecResult,
     ExecState,
     RunRequest,
@@ -442,6 +445,79 @@ async def test_nothing_a_stale_writer_sends_or_stops_acts(wall: Wall) -> None:
     progress = await relay.watch(request(), wall.owner.org_id, lost.id, -1)
     assert progress.state is ExecState.INTERRUPTED
     assert progress.outcome is not None and progress.outcome.refused == StaleExec.code
+
+
+# A run that cannot read its item's progress for a moment waits; one that
+# loses it stops the item, so nothing runs on that no call waits for.
+
+
+class Flaky:
+    """The relay, each read of an item's progress failing with the next of
+    `failures` while any is left; `read` is set by a read that went through."""
+
+    def __init__(self, relay: RelayManagerInterface) -> None:
+        self._relay = relay
+        self.failures: list[Exception] = []
+        self.read = asyncio.Event()
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._relay, name)
+
+    async def watch(self, *args: object) -> ExecProgress:
+        if self.failures:
+            raise self.failures.pop(0)
+        self.read.set()
+        return await self._relay.watch(*args)  # type: ignore[arg-type]
+
+
+def flaky(wall: Wall) -> tuple[TransportRelayImpl, Flaky]:
+    relay = Flaky(wall.managers.relay)
+    through = cast(RelayManagerInterface, relay)
+    transport = TransportRelayImpl(
+        lambda: through,
+        lambda: RequestContext(request_id=new_id(), app=RUNNER),
+        first_poll=timedelta(milliseconds=1),
+        last_poll=timedelta(milliseconds=5),
+        grace=timedelta(milliseconds=20),
+    )
+    return transport, relay
+
+
+async def test_a_progress_read_that_fails_for_now_is_waited_out(wall: Wall) -> None:
+    host = Host(wall.managers, wall.holder)
+    runner, relay = flaky(wall)
+    waiting = asyncio.ensure_future(runner.run(wall.workspace, command(wall.epoch), seal=NO_SEAL))
+    row = await host.claim_soon()
+    relay.failures += [Unavailable("the database did not answer in time"), OSError()]
+    relay.read.clear()
+    await asyncio.wait_for(relay.read.wait(), 5)  # read again once both failed
+    assert relay.failures == []
+    await host.finish(row, 0, "ok\n")
+    assert (await waiting).stdout == "ok\n"
+    assert await wall.managers.relay.controls(request(), wall.holder, None) == []
+
+
+@pytest.mark.parametrize("lost", ["refused", "past its deadline"])
+async def test_a_run_that_loses_its_items_progress_stops_it_and_answers_interrupted(
+    wall: Wall, lost: str
+) -> None:
+    host = Host(wall.managers, wall.holder)
+    runner, relay = flaky(wall)
+    spec = command(wall.epoch, seconds=30 if lost == "refused" else 0.3)
+    waiting = asyncio.ensure_future(runner.run(wall.workspace, spec, seal=NO_SEAL))
+    row = await host.claim_soon()
+    if lost == "refused":
+        relay.failures.append(NotFound("exec item not found"))
+    else:
+        relay.failures += [Unavailable("the database did not answer in time")] * 100_000
+    with pytest.raises(ToolFailed) as ended:
+        await waiting
+    assert ended.value.failure is ToolFailure.INTERRUPTED
+    assert "lost track of the command" in ended.value.message
+    # Its host is told to stop it, after the deadline's own cut when one came.
+    controls = await wall.managers.relay.controls(request(), wall.holder, None)
+    assert controls[-1].item_id == host.item_id(row)
+    assert controls[-1].kind is StopKind.INTERRUPT
 
 
 # Check 5: what crosses the wall is verified by its hash at the relay.

@@ -27,7 +27,7 @@ from acme.infra.transports import (
 from acme.infra.workspaces import IsolationMode, Workspace
 from acme.om.base import new_id, utcnow
 from acme.om.context import RequestContext
-from acme.om.exceptions import ToolFailed
+from acme.om.exceptions import PlatformException, ToolFailed, Unavailable
 from acme.om.placement.types.work import ExecEffect
 from acme.om.relay.exceptions import ContentNotKept, NoWorkspaceHost, StaleExec
 from acme.om.relay.manager import RelayManagerInterface
@@ -268,21 +268,41 @@ class TransportRelayImpl(TransportInterface):
     ) -> ExecProgress | None:
         """Waits for the item to settle, streaming its parts. Past its
         deadline by this clock it is cut on its host; an attaching wait
-        gives up a grace after that, and answers None."""
+        gives up a grace after that, and answers None.
+
+        A read of its progress that fails for now is waited out until a
+        grace past the deadline. One that fails for good, or still fails
+        then, stops the item on its host, so nothing runs on that no call
+        waits for: the call answers interrupted, and an attaching wait
+        answers None."""
         after = -1
         delay = self._first_poll
         cut = False
         while True:
-            progress = await self._relay().watch(rctx, org_id, item.id, after)
-            for part in progress.parts:
-                if on_output is not None:
-                    await on_output(part.stream, part.text)
-                after = part.seq
-            if progress.parts:
-                delay = self._first_poll
-                continue  # more may wait behind a full page
-            if progress.state in SETTLED:
-                return progress
+            try:
+                progress = await self._relay().watch(rctx, org_id, item.id, after)
+            except Exception as error:
+                if _final(error) or self._clock() >= item.deadline + self._grace:
+                    log.warning("exec item %s: its progress is lost", item.id, exc_info=True)
+                    await self._stop(rctx, org_id, item.id, StopKind.INTERRUPT, epoch)
+                    if attach:
+                        return None
+                    raise ToolFailed(
+                        ToolFailure.INTERRUPTED,
+                        "the platform lost track of the command while it ran, and stopped it; "
+                        "check the workspace before you run it again",
+                    ) from error
+                log.warning("exec item %s: its progress was not read: %s", item.id, error)
+            else:
+                for part in progress.parts:
+                    if on_output is not None:
+                        await on_output(part.stream, part.text)
+                    after = part.seq
+                if progress.parts:
+                    delay = self._first_poll
+                    continue  # more may wait behind a full page
+                if progress.state in SETTLED:
+                    return progress
             now = self._clock()
             if not cut and now >= item.deadline:
                 cut = True
@@ -376,6 +396,12 @@ class TransportPlacedImpl(TransportInterface):
         if await self._placement.inside_wall(workspace.org_id, workspace.id):
             return self._relayed
         return self._direct
+
+
+def _final(error: Exception) -> bool:
+    """A failure that waiting does not mend: the platform's refusal, never
+    its `Unavailable`. A backend's or the wire's is waited out."""
+    return isinstance(error, PlatformException) and not isinstance(error, Unavailable)
 
 
 def _ended(progress: ExecProgress) -> tuple[ExecOutcome, ExecOutput]:
