@@ -53,7 +53,8 @@ of](../../../../README.md).
 - **Nothing is spent when nobody can say who pays.** A missing account,
   an own key with no reference, a plan the catalog lacks, or a stored
   account this process cannot read refuses the call. Nothing falls back
-  to the platform's key.
+  to the platform's key. An account on its own key is refused too, until
+  the tenant's key reaches the call: the loop calls on the platform's.
 - **A change of time zone never makes budget.** Days and weeks follow
   the tenant's zone, months its billing period. A change keeps the open
   window's start and ends it at the new zone's first boundary at or

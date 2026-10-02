@@ -169,9 +169,18 @@ def funding_of(
 ) -> Funding:
     """The account as one hold carries it. An account that is missing, whose
     funding names no key, or whose plan the catalog does not hold, cannot
-    say who pays: `SpenderUnknown`, and nothing is spent."""
+    say who pays: `SpenderUnknown`, and nothing is spent.
+
+    So is an account on its own key, for now: the loop calls the provider
+    on the one credential its root built, the platform's, so a call held
+    for the tenant's key would run on the platform's and be billed nothing.
+    It is refused until the tenant's credential reaches the call."""
     credential = credential_of(account)
     assert account is not None
+    if account.funding is FundingMode.OWN_KEY:
+        raise SpenderUnknown(
+            "the tenant's own key does not reach the call yet; nothing is spent on the platform's"
+        )
     plan = plans.get(account.plan)
     if plan is None:
         raise SpenderUnknown(f"the tenant's plan {account.plan_id} is unknown; nothing is spent")

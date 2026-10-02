@@ -412,6 +412,26 @@ async def test_a_tenant_nobody_can_name_to_pay_spends_nothing_and_takes_no_platf
     assert await money.ledger.read_entries(money.loop.owner.org_id, limit=10) == []
 
 
+async def test_an_own_key_tenant_spends_nothing_until_its_key_reaches_the_call(
+    tmp_path: Path,
+) -> None:
+    """The loop calls the provider on the platform's key alone, so a tenant
+    on its own key, named and all, is refused: no provider call, no ledger
+    entry, and the session parks for a person."""
+    money = money_over(tmp_path)
+    await money.open(funding=FundingMode.OWN_KEY, key_ref="tenant-key-1")
+    session_id = await money.loop.start()
+    await money.loop.say(session_id, "What is the total?")
+    money.loop.anthropic.add(reply(said("The total is 12.")))
+
+    parked = await money.loop.loops.run(money.loop.owner, session_id)
+
+    assert parked.end is RunEnd.PARKED and parked.park is not None
+    assert parked.park.reason is ParkReason.PERSON and parked.park.unlock == SPENDER_UNLOCK
+    assert money.loop.anthropic.calls == [] and money.loop.openai.calls == []
+    assert await money.ledger.read_entries(money.loop.owner.org_id, limit=10) == []
+
+
 # Rate limits and spend limits.
 
 
