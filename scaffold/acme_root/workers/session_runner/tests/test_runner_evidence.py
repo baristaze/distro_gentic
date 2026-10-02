@@ -1,6 +1,6 @@
 """The runner's composition ends every success through the evidence's
-gate, over the work product the product wires, and boots outside `local`
-with it."""
+gate, over the work product the product wires, or the workspaces' read of
+the checkout, and boots outside `local` with it."""
 
 from pathlib import Path
 
@@ -13,8 +13,9 @@ from acme.integrations.model_providers.registry import scripted_model_providers
 from acme.om.agents.impl.manager import AgentsManagerImpl
 from acme.om.evidence import WorkProductInterface
 from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
-from acme.om.evidence.impl.ports import WorkProductAbsentImpl, WorkProductMemoryImpl
+from acme.om.evidence.impl.ports import WorkProductMemoryImpl
 from acme.om.storage.impl.memory import StorageMemoryImpl
+from acme.om.workspaces.impl.work_product import WorkProductWorkspacesImpl
 from acme.workers.session_runner.container import RunnerContainer
 from acme.workers.session_runner.settings import SessionRunnerSettings
 
@@ -37,7 +38,7 @@ def test_the_runners_container_builds_the_evidence_gate(tmp_path: Path) -> None:
     work = WorkProductMemoryImpl()
     for container, reads in (
         (runner(tmp_path, work_product=work), WorkProductMemoryImpl),
-        (runner(tmp_path), WorkProductAbsentImpl),
+        (runner(tmp_path), WorkProductWorkspacesImpl),
     ):
         agents = container.managers.agents
         assert isinstance(agents, AgentsManagerImpl)

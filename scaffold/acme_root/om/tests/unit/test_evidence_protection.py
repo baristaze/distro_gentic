@@ -159,5 +159,9 @@ async def test_the_root_keeps_the_protected_ceiling_whatever_options_it_is_given
         managers = build_managers(
             StorageMemoryImpl(), InfraLocalImpl(tmp_path), tools_options=options
         )
-        ceilings = managers.tools._options.ceilings  # pyright: ignore[reportAttributeAccessIssue]
+        # The engine's tools manager, beneath the layers the root puts on it.
+        tools: object = managers.tools
+        while hasattr(tools, "_inner"):
+            tools = getattr(tools, "_inner")  # noqa: B009 (each layer's own field)
+        ceilings = tools._options.ceilings  # pyright: ignore[reportAttributeAccessIssue]
         assert PROTECTED_CEILING in ceilings.rules

@@ -8,6 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 from acme.infra.impl.local import InfraLocalImpl
@@ -253,6 +254,7 @@ def loop_over(
     executor: ExecutorInterface | None = None,
     work_product: WorkProductInterface | None = None,
     call_gate: Callable[[Managers, Clock], CallGateInterface] | None = None,
+    **roots: Any,
 ) -> Loop:
     """`storage` None is the memory storage, and `owner` None a fresh
     tenant's owner; a suite over Postgres hands in both. `jitter` is what
@@ -260,7 +262,8 @@ def loop_over(
     null gate, which accepts a result and marks it unverified, as the
     engine's suites read it; `executor` and `work_product` go to the root as
     they are. `call_gate` None is the budgets' gate behind the call gate; a
-    suite of a gate of its own builds it from the managers and the clock."""
+    suite of a gate of its own builds it from the managers and the clock;
+    and `roots` is what else the managers are built with."""
     infra = InfraLocalImpl(tmp_path)
     anthropic = ModelProviderScriptedImpl(ProviderName.ANTHROPIC)
     openai = ModelProviderScriptedImpl(ProviderName.OPENAI)
@@ -280,6 +283,7 @@ def loop_over(
         result_gate=result_gate or ResultGateNullImpl(),
         executor=executor,
         work_product=work_product,
+        **roots,
     )
     clock = Clock()
 
