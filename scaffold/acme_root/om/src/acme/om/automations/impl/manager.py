@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from uuid import UUID
@@ -39,6 +40,8 @@ from acme.om.steps.types.header import InputHeader
 from acme.om.steps.types.step import Actor, Origin, Step, StepType
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tenancy.rules import permissions_of, role_at_most
+
+log = logging.getLogger(__name__)
 
 CREATED = "automations.automation.created"
 GRANTED = "automations.principal.granted"
@@ -158,14 +161,12 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         now = self._clock()
         runs: list[AutomationRun] = []
         for automation in await self._enabled(ctx):
-            runs.extend(await self._drain(ctx, automation))
-            at = slot(automation.trigger, automation.created_at, now)
-            if at is None:
-                continue
-            run_id = derived_id(automation.id, at, "schedule")
-            if await self._storage.read_run(ctx.org_id, run_id) is not None:
-                continue
-            runs.append(await self._fire_one(ctx, automation, Firing(), None, run_id=run_id))
+            try:
+                runs.extend(await self._tick_one(ctx, automation, now))
+            except Exception:
+                # One automation that fails never stops the tenant's others:
+                # its queue and its slot are asked again at the next tick.
+                log.exception("automation %s of org %s failed its tick", automation.id, ctx.org_id)
         return tuple(runs)
 
     async def purge_tenant(self, ctx: TenantContext) -> int:
@@ -175,6 +176,21 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         return await self._storage.purge_tenant(ctx.org_id, self._options.purge_batch)
 
     # A firing.
+
+    async def _tick_one(
+        self, ctx: TenantContext, automation: Automation, now: datetime
+    ) -> list[AutomationRun]:
+        """Its queued runs as its limits start them, and its schedule's slot
+        at `now` when no run holds it yet."""
+        runs = await self._drain(ctx, automation)
+        at = slot(automation.trigger, automation.created_at, now)
+        if at is None:
+            return runs
+        run_id = derived_id(automation.id, at, "schedule")
+        if await self._storage.read_run(ctx.org_id, run_id) is not None:
+            return runs
+        runs.append(await self._fire_one(ctx, automation, Firing(), None, run_id=run_id))
+        return runs
 
     async def _fire_one(
         self,

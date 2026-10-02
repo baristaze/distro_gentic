@@ -12,12 +12,14 @@ from uuid import UUID
 import pytest
 from contracts.intake import WORKER, Wired, wired
 from contracts.loops import reply, said, use
+from pydantic import ValidationError
 
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agents.types.request import Start
 from acme.om.agents.types.run import RunEnd
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.automations.types.automation import (
+    MIN_EVERY,
     Action,
     ActionKind,
     Automation,
@@ -472,6 +474,35 @@ async def test_a_schedule_fires_once_a_slot_however_often_it_is_ticked(
     platform.clock.now += timedelta(hours=3)
     assert len(await platform.automations.tick(platform.service)) == 1
     assert len(await platform.automations.get_runs(platform.owner, mine.id, 10)) == 3
+
+
+def test_a_schedule_fires_at_most_once_a_minute() -> None:
+    for every in (timedelta(0), timedelta(seconds=59), -timedelta(hours=1)):
+        with pytest.raises(ValidationError):
+            Trigger(kind=TriggerKind.SCHEDULE, every=every)
+    assert Trigger(kind=TriggerKind.SCHEDULE, every=timedelta(minutes=1)).every == MIN_EVERY
+
+
+async def test_a_failing_automation_leaves_the_next_ones_schedule_firing(
+    platform: Wired, creator: TenantContext
+) -> None:
+    """A schedule whose period its row holds at zero fails at every tick;
+    the automation after it still fires each slot."""
+    zero = Trigger.model_construct(
+        kind=TriggerKind.SCHEDULE, integrations=(), arrivals=(), effects=(), every=timedelta(0)
+    )
+    broken = scheduled(creator).model_copy(update={"trigger": zero})
+    await platform.storage.get_automation_storage().create_automation(
+        platform.owner.org_id, broken, ()
+    )
+    mine = await platform.automations.create_automation(creator, scheduled(creator))
+    assert broken.id < mine.id
+    (first,) = await platform.automations.tick(platform.service)
+    platform.clock.now += timedelta(hours=1)
+    (second,) = await platform.automations.tick(platform.service)
+    assert {first.automation_id, second.automation_id} == {mine.id}
+    assert first.status is second.status is RunStatus.STARTED
+    assert await platform.automations.get_runs(platform.owner, broken.id, 10) == ()
 
 
 async def test_the_automation_principal_is_granted_in_person_up_to_the_granters_role(

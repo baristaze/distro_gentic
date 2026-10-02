@@ -27,7 +27,9 @@ is made of](../../../../README.md).
 - **Tick.** Every worker's sweep ticks each tenant once a pass. A
   schedule fires once for the slot it is in, its creation time and every
   period after it, whichever worker ticks first; a slot no tick reached
-  is not fired late. Queued runs start while the limits let them.
+  is not fired late. Queued runs start while the limits let them. A
+  schedule's period is a minute at least, and one automation that fails
+  its tick never stops the others.
 
 ## The rules
 

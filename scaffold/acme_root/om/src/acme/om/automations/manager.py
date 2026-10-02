@@ -72,7 +72,8 @@ class AutomationsManagerInterface(ABC):
         start; answers the runs it made or moved. A slot's run takes an id
         derived from the automation and the slot, so the ticks of several
         workers in one slot make one run, and a slot fired already fires
-        nothing."""
+        nothing. An automation that fails is logged and passed by, and the
+        others still fire."""
         ...
 
     @abstractmethod

@@ -17,6 +17,9 @@ from acme.om.steps.types.content import MAX_NAME, Stored
 
 MAX_BRIEF = 20_000
 
+MIN_EVERY = timedelta(minutes=1)
+"""The shortest period a schedule fires at."""
+
 
 class TriggerKind(StrEnum):
     EVENT = "event"  # an event the router placed, matched by its filters
@@ -25,7 +28,8 @@ class TriggerKind(StrEnum):
 
 class Trigger(Platform):
     """What fires an automation: an event that passes every filter it sets,
-    or a schedule. A filter left empty matches any event."""
+    or a schedule, at most once a `MIN_EVERY`. A filter left empty matches
+    any event."""
 
     kind: TriggerKind
     integrations: tuple[Stored, ...] = ()
@@ -38,6 +42,8 @@ class Trigger(Platform):
         scheduled = self.kind is TriggerKind.SCHEDULE
         if scheduled != (self.every is not None):
             raise ValueError("a schedule fires every so often, and an event trigger does not")
+        if self.every is not None and self.every < MIN_EVERY:
+            raise ValueError(f"a schedule fires at most once every {MIN_EVERY}")
         if scheduled and (self.integrations or self.arrivals or self.effects):
             raise ValueError("a schedule has no event to filter")
         return self
