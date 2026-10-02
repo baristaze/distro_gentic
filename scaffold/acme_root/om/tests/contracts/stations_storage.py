@@ -355,6 +355,7 @@ class StationsStorageContract:
             lease.expires_at,
         )
         assert await storage.read_lease(org, lease.id) == lease
+        assert lease.entry_id is not None
         entry = await storage.read_entry(org, lease.entry_id)
         assert entry is not None and entry.state is EntryState.GRANTED
         assert entry.lease_id == lease.id

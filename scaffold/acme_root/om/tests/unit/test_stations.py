@@ -22,7 +22,13 @@ from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext, Role, TenantContext
 from acme.om.evidence.types.provenance import Provenance
 from acme.om.evidence.types.record import CaseTally, RunOutcome
-from acme.om.exceptions import CredentialExpired, InvalidCredential, NotAuthorized, NotFound
+from acme.om.exceptions import (
+    CredentialExpired,
+    InvalidCredential,
+    NotAuthorized,
+    NotFound,
+    ValidationFailed,
+)
 from acme.om.hosts.exceptions import VersionBelowFloor
 from acme.om.placement.rules import lab_lane
 from acme.om.platform_agents.types.validation import ValidationStart, ValidationStatus
@@ -623,6 +629,9 @@ async def test_the_daemons_report_finishes_a_validation_session_with_no_model_ca
     # It holds its station by a lease of its own, as any grant does.
     lease = await stations._storage.read_lease(owner.org_id, job.lease_id)  # pyright: ignore[reportPrivateUsage]
     assert lease is not None and (lease.entry_id, lease.token) == (None, 1)
+    # It takes no job but its own check.
+    with pytest.raises(ValidationFailed):
+        await stations.submit_job(owner, new_id(), lease.id, (StationCommand(operation="apply"),))
     report = JobReport(
         run_id=new_id(),
         outcome=RunOutcome.PASSED,

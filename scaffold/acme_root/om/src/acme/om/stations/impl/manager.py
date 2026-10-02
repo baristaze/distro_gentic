@@ -336,6 +336,10 @@ class StationsManagerImpl(StationsManagerInterface):
         now = self._clock()
         if lease.ended_at is not None or lease.expires_at <= now:
             raise LeaseEnded(f"lease {lease_id} is no longer live")
+        if lease.entry_id is None:
+            raise ValidationFailed(
+                f"lease {lease_id} is a validation session's, and runs its check alone"
+            )
         entry = await self._storage.read_entry(ctx.org_id, lease.entry_id)
         if entry is None:
             raise NotFound(f"the ask of lease {lease_id} not found")
