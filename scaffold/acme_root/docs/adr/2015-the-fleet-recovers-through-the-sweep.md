@@ -45,13 +45,15 @@ time bounds each read.
 **A session no run holds asks for its run again, once a write.** The
 pass reads, across tenants, the sessions pending with no write to their
 row for twenty minutes. A run never writes the row while it drives a
-loop, so the row's age alone says nothing of a run. A session with a
-loop item on it queued or claimed, or a step from the last twenty
-minutes, is a run's, and the pass moves past it: a second run would
+loop, so the row's age alone says nothing of a run. A live run always
+holds its loop item claimed, so a session with a loop item on it queued
+or claimed is a run's, and the pass moves past it: a second run would
 take the next writer epoch and fence the live one, whose call in flight
-is billed and thrown away. The pass asks for each other one's run as
-the person who made the session, as a wake does, under a key drawn from
-the session's version. A pass that finds it again asks nothing more.
+is billed and thrown away. A step alone holds nothing: a run whose item
+failed for good may have written one a minute before. The pass asks for
+each other one's run as the person who made the session, as a wake does,
+under a key drawn from the session's version. A pass that finds it
+again asks nothing more.
 The run that takes it up asks an approval that expired meanwhile again,
 at its gate.
 

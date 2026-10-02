@@ -48,10 +48,10 @@ history. This is one of the kinds of thing [Acme is made of](../../../../README.
   provider's outage parked wake staggered, each a share of a minute after
   the retry time, so the provider that came back meets them in turn.
 - **Asked for again.** A session pending twenty minutes with no write to
-  its row and no step in that time, and no loop item on it queued or
-  claimed, has no run holding its loop; the sweep reads it, and asks for
-  its run again. A run never writes the row while it drives a loop, so
-  the row's age alone says nothing of a run.
+  its row, and no loop item on it queued or claimed, has no run holding
+  its loop; the sweep reads it, and asks for its run again. A run never
+  writes the row while it drives a loop, so the row's age alone says
+  nothing of a run; the loop item a live run holds claimed does.
 - **End a loop.** The session goes idle, and the next input that wakes
   it starts the next loop over the same history. A waking input the loop
   never delivered keeps it pending, so a new loop starts on it, unless

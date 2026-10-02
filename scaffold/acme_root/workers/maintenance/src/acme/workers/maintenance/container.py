@@ -195,7 +195,6 @@ class WorkerContainer:
         )
         self.stalled = StalledSessionsSweep(
             managers.agent_sessions,
-            managers.steps,
             managers.work,
             managers.tenancy,
             StalledOptions(batch=STALLED_SWEEP_BATCH),

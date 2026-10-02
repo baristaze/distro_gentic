@@ -7,7 +7,7 @@ session pending with no loop has its run asked for again, once, and one
 whose run holds its loop is never asked for."""
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import UUID
@@ -321,15 +321,12 @@ async def its_loop(
     return claimed
 
 
-def a_sweep(container: WorkerContainer, at: datetime) -> StalledSessionsSweep:
+def a_sweep(container: WorkerContainer, clock: Callable[[], datetime]) -> StalledSessionsSweep:
+    """A worker's stalled sweep, on `clock`. The worker holds one across its
+    passes, and each reads on from where the one before stopped."""
     managers = container.managers
     return StalledSessionsSweep(
-        managers.agent_sessions,
-        managers.steps,
-        managers.work,
-        managers.tenancy,
-        StalledOptions(),
-        clock=lambda: at,
+        managers.agent_sessions, managers.work, managers.tenancy, StalledOptions(), clock=clock
     )
 
 
@@ -375,11 +372,12 @@ async def test_a_session_pending_with_no_loop_has_its_run_asked_for_once(
 
     work = container.storage.get_work_storage()
     key = derived_id(stuck.id, stuck.updated_at, f"stalled:{stuck.version}")
-    await a_sweep(container, utcnow())(request())
+    now = utcnow()
+    await a_sweep(container, lambda: now)(request())
     assert await work.read_item_by_key(owner.org_id, key) is None, "not stalled yet"
 
     later = utcnow() + StalledOptions().stall_after + timedelta(minutes=1)
-    assert await a_sweep(container, later)(request()) >= 1
+    assert await a_sweep(container, lambda: later)(request()) >= 1
     asked = await work.read_item_by_key(owner.org_id, key)
     assert asked is not None
     assert (asked.kind, asked.target_id, asked.created_by) == (
@@ -390,7 +388,7 @@ async def test_a_session_pending_with_no_loop_has_its_run_asked_for_once(
     idle_key = derived_id(idle.id, idle.updated_at, f"stalled:{idle.version}")
     assert await work.read_item_by_key(owner.org_id, idle_key) is None, "an idle session waits"
     # A second pass, of this worker or another, asks for nothing more.
-    await a_sweep(container, later)(request())
+    await a_sweep(container, lambda: later)(request())
     assert await work.read_item_by_key(owner.org_id, key) == asked
 
 
@@ -401,7 +399,9 @@ async def test_a_session_whose_run_holds_its_loop_is_not_asked_for_again(
     session pending past twenty minutes may be one a run still holds: its
     loop claimed, its last step a minute old. The sweep asks nothing for it,
     since the run it asked for would take the next epoch and fence the live
-    one. Its last step alone holds it too, until it is as old."""
+    one. Once that loop failed for good, its last step holds nothing, however
+    recent: the worker's one sweep asks for its run, once, across its
+    passes."""
     managers = container.managers
     owner = await an_owner_on_its_own_lane(container)
     session = await managers.agent_sessions.create_session(owner, a_session())
@@ -422,14 +422,20 @@ async def test_a_session_whose_run_holds_its_loop_is_not_asked_for_again(
     work = container.storage.get_work_storage()
     key = derived_id(row.id, row.updated_at, f"stalled:{row.version}")
     later = written + timedelta(minutes=1)
-    await a_sweep(container, later)(request())
+    await a_sweep(container, lambda: later)(request())
     assert await work.read_item_by_key(owner.org_id, key) is None, "its loop is claimed"
     await managers.work.fail_for_good(ctx, loop, "the runner refused it")
-    await a_sweep(container, later)(request())
-    assert await work.read_item_by_key(owner.org_id, key) is None, "its last step is recent"
 
-    quiet = written + StalledOptions().stall_after + timedelta(minutes=1)
-    await a_sweep(container, quiet)(request())
+    # One sweep across three passes, as the worker holds it: the first reads
+    # the session a minute after its last step, the last long after.
+    now = later
+    sweep = a_sweep(container, lambda: now)
+    await sweep(request())
     asked = await work.read_item_by_key(owner.org_id, key)
-    assert asked is not None
+    assert asked is not None, "its last step, a minute old, holds nothing"
     assert (asked.kind, asked.target_id) == (WorkKind.LOOP, session.id)
+    now = later + timedelta(minutes=1)
+    await sweep(request())
+    now = written + StalledOptions().stall_after * 2
+    await sweep(request())
+    assert await work.read_item_by_key(owner.org_id, key) == asked, "asked for once"

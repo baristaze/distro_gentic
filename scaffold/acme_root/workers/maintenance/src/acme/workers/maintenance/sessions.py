@@ -22,7 +22,6 @@ from acme.om.agent_sessions.types.agent_session import AgentSession, SessionStat
 from acme.om.base import Platform, derived_id, new_id, utcnow
 from acme.om.context import Permission, RequestContext, TenantContext
 from acme.om.exceptions import InvalidCredential, NotFound
-from acme.om.steps import StepsManagerInterface
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.work import WorkManagerInterface
 from acme.om.work.types.handler import WorkHandlerInterface
@@ -81,11 +80,11 @@ class WakeSessionsHandlerImpl(WorkHandlerInterface):
 
 
 class StalledOptions(Platform):
-    # A session pending this long with no write to its row, no loop item on
-    # it queued or claimed, and no step this recent is one whose loop no run
-    # holds: its loop's work failed for good, or never landed. A run never
-    # writes the row while it drives a loop, so the row's age alone says
-    # nothing of a run.
+    # A session pending this long with no write to its row and no loop item
+    # on it queued or claimed is one whose loop no run holds: its loop's work
+    # failed for good, or never landed. A run never writes the row while it
+    # drives a loop, so the row's age alone says nothing of a run; the loop
+    # item a live run holds claimed does.
     stall_after: timedelta = timedelta(minutes=20)
     # How far back past `stall_after` a worker's first call reads. Every
     # call after reads on from where the one before stopped.
@@ -106,14 +105,12 @@ class StalledSessionsSweep:
     def __init__(
         self,
         sessions: AgentSessionsManagerInterface,
-        steps: StepsManagerInterface,
         work: WorkManagerInterface,
         tenancy: TenancyManagerInterface,
         options: StalledOptions,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._sessions = sessions
-        self._steps = steps
         self._work = work
         self._tenancy = tenancy
         self._options = options
@@ -146,9 +143,11 @@ class StalledSessionsSweep:
     async def _ask(self, rctx: RequestContext, org_id: UUID, session: AgentSession) -> bool:
         """Asks for one session's run; False when it is left for the next
         call. A deleted tenant's session goes with its tenant's purge, and
-        one whose loop a run holds is the run's: the read moves past it, and
-        a loop whose work then fails for good is a dead letter an operator
-        requeues."""
+        one with a loop item on it queued or claimed is that loop's: the read
+        moves past it, and a loop whose work then fails for good is a dead
+        letter an operator requeues. Any other is asked for, once: a live run
+        always holds its loop item claimed, so a step the run wrote holds
+        nothing once its item failed for good."""
         try:
             ctx = await self._tenancy.service_context(rctx, org_id, session.created_by)
         except InvalidCredential:
@@ -169,7 +168,7 @@ class StalledSessionsSweep:
             available_at=now,
         )
         try:
-            if await self._held(ctx, session.id, now - self._options.stall_after):
+            if await self._work.has_open(ctx, WorkKind.LOOP, session.id):
                 return True
             queued = await self._work.enqueue(ctx, item)
         except Exception:
@@ -183,15 +182,3 @@ class StalledSessionsSweep:
                 session.updated_at.isoformat(),
             )
         return True
-
-    async def _held(self, ctx: TenantContext, session_id: UUID, before: datetime) -> bool:
-        """Whether a run holds the session's loop, or one waits to: a loop
-        item on it queued or claimed, or a step written at `before` or
-        later."""
-        if await self._work.has_open(ctx, WorkKind.LOOP, session_id):
-            return True
-        head = (await self._steps.get_cursor(ctx, session_id)).head
-        if head == 0:
-            return False
-        latest = await self._steps.get_steps(ctx, session_id, head - 1, 1)
-        return any(step.created_at >= before for step in latest.items)
