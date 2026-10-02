@@ -14,6 +14,7 @@ from acme.om.hosts.storage import HostsStorageInterface
 from acme.om.idempotency.storage import IdempotencyStorageInterface
 from acme.om.intake.storage import IntakeStorageInterface
 from acme.om.knowledge.storage import KnowledgeStorageInterface
+from acme.om.matrix.storage import MatrixStorageInterface, MatrixTenantStorageInterface
 from acme.om.media.storage import MediaStorageInterface
 from acme.om.models.storage import FillSetStorageInterface
 from acme.om.orchestrations.storage import OrchestrationsStorageInterface
@@ -126,6 +127,12 @@ class StorageInterface(ABC):
 
     @abstractmethod
     def get_workspace_storage(self) -> WorkspaceStorageInterface: ...
+
+    @abstractmethod
+    def get_matrix_storage(self) -> MatrixStorageInterface: ...
+
+    @abstractmethod
+    def get_matrix_tenant_storage(self) -> MatrixTenantStorageInterface: ...
 
     @abstractmethod
     async def healthcheck(self) -> bool: ...

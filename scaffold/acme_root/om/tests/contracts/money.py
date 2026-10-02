@@ -3,6 +3,7 @@ memory storage, scripted providers, and fake clock, with an account, the
 one ledger, the price book, the payment provider's twin, and a pager that
 keeps its pages. Nothing here reaches a network."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -16,9 +17,11 @@ from acme.om.billing.storage import AccountStorageInterface, MoneyLedgerStorageI
 from acme.om.billing.types.account import AccountRequest, FundingMode
 from acme.om.billing.types.plan import PLANS, UNITS, PlanCatalog
 from acme.om.context import TenantContext
+from acme.om.models.layer import ModelsLayer
 from acme.om.root import Managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
+from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.windows.gate import CallGateInterface
 from contracts.loops import Clock, Loop, loop_over
 
@@ -63,9 +66,12 @@ def money_over(
     loop_options: LoopOptions | None = None,
     storage: StorageInterface | None = None,
     owner: TenantContext | None = None,
+    models_layer: ModelsLayer | None = None,
+    tools_layer: Callable[[ToolsManagerInterface], ToolsManagerInterface] | None = None,
 ) -> Money:
     """`storage` None is the memory storage, and `owner` None a fresh
-    tenant's owner; a suite over Postgres hands in both."""
+    tenant's owner; a suite over Postgres hands in both. The layers go to
+    the loop's root as they are."""
     storage = storage or StorageMemoryImpl()
     accounts = storage.get_account_storage()
     ledger = storage.get_money_ledger_storage()
@@ -88,7 +94,15 @@ def money_over(
         built.append((gate, calls))
         return calls
 
-    loop = loop_over(tmp_path, storage=storage, owner=owner, options=loop_options, call_gate=gates)
+    loop = loop_over(
+        tmp_path,
+        storage=storage,
+        owner=owner,
+        options=loop_options,
+        call_gate=gates,
+        models_layer=models_layer,
+        tools_layer=tools_layer,
+    )
     ((gate, calls),) = built
     payments = PaymentProviderTwinImpl()
     billing = BillingManagerImpl(
