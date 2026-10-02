@@ -49,7 +49,10 @@ scenario holds trials of both arms, scheduled candidate, baseline,
 baseline, candidate, on one station. So the baseline's score is measured
 under the conditions the candidate's was, and a drift over the run falls
 on both. Any lower candidate score is flagged. A benchmark is a global
-row an operator records, written once, and no purge reaches it.
+row an operator records, written once, and no purge reaches it. What
+it shows of a model goes to the model matrix: for each model role whose
+fill the candidate changed, the model passed the scenario when the
+candidate did not regress, and that result is what qualifies it there.
 
 **The benchmark job is dispatched, never gating.** It runs `make
 benchmark` over its own stack. The scaffold's case is a rehearsal with

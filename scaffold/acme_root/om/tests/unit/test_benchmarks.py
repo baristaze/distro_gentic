@@ -7,7 +7,7 @@ import pytest
 from contracts.benchmark_storage import BASELINE, CANDIDATE, make_trials, operator
 
 from acme.om.benchmarks.impl.manager import BenchmarksManagerImpl
-from acme.om.benchmarks.rules import interleaving_refusal, schedule
+from acme.om.benchmarks.rules import interleaving_refusal, qualifications, schedule
 from acme.om.benchmarks.storage.impl.memory import BenchmarkStorageMemoryImpl
 from acme.om.benchmarks.types.benchmark import Arm
 from acme.om.context import OperatorRole
@@ -52,6 +52,27 @@ async def test_a_lower_score_than_its_baseline_is_flagged(
     assert not level.regressed and not higher.regressed
     history = await benchmarks.history(admin, "grip-slips", 10)
     assert [found.id for found in history] == [higher.id, level.id, lower.id]
+
+
+async def test_a_benchmark_qualifies_the_model_it_changed_for_the_matrix(
+    benchmarks: BenchmarksManagerImpl,
+) -> None:
+    admin = operator()
+    held = await benchmarks.record(admin, make_trials([1.0, 1.0], [1.0, 1.0]))
+    (run,) = qualifications(held)
+    assert (run.ref.name, run.role, run.benchmark) == (
+        "anthropic/claude-opus-5-5",
+        "main",
+        "grip-slips",
+    )
+    assert run.passed and run.run == f"benchmark {held.id}"
+    lower = await benchmarks.record(admin, make_trials([1.0, 0.0], [1.0, 1.0]))
+    assert [found.passed for found in qualifications(lower)] == [False]
+    # A run that changed only the kind's version says nothing of a model.
+    same = make_trials([1.0], [1.0]).model_copy(
+        update={"candidate": CANDIDATE.model_copy(update={"fills": BASELINE.fills})}
+    )
+    assert qualifications(await benchmarks.record(admin, same)) == ()
 
 
 # The arms interleave on one station.

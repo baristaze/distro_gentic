@@ -38,6 +38,9 @@ made of](../../../../README.md).
   dispatch, never on a push or a pull request.
 - **The platform's own.** A benchmark belongs to no tenant, and nothing
   purges it.
+- **It feeds the matrix.** For each model role whose fill the candidate
+  changed, the run passed the model when the candidate did not regress
+  (`rules.qualifications`).
 
 <!-- agents-only
 The pure rules are `rules.py`: `schedule` gives the order, and
@@ -50,5 +53,8 @@ records the decisions.
 ## How another namespace composes it
 
 The benchmark job runs a scenario's trials through the acceptance
-harness of the [evidence](../evidence/README.md), and hands the run to
-`record`. Nothing else reads it.
+harness of the [evidence](../evidence/README.md), hands the run to
+`record`, and records what it shows of each model it changed with the
+[model matrix](../matrix/README.md): a model whose candidate did not
+regress has passed the scenario for its model role. That result is what
+qualifies the model for a version of the matrix.

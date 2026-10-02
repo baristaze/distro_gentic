@@ -1,6 +1,8 @@
 """The benchmark job's rehearsal: an acceptance scenario's trials, a
 candidate and a baseline interleaved on one station, each judged by the
-harness and recorded over the stack as a benchmark, written once.
+harness and recorded over the stack as a benchmark, written once, and
+what it shows of the model the candidate changed recorded with the model
+matrix.
 
 Scripted sessions stand in for the agent and the line's executor is a
 twin, so the rehearsal spends nothing and proves the job's wiring end to
@@ -17,7 +19,9 @@ from contracts.acceptance import GRIP, judged_trials
 from contracts.benchmark_storage import BASELINE, CANDIDATE, operator
 from contracts.rehearsal import bench_over
 
+from acme.om.benchmarks.rules import qualifications
 from acme.om.benchmarks.types.benchmark import BenchmarkTrials
+from acme.om.matrix.root import MatrixLayer
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.settings import MigrationSettings
 
@@ -50,6 +54,9 @@ async def test_the_scenarios_trials_are_judged_and_recorded(
     recorded = await bench.managers.benchmarks.record(admin, run)
     assert await bench.managers.benchmarks.get(admin, recorded.id) == recorded
     assert recorded.candidate_result.trials == recorded.baseline_result.trials == PAIRS
+    matrix = MatrixLayer(storage).build(bench.managers).matrix_operator
+    fed = [await matrix.record_benchmark(admin, run) for run in qualifications(recorded)]
+    assert [(found.model, found.passed) for found in fed] == [("claude-opus-5-5", True)]
     print(
         f"\n{GRIP.name}: candidate {recorded.candidate_result.score:.3f}"
         f" against baseline {recorded.baseline_result.score:.3f},"

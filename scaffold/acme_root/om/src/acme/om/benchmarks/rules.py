@@ -1,10 +1,12 @@
 """Pure rules of benchmarks: the order an arm's trials take beside the
-other's, whether a run kept it, what each arm's trials show, and whether
-the candidate regressed. Values in, values out."""
+other's, whether a run kept it, what each arm's trials show, whether the
+candidate regressed, and what a benchmark tells the model matrix. Values
+in, values out."""
 
 from collections.abc import Sequence
 
-from acme.om.benchmarks.types.benchmark import Arm, ArmResult, Trial
+from acme.om.benchmarks.types.benchmark import Arm, ArmResult, Benchmark, Trial
+from acme.om.matrix.types.record import BenchmarkRun
 
 
 def schedule(pairs: int) -> tuple[Arm, ...]:
@@ -61,3 +63,24 @@ def arm_result(trials: Sequence[Trial], arm: Arm) -> ArmResult:
 def regressed(candidate: ArmResult, baseline: ArmResult) -> bool:
     """A candidate that scored under its baseline regressed."""
     return candidate.score < baseline.score
+
+
+def qualifications(benchmark: Benchmark) -> tuple[BenchmarkRun, ...]:
+    """What a benchmark shows the model matrix: for each model role whose
+    fill the candidate changed, whether its model held up against the
+    baseline's on the scenario. It passed when the candidate did not
+    regress. A run that changed only the agent kind's version says nothing
+    of a model."""
+    before = {found.role: found.fill for found in benchmark.baseline.fills}
+    return tuple(
+        BenchmarkRun(
+            provider=found.fill.provider,
+            model=found.fill.model,
+            role=found.role,
+            benchmark=benchmark.scenario,
+            passed=not benchmark.regressed,
+            run=f"benchmark {benchmark.id}",
+        )
+        for found in benchmark.candidate.fills
+        if before.get(found.role) != found.fill
+    )
