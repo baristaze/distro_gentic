@@ -14,6 +14,7 @@ from acme.integrations.impl.configured import IntegrationsConfiguredImpl
 from acme.integrations.root import IntegrationsInterface
 from acme.om.agents.types.kind import AgentKind
 from acme.om.base import new_id
+from acme.om.evidence import ExecutorInterface, WorkProductInterface
 from acme.om.hosts.impl.placement import PlacementHostsImpl
 from acme.om.root import Managers, build_managers
 from acme.om.storage.impl.postgres import StoragePostgresImpl
@@ -50,10 +51,15 @@ class RunnerContainer:
         agent_kinds: tuple[AgentKind, ...] = (),
         tool_catalog: tuple[ToolInterface, ...] = (),
         domain_classes: tuple[str, ...] = (),
+        executor: ExecutorInterface | None = None,
+        work_product: WorkProductInterface | None = None,
     ) -> RunnerContainer:
         """Over the database, the infra, and the providers the settings
         name. `agent_kinds`, `tool_catalog`, and `domain_classes` are the
-        product's, as every process that builds the managers passes them."""
+        product's, as every process that builds the managers passes them;
+        so are `executor` and `work_product`, the evidence's ports. The
+        result gate every success passes is the evidence's, over that work
+        product: with none wired, no success counts."""
         storage = StoragePostgresImpl(
             settings.role_urls(),
             settings.role_pools(),
@@ -71,6 +77,8 @@ class RunnerContainer:
             agent_kinds=agent_kinds,
             tool_catalog=tool_catalog,
             domain_classes=domain_classes,
+            executor=executor,
+            work_product=work_product,
         )
 
     @classmethod
@@ -84,19 +92,19 @@ class RunnerContainer:
         agent_kinds: tuple[AgentKind, ...] = (),
         tool_catalog: tuple[ToolInterface, ...] = (),
         domain_classes: tuple[str, ...] = (),
+        executor: ExecutorInterface | None = None,
+        work_product: WorkProductInterface | None = None,
     ) -> RunnerContainer:
         """The managers over whichever roots the caller chose, every tool call
         held to the trust swimlane's rules: audited with its four answers,
         this runner its executor, and refused a secret that would cross its
         session's wall. A session pinned to its tenant's hosts is inside the
         wall, and none of its calls runs on this runner."""
-        executor = Executor(
-            kind=ExecutorKind.CLOUD, credential_id=new_id(), label=settings.runner_id
-        )
+        runner = Executor(kind=ExecutorKind.CLOUD, credential_id=new_id(), label=settings.runner_id)
         trust = TrustLayer(
             storage,
             infra,
-            placement=PlacementHostsImpl(storage.get_hosts_storage(), executor),
+            placement=PlacementHostsImpl(storage.get_hosts_storage(), runner),
             probe=KeyProbeAbsentImpl(),
         )
         managers = build_managers(
@@ -107,6 +115,8 @@ class RunnerContainer:
             agent_kinds=agent_kinds,
             tool_catalog=tool_catalog,
             domain_classes=domain_classes,
+            executor=executor,
+            work_product=work_product,
             tools_layer=trust.tools,
         )
         trust.build(managers)

@@ -23,6 +23,8 @@ from acme.om.budgets.storage.impl.postgres import (
 )
 from acme.om.events.storage import EventStorageInterface
 from acme.om.events.storage.impl.postgres import EventStoragePostgresImpl
+from acme.om.evidence.storage import EvidenceStorageInterface
+from acme.om.evidence.storage.impl.postgres import EvidenceStoragePostgresImpl
 from acme.om.hosts.storage import HostsStorageInterface
 from acme.om.hosts.storage.impl.postgres import HostsStoragePostgresImpl
 from acme.om.idempotency.storage import IdempotencyStorageInterface
@@ -196,6 +198,7 @@ class StoragePostgresImpl(StorageInterface):
         self._fill_sets = FillSetStoragePostgresImpl(sessions)
         self._windows = WindowStoragePostgresImpl(sessions)
         self._tools = ToolStoragePostgresImpl(sessions)
+        self._evidence = EvidenceStoragePostgresImpl(sessions)
         self._placement = PlacementStoragePostgresImpl(sessions)
         self._trust = TrustStoragePostgresImpl(sessions)
         self._hosts = HostsStoragePostgresImpl(sessions)
@@ -250,6 +253,9 @@ class StoragePostgresImpl(StorageInterface):
 
     def get_tool_storage(self) -> ToolStorageInterface:
         return self._tools
+
+    def get_evidence_storage(self) -> EvidenceStorageInterface:
+        return self._evidence
 
     def get_placement_storage(self) -> PlacementStorageInterface:
         return self._placement
