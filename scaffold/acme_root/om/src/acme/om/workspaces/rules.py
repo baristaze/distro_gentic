@@ -51,6 +51,9 @@ NEVER_REACHED: tuple[Network, ...] = tuple(
 """What no workspace reaches, whatever its egress: the metadata endpoints and
 the host it runs on."""
 
+NAT64 = ip_network("64:ff9b::/96")
+"""The well-known prefix a NAT64 gateway carries an IPv4 address in."""
+
 METADATA_NAMES = frozenset(
     {"metadata", "metadata.google.internal", "instance-data", "instance-data.ec2.internal"}
 )
@@ -138,9 +141,16 @@ def host_refusal(spec: IsolationSpec, offer: HostOffer, *, local: bool, running:
 
 
 def _address(value: IPv4Address | IPv6Address) -> IPv4Address | IPv6Address:
-    """An IPv4 address carried in IPv6 is the IPv4 address it carries."""
-    if isinstance(value, IPv6Address) and value.ipv4_mapped is not None:
+    """An IPv4 address carried in IPv6 is the IPv4 address it carries: mapped,
+    through 6to4, or through a NAT64 gateway's prefix."""
+    if not isinstance(value, IPv6Address):
+        return value
+    if value.ipv4_mapped is not None:
         return value.ipv4_mapped
+    if value.sixtofour is not None:
+        return value.sixtofour
+    if value in NAT64:
+        return IPv4Address(int(value) & 0xFFFFFFFF)
     return value
 
 

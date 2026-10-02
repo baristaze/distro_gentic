@@ -90,6 +90,8 @@ def test_no_egress_refuses_everything_and_open_egress_the_platforms_insides_alon
         ("169.254.169.254", "169.254.169.254", "the metadata endpoint by its address"),
         ("git.example.com", "169.254.169.254", "a listed name resolved to the metadata endpoint"),
         ("git.example.com", "::ffff:169.254.169.254", "the same, carried in IPv6"),
+        ("git.example.com", "64:ff9b::a9fe:a9fe", "the same, through a NAT64 gateway"),
+        ("git.example.com", "2002:a9fe:a9fe::1", "the same, through 6to4"),
         ("git.example.com", "fd00:ec2::254", "the metadata endpoint over IPv6"),
         ("metadata.google.internal", str(PUBLIC), "a metadata endpoint by its name"),
         ("git.example.com", "10.0.12.7", "a listed name resolved to the internal network"),
