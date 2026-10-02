@@ -93,6 +93,7 @@ def test_no_egress_refuses_everything_and_open_egress_the_platforms_insides_alon
         ("git.example.com", "64:ff9b::a9fe:a9fe", "the same, through a NAT64 gateway"),
         ("git.example.com", "2002:a9fe:a9fe::1", "the same, through 6to4"),
         ("git.example.com", "fd00:ec2::254", "the metadata endpoint over IPv6"),
+        ("git.example.com", "fd20:ce::254", "another cloud's metadata endpoint over IPv6"),
         ("metadata.google.internal", str(PUBLIC), "a metadata endpoint by its name"),
         ("git.example.com", "10.0.12.7", "a listed name resolved to the internal network"),
         ("git.example.com", "172.20.1.1", "another private range"),
@@ -108,6 +109,18 @@ def test_the_platforms_insides_are_never_reached(
     asked = request(destination, address)
     decision = rules.egress_decision(egress, (SOURCE,), asked, INTERNAL)
     assert not decision.allowed, why
+
+
+@pytest.mark.parametrize(
+    "address", ["169.254.169.254", "fd00:ec2::254", "fd20:ce::254", "100.100.100.200"]
+)
+def test_a_metadata_endpoint_is_never_reached_whatever_the_internal_networks(
+    address: str,
+) -> None:
+    """A deployment that narrows its internal networks to its own still never
+    reaches a cloud's metadata endpoint."""
+    asked = request(address=address)
+    assert not rules.egress_decision(EgressMode.OPEN, (), asked, ()).allowed
 
 
 def test_a_stations_network_is_never_reached() -> None:

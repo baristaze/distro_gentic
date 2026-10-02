@@ -41,6 +41,7 @@ NEVER_REACHED: tuple[Network, ...] = tuple(
         "169.254.0.0/16",  # link-local, the clouds' metadata endpoint among it
         "fe80::/10",
         "fd00:ec2::254/128",  # a cloud's metadata endpoint over IPv6
+        "fd20:ce::254/128",  # another cloud's, over IPv6
         "100.100.100.200/32",  # another cloud's metadata endpoint
         "127.0.0.0/8",  # the host itself
         "::1/128",
