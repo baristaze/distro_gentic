@@ -42,6 +42,7 @@ IMPL_INTERFACES: dict[str, str] = {
     "WindowStoragePostgresImpl": "WindowStorageInterface",
     "ToolStoragePostgresImpl": "ToolStorageInterface",
     "HostsStoragePostgresImpl": "HostsStorageInterface",
+    "StationsStoragePostgresImpl": "StationsStorageInterface",
     "MatrixStoragePostgresImpl": "MatrixStorageInterface",
     "MatrixTenantStoragePostgresImpl": "MatrixTenantStorageInterface",
 }
