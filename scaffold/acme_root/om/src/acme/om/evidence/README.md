@@ -45,7 +45,7 @@ of](../../../../README.md).
 
 - **A double is never validation, and a twin is never real.** A check
   passes at its grade only on runs the real thing, or a twin where the
-  policy accepts one, served.
+  policy accepts one, served, and only on runs that passed a case.
 - **The agent cannot change a protected path.** A tool that would change
   one is denied whatever any policy layer allows, and a change that
   touches one voids validation.
@@ -57,9 +57,10 @@ of](../../../../README.md).
   that head counted. A failure explained by runs is a result. A success
   that validated nothing is inconclusive.
 - **A rate is bounded, never zero.** An exact or Wilson bound at a
-  declared confidence, after the trial count the policy declared; a trial
-  a safety stop ended is classified by the declared rule, never dropped;
-  rates judged together correct their confidence.
+  declared confidence, over each validation's trials at the count the
+  policy declared; a trial a safety stop ended is classified by the
+  declared rule, never dropped; rates judged together correct their
+  confidence.
 - **The hidden suite stays hidden.** A scan of every surface the agent
   reads finds any mention of it.
 - **Every run belongs to one org,** and goes with its session or with its

@@ -31,7 +31,9 @@ session at the delivered head and every run each one lists, checks that
 each run is its validation's executor's, at that head, from a clean
 tree, and judges the current policy against all of them. No verdict is
 stored to trust. A check that failed once at the head still counts after
-a later pass, so running validation again until it passes does not pass.
+a later pass, and a rate is judged one validation's batch at a time, so
+running validation again until it passes does not pass. A run that
+passed no case is no passing run.
 
 **A run is written once.** Runs, validations, and hypotheses and
 findings are append-only in `activity`, as the history is (ADR 1002),
@@ -42,10 +44,12 @@ and the purge login takes them with their session or their tenant (ADR
 not change, or whose change the policy asks no check of, ends
 `inconclusive`, never `succeeded` and never refused.
 
-**The work product and the executor are ports.** The root wires them;
-the loud nulls refuse every read and every run. The engine's null result
-gate stays the default of `build_managers`, and a process passes this
-gate once it wires a work product.
+**The work product and the executor are ports, and this gate is the
+root's.** A process wires the ports, the session runner from its
+product's entry; the loud nulls refuse every read and every run. The
+root builds this gate over the work product it is given whenever no gate
+is passed, and refuses a quiet null result gate outside `local`, as it
+refuses a quiet budget gate.
 
 ## Consequences
 
@@ -53,5 +57,6 @@ gate once it wires a work product.
   is kept.
 - A policy change applies to the next judgment, not the next validation:
   a check the policy adds is unmet until a validation runs it.
-- A process that wires no work product completes work through the null
-  gate, which marks every result unverified.
+- A process that wires no work product counts no success: a delivered
+  change cannot be read, so the gate refuses it, and a failure explained
+  by runs still ends the loop.
