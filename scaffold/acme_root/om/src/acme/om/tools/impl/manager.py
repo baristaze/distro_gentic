@@ -572,6 +572,7 @@ class ToolsManagerImpl(ToolsManagerInterface):
             self._transport,
             workspace,
             seal=self._sealing(ctx, request),
+            session_id=request.session_id,
             key=request.id,
             epoch=epoch,
             deadline=deadline,

@@ -94,6 +94,7 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             # hypotheses and findings under the purge login.
             "evidence": managers.evidence.purge_tenant,
             "placement": managers.placement.purge_tenant,
+            "validation_sessions": managers.platform_agents.purge_tenant,
             # Every artifact's object, then its record, under the purge login.
             "artifacts": managers.windows.purge_tenant,
             # The history, then its sessions, both under the purge login: a

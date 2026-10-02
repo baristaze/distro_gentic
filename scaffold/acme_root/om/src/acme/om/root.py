@@ -62,6 +62,10 @@ from acme.om.outbox.impl.relay import OutboxRelayImpl
 from acme.om.placement import PlacementManagerInterface, PlacementOperatorManagerInterface
 from acme.om.placement.impl.manager import PlacementManagerImpl, PlacementOptions
 from acme.om.placement.impl.operator import PlacementOperatorManagerImpl
+from acme.om.platform_agents import PlatformAgentsManagerInterface
+from acme.om.platform_agents.catalog import PlatformAgents, refuse_reach, with_shipped
+from acme.om.platform_agents.impl.manager import PlatformAgentsManagerImpl, PlatformAgentsOptions
+from acme.om.platform_agents.kinds import SHIPPED
 from acme.om.privacy import PrivacyManagerInterface
 from acme.om.privacy.impl.artifacts import ArtifactSealKeysImpl
 from acme.om.privacy.impl.keys import SessionKeysImpl
@@ -140,6 +144,7 @@ class Managers:
     evidence: EvidenceManagerInterface
     placement: PlacementManagerInterface
     placement_operator: PlacementOperatorManagerInterface
+    platform_agents: PlatformAgentsManagerInterface
 
 
 LOCAL = "local"
@@ -275,6 +280,8 @@ def build_managers(
     domain_classes: tuple[str, ...] = (),
     loop_options: LoopOptions | None = None,
     placement_options: PlacementOptions | None = None,
+    platform_agents_options: PlatformAgentsOptions | None = None,
+    platform_agents: PlatformAgents | None = None,
     environment: str = LOCAL,
     tenant_keys: TenantKeysInterface | None = None,
     session_projects: SessionProjectInterface | None = None,
@@ -337,6 +344,12 @@ def build_managers(
     `placement_options` is the fair share of a tenant no operator gave one,
     and the delay a loop over its share waits; None keeps the defaults.
 
+    `platform_agents` ships the platform's agents, with the corpus its
+    assistant answers from: their kinds join `agent_kinds` and their tools
+    join `tool_catalog`, ahead of the adopter's. A catalog that holds two
+    tools of one name, or lets the assistant reach past reading and handing
+    work on, is refused at boot (`UnsafeConfiguration`). None ships none.
+
     The platform's retention takes three. `tenant_keys` says whose key
     service holds each tenant's keys; None is infra's for every tenant, and
     in `local` the local key service over it, which destroys a session's key
@@ -345,6 +358,20 @@ def build_managers(
     destruction. `session_projects` names a new session's project, None
     none, so each session takes its tenant's policy unnarrowed; and
     `retention_options` the sweep's batches."""
+    if platform_agents is not None:
+        # Their tools read the managers built below, so each edge is bound
+        # at call time.
+        agent_kinds = (*SHIPPED, *agent_kinds)
+        tool_catalog = with_shipped(
+            platform_agents,
+            tool_catalog,
+            domain_classes,
+            sessions=lambda: managers.agent_sessions,
+            policies=lambda: managers.tools,
+            agents=lambda: managers.agents,
+            evidence=lambda: managers.evidence,
+        )
+        refuse_reach(agent_kinds, tool_catalog)
     # The relay every core-role manager hands its outbox rows to. It reaches
     # the work manager through the root below, because a row of kind
     # `work.<kind>` is enqueued there: the work manager needs the tenancy
@@ -574,6 +601,13 @@ def build_managers(
         tenancy,
         placement_options or PlacementOptions(),
     )
+    # The validation sessions: station work on the queue, with no agent.
+    platform = PlatformAgentsManagerImpl(
+        storage.get_platform_agents_storage(),
+        tenancy,
+        outbox,
+        platform_agents_options or PlatformAgentsOptions(),
+    )
     managers = Managers(
         tenancy=tenancy,
         tenancy_operator=tenancy_operator,
@@ -629,5 +663,6 @@ def build_managers(
             storage.get_event_storage(),
             infra.get_topics(),
         ),
+        platform_agents=platform,
     )
     return managers
