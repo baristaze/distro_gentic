@@ -44,7 +44,11 @@ history. This is one of the kinds of thing [Acme is made of](../../../../README.
 - **Wake by itself.** A park with a time to try again is woken at that
   time from the work queue, and a raised budget wakes every session
   parked on a budget. A woken session is pending; the run that takes it
-  up writes a `resumed` step and asks its gates again.
+  up writes a `resumed` step and asks its gates again. The sessions one
+  provider's outage parked wake staggered, each a share of a minute after
+  the retry time, so the provider that came back meets them in turn.
+- **Asked for again.** A session pending long past a run's time has no
+  run holding its loop; the sweep reads it, and asks for its run again.
 - **End a loop.** The session goes idle, and the next input that wakes
   it starts the next loop over the same history. A waking input the loop
   never delivered keeps it pending, so a new loop starts on it, unless

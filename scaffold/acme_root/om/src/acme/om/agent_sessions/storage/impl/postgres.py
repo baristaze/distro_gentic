@@ -106,6 +106,29 @@ class AgentSessionStoragePostgresImpl(PgStorageBase, AgentSessionStorageInterfac
                 for row in (await session.execute(stmt)).scalars()
             ]
 
+    async def read_stalled(
+        self, after: datetime, before: datetime, limit: int
+    ) -> list[tuple[UUID, AgentSession]]:
+        # Pending is a passing status, so few rows hold it at any time: the
+        # tenant-led status index finds them, and the order sorts only them.
+        stmt = (
+            select(AgentSessions)
+            .where(
+                AgentSessions.status == SessionStatus.PENDING.value,
+                AgentSessions.deleted_at.is_(None),
+                AgentSessions.updated_at >= after,
+                AgentSessions.updated_at < before,
+            )
+            .order_by(AgentSessions.updated_at, AgentSessions.id)
+            .limit(limit)
+        )
+        async with self._session_for(stmt, org_id=EMPTY_UUID) as session:
+            await session.execute(PLAN_WITH_VALUES)
+            return [
+                (row.org_id, to_model(row, AgentSession))
+                for row in (await session.execute(stmt)).scalars()
+            ]
+
     async def tree_holds_others(self, org_id: UUID, root_id: UUID, session_id: UUID) -> bool:
         stmt = select(
             exists().where(

@@ -14,7 +14,9 @@ from contracts.doubles import context
 from contracts.step_storage import make_message, make_request
 
 from acme.infra.impl.local import InfraLocalImpl
+from acme.om.agent_sessions.impl.manager import AgentSessionsOptions
 from acme.om.agent_sessions.limits import step_guard_park
+from acme.om.agent_sessions.rules import wakes_after
 from acme.om.agent_sessions.types.agent_session import AgentSession, SessionStatus
 from acme.om.base import new_id, utcnow
 from acme.om.budgets.rules import HOLD_RETRY, budget_park, window_bounds
@@ -95,12 +97,35 @@ async def test_a_park_with_a_retry_time_waits_in_the_queue_until_it(engine: Engi
     park = Park(reason=ParkReason.PROVIDER, unlock="anthropic", retry_at=later)
     await engine.managers.agent_sessions.park(ctx, session.id, epoch, loop, park)
     (wake,) = engine.queued(WorkKind.WAKE_SESSION)
-    assert (wake.target_id, wake.available_at, wake.created_by) == (
-        session.id,
-        later,
-        session.created_by,
-    )
+    assert (wake.target_id, wake.created_by) == (session.id, session.created_by)
+    # A park on a provider wakes a share of the spread after its retry time.
+    assert later <= wake.available_at < later + AgentSessionsOptions().wake_spread
     assert WakeSessionPayload.model_validate(dict(wake.payload)).park == park
+
+
+async def test_the_sessions_one_outage_parks_wake_staggered_not_at_once(engine: Engine) -> None:
+    """Every session that met one outage parks until its one retry time. Their
+    wakes spread across the spread after it, each at its own time and none
+    before the retry time, so the provider that came back meets them in
+    turn; a park of a tenant's own, a budget's, wakes at its time."""
+    ctx = context(Role.MEMBER)
+    retry_at = utcnow() + timedelta(minutes=5)
+    outage = Park(reason=ParkReason.PROVIDER, unlock="anthropic", retry_at=retry_at)
+    for _ in range(20):
+        session, epoch, loop = await running(engine, ctx)
+        await engine.managers.agent_sessions.park(ctx, session.id, epoch, loop, outage)
+    wakes = sorted(item.available_at for item in engine.queued(WorkKind.WAKE_SESSION))
+    spread = AgentSessionsOptions().wake_spread
+    assert len(wakes) == 20 and len(set(wakes)) == 20, "no two wake at once"
+    assert retry_at <= wakes[0] and wakes[-1] < retry_at + spread
+    assert wakes[-1] - wakes[0] > spread / 2, "spread across the window, not bunched"
+    # A wake is drawn from its session and the retry time: asked again, the same.
+    assert all(
+        wakes_after(item.target_id, outage, spread) == item.available_at
+        for item in engine.queued(WorkKind.WAKE_SESSION)
+    )
+    budget = Park(reason=ParkReason.BUDGET, unlock="b", retry_at=retry_at)
+    assert wakes_after(new_id(), budget, spread) == retry_at
 
 
 async def test_a_park_resumes_by_itself_once_its_retry_time_comes(engine: Engine) -> None:
