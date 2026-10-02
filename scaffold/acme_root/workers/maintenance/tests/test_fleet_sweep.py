@@ -19,9 +19,14 @@ ROOT = Path(__file__).resolve().parents[3]
 PACKAGE = WorkerLoop.__module__.split(".")[0]
 """The root package every distribution of the scaffold shares."""
 
-FLEET = (f"{PACKAGE}.workers", f"{PACKAGE}.om", f"{PACKAGE}.infra")
-"""What a program needs to reach the fleet: a worker's loop, the managers,
-or the storage and infra beneath them."""
+FLEET = (f"{PACKAGE}.workers", f"{PACKAGE}.om")
+"""What a program needs to reach the fleet: a worker's loop, or the managers
+and the storage beneath them."""
+
+INSIDE = (f"{PACKAGE}-client", f"{PACKAGE}-infra")
+"""The distributions a program inside a customer's wall may depend on: the
+API's client, and the infra adapters a host runs its work through, which
+import neither a worker nor the managers."""
 
 
 def sources(under: Path) -> list[Path]:
@@ -64,17 +69,18 @@ def test_the_maintenance_sweep_carries_the_platforms_duties(tmp_path: Path) -> N
 def test_a_host_or_a_daemon_never_runs_the_sweep() -> None:
     """Every program under `apps/`, a host's and a daemon's among them,
     imports nothing that reaches the fleet and depends on no distribution
-    that does; and the sweep's loop is built only by a cloud worker."""
+    that does, the infra it runs its work through included; and the sweep's
+    loop is built only by a cloud worker."""
     apps = ROOT / "apps"
     programs = [path.parent for path in sorted(apps.glob("*/pyproject.toml"))]
     assert apps / "host" in programs, "the host is one of them"
+    for path in [p for under in [*programs, ROOT / "infra"] for p in sources(under)]:
+        reached = {name for name in imported(path) if name.startswith(FLEET)}
+        assert not reached, f"{path.relative_to(ROOT)} imports {sorted(reached)}"
     for program in programs:
-        for path in sources(program):
-            reached = {name for name in imported(path) if name.startswith(FLEET)}
-            assert not reached, f"{path.relative_to(ROOT)} imports {sorted(reached)}"
         project = tomllib.loads((program / "pyproject.toml").read_text())["project"]
         wanted = [d for d in project.get("dependencies", []) if d.startswith(f"{PACKAGE}-")]
-        assert all(d.startswith(f"{PACKAGE}-client") for d in wanted), f"{program.name}: {wanted}"
+        assert all(d.startswith(INSIDE) for d in wanted), f"{program.name}: {wanted}"
     builders = [path for path in sources(ROOT) if builds_a_worker_loop(path)]
     assert builders, "the sweep's loop is built somewhere"
     assert all(path.relative_to(ROOT).parts[0] == "workers" for path in builders), builders
