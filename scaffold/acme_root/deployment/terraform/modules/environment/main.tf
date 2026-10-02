@@ -389,6 +389,9 @@ module "api" {
     # What the portal's distribution sends in X-Acme-Edge: beside it, the
     # address CloudFront appended to X-Forwarded-For names the client.
     ACME_EDGE_SECRET = module.secrets.edge_secret_arn
+    # What a live-read handle is signed with: the API alone issues and
+    # reads one.
+    ACME_LIVE_READ_KEY = module.secrets.live_read_key_secret_arn
   })
 
   environment_variables = merge(local.process_environment, local.api_sign_in_environment, {

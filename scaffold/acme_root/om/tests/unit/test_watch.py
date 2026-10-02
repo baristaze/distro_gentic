@@ -167,14 +167,14 @@ async def test_a_live_read_reads_its_own_session_and_resumes_after_the_last_part
         watched.stream.emit(text(other.id, theirs, n))
     live = await watched.watch.open_live(watched.person, watched.session_id)
 
-    page = await watched.watch.read_live(live.handle, ())
+    page = await watched.watch.read_live(request(), live.handle, ())
     (stream,) = page.streams
     assert (page.session_id, stream.step_id) == (watched.session_id, mine)
     assert [part.n for part in stream.parts] == [0, 1, 2] and not stream.dropped
 
     watched.stream.emit(text(watched.session_id, mine, 3))
     watched.stream.emit(text(watched.session_id, mine, 4))
-    page = await watched.watch.read_live(live.handle, (Seen(step_id=mine, n=2),))
+    page = await watched.watch.read_live(request(), live.handle, (Seen(step_id=mine, n=2),))
     assert [part.n for part in page.streams[0].parts] == [3, 4]
 
     # The handle names its session under the platform's signature: one made
@@ -189,7 +189,7 @@ async def test_a_live_read_reads_its_own_session_and_resumes_after_the_last_part
         "no handle at all",
     ):
         with pytest.raises(LiveReadRefused):
-            await watched.watch.read_live(handle, ())
+            await watched.watch.read_live(request(), handle, ())
 
 
 async def test_a_live_read_handle_is_issued_only_for_a_session_the_viewer_sees(
@@ -207,10 +207,10 @@ async def test_a_live_read_handle_expires(watched: Watched) -> None:
     watched.stream.emit(text(watched.session_id, step, 0))
     live = await watched.watch.open_live(watched.person, watched.session_id)
     assert live.expires_at == watched.clock.now + LIFE
-    assert (await watched.watch.read_live(live.handle, ())).streams
+    assert (await watched.watch.read_live(request(), live.handle, ())).streams
     watched.clock.now = live.expires_at
     with pytest.raises(LiveReadRefused):
-        await watched.watch.read_live(live.handle, ())
+        await watched.watch.read_live(request(), live.handle, ())
 
 
 # Check 2: the stream service's buffer per open stream is bounded, and losing

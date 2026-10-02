@@ -517,6 +517,150 @@
         "title": "CommandBody",
         "type": "object"
       },
+      "CommandPartView": {
+        "properties": {
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "stream": {
+            "title": "Stream",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "seq",
+          "stream",
+          "text"
+        ],
+        "title": "CommandPartView",
+        "type": "object"
+      },
+      "CommandProgressView": {
+        "description": "How a command stands: its state, its output after the last part read,\nand how it ended once it has. `refused` names why its host or the relay\nrefused it, such as a command a later run fenced.",
+        "properties": {
+          "exit_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Code"
+          },
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/CommandPartView"
+            },
+            "title": "Parts",
+            "type": "array"
+          },
+          "refused": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refused"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ExecState"
+          },
+          "stderr": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stderr"
+          },
+          "stdout": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stdout"
+          },
+          "stopped": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StopKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "timed_out": {
+            "default": false,
+            "title": "Timed Out",
+            "type": "boolean"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "state",
+          "parts"
+        ],
+        "title": "CommandProgressView",
+        "type": "object"
+      },
+      "CommandRequest": {
+        "additionalProperties": false,
+        "description": "A command by hand: what it runs, where in the workspace, and how long\nit may take. Its key is the request's idempotency key.",
+        "properties": {
+          "argv": {
+            "items": {
+              "maxLength": 4096,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 256,
+            "minItems": 1,
+            "title": "Argv",
+            "type": "array"
+          },
+          "cwd": {
+            "default": ".",
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Cwd",
+            "type": "string"
+          },
+          "timeout_seconds": {
+            "default": 300,
+            "exclusiveMinimum": 0.0,
+            "maximum": 3600.0,
+            "title": "Timeout Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "argv"
+        ],
+        "title": "CommandRequest",
+        "type": "object"
+      },
       "CommandView": {
         "properties": {
           "operation": {
@@ -1311,6 +1455,16 @@
         "title": "ExecLeaseView",
         "type": "object"
       },
+      "ExecState": {
+        "enum": [
+          "queued",
+          "running",
+          "done",
+          "interrupted"
+        ],
+        "title": "ExecState",
+        "type": "string"
+      },
       "FilePageView": {
         "description": "One page of the org's stored files, oldest first. `next_cursor` fetches\nthe next page and is null on the last one.",
         "properties": {
@@ -1437,6 +1591,23 @@
         "title": "FileView",
         "type": "object"
       },
+      "GiveBackRequest": {
+        "additionalProperties": false,
+        "description": "What the person did, as the agent reads it on resume.",
+        "properties": {
+          "summary": {
+            "maxLength": 100000,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary"
+        ],
+        "title": "GiveBackRequest",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1448,6 +1619,48 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HandRunView": {
+        "description": "A command by hand as recorded: the item that holds what ran, the\nperson it is attributed to, and the writer epoch it runs under.",
+        "properties": {
+          "command_key": {
+            "format": "uuid",
+            "title": "Command Key",
+            "type": "string"
+          },
+          "epoch": {
+            "title": "Epoch",
+            "type": "integer"
+          },
+          "item_id": {
+            "format": "uuid",
+            "title": "Item Id",
+            "type": "string"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ExecState"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item_id",
+          "session_id",
+          "command_key",
+          "user_id",
+          "epoch",
+          "state"
+        ],
+        "title": "HandRunView",
         "type": "object"
       },
       "HeartbeatRequest": {
@@ -2449,6 +2662,154 @@
         "title": "LinePlaceView",
         "type": "object"
       },
+      "LivePageView": {
+        "properties": {
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "streams": {
+            "items": {
+              "$ref": "#/components/schemas/LiveStreamView"
+            },
+            "title": "Streams",
+            "type": "array"
+          }
+        },
+        "required": [
+          "session_id",
+          "streams"
+        ],
+        "title": "LivePageView",
+        "type": "object"
+      },
+      "LivePartView": {
+        "description": "One part of a stream: its kind, its place, and its text. `index` is\nthe block of a model response it belongs to; a tool call's input names\nthe call, and a tool's output its channel.",
+        "properties": {
+          "channel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel"
+          },
+          "index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/PartKind"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "tool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool"
+          },
+          "tool_use_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Use Id"
+          }
+        },
+        "required": [
+          "kind",
+          "n",
+          "text"
+        ],
+        "title": "LivePartView",
+        "type": "object"
+      },
+      "LiveReadView": {
+        "description": "A handle to one session's open streams until `expires_at`. Read it\nat `GET /v1/live?handle=`; a viewer asks for a new one when it ends.",
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "handle": {
+            "title": "Handle",
+            "type": "string"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "handle",
+          "expires_at"
+        ],
+        "title": "LiveReadView",
+        "type": "object"
+      },
+      "LiveStreamView": {
+        "description": "One open stream: the step it adds up to, the oldest part the service\nstill holds, the parts after the last one read, and whether parts never\nread were let go. The step holds them once it is stored.",
+        "properties": {
+          "dropped": {
+            "title": "Dropped",
+            "type": "boolean"
+          },
+          "first": {
+            "title": "First",
+            "type": "integer"
+          },
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/LivePartView"
+            },
+            "title": "Parts",
+            "type": "array"
+          },
+          "step_id": {
+            "format": "uuid",
+            "title": "Step Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "step_id",
+          "first",
+          "dropped",
+          "parts"
+        ],
+        "title": "LiveStreamView",
+        "type": "object"
+      },
       "LogoutRequest": {
         "additionalProperties": false,
         "description": "Where the identity provider sends the browser once it has ended its own\nsession: this environment's portal page for it, and nothing else. Left\nout, the provider sends it to its default sign-out address.",
@@ -3089,6 +3450,16 @@
         ],
         "title": "ParkView",
         "type": "object"
+      },
+      "PartKind": {
+        "enum": [
+          "text",
+          "thinking",
+          "tool_input",
+          "tool_output"
+        ],
+        "title": "PartKind",
+        "type": "string"
       },
       "PartRequest": {
         "additionalProperties": false,
@@ -4238,6 +4609,17 @@
         ],
         "title": "StepView",
         "type": "object"
+      },
+      "StopKind": {
+        "description": "What the control stream tells a host about one item it holds. Each\nends the command at once.",
+        "enum": [
+          "cancel",
+          "interrupt",
+          "deadline",
+          "revoke"
+        ],
+        "title": "StopKind",
+        "type": "string"
       },
       "StopReason": {
         "description": "Why a response stopped. A model's refusal is a response its agent kind\nhandles, never a provider error.",
@@ -6358,6 +6740,433 @@
         ]
       }
     },
+    "/v1/agent-sessions/{session_id}/control": {
+      "post": {
+        "description": "The person takes the session's environment: the agent stands down,\nits loop parked on a hand-over.",
+        "operationId": "take_control_v1_agent_sessions__session_id__control_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentSessionView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Take Control",
+        "tags": [
+          "watch"
+        ]
+      }
+    },
+    "/v1/agent-sessions/{session_id}/control/commands": {
+      "post": {
+        "description": "A command by hand, recorded as the person's run and sent to the host\nthat holds the workspace. A retried send is the same run.",
+        "operationId": "run_command_v1_agent_sessions__session_id__control_commands_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommandRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HandRunView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Command",
+        "tags": [
+          "watch"
+        ]
+      }
+    },
+    "/v1/agent-sessions/{session_id}/control/commands/{key}": {
+      "get": {
+        "description": "How the command stands: its output after `after_seq`, and how it\nended once it has.",
+        "operationId": "command_v1_agent_sessions__session_id__control_commands__key__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_seq",
+            "required": false,
+            "schema": {
+              "default": -1,
+              "minimum": -1,
+              "title": "After Seq",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommandProgressView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Command",
+        "tags": [
+          "watch"
+        ]
+      }
+    },
+    "/v1/agent-sessions/{session_id}/control/give-back": {
+      "post": {
+        "description": "The person gives the environment back: their summary is the message\nthe agent reads on resume.",
+        "operationId": "give_back_v1_agent_sessions__session_id__control_give_back_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GiveBackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentSessionView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Give Back",
+        "tags": [
+          "watch"
+        ]
+      }
+    },
     "/v1/agent-sessions/{session_id}/controls": {
       "post": {
         "description": "The control as stored, out of band: it never waits behind a message.",
@@ -6567,6 +7376,98 @@
         "summary": "Leave",
         "tags": [
           "stations"
+        ]
+      }
+    },
+    "/v1/agent-sessions/{session_id}/live": {
+      "post": {
+        "description": "A handle to the session's open streams, for a viewer who may read it,\nthat lasts minutes.",
+        "operationId": "open_live_v1_agent_sessions__session_id__live_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveReadView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Open Live",
+        "tags": [
+          "watch"
         ]
       }
     },
@@ -10340,6 +11241,102 @@
         "summary": "Reorder",
         "tags": [
           "stations"
+        ]
+      }
+    },
+    "/v1/live": {
+      "get": {
+        "description": "The open streams of the handle's session, each after the last part\nread (`after=<step_id>:<n>`, once a stream). The handle is the\nauthority: one that does not verify, or has expired, reads nothing.",
+        "operationId": "read_live_v1_live_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "handle",
+            "required": true,
+            "schema": {
+              "maxLength": 1024,
+              "minLength": 1,
+              "title": "Handle",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LivePageView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Live",
+        "tags": [
+          "watch"
         ]
       }
     },

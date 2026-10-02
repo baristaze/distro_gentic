@@ -12,7 +12,7 @@ from collections.abc import Sequence
 from uuid import UUID
 
 from acme.om.agent_sessions.types.agent_session import AgentSession
-from acme.om.context import TenantContext
+from acme.om.context import RequestContext, TenantContext
 from acme.om.relay.types.exec import ExecProgress
 from acme.om.watch.types.control import HandCommand, HandRun
 from acme.om.watch.types.live import LivePage, LiveRead, Seen
@@ -30,10 +30,11 @@ class WatchManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def read_live(self, handle: str, seen: Sequence[Seen]) -> LivePage:
-        """The open streams of the one session the handle names, each from
-        the part after the last `seen` names for it, by the handle alone.
-        A handle that does not verify, or has expired, is
+    async def read_live(self, rctx: RequestContext, handle: str, seen: Sequence[Seen]) -> LivePage:
+        """Platform-internal: the open streams of the one session the handle
+        names, each from the part after the last `seen` names for it. The
+        handle is the authority, as a presigned URL is, so this runs below
+        any principal. A handle that does not verify, or has expired, is
         `LiveReadRefused`, and reads nothing."""
         ...
 

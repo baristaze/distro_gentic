@@ -9,7 +9,7 @@ from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agents import AgentsManagerInterface
 from acme.om.agents.loop import LoopManagerInterface
 from acme.om.base import Platform, derived_id, new_id, utcnow
-from acme.om.context import Permission, TenantContext
+from acme.om.context import Permission, RequestContext, TenantContext
 from acme.om.events import EventsManagerInterface
 from acme.om.events.manager import audit_event
 from acme.om.exceptions import NotAuthorized, NotFound, Unavailable
@@ -78,7 +78,7 @@ class WatchManagerImpl(WatchManagerInterface):
         handle = signed(self._key(), grant)
         return LiveRead(session_id=session_id, handle=handle, expires_at=expires_at)
 
-    async def read_live(self, handle: str, seen: Sequence[Seen]) -> LivePage:
+    async def read_live(self, rctx: RequestContext, handle: str, seen: Sequence[Seen]) -> LivePage:
         grant = verified(self._key(), handle)
         if grant is None:
             raise LiveReadRefused("the handle is not one the platform signed")

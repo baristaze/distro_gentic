@@ -307,6 +307,9 @@ REQUEST_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
         ("StationsManagerInterface", "claim"),
         ("StationsManagerInterface", "renew"),
         ("StationsManagerInterface", "report"),
+        # A live read, by its handle alone: the handle is the authority, as a
+        # presigned URL is, and the read mints no context.
+        ("WatchManagerInterface", "read_live"),
         # The sweep's requeue across tenants: a dead letter it makes is
         # written under its tenant's service context, minted from this stage
         # as the claim mints one.

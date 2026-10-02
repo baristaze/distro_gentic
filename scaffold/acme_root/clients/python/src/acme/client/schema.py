@@ -98,6 +98,29 @@ class CommandBody(BaseModel):
     parameters: Annotated[dict[str, Any] | None, Field(title='Parameters')] = None
 
 
+class CommandPartView(BaseModel):
+    seq: Annotated[int, Field(title='Seq')]
+    stream: Annotated[str, Field(title='Stream')]
+    text: Annotated[str, Field(title='Text')]
+
+
+class ArgvItem(RootModel[str]):
+    root: Annotated[str, Field(max_length=4096, min_length=1)]
+
+
+class CommandRequest(BaseModel):
+    """
+    A command by hand: what it runs, where in the workspace, and how long
+    it may take. Its key is the request's idempotency key.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    argv: Annotated[list[ArgvItem], Field(max_length=256, min_length=1, title='Argv')]
+    cwd: Annotated[str | None, Field(max_length=4096, min_length=1, title='Cwd')] = '.'
+    timeout_seconds: Annotated[int | None, Field(gt=0, le=3600, title='Timeout Seconds')] = 300
+
+
 class CommandView(BaseModel):
     operation: Annotated[str, Field(title='Operation')]
     parameters: Annotated[dict[str, Any], Field(title='Parameters')]
@@ -395,6 +418,13 @@ class ExecLeaseView(BaseModel):
     lease_expires_at: Annotated[AwareDatetime, Field(title='Lease Expires At')]
 
 
+class ExecState(StrEnum):
+    queued = 'queued'
+    running = 'running'
+    done = 'done'
+    interrupted = 'interrupted'
+
+
 class FilePurpose(StrEnum):
     """
     Which context a file came from. The purpose decides the bounds an
@@ -426,6 +456,29 @@ class FileView(BaseModel):
     size_bytes: Annotated[int, Field(title='Size Bytes')]
     status: FileStatus
     subject_id: Annotated[UUID | None, Field(title='Subject Id')]
+
+
+class GiveBackRequest(BaseModel):
+    """
+    What the person did, as the agent reads it on resume.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    summary: Annotated[str, Field(max_length=100000, min_length=1, title='Summary')]
+
+
+class HandRunView(BaseModel):
+    """
+    A command by hand as recorded: the item that holds what ran, the
+    person it is attributed to, and the writer epoch it runs under.
+    """
+    command_key: Annotated[UUID, Field(title='Command Key')]
+    epoch: Annotated[int, Field(title='Epoch')]
+    item_id: Annotated[UUID, Field(title='Item Id')]
+    session_id: Annotated[UUID, Field(title='Session Id')]
+    state: ExecState
+    user_id: Annotated[UUID, Field(title='User Id')]
 
 
 class InvitationState(StrEnum):
@@ -577,6 +630,16 @@ class LinePlaceView(BaseModel):
     entry: LineEntryView
     estimate_seconds: Annotated[int, Field(title='Estimate Seconds')]
     position: Annotated[int, Field(title='Position')]
+
+
+class LiveReadView(BaseModel):
+    """
+    A handle to one session's open streams until `expires_at`. Read it
+    at `GET /v1/live?handle=`; a viewer asks for a new one when it ends.
+    """
+    expires_at: Annotated[AwareDatetime, Field(title='Expires At')]
+    handle: Annotated[str, Field(title='Handle')]
+    session_id: Annotated[UUID, Field(title='Session Id')]
 
 
 class LogoutRequest(BaseModel):
@@ -737,6 +800,13 @@ class ParkView(BaseModel):
     reason: ParkReason
     retry_at: Annotated[AwareDatetime | None, Field(title='Retry At')]
     unlock: Annotated[str, Field(title='Unlock')]
+
+
+class PartKind(StrEnum):
+    text = 'text'
+    thinking = 'thinking'
+    tool_input = 'tool_input'
+    tool_output = 'tool_output'
 
 
 class Permission(StrEnum):
@@ -1077,6 +1147,17 @@ class StepType(StrEnum):
     environment_changed = 'environment_changed'
 
 
+class StopKind(StrEnum):
+    """
+    What the control stream tells a host about one item it holds. Each
+    ends the command at once.
+    """
+    cancel = 'cancel'
+    interrupt = 'interrupt'
+    deadline = 'deadline'
+    revoke = 'revoke'
+
+
 class StopReason(StrEnum):
     """
     Why a response stopped. A model's refusal is a response its agent kind
@@ -1288,6 +1369,23 @@ class ClaimView(BaseModel):
     item: ClaimedWorkView | None
 
 
+class CommandProgressView(BaseModel):
+    """
+    How a command stands: its state, its output after the last part read,
+    and how it ended once it has. `refused` names why its host or the relay
+    refused it, such as a command a later run fenced.
+    """
+    exit_code: Annotated[int | None, Field(title='Exit Code')] = None
+    parts: Annotated[list[CommandPartView], Field(title='Parts')]
+    refused: Annotated[str | None, Field(title='Refused')] = None
+    state: ExecState
+    stderr: Annotated[str | None, Field(title='Stderr')] = None
+    stdout: Annotated[str | None, Field(title='Stdout')] = None
+    stopped: StopKind | None = None
+    timed_out: Annotated[bool | None, Field(title='Timed Out')] = False
+    truncated: Annotated[bool | None, Field(title='Truncated')] = False
+
+
 class ControlRequest(BaseModel):
     """
     A control. An interrupt names the seq of the tool request it stops,
@@ -1454,6 +1552,33 @@ class LastOwnerDetail(BaseModel):
     last owner of, which they hand on or delete before their account goes.
     """
     orgs: Annotated[list[OwnedOrgRef], Field(title='Orgs')]
+
+
+class LivePartView(BaseModel):
+    """
+    One part of a stream: its kind, its place, and its text. `index` is
+    the block of a model response it belongs to; a tool call's input names
+    the call, and a tool's output its channel.
+    """
+    channel: Annotated[str | None, Field(title='Channel')] = None
+    index: Annotated[int | None, Field(title='Index')] = None
+    kind: PartKind
+    n: Annotated[int, Field(title='N')]
+    text: Annotated[str, Field(title='Text')]
+    tool: Annotated[str | None, Field(title='Tool')] = None
+    tool_use_id: Annotated[str | None, Field(title='Tool Use Id')] = None
+
+
+class LiveStreamView(BaseModel):
+    """
+    One open stream: the step it adds up to, the oldest part the service
+    still holds, the parts after the last one read, and whether parts never
+    read were let go. The step holds them once it is stored.
+    """
+    dropped: Annotated[bool, Field(title='Dropped')]
+    first: Annotated[int, Field(title='First')]
+    parts: Annotated[list[LivePartView], Field(title='Parts')]
+    step_id: Annotated[UUID, Field(title='Step Id')]
 
 
 class MeView(BaseModel):
@@ -1689,6 +1814,11 @@ class JobReportRequest(BaseModel):
     refused: Annotated[list[RefusalBody] | None, Field(max_length=100, title='Refused')] = None
     run_id: Annotated[UUID, Field(title='Run Id')]
     started_at: Annotated[AwareDatetime, Field(title='Started At')]
+
+
+class LivePageView(BaseModel):
+    session_id: Annotated[UUID, Field(title='Session Id')]
+    streams: Annotated[list[LiveStreamView], Field(title='Streams')]
 
 
 class MembershipChoicePageView(BaseModel):
