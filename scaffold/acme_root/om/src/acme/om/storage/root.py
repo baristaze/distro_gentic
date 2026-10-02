@@ -5,13 +5,17 @@ from abc import ABC, abstractmethod
 from acme.om.agent_sessions.storage import AgentSessionStorageInterface
 from acme.om.agents.storage import AgentStorageInterface
 from acme.om.attribution.storage import AttributionStorageInterface
+from acme.om.automations.storage import AutomationStorageInterface
 from acme.om.budgets.storage import BudgetStorageInterface, LedgerStorageInterface
 from acme.om.events.storage import EventStorageInterface
 from acme.om.idempotency.storage import IdempotencyStorageInterface
+from acme.om.intake.storage import IntakeStorageInterface
+from acme.om.knowledge.storage import KnowledgeStorageInterface
 from acme.om.media.storage import MediaStorageInterface
 from acme.om.models.storage import FillSetStorageInterface
 from acme.om.orchestrations.storage import OrchestrationsStorageInterface
 from acme.om.outbox.storage import OutboxStorageInterface
+from acme.om.playbooks.storage import PlaybookStorageInterface
 from acme.om.privacy.storage import PrivacyStorageInterface
 from acme.om.steps.storage import StepStorageInterface
 from acme.om.tenancy.storage import TenancyStorageInterface
@@ -75,6 +79,18 @@ class StorageInterface(ABC):
 
     @abstractmethod
     def get_trust_storage(self) -> TrustStorageInterface: ...
+
+    @abstractmethod
+    def get_intake_storage(self) -> IntakeStorageInterface: ...
+
+    @abstractmethod
+    def get_automation_storage(self) -> AutomationStorageInterface: ...
+
+    @abstractmethod
+    def get_playbook_storage(self) -> PlaybookStorageInterface: ...
+
+    @abstractmethod
+    def get_knowledge_storage(self) -> KnowledgeStorageInterface: ...
 
     @abstractmethod
     async def healthcheck(self) -> bool: ...

@@ -6,12 +6,18 @@ from acme.om.agents.storage import AgentStorageInterface
 from acme.om.agents.storage.impl.memory import AgentStorageMemoryImpl
 from acme.om.attribution.storage import AttributionStorageInterface
 from acme.om.attribution.storage.impl.memory import AttributionStorageMemoryImpl
+from acme.om.automations.storage import AutomationStorageInterface
+from acme.om.automations.storage.impl.memory import AutomationStorageMemoryImpl
 from acme.om.budgets.storage import BudgetStorageInterface, LedgerStorageInterface
 from acme.om.budgets.storage.impl.memory import BudgetStorageMemoryImpl, LedgerStorageMemoryImpl
 from acme.om.events.storage import EventStorageInterface
 from acme.om.events.storage.impl.memory import EventStorageMemoryImpl
 from acme.om.idempotency.storage import IdempotencyStorageInterface
 from acme.om.idempotency.storage.impl.memory import IdempotencyStorageMemoryImpl
+from acme.om.intake.storage import IntakeStorageInterface
+from acme.om.intake.storage.impl.memory import IntakeStorageMemoryImpl
+from acme.om.knowledge.storage import KnowledgeStorageInterface
+from acme.om.knowledge.storage.impl.memory import KnowledgeStorageMemoryImpl
 from acme.om.media.storage import MediaStorageInterface
 from acme.om.media.storage.impl.memory import MediaStorageMemoryImpl
 from acme.om.models.storage import FillSetStorageInterface
@@ -20,6 +26,8 @@ from acme.om.orchestrations.storage import OrchestrationsStorageInterface
 from acme.om.orchestrations.storage.impl.memory import OrchestrationsStorageMemoryImpl
 from acme.om.outbox.storage import OutboxStorageInterface
 from acme.om.outbox.storage.impl.memory import OutboxStorageMemoryImpl
+from acme.om.playbooks.storage import PlaybookStorageInterface
+from acme.om.playbooks.storage.impl.memory import PlaybookStorageMemoryImpl
 from acme.om.privacy.storage import PrivacyStorageInterface
 from acme.om.privacy.storage.impl.memory import PrivacyStorageMemoryImpl
 from acme.om.steps.storage import StepStorageInterface
@@ -60,6 +68,10 @@ class StorageMemoryImpl(StorageInterface):
         self._windows = WindowStorageMemoryImpl()
         self._tools = ToolStorageMemoryImpl(self._outbox)
         self._trust = TrustStorageMemoryImpl(self._outbox)
+        self._intake = IntakeStorageMemoryImpl()
+        self._automation = AutomationStorageMemoryImpl(self._outbox)
+        self._playbook = PlaybookStorageMemoryImpl(self._outbox)
+        self._knowledge = KnowledgeStorageMemoryImpl(self._outbox)
 
     def get_tenancy_storage(self) -> TenancyStorageInterface:
         return self._tenancy
@@ -114,6 +126,18 @@ class StorageMemoryImpl(StorageInterface):
 
     def get_trust_storage(self) -> TrustStorageInterface:
         return self._trust
+
+    def get_intake_storage(self) -> IntakeStorageInterface:
+        return self._intake
+
+    def get_automation_storage(self) -> AutomationStorageInterface:
+        return self._automation
+
+    def get_playbook_storage(self) -> PlaybookStorageInterface:
+        return self._playbook
+
+    def get_knowledge_storage(self) -> KnowledgeStorageInterface:
+        return self._knowledge
 
     async def healthcheck(self) -> bool:
         return True

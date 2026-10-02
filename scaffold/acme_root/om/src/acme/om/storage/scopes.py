@@ -121,6 +121,13 @@ TABLE_SCOPES: dict[str, TableScope] = {
     "secret_declarations": TableScope(ScopeKind.ORG),
     "provider_keys": TableScope(ScopeKind.ORG),
     "content_grants": TableScope(ScopeKind.ORG),
+    "account_links": TableScope(ScopeKind.ORG),
+    "work_bindings": TableScope(ScopeKind.ORG),
+    "automations": TableScope(ScopeKind.ORG),
+    "automation_runs": TableScope(ScopeKind.ORG),
+    "playbooks": TableScope(ScopeKind.ORG),
+    "playbook_invocations": TableScope(ScopeKind.ORG),
+    "knowledge_entries": TableScope(ScopeKind.ORG),
     # A tenant's rows that also belong to one person in it. A user's person
     # is the identity behind it, so it narrows on `app.identity_id`; every
     # other row here names the user and narrows on `app.user_id`.

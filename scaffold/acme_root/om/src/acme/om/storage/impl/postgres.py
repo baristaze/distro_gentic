@@ -16,6 +16,8 @@ from acme.om.agents.storage import AgentStorageInterface
 from acme.om.agents.storage.impl.postgres import AgentStoragePostgresImpl
 from acme.om.attribution.storage import AttributionStorageInterface
 from acme.om.attribution.storage.impl.postgres import AttributionStoragePostgresImpl
+from acme.om.automations.storage import AutomationStorageInterface
+from acme.om.automations.storage.impl.postgres import AutomationStoragePostgresImpl
 from acme.om.budgets.storage import BudgetStorageInterface, LedgerStorageInterface
 from acme.om.budgets.storage.impl.postgres import (
     BudgetStoragePostgresImpl,
@@ -25,6 +27,10 @@ from acme.om.events.storage import EventStorageInterface
 from acme.om.events.storage.impl.postgres import EventStoragePostgresImpl
 from acme.om.idempotency.storage import IdempotencyStorageInterface
 from acme.om.idempotency.storage.impl.postgres import IdempotencyStoragePostgresImpl
+from acme.om.intake.storage import IntakeStorageInterface
+from acme.om.intake.storage.impl.postgres import IntakeStoragePostgresImpl
+from acme.om.knowledge.storage import KnowledgeStorageInterface
+from acme.om.knowledge.storage.impl.postgres import KnowledgeStoragePostgresImpl
 from acme.om.media.storage import MediaStorageInterface
 from acme.om.media.storage.impl.postgres import MediaStoragePostgresImpl
 from acme.om.models.storage import FillSetStorageInterface
@@ -33,6 +39,8 @@ from acme.om.orchestrations.storage import OrchestrationsStorageInterface
 from acme.om.orchestrations.storage.impl.postgres import OrchestrationsStoragePostgresImpl
 from acme.om.outbox.storage import OutboxStorageInterface
 from acme.om.outbox.storage.impl.postgres import OutboxStoragePostgresImpl
+from acme.om.playbooks.storage import PlaybookStorageInterface
+from acme.om.playbooks.storage.impl.postgres import PlaybookStoragePostgresImpl
 from acme.om.privacy.storage import PrivacyStorageInterface
 from acme.om.privacy.storage.impl.postgres import PrivacyStoragePostgresImpl
 from acme.om.steps.storage import StepStorageInterface
@@ -193,6 +201,10 @@ class StoragePostgresImpl(StorageInterface):
         self._windows = WindowStoragePostgresImpl(sessions)
         self._tools = ToolStoragePostgresImpl(sessions)
         self._trust = TrustStoragePostgresImpl(sessions)
+        self._intake = IntakeStoragePostgresImpl(sessions)
+        self._automation = AutomationStoragePostgresImpl(sessions)
+        self._playbook = PlaybookStoragePostgresImpl(sessions)
+        self._knowledge = KnowledgeStoragePostgresImpl(sessions)
 
     def get_tenancy_storage(self) -> TenancyStorageInterface:
         return self._tenancy
@@ -247,6 +259,18 @@ class StoragePostgresImpl(StorageInterface):
 
     def get_trust_storage(self) -> TrustStorageInterface:
         return self._trust
+
+    def get_intake_storage(self) -> IntakeStorageInterface:
+        return self._intake
+
+    def get_automation_storage(self) -> AutomationStorageInterface:
+        return self._automation
+
+    def get_playbook_storage(self) -> PlaybookStorageInterface:
+        return self._playbook
+
+    def get_knowledge_storage(self) -> KnowledgeStorageInterface:
+        return self._knowledge
 
     async def healthcheck(self) -> bool:
         """A connect and a `SELECT 1` on every engine, each under the bounds its

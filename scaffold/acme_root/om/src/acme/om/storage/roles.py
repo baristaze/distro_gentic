@@ -46,6 +46,13 @@ TABLE_ROLES: dict[str, DatabaseRole] = {
     "secret_declarations": DatabaseRole.CORE,
     "provider_keys": DatabaseRole.CORE,
     "content_grants": DatabaseRole.CORE,
+    "account_links": DatabaseRole.CORE,
+    "work_bindings": DatabaseRole.CORE,
+    "automations": DatabaseRole.CORE,
+    "automation_runs": DatabaseRole.CORE,
+    "playbooks": DatabaseRole.CORE,
+    "playbook_invocations": DatabaseRole.CORE,
+    "knowledge_entries": DatabaseRole.CORE,
 }
 
 APPEND_ONLY_TABLES: frozenset[str] = frozenset(
