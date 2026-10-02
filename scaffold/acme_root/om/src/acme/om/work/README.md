@@ -15,9 +15,13 @@ kinds of thing [Acme is made of](../../../../README.md).
   frees, `DELETE_ACCOUNT` and `DELETE_ORG` for the identity provider's
   side of a deletion, `WAKE_SESSION` and `WAKE_SESSIONS` for the
   agent sessions a park's time or a raised budget frees, and `LOOP` for
-  a session's loop, which the session runner runs. A kind whose
-  payload names a time waits until then.
-- **Lane**: a routing name. A worker serves one lane.
+  a session's loop, which the session runner runs. The platform adds
+  three that a host or a daemon claims through the gateway: `EXEC`,
+  `WORKSPACE`, and `STATION`. A kind whose payload names a time waits
+  until then.
+- **Lane**: a routing name, which
+  [placement](../placement/README.md) answers at every enqueue. A
+  worker serves one lane.
 - **Handler**: the code that does one kind. It is idempotent, because
   an item may run twice.
 
