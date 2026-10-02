@@ -36,6 +36,7 @@ from contracts import (
     outbox_storage,
     placement_storage,
     privacy_storage,
+    relay_storage,
     retention_storage,
     step_storage,
     tenancy_storage,
@@ -90,6 +91,9 @@ STORAGE_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         # credential is found by digest, which finds the tenant with it.
         ("HostsStorageInterface", "read_enrollment_token_by_digest"),
         ("HostsStorageInterface", "read_host_by_credential_digest"),
+        # The sweep's read of running exec items whose lease ended, each named
+        # with its tenant, whose service context the sweep settles it under.
+        ("RelayStorageInterface", "read_expired"),
         # The sweep's requeue of expired leases: a named write in the system
         # scope, like the claim it undoes. A crashed worker's item waits one
         # pass for it, not the turn of its tenant in a ring of every tenant.
@@ -141,6 +145,7 @@ CROSS_TENANT_CASES: dict[str, frozenset[str]] = {
     "OutboxStorageInterface": outbox_storage.CROSS_TENANT_CASES,
     "PlacementStorageInterface": placement_storage.CROSS_TENANT_CASES,
     "PrivacyStorageInterface": privacy_storage.CROSS_TENANT_CASES,
+    "RelayStorageInterface": relay_storage.CROSS_TENANT_CASES,
     "RetentionStorageInterface": retention_storage.CROSS_TENANT_CASES,
     "StepStorageInterface": step_storage.CROSS_TENANT_CASES,
     "TenancyStorageInterface": tenancy_storage.CROSS_TENANT_CASES,
@@ -190,6 +195,7 @@ MANAGER_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         ("WindowsManagerInterface", "purge_artifacts"),
         ("ToolsManagerInterface", "purge_workspace"),
         ("EvidenceManagerInterface", "purge_session"),
+        ("RelayManagerInterface", "purge_session"),
         # The sweep's gauges of the queue, read across tenants like the purge.
         ("WorkManagerInterface", "oldest_ready_age"),
         ("WorkManagerInterface", "failed_within"),
@@ -240,6 +246,23 @@ REQUEST_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
         ("HostsManagerInterface", "rotate"),
         ("HostsManagerInterface", "heartbeat"),
         ("HostsManagerInterface", "claim"),
+        # The relay runs below any principal: the runner's transport sends,
+        # watches, stops, and recovers a session's exec items, and a host
+        # reads, streams, settles, and renews the items it holds and reads its
+        # control messages. Each mints its tenant's service context from this
+        # stage, as the claim does.
+        ("RelayManagerInterface", "send"),
+        ("RelayManagerInterface", "watch"),
+        ("RelayManagerInterface", "stop"),
+        ("RelayManagerInterface", "outcome_of"),
+        ("RelayManagerInterface", "detail"),
+        ("RelayManagerInterface", "push_part"),
+        ("RelayManagerInterface", "push_result"),
+        ("RelayManagerInterface", "extend"),
+        ("RelayManagerInterface", "controls"),
+        # And the sweep's settlement of the items whose lease ended, across
+        # tenants, each under its tenant's service context.
+        ("RelayManagerInterface", "settle_expired"),
         # The sweep's requeue across tenants: a dead letter it makes is
         # written under its tenant's service context, minted from this stage
         # as the claim mints one.

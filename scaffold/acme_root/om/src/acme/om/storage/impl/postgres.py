@@ -41,6 +41,8 @@ from acme.om.placement.storage import PlacementStorageInterface
 from acme.om.placement.storage.impl.postgres import PlacementStoragePostgresImpl
 from acme.om.privacy.storage import PrivacyStorageInterface
 from acme.om.privacy.storage.impl.postgres import PrivacyStoragePostgresImpl
+from acme.om.relay.storage import RelayStorageInterface
+from acme.om.relay.storage.impl.postgres import RelayStoragePostgresImpl
 from acme.om.retention.storage import RetentionStorageInterface
 from acme.om.retention.storage.impl.postgres import RetentionStoragePostgresImpl
 from acme.om.steps.storage import StepStorageInterface
@@ -205,6 +207,7 @@ class StoragePostgresImpl(StorageInterface):
         self._placement = PlacementStoragePostgresImpl(sessions)
         self._trust = TrustStoragePostgresImpl(sessions)
         self._hosts = HostsStoragePostgresImpl(sessions)
+        self._relay = RelayStoragePostgresImpl(sessions)
 
     def get_tenancy_storage(self) -> TenancyStorageInterface:
         return self._tenancy
@@ -271,6 +274,9 @@ class StoragePostgresImpl(StorageInterface):
 
     def get_hosts_storage(self) -> HostsStorageInterface:
         return self._hosts
+
+    def get_relay_storage(self) -> RelayStorageInterface:
+        return self._relay
 
     async def healthcheck(self) -> bool:
         """A connect and a `SELECT 1` on every engine, each under the bounds its

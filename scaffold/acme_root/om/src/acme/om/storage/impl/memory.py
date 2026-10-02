@@ -28,6 +28,8 @@ from acme.om.placement.storage import PlacementStorageInterface
 from acme.om.placement.storage.impl.memory import PlacementStorageMemoryImpl
 from acme.om.privacy.storage import PrivacyStorageInterface
 from acme.om.privacy.storage.impl.memory import PrivacyStorageMemoryImpl
+from acme.om.relay.storage import RelayStorageInterface
+from acme.om.relay.storage.impl.memory import RelayStorageMemoryImpl
 from acme.om.retention.storage import RetentionStorageInterface
 from acme.om.retention.storage.impl.memory import RetentionStorageMemoryImpl
 from acme.om.steps.storage import StepStorageInterface
@@ -72,6 +74,7 @@ class StorageMemoryImpl(StorageInterface):
         self._placement = PlacementStorageMemoryImpl()
         self._trust = TrustStorageMemoryImpl(self._outbox)
         self._hosts = HostsStorageMemoryImpl(self._outbox)
+        self._relay = RelayStorageMemoryImpl(self._outbox)
 
     def get_tenancy_storage(self) -> TenancyStorageInterface:
         return self._tenancy
@@ -138,6 +141,9 @@ class StorageMemoryImpl(StorageInterface):
 
     def get_hosts_storage(self) -> HostsStorageInterface:
         return self._hosts
+
+    def get_relay_storage(self) -> RelayStorageInterface:
+        return self._relay
 
     async def healthcheck(self) -> bool:
         return True

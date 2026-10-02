@@ -9,6 +9,7 @@ from uuid import UUID
 from acme.infra.base import QuietNull
 from acme.infra.cache import CacheInterface, CacheScope
 from acme.infra.root import InfraInterface
+from acme.infra.transports import TransportInterface
 from acme.integrations.identity import IdentityProviderInterface
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
 from acme.integrations.model_providers.registry import absent_model_providers
@@ -73,6 +74,9 @@ from acme.om.privacy.impl.records import RecordSealKeysImpl
 from acme.om.privacy.impl.routed_steps import StepStorageRoutedImpl
 from acme.om.privacy.impl.sealed_steps import StepStorageSealedImpl
 from acme.om.privacy.keys import SessionKeysInterface
+from acme.om.relay import RelayManagerInterface
+from acme.om.relay.impl.manager import RelayManagerImpl, RelayOptions
+from acme.om.relay.impl.placement import PlacementClaimsRelayedImpl
 from acme.om.retention import RetentionManagerInterface
 from acme.om.retention.impl.keys import (
     KeyServiceByTenantImpl,
@@ -143,6 +147,7 @@ class Managers:
     placement: PlacementManagerInterface
     placement_operator: PlacementOperatorManagerInterface
     hosts: HostsManagerInterface
+    relay: RelayManagerInterface
 
 
 LOCAL = "local"
@@ -174,6 +179,7 @@ async def purge_held(
     runs, and its tree when it was the tree's last session."""
     await managers.windows.purge_artifacts(org_id, session_id)
     await managers.tools.purge_workspace(org_id, session_id)
+    await managers.relay.purge_session(org_id, session_id)
     await managers.attribution.purge_authority(org_id, session_id)
     await managers.evidence.purge_session(org_id, session_id)
     if tree_id is not None:
@@ -279,6 +285,8 @@ def build_managers(
     loop_options: LoopOptions | None = None,
     placement_options: PlacementOptions | None = None,
     hosts_options: HostsOptions | None = None,
+    relay_options: RelayOptions | None = None,
+    transport_layer: Callable[[TransportInterface], TransportInterface] | None = None,
     environment: str = LOCAL,
     tenant_keys: TenantKeysInterface | None = None,
     session_projects: SessionProjectInterface | None = None,
@@ -342,6 +350,11 @@ def build_managers(
     and the delay a loop over its share waits; None keeps the defaults.
     `hosts_options` is the lives of a host's credentials, the window a host
     counts as online, and its claim's lease; None keeps the defaults.
+    `relay_options` is the lease a host renews on an `exec` item and the
+    bounds of its output; None keeps the defaults. `transport_layer` wraps
+    the transport infra chose before the tools take it: the session runner
+    puts the relay behind it for a session inside its tenant's wall. None
+    takes infra's transport as it is.
 
     The platform's retention takes three. `tenant_keys` says whose key
     service holds each tenant's keys; None is infra's for every tenant, and
@@ -540,6 +553,8 @@ def build_managers(
     if PROTECTED_CEILING not in tool_options.ceilings.rules:
         ceilings = PolicyLayer(rules=(*tool_options.ceilings.rules, PROTECTED_CEILING))
         tool_options = tool_options.model_copy(update={"ceilings": ceilings})
+    records = record_seal or RecordSealKeysImpl(session_keys, storage.get_privacy_storage())
+    transport = infra.get_transport()
     tools: ToolsManagerInterface = ToolsManagerImpl(
         storage.get_tool_storage(),
         steps,
@@ -547,10 +562,10 @@ def build_managers(
         events,
         outbox,
         infra.get_workspaces(),
-        infra.get_transport(),
+        transport if transport_layer is None else transport_layer(transport),
         tool_options,
         keyed_hash=privacy.keyed_hash,
-        record_seal=record_seal or RecordSealKeysImpl(session_keys, storage.get_privacy_storage()),
+        record_seal=records,
         attribution=attribution,
     )
     # What makes a result: the runs, the policies, and validation on the
@@ -579,6 +594,18 @@ def build_managers(
         work,
         tenancy,
         placement_options or PlacementOptions(),
+    )
+    # A host's credential, its claims through placement, and where each
+    # session runs. An exec item a claim takes is started by the relay before
+    # it reaches a host; the relay is built below, so the edge is bound at
+    # call time.
+    hosts = HostsManagerImpl(
+        storage.get_hosts_storage(),
+        PlacementClaimsRelayedImpl(placement, lambda: managers.relay),
+        agent_sessions,
+        tenancy,
+        outbox,
+        hosts_options or HostsOptions(),
     )
     managers = Managers(
         tenancy=tenancy,
@@ -635,15 +662,19 @@ def build_managers(
             storage.get_event_storage(),
             infra.get_topics(),
         ),
-        # A host's credential, its claims through placement, and where each
-        # session runs.
-        hosts=HostsManagerImpl(
-            storage.get_hosts_storage(),
-            placement,
-            agent_sessions,
+        hosts=hosts,
+        # A tool call into a customer's wall as keyed exec work: its items,
+        # their output sealed under the session's key as its commands' records
+        # are, and the control messages that stop them.
+        relay=RelayManagerImpl(
+            storage.get_relay_storage(),
+            work,
+            steps,
             tenancy,
+            hosts,
             outbox,
-            hosts_options or HostsOptions(),
+            records,
+            relay_options or RelayOptions(),
         ),
     )
     return managers
