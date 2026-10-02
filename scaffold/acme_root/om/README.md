@@ -202,6 +202,7 @@ arrive twice, so the second copy gets the first one's answer.
 - [Models](src/acme/om/models/README.md)
 - [Windows](src/acme/om/windows/README.md)
 - [Tools](src/acme/om/tools/README.md)
+- [Trust](src/acme/om/trust/README.md)
 - [Events](src/acme/om/events/README.md)
 - [Outbox rows](src/acme/om/outbox/README.md)
 - [Work items](src/acme/om/work/README.md)

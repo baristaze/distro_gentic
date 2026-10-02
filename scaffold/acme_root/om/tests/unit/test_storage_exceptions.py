@@ -36,6 +36,7 @@ from contracts import (
     step_storage,
     tenancy_storage,
     tool_storage,
+    trust_storage,
     window_storage,
     work_storage,
 )
@@ -128,6 +129,7 @@ CROSS_TENANT_CASES: dict[str, frozenset[str]] = {
     "TenancyStorageInterface": tenancy_storage.CROSS_TENANT_CASES,
     "WindowStorageInterface": window_storage.CROSS_TENANT_CASES,
     "ToolStorageInterface": tool_storage.CROSS_TENANT_CASES,
+    "TrustStorageInterface": trust_storage.CROSS_TENANT_CASES,
     "WorkStorageInterface": work_storage.CROSS_TENANT_CASES,
 }
 """Which contract suite carries the cross-tenant cases of each storage
@@ -201,6 +203,10 @@ REQUEST_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
         ("TenancyManagerInterface", "grant_operator"),
         ("TenancyManagerInterface", "disable_operator"),
         ("TenancyManagerInterface", "grant_operator_token"),
+        # The grant job's content grant, which no route writes, beside the
+        # operator allowlist's.
+        ("TrustOperatorManagerInterface", "grant_content"),
+        ("TrustOperatorManagerInterface", "revoke_content"),
         ("WorkManagerInterface", "claim"),
         # The sweep's requeue across tenants: a dead letter it makes is
         # written under its tenant's service context, minted from this stage
