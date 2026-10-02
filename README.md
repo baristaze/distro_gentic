@@ -53,6 +53,11 @@ In Claude Code, the repository is a plugin marketplace:
 /plugin install distro-gentic@distro-gentic
 ```
 
+The full review, `distro-review-full`, judges all three layers: the
+platform's rules itself, and the engine's and the guideline's through
+their own full reviews. Install their plugins beside this one, or its
+report names their layers as not run.
+
 ## Develop
 
 ```bash
