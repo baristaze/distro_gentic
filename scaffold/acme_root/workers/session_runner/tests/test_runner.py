@@ -36,6 +36,7 @@ from acme.om.context import (
     TenantContext,
 )
 from acme.om.exceptions import NotFound, UnknownAgentKind
+from acme.om.placement.rules import CLAIMED_THROUGH_THE_GATEWAY
 from acme.om.steps.rules import message_step
 from acme.om.steps.types.header import LoopOutcome
 from acme.om.steps.types.step import StepType
@@ -55,6 +56,7 @@ from acme.om.work.types.work_item import (
 from acme.workers.maintenance.container import WorkerContainer
 from acme.workers.maintenance.main import build_loop
 from acme.workers.session_runner.container import RunnerContainer
+from acme.workers.session_runner.fair_share import FairShareGuardImpl
 from acme.workers.session_runner.main import build_runner, loop_options
 from acme.workers.session_runner.runs import LoopHandlerImpl
 from acme.workers.session_runner.settings import SessionRunnerSettings
@@ -203,30 +205,34 @@ async def test_a_runner_that_lacks_the_kind_leaves_the_loop_to_a_retry(tmp_path:
 def test_every_kind_is_claimed_by_one_worker_and_asked_for_as_widely_as_it_runs(
     tmp_path: Path,
 ) -> None:
-    """The maintenance worker and the runner split the kinds between them,
+    """The maintenance worker and the runner split the kinds the platform's
+    own workers run, a host and a daemon claim the rest through the gateway,
     and whoever may ask for the loop's work may make every call its handler
-    makes."""
+    and its guard make."""
     worker = WorkerContainer.for_tests(StorageMemoryImpl(), InfraLocalImpl(tmp_path / "worker"))
     maintenance = set(build_loop(worker).kinds)
     runner = runner_over(tmp_path)
     handlers = build_runner(runner)._handlers  # pyright: ignore[reportPrivateUsage]
     assert set(handlers) == {WorkKind.LOOP} and not maintenance & set(handlers)
-    assert maintenance | set(handlers) == set(WorkKind)
+    assert not (maintenance | set(handlers)) & CLAIMED_THROUGH_THE_GATEWAY
+    assert maintenance | set(handlers) | CLAIMED_THROUGH_THE_GATEWAY == set(WorkKind)
     asking = WORK_ENQUEUE_PERMISSIONS[WorkKind.LOOP]
+    requires = (*LoopHandlerImpl.REQUIRES, *FairShareGuardImpl.REQUIRES)
     for role, permissions in ROLE_PERMISSIONS.items():
         if asking in permissions:
-            missing = [p for p in LoopHandlerImpl.REQUIRES if p not in permissions]
+            missing = [p for p in requires if p not in permissions]
             assert not missing, f"{role.value} asks for LOOP without {missing}"
 
 
 def test_the_runner_sweeps_recovery_alone_on_knobs_of_its_own() -> None:
-    options = loop_options(settings(runner_lease_seconds=7, runner_lane="loops"))
+    options = loop_options(settings(runner_lease_seconds=7, runner_lane="loop:pro"))
     assert options.recovery_only, "the runner purges nothing and judges no tenant purged"
     assert (options.lease, options.lane, options.worker_id) == (
         timedelta(seconds=7),
-        "loops",
+        "loop:pro",
         "runner-test",
     )
+    assert loop_options(settings()).lane == "loop:standard", "the default tier's lane"
 
 
 def test_every_knob_of_the_runner_is_in_the_example_env() -> None:

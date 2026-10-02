@@ -134,6 +134,17 @@ on their own, which wait for a person, and which never run, and who may
 approve each kind. A person's yes or no to one call is a step of the
 session's history.
 
+## Where work runs
+
+Each kind of work a session makes runs where what it needs is: its loop
+on the platform's runners, a command on the machine that holds its
+workspace, work on a station beside the station. A **lane** is where an
+item waits for that place.
+
+An org's **fair share** says which lane its loops wait in, its plan's or
+one of its own, and how many of them run at once. The platform's
+operators set it. A loop over it waits its turn and never fails.
+
 ## What the platform writes for itself
 
 No person creates these and no screen shows them, but each belongs to
@@ -188,6 +199,8 @@ arrive twice, so the second copy gets the first one's answer.
 - A loop is a run of a session's steps and has no record of its own; it
   reads where it is from them, so a loop a crash interrupted goes on
   where it stopped.
+- A fair share names its org, one each, and the lane of every loop the
+  org asks for is read off it.
 
 ## One page per kind
 
@@ -202,6 +215,7 @@ arrive twice, so the second copy gets the first one's answer.
 - [Models](src/acme/om/models/README.md)
 - [Windows](src/acme/om/windows/README.md)
 - [Tools](src/acme/om/tools/README.md)
+- [Placement](src/acme/om/placement/README.md)
 - [Trust](src/acme/om/trust/README.md)
 - [Events](src/acme/om/events/README.md)
 - [Outbox rows](src/acme/om/outbox/README.md)

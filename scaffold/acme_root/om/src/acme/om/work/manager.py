@@ -99,6 +99,16 @@ class WorkManagerInterface(ABC):
         ...
 
     @abstractmethod
+    async def claimed_ahead(self, ctx: TenantContext, item: WorkItem) -> int:
+        """How many of the tenant's other items of the item's kind are claimed
+        under a live lease ahead of it: before it in the claim order on its
+        lane, and every one on another lane, where the claim order says
+        nothing. A guard at the claim counts them, so of two items claimed
+        together under a bound one of them fits, the later in the claim order
+        is the one that waits, and neither waits on the other forever."""
+        ...
+
+    @abstractmethod
     async def requeue_stale(self, rctx: RequestContext, limit: int) -> int:
         """Platform-internal: the sweep, across tenants, like the claim: returns
         up to `limit` items whose lease expired to the queue, or fails them

@@ -18,6 +18,7 @@ LEASE = timedelta(seconds=30)
 
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
+        "count_claimed_ahead",
         "create_item",
         "read_item",
         "read_item_by_key",
@@ -362,6 +363,65 @@ class WorkStorageContract:
         assert await storage.create_item(elsewhere, theirs) is InsertOutcome.INSERTED
         assert await storage.read_item_by_key(org, mine.idempotency_key) == mine
         assert await storage.read_item_by_key(elsewhere, mine.idempotency_key) == theirs
+
+    async def test_the_claims_ahead_are_live_of_the_kind_before_it_on_its_lane_or_on_another(
+        self, storage: WorkStorageInterface, lane: str
+    ) -> None:
+        org, now = new_id(), utcnow()
+
+        def claimed(
+            seconds_ago: int, *, on: str = lane, kind: WorkKind = WorkKind.LOOP, live: bool = True
+        ) -> WorkItem:
+            item = make_item(lane=on).model_copy(
+                update={
+                    "kind": kind,
+                    "available_at": now - timedelta(seconds=seconds_ago),
+                    "status": WorkStatus.CLAIMED,
+                    "claimed_by": "runner",
+                    "claim_token": new_id(),
+                    "lease_expires_at": now + (LEASE if live else -LEASE),
+                }
+            )
+            return item
+
+        mine = claimed(2)
+        ahead = claimed(3)
+        behind = claimed(1)
+        elsewhere = claimed(0, on=lane + "-other")
+        lapsed = claimed(4, live=False)
+        another_kind = claimed(5, kind=WorkKind.NOOP)
+        queued = claimed(6).model_copy(
+            update={
+                "status": WorkStatus.QUEUED,
+                "claimed_by": None,
+                "claim_token": None,
+                "lease_expires_at": None,
+            }
+        )
+        for item in (mine, ahead, behind, elsewhere, lapsed, another_kind, queued):
+            assert await storage.create_item(org, item) is InsertOutcome.INSERTED
+        assert await storage.count_claimed_ahead(org, mine, now) == 2, "ahead, and elsewhere"
+        assert await storage.count_claimed_ahead(org, behind, now) == 3
+        assert await storage.count_claimed_ahead(org, ahead, now) == 1, "elsewhere alone"
+
+    async def test_count_claimed_ahead_of_another_tenant_counts_none(
+        self, storage: WorkStorageInterface, lane: str
+    ) -> None:
+        org, other_org, now = new_id(), new_id(), utcnow()
+        claim = {
+            "kind": WorkKind.LOOP,
+            "status": WorkStatus.CLAIMED,
+            "claimed_by": "runner",
+            "lease_expires_at": now + LEASE,
+        }
+        ahead = make_item(lane=lane).model_copy(
+            update={**claim, "claim_token": new_id(), "available_at": now - LEASE}
+        )
+        mine = make_item(lane=lane).model_copy(update={**claim, "claim_token": new_id()})
+        await storage.create_item(org, ahead)
+        await storage.create_item(org, mine)
+        assert await storage.count_claimed_ahead(org, mine, now) == 1
+        assert await storage.count_claimed_ahead(other_org, mine, now) == 0
 
     async def test_reads_and_writes_are_tenant_scoped(self, storage: WorkStorageInterface) -> None:
         org_a, org_b = new_id(), new_id()

@@ -32,6 +32,7 @@ from contracts import (
     media_storage,
     orchestration_storage,
     outbox_storage,
+    placement_storage,
     privacy_storage,
     step_storage,
     tenancy_storage,
@@ -124,6 +125,7 @@ CROSS_TENANT_CASES: dict[str, frozenset[str]] = {
     "MediaStorageInterface": media_storage.CROSS_TENANT_CASES,
     "OrchestrationsStorageInterface": orchestration_storage.CROSS_TENANT_CASES,
     "OutboxStorageInterface": outbox_storage.CROSS_TENANT_CASES,
+    "PlacementStorageInterface": placement_storage.CROSS_TENANT_CASES,
     "PrivacyStorageInterface": privacy_storage.CROSS_TENANT_CASES,
     "StepStorageInterface": step_storage.CROSS_TENANT_CASES,
     "TenancyStorageInterface": tenancy_storage.CROSS_TENANT_CASES,
@@ -178,6 +180,9 @@ MANAGER_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         # And the sweep's tally of the platform's size, counted across tenants
         # for the operator plane's read: it counts for no tenant.
         ("TenancyOperatorManagerInterface", "tally_size"),
+        # And the lane an item is enqueued on, which both enqueues ask under
+        # the tenant they name, the relayed one with no stage.
+        ("PlacementManagerInterface", "lane_for"),
     }
 )
 
@@ -208,6 +213,9 @@ REQUEST_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
         ("TrustOperatorManagerInterface", "grant_content"),
         ("TrustOperatorManagerInterface", "revoke_content"),
         ("WorkManagerInterface", "claim"),
+        # The claim made on behalf of a host or a daemon, which rebuilds the
+        # run's context from the item as the claim does.
+        ("PlacementManagerInterface", "claim_for"),
         # The sweep's requeue across tenants: a dead letter it makes is
         # written under its tenant's service context, minted from this stage
         # as the claim mints one.
