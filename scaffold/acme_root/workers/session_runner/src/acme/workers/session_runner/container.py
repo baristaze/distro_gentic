@@ -14,9 +14,11 @@ from acme.integrations.impl.configured import IntegrationsConfiguredImpl
 from acme.integrations.root import IntegrationsInterface
 from acme.om.agents.types.kind import AgentKind
 from acme.om.base import new_id
+from acme.om.playbooks.root import PlaybooksLayer
 from acme.om.root import Managers, build_managers
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
+from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.tools.tool import ToolInterface
 from acme.om.trust.impl.keys import KeyProbeAbsentImpl
 from acme.om.trust.impl.placement import PlacementCloudImpl
@@ -95,6 +97,12 @@ class RunnerContainer:
         trust = TrustLayer(
             storage, infra, placement=PlacementCloudImpl(executor), probe=KeyProbeAbsentImpl()
         )
+        playbooks = PlaybooksLayer(storage)
+
+        def layers(inner: ToolsManagerInterface) -> ToolsManagerInterface:
+            # The wall and the audit first, then the session's playbook gates.
+            return playbooks.tools(trust.tools(inner))
+
         managers = build_managers(
             storage,
             infra,
@@ -103,9 +111,10 @@ class RunnerContainer:
             agent_kinds=agent_kinds,
             tool_catalog=tool_catalog,
             domain_classes=domain_classes,
-            tools_layer=trust.tools,
+            tools_layer=layers,
         )
         trust.build(managers)
+        playbooks.build(managers)
         return cls(settings, storage, infra, integrations, managers)
 
     async def start(self) -> None:

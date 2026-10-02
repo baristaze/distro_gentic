@@ -31,6 +31,7 @@ from acme.workers.maintenance.container import (
 from acme.workers.maintenance.deliveries import (
     DeliveryConsumer,
     DeliveryOptions,
+    FeedbackDeliveriesImpl,
     IdentityDeliveriesImpl,
 )
 from acme.workers.maintenance.handler import NoopHandlerImpl
@@ -102,6 +103,12 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             # Its secrets' names, its keys' records with their values in the
             # store, and its operators' content grants.
             "trust": container.trust.trust.purge_tenant,
+            # Its account links and work bindings, its automations and their
+            # runs, its playbooks and their invocations, and its knowledge.
+            "intake": container.intake.purge_tenant,
+            "automations": container.automations.purge_tenant,
+            "playbooks": container.playbooks.purge_tenant,
+            "knowledge": container.knowledge.purge_tenant,
             # Deletes nothing: what a call held and spent stays, so a
             # tenant whose ledger remains is never marked purged.
             "ledger": managers.budgets.purge_ledger,
@@ -157,7 +164,10 @@ def build_consumer(container: WorkerContainer) -> DeliveryConsumer:
     return DeliveryConsumer(
         queues=container.infra.get_queues(),
         tenancy=container.managers.tenancy,
-        providers={"identity": IdentityDeliveriesImpl(container.managers.events)},
+        providers={
+            "identity": IdentityDeliveriesImpl(container.managers.events),
+            "feedback": FeedbackDeliveriesImpl(container.intake, container.automations),
+        },
         options=DeliveryOptions(worker_id=container.settings.worker_id),
     )
 
