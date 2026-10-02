@@ -1,7 +1,8 @@
 """Which project a new session belongs to, asked when its retention
-snapshot is taken. The platform's work intake knows it; until a session
-carries it, the null answers none, and the session takes its tenant's
-policy unnarrowed."""
+snapshot is taken. The projects answer it, from the row their start
+writes before the session (`acme.om.projects.impl.retention`); a session
+of no project, or a root that wires the null, takes its tenant's policy
+unnarrowed."""
 
 from abc import ABC, abstractmethod
 from uuid import UUID

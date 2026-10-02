@@ -25,6 +25,7 @@ from acme.om.models.impl.manager import ModelsOptions
 from acme.om.orchestrations.impl.manager import OrchestrationsOptions
 from acme.om.placement.impl.manager import PlacementOptions
 from acme.om.platform_agents.impl.manager import PlatformAgentsOptions
+from acme.om.projects.impl.manager import ProjectsOptions
 from acme.om.retention.impl.manager import RetentionOptions
 from acme.om.root import Managers, build_managers
 from acme.om.steps.impl.manager import StepsOptions
@@ -115,6 +116,7 @@ def worker_managers(
         placement_options=PlacementOptions(purge_batch=batch),
         hosts_options=HostsOptions(purge_batch=batch),
         platform_agents_options=PlatformAgentsOptions(purge_batch=batch),
+        projects_options=ProjectsOptions(purge_batch=batch),
     )
 
 
