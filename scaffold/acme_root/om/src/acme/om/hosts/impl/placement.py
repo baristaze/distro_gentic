@@ -1,5 +1,6 @@
 from uuid import UUID
 
+from acme.om.agent_sessions.storage import AgentSessionStorageInterface
 from acme.om.hosts.exceptions import PinnedToHosts
 from acme.om.hosts.storage import HostsStorageInterface
 from acme.om.trust.placement import PlacementInterface
@@ -12,16 +13,25 @@ class PlacementHostsImpl(PlacementInterface):
     machine this is built for. A pinned session runs inside its tenant's
     wall, on a host of its pool, which only the relay reaches: until a call
     names the host that holds its workspace, it is refused, and it never
-    runs on one of the platform's machines."""
+    runs on one of the platform's machines. A sub-agent runs where its
+    tree's root runs: its placement is its root's."""
 
-    def __init__(self, storage: HostsStorageInterface, cloud: Executor) -> None:
+    def __init__(
+        self,
+        storage: HostsStorageInterface,
+        sessions: AgentSessionStorageInterface,
+        cloud: Executor,
+    ) -> None:
         if cloud.kind is not ExecutorKind.CLOUD:
             raise ValueError("a session in the cloud runs on a machine of the cloud")
         self._storage = storage
+        self._sessions = sessions
         self._cloud = cloud
 
     async def inside_wall(self, org_id: UUID, session_id: UUID) -> bool:
-        placed = await self._storage.read_placement(org_id, session_id)
+        session = await self._sessions.read_session(org_id, session_id)
+        root_id = session_id if session is None else session.root_id
+        placed = await self._storage.read_placement(org_id, root_id)
         return placed is not None and placed.pool_id is not None
 
     async def executor_of(self, org_id: UUID, session_id: UUID) -> Executor:

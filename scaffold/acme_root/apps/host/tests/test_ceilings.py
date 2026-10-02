@@ -96,8 +96,15 @@ def test_an_item_that_says_too_little_is_read_as_the_widest_ask() -> None:
         "a project this host does not serve",
         "no isolation named",
         "egress beyond this host's allowlist",
+        "a read outside this host's readable paths",
         "a person's command, which this host does not accept",
     ]
+
+
+def test_an_item_silent_on_its_reads_is_read_as_reading_everything() -> None:
+    silent = {key: value for key, value in FITS.items() if key != "reads"}
+    assert refused(silent) == ["a read outside this host's readable paths"]
+    assert refused({**FITS, "reads": []}) == []
 
 
 def test_letting_go_of_a_workspace_runs_nothing_and_is_never_refused() -> None:

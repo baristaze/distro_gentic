@@ -91,6 +91,11 @@ RETRYABLE_FAILURES = (httpx.TimeoutException, httpx.NetworkError)
 """The wire failing before the API decided: the timeout, and a connection that
 was refused, reset, or lost. Every other transport failure stands as it is."""
 
+WIRE_FAILURES = (httpx.TransportError,)
+"""Every way the wire fails a call, no answer of the API's among them. A caller
+that outlasts the platform's absence, such as a workspace host, waits these
+out without naming the technology under the client."""
+
 AppName = Literal["portal", "admin", "cli", "api"]
 
 
@@ -767,8 +772,7 @@ class ApiClient:
     # A workspace host's own calls. It enrolls once with its tenant's
     # enrollment token, then calls with a credential of its own, which it
     # rotates before it ends. None of them is retried: an enrollment twice
-    # is two hosts, and a lost rotation is rotated again with the credential
-    # it was meant to replace.
+    # is two hosts, and a credential rotated twice ends its host.
 
     async def enroll_host(
         self,

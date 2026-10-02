@@ -99,12 +99,15 @@ class RunnerContainer:
         held to the trust swimlane's rules: audited with its four answers,
         this runner its executor, and refused a secret that would cross its
         session's wall. A session pinned to its tenant's hosts is inside the
-        wall, and none of its calls runs on this runner."""
+        wall, its sub-agents with it, and none of their calls runs on this
+        runner."""
         runner = Executor(kind=ExecutorKind.CLOUD, credential_id=new_id(), label=settings.runner_id)
         trust = TrustLayer(
             storage,
             infra,
-            placement=PlacementHostsImpl(storage.get_hosts_storage(), runner),
+            placement=PlacementHostsImpl(
+                storage.get_hosts_storage(), storage.get_agent_session_storage(), runner
+            ),
             probe=KeyProbeAbsentImpl(),
         )
         managers = build_managers(

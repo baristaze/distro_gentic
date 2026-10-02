@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from acme.om.budgets.types.breach import Refusal
-    from acme.om.steps.types.header import ToolFailure
+    from acme.om.steps.types.header import Park, ToolFailure
 
 
 class PlatformException(Exception):
@@ -375,6 +375,19 @@ class SpenderUnknown(BudgetsException, NotAuthorized):
     closed for spend: nothing is held and nothing is spent."""
 
     code = "spender_unknown"
+
+
+class GateParked(BudgetsException):
+    """A gate that parks the call itself, on a reason and an unlock of its
+    own: a platform's gate, for what no breach of a budget says, such as a
+    call far above its session's norm. Nothing is held, nothing is spent,
+    and the loop parks on `park`."""
+
+    code = "gate_parked"
+
+    def __init__(self, park: Park, message: str) -> None:
+        super().__init__(message)
+        self.park = park
 
 
 class ModelsException(PlatformException): ...

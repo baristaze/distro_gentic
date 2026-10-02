@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from acme.om.agent_sessions.storage import AgentSessionStorageInterface
 from acme.om.agents.storage import AgentStorageInterface
 from acme.om.attribution.storage import AttributionStorageInterface
+from acme.om.billing.storage import AccountStorageInterface, MoneyLedgerStorageInterface
 from acme.om.budgets.storage import BudgetStorageInterface, LedgerStorageInterface
 from acme.om.events.storage import EventStorageInterface
 from acme.om.evidence.storage import EvidenceStorageInterface
@@ -15,7 +16,9 @@ from acme.om.models.storage import FillSetStorageInterface
 from acme.om.orchestrations.storage import OrchestrationsStorageInterface
 from acme.om.outbox.storage import OutboxStorageInterface
 from acme.om.placement.storage import PlacementStorageInterface
+from acme.om.platform_agents.storage import PlatformAgentsStorageInterface
 from acme.om.privacy.storage import PrivacyStorageInterface
+from acme.om.projects.storage import ProjectStorageInterface
 from acme.om.retention.storage import RetentionStorageInterface
 from acme.om.stations.storage import StationsStorageInterface
 from acme.om.steps.storage import StepStorageInterface
@@ -64,6 +67,9 @@ class StorageInterface(ABC):
     def get_privacy_storage(self) -> PrivacyStorageInterface: ...
 
     @abstractmethod
+    def get_project_storage(self) -> ProjectStorageInterface: ...
+
+    @abstractmethod
     def get_retention_storage(self) -> RetentionStorageInterface: ...
 
     @abstractmethod
@@ -71,6 +77,12 @@ class StorageInterface(ABC):
 
     @abstractmethod
     def get_ledger_storage(self) -> LedgerStorageInterface: ...
+
+    @abstractmethod
+    def get_account_storage(self) -> AccountStorageInterface: ...
+
+    @abstractmethod
+    def get_money_ledger_storage(self) -> MoneyLedgerStorageInterface: ...
 
     @abstractmethod
     def get_fill_set_storage(self) -> FillSetStorageInterface: ...
@@ -94,6 +106,7 @@ class StorageInterface(ABC):
     def get_hosts_storage(self) -> HostsStorageInterface: ...
 
     @abstractmethod
+    def get_platform_agents_storage(self) -> PlatformAgentsStorageInterface: ...
     def get_stations_storage(self) -> StationsStorageInterface: ...
 
     @abstractmethod

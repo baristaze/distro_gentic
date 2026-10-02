@@ -68,15 +68,17 @@ class HostsManagerInterface(ABC):
     ) -> SessionPlacement:
         """A principal sets where the session runs: one of the tenant's pools,
         or the cloud with None. This is the one way a session's placement
-        changes. Requires the write permission. NotFound when the tenant
-        holds no such session or pool."""
+        changes, and it places a tree's root: a sub-agent runs where its
+        root runs, and placing one is `ValidationFailed`. Requires the write
+        permission. NotFound when the tenant holds no such session or pool."""
         ...
 
     @abstractmethod
     async def placement_of(self, ctx: TenantContext, session_id: UUID) -> PlacementState:
         """Where the session runs and how many of its pool's hosts are online:
-        a pinned session with none online waits, and reads so here. NotFound
-        when the tenant holds no such session."""
+        a pinned session with none online waits, and reads so here. A
+        sub-agent reads its root's. NotFound when the tenant holds no such
+        session."""
         ...
 
     @abstractmethod
@@ -103,15 +105,20 @@ class HostsManagerInterface(ABC):
     @abstractmethod
     async def authenticate(self, rctx: RequestContext, credential: str) -> HostIdentity:
         """Platform-internal: the host behind a host credential. Refuses any
-        other kind of credential, an expired or rotated one, and a revoked
-        host's."""
+        other kind of credential, an expired one, and a revoked host's. A
+        rotated credential presented past its grace means two machines hold
+        the host's identity: it is refused, and the host and every
+        credential it holds are revoked."""
         ...
 
     @abstractmethod
     async def rotate(self, rctx: RequestContext, host: HostIdentity) -> IssuedHostCredential:
         """Platform-internal: the host's next credential, in the clear once.
-        The one it called with ends after a short grace, so a host whose
-        answer was lost rotates again with it."""
+        The one it called with ends after a short grace, so a call in flight
+        with it lands, and every older one ends now. A credential rotates
+        once: a second rotation of it means two machines hold it, so it is
+        refused with CredentialExpired, and the host and every credential
+        it holds are revoked."""
         ...
 
     @abstractmethod
