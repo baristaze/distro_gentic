@@ -26,6 +26,10 @@ uv run acme-host run          # every start after it
 - **Claims only what is pinned to it.** It states the version of `exec`
   work it reads, and nothing else. The platform hands it work of its own
   pool, read off its credential.
+- **Waits out a failure.** An answer the platform could not serve, a
+  429, or a lost connection makes it wait, longer after each in a row,
+  and call again with the credential it holds. Only a refused credential
+  or a version below the floor stops it.
 - **Holds its owner's ceilings.** Its owner writes `ceilings.toml` in its
   home: the projects it serves, its minimum isolation, its egress, the
   paths a result may read, and whether it accepts people's commands.
@@ -53,8 +57,8 @@ payload (`ceilings.ask_of`); a payload without them is refused.
 ## Conventions
 
 - Exit codes: 0 done, 1 the platform refused, 2 a setting or a file on
-  the host is wrong, 3 not enrolled, 4 the platform is unreachable, 5 a
-  startup probe failed.
+  the host is wrong, 3 not enrolled, 4 the platform is unreachable at
+  startup, 5 a startup probe failed.
 - `ACME_API_URL` names the platform. `ACME_HOST_HOME` (default
   `~/.config/acme-host`) holds `credential.json`, mode 600, and the
   owner's `ceilings.toml`. `ACME_HOST_NAME` is the name it enrolls

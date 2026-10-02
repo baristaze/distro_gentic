@@ -1,9 +1,9 @@
 """The host's commands. `probe` runs the startup probes and prints what the
 host would advertise. `run` starts the host: it probes, enrolls once or
-picks up its credential, then beats, rotates, and claims until stopped.
-Exit codes: 0 done, 1 the platform refused, 2 a setting or a file on the
-host is wrong, 3 not enrolled, 4 the platform is unreachable, 5 a startup
-probe failed."""
+picks up its credential, then beats, rotates, and claims until stopped,
+waiting out a failure it outlasts. Exit codes: 0 done, 1 the platform
+refused, 2 a setting or a file on the host is wrong, 3 not enrolled, 4 the
+platform is unreachable at startup, 5 a startup probe failed."""
 
 import asyncio
 import logging
@@ -17,7 +17,7 @@ import typer
 
 from acme.apps.host import ceilings
 from acme.apps.host.agent import HostAgent, NotEnrolled
-from acme.apps.host.config import BadSetting, Settings, settings_from_env
+from acme.apps.host.config import BadSetting, settings_from_env
 from acme.apps.host.probe import Misconfigured, real_probes, startup
 from acme.client.client import ApiClient, ApiError
 
@@ -85,17 +85,16 @@ def run() -> None:
             lambda token: build_client(settings.api_url, token),
         )
         await agent.start()
-        await serve(agent, settings)
+        await serve(agent)
 
     _guarded(go())
 
 
-async def serve(agent: HostAgent, settings: Settings) -> None:
-    """Claims while there is work, and waits a beat when there is none."""
+async def serve(agent: HostAgent) -> None:
+    """Claims while there is work, waits a beat when there is none, and waits
+    out a failure the host outlasts (`HostAgent.turn`)."""
     while True:
-        handled = await agent.tick()
-        if handled is None:
-            await asyncio.sleep(settings.beat_seconds)
+        await asyncio.sleep(await agent.turn())
 
 
 def _guarded(coroutine: Coroutine[Any, Any, None]) -> None:

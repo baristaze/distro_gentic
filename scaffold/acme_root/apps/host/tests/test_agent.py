@@ -2,7 +2,8 @@
 tenant's token and resumes with its own credential after that, rotates the
 credential at half its life, is handed only the work pinned to its pool,
 holds each item to its owner's ceilings before anything runs, and is handed
-nothing while it reads a version below the floor."""
+nothing while it reads a version below the floor. A failure it outlasts is
+waited out with the credential it holds; a refused credential ends it."""
 
 import stat
 from datetime import UTC, datetime, timedelta
@@ -10,13 +11,14 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+import httpx
 import pytest
 from host_support import Stack, probes
 
-from acme.apps.host.agent import ExecutorInterface, HostAgent, NotEnrolled
+from acme.apps.host.agent import BACKOFF_MAX_SECONDS, ExecutorInterface, HostAgent, NotEnrolled
 from acme.apps.host.ceilings import Ask, Ceilings
 from acme.apps.host.config import load_credential
-from acme.client.client import ApiError
+from acme.client.client import ApiClient, ApiError
 from acme.client.types import ClaimedWorkView, IsolationMode
 from acme.om.base import new_id, utcnow
 from acme.om.hosts import rules
@@ -218,3 +220,66 @@ async def test_a_host_below_the_floor_is_handed_nothing(
         await host.claim_once()
     assert (refused.value.status, refused.value.code) == (426, "version_below_floor")
     assert ran.ran == []
+
+
+class FailsOnce(httpx.AsyncBaseTransport):
+    """The stack, except that the first call to `path` fails as `failure`
+    says: an answer with that status, or the wire dropping it."""
+
+    def __init__(self, inner: httpx.AsyncBaseTransport, path: str, failure: int | None) -> None:
+        self._inner = inner
+        self._path = path
+        self._failure = failure
+        self.failed = False
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        if not self.failed and request.url.path == self._path:
+            self.failed = True
+            if self._failure is None:
+                raise httpx.ConnectError("the connection was reset", request=request)
+            error = {"error": {"code": "unavailable", "message": "try again"}}
+            return httpx.Response(self._failure, json=error, headers={"retry-after": "7"})
+        return await self._inner.handle_async_request(request)
+
+
+@pytest.mark.parametrize("failure", [503, 429, None])
+async def test_a_host_waits_out_a_failed_beat_and_goes_on_with_its_credential(
+    api: Stack, tmp_path: Path, failure: int | None
+) -> None:
+    pool = await api.pool()
+    flaky = FailsOnce(api.transport, "/v1/hosts/me/heartbeats", failure)
+    ran = Recording()
+    host = HostAgent(
+        api.settings(tmp_path, await api.token(pool.id)),
+        CEILINGS,
+        probes(IsolationMode.container),
+        lambda token: ApiClient(
+            "http://test", app="api", app_version="host@test", token=token, transport=flaky
+        ),
+        ran,
+        jitter=lambda: 0.0,
+    )
+    await host.start()
+    held = host.credential
+    wait = await host.turn()
+    assert flaky.failed
+    assert wait == (7.0 if failure is not None else 0.5)
+    assert 0 < wait <= BACKOFF_MAX_SECONDS
+    assert host.credential == held == load_credential(tmp_path / "credential.json")
+    host_id = held.host_id
+    item = await enqueue(
+        api, WorkKind.EXEC, {"host_id": host_id, **fitting()}, host_lane(UUID(host_id))
+    )
+    assert await host.turn() == 0.0
+    assert [one.id for one in ran.ran] == [item.id]
+    assert await host.turn() == api.settings(tmp_path, None).beat_seconds
+
+
+async def test_a_refused_credential_ends_the_host(api: Stack, tmp_path: Path) -> None:
+    pool = await api.pool()
+    host = agent(api, tmp_path, await api.token(pool.id))
+    await host.start()
+    await api.container.managers.hosts.revoke_host(api.owner, UUID(host.credential.host_id))
+    with pytest.raises(ApiError) as refused:
+        await host.turn()
+    assert refused.value.status == 401
