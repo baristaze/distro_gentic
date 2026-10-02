@@ -78,6 +78,8 @@ from acme.om.windows.storage import WindowStorageInterface
 from acme.om.windows.storage.impl.postgres import WindowStoragePostgresImpl
 from acme.om.work.storage import WorkStorageInterface
 from acme.om.work.storage.impl.postgres import WorkStoragePostgresImpl
+from acme.om.workspaces.storage import WorkspaceStorageInterface
+from acme.om.workspaces.storage.impl.postgres import WorkspaceStoragePostgresImpl
 
 
 def connect_args(pool: RolePool) -> dict[str, Any]:
@@ -233,6 +235,7 @@ class StoragePostgresImpl(StorageInterface):
         self._knowledge = KnowledgeStoragePostgresImpl(sessions)
         self._platform_agents = PlatformAgentsStoragePostgresImpl(sessions)
         self._stations = StationsStoragePostgresImpl(sessions)
+        self._workspaces = WorkspaceStoragePostgresImpl(sessions)
 
     def get_tenancy_storage(self) -> TenancyStorageInterface:
         return self._tenancy
@@ -326,6 +329,8 @@ class StoragePostgresImpl(StorageInterface):
 
     def get_stations_storage(self) -> StationsStorageInterface:
         return self._stations
+    def get_workspace_storage(self) -> WorkspaceStorageInterface:
+        return self._workspaces
 
     async def healthcheck(self) -> bool:
         """A connect and a `SELECT 1` on every engine, each under the bounds its

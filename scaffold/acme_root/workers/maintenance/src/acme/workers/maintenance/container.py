@@ -48,6 +48,7 @@ from acme.om.trust.impl.placement import PlacementCloudImpl
 from acme.om.trust.root import TrustLayer
 from acme.om.trust.types.identities import Executor, ExecutorKind
 from acme.om.work.impl.manager import WorkOptions
+from acme.om.workspaces.impl.manager import WorkspacesOptions
 from acme.workers.maintenance.settings import MaintenanceSettings
 
 log = logging.getLogger(__name__)
@@ -127,6 +128,7 @@ def worker_managers(
         platform_agents_options=PlatformAgentsOptions(purge_batch=batch),
         projects_options=ProjectsOptions(purge_batch=batch),
         stations_options=StationsOptions(purge_batch=batch),
+        workspaces_options=WorkspacesOptions(purge_batch=batch),
     )
 
 
