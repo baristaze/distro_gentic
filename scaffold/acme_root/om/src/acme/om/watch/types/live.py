@@ -27,10 +27,10 @@ class LiveRead(Platform):
 
 
 class Grant(Platform):
-    """What a handle grants once its signature verifies: one session of one
-    tenant, read by one viewer, until a time."""
+    """What a handle grants once its signature verifies: one session, read
+    by one viewer, until a time. A session's id is the platform's, never
+    two tenants', so the session names its tenant."""
 
-    org_id: UUID
     session_id: UUID
     viewer_id: UUID
     expires_at: datetime

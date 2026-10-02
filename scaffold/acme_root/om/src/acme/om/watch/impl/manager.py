@@ -72,9 +72,7 @@ class WatchManagerImpl(WatchManagerInterface):
         ctx.require(Permission.READ)
         await self._sessions.get_session(ctx, session_id)
         expires_at = self._clock() + self._options.live_read_life
-        grant = Grant(
-            org_id=ctx.org_id, session_id=session_id, viewer_id=ctx.user_id, expires_at=expires_at
-        )
+        grant = Grant(session_id=session_id, viewer_id=ctx.user_id, expires_at=expires_at)
         handle = signed(self._key(), grant)
         return LiveRead(session_id=session_id, handle=handle, expires_at=expires_at)
 
