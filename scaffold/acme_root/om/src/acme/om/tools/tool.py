@@ -51,6 +51,7 @@ class ToolRuntime:
         workspace: Workspace,
         *,
         seal: RecordSeal,
+        session_id: UUID,
         key: UUID,
         epoch: int,
         deadline: datetime,
@@ -65,6 +66,7 @@ class ToolRuntime:
         self._transport = transport
         self._workspace = workspace
         self._seal = seal
+        self._session_id = session_id
         self._key = key
         self._epoch = epoch
         self._effect = effect
@@ -74,6 +76,12 @@ class ToolRuntime:
         self._read_only = read_only
         self._commands = 0
         self.deadline = deadline
+
+    @property
+    def session_id(self) -> UUID:
+        """The session the call is made in: what a tool that starts a session
+        of its own, a hand-off or a child, names as where it came from."""
+        return self._session_id
 
     @property
     def key(self) -> UUID:

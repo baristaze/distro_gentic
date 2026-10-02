@@ -56,6 +56,7 @@ TABLE_ROLES: dict[str, DatabaseRole] = {
     "billing_accounts": DatabaseRole.CORE,
     "ledger_entries": DatabaseRole.ACTIVITY,
     "ledger_counts": DatabaseRole.ACTIVITY,
+    "validation_sessions": DatabaseRole.CORE,
     "projects": DatabaseRole.CORE,
     "session_projects": DatabaseRole.CORE,
 }
