@@ -47,7 +47,7 @@ SCRAPE_PORT ?= $(ACME_COLLECTOR_SCRAPE_PORT)
 # `make arch-check ARCH_CHECK="python3 ../swe_guidelines/checkers/arch_check.py"`.
 ARCH_CHECK ?= uvx --python "$(shell cat .python-version)" --from "git+https://github.com/baristaze/swe_guidelines@v0.48.0\#subdirectory=checkers" arch-check
 
-.PHONY: help setup up down reset urls infra-up buckets devx-up stack-up infra-down infra-reset collector-scrape migrate seed migrate-check benchmark-boot check lint format-check typecheck arch-check agentic-check test-unit test-integration test-telemetry test-live traffic openapi
+.PHONY: help setup up down reset urls infra-up buckets devx-up stack-up infra-down infra-reset collector-scrape migrate seed migrate-check benchmark-boot check lint format-check typecheck arch-check agentic-check test-unit test-integration test-telemetry test-live benchmark traffic openapi
 
 # This Makefile alone, never $(MAKEFILE_LIST): the includes above put
 # .env.example and .env in that list, and grep prefixes every match with the
@@ -217,16 +217,24 @@ agentic-check: ## The engine's static checks, configured in pyproject.toml
 	uv run --package acme-checkers agentic-check
 
 test-unit: ## Unit tests over the memory impls
-	uv run pytest -q -m "not integration and not e2e and not telemetry and not live"
+	uv run pytest -q -m "not integration and not e2e and not telemetry and not live and not benchmark"
 
 test-integration: ## Integration tests over the compose stack
-	uv run pytest -q -m "integration and not live"
+	uv run pytest -q -m "integration and not live and not benchmark"
 
 # A session's loop on a live model provider, once, by hand: it spends, within
 # a budget the case sets, so no gate runs it. Needs a migrated stack and
 # ANTHROPIC_API_KEY (or ACME_ANTHROPIC_API_KEY) in the shell.
 test-live: ## One loop end to end on a live model provider; spends, so run by hand
 	uv run pytest -q -s -m live
+
+# The acceptance scenarios' trials, judged and recorded as benchmarks over
+# a migrated stack. A model's answers vary from run to run, so no gate a
+# code change needs runs this: the benchmark workflow does, when a person
+# dispatches it. The scaffold's own case is a rehearsal that spends
+# nothing; a product's scenarios run its agents on real providers.
+benchmark: ## Judge the acceptance scenarios and record each run as a benchmark; never a gate
+	uv run pytest -q -s -m benchmark
 
 # The round trip: a real API process on a free port, the devx collector aimed
 # at that port while it runs, the exporter and the DSN set, one session of
