@@ -22,6 +22,7 @@ from acme.om.media.impl.manager import MediaOptions
 from acme.om.models.impl.manager import ModelsOptions
 from acme.om.orchestrations.impl.manager import OrchestrationsOptions
 from acme.om.placement.impl.manager import PlacementOptions
+from acme.om.platform_agents.impl.manager import PlatformAgentsOptions
 from acme.om.root import Managers, build_managers
 from acme.om.steps.impl.manager import StepsOptions
 from acme.om.storage.impl.postgres import StoragePostgresImpl
@@ -98,6 +99,7 @@ def worker_managers(
         models_options=ModelsOptions(purge_batch=batch),
         tools_options=ToolsOptions(purge_batch=batch),
         placement_options=PlacementOptions(purge_batch=batch),
+        platform_agents_options=PlatformAgentsOptions(purge_batch=batch),
     )
 
 

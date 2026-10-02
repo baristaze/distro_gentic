@@ -13,6 +13,7 @@ from acme.om.models.storage import FillSetStorageInterface
 from acme.om.orchestrations.storage import OrchestrationsStorageInterface
 from acme.om.outbox.storage import OutboxStorageInterface
 from acme.om.placement.storage import PlacementStorageInterface
+from acme.om.platform_agents.storage import PlatformAgentsStorageInterface
 from acme.om.privacy.storage import PrivacyStorageInterface
 from acme.om.steps.storage import StepStorageInterface
 from acme.om.tenancy.storage import TenancyStorageInterface
@@ -75,6 +76,9 @@ class StorageInterface(ABC):
 
     @abstractmethod
     def get_placement_storage(self) -> PlacementStorageInterface: ...
+
+    @abstractmethod
+    def get_platform_agents_storage(self) -> PlatformAgentsStorageInterface: ...
 
     @abstractmethod
     async def healthcheck(self) -> bool: ...
