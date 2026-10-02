@@ -1,0 +1,13 @@
+{
+  "name": "distro-gentic",
+  "version": "0.0.0",
+  "description": "The agentic platform's spec with lens-based review skills and scaffolding skills, in the shape of the Software Design and Architecture Guidelines",
+  "author": {
+    "name": "Baris Taze",
+    "url": "https://github.com/baristaze"
+  },
+  "homepage": "https://github.com/baristaze/distro_gentic",
+  "repository": "https://github.com/baristaze/distro_gentic",
+  "license": "Apache-2.0",
+  "keywords": ["agents", "platform", "architecture", "review", "scaffold", "python"]
+}

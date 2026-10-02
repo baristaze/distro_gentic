@@ -1,0 +1,18 @@
+{
+  "name": "distro-gentic",
+  "owner": {
+    "name": "Baris Taze",
+    "url": "https://github.com/baristaze"
+  },
+  "description": "distro_gentic: the spec of a closed-loop agentic platform, its lenses, and the skills that apply them",
+  "plugins": [
+    {
+      "name": "distro-gentic",
+      "source": "./",
+      "description": "Lens-based review skills and scaffolding skills for a closed-loop agentic platform, backed by its spec",
+      "version": "0.0.0",
+      "category": "development",
+      "tags": ["agents", "platform", "review", "scaffold", "python"]
+    }
+  ]
+}
