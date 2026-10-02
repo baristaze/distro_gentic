@@ -15,7 +15,9 @@ from acme.om.evidence.types.record import NAME, PROJECT
 
 PATTERN = Annotated[str, Field(min_length=1, max_length=300, pattern=r"^[^\s\\]+$")]
 """A path pattern, from the work product's root: `*` within one part of a
-path, `**` across parts, as `PurePosixPath.full_match` reads it."""
+path, `**` across parts, as `PurePosixPath.full_match` reads it. A pattern
+that names a folder, with or without a trailing `/`, covers everything in
+it."""
 
 
 class Grade(StrEnum):

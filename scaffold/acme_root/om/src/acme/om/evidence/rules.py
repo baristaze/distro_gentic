@@ -16,7 +16,7 @@ from acme.om.evidence.rates import corrected, rate_claim
 from acme.om.evidence.types.acceptance import Leak, Surface
 from acme.om.evidence.types.contract import CheckDeclaration, Offer
 from acme.om.evidence.types.policy import Requirement, ValidationPolicy
-from acme.om.evidence.types.rate import AbortRule
+from acme.om.evidence.types.rate import AbortRule, RateRule
 from acme.om.evidence.types.record import ExecutionRecord, RunOutcome, RunPurpose
 from acme.om.evidence.types.validation import Delivery, ExecutionRequest, Validation
 from acme.om.steps.types.header import LoopOutcome
@@ -53,11 +53,14 @@ def normalized(path: str) -> str | None:
 
 def matches(pattern: str, path: str) -> bool:
     """Whether a pattern matches a normalized path: `*` within one part,
-    `**` across parts. A pattern of a folder's contents matches the folder
-    too, so a change to the folder itself is seen."""
-    folded = pattern.strip().lstrip("/").casefold()
-    if PurePosixPath(path).full_match(folded):
-        return True
+    `**` across parts. A pattern that names a folder, with or without its
+    trailing `/`, matches everything in it, as it matches a path in a folder
+    it matches; a pattern of a folder's contents matches the folder too."""
+    folded = pattern.strip().strip("/").casefold() or "**"
+    parts = PurePosixPath(path).parts
+    for depth in range(1, len(parts) + 1):
+        if PurePosixPath(*parts[:depth]).full_match(folded):
+            return True
     return folded.endswith("/**") and path == folded[: -len("/**")]
 
 
@@ -278,40 +281,61 @@ def unmet_requirements(
     """What the runs at the head leave unmet. A plain requirement needs a
     passing run at its grade and no run of its check that did not pass: a
     check run again until it passes still counts every run. A rate
-    requirement counts every trial at the head, each at its grade, and
-    needs its bound under the declared rate; its confidence is corrected
-    for the number of rates judged together. A double's run is below every
-    grade."""
+    requirement judges each validation's trials as one batch, at its grade
+    and its declared count, and needs every batch's bound under the declared
+    rate: a batch that failed still counts after a later one passes, so
+    validating again until the bound holds never passes. Its confidence is
+    corrected for the number of rates judged together. A double's run is
+    below every grade, and a run that passed no case does not pass."""
     unmet: list[str] = []
     rated = sum(1 for requirement in needed if requirement.rate is not None)
     for requirement in needed:
         runs = [record for record in records if record.check == requirement.check]
         floor = requirement.grade.floor.strength
-        graded = [record for record in runs if record.provenance.strength >= floor]
         name = requirement.check
         if requirement.rate is None:
-            bad = [record for record in runs if record.outcome is not RunOutcome.PASSED]
+            bad = [record for record in runs if not record.passing]
+            graded = [record for record in runs if record.provenance.strength >= floor]
             if bad:
                 unmet.append(f"{name} did not pass in {len(bad)} of {len(runs)} runs")
             elif not graded:
                 unmet.append(f"{name} has no passing run at the {requirement.grade.value} grade")
             continue
         rule = requirement.rate
-        below = len(runs) - len(graded)
-        if below:
-            unmet.append(f"{name} ran {below} trials below the {requirement.grade.value} grade")
-            continue
-        if len(runs) < rule.trials:
-            unmet.append(f"{name} ran {len(runs)} of the {rule.trials} trials declared")
-            continue
-        aborted = sum(1 for record in runs if record.outcome is RunOutcome.ABORTED)
-        if aborted and rule.aborted is AbortRule.INCONCLUSIVE:
-            unmet.append(f"{name} had {aborted} trials a safety stop ended")
-            continue
-        claim = rate_claim(name, head, runs, corrected(rule.confidence, rated), rule.bound)
-        if claim.upper > rule.max_rate:
-            unmet.append(f"{name}: {claim.render()}, above the {rule.max_rate:.2%} declared")
+        batches: dict[UUID | None, list[ExecutionRecord]] = {}
+        for record in runs:
+            batches.setdefault(record.validation_id, []).append(record)
+        if not batches:
+            unmet.append(f"{name} ran 0 of the {rule.trials} trials declared")
+        confidence = corrected(rule.confidence, rated)
+        for batch in batches.values():
+            unmet.extend(batch_refusal(name, head, batch, rule, floor, confidence))
     return unmet
+
+
+def batch_refusal(
+    name: str,
+    head: str,
+    batch: Sequence[ExecutionRecord],
+    rule: RateRule,
+    floor: int,
+    confidence: float,
+) -> list[str]:
+    """Why one validation's trials of a check leave its rate unmet: trials
+    below the grade, fewer trials than declared, a safety stop the rule
+    leaves without a conclusion, or a bound above the declared rate."""
+    below = sum(1 for record in batch if record.provenance.strength < floor)
+    if below:
+        return [f"{name} ran {below} trials below the grade"]
+    if len(batch) < rule.trials:
+        return [f"{name} ran {len(batch)} of the {rule.trials} trials declared"]
+    aborted = sum(1 for record in batch if record.outcome is RunOutcome.ABORTED)
+    if aborted and rule.aborted is AbortRule.INCONCLUSIVE:
+        return [f"{name} had {aborted} trials a safety stop ended"]
+    claim = rate_claim(name, head, batch, confidence, rule.bound)
+    if claim.upper > rule.max_rate:
+        return [f"{name}: {claim.render()}, above the {rule.max_rate:.2%} declared"]
+    return []
 
 
 # Acceptance: the hidden suite.

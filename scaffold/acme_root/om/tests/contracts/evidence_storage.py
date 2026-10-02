@@ -16,6 +16,7 @@ from acme.om.evidence.types.inference import Inference, InferenceKind, Stance
 from acme.om.evidence.types.policy import Requirement, ValidationPolicy
 from acme.om.evidence.types.provenance import ArtifactRef, Dependency, Provenance
 from acme.om.evidence.types.record import (
+    CaseTally,
     Environment,
     ExecutionRecord,
     RunOutcome,
@@ -106,6 +107,9 @@ def make_record(
         started_at=now - timedelta(seconds=2),
         finished_at=now,
         outcome=outcome,
+        cases=CaseTally(
+            passed=int(outcome is RunOutcome.PASSED), failed=int(outcome is RunOutcome.FAILED)
+        ),
         artifacts=(ArtifactRef(name="log.txt", sha256=HASH, provenance=Provenance.REAL),),
         dependencies=(Dependency(name="arm", provenance=provenance),),
         abort="the guard stopped it" if outcome is RunOutcome.ABORTED else None,

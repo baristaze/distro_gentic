@@ -40,14 +40,15 @@ def all_pass(check: str, trial: int) -> str:
 class ScriptedExecutor(ExecutorInterface):
     """Runs nothing: writes the results stream a fresh executor would for the
     checks it is asked, each trial's outcome as `outcome` says, every
-    dependency served as `provenance` says. `requests` keeps what it was
-    asked."""
+    dependency served as `provenance` says, and each run's cases as
+    `cases` says when it is set. `requests` keeps what it was asked."""
 
     name: str = "executor-1"
     outcome: Outcome = all_pass
     provenance: Provenance = Provenance.REAL
     capabilities: frozenset[str] = frozenset({"arm"})
     tamper: Callable[[bytes], bytes] | None = None
+    cases: tuple[str, ...] | None = None
     requests: list[ExecutionRequest] = field(default_factory=list)
 
     async def offer(self, ctx: TenantContext) -> Offer:
@@ -62,7 +63,13 @@ class ScriptedExecutor(ExecutorInterface):
                 outcome = self.outcome(check.name, trial)
                 lines.extend(
                     stream(
-                        check.name, check.version, request.version, outcome, self.provenance, start
+                        check.name,
+                        check.version,
+                        request.version,
+                        outcome,
+                        self.provenance,
+                        start,
+                        self.cases,
                     )
                 )
         results = "\n".join(json.dumps(line) for line in lines).encode()
@@ -79,9 +86,12 @@ def stream(
     outcome: str,
     provenance: Provenance,
     at: Any,
+    cases: tuple[str, ...] | None = None,
 ) -> list[dict[str, Any]]:
-    """One run's lines, as the contract writes them."""
-    case = "failed" if outcome == "failed" else "passed"
+    """One run's lines, as the contract writes them: one case that passed or
+    failed with the run, or the cases named."""
+    if cases is None:
+        cases = ("failed" if outcome == "failed" else "passed",)
     return [
         {
             "kind": "start",
@@ -96,7 +106,10 @@ def stream(
             "dependencies": [{"name": "arm", "provenance": provenance.value}],
             "started_at": at.isoformat(),
         },
-        {"kind": "case", "name": f"{check}-case", "outcome": case, "seconds": 0.5},
+        *(
+            {"kind": "case", "name": f"{check}-case-{number}", "outcome": case, "seconds": 0.5}
+            for number, case in enumerate(cases)
+        ),
         {
             "kind": "end",
             "outcome": outcome,

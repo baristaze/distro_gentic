@@ -68,9 +68,10 @@ def rate_claim(
     bound: Bound,
 ) -> RateClaim:
     """What every trial of a check at a version shows. A trial that did not
-    pass is a failure; one a safety stop ended counts as one too, under the
-    rule that lets it be counted at all. No trial is dropped."""
-    failures = sum(1 for record in trials if record.outcome is not RunOutcome.PASSED)
+    pass, or passed no case, is a failure; one a safety stop ended counts as
+    one too, under the rule that lets it be counted at all. No trial is
+    dropped."""
+    failures = sum(1 for record in trials if not record.passing)
     aborted = sum(1 for record in trials if record.outcome is RunOutcome.ABORTED)
     return RateClaim(
         check=check,

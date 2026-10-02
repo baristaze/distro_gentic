@@ -6,6 +6,7 @@ whatever the kind's defaults and the tenant's layer allow."""
 from datetime import timedelta
 from pathlib import Path
 
+import pytest
 from contracts.doubles import context
 from contracts.evidence import arm_policy, evidence_over
 from contracts.factories import make_org
@@ -124,6 +125,31 @@ async def test_an_agents_edit_to_a_protected_path_is_refused(tmp_path: Path) -> 
     )
     assert gate.outcome is GateOutcome.RUN and gate.decision is Decision.ALLOW
     assert write.written == [], "the gate runs nothing"
+
+
+@pytest.mark.parametrize("pattern", ["tests/", "tests"])
+async def test_a_folder_a_policy_protects_refuses_an_edit_inside_it(
+    pattern: str, tmp_path: Path
+) -> None:
+    org = make_org()
+    evidence = evidence_over()
+    await evidence.manager.write_policy(context(Role.OWNER, org), arm_policy(protected=(pattern,)))
+    tools = tools_over(twin_transport(tmp_path)[0], options=ToolsOptions(ceilings=CEILINGS))
+    ctx = context(Role.SERVICE, org)
+    call = await put_call(
+        tools.manager,
+        tools.steps,
+        ctx,
+        "write_file",
+        {"path": "tests/test_x.py", "text": "x"},
+        "write",
+    )
+    registry = registry_of(WriteFile(evidence.manager, "arm"))
+    workspace = Workspace.absent(ctx.org_id, new_id())
+    gate = await tools.manager.gate(
+        ctx, registry, ALLOW_WRITES, call.request, call.call_input, workspace
+    )
+    assert gate.outcome is GateOutcome.REFUSE and gate.decision is Decision.DENY
 
 
 async def test_the_root_keeps_the_protected_ceiling_whatever_options_it_is_given(

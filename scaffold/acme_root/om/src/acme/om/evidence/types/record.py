@@ -100,6 +100,13 @@ class ExecutionRecord(Identifiable, Created):
         return self
 
     @property
+    def passing(self) -> bool:
+        """Whether the run passed: its outcome says so and at least one of its
+        cases passed. A run whose cases were all skipped, or that reported
+        none, showed nothing."""
+        return self.outcome is RunOutcome.PASSED and self.cases.passed > 0
+
+    @property
     def provenance(self) -> Provenance:
         """What served the run, as it is reported: its weakest dependency's
         provenance. A run a twin served is a twin's run, never real."""

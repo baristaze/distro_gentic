@@ -337,6 +337,36 @@ async def test_fewer_trials_than_declared_are_refused() -> None:
     assert refused(await case.submit(), "trials ran 3 of the 300 trials declared")
 
 
+# A run that passed no case is no passing run.
+
+
+@pytest.mark.parametrize("cases", [("skipped", "skipped"), ()])
+async def test_a_run_that_passed_no_case_is_no_passing_run(cases: tuple[str, ...]) -> None:
+    case = await Case.start(ScriptedExecutor(cases=cases))
+    await case.validate()
+    runs = (await case.evidence.manager.get_runs(case.ctx, case.session, None, 10)).items
+    validated = [run for run in runs if run.purpose is RunPurpose.VALIDATION]
+    assert [run.cases.passed for run in validated] == [0] and not validated[0].passing
+    assert refused(await case.submit(), "unit did not pass in 1 of 1 runs")
+
+
+# A rate is judged a batch at a time: validating again until it holds never passes.
+
+
+async def test_a_failed_batch_stays_counted_after_a_clean_one() -> None:
+    flaky = ScriptedExecutor(outcome=lambda check, trial: "failed" if trial == 0 else "passed")
+    case = await Case.start(flaky, trials(300, max_rate=0.01))
+    await case.validate()
+    assert refused(await case.submit(), "1 failures in 300 trials")
+    # A clean batch alone would hold, and the two pooled (1 in 600) would too.
+    flaky.outcome = lambda check, trial: "passed"
+    await case.validate()
+    assert refused(await case.submit(), "1 failures in 300 trials", "above the 1.00% declared")
+    clean = await Case.start(ScriptedExecutor(), trials(300, max_rate=0.01))
+    await clean.validate()
+    assert succeeded(await clean.submit())
+
+
 # The root wires this gate, and a deployed root refuses the null one.
 
 

@@ -60,6 +60,20 @@ def test_a_path_no_pattern_matches_is_free(path: str) -> None:
     assert protected_paths(PATTERNS, [path]) == ()
 
 
+@pytest.mark.parametrize("pattern", ["tests/", "tests", "/tests/", "Tests/", "tests/**"])
+def test_a_pattern_that_names_a_folder_protects_everything_in_it(pattern: str) -> None:
+    paths = ["tests/test_x.py", "tests/fixtures/arm.json", "tests"]
+    assert protected_paths([pattern], paths) == tuple(sorted(paths))
+    assert protected_paths([pattern], ["src/tests.py", "docs/tests/a.md"]) == ()
+
+
+def test_a_glob_that_names_folders_protects_what_they_hold() -> None:
+    assert protected_paths(["src/*/fixtures"], ["src/arm/fixtures/a.json"]) == (
+        "src/arm/fixtures/a.json",
+    )
+    assert protected_paths(["src/*/fixtures/"], ["src/arm/main.py"]) == ()
+
+
 def test_the_target_is_read_from_the_policy_never_from_the_call() -> None:
     policy = arm_policy(protected=PATTERNS)
     assert protection_target(policy, ["src/grip.py", "tests/a.py"]).attributes == {
@@ -177,7 +191,7 @@ def test_the_collector_reads_each_run_and_streams_its_cases() -> None:
         now=at,
     )
     seen = [collector.feed(line) for line in data.splitlines()]
-    assert [case.name for case in seen if case is not None] == ["unit-case", "unit-case"]
+    assert [case.name for case in seen if case is not None] == ["unit-case-0", "unit-case-0"]
 
 
 def a_run(**changes: Any) -> list[dict[str, Any]]:
