@@ -60,6 +60,9 @@ from acme.om.privacy.impl.records import RecordSealKeysImpl
 from acme.om.privacy.impl.routed_steps import StepStorageRoutedImpl
 from acme.om.privacy.impl.sealed_steps import StepStorageSealedImpl
 from acme.om.privacy.keys import SessionKeysInterface
+from acme.om.projects import ProjectsManagerInterface
+from acme.om.projects.impl.manager import ProjectsManagerImpl, ProjectsOptions
+from acme.om.projects.impl.sessions import AgentSessionsInProjectImpl
 from acme.om.steps import StepsManagerInterface
 from acme.om.steps.impl.manager import StepsManagerImpl, StepsOptions
 from acme.om.steps.storage import StepStorageInterface
@@ -113,6 +116,7 @@ class Managers:
     agents: AgentsManagerInterface
     tools: ToolsManagerInterface
     loop: LoopManagerInterface
+    projects: ProjectsManagerInterface
 
 
 LOCAL = "local"
@@ -137,13 +141,15 @@ def refuse_quiet_spend(environment: str, *capabilities: object) -> None:
 async def purge_held(
     managers: Managers, org_id: UUID, session_id: UUID, tree_id: UUID | None
 ) -> None:
-    """What the windows, the tools, attribution, and the agents hold of a
-    session the sweep purges: its artifacts, and its workspace with its
-    transport's records, which go with its history, its authority, and its
-    tree when it was the tree's last session."""
+    """What the windows, the tools, attribution, the projects, and the
+    agents hold of a session the sweep purges: its artifacts, and its
+    workspace with its transport's records, which go with its history, its
+    authority, its project's row, and its tree when it was the tree's last
+    session."""
     await managers.windows.purge_artifacts(org_id, session_id)
     await managers.tools.purge_workspace(org_id, session_id)
     await managers.attribution.purge_authority(org_id, session_id)
+    await managers.projects.purge_session(org_id, session_id)
     if tree_id is not None:
         await managers.agents.purge_tree(org_id, tree_id)
 
@@ -245,6 +251,7 @@ def build_managers(
     domain_classes: tuple[str, ...] = (),
     loop_options: LoopOptions | None = None,
     environment: str = LOCAL,
+    projects_options: ProjectsOptions | None = None,
 ) -> Managers:
     """`integrations` is the root of the hosted services the managers front:
     the identity provider, which the tenancy manager signs people in and
@@ -282,7 +289,9 @@ def build_managers(
     session's registry holds those its kind names, with `domain_classes`,
     the classes the adopter declares; `stream_sink`, the carrier its parts
     go to, None the quiet null, which drops them; and `loop_options`. Its
-    outage signal is infra's, and its model providers the integrations'."""
+    outage signal is infra's, and its model providers the integrations'.
+
+    The platform's projects take `projects_options`, the purges' batch."""
     # The relay every core-role manager hands its outbox rows to. It reaches
     # the work manager through the root below, because a row of kind
     # `work.<kind>` is enqueued there: the work manager needs the tenancy
@@ -340,7 +349,7 @@ def build_managers(
         # bound at call time.
         instructs=lambda ctx, session_id: managers.agents.require_instructor(ctx, session_id),
     )
-    agent_sessions = AgentSessionsManagerImpl(
+    engine_sessions = AgentSessionsManagerImpl(
         storage.get_agent_session_storage(),
         steps,
         tenancy,
@@ -357,11 +366,16 @@ def build_managers(
         storage.get_privacy_storage(),
         session_keys,
         steps,
-        agent_sessions,
+        engine_sessions,
         tenancy,
         outbox,
         PrivacyOptions(),
     )
+    # Each session's project: a session spawned or handed over belongs to
+    # the project of the session it came from. Every other namespace reaches
+    # the sessions through the decorator, so no such session stands outside
+    # its origin's project.
+    agent_sessions = AgentSessionsInProjectImpl(engine_sessions, storage.get_project_storage())
     # The gate reads the budgets of a call's scopes and holds on the ledger.
     budgets = BudgetsManagerImpl(
         storage.get_budget_storage(),
@@ -460,6 +474,17 @@ def build_managers(
         outbox,
         operator_options or TenancyOperatorOptions(),
     )
+    # The projects start a root session through the agents, under a project
+    # of the caller's tenant, and answer each session's project to the
+    # namespaces that key a policy by it.
+    projects = ProjectsManagerImpl(
+        storage.get_project_storage(),
+        agent_sessions,
+        agents,
+        tenancy,
+        outbox,
+        projects_options or ProjectsOptions(),
+    )
     managers = Managers(
         tenancy=tenancy,
         tenancy_operator=tenancy_operator,
@@ -506,5 +531,6 @@ def build_managers(
             loop_options or LoopOptions(),
             domain_classes=domain_classes,
         ),
+        projects=projects,
     )
     return managers

@@ -13,6 +13,7 @@ from acme.om.models.storage import FillSetStorageInterface
 from acme.om.orchestrations.storage import OrchestrationsStorageInterface
 from acme.om.outbox.storage import OutboxStorageInterface
 from acme.om.privacy.storage import PrivacyStorageInterface
+from acme.om.projects.storage import ProjectStorageInterface
 from acme.om.steps.storage import StepStorageInterface
 from acme.om.tenancy.storage import TenancyStorageInterface
 from acme.om.tools.storage import ToolStorageInterface
@@ -56,6 +57,9 @@ class StorageInterface(ABC):
 
     @abstractmethod
     def get_privacy_storage(self) -> PrivacyStorageInterface: ...
+
+    @abstractmethod
+    def get_project_storage(self) -> ProjectStorageInterface: ...
 
     @abstractmethod
     def get_budget_storage(self) -> BudgetStorageInterface: ...
