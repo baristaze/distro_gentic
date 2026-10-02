@@ -93,3 +93,7 @@ directory must not, so the host refuses an item at that mode.
   purge of a host's own records, are the workspace work's.
 - The engine's transport types gain the command's effect, so the next
   move of the base merges over that field.
+- The host imports the engine's transports, isolation, and local secrets
+  to run what it holds, which PLC-10's check reads as reaching the
+  platform. Its exceptions name this decision: the host dials nothing
+  through them and reaches the platform through the client alone.

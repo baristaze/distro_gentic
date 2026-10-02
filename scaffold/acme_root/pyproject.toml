@@ -104,6 +104,20 @@ exclude = ["clients/python/src/acme/client/schema.py"]
 package = "acme"
 exclude = ["clients/python/src/acme/client/schema.py"]
 
+# A host runs the exec items it holds on its own disk, through the engine's
+# transports, isolation, and local secrets; it dials nothing through them.
+[[tool.distro-check.exception]]
+rule = "PLC-10"
+path = "apps/host/src/acme/apps/host/main.py"
+adr = "docs/adr/2004-a-tool-call-crosses-the-wall-as-keyed-exec-work-and-runs-once.md"
+reason = "a host runs the items it holds through the engine's container transport on its own disk, and reaches the platform through the client alone"
+
+[[tool.distro-check.exception]]
+rule = "PLC-10"
+path = "apps/host/src/acme/apps/host/relay.py"
+adr = "docs/adr/2004-a-tool-call-crosses-the-wall-as-keyed-exec-work-and-runs-once.md"
+reason = "a host runs the items it holds through the engine's container transport on its own disk, and reaches the platform through the client alone"
+
 # The guideline's static checker (`make arch-check`). The layout is the
 # guideline's, so only the package and the project's own lists are named.
 [tool.arch-check]
