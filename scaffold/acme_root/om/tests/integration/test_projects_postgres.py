@@ -171,8 +171,12 @@ async def test_a_projects_retention_narrowing_reaches_its_sessions(
     narrow, other = await a_project(managers, ctx), await a_project(managers, ctx, "acme/bin")
     week = timedelta(days=7)
     current = await managers.retention.get_policy(ctx)
-    narrowing = ProjectRetention(project_id=narrow.id, policy=RetentionPolicy(content_lifetime=week))
-    await managers.retention.write_policy(ctx, current.model_copy(update={"projects": (narrowing,)}))
+    narrowing = ProjectRetention(
+        project_id=narrow.id, policy=RetentionPolicy(content_lifetime=week)
+    )
+    await managers.retention.write_policy(
+        ctx, current.model_copy(update={"projects": (narrowing,)})
+    )
     on_narrow = await managers.projects.start_session(ctx, narrow.id, a_start())
     on_other = await managers.projects.start_session(ctx, other.id, a_start())
     snapshots = await rows(

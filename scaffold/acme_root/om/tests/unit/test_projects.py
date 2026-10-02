@@ -185,7 +185,9 @@ async def test_a_projects_retention_narrowing_reaches_its_sessions(managers: Man
     narrow, other = await a_project(managers, admin), await a_project(managers, admin, "acme/bin")
     tenant, week = RetentionPolicy(content_lifetime=timedelta(days=30)), timedelta(days=7)
     current = await managers.retention.get_policy(admin)
-    narrowing = ProjectRetention(project_id=narrow.id, policy=RetentionPolicy(content_lifetime=week))
+    narrowing = ProjectRetention(
+        project_id=narrow.id, policy=RetentionPolicy(content_lifetime=week)
+    )
     await managers.retention.write_policy(
         admin, current.model_copy(update={"policy": tenant, "projects": (narrowing,)})
     )
