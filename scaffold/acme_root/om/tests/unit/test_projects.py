@@ -24,6 +24,7 @@ from acme.om.context import Role, TenantContext
 from acme.om.exceptions import NotAuthorized, NotFound, TenantMismatch
 from acme.om.projects.exceptions import ProjectFixed
 from acme.om.projects.types.project import Project, Repository
+from acme.om.retention.types.policy import ProjectRetention, RetentionPolicy
 from acme.om.root import Managers, build_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 
@@ -172,6 +173,33 @@ async def test_a_child_of_no_project_takes_none_named_for_it(managers: Managers)
         )
     with pytest.raises(ProjectFixed):
         await managers.agents.spawn(member, parent.id, spawn)
+
+
+async def test_a_projects_retention_narrowing_reaches_its_sessions(managers: Managers) -> None:
+    """Retention asks the projects which project a new session belongs to:
+    a session of the narrowing project, and the child it spawns, take the
+    narrowing; one of a sibling project, or of none, takes its tenant's
+    policy alone."""
+    org = make_org()
+    admin, member = context(Role.ADMIN, org), context(Role.MEMBER, org)
+    narrow, other = await a_project(managers, admin), await a_project(managers, admin, "acme/bin")
+    tenant, week = RetentionPolicy(content_lifetime=timedelta(days=30)), timedelta(days=7)
+    current = await managers.retention.get_policy(admin)
+    narrowing = ProjectRetention(project_id=narrow.id, policy=RetentionPolicy(content_lifetime=week))
+    await managers.retention.write_policy(
+        admin, current.model_copy(update={"policy": tenant, "projects": (narrowing,)})
+    )
+    on_narrow = await managers.projects.start_session(member, narrow.id, a_start())
+    spawn = Spawn(id=new_id(), kind="delivery", title="reproduce it", objective="run it")
+    child = await managers.agents.spawn(member, on_narrow.id, spawn)
+    on_other = await managers.projects.start_session(member, other.id, a_start())
+    loose = await managers.agents.start_session(member, a_start())
+    snapshot = managers.retention.get_snapshot
+    for session in (on_narrow, child):
+        taken = await snapshot(member, session.id)
+        assert (taken.project_id, taken.policy.content_lifetime) == (narrow.id, week)
+    assert (await snapshot(member, on_other.id)).policy == tenant
+    assert (await snapshot(member, loose.id)).policy == tenant
 
 
 async def test_only_the_bound_repository_is_work_product(managers: Managers) -> None:

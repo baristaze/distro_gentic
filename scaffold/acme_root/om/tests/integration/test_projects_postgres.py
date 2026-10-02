@@ -7,9 +7,11 @@ tenant's project starts nothing and leaves no row, and another tenant
 reads no row of it. A session's project never changes: a start under
 another project is refused, and the runtime login may not rewrite or remove
 the row. The one repository a session's work product lands on is its own
-project's."""
+project's, and a project's retention narrowing reaches its sessions'
+snapshot rows."""
 
 from collections.abc import AsyncIterator
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -28,6 +30,7 @@ from acme.om.context import AppContext, AppType, RequestContext, TenantContext
 from acme.om.exceptions import NotFound
 from acme.om.projects.exceptions import ProjectFixed
 from acme.om.projects.types.project import Project
+from acme.om.retention.types.policy import ProjectRetention, RetentionPolicy
 from acme.om.root import Managers, build_managers
 from acme.om.storage.impl.pg_base import LoginSessions, set_scope
 from acme.om.storage.impl.postgres import StoragePostgresImpl
@@ -159,3 +162,26 @@ async def test_only_the_bound_repository_is_work_product(managers: Managers) -> 
     assert await work(ctx, on_bin.id) == bin_.repository
     assert await work(ctx, loose.id) is None
     assert await work(other, on_arm.id) is None
+
+
+async def test_a_projects_retention_narrowing_reaches_its_sessions(
+    managers: Managers, pg_sessions: LoginSessions
+) -> None:
+    ctx = await an_org(managers)
+    narrow, other = await a_project(managers, ctx), await a_project(managers, ctx, "acme/bin")
+    week = timedelta(days=7)
+    current = await managers.retention.get_policy(ctx)
+    narrowing = ProjectRetention(project_id=narrow.id, policy=RetentionPolicy(content_lifetime=week))
+    await managers.retention.write_policy(ctx, current.model_copy(update={"projects": (narrowing,)}))
+    on_narrow = await managers.projects.start_session(ctx, narrow.id, a_start())
+    on_other = await managers.projects.start_session(ctx, other.id, a_start())
+    snapshots = await rows(
+        pg_sessions,
+        "SELECT session_id, project_id, policy->>'content_lifetime' AS content"
+        " FROM core.session_retention ORDER BY session_id",
+        ctx.org_id,
+    )
+    assert snapshots == [
+        {"session_id": on_narrow.id, "project_id": narrow.id, "content": "P7D"},
+        {"session_id": on_other.id, "project_id": other.id, "content": None},
+    ]
