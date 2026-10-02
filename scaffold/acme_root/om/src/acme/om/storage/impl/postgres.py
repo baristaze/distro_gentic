@@ -1,0 +1,264 @@
+"""The relational storage root: one engine and pool per distinct role URL and
+its bounds, under the runtime login, the system login, and, in the
+maintenance worker, the purge login, every namespace impl constructed here."""
+
+import asyncio
+from collections.abc import Mapping
+from dataclasses import replace
+from typing import Any
+
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
+
+from acme.om.agent_sessions.storage import AgentSessionStorageInterface
+from acme.om.agent_sessions.storage.impl.postgres import AgentSessionStoragePostgresImpl
+from acme.om.agents.storage import AgentStorageInterface
+from acme.om.agents.storage.impl.postgres import AgentStoragePostgresImpl
+from acme.om.attribution.storage import AttributionStorageInterface
+from acme.om.attribution.storage.impl.postgres import AttributionStoragePostgresImpl
+from acme.om.budgets.storage import BudgetStorageInterface, LedgerStorageInterface
+from acme.om.budgets.storage.impl.postgres import (
+    BudgetStoragePostgresImpl,
+    LedgerStoragePostgresImpl,
+)
+from acme.om.events.storage import EventStorageInterface
+from acme.om.events.storage.impl.postgres import EventStoragePostgresImpl
+from acme.om.idempotency.storage import IdempotencyStorageInterface
+from acme.om.idempotency.storage.impl.postgres import IdempotencyStoragePostgresImpl
+from acme.om.media.storage import MediaStorageInterface
+from acme.om.media.storage.impl.postgres import MediaStoragePostgresImpl
+from acme.om.models.storage import FillSetStorageInterface
+from acme.om.models.storage.impl.postgres import FillSetStoragePostgresImpl
+from acme.om.orchestrations.storage import OrchestrationsStorageInterface
+from acme.om.orchestrations.storage.impl.postgres import OrchestrationsStoragePostgresImpl
+from acme.om.outbox.storage import OutboxStorageInterface
+from acme.om.outbox.storage.impl.postgres import OutboxStoragePostgresImpl
+from acme.om.privacy.storage import PrivacyStorageInterface
+from acme.om.privacy.storage.impl.postgres import PrivacyStoragePostgresImpl
+from acme.om.steps.storage import StepStorageInterface
+from acme.om.steps.storage.impl.postgres import StepStoragePostgresImpl
+from acme.om.storage.impl.pg_base import LoginSessions, ScopedConnection, SessionFactory
+from acme.om.storage.roles import DatabaseRole
+from acme.om.storage.root import StorageInterface
+from acme.om.storage.settings import RolePool
+from acme.om.tenancy.storage import TenancyStorageInterface
+from acme.om.tenancy.storage.impl.postgres import TenancyStoragePostgresImpl
+from acme.om.tools.storage import ToolStorageInterface
+from acme.om.tools.storage.impl.postgres import ToolStoragePostgresImpl
+from acme.om.windows.storage import WindowStorageInterface
+from acme.om.windows.storage.impl.postgres import WindowStoragePostgresImpl
+from acme.om.work.storage import WorkStorageInterface
+from acme.om.work.storage.impl.postgres import WorkStoragePostgresImpl
+
+
+def connect_args(pool: RolePool) -> dict[str, Any]:
+    """What every connection of a pool is opened with. `statement_timeout` is a
+    server setting in the startup packet, so Postgres cancels any statement that
+    runs past the deadline on every connection the pool opens: the deadline
+    holds for every statement of every role and no call site carries it. The
+    driver's own `timeout` bounds opening a connection, so a database that
+    accepts no connection fails a call within the same bound a checkout has.
+    Every connection is a `ScopedConnection`, which carries the funnel's scope
+    in the message that begins a transaction."""
+    milliseconds = round(pool.statement_timeout_seconds * 1000)
+    return {
+        "timeout": pool.checkout_timeout_seconds,
+        "server_settings": {"statement_timeout": str(milliseconds)},
+        "connection_class": ScopedConnection,
+    }
+
+
+PURGE_POOL_SIZE = 1
+"""The connections the purge login's pool opens: the sweep sends one purge
+statement at a time, and no other path holds the login (ADR 1010)."""
+
+
+POOL_RECYCLE_SECONDS = 300
+"""The age past which a pooled connection is closed at checkout and a new one
+opened in its place. The shortest idle cutoff between a task and its database
+is the security group's connection tracking: 350 seconds on the newest EC2
+hosts, and a tracked connection idle past it is dropped without a word to
+either end. A connection is never idle longer than it is old, so none is used
+past that cutoff. Postgres itself closes no idle session: RDS leaves
+`idle_session_timeout` off, and the parameter group does not set it."""
+
+
+def engine_for(url: str, pool: RolePool) -> AsyncEngine:
+    """One engine on a URL under one role's bounds. `max_overflow` is zero, not a
+    knob of its own: the declared size is then the number of connections the
+    process can hold, which is the number a worker's capacity is set against, and
+    a checkout past it waits `pool_timeout` and fails rather than queueing
+    without end.
+
+    No ping before a checkout: that is three round trips (BEGIN, a probe,
+    ROLLBACK) before every transaction. The pool recycles a connection before
+    anything on the path can drop it, and a connection the server closed anyway
+    fails the message that begins the transaction and sets its scope, which
+    writes nothing, so the storage funnel drops it and begins again on the
+    next connection (`pg_base.scoped_session`).
+
+    The engine hides its parameters: a statement that fails is an exception
+    whose text names the statement and never the values bound to it, which
+    are a tenant's words and a person's address, so no traceback in a log
+    line carries them."""
+    return create_async_engine(
+        url,
+        hide_parameters=True,
+        pool_recycle=POOL_RECYCLE_SECONDS,
+        pool_size=pool.size,
+        max_overflow=0,
+        pool_timeout=pool.checkout_timeout_seconds,
+        connect_args=connect_args(pool),
+    )
+
+
+def login_sessions(
+    urls: Mapping[DatabaseRole, str],
+    pools: Mapping[DatabaseRole, RolePool],
+    *,
+    system_urls: Mapping[DatabaseRole, str],
+    purge_urls: Mapping[DatabaseRole, str] | None = None,
+) -> tuple[LoginSessions, dict[tuple[str, RolePool], AsyncEngine]]:
+    """The session factories of every login the caller names, and the engines
+    behind them keyed by URL and bounds so the caller can dispose of them.
+    This is the one way a pool is opened: the storage root builds its
+    sessions here, and so do the integration suites, which then run every
+    case under the bounds a deployed process holds and not under a library's
+    defaults. `purge_urls` opens the purge login's pools, each of
+    `PURGE_POOL_SIZE` connections under its role's bounds; without it the
+    sessions hold no purge login."""
+    engines: dict[tuple[str, RolePool], AsyncEngine] = {}
+
+    def factories(
+        by_role: Mapping[DatabaseRole, str], bounds: Mapping[DatabaseRole, RolePool]
+    ) -> dict[DatabaseRole, SessionFactory]:
+        found: dict[DatabaseRole, SessionFactory] = {}
+        for role in DatabaseRole:
+            key = (by_role[role], bounds[role])
+            if key not in engines:
+                engines[key] = engine_for(*key)
+            found[role] = async_sessionmaker(engines[key], expire_on_commit=False)
+        return found
+
+    purge = None
+    if purge_urls is not None:
+        one = {role: replace(pool, size=PURGE_POOL_SIZE) for role, pool in pools.items()}
+        purge = factories(purge_urls, one)
+    return LoginSessions(factories(urls, pools), factories(system_urls, pools), purge), engines
+
+
+class StoragePostgresImpl(StorageInterface):
+    def __init__(
+        self,
+        urls: Mapping[DatabaseRole, str],
+        pools: Mapping[DatabaseRole, RolePool],
+        *,
+        system_urls: Mapping[DatabaseRole, str],
+        purge_urls: Mapping[DatabaseRole, str] | None = None,
+    ) -> None:
+        """One engine per distinct URL and bounds: roles that share both share a
+        pool, and a role given a size, a checkout bound, or a statement deadline
+        of its own gets a pool of its own, which is what makes the role the
+        bulkhead between two load profiles on one database. Both arguments come
+        from the settings object the composition root read at boot: the impl
+        reads no environment variable of its own.
+
+        `system_urls` are the same roles under the system login. They name
+        another login, so they open pools of their own under the same bounds,
+        and only the system scope draws on them. `purge_urls` are the same
+        roles under the purge login, which only the maintenance worker names:
+        a root built without them deletes no step (ADR 1010)."""
+        sessions, engines = login_sessions(
+            urls, pools, system_urls=system_urls, purge_urls=purge_urls
+        )
+        self._engines = engines
+        self._sessions = sessions
+        self._tenancy = TenancyStoragePostgresImpl(sessions)
+        self._work = WorkStoragePostgresImpl(sessions)
+        self._media = MediaStoragePostgresImpl(sessions)
+        self._idempotency = IdempotencyStoragePostgresImpl(sessions)
+        self._events = EventStoragePostgresImpl(sessions)
+        self._outbox = OutboxStoragePostgresImpl(sessions)
+        self._orchestrations = OrchestrationsStoragePostgresImpl(sessions)
+        self._steps = StepStoragePostgresImpl(sessions)
+        self._agent_sessions = AgentSessionStoragePostgresImpl(sessions)
+        self._agents = AgentStoragePostgresImpl(sessions)
+        self._attribution = AttributionStoragePostgresImpl(sessions)
+        self._privacy = PrivacyStoragePostgresImpl(sessions)
+        self._budgets = BudgetStoragePostgresImpl(sessions)
+        self._ledger = LedgerStoragePostgresImpl(sessions)
+        self._fill_sets = FillSetStoragePostgresImpl(sessions)
+        self._windows = WindowStoragePostgresImpl(sessions)
+        self._tools = ToolStoragePostgresImpl(sessions)
+
+    def get_tenancy_storage(self) -> TenancyStorageInterface:
+        return self._tenancy
+
+    def get_work_storage(self) -> WorkStorageInterface:
+        return self._work
+
+    def get_media_storage(self) -> MediaStorageInterface:
+        return self._media
+
+    def get_idempotency_storage(self) -> IdempotencyStorageInterface:
+        return self._idempotency
+
+    def get_event_storage(self) -> EventStorageInterface:
+        return self._events
+
+    def get_outbox_storage(self) -> OutboxStorageInterface:
+        return self._outbox
+
+    def get_orchestrations_storage(self) -> OrchestrationsStorageInterface:
+        return self._orchestrations
+
+    def get_step_storage(self) -> StepStorageInterface:
+        return self._steps
+
+    def get_agent_session_storage(self) -> AgentSessionStorageInterface:
+        return self._agent_sessions
+
+    def get_agent_storage(self) -> AgentStorageInterface:
+        return self._agents
+
+    def get_attribution_storage(self) -> AttributionStorageInterface:
+        return self._attribution
+
+    def get_privacy_storage(self) -> PrivacyStorageInterface:
+        return self._privacy
+
+    def get_budget_storage(self) -> BudgetStorageInterface:
+        return self._budgets
+
+    def get_ledger_storage(self) -> LedgerStorageInterface:
+        return self._ledger
+
+    def get_fill_set_storage(self) -> FillSetStorageInterface:
+        return self._fill_sets
+
+    def get_window_storage(self) -> WindowStorageInterface:
+        return self._windows
+
+    def get_tool_storage(self) -> ToolStorageInterface:
+        return self._tools
+
+    async def healthcheck(self) -> bool:
+        """A connect and a `SELECT 1` on every engine, each under the bounds its
+        own pool declares: a checkout waits at most the checkout bound and the
+        statement at most its deadline, so a saturated or unreachable pool
+        answers false instead of holding the caller. The deadline here is the
+        sum of the two, the worst a healthy answer can cost, and it is not a
+        knob: the bounds it is made of already are."""
+        try:
+            for (_, pool), engine in self._engines.items():
+                deadline = pool.checkout_timeout_seconds + pool.statement_timeout_seconds
+                async with asyncio.timeout(deadline):
+                    async with engine.connect() as connection:
+                        await connection.execute(text("SELECT 1"))
+        except Exception:
+            return False
+        return True
+
+    async def close(self) -> None:
+        for engine in self._engines.values():
+            await engine.dispose()
