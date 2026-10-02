@@ -3,14 +3,14 @@ fence: account links and work bindings, automations and their runs,
 playbook versions and their invocations, and knowledge entries.
 
 Revision ID: 202610032400
-Revises: 202610032100
+Revises: 202610032300
 """
 
 from acme.om.storage.migrate import run_sql
 from acme.om.storage.roles import DatabaseRole
 
 revision = "202610032400"
-down_revision = "202610032100"
+down_revision = "202610032300"
 branch_labels = None
 depends_on = None
 
