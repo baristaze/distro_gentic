@@ -71,6 +71,17 @@ from acme.om.privacy.impl.records import RecordSealKeysImpl
 from acme.om.privacy.impl.routed_steps import StepStorageRoutedImpl
 from acme.om.privacy.impl.sealed_steps import StepStorageSealedImpl
 from acme.om.privacy.keys import SessionKeysInterface
+from acme.om.retention import RetentionManagerInterface
+from acme.om.retention.impl.keys import (
+    KeyServiceByTenantImpl,
+    KeyServiceLocalImpl,
+    TenantKeysImpl,
+)
+from acme.om.retention.impl.manager import RetentionManagerImpl, RetentionOptions
+from acme.om.retention.impl.projects import SessionProjectNullImpl
+from acme.om.retention.impl.sessions import AgentSessionsRetainedImpl
+from acme.om.retention.keys import TenantKeysInterface
+from acme.om.retention.projects import SessionProjectInterface
 from acme.om.steps import StepsManagerInterface
 from acme.om.steps.impl.manager import StepsManagerImpl, StepsOptions
 from acme.om.steps.storage import StepStorageInterface
@@ -126,6 +137,7 @@ class Managers:
     steps: StepsManagerInterface
     agent_sessions: AgentSessionsManagerInterface
     privacy: PrivacyManagerInterface
+    retention: RetentionManagerInterface
     budgets: BudgetsManagerInterface
     budget_gate: BudgetGateInterface
     pricing: PricingInterface
@@ -280,6 +292,9 @@ def build_managers(
     pull_requests: PullRequestsInterface | None = None,
     workspace_git: WorkspaceGitInterface | None = None,
     environment: str = LOCAL,
+    tenant_keys: TenantKeysInterface | None = None,
+    session_projects: SessionProjectInterface | None = None,
+    retention_options: RetentionOptions | None = None,
     evidence_options: EvidenceOptions | None = None,
     executor: ExecutorInterface | None = None,
     work_product: WorkProductInterface | None = None,
@@ -339,6 +354,15 @@ def build_managers(
 
     `placement_options` is the fair share of a tenant no operator gave one,
     and the delay a loop over its share waits; None keeps the defaults.
+
+    The platform's retention takes three. `tenant_keys` says whose key
+    service holds each tenant's keys; None is infra's for every tenant, and
+    in `local` the local key service over it, which destroys a session's key
+    and reports it as a tenant's own service does. Elsewhere infra's holds
+    the tenant's key alone, and the engine's revocation is the
+    destruction. `session_projects` names a new session's project, None
+    none, so each session takes its tenant's policy unnarrowed; and
+    `retention_options` the sweep's batches.
 
     The workspaces take five. `workspace_host` is what this process, the
     host its tools run on, offers beyond its provider; None offers nothing
@@ -400,7 +424,13 @@ def build_managers(
     )
     # The history first: a session's status is read off its steps. What a
     # step says reaches it through the sealing layer, by the session's policy.
-    session_keys = SessionKeysImpl(storage.get_privacy_storage(), infra.get_keys())
+    # Each tenant's keys in its own key service: the platform's, or the one
+    # the tenant brought. In `local`, the platform's is the local key service
+    # over infra's, which holds each session's key in this process.
+    keys = tenant_keys or TenantKeysImpl(
+        KeyServiceLocalImpl(infra.get_keys()) if environment == LOCAL else infra.get_keys()
+    )
+    session_keys = SessionKeysImpl(storage.get_privacy_storage(), KeyServiceByTenantImpl(keys))
     records = record_seal or RecordSealKeysImpl(session_keys, storage.get_privacy_storage())
     steps = StepsManagerImpl(
         private_history(storage, session_keys, StepStorageMemoryImpl()),
@@ -412,10 +442,10 @@ def build_managers(
         instructs=lambda ctx, session_id: managers.agents.require_instructor(ctx, session_id),
     )
     kinds = AgentKindCatalog(kinds=agent_kinds)
-    # Each session's workspace, pinned as the session is created: the
-    # decorator below pins it before the engine writes the session, and
-    # every namespace reaches the sessions through it. Its checkout runs in
-    # the workspace through the transport, under the session's epoch.
+    # Each session's workspace, pinned as the session is created: a
+    # decorator below pins it before the session is written. Its checkout
+    # runs in the workspace through the transport, under the session's
+    # epoch.
     workspaces = WorkspacesManagerImpl(
         storage.get_workspace_storage(),
         tenancy,
@@ -440,15 +470,35 @@ def build_managers(
             managers, org_id, session_id, tree_id
         ),
     )
-    agent_sessions = AgentSessionsPinnedImpl(engine_sessions, workspaces)
     privacy = PrivacyManagerImpl(
         storage.get_privacy_storage(),
         session_keys,
         steps,
-        agent_sessions,
+        engine_sessions,
         tenancy,
         outbox,
         PrivacyOptions(),
+    )
+    # Each session's retention: the snapshot it takes as it is created, and
+    # the sweep that destroys its key when its content expires and marks it
+    # when its shape does, through the engine's own sessions. Every other
+    # namespace reaches the sessions through the decorator, so no session is
+    # created without its snapshot.
+    retention = RetentionManagerImpl(
+        storage.get_retention_storage(),
+        keys,
+        privacy,
+        engine_sessions,
+        tenancy,
+        events,
+        outbox,
+        session_projects or SessionProjectNullImpl(),
+        retention_options or RetentionOptions(),
+    )
+    # And each session's workspace pinned before it is written, around the
+    # snapshot: every other namespace reaches the sessions through both.
+    agent_sessions = AgentSessionsPinnedImpl(
+        AgentSessionsRetainedImpl(engine_sessions, retention, privacy), workspaces
     )
     # The gate reads the budgets of a call's scopes and holds on the ledger.
     budgets = BudgetsManagerImpl(
@@ -603,6 +653,7 @@ def build_managers(
         steps=steps,
         agent_sessions=agent_sessions,
         privacy=privacy,
+        retention=retention,
         budgets=budgets,
         budget_gate=gate,
         # The one source of prices: the list table.
