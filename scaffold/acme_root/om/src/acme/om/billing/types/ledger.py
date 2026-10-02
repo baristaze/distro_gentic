@@ -183,6 +183,9 @@ class Shortfall(Platform):
     units: int | None = Field(ge=0)
     short: int = Field(ge=1)
     resets_at: datetime | None
+    reserved: int = Field(default=0, ge=0)
+    """Units the buckets' open holds reserve: when they cover the shortfall,
+    their settlements can free the room."""
 
 
 class Turned(Platform):

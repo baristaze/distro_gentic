@@ -29,7 +29,7 @@ from acme.om.billing.types.ledger import (
     Turned,
 )
 from acme.om.billing.types.plan import PlanCatalog, UnitScale
-from acme.om.budgets.rules import EPOCH, breaches, window_bounds
+from acme.om.budgets.rules import EPOCH, HOLD_RETRY, breaches, window_bounds
 from acme.om.budgets.types.amount import Amount
 from acme.om.budgets.types.breach import Refusal
 from acme.om.budgets.types.budget import Budget, BudgetWindow, WindowKind
@@ -40,6 +40,10 @@ from acme.om.steps.types.header import Park, ParkReason
 FUNDS_UNLOCK = "funds"
 """A budget park's unlock when no bucket covers the call: a top-up, a
 grant, or the next billing period."""
+
+HELD_UNLOCK = "held"
+"""A budget park's unlock when the room a call lacks is what other calls'
+open holds reserve: their settlements."""
 
 PRICE_UNLOCK = "price"
 """A budget park's unlock when no price gives the call a cost in units."""
@@ -331,9 +335,9 @@ def draw_of(units: int, funding: Funding, counts: Mapping[CountKey, Count]) -> t
 def shortfall_of(
     units: int, short: int, funding: Funding, counts: Mapping[CountKey, Count]
 ) -> Shortfall:
-    """The shortfall of a hold, and whether a fresh billing period covers it:
-    the included units and the line of credit refill, the granted units and
-    the credits do not."""
+    """The shortfall of a hold, whether a fresh billing period covers it (the
+    included units and the line of credit refill, the granted units and the
+    credits do not), and what the buckets' open holds reserve."""
     lasting = sum(
         available(bucket, funding, _count(counts, bucket_key(bucket, funding)))
         // (funding.unit_price_micros if bucket in MONEY_BUCKETS else 1)
@@ -341,7 +345,17 @@ def shortfall_of(
     )
     fresh = funding.included_units + funding.credit_line_micros // funding.unit_price_micros
     covered = units <= lasting + fresh
-    return Shortfall(units=units, short=short, resets_at=funding.period_end if covered else None)
+    reserved = sum(
+        _count(counts, bucket_key(bucket, funding)).held
+        // (funding.unit_price_micros if bucket in MONEY_BUCKETS else 1)
+        for bucket in BUCKET_ORDER
+    )
+    return Shortfall(
+        units=units,
+        short=short,
+        resets_at=funding.period_end if covered else None,
+        reserved=reserved,
+    )
 
 
 def open_answer(
@@ -485,11 +499,19 @@ def far_above(cost: int | None, recent: Sequence[int], guard: AnomalyGuard) -> b
 # The parks, and what a person is told.
 
 
-def shortfall_park(shortfall: Shortfall) -> Park:
-    """A shortfall parks on the budget: a spend limit. It tries again by
-    itself at the next billing period when that covers the call."""
-    unlock = PRICE_UNLOCK if shortfall.units is None else FUNDS_UNLOCK
-    return Park(reason=ParkReason.BUDGET, unlock=unlock, retry_at=shortfall.resets_at)
+def shortfall_park(shortfall: Shortfall, now: datetime, hold_retry: timedelta = HOLD_RETRY) -> Park:
+    """A shortfall parks on the budget: a spend limit. When open holds
+    reserve the room it lacks, their settlements can free it, so it tries
+    again soon, never after the period's end. Otherwise it tries again at
+    the next billing period when that covers the call, or waits for a
+    person."""
+    if shortfall.units is None:
+        return Park(reason=ParkReason.BUDGET, unlock=PRICE_UNLOCK)
+    if shortfall.short <= shortfall.reserved:
+        soon = now + hold_retry
+        retry_at = soon if shortfall.resets_at is None else min(soon, shortfall.resets_at)
+        return Park(reason=ParkReason.BUDGET, unlock=HELD_UNLOCK, retry_at=retry_at)
+    return Park(reason=ParkReason.BUDGET, unlock=FUNDS_UNLOCK, retry_at=shortfall.resets_at)
 
 
 def anomaly_park() -> Park:
@@ -528,6 +550,14 @@ def notice_of(park: Park) -> Notice:
             return Notice(
                 limit=LimitKind.SPEND,
                 text=f"The account's balance does not cover this call. It waits until {when}.",
+            )
+        case ParkReason.BUDGET if park.unlock == HELD_UNLOCK:
+            return Notice(
+                limit=LimitKind.SPEND,
+                text=(
+                    "Other calls hold the account's balance for now. "
+                    "The session tries again when they settle."
+                ),
             )
         case ParkReason.BUDGET if park.unlock == PRICE_UNLOCK:
             return Notice(

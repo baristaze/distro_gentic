@@ -32,6 +32,7 @@ from acme.om.billing.impl.prices import PriceBookTableImpl
 from acme.om.billing.rules import (
     ANOMALY_UNLOCK,
     FUNDS_UNLOCK,
+    HELD_UNLOCK,
     AnomalyGuard,
     LimitKind,
     credential_of,
@@ -220,6 +221,36 @@ async def test_the_buckets_are_drawn_in_their_fixed_order_and_prepaid_differs_on
     assert parked.value.park.reason is ParkReason.BUDGET
     assert parked.value.park.unlock == FUNDS_UNLOCK
     assert parked.value.park.retry_at is not None, "the next billing period refills the plan"
+
+
+async def test_a_call_short_only_of_what_open_holds_reserve_tries_again_soon(
+    tmp_path: Path,
+) -> None:
+    """Ten included units, eight held by a call still open: a call for five
+    parks on the budget and tries again within seconds, not at the period's
+    end, and fits once the open call settles."""
+    plans = PlanCatalog(
+        plans=(Plan(id="ten", version=1, included_units=10, unit_price_micros=1_000),)
+    )
+    money = money_over(tmp_path, plans=plans)
+    await money.open(plan="ten")
+    owner = money.loop.owner
+    first = await money.gate.authorize_priced(owner, tenant_request(owner, 8_000), None)
+    assert isinstance(first, FundedHold) and first.draw.included == 8
+
+    with pytest.raises(GateParked) as parked:
+        await money.gate.authorize_priced(owner, tenant_request(owner, 5_000), None)
+
+    park = parked.value.park
+    assert park.reason is ParkReason.BUDGET and park.unlock == HELD_UNLOCK
+    assert park.retry_at is not None
+    assert park.retry_at - money.loop.clock() <= timedelta(seconds=30), (
+        "soon, never the period's end"
+    )
+    assert notice_of(park).limit is LimitKind.SPEND
+    await money.gate.settle(owner, first.id, Billed(usage=Spend(cost_micros=3_000, tokens=0)))
+    second = await money.gate.authorize_priced(owner, tenant_request(owner, 5_000), None)
+    assert isinstance(second, FundedHold) and second.draw.included == 5
 
 
 # Time zones.

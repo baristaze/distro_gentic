@@ -225,9 +225,13 @@ class MoneyGateImpl(MoneyGateInterface):
         if turned.refusal is not None:
             return turned.refusal
         assert turned.shortfall is not None
+        shortfall = turned.shortfall
+        held = (
+            " until other calls' open holds settle" if shortfall.short <= shortfall.reserved else ""
+        )
         raise GateParked(
-            shortfall_park(turned.shortfall),
-            f"no bucket covers {turned.shortfall.short} units of the call",
+            shortfall_park(shortfall, self._clock()),
+            f"no bucket covers {shortfall.short} units of the call{held}",
         )
 
 
