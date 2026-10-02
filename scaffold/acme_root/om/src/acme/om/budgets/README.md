@@ -43,7 +43,8 @@ thing [Acme is made of](../../../../README.md).
 - **Settle a hold.** It is released only when the provider provably did
   not bill. Otherwise it counts the usage the provider reported, or
   usage retrieved later, else the whole hold: a broken stream or a crash
-  after the call was sent is usually billed.
+  after the call was sent is usually billed. A hold whose run died before
+  it settled is settled by the sweep ([billing](../billing/README.md)).
 - **Read a budget's spend** in its current window.
 
 ## The rules
