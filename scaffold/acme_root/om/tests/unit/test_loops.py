@@ -250,7 +250,9 @@ async def test_a_request_a_lost_run_left_open_is_closed_and_its_hold_settled_who
     fill = (await managers.models.get_fill_set(ctx, session_id)).fill_for(MAIN)
     assert fill is not None
     gate = CallGateBudgetImpl(managers.budget_gate, managers.pricing, managers.agent_sessions)
-    hold = await gate.authorize(ctx, session_id, person(ctx.user_id), MAIN, fill, rendered.call)
+    hold = await gate.authorize(
+        ctx, session_id, person(ctx.user_id), MAIN, fill, rendered.call, credential="platform"
+    )
     lost = request_step(
         rendered, rendered.attribution, session_id, trigger.id, new_id(), loop.clock(), hold_id=hold
     )

@@ -33,6 +33,7 @@ from acme.om.context import (
     build_context,
 )
 from acme.om.exceptions import NotAuthorized
+from acme.om.models.impl.credentials import CallCredentialsPlatformImpl
 from acme.om.root import Managers, build_managers
 from acme.om.steps.types.step import Step
 from acme.om.storage.impl.memory import StorageMemoryImpl
@@ -233,7 +234,7 @@ def trusted(
         managers.windows,
         managers.tools,
         CallGateBudgetImpl(managers.budget_gate, managers.pricing, managers.agent_sessions),
-        providers,
+        CallCredentialsPlatformImpl(providers),
         infra.get_outages(),
         sink,
         catalog,

@@ -31,6 +31,8 @@ from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import Platform, new_id, utcnow
 from acme.om.context import CredentialKind, RequestContext, Role, TenantContext, build_context
 from acme.om.evidence import ExecutorInterface, WorkProductInterface
+from acme.om.models.impl.credentials import CallCredentialsPlatformImpl
+from acme.om.models.layer import ModelsLayer
 from acme.om.root import Managers, build_managers
 from acme.om.steps.types.content import TextBlock, ToolUseBlock
 from acme.om.steps.types.header import LoopOutcome, ParkReason
@@ -38,6 +40,7 @@ from acme.om.steps.types.step import Step, StepType
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.tenancy.rules import permissions_of
+from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.tools.tool import ToolInterface, ToolRuntime
 from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule, Target
 from acme.om.tools.types.tool import Effect, ToolClass, ToolInput, ToolSpec
@@ -253,6 +256,8 @@ def loop_over(
     executor: ExecutorInterface | None = None,
     work_product: WorkProductInterface | None = None,
     call_gate: Callable[[Managers, Clock], CallGateInterface] | None = None,
+    models_layer: ModelsLayer | None = None,
+    tools_layer: Callable[[ToolsManagerInterface], ToolsManagerInterface] | None = None,
 ) -> Loop:
     """`storage` None is the memory storage, and `owner` None a fresh
     tenant's owner; a suite over Postgres hands in both. `jitter` is what
@@ -260,7 +265,9 @@ def loop_over(
     null gate, which accepts a result and marks it unverified, as the
     engine's suites read it; `executor` and `work_product` go to the root as
     they are. `call_gate` None is the budgets' gate behind the call gate; a
-    suite of a gate of its own builds it from the managers and the clock."""
+    suite of a gate of its own builds it from the managers and the clock.
+    `models_layer` and `tools_layer` go to the root as a platform's root
+    hands them in, and the loop takes the layer's call credentials."""
     infra = InfraLocalImpl(tmp_path)
     anthropic = ModelProviderScriptedImpl(ProviderName.ANTHROPIC)
     openai = ModelProviderScriptedImpl(ProviderName.OPENAI)
@@ -280,6 +287,8 @@ def loop_over(
         result_gate=result_gate or ResultGateNullImpl(),
         executor=executor,
         work_product=work_product,
+        models_layer=models_layer,
+        tools_layer=tools_layer,
     )
     clock = Clock()
 
@@ -288,6 +297,7 @@ def loop_over(
         await asyncio.sleep(0)
 
     sink = sink or StreamSinkMemoryImpl()
+    options = options or LoopOptions(control_poll=timedelta(milliseconds=1))
     loops = LoopManagerImpl(
         managers.steps,
         managers.agent_sessions,
@@ -302,11 +312,15 @@ def loop_over(
             if call_gate is None
             else call_gate(managers, clock)
         ),
-        providers,
+        (
+            CallCredentialsPlatformImpl(providers, options.credential)
+            if models_layer is None
+            else models_layer.credentials(providers)
+        ),
         outages or infra.get_outages(),
         sink,
         tuple(catalog.values()),
-        options or LoopOptions(control_poll=timedelta(milliseconds=1)),
+        options,
         clock,
         sleep,
         jitter=jitter,
