@@ -29,7 +29,16 @@ of](../../../../README.md).
   from the version the work started from. A **baseline** is the same pass
   at that starting version, before any change.
 - **Rate claim**: what repeated trials show of a failure rate: never the
-  rate, only a bound under it at a declared confidence.
+  rate, only a bound under it at a declared confidence. The trials are a
+  count fixed before them, or a **sequential test** that may stop early,
+  but only where its declared rule says.
+- **Scenario**: an acceptance case. An objective that hides its root
+  cause, the visible checks the baseline must fail on, a **hidden suite**
+  the agent never sees, and the paths no change may touch: the checks and
+  the system under test.
+- **Acceptance verdict**: what the harness found of one session's work on
+  a scenario: each link its chain of evidence lacks, and the hidden
+  suite's runs, kept here and nowhere the agent reads.
 
 ## What can happen
 
@@ -40,6 +49,9 @@ of](../../../../README.md).
   runs the checks, writes and hashes the results, and every run it wrote
   is kept with the validation, or none is.
 - **Submit** a result. The gate judges it.
+- **Judge** a session's work on a scenario. The harness asks the gate
+  again, runs the hidden suite at the head, and judges the chain. It runs
+  in the benchmark job, never in a gate a code change needs.
 
 ## The rules
 
@@ -61,8 +73,18 @@ of](../../../../README.md).
   policy declared; a trial a safety stop ended is classified by the
   declared rule, never dropped; rates judged together correct their
   confidence.
+- **A sequential test stops where its rule says.** It stops at the first
+  trial where its bound falls under the declared rate, or where no trial
+  left could bring it there; a batch that stops anywhere else is not the
+  test declared. A fixed count runs every trial, whatever the first ones
+  showed.
 - **The hidden suite stays hidden.** A scan of every surface the agent
   reads finds any mention of it.
+- **Acceptance judges the chain, never the files.** A failing baseline at
+  the base before the change, every hypothesis resolved, a validation the
+  gate accepts, a result that cites it, and the hidden suite passing at
+  the head, with no check and nothing of the system under test changed.
+  Each link is a record the platform wrote.
 - **Every run belongs to one org,** and goes with its session or with its
   tenant.
 
