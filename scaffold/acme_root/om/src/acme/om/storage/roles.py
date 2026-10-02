@@ -92,6 +92,7 @@ TABLE_ROLES: dict[str, DatabaseRole] = {
     "model_retirements": DatabaseRole.CORE,
     "matrix_pins": DatabaseRole.CORE,
     "fill_overrides": DatabaseRole.CORE,
+    "benchmarks": DatabaseRole.CORE,
 }
 
 APPEND_ONLY_TABLES: frozenset[str] = frozenset(
@@ -106,6 +107,7 @@ APPEND_ONLY_TABLES: frozenset[str] = frozenset(
         "ledger_entries",
         "session_projects",
         "benchmark_results",
+        "benchmarks",
     }
 )
 """Tables whose rows are written once: the serving logins hold SELECT and

@@ -343,6 +343,7 @@ arrive twice, so the second copy gets the first one's answer.
 - [Windows](src/acme/om/windows/README.md)
 - [Tools](src/acme/om/tools/README.md)
 - [Evidence](src/acme/om/evidence/README.md)
+- [Benchmarks](src/acme/om/benchmarks/README.md)
 - [Placement](src/acme/om/placement/README.md)
 - [Trust](src/acme/om/trust/README.md)
 - [Hosts](src/acme/om/hosts/README.md)

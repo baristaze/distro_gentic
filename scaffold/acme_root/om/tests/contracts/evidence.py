@@ -17,6 +17,7 @@ from acme.om.evidence.executor import ExecutorInterface
 from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
 from acme.om.evidence.impl.manager import EvidenceManagerImpl, EvidenceOptions
 from acme.om.evidence.impl.ports import WorkProductMemoryImpl
+from acme.om.evidence.rates import stops_at
 from acme.om.evidence.storage.impl.memory import EvidenceStorageMemoryImpl
 from acme.om.evidence.types.contract import CheckDeclaration, Offer
 from acme.om.evidence.types.policy import Requirement, ValidationPolicy
@@ -41,7 +42,8 @@ class ScriptedExecutor(ExecutorInterface):
     """Runs nothing: writes the results stream a fresh executor would for the
     checks it is asked, each trial's outcome as `outcome` says, every
     dependency served as `provenance` says, and each run's cases as
-    `cases` says when it is set. `requests` keeps what it was asked."""
+    `cases` says when it is set. A check with a rate stops where its rule
+    stops it, as an executor does. `requests` keeps what it was asked."""
 
     name: str = "executor-1"
     outcome: Outcome = all_pass
@@ -58,9 +60,14 @@ class ScriptedExecutor(ExecutorInterface):
         self.requests.append(request)
         lines: list[dict[str, Any]] = []
         start = utcnow()
-        for check, trials in zip(request.checks, request.trials, strict=True):
+        rates = request.rates or (None,) * len(request.checks)
+        for check, trials, rate in zip(request.checks, request.trials, rates, strict=True):
+            failed: list[bool] = []
             for trial in range(trials):
+                if rate is not None and stops_at(rate, failed, rate.confidence) is not None:
+                    break
                 outcome = self.outcome(check.name, trial)
+                failed.append(outcome != "passed")
                 lines.extend(
                     stream(
                         check.name,
