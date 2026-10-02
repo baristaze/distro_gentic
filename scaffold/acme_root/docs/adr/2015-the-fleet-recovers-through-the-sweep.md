@@ -42,13 +42,18 @@ from where its last pass stopped, one slice of opening times per read,
 and its first pass reads a day back. An index on the holds' opening
 time bounds each read.
 
-**A session pending past a run's time asks for its run again, once a
-write.** The pass reads, across tenants, the sessions pending with no
-write for twenty minutes, longer than a run may take before it hands
-its loop back. It asks for each one's run as the person who made the
-session, as a wake does, under a key drawn from the session's version.
-A pass that finds it again asks nothing more. The run that takes it up
-asks an approval that expired meanwhile again, at its gate.
+**A session no run holds asks for its run again, once a write.** The
+pass reads, across tenants, the sessions pending with no write to their
+row for twenty minutes. A run never writes the row while it drives a
+loop, so the row's age alone says nothing of a run. A session with a
+loop item on it queued or claimed, or a step from the last twenty
+minutes, is a run's, and the pass moves past it: a second run would
+take the next writer epoch and fence the live one, whose call in flight
+is billed and thrown away. The pass asks for each other one's run as
+the person who made the session, as a wake does, under a key drawn from
+the session's version. A pass that finds it again asks nothing more.
+The run that takes it up asks an approval that expired meanwhile again,
+at its gate.
 
 ## Consequences
 
@@ -57,12 +62,14 @@ asks an approval that expired meanwhile again, at its gate.
   worst case is lost to the count. The engine's worst case already
   bounds a call's spend.
 - A session whose loop waits in its lane longer than twenty minutes, in
-  a backlog or while its runners are down, gets one more loop item. The
-  fair-share guard defers it as it does the first, and a run that finds
-  nothing to do writes nothing.
+  a backlog or while its runners are down, gets no second loop item: its
+  queued item holds it. A run takes the next writer epoch before it
+  reads anything, so even one that finds nothing to do fences the run
+  before it.
 - A session whose asked-for run fails for good stays pending until a
   write moves it or an operator requeues the dead letter, as any dead
-  letter does.
+  letter does. So does one whose loop a run held when a pass read it and
+  whose work then failed for good: the pass reads on past it.
 - The duties of the relay, the stations, and their lines join the same
   list when those parts land: each one's own, across tenants, bounded,
   and safe to run twice.

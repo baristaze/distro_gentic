@@ -3,7 +3,8 @@ them: its container built from its settings, its loop's pass. A loop whose
 runner died is requeued, and its next run takes a new writer epoch. A hold
 nobody settled settles at the bill the provider gives, else whole, never
 below what the provider billed, and is released only on its proof. A
-session pending with no loop has its run asked for again, once."""
+session pending with no loop has its run asked for again, once, and one
+whose run holds its loop is never asked for."""
 
 import asyncio
 from collections.abc import AsyncIterator
@@ -32,11 +33,20 @@ from acme.om.budgets.types.hold import (
     NotBilledProof,
     Settlement,
 )
-from acme.om.context import TenantContext
+from acme.om.context import (
+    AppContext,
+    AppType,
+    CredentialKind,
+    OperatorContext,
+    OperatorRole,
+    TenantContext,
+)
 from acme.om.exceptions import StaleWriter
+from acme.om.placement.rules import own_lane
 from acme.om.steps.types.content import Content, TextBlock
-from acme.om.steps.types.header import InputHeader
+from acme.om.steps.types.header import InputHeader, ModelRequestHeader
 from acme.om.steps.types.step import Actor, Origin, Step, StepType
+from acme.om.tenancy.rules import operator_permissions_of
 from acme.om.work.types.work_item import LoopPayload, WorkItem, WorkKind, WorkStatus
 from acme.workers.maintenance.container import WorkerContainer
 from acme.workers.maintenance.main import build_loop
@@ -278,36 +288,98 @@ async def test_a_hold_settles_at_the_providers_bill_and_is_released_only_on_its_
 # A session pending with no loop.
 
 
+def an_operator() -> OperatorContext:
+    return OperatorContext(
+        request_id=new_id(),
+        app=AppContext(type=AppType.CLI, version="ops@test"),
+        identity_id=new_id(),
+        email="root@example.test",
+        credential_kind=CredentialKind.LOGIN,
+        credential_id=new_id(),
+        permissions=operator_permissions_of(OperatorRole.WRITE),
+    )
+
+
+async def an_owner_on_its_own_lane(container: WorkerContainer) -> TenantContext:
+    """A tenant whose loops land in a lane of its own, so a claim there takes
+    this test's loops and no other's."""
+    owner = await an_owner(container)
+    await container.managers.placement_operator.set_share(
+        an_operator(), owner.org_id, plan_tier="standard", own_lane=True, concurrency=8
+    )
+    return owner
+
+
+async def its_loop(
+    container: WorkerContainer, owner: TenantContext
+) -> tuple[TenantContext, WorkItem]:
+    """The tenant's next loop, claimed by a runner that holds it for an hour."""
+    claimed = await container.managers.work.claim(
+        request(), own_lane(owner.org_id), [WorkKind.LOOP], "runner", timedelta(hours=1)
+    )
+    assert claimed is not None
+    return claimed
+
+
+def a_sweep(container: WorkerContainer, at: datetime) -> StalledSessionsSweep:
+    managers = container.managers
+    return StalledSessionsSweep(
+        managers.agent_sessions,
+        managers.steps,
+        managers.work,
+        managers.tenancy,
+        StalledOptions(),
+        clock=lambda: at,
+    )
+
+
+def a_model_request(message: Step, at: datetime) -> Step:
+    person = Principal(kind=PrincipalKind.PERSON, id=new_id())
+    return Step(
+        id=new_id(),
+        created_at=at,
+        session_id=message.session_id,
+        loop_id=message.loop_id,
+        type=StepType.MODEL_REQUEST,
+        actor=Actor.ENGINE,
+        origin=Origin.ENGINE,
+        refs=(message.id,),
+        header=ModelRequestHeader(
+            role="main",
+            spender=person,
+            speaker=person,
+            fill="anthropic/claude-sonnet-5-5",
+            fill_set_version=1,
+            left_edge=1,
+            prompt_hash="k:prompt",
+        ),
+    )
+
+
 async def test_a_session_pending_with_no_loop_has_its_run_asked_for_once(
     container: WorkerContainer,
 ) -> None:
-    """A session left pending past a run's time is one whose loop no run
-    holds: the sweep asks for its run, as the person who made the session,
-    keyed on the write that left it pending, so a second pass asks nothing
-    more. A session pending for less, or idle, is left alone."""
+    """A session pending past twenty minutes whose loop failed for good is
+    one no run holds: the sweep asks for its run, as the person who made the
+    session, keyed on the write that left it pending, so a second pass asks
+    nothing more. A session pending for less, or idle, is left alone."""
     managers = container.managers
-    owner = await an_owner(container)
+    owner = await an_owner_on_its_own_lane(container)
     stuck = await managers.agent_sessions.create_session(owner, a_session())
     idle = await managers.agent_sessions.create_session(owner, a_session())
     _, stuck = await managers.agent_sessions.receive(owner, stuck.id, [a_message(stuck.id)])
     assert stuck.status is SessionStatus.PENDING
-
-    def sweep(at: datetime) -> StalledSessionsSweep:
-        return StalledSessionsSweep(
-            managers.agent_sessions,
-            managers.work,
-            managers.tenancy,
-            StalledOptions(),
-            clock=lambda: at,
-        )
+    ctx, loop = await its_loop(container, owner)
+    assert loop.target_id == stuck.id
+    await managers.work.fail_for_good(ctx, loop, "the runner refused it")
 
     work = container.storage.get_work_storage()
     key = derived_id(stuck.id, stuck.updated_at, f"stalled:{stuck.version}")
-    await sweep(utcnow())(request())
+    await a_sweep(container, utcnow())(request())
     assert await work.read_item_by_key(owner.org_id, key) is None, "not stalled yet"
 
     later = utcnow() + StalledOptions().stall_after + timedelta(minutes=1)
-    assert await sweep(later)(request()) >= 1
+    assert await a_sweep(container, later)(request()) >= 1
     asked = await work.read_item_by_key(owner.org_id, key)
     assert asked is not None
     assert (asked.kind, asked.target_id, asked.created_by) == (
@@ -318,5 +390,46 @@ async def test_a_session_pending_with_no_loop_has_its_run_asked_for_once(
     idle_key = derived_id(idle.id, idle.updated_at, f"stalled:{idle.version}")
     assert await work.read_item_by_key(owner.org_id, idle_key) is None, "an idle session waits"
     # A second pass, of this worker or another, asks for nothing more.
-    await sweep(later)(request())
+    await a_sweep(container, later)(request())
     assert await work.read_item_by_key(owner.org_id, key) == asked
+
+
+async def test_a_session_whose_run_holds_its_loop_is_not_asked_for_again(
+    container: WorkerContainer,
+) -> None:
+    """A run never writes its session's row while it drives a loop, so a
+    session pending past twenty minutes may be one a run still holds: its
+    loop claimed, its last step a minute old. The sweep asks nothing for it,
+    since the run it asked for would take the next epoch and fence the live
+    one. Its last step alone holds it too, until it is as old."""
+    managers = container.managers
+    owner = await an_owner_on_its_own_lane(container)
+    session = await managers.agent_sessions.create_session(owner, a_session())
+    (message,), session = await managers.agent_sessions.receive(
+        owner, session.id, [a_message(session.id)]
+    )
+    # The run as a runner drives it: its loop claimed, its epoch, the
+    # projection at its start, then a model request 21 minutes after the input.
+    ctx, loop = await its_loop(container, owner)
+    assert loop.target_id == session.id
+    epoch = await managers.steps.begin_run(ctx, session.id)
+    await managers.agent_sessions.project_status(ctx, session.id)
+    written = session.updated_at + timedelta(minutes=21)
+    await managers.steps.append_steps(ctx, session.id, epoch, [a_model_request(message, written)])
+    row = await managers.agent_sessions.get_session(owner, session.id)
+    assert (row.status, row.version) == (SessionStatus.PENDING, session.version)
+
+    work = container.storage.get_work_storage()
+    key = derived_id(row.id, row.updated_at, f"stalled:{row.version}")
+    later = written + timedelta(minutes=1)
+    await a_sweep(container, later)(request())
+    assert await work.read_item_by_key(owner.org_id, key) is None, "its loop is claimed"
+    await managers.work.fail_for_good(ctx, loop, "the runner refused it")
+    await a_sweep(container, later)(request())
+    assert await work.read_item_by_key(owner.org_id, key) is None, "its last step is recent"
+
+    quiet = written + StalledOptions().stall_after + timedelta(minutes=1)
+    await a_sweep(container, quiet)(request())
+    asked = await work.read_item_by_key(owner.org_id, key)
+    assert asked is not None
+    assert (asked.kind, asked.target_id) == (WorkKind.LOOP, session.id)

@@ -184,8 +184,9 @@ class AgentSessionsManagerInterface(ABC):
         """Platform-internal: the sweep's read, across tenants, for no
         principal: at most `limit` of the sessions pending, and not marked
         deleted, whose last write is at or after `after` and before
-        `before`, each with its tenant, oldest write first. A session
-        pending with no write for long is one whose loop no run holds."""
+        `before`, each with its tenant, oldest write first. A run never
+        writes the row while it drives a loop, so a session found here may
+        be one a run still holds: the caller asks the queue and the history."""
         ...
 
     @abstractmethod
