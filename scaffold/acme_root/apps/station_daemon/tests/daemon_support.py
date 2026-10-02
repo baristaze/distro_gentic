@@ -49,15 +49,21 @@ max = 1.0
 
 
 class Cuttable(httpx.AsyncBaseTransport):
-    """The way to the platform, which a case cuts and mends."""
+    """The way to the platform, which a case cuts and mends, and on which it
+    makes the platform fail the calls whose path ends a given way."""
 
     def __init__(self, inner: httpx.AsyncBaseTransport) -> None:
         self._inner = inner
         self.cut = False
+        self.failing: dict[str, int] = {}
+        """A path's ending, and the status the platform answers it with."""
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         if self.cut:
             raise httpx.ConnectError("the platform cannot be reached", request=request)
+        for ending, status in self.failing.items():
+            if request.url.path.endswith(ending):
+                return httpx.Response(status, request=request)
         return await self._inner.handle_async_request(request)
 
 

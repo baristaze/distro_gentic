@@ -4,16 +4,20 @@ owner's limits before the station's adapter; a refused command is in the
 run's record, and on the disk until the platform recorded it; a token
 below the highest it has seen is refused; a daemon cut off from the
 platform runs its job to its lease's end on its own clock, stops the
-station, and claims nothing; and a revoked lease stops the station."""
+station, and claims nothing, as one the platform fails does; a refused
+credential stops the station and keeps the report for the next one; and a
+revoked lease stops the station."""
 
 import stat
+from datetime import timedelta
 from pathlib import Path
 from uuid import UUID
 
+import pytest
 from daemon_support import Monotonic, Stack
 
 from acme.apps.station_daemon.config import load_credential
-from acme.apps.station_daemon.daemon import LeaseClock, StationDaemon
+from acme.apps.station_daemon.daemon import CredentialRefused, LeaseClock, StationDaemon
 from acme.client.types import StationJobView
 from acme.om.base import new_id
 from acme.om.evidence.types.provenance import Provenance
@@ -147,6 +151,83 @@ async def test_a_daemon_cut_off_runs_its_job_to_its_lease_end_stops_and_claims_n
     assert daemon.journal.pending() == []
     (run,) = await runs_of(api, lease)
     assert run.outcome is RunOutcome.ABORTED and run.metrics["commands_run"] == 3
+
+
+async def test_a_failing_renewal_is_asked_again_and_the_job_runs_to_its_lease(
+    api: Stack, tmp_path: Path
+) -> None:
+    clock = Monotonic()
+    daemon, twin = await api.daemon(tmp_path, clock=clock, seconds=20.0)
+    lease = await api.granted()
+    await api.job(lease, 0.1, 0.2, 0.3, 0.4)
+    claimed = await api.client(daemon.credential.token).claim_station_work(1)
+    assert claimed.job is not None
+    # The platform fails every renewal and every report with a 503.
+    api.transport.failing = {"/renewals": 503, "/reports": 503}
+    ran = await daemon.run(claimed.job, clock_for(daemon, claimed.lease_seconds or 0.0))
+    # The job ran on to its lease's end, and the station took its stop.
+    assert twin.calls == ["stop:hold", "restore", "apply", "apply", "apply", "stop:hold"]
+    assert ran.refused[0]["reason"] == "lease_ended" and not ran.reported
+    assert len(daemon.journal.pending()) == 1
+    api.transport.failing = {}
+    assert await daemon.flush() == 1
+    (run,) = await runs_of(api, lease)
+    assert run.outcome is RunOutcome.ABORTED and run.metrics["commands_run"] == 3
+
+
+async def test_a_refused_credential_mid_job_stops_the_station_and_keeps_the_report(
+    api: Stack, tmp_path: Path
+) -> None:
+    clock = Monotonic()
+    daemon, twin = await api.daemon(tmp_path, clock=clock, seconds=20.0)
+    lease = await api.granted()
+    await api.job(lease, 0.1, 0.2, 0.3)
+    claimed = await api.client(daemon.credential.token).claim_station_work(1)
+    assert claimed.job is not None
+    await api.container.managers.stations.revoke_daemon(api.owner, api.lab.id)
+    with pytest.raises(CredentialRefused):
+        await daemon.run(claimed.job, clock_for(daemon, claimed.lease_seconds or 0.0))
+    # Two ran before the renewal was due; its credential was refused, and
+    # the station took its controlled stop.
+    assert twin.calls == ["stop:hold", "restore", "apply", "apply", "stop:hold"]
+    ((job_id, report),) = daemon.journal.pending()
+    assert job_id == str(claimed.job.id) and report["refused"][0]["reason"] == "lease_ended"
+    assert not (tmp_path / "credential.json").exists()
+    # Started again with a first credential its owner issues, it sends what
+    # the disk holds.
+    again = StationDaemon(api.settings(tmp_path, await api.credential()), {}, {}, api.client)
+    await again.start()
+    assert await again.tick() is None
+    (run,) = await runs_of(api, lease)
+    assert str(run.id) == report["run_id"] and run.outcome is RunOutcome.ABORTED
+    assert again.journal.pending() == []
+
+
+async def test_an_idle_daemon_waits_out_a_failing_claim_and_stops_on_a_refused_one(
+    api: Stack, tmp_path: Path
+) -> None:
+    daemon, _ = await api.daemon(tmp_path)
+    api.transport.failing = {"/claims": 503}
+    assert await daemon.tick() is None and daemon.offline
+    api.transport.failing = {}
+    await api.container.managers.stations.revoke_daemon(api.owner, api.lab.id)
+    with pytest.raises(CredentialRefused):
+        await daemon.tick()
+
+
+async def test_a_credential_that_would_lapse_in_a_job_is_rotated_at_its_start(
+    api: Stack, tmp_path: Path
+) -> None:
+    daemon, _ = await api.daemon(tmp_path)
+    lease = await api.granted()
+    await api.job(lease, 0.1)
+    claimed = await api.client(daemon.credential.token).claim_station_work(1)
+    assert claimed.job is not None
+    held = daemon.credential
+    # On the daemon's clock the credential ends ten seconds into the lease.
+    daemon._now = lambda: held.expires_at - timedelta(seconds=10)  # pyright: ignore[reportPrivateUsage]
+    ran = await daemon.run(claimed.job, clock_for(daemon, claimed.lease_seconds or 0.0))
+    assert ran.reported and daemon.credential.token != held.token
 
 
 async def test_a_revoked_lease_stops_the_station_at_the_daemons_next_renewal(

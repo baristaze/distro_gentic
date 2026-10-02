@@ -3,8 +3,8 @@ service configuration its stations' declared device access becomes, for
 its owner to review line by line. `run` starts the daemon: it picks up its
 credential, or trades its first one, then rotates, claims, and runs its
 lab's station work until stopped. Exit codes: 0 done, 1 the platform
-refused, 2 a setting or a file on the host is wrong, 3 not enrolled, 4 the
-platform is unreachable at the start."""
+refused, 2 a setting or a file on the host is wrong, 3 not enrolled, or its
+credential refused, 4 the platform is unreachable at the start."""
 
 import asyncio
 import logging

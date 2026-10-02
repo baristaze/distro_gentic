@@ -19,9 +19,14 @@ The daemon holds logic, as the guard nearest the resource must (ADR
   left, never until when, and the daemon times them on its own monotonic
   clock, from the moment it asked. Past that, it runs nothing under the
   lease and takes the controlled stop.
-- **The platform gone.** A daemon that cannot reach the platform lets the
-  current job run to its lease's end, then stops the station, and claims
-  no new job until the platform answers again.
+- **The platform gone.** A daemon that cannot reach the platform, or that
+  the platform answers with a passing error, lets the current job run to
+  its lease's end, then stops the station, and claims no new job until
+  the platform answers again.
+- **The credential refused.** A daemon whose credential the platform
+  refuses takes the station's controlled stop, keeps the job's report on
+  its disk, forgets the credential, and stops: started again with a first
+  credential its owner issues, it sends what the disk holds.
 - **The evidence.** A job's report, every refused command in it, is on
   the disk before it is sent, and stays there until the platform recorded
   it (`journal.Journal`)."""
@@ -31,7 +36,7 @@ import time
 import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -53,13 +58,22 @@ STATION_VERSION = 1
 FENCED = "fenced"
 LEASE_ENDED = "lease_ended"
 UNKNOWN_OPERATION = "unknown_operation"
-GONE_FOR_GOOD = frozenset({"lease_ended", "job_settled", "not_found"})
-"""The refusals of a renewal that say the lease will not come back."""
 
 
 class NotEnrolled(RuntimeError):
     """The daemon holds no live credential and was given none: its owner
     issues one for its lab, and the daemon is started with it once."""
+
+
+class CredentialRefused(NotEnrolled):
+    """The platform refused the daemon's credential: it expired, or it was
+    revoked. The daemon forgets it and stops, and its owner issues it a
+    first credential again."""
+
+
+def passing(error: ApiError) -> bool:
+    """Whether a refusal passes: the platform failed, or asked for less."""
+    return error.status >= 500 or error.status == 429
 
 
 ClientFactory = Callable[[str | None], ApiClient]
@@ -157,6 +171,12 @@ class StationDaemon:
         except httpx.TransportError as error:
             self._lost(error)
             return None
+        except ApiError as error:
+            if passing(error):
+                self._lost(error)
+                return None
+            self._raise_if_refused(error)
+            raise
         self.offline = False
         if answer.item is None:
             return None
@@ -169,8 +189,8 @@ class StationDaemon:
 
     async def flush(self) -> int:
         """Sends every report the platform has not recorded; returns how many
-        it recorded now. A transport failure is raised, and what is left
-        stays on the disk."""
+        it recorded now. A transport failure, or a refused credential, is
+        raised, and what is left stays on the disk."""
         recorded = 0
         for job_id, report in self._journal.pending():
             if await self._send(job_id, report):
@@ -179,39 +199,68 @@ class StationDaemon:
 
     async def run(self, job: StationJobView, lease: LeaseClock) -> Ran:
         """Runs a job's commands in order, each through the guard first. The
-        first refusal ends the job; a lease that ended stops the station."""
+        first refusal ends the job; a lease that ended stops the station. A
+        refused credential ends the job too: the station takes its
+        controlled stop, the report stays on the disk, and the refusal is
+        raised once it is there."""
         started = self._now()
         refused: list[dict[str, Any]] = []
         ran = passed = failed = 0
         station = self._stations.get(job.station_id)
         adapter = self._adapters.get(job.station_id)
-        for command in job.commands:
-            if station is None or adapter is None:
-                refused.append(
-                    self._refused(command.operation, UNKNOWN_OPERATION, "no such station here")
+        cut: CredentialRefused | None = None
+        try:
+            # A credential that would lapse before the lease is rotated now,
+            # never mid-job.
+            await self._rotate_in_job(lease)
+            for command in job.commands:
+                if station is None or adapter is None:
+                    refused.append(
+                        self._refused(command.operation, UNKNOWN_OPERATION, "no such station here")
+                    )
+                    break
+                await self._renew_if_due(job, lease)
+                why = await self._guard(
+                    station, adapter, job, lease, command.operation, command.parameters
                 )
-                break
-            await self._renew_if_due(job, lease)
-            why = await self._guard(
-                station, adapter, job, lease, command.operation, command.parameters
-            )
-            if why is not None:
-                refused.append(self._refused(command.operation, *why))
-                break
-            outcome = await adapter.run(command.operation, command.parameters)
-            ran += 1
-            passed, failed = passed + outcome.ok, failed + (not outcome.ok)
-        if adapter is not None and (lease.gone or self._monotonic() >= lease.deadline):
+                if why is not None:
+                    refused.append(self._refused(command.operation, *why))
+                    break
+                outcome = await adapter.run(command.operation, command.parameters)
+                ran += 1
+                passed, failed = passed + outcome.ok, failed + (not outcome.ok)
+        except CredentialRefused as error:
+            cut = error
+            lease.gone = True
+            if ran < len(job.commands):
+                # The command it was about to run did not run.
+                refused.append(
+                    self._refused(
+                        job.commands[ran].operation,
+                        LEASE_ENDED,
+                        "the daemon's credential was refused, so it holds no lease",
+                    )
+                )
+        stopped = adapter is not None and (lease.gone or self._monotonic() >= lease.deadline)
+        if stopped and adapter is not None:
             # The station takes its controlled stop: a lease that ended runs
             # nothing more, whoever holds the station next.
             await adapter.stop()
         report = self._report(job, adapter, started, ran, passed, failed, refused)
         self._journal.keep(str(job.id), report)
+        if cut is not None:
+            raise cut
         try:
             reported = await self._send(str(job.id), report)
         except httpx.TransportError as error:
             self._lost(error)
             reported = False
+        except CredentialRefused:
+            # It can hold the lease no longer: the station stops, and the
+            # report waits on the disk for a credential.
+            if adapter is not None and not stopped:
+                await adapter.stop()
+            raise
         return Ran(job_id=str(job.id), report=report, reported=reported, refused=refused)
 
     async def _guard(
@@ -241,13 +290,16 @@ class StationDaemon:
         return refusal(station, operation, parameters)
 
     async def _renew_if_due(self, job: StationJobView, lease: LeaseClock) -> None:
-        """Renews the lease at half its time, as the executor of the job.
-        A platform that cannot be reached leaves the deadline where it was;
-        one that says the lease ended marks it gone."""
+        """Renews the lease at half its time, as the executor of the job,
+        rotating the credential first when it would lapse before the lease.
+        A platform that cannot be reached, or that fails, leaves the
+        deadline where it was and is asked again; one that refuses the
+        credential raises; any other refusal marks the lease gone."""
         if lease.gone or self._monotonic() < lease.renew_at:
             return
         asked = self._monotonic()
         try:
+            await self._rotate_in_job(lease)
             async with self._client_for(self.credential.token) as client:
                 left = await client.renew_station_job(job.id)
         except httpx.TransportError as error:
@@ -256,10 +308,16 @@ class StationDaemon:
             lease.renew_at = asked + max(0.0, (lease.deadline - asked) / 2)
             return
         except ApiError as error:
-            if error.code in GONE_FOR_GOOD:
-                lease.gone = True
+            if passing(error):
+                self._lost(error)
+                lease.renew_at = asked + max(0.0, (lease.deadline - asked) / 2)
                 return
-            raise
+            self._raise_if_refused(error)
+            # The lease ended, its job was settled, or it is not this lab's:
+            # it will not come back.
+            log.warning("the renewal of job %s was refused: %s", job.id, error)
+            lease.gone = True
+            return
         self.offline = False
         lease.deadline = asked + left.seconds
         lease.renew_at = asked + left.seconds / 2
@@ -271,20 +329,53 @@ class StationDaemon:
             async with self._client_for(self.credential.token) as client:
                 await client.report_station_job(UUID(job_id), report)
         except ApiError as error:
-            if error.status >= 500 or error.status == 429:
+            if passing(error):
                 return False
+            self._raise_if_refused(error)
             log.error("the report of job %s was refused: %s; it is set aside", job_id, error)
             self._journal.set_aside(job_id)
             return False
         self._journal.sent(job_id)
         return True
 
-    async def _rotate_if_due(self) -> None:
-        if not self.credential.due(self._now()):
+    async def _rotate_if_due(self, within: float = 0.0) -> None:
+        """Rotates at half the credential's life, or sooner when it would end
+        within `within` seconds. A refused credential raises."""
+        now = self._now()
+        held = self.credential
+        if not held.due(now) and not held.ended(now + timedelta(seconds=within)):
             return
-        async with self._client_for(self.credential.token) as client:
-            issued = await client.rotate_daemon_credential()
+        try:
+            async with self._client_for(held.token) as client:
+                issued = await client.rotate_daemon_credential()
+        except ApiError as error:
+            self._raise_if_refused(error)
+            raise
         self._keep(issued)
+
+    async def _rotate_in_job(self, lease: LeaseClock) -> None:
+        """Rotates, in a job, when the credential would lapse before the
+        lease: a rotation that cannot be made now is made at the next
+        renewal, while the credential still lives."""
+        try:
+            await self._rotate_if_due(max(0.0, lease.deadline - self._monotonic()))
+        except httpx.TransportError as error:
+            self._lost(error)
+        except ApiError as error:
+            if passing(error):
+                self._lost(error)
+            else:
+                log.warning("the rotation was refused: %s; tried again at the next", error)
+
+    def _raise_if_refused(self, error: ApiError) -> None:
+        """A refused credential: forgotten, so a start takes the first one
+        its owner issues next, and raised."""
+        if error.status != 401:
+            return
+        log.error("the platform refused the daemon's credential: %s", error)
+        self._credential = None
+        self._settings.credential_path.unlink(missing_ok=True)
+        raise CredentialRefused(str(error)) from error
 
     def _refused(self, operation: str, reason: str, detail: str) -> dict[str, Any]:
         log.warning("refused %s: %s: %s", operation, reason, detail)
@@ -328,7 +419,7 @@ class StationDaemon:
 
     def _lost(self, error: Exception) -> None:
         if not self.offline:
-            log.warning("the platform cannot be reached: %s", error)
+            log.warning("the platform cannot be reached, or failed: %s", error)
         self.offline = True
 
     def _keep(self, issued: IssuedDaemonCredentialView) -> None:
