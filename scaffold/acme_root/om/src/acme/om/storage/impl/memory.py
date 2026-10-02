@@ -26,6 +26,8 @@ from acme.om.placement.storage import PlacementStorageInterface
 from acme.om.placement.storage.impl.memory import PlacementStorageMemoryImpl
 from acme.om.privacy.storage import PrivacyStorageInterface
 from acme.om.privacy.storage.impl.memory import PrivacyStorageMemoryImpl
+from acme.om.retention.storage import RetentionStorageInterface
+from acme.om.retention.storage.impl.memory import RetentionStorageMemoryImpl
 from acme.om.steps.storage import StepStorageInterface
 from acme.om.steps.storage.impl.memory import StepStorageMemoryImpl
 from acme.om.storage.root import StorageInterface
@@ -58,6 +60,7 @@ class StorageMemoryImpl(StorageInterface):
         self._agents = AgentStorageMemoryImpl(self._outbox)
         self._attribution = AttributionStorageMemoryImpl(self._outbox)
         self._privacy = PrivacyStorageMemoryImpl(self._outbox)
+        self._retention = RetentionStorageMemoryImpl(self._outbox)
         self._budgets = BudgetStorageMemoryImpl(self._outbox)
         self._ledger = LedgerStorageMemoryImpl()
         self._fill_sets = FillSetStorageMemoryImpl()
@@ -102,6 +105,9 @@ class StorageMemoryImpl(StorageInterface):
 
     def get_privacy_storage(self) -> PrivacyStorageInterface:
         return self._privacy
+
+    def get_retention_storage(self) -> RetentionStorageInterface:
+        return self._retention
 
     def get_budget_storage(self) -> BudgetStorageInterface:
         return self._budgets
