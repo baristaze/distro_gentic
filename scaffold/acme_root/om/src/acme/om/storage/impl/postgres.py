@@ -44,6 +44,8 @@ from acme.om.media.storage import MediaStorageInterface
 from acme.om.media.storage.impl.postgres import MediaStoragePostgresImpl
 from acme.om.models.storage import FillSetStorageInterface
 from acme.om.models.storage.impl.postgres import FillSetStoragePostgresImpl
+from acme.om.notifications.storage import NotificationStorageInterface
+from acme.om.notifications.storage.impl.postgres import NotificationStoragePostgresImpl
 from acme.om.orchestrations.storage import OrchestrationsStorageInterface
 from acme.om.orchestrations.storage.impl.postgres import OrchestrationsStoragePostgresImpl
 from acme.om.outbox.storage import OutboxStorageInterface
@@ -231,6 +233,7 @@ class StoragePostgresImpl(StorageInterface):
         self._automation = AutomationStoragePostgresImpl(sessions)
         self._playbook = PlaybookStoragePostgresImpl(sessions)
         self._knowledge = KnowledgeStoragePostgresImpl(sessions)
+        self._notification = NotificationStoragePostgresImpl(sessions)
         self._platform_agents = PlatformAgentsStoragePostgresImpl(sessions)
         self._workspaces = WorkspaceStoragePostgresImpl(sessions)
 
@@ -320,6 +323,9 @@ class StoragePostgresImpl(StorageInterface):
 
     def get_knowledge_storage(self) -> KnowledgeStorageInterface:
         return self._knowledge
+
+    def get_notification_storage(self) -> NotificationStorageInterface:
+        return self._notification
 
     def get_platform_agents_storage(self) -> PlatformAgentsStorageInterface:
         return self._platform_agents

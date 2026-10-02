@@ -7,15 +7,24 @@ The runner holds no purge login: it runs what a model asks for, and the
 one login that deletes a history is the maintenance worker's alone."""
 
 import logging
+from uuid import UUID
 
 from acme.infra.impl.configured import InfraConfiguredImpl
 from acme.infra.root import InfraInterface
 from acme.integrations.impl.configured import IntegrationsConfiguredImpl
 from acme.integrations.root import IntegrationsInterface
 from acme.om.agents.types.kind import AgentKind
+from acme.om.attribution.impl.manager import members_context
+from acme.om.attribution.types.principal import Principal
+from acme.om.automations.root import automation_principals
 from acme.om.base import new_id
+from acme.om.context import RequestContext, TenantContext
 from acme.om.evidence import ExecutorInterface, WorkProductInterface
 from acme.om.hosts.impl.placement import PlacementHostsImpl
+from acme.om.intake.root import build_intake
+from acme.om.knowledge.root import KnowledgeLayer
+from acme.om.notifications.manager import NotificationsManagerInterface
+from acme.om.notifications.root import build_notifications
 from acme.om.playbooks.root import PlaybooksLayer
 from acme.om.root import Managers, build_managers
 from acme.om.storage.impl.postgres import StoragePostgresImpl
@@ -44,6 +53,10 @@ class RunnerContainer:
         self.infra = infra
         self.integrations = integrations
         self.managers = managers
+        # Whoever can clear a park its runs wrote is told, on their channels.
+        self.notifications: NotificationsManagerInterface = build_notifications(
+            storage, managers, integrations, build_intake(storage, managers)
+        )
 
     @classmethod
     def build(
@@ -113,10 +126,17 @@ class RunnerContainer:
             probe=KeyProbeAbsentImpl(),
         )
         playbooks = PlaybooksLayer(storage)
+        knowledge = KnowledgeLayer(storage)
 
         def layers(inner: ToolsManagerInterface) -> ToolsManagerInterface:
-            # The wall and the audit first, then the session's playbook gates.
-            return playbooks.tools(trust.tools(inner))
+            # The wall and the audit first, then the session's playbook gates,
+            # then the knowledge a session recalls as its first loop starts.
+            return knowledge.tools(playbooks.tools(trust.tools(inner)))
+
+        async def members(
+            rctx: RequestContext, org_id: UUID, principal: Principal
+        ) -> TenantContext:
+            return await members_context(managers.tenancy)(rctx, org_id, principal)
 
         managers = build_managers(
             storage,
@@ -129,9 +149,13 @@ class RunnerContainer:
             executor=executor,
             work_product=work_product,
             tools_layer=layers,
+            # A call of a session the tenant's automation principal started
+            # runs on that principal's grant; every other on a member's place.
+            principal_context=automation_principals(storage.get_automation_storage(), members),
         )
         trust.build(managers)
         playbooks.build(managers)
+        knowledge.build(managers)
         return cls(settings, storage, infra, integrations, managers)
 
     async def start(self) -> None:

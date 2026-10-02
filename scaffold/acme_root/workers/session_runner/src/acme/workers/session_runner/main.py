@@ -58,7 +58,9 @@ def build_runner(container: RunnerContainer, lane: str | None = None) -> WorkerL
     operation once its tenant's fair share admits it. It purges nothing, so
     it has no purge of its own."""
     managers = container.managers
-    loop = LoopHandlerImpl(managers.loop, managers.agent_sessions)
+    loop = LoopHandlerImpl(
+        managers.loop, managers.agent_sessions, container.notifications.notify_park
+    )
     return WorkerLoop(
         work=managers.work,
         outbox=managers.outbox,

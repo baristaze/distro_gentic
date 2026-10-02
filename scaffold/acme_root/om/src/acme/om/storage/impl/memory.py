@@ -31,6 +31,8 @@ from acme.om.media.storage import MediaStorageInterface
 from acme.om.media.storage.impl.memory import MediaStorageMemoryImpl
 from acme.om.models.storage import FillSetStorageInterface
 from acme.om.models.storage.impl.memory import FillSetStorageMemoryImpl
+from acme.om.notifications.storage import NotificationStorageInterface
+from acme.om.notifications.storage.impl.memory import NotificationStorageMemoryImpl
 from acme.om.orchestrations.storage import OrchestrationsStorageInterface
 from acme.om.orchestrations.storage.impl.memory import OrchestrationsStorageMemoryImpl
 from acme.om.outbox.storage import OutboxStorageInterface
@@ -98,6 +100,7 @@ class StorageMemoryImpl(StorageInterface):
         self._automation = AutomationStorageMemoryImpl(self._outbox)
         self._playbook = PlaybookStorageMemoryImpl(self._outbox)
         self._knowledge = KnowledgeStorageMemoryImpl(self._outbox)
+        self._notification = NotificationStorageMemoryImpl()
         self._platform_agents = PlatformAgentsStorageMemoryImpl(self._outbox)
         self._workspaces = WorkspaceStorageMemoryImpl(self._outbox)
 
@@ -187,6 +190,9 @@ class StorageMemoryImpl(StorageInterface):
 
     def get_knowledge_storage(self) -> KnowledgeStorageInterface:
         return self._knowledge
+
+    def get_notification_storage(self) -> NotificationStorageInterface:
+        return self._notification
 
     def get_platform_agents_storage(self) -> PlatformAgentsStorageInterface:
         return self._platform_agents
