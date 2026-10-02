@@ -187,3 +187,9 @@ sites = [
     "om/src/acme/om/tenancy/impl/manager.py::TenancyManagerImpl.member_context",
 ]
 builders = ["build_context"]
+
+# The entities a reader with no tenant takes, which carry their org_id: the
+# guideline's two, and the claimant the control plane claims for across
+# tenants, whose org_id is the wall it sits in.
+[tool.arch-check.options.OM-02]
+tenantless = ["OutboxRow", "Event", "Claimant"]

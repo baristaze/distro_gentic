@@ -2699,7 +2699,10 @@
           "DELETE_ORG",
           "WAKE_SESSION",
           "WAKE_SESSIONS",
-          "LOOP"
+          "LOOP",
+          "EXEC",
+          "WORKSPACE",
+          "STATION"
         ],
         "title": "WorkKind",
         "type": "string"
