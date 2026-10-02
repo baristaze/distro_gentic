@@ -86,7 +86,7 @@ def declared(
     )
 
 
-# Check 1: an audit entry names executor, principal, spender, and actor, and
+# An audit entry names executor, principal, spender, and actor, and
 # no two of them are one.
 
 
@@ -151,7 +151,7 @@ async def test_an_audit_entry_refuses_one_answer_in_two_fields() -> None:
             CallAudit.model_validate({**whole, **conflated})
 
 
-# Check 2: a session whose principal was revoked parks its calls, and runs
+# A session whose principal was revoked parks its calls, and runs
 # again only once a person takes it over.
 
 
@@ -195,7 +195,7 @@ async def test_a_lapsed_principal_parks_the_call_until_a_person_takes_the_sessio
     assert audit.principal == person(other.user_id)
 
 
-# Check 3: a secret's value never appears in a step, a log, a stream part,
+# A secret's value never appears in a step, a log, a stream part,
 # or what a model reads; and a secret never crosses its session's wall.
 
 
@@ -292,7 +292,7 @@ async def test_a_secret_crosses_no_wall_either_way_and_takes_no_value_from_the_c
         await trust.declare_secret(platform.member(), declared(name="another"))
 
 
-# Check 4: a rotated tenant key is never served from a client cached by its
+# A rotated tenant key is never served from a client cached by its
 # old reference.
 
 
