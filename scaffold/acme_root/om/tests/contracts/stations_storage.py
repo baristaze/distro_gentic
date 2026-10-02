@@ -7,7 +7,6 @@ raced at once land one. The cases named in `CROSS_TENANT_CASES` are the
 tenant fence's evidence: each one presents another tenant's identifier and
 asserts that nothing is found and nothing changes."""
 
-import asyncio
 from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
@@ -23,6 +22,7 @@ from acme.om.stations.types.job import JobState, StationCommand, StationJob
 from acme.om.stations.types.lease import LeaseEnd, StationLease
 from acme.om.stations.types.line import EntryState, LineEntry
 from acme.om.stations.types.station import Lab, Station, StationPool
+from contracts.racing import race
 
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
@@ -424,11 +424,11 @@ class StationsStorageContract:
         first = await self.waiting(storage, org, pool, rank=1.0)
         second = await self.waiting(storage, org, pool, rank=2.0)
         at = utcnow()
-        landed = await asyncio.gather(
+        run = await race(
             storage.grant(org, make_lease(station, first, at), MARGIN, ()),
             storage.grant(org, make_lease(station, second, at), MARGIN, ()),
         )
-        assert sorted(landed) == [False, True]
+        assert sorted(run.outcomes) == [False, True], run.summary()
         held = await storage.read_station(org, station.id)
         assert held is not None and held.token == 1
         settled = [await storage.read_entry(org, e.id) for e in (first, second)]
