@@ -137,8 +137,30 @@ class ControlCommand(StrEnum):
     unlock = 'unlock'
 
 
+class ControlKind(StrEnum):
+    """
+    What one line of a host's control stream says.
+    """
+    wake = 'wake'
+    ping = 'ping'
+    cancel = 'cancel'
+    interrupt = 'interrupt'
+    deadline = 'deadline'
+    revoke = 'revoke'
+
+
 class RequestSeq(RootModel[int]):
     root: Annotated[int, Field(ge=1, title='Request Seq')]
+
+
+class ControlView(BaseModel):
+    """
+    One line of a host's control stream. `wake` asks it to claim now,
+    `ping` keeps the stream open, and the rest end the item named at once.
+    """
+    id: Annotated[UUID | None, Field(title='Id')] = None
+    item_id: Annotated[UUID | None, Field(title='Item Id')] = None
+    kind: ControlKind
 
 
 class CreateLabRequest(BaseModel):
@@ -228,6 +250,14 @@ class CredentialKind(StrEnum):
     socket_ticket = 'socket_ticket'
     operator_token = 'operator_token'
     internal = 'internal'
+
+
+class CrossingKind(StrEnum):
+    enrollment = 'enrollment'
+    claim = 'claim'
+    stream_part = 'stream_part'
+    artifact = 'artifact'
+    result = 'result'
 
 
 class DecisionRequest(BaseModel):
@@ -353,6 +383,26 @@ class ExchangeSessionRequest(BaseModel):
         extra='forbid',
     )
     org_id: Annotated[UUID, Field(title='Org Id')]
+
+
+class ExecDetailView(BaseModel):
+    """
+    An item the host holds: the call, the workspace, and the operation.
+    """
+    call_id: Annotated[UUID, Field(title='Call Id')]
+    deadline: Annotated[AwareDatetime, Field(title='Deadline')]
+    effect: Annotated[str, Field(title='Effect')]
+    epoch: Annotated[int | None, Field(title='Epoch')]
+    item_id: Annotated[UUID, Field(title='Item Id')]
+    location: Annotated[str, Field(title='Location')]
+    org_id: Annotated[UUID, Field(title='Org Id')]
+    request: Annotated[dict[str, Any], Field(title='Request')]
+    session_id: Annotated[UUID, Field(title='Session Id')]
+    spec: Annotated[dict[str, Any], Field(title='Spec')]
+
+
+class ExecLeaseView(BaseModel):
+    lease_expires_at: Annotated[AwareDatetime, Field(title='Lease Expires At')]
 
 
 class FilePurpose(StrEnum):
@@ -669,6 +719,11 @@ class Origin(StrEnum):
     automation = 'automation'
     parent = 'parent'
     engine = 'engine'
+
+
+class OutputStream(StrEnum):
+    stdout = 'stdout'
+    stderr = 'stderr'
 
 
 class OwnedOrgRef(BaseModel):
@@ -1292,6 +1347,19 @@ class ControlRequest(BaseModel):
     request_seq: Annotated[RequestSeq | None, Field(title='Request Seq')] = None
 
 
+class CrossingBody(BaseModel):
+    """
+    What the sender declares of the bytes it sends: what they are, their
+    SHA-256 in hex, and their size.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: CrossingKind
+    sha256: Annotated[str, Field(pattern='^[0-9a-f]{64}$', title='Sha256')]
+    size: Annotated[int, Field(ge=0, title='Size')]
+
+
 class EnrollRequest(BaseModel):
     """
     A host's name and its report, beside its enrollment token. The pool
@@ -1539,6 +1607,19 @@ class OrgPageView(BaseModel):
     next_cursor: Annotated[str | None, Field(title='Next Cursor')]
 
 
+class PartRequest(BaseModel):
+    """
+    One part of an item's output, in the order the host read it.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    crossing: CrossingBody
+    data: Annotated[str, Field(max_length=90000, title='Data')]
+    seq: Annotated[int, Field(ge=0, title='Seq')]
+    stream: OutputStream
+
+
 class PlacementView(BaseModel):
     """
     Where a session runs. A pinned session with no host of its pool
@@ -1559,6 +1640,17 @@ class RefusalBody(BaseModel):
     operation: Annotated[str, Field(max_length=100, min_length=1, title='Operation')]
     reason: RefusalReason
     refused_at: Annotated[AwareDatetime, Field(title='Refused At')]
+
+
+class ResultRequest(BaseModel):
+    """
+    How an item ended: the JSON of an exec result, in base64.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    crossing: CrossingBody
+    data: Annotated[str, Field(max_length=16000000, title='Data')]
 
 
 class SessionStandingView(BaseModel):

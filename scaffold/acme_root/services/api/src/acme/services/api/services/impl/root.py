@@ -15,6 +15,7 @@ from acme.services.api.services import (
     HostsServiceInterface,
     MediaServiceInterface,
     RealtimeServiceInterface,
+    RelayServiceInterface,
     ServicesInterface,
     StationsServiceInterface,
     TenancyServiceInterface,
@@ -27,6 +28,7 @@ from acme.services.api.services.impl.fleet import FleetServiceImpl
 from acme.services.api.services.impl.hosts import HostsServiceImpl
 from acme.services.api.services.impl.media import MediaServiceImpl
 from acme.services.api.services.impl.realtime import RealtimeServiceImpl
+from acme.services.api.services.impl.relay import RelayServiceImpl
 from acme.services.api.services.impl.stations import StationsServiceImpl
 from acme.services.api.services.impl.tenancy import TenancyServiceImpl
 from acme.services.api.services.impl.webhooks import WebhooksServiceImpl
@@ -44,6 +46,7 @@ class ServicesImpl(ServicesInterface):
         agent_sessions: AgentSessionsServiceInterface,
         hosts: HostsServiceInterface,
         fleet: FleetServiceInterface,
+        relay: RelayServiceInterface,
         stations: StationsServiceInterface,
     ) -> None:
         self._tenancy = tenancy
@@ -55,6 +58,7 @@ class ServicesImpl(ServicesInterface):
         self._agent_sessions = agent_sessions
         self._hosts = hosts
         self._fleet = fleet
+        self._relay = relay
         self._stations = stations
 
     def get_tenancy_service(self) -> TenancyServiceInterface:
@@ -84,6 +88,9 @@ class ServicesImpl(ServicesInterface):
     def get_fleet_service(self) -> FleetServiceInterface:
         return self._fleet
 
+    def get_relay_service(self) -> RelayServiceInterface:
+        return self._relay
+
     def get_stations_service(self) -> StationsServiceInterface:
         return self._stations
 
@@ -111,5 +118,6 @@ def build_services(
         ),
         hosts=HostsServiceImpl(managers.hosts),
         fleet=FleetServiceImpl(managers.placement_operator, trust_operator),
+        relay=RelayServiceImpl(managers.relay, infra.get_topics()),
         stations=StationsServiceImpl(managers.stations),
     )

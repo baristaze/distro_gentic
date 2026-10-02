@@ -832,6 +832,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/hosts/me/control": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Control
+         * @description The host's control stream, after the message `after` names.
+         */
+        get: operations["control_v1_hosts_me_control_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/hosts/me/credentials": {
         parameters: {
             query?: never;
@@ -847,6 +867,89 @@ export interface paths {
          *     grace.
          */
         post: operations["rotate_v1_hosts_me_credentials_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/hosts/me/exec/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Detail
+         * @description What the host runs for an item it holds: the command or the file
+         *     operation, opened, with its deadline, its writer epoch, and where the
+         *     workspace is.
+         */
+        get: operations["detail_v1_hosts_me_exec__item_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/hosts/me/exec/{item_id}/lease": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Extend
+         * @description Renews the host's lease on the item while it runs.
+         */
+        post: operations["extend_v1_hosts_me_exec__item_id__lease_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/hosts/me/exec/{item_id}/parts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Push Part
+         * @description One part of the item's output. A part sent again lands once.
+         */
+        post: operations["push_part_v1_hosts_me_exec__item_id__parts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/hosts/me/exec/{item_id}/result": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Push Result
+         * @description How the item ended, stored under its call's key. The first
+         *     settlement wins: one its lease or a stop settled already is refused.
+         */
+        post: operations["push_result_v1_hosts_me_exec__item_id__result_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1895,6 +1998,12 @@ export interface components {
          */
         ControlCommand: "pause" | "resume" | "cancel" | "interrupt" | "compact" | "approve" | "deny" | "unlock";
         /**
+         * ControlKind
+         * @description What one line of a host's control stream says.
+         * @enum {string}
+         */
+        ControlKind: "wake" | "ping" | "cancel" | "interrupt" | "deadline" | "revoke";
+        /**
          * ControlRequest
          * @description A control. An interrupt names the seq of the tool request it stops,
          *     and no other control names one.
@@ -1903,6 +2012,18 @@ export interface components {
             command: components["schemas"]["SessionControl"];
             /** Request Seq */
             request_seq?: number | null;
+        };
+        /**
+         * ControlView
+         * @description One line of a host's control stream. `wake` asks it to claim now,
+         *     `ping` keeps the stream open, and the rest end the item named at once.
+         */
+        ControlView: {
+            /** Id */
+            id?: string | null;
+            /** Item Id */
+            item_id?: string | null;
+            kind: components["schemas"]["ControlKind"];
         };
         /** CreateLabRequest */
         CreateLabRequest: {
@@ -1992,6 +2113,23 @@ export interface components {
          * @enum {string}
          */
         CredentialKind: "api_key" | "session_token" | "login" | "socket_ticket" | "operator_token" | "internal";
+        /**
+         * CrossingBody
+         * @description What the sender declares of the bytes it sends: what they are, their
+         *     SHA-256 in hex, and their size.
+         */
+        CrossingBody: {
+            kind: components["schemas"]["CrossingKind"];
+            /** Sha256 */
+            sha256: string;
+            /** Size */
+            size: number;
+        };
+        /**
+         * CrossingKind
+         * @enum {string}
+         */
+        CrossingKind: "enrollment" | "claim" | "stream_part" | "artifact" | "result";
         /**
          * DecisionRequest
          * @description A person's decision on the tool call at a seq. A denial's note is what
@@ -2184,6 +2322,59 @@ export interface components {
              * Format: uuid
              */
             org_id: string;
+        };
+        /**
+         * ExecDetailView
+         * @description An item the host holds: the call, the workspace, and the operation.
+         */
+        ExecDetailView: {
+            /**
+             * Call Id
+             * Format: uuid
+             */
+            call_id: string;
+            /**
+             * Deadline
+             * Format: date-time
+             */
+            deadline: string;
+            /** Effect */
+            effect: string;
+            /** Epoch */
+            epoch: number | null;
+            /**
+             * Item Id
+             * Format: uuid
+             */
+            item_id: string;
+            /** Location */
+            location: string;
+            /**
+             * Org Id
+             * Format: uuid
+             */
+            org_id: string;
+            /** Request */
+            request: {
+                [key: string]: unknown;
+            };
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+            /** Spec */
+            spec: {
+                [key: string]: unknown;
+            };
+        };
+        /** ExecLeaseView */
+        ExecLeaseView: {
+            /**
+             * Lease Expires At
+             * Format: date-time
+             */
+            lease_expires_at: string;
         };
         /**
          * FilePageView
@@ -3129,6 +3320,11 @@ export interface components {
          */
         Origin: "portal" | "cli" | "api" | "integration" | "automation" | "parent" | "engine";
         /**
+         * OutputStream
+         * @enum {string}
+         */
+        OutputStream: "stdout" | "stderr";
+        /**
          * OwnedOrgRef
          * @description An org named in a refusal: enough to find it and to say which.
          */
@@ -3160,6 +3356,18 @@ export interface components {
             retry_at: string | null;
             /** Unlock */
             unlock: string;
+        };
+        /**
+         * PartRequest
+         * @description One part of an item's output, in the order the host read it.
+         */
+        PartRequest: {
+            crossing: components["schemas"]["CrossingBody"];
+            /** Data */
+            data: string;
+            /** Seq */
+            seq: number;
+            stream: components["schemas"]["OutputStream"];
         };
         /**
          * Permission
@@ -3287,6 +3495,15 @@ export interface components {
         ReorderRequest: {
             /** Before */
             before: string | null;
+        };
+        /**
+         * ResultRequest
+         * @description How an item ended: the JSON of an exec result, in base64.
+         */
+        ResultRequest: {
+            crossing: components["schemas"]["CrossingBody"];
+            /** Data */
+            data: string;
         };
         /** RevokedDaemonView */
         RevokedDaemonView: {
@@ -5758,6 +5975,42 @@ export interface operations {
             };
         };
     };
+    control_v1_hosts_me_control_get: {
+        parameters: {
+            query?: {
+                after?: string | null;
+            };
+            header?: {
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ControlView"];
+                    "application/x-ndjson": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     rotate_v1_hosts_me_credentials_post: {
         parameters: {
             query?: never;
@@ -5779,6 +6032,150 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["IssuedHostCredentialView"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    detail_v1_hosts_me_exec__item_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExecDetailView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    extend_v1_hosts_me_exec__item_id__lease_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExecLeaseView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    push_part_v1_hosts_me_exec__item_id__parts_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    push_result_v1_hosts_me_exec__item_id__result_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResultRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

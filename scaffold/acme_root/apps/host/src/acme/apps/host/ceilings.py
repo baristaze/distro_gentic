@@ -1,7 +1,7 @@
 """The owner's ceilings: limits the host's owner sets in a file on the host
 and the platform cannot raise. The projects it serves, its minimum
-isolation, its egress, the paths it lets a result read, and whether it
-accepts people's commands. They are read from `ceilings.toml` at startup,
+isolation, its egress, the paths it lets a result read, whether it
+accepts people's commands, and how many items it runs at once. They are read from `ceilings.toml` at startup,
 held frozen, and changed by nothing the platform sends: no call answers
 with them and no item carries them, so a compromised control plane still
 cannot widen what the host does.
@@ -17,6 +17,7 @@ min_isolation = "container"                           # vm, container, or direct
 egress = ["github.com:443", "pypi.org:443"]           # or "open"
 readable = ["/srv/work"]
 people_commands = false
+items_at_once = 4
 ```
 """
 
@@ -40,6 +41,8 @@ STRENGTH: dict[IsolationMode, int] = {
 
 OPEN = "open"
 ALL = "all"
+MOST_AT_ONCE = 64
+"""The most items a host runs at once, whatever its owner writes."""
 WITHIN_A_WORKSPACE = frozenset({"release", "purge"})
 """Workspace operations that only let go of what the host already holds:
 they run nothing and read nothing, so only the tenant fence applies."""
@@ -55,6 +58,7 @@ class Ceilings:
     egress: frozenset[str] | None = frozenset()
     readable: tuple[str, ...] = ()
     people_commands: bool = False
+    items_at_once: int = 4
 
 
 @dataclass(frozen=True)
@@ -85,7 +89,8 @@ def load(path: Path) -> Ceilings:
         raise BadSetting(f"the owner's ceilings cannot be read from {path}: {error}") from None
     except tomllib.TOMLDecodeError as error:
         raise BadSetting(f"ceilings: {error}") from None
-    unknown = set(raw) - {"projects", "min_isolation", "egress", "readable", "people_commands"}
+    known = {"projects", "min_isolation", "egress", "readable", "people_commands", "items_at_once"}
+    unknown = set(raw) - known
     if unknown:
         raise BadSetting(f"ceilings: unknown {', '.join(sorted(unknown))}")
     projects_raw = raw.get("projects", [])
@@ -106,12 +111,18 @@ def load(path: Path) -> Ceilings:
     people = raw.get("people_commands", False)
     if not isinstance(people, bool):
         raise BadSetting("ceilings: people_commands is true or false")
+    at_once = raw.get("items_at_once", Ceilings.items_at_once)
+    if isinstance(at_once, bool) or not isinstance(at_once, int):
+        raise BadSetting("ceilings: items_at_once is a whole number")
+    if not 1 <= at_once <= MOST_AT_ONCE:
+        raise BadSetting(f"ceilings: items_at_once is from 1 to {MOST_AT_ONCE}")
     return Ceilings(
         projects=projects,
         min_isolation=min_isolation,
         egress=egress,
         readable=tuple(posixpath.normpath(path) for path in readable),
         people_commands=people,
+        items_at_once=at_once,
     )
 
 

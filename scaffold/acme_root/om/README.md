@@ -190,6 +190,14 @@ own, which lasts an hour and which it renews itself. A session's
 org's pools. A session pinned to a pool with no host online waits, and
 says so; it never moves to the cloud unless a person moves it.
 
+When a pinned session's agent calls a tool, the call crosses the wall as
+an **exec item**: one command or file operation for the host that holds
+the session's workspace. The host claims it, runs it, streams what it
+prints back, and pushes how it ended, which is kept under the call's key.
+A call the agent may not repeat runs once, whatever crashes. The host
+holds one **control stream** open to the platform, which stops a command
+at once.
+
 A **station** is a scarce, located thing work needs, in a **lab** that
 one **station daemon** serves inside an org's wall, and in a **pool** of
 stations of its kind. A session that needs one joins a **line** and waits
@@ -303,6 +311,9 @@ arrive twice, so the second copy gets the first one's answer.
 - A pool, its tokens, its hosts, their credentials, and a session's
   placement name their org. A host is handed only the work of its own
   pool, whatever it asks for.
+- An exec item, its output, its control messages, and a session's
+  workspace binding name their org. A host reads and answers only the
+  items it holds.
 - A validation session names its org, and its station work is a work
   item that names the session.
 - A lab, a pool, a station, a daemon's credentials, a line entry, a
@@ -335,6 +346,7 @@ arrive twice, so the second copy gets the first one's answer.
 - [Placement](src/acme/om/placement/README.md)
 - [Trust](src/acme/om/trust/README.md)
 - [Hosts](src/acme/om/hosts/README.md)
+- [Relay](src/acme/om/relay/README.md)
 - [Intake](src/acme/om/intake/README.md)
 - [Automations](src/acme/om/automations/README.md)
 - [Playbooks](src/acme/om/playbooks/README.md)

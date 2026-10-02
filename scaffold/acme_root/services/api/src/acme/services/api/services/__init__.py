@@ -11,6 +11,7 @@ from acme.services.api.services.fleet import FleetServiceInterface
 from acme.services.api.services.hosts import HostsServiceInterface
 from acme.services.api.services.media import MediaServiceInterface
 from acme.services.api.services.realtime import RealtimeServiceInterface
+from acme.services.api.services.relay import RelayServiceInterface
 from acme.services.api.services.stations import StationsServiceInterface
 from acme.services.api.services.tenancy import TenancyServiceInterface
 from acme.services.api.services.webhooks import WebhooksServiceInterface
@@ -23,6 +24,7 @@ __all__ = [
     "HostsServiceInterface",
     "MediaServiceInterface",
     "RealtimeServiceInterface",
+    "RelayServiceInterface",
     "ServicesInterface",
     "StationsServiceInterface",
     "TenancyServiceInterface",
@@ -57,6 +59,9 @@ class ServicesInterface(ABC):
 
     @abstractmethod
     def get_fleet_service(self) -> FleetServiceInterface: ...
+
+    @abstractmethod
+    def get_relay_service(self) -> RelayServiceInterface: ...
 
     @abstractmethod
     def get_stations_service(self) -> StationsServiceInterface: ...

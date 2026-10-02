@@ -24,6 +24,7 @@ from acme.om.platform_agents.storage import PlatformAgentsStorageInterface
 from acme.om.playbooks.storage import PlaybookStorageInterface
 from acme.om.privacy.storage import PrivacyStorageInterface
 from acme.om.projects.storage import ProjectStorageInterface
+from acme.om.relay.storage import RelayStorageInterface
 from acme.om.retention.storage import RetentionStorageInterface
 from acme.om.stations.storage import StationsStorageInterface
 from acme.om.steps.storage import StepStorageInterface
@@ -125,6 +126,9 @@ class StorageInterface(ABC):
 
     @abstractmethod
     def get_platform_agents_storage(self) -> PlatformAgentsStorageInterface: ...
+
+    @abstractmethod
+    def get_relay_storage(self) -> RelayStorageInterface: ...
 
     @abstractmethod
     def get_stations_storage(self) -> StationsStorageInterface: ...
