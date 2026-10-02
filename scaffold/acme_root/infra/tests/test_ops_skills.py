@@ -31,19 +31,34 @@ PREAMBLE = SKILLS / "_shared" / "ops-preamble.md"
 README = ROOT / "ops" / "README.md"
 REFERENCE = "../_shared/ops-preamble.md"
 
+# The platform's own operational skills, each with the one role it holds:
+# a supporter reads one named tenant through the operator plane, and an
+# investigator reads the signals' aggregates and no tenant's rows.
+PLATFORM = {
+    "ops-session-stuck": "supporter",
+    "ops-host-idle": "supporter",
+    "ops-station-idle": "supporter",
+    "ops-integration-silent": "investigator",
+    "ops-provider-outage": "investigator",
+    "audit-model-spend": "investigator",
+}
+SUPPORTERS = [name for name, role in PLATFORM.items() if role == "supporter"]
 # Every skill that can reach an environment, and so holds a credential.
-READERS = [
-    "audit-deploy-time",
-    "audit-retention",
-    "ops-cloud-deployment-create",
-    "ops-cloud-deployment-nuke",
-    "ops-infra-as-code",
-    "ops-investigate",
-    "ops-root-cause",
-    "ops-simulate-traffic",
-    "ops-watch",
-    "stress-test-run",
-]
+READERS = sorted(
+    [
+        "audit-deploy-time",
+        "audit-retention",
+        "ops-cloud-deployment-create",
+        "ops-cloud-deployment-nuke",
+        "ops-infra-as-code",
+        "ops-investigate",
+        "ops-root-cause",
+        "ops-simulate-traffic",
+        "ops-watch",
+        "stress-test-run",
+        *PLATFORM,
+    ]
+)
 # The skills that reach the env file's tokens.
 TOKEN_HOLDERS = [
     "ops-investigate",
@@ -51,6 +66,7 @@ TOKEN_HOLDERS = [
     "ops-simulate-traffic",
     "ops-watch",
     "stress-test-run",
+    *PLATFORM,
 ]
 # The two that drive traffic, whose `acme-ops` command reads the provisioner's
 # file; every other token holder reads, and holds the read token alone.
@@ -73,10 +89,14 @@ AUDITS = [
     "audit-credential-lifetimes",
     "audit-database-calls",
     "audit-deploy-time",
+    "audit-model-spend",
     "audit-provider-calls",
     "audit-query-indexes",
     "audit-retention",
 ]
+# The two audits the guideline leaves optional and the platform requires: a
+# platform of agents lives on provider calls and on credentials.
+REQUIRED_AUDITS = ["audit-credential-lifetimes", "audit-provider-calls"]
 # The audits that build a database of their own on the local stack.
 DATABASE_AUDITS = [
     "audit-credential-lifetimes",
@@ -887,7 +907,13 @@ def test_the_fold_reads_the_commit_staging_deployed_as_the_release_does() -> Non
 # carry, the exporter's own `OTelLib` among them, and its Terraform test holds
 # them there. So a skill's schema is one of the dashboard's.
 DASHBOARD = ROOT / "deployment" / "terraform" / "modules" / "dashboard"
-METRIC_READERS = ["ops-investigate", "ops-watch"]
+METRIC_READERS = [
+    "ops-investigate",
+    "ops-watch",
+    "ops-integration-silent",
+    "ops-provider-outage",
+    "audit-model-spend",
+]
 SEARCH_SCHEMA = re.compile(r"SEARCH\(\W*?(\{[^}]*\})")
 
 
@@ -1029,3 +1055,56 @@ def test_claude_code_finds_the_same_skills_through_a_link() -> None:
     assert link.is_symlink(), ".claude/skills is not a link"
     assert os.readlink(link) == "../.agents/skills"
     assert link.resolve() == SKILLS.resolve()
+
+
+@pytest.mark.parametrize(("name", "role"), PLATFORM.items())
+def test_a_platform_skill_names_its_role_and_ops_readme_gives_it_the_same(
+    name: str, role: str
+) -> None:
+    """The skill says which role it holds before anything else of its
+    credential, and `ops/README.md` gives it the same one, so a reader who
+    trusts either grants the same credential."""
+    section = _prose(name).split("## Role and credential", 1)[1].strip()
+    assert section.lower().startswith((f"the {role}", role)), section[:80]
+    assert _readme_needs(name) == role
+    assert "Refuse any profile wider than the investigate role." in _prose(name)
+
+
+# The one route each supporter reads of its tenant: an aggregate of what
+# the platform knows, never a list, never the tenant's own words.
+STANDING = {
+    "ops-session-stuck": "orgs/<org_id>/sessions/<session_id>/standing",
+    "ops-host-idle": "orgs/<org_id>/hosts/<host_id>/standing",
+    "ops-station-idle": "orgs/<org_id>/stations/<station_id>/standing",
+}
+
+
+@pytest.mark.parametrize("name", SUPPORTERS)
+def test_a_supporter_reads_who_it_is_and_one_standing_of_the_tenant_it_names(name: str) -> None:
+    """The operator's own role first, then the tenant's standing alone,
+    whose `jq` keeps none of the words a tenant writes."""
+    reads = list(OPERATOR_READ.finditer(_skill(name)))
+    assert [read["route"] for read in reads] == ["me", STANDING[name]]
+    kept = set(re.findall(r"[a-z_]+", reads[1]["kept"]))
+    assert not kept & {"name", "slug", "display_name", "email", "text", "content"}, reads[1][0]
+
+
+@pytest.mark.parametrize("name", [*PLATFORM])
+def test_no_platform_skill_opens_content_or_reads_an_operator_plane_list(name: str) -> None:
+    """Shape is an operator's to read and content is not: no skill names the
+    route that opens a session's content, and none reads a list of orgs."""
+    text = _skill(name)
+    assert "/content" not in text
+    routes = [read["route"] for read in OPERATOR_READ.finditer(text)]
+    assert "orgs" not in routes and not [r for r in routes if r.endswith("/members")]
+    if PLATFORM[name] == "investigator":
+        assert routes == [], f"{name} reads the operator plane, which its role does not"
+
+
+def test_the_platform_requires_the_two_audits_the_guideline_leaves_optional() -> None:
+    readme = README.read_text()
+    for name in REQUIRED_AUDITS:
+        assert name in _own("audit-*")
+        row = re.search(rf"^\| `{name}` \|[^\n]*$", readme, re.MULTILINE)
+        assert row and "optional" not in row[0].lower(), name
+    assert "requires two audits the guideline leaves optional" in " ".join(readme.split())
