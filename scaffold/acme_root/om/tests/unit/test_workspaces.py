@@ -21,13 +21,18 @@ from acme.infra.workspaces import (
     IsolationSpec,
 )
 from acme.infra.workspaces.twin import WorkspaceTwinImpl
+from acme.om.agents import ResultGateInterface
 from acme.om.agents.types.kind import AgentKind
 from acme.om.agents.types.run import RunEnd
 from acme.om.base import new_id
 from acme.om.context import Role
+from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
+from acme.om.evidence.impl.ports import WorkProductAbsentImpl
 from acme.om.exceptions import NotAuthorized, NotFound
 from acme.om.steps.types.header import LoopOutcome, ParkReason
 from acme.om.steps.types.step import Step, StepType
+from acme.om.storage.impl.memory import StorageMemoryImpl
+from acme.om.storage.root import StorageInterface
 from acme.om.workspaces.rules import SNAPSHOT_PREFIX, session_branch
 from acme.om.workspaces.types.egress import (
     READ_ONLY,
@@ -49,6 +54,12 @@ CONTAINED = kind("contained", IsolationMode.CONTAINER, EgressMode.NONE)
 
 SOURCE = EgressRule(destination="git.example.com", methods=(EgressMethod.GET, EgressMethod.POST))
 MIRROR = EgressRule(destination="*.mirror.example.com", methods=READ_ONLY)
+
+
+def gate(storage: StorageInterface) -> ResultGateInterface:
+    """The evidence's gate, as a deployed root takes it: outside `local`, a
+    root refuses the null one."""
+    return ResultGateEvidenceImpl(storage.get_evidence_storage(), WorkProductAbsentImpl())
 
 
 def loop_of(tmp_path: Path, *kinds: AgentKind, **roots: Any) -> Loop:
@@ -81,7 +92,8 @@ async def test_a_host_that_cannot_give_the_pinned_isolation_parks_the_loop_on_th
     # A host of the platform's cloud: the twin's level is local's alone, so
     # this host refuses it before its provider, which would take it, is
     # reached.
-    loop = loop_of(tmp_path, environment="production")
+    storage = StorageMemoryImpl()
+    loop = loop_of(tmp_path, storage=storage, environment="production", result_gate=gate(storage))
     session_id = await loop.start("twinned")
     pinned = await loop.managers.workspaces.get_workspace(loop.owner, session_id)
     assert pinned.level is IsolationMode.TWIN, "pinned when the session was created"
@@ -336,3 +348,4 @@ async def test_the_sessions_own_branch_and_pull_request_are_work_product_and_all
         repository=REPOSITORY, kind=WriteKind.PUSH, ref=session_branch(unbound_session)
     )
     assert await unbound.managers.workspaces.outward(unbound.owner, unbound_session, own)
+

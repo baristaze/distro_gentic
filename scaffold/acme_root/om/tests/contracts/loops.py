@@ -19,6 +19,8 @@ from acme.integrations.model_providers.calls import ModelReply
 from acme.integrations.model_providers.registry import ModelProvidersOverImpl
 from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl, ScriptedFailure
 from acme.integrations.model_providers.types import ErrorKind, ProviderName, StopReason, Usage
+from acme.om.agents.gate import ResultGateInterface
+from acme.om.agents.impl.gate import ResultGateNullImpl
 from acme.om.agents.impl.loop import LoopManagerImpl, LoopOptions
 from acme.om.agents.impl.sink import StreamSinkMemoryImpl
 from acme.om.agents.types.kind import AgentKind, AgentKindCatalog, DoneRule, TreeLimits
@@ -29,6 +31,7 @@ from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import Platform, new_id, utcnow
 from acme.om.context import CredentialKind, RequestContext, Role, TenantContext, build_context
+from acme.om.evidence import ExecutorInterface, WorkProductInterface
 from acme.om.root import Managers, build_managers
 from acme.om.steps.types.content import TextBlock, ToolUseBlock
 from acme.om.steps.types.header import LoopOutcome, ParkReason
@@ -246,12 +249,17 @@ def loop_over(
     owner: TenantContext | None = None,
     sink: StreamSinkMemoryImpl | None = None,
     jitter: Callable[[], float] = random.random,
+    result_gate: ResultGateInterface | None = None,
+    executor: ExecutorInterface | None = None,
+    work_product: WorkProductInterface | None = None,
     **roots: Any,
 ) -> Loop:
     """`storage` None is the memory storage, and `owner` None a fresh
     tenant's owner; a suite over Postgres hands in both. `jitter` is what
-    the loop draws its retry waits from, and `roots` is what else the
-    managers are built with."""
+    the loop draws its retry waits from. `result_gate` None is the engine's
+    null gate, which accepts a result and marks it unverified, as the
+    engine's suites read it; `executor` and `work_product` go to the root as
+    they are, and `roots` is what else the managers are built with."""
     infra = InfraLocalImpl(tmp_path)
     anthropic = ModelProviderScriptedImpl(ProviderName.ANTHROPIC)
     openai = ModelProviderScriptedImpl(ProviderName.OPENAI)
@@ -268,6 +276,9 @@ def loop_over(
         agent_kinds=kinds,
         principal_context=live,
         tool_catalog=tuple(catalog.values()),
+        result_gate=result_gate or ResultGateNullImpl(),
+        executor=executor,
+        work_product=work_product,
         **roots,
     )
     clock = Clock()

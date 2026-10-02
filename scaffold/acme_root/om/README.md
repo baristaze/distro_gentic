@@ -134,6 +134,19 @@ on their own, which wait for a person, and which never run, and who may
 approve each kind. A person's yes or no to one call is a step of the
 session's history.
 
+## Evidence
+
+A **run** is one execution of one check, written once: the version it
+ran against, the environment, who ran it, its outcome, and what served
+each thing it relied on: the real thing, a **twin**, a test **double**, or
+nothing. A **hypothesis** and a **finding** link the runs that show them.
+
+A **validation policy** is a project's say over what counts as done: the
+checks a change must pass, and the **protected** paths no agent may
+change. A **validation** runs those checks on a fresh executor, apart
+from the agent, at the version delivered; the **result gate** counts a
+success only on its runs.
+
 ## Where work runs
 
 Each kind of work a session makes runs where what it needs is: its loop
@@ -213,6 +226,9 @@ arrive twice, so the second copy gets the first one's answer.
 - A loop is a run of a session's steps and has no record of its own; it
   reads where it is from them, so a loop a crash interrupted goes on
   where it stopped.
+- A run, a validation, a hypothesis, and a finding belong to one session
+  and name its org; they go when the session is purged. A validation
+  policy names its org and its project, one each.
 - A fair share names its org, one each, and the lane of every loop the
   org asks for is read off it.
 - A session's workspace names its org and its session, one each, and an
@@ -231,6 +247,7 @@ arrive twice, so the second copy gets the first one's answer.
 - [Models](src/acme/om/models/README.md)
 - [Windows](src/acme/om/windows/README.md)
 - [Tools](src/acme/om/tools/README.md)
+- [Evidence](src/acme/om/evidence/README.md)
 - [Placement](src/acme/om/placement/README.md)
 - [Trust](src/acme/om/trust/README.md)
 - [Workspaces](src/acme/om/workspaces/README.md)
