@@ -5,7 +5,9 @@ holds each item to its owner's ceilings before anything runs, and is handed
 nothing while it reads a version below the floor. A failure it outlasts is
 waited out with the credential it holds; a refused credential ends it."""
 
+import asyncio
 import stat
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -196,6 +198,7 @@ async def test_a_host_runs_only_its_pools_work_and_only_within_its_ceilings(
     handled = []
     while (one := await host.tick()) is not None:
         handled.append(one)
+    await host.idle()
     by_id = {one.item.id: one.refused for one in handled}
     assert set(by_id) == {fits.id, persons.id, silent.id}
     assert by_id[fits.id] == []
@@ -273,8 +276,53 @@ async def test_a_host_waits_out_a_failed_beat_and_goes_on_with_its_credential(
     prepare = {"operation": WorkspaceOperation.PREPARE.value, "pool_id": str(pool.id)}
     item = await enqueue(api, WorkKind.WORKSPACE, {**prepare, **fitting()}, pool_lane(pool.id))
     assert await host.turn() == 0.0
+    await host.idle()
     assert [one.id for one in ran.ran] == [item.id]
     assert await host.turn() == api.settings(tmp_path, None).beat_seconds
+
+
+class Held(Recording):
+    """An executor whose items run until `release` is set."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.release = asyncio.Event()
+
+    async def run(self, item: ClaimedWorkView, ask: Ask) -> None:
+        await super().run(item, ask)
+        await self.release.wait()
+
+
+async def test_a_host_runs_no_more_items_at_once_than_its_ceilings_allow(
+    api: Stack, tmp_path: Path
+) -> None:
+    pool = await api.pool()
+    held = Held()
+    host = HostAgent(
+        api.settings(tmp_path, await api.token(pool.id)),
+        replace(CEILINGS, items_at_once=2),
+        probes(IsolationMode.container),
+        api.client,
+        held,
+    )
+    await host.start()
+    prepare = {"operation": WorkspaceOperation.PREPARE.value, "pool_id": str(pool.id)}
+    items = [
+        await enqueue(api, WorkKind.WORKSPACE, {**prepare, **fitting()}, pool_lane(pool.id))
+        for _ in range(3)
+    ]
+    assert await host.claim_once() is not None
+    assert await host.claim_once() is not None
+    # Two run side by side; a third is not claimed, so no lease waits on it.
+    assert await host.claim_once() is None
+    await asyncio.sleep(0)
+    assert len(held.ran) == 2
+    held.release.set()
+    await host.idle()
+    assert host.woken.is_set()  # an item that ends wakes the loop to claim
+    assert await host.claim_once() is not None
+    await host.idle()
+    assert {one.id for one in held.ran} == {item.id for item in items}
 
 
 async def test_a_refused_credential_ends_the_host(api: Stack, tmp_path: Path) -> None:

@@ -2,7 +2,8 @@
 with its tenant's enrollment token, or picks up the credential it already
 holds. From then on it beats, rotates its credential at half its life, and
 claims: what it is handed is held to its owner's ceilings, and only then
-given to the executor. Beside its claims it holds one long-lived control
+given to the executor, which runs it beside the others it runs, up to the
+number its owner's ceilings allow. Beside its claims it holds one long-lived control
 stream open, which wakes it to claim at once and stops an item it runs at
 once. Every connection is opened from here, outward.
 
@@ -123,6 +124,7 @@ class HostAgent:
         """Set when the control stream says work reached this host's lanes."""
         self._seen: UUID | None = None  # the last control message the host saw
         self._rotating = asyncio.Lock()
+        self._running: set[asyncio.Task[None]] = set()
 
     @property
     def probed(self) -> Probed:
@@ -179,8 +181,13 @@ class HostAgent:
             return True
 
     async def claim_once(self) -> Handled | None:
-        """One claim. The item is held to the owner's ceilings, and to what
-        the host probed, before the executor sees it."""
+        """One claim, while the host runs fewer items than its ceilings allow:
+        none is claimed past that, so no lease is held for work that waits.
+        The item is held to the owner's ceilings, and to what the host
+        probed, before the executor sees it. It runs beside the others; when
+        it ends, `woken` is set, so the loop claims again at once."""
+        if len(self._running) >= self._ceilings.items_at_once:
+            return None
         async with self._client_for(self.credential.token) as client:
             answer = await client.claim_host_work(EXEC_VERSION)
         if answer.item is None:
@@ -191,8 +198,26 @@ class HostAgent:
             log.warning("item %s refused: %s", answer.item.id, "; ".join(refused))
             await self._executor.refuse(answer.item, refused)
         else:
-            await self._executor.run(answer.item, ask)
+            task = asyncio.ensure_future(self._run(answer.item, ask))
+            self._running.add(task)
+            task.add_done_callback(self._ended)
         return Handled(item=answer.item, refused=refused)
+
+    async def idle(self) -> None:
+        """Waits until no item runs here."""
+        while self._running:
+            await asyncio.wait(set(self._running))
+
+    async def _run(self, item: ClaimedWorkView, ask: Ask) -> None:
+        try:
+            await self._executor.run(item, ask)
+        except Exception:
+            # Its lease runs out, and the platform's sweep settles it.
+            log.exception("item %s failed on this host", item.id)
+
+    def _ended(self, task: asyncio.Task[None]) -> None:
+        self._running.discard(task)
+        self.woken.set()
 
     def client(self) -> ApiClient:
         """A client that calls with this host's credential as it is now."""

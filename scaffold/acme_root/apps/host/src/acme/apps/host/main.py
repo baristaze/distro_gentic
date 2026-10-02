@@ -117,20 +117,22 @@ def host_transports(settings: Settings) -> dict[IsolationMode, TransportInterfac
 
 
 async def serve(agent: HostAgent, settings: Settings) -> None:
-    """Claims while there is work, waits a beat when there is none, and waits
-    out a failure the host outlasts (`HostAgent.turn`); the control stream
-    cuts a wait short when work reaches the host. It beats and rotates its
-    credential on a loop of its own too, so a long command keeps the host
-    online and its credential live."""
+    """Claims while there is work and a free slot, waits a beat when there is
+    neither, and waits out a failure the host outlasts (`HostAgent.turn`);
+    the control stream, or an item that ends, cuts a wait short. Each item
+    runs beside the others, so a long command holds up no other call. It
+    beats and rotates its credential on a loop of its own too, so a long
+    command keeps the host online and its credential live."""
     beside = [
         asyncio.ensure_future(listen(agent)),
         asyncio.ensure_future(keep_alive(agent, settings)),
     ]
     try:
         while True:
+            # Cleared before the turn, so a wake that comes during it holds.
+            agent.woken.clear()
             wait = await agent.turn()
             if wait > 0:
-                agent.woken.clear()
                 with contextlib.suppress(TimeoutError):
                     await asyncio.wait_for(agent.woken.wait(), wait)
     finally:

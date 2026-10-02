@@ -32,7 +32,8 @@ uv run acme-host run          # every start after it
   or a version below the floor stops it.
 - **Holds its owner's ceilings.** Its owner writes `ceilings.toml` in its
   home: the projects it serves, its minimum isolation, its egress, the
-  paths a result may read, and whether it accepts people's commands.
+  paths a result may read, whether it accepts people's commands, and how
+  many items it runs at once.
   Every item it claims is held to them, and to the modes it probed,
   before anything runs. An item that does not say what it needs is read
   as asking the most. Nothing the platform sends changes a ceiling, and
@@ -42,7 +43,9 @@ uv run acme-host run          # every start after it
   runs it through its own transport, a container per session, sends
   what it prints back a part at a time, and pushes how it ended, each
   with the hash of the bytes it sends. It renews its lease while the
-  command runs. It holds one control stream open to the platform, which
+  command runs, and waits out a renewal or a result the platform fails
+  to take while the lease lasts. Items run side by side, so a long
+  command holds up no other call. It holds one control stream open to the platform, which
   wakes it to claim at once and stops a command at once. An item past a
   ceiling is answered as refused, so the agent reads why. A bare
   directory runs only as the host's dedicated user, which no transport
@@ -54,6 +57,7 @@ min_isolation = "container"                           # vm, container, or direct
 egress = ["github.com:443"]                           # or "open"
 readable = ["/srv/work"]
 people_commands = false
+items_at_once = 4
 ```
 
 <!-- agents-only

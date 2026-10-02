@@ -293,5 +293,23 @@ async def test_a_renewal_or_a_result_the_platform_fails_to_take_is_sent_again(
     assert (ran.exit_code, ran.stdout, len(handed)) == (0, "done\n", 1)
 
 
+async def test_a_short_command_beside_a_long_one_runs_within_its_deadline(
+    relayed: Relayed,
+) -> None:
+    long = asyncio.ensure_future(
+        relayed.runner.run(
+            relayed.workspace, command(relayed.epoch, "sh", "-c", "sleep 2"), seal=NO_SEAL
+        )
+    )
+    looping = asyncio.ensure_future(claims(relayed.host, long))
+    await asyncio.sleep(0.2)  # the long one is claimed and runs
+    short = command(relayed.epoch, "echo", "short", seconds=1)
+    ran = await relayed.runner.run(relayed.workspace, short, seal=NO_SEAL)
+    assert (ran.exit_code, ran.stdout, ran.timed_out) == (0, "short\n", False)
+    assert not long.done()
+    assert (await long).exit_code == 0
+    assert len(await looping) == 2
+
+
 def _request() -> RequestContext:
     return RequestContext(request_id=new_id(), app=RUNNER)
