@@ -150,6 +150,9 @@ class LeaseLosingWork(WorkManagerInterface):
     async def fail_for_good(self, ctx: TenantContext, item: WorkItem, error: str) -> WorkItem:
         return await self._inner.fail_for_good(ctx, item, error)
 
+    async def claimed_ahead(self, ctx: TenantContext, item: WorkItem) -> int:
+        return await self._inner.claimed_ahead(ctx, item)
+
     async def defer(self, ctx: TenantContext, item: WorkItem, delay: timedelta) -> WorkItem:
         return await self._inner.defer(ctx, item, delay)
 
