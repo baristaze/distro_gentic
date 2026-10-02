@@ -1,6 +1,7 @@
 """Storage of the work queue. The claim is the one named atomic method. The
-claim, the requeue of expired leases, the purge, and the two reads of the
-sweep's gauges reach across tenants in the system scope; every other
+claim, the requeue of expired leases, the purge, the reads of the sweep's
+gauges, and the count of a lane's line reach across tenants in the system
+scope; every other
 operation takes org_id first. The claim mints a token, and the writes that
 move a claimed item are conditional on that token still being on the row, so
 a lost lease can never be written over, not even by the worker that held the
@@ -121,6 +122,37 @@ class WorkStorageInterface(ABC):
         scope: how many items are failed and were last changed after `since`,
         which is when they failed. An item an operator sent back is no longer
         failed and is not counted."""
+        ...
+
+    @abstractmethod
+    async def count_ready_by_lane(self, prefix: str, now: datetime) -> dict[str, int]:
+        """Cross-tenant, for the sweep's gauge of the lanes' depth, in the
+        system scope: the queued items ready at `now` on each lane whose name
+        starts with `prefix`, by lane. A lane with none is absent."""
+        ...
+
+    @abstractmethod
+    async def count_ready_ahead(self, item: WorkItem, now: datetime) -> int:
+        """Cross-tenant, in the system scope, for the operator plane's read of
+        one item's place in line: the queued items ready at `now` on its lane,
+        of any tenant, that come before it in the claim order
+        (`available_at`, then id). A count, never a row of another tenant."""
+        ...
+
+    @abstractmethod
+    async def count_ready_on_lanes(
+        self, org_id: UUID, lanes: Sequence[str], now: datetime
+    ) -> dict[tuple[str, WorkKind], int]:
+        """The tenant's queued items ready at `now` on each of `lanes`, by lane
+        and kind: what a host or a daemon of the tenant would be handed."""
+        ...
+
+    @abstractmethod
+    async def read_latest_for_target(
+        self, org_id: UUID, kind: WorkKind, target_id: UUID
+    ) -> WorkItem | None:
+        """The tenant's item of `kind` for `target_id` made last, whatever
+        its status; None when there is none."""
         ...
 
     @abstractmethod

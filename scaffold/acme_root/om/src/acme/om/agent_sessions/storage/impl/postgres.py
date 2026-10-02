@@ -1,7 +1,8 @@
+from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import Update, delete, exists, select, update
+from sqlalchemy import Update, case, delete, exists, func, literal, select, update
 
 from acme.om.agent_sessions.storage import AgentSessionStorageInterface
 from acme.om.agent_sessions.storage.tables.agent_sessions import AgentSessions
@@ -10,6 +11,7 @@ from acme.om.base import EMPTY_UUID
 from acme.om.exceptions import PreconditionFailed
 from acme.om.outbox.storage.tables.outbox_rows import OutboxRows
 from acme.om.outbox.types.row import OutboxRow
+from acme.om.steps.types.header import ParkReason
 from acme.om.storage.impl.pg_base import PLAN_WITH_VALUES, PgStorageBase, deleted
 from acme.om.storage.utils.translation import to_model, to_row, to_values
 
@@ -105,6 +107,25 @@ class AgentSessionStoragePostgresImpl(PgStorageBase, AgentSessionStorageInterfac
                 (row.org_id, to_model(row, AgentSession))
                 for row in (await session.execute(stmt)).scalars()
             ]
+
+    async def count_parked(self, cuts: Sequence[datetime]) -> dict[tuple[ParkReason, int], int]:
+        reason = AgentSessions.park["reason"].astext
+        age = sum(
+            (case((AgentSessions.updated_at <= cut, 1), else_=0) for cut in cuts),
+            start=literal(0),
+        )
+        stmt = (
+            select(reason, age, func.count())
+            .where(
+                AgentSessions.status == SessionStatus.PARKED.value,
+                AgentSessions.deleted_at.is_(None),
+            )
+            .group_by(reason, age)
+        )
+        # Every tenant's parked sessions, so the system scope, spelled here.
+        async with self._session_for(stmt, org_id=EMPTY_UUID) as session:
+            rows = (await session.execute(stmt)).all()
+        return {(ParkReason(r), int(a)): n for r, a, n in rows}
 
     async def tree_holds_others(self, org_id: UUID, root_id: UUID, session_id: UUID) -> bool:
         stmt = select(

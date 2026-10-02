@@ -10,11 +10,12 @@ from collections.abc import Sequence
 from fastapi import APIRouter
 
 from acme.services.api.realtime import socket
-from acme.services.api.routers import admin, agent_sessions, events, hosts, media, tenancy
+from acme.services.api.routers import admin, agent_sessions, events, fleet, hosts, media, tenancy
 
 HOSTED: dict[str, tuple[APIRouter, ...]] = {
-    # The operator plane is tenancy's: it lists and deletes orgs.
-    "tenancy": (tenancy.router, admin.router),
+    # The operator plane is tenancy's: it lists and deletes orgs, and the
+    # platform's own operator routes ride beside it.
+    "tenancy": (tenancy.router, admin.router, fleet.router),
     # The realtime channel is the events stream pushed; its replay is `/events`.
     "events": (events.router, socket.router),
     "media": (media.router,),

@@ -49,6 +49,10 @@ of](../../../../README.md).
   shape: its steps' places, types, and headers. Opening what it says
   takes a content grant in that tenant, and each opening lands in the
   tenant's own event stream.
+- **Grant and revoke content.** The grant job opens one tenant's
+  content to one operator on the allowlist, for an hour or less and
+  never more than eight, and ends it at once; the tenant's stream holds
+  both.
 
 ## The rules
 

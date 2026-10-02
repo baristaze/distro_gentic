@@ -6,10 +6,12 @@ from datetime import timedelta
 from acme.infra.root import InfraInterface
 from acme.integrations.root import IntegrationsInterface
 from acme.om.root import Managers
+from acme.om.trust import TrustOperatorManagerInterface
 from acme.services.api.services import (
     AdminServiceInterface,
     AgentSessionsServiceInterface,
     EventsServiceInterface,
+    FleetServiceInterface,
     HostsServiceInterface,
     MediaServiceInterface,
     RealtimeServiceInterface,
@@ -20,6 +22,7 @@ from acme.services.api.services import (
 from acme.services.api.services.impl.admin import AdminServiceImpl
 from acme.services.api.services.impl.agent_sessions import AgentSessionsServiceImpl
 from acme.services.api.services.impl.events import EventsServiceImpl
+from acme.services.api.services.impl.fleet import FleetServiceImpl
 from acme.services.api.services.impl.hosts import HostsServiceImpl
 from acme.services.api.services.impl.media import MediaServiceImpl
 from acme.services.api.services.impl.realtime import RealtimeServiceImpl
@@ -38,6 +41,7 @@ class ServicesImpl(ServicesInterface):
         webhooks: WebhooksServiceInterface,
         agent_sessions: AgentSessionsServiceInterface,
         hosts: HostsServiceInterface,
+        fleet: FleetServiceInterface,
     ) -> None:
         self._tenancy = tenancy
         self._admin = admin
@@ -47,6 +51,7 @@ class ServicesImpl(ServicesInterface):
         self._webhooks = webhooks
         self._agent_sessions = agent_sessions
         self._hosts = hosts
+        self._fleet = fleet
 
     def get_tenancy_service(self) -> TenancyServiceInterface:
         return self._tenancy
@@ -72,12 +77,16 @@ class ServicesImpl(ServicesInterface):
     def get_hosts_service(self) -> HostsServiceInterface:
         return self._hosts
 
+    def get_fleet_service(self) -> FleetServiceInterface:
+        return self._fleet
+
 
 def build_services(
     managers: Managers,
     infra: InfraInterface,
     integrations: IntegrationsInterface,
     head_max_age: timedelta,
+    trust_operator: TrustOperatorManagerInterface,
 ) -> ServicesInterface:
     """In-process impls only: a Python caller outside the process reaches the
     same services through the typed client under `clients/python`."""
@@ -94,4 +103,5 @@ def build_services(
             managers.agent_sessions, managers.agents, managers.steps, managers.tools
         ),
         hosts=HostsServiceImpl(managers.hosts),
+        fleet=FleetServiceImpl(managers.placement_operator, trust_operator),
     )

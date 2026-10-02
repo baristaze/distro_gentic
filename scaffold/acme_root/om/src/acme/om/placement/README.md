@@ -46,6 +46,16 @@ environment is.
 - **Set a share.** An operator writes a tenant's share, a new version
   each time, and the tenant's stream names the operator. A tenant never
   writes its own.
+- **Read a standing.** An operator who names the tenant reads why one
+  of its sessions is or is not moving (its park, its loop's item, lease,
+  lane, and place in line, its share, and where it runs), and why one of
+  its hosts takes no work (its state, what it advertised, and what waits
+  on its lanes): ids, counts, times, and states, never what the tenant
+  wrote.
+- **Count the fleet.** The sweep reads, across every tenant, the parked
+  sessions by reason and age, the ready loops by plan tier, and the
+  hosts by state, each by bounded labels alone, for the operator
+  dashboard.
 - **Purge.** A tenant deleted past its retention loses its share.
 
 ## The rules

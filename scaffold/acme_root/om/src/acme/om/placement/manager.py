@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     # The work queue fixes its payloads by kind, and the payloads of the
     # kinds a host or a daemon runs are this namespace's, so the work item
     # is named here for the type checker alone.
+    from acme.om.placement.types.standing import FleetCounts, HostStanding, SessionStanding
     from acme.om.work.types.work_item import WorkItem
 
 
@@ -63,8 +64,11 @@ class PlacementManagerInterface(ABC):
 
 
 class PlacementOperatorManagerInterface(ABC):
-    """The operators' plane of placement: one named org's fair share. A
-    tenant never writes its own, so none can raise its own limit."""
+    """The operators' plane of placement: one named org's fair share, which
+    a tenant never writes, so none can raise its own limit; where one of its
+    sessions' work stands, and what one of its hosts is handed. Each read
+    names the tenant and is logged with the operator, and answers ids,
+    counts, times, and states, never what the tenant wrote."""
 
     @abstractmethod
     async def set_share(
@@ -82,4 +86,35 @@ class PlacementOperatorManagerInterface(ABC):
         already queued stays in its lane. Requires the write permission.
         NotFound when the org is not there or is deleted; ValidationFailed
         when a field is out of its bounds."""
+        ...
+
+    @abstractmethod
+    async def get_session_standing(
+        self, admin: OperatorContext, org_id: UUID, session_id: UUID
+    ) -> SessionStanding:
+        """Why the named tenant's session is or is not moving: its status, its
+        park and when it last changed, its tenant's share, where it runs and
+        how many of its pool's hosts are online, and its loop item made last
+        with its place in line. Requires the read permission. NotFound for a
+        session the tenant does not hold."""
+        ...
+
+    @abstractmethod
+    async def get_host_standing(
+        self, admin: OperatorContext, org_id: UUID, host_id: UUID
+    ) -> HostStanding:
+        """Why the named tenant's host takes no work: its state, what it
+        advertised, the version of `exec` work it reads against the floor,
+        when it last called, and the ready items, by kind, on its pool's lane
+        and its own. Requires the read permission. NotFound for a host the
+        tenant does not hold."""
+        ...
+
+    @abstractmethod
+    async def fleet_counts(self) -> FleetCounts:
+        """Platform-internal: the sweep's read of the platform's signals,
+        across every tenant, each by bounded labels alone: the parked
+        sessions by park reason and age, the ready loops by plan tier (every
+        tenant's own lane under one label), and the hosts by state. Takes no
+        context, because it reads for no tenant and no principal."""
         ...

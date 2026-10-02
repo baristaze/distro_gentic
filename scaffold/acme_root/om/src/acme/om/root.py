@@ -63,7 +63,10 @@ from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.impl.relay import OutboxRelayImpl
 from acme.om.placement import PlacementManagerInterface, PlacementOperatorManagerInterface
 from acme.om.placement.impl.manager import PlacementManagerImpl, PlacementOptions
-from acme.om.placement.impl.operator import PlacementOperatorManagerImpl
+from acme.om.placement.impl.operator import (
+    PlacementOperatorManagerImpl,
+    PlacementOperatorOptions,
+)
 from acme.om.platform_agents import PlatformAgentsManagerInterface
 from acme.om.platform_agents.catalog import PlatformAgents, refuse_reach, with_shipped
 from acme.om.platform_agents.impl.manager import PlatformAgentsManagerImpl, PlatformAgentsOptions
@@ -760,6 +763,14 @@ def build_managers(
             storage.get_tenancy_storage(),
             storage.get_event_storage(),
             infra.get_topics(),
+            storage.get_agent_session_storage(),
+            storage.get_work_storage(),
+            storage.get_hosts_storage(),
+            PlacementOperatorOptions(
+                default_tier=(placement_options or PlacementOptions()).default_tier,
+                default_concurrency=(placement_options or PlacementOptions()).default_concurrency,
+                online_window=(hosts_options or HostsOptions()).online_window,
+            ),
         ),
         workspaces=workspaces,
         # A host's credential, its claims through placement, and where each
