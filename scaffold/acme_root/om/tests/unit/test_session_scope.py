@@ -157,10 +157,9 @@ def test_every_enumerated_exception_takes_the_system_scope(interface: str, metho
     primitive or read one row by a hash, and the source they pass through is
     read by the test above."""
     impl = next(name for name, value in IMPL_INTERFACES.items() if value == interface)
-    # The namespace's folder, its underscores dropped, starts the impl's name.
-    path = next(
-        p for p in impl_modules() if impl.lower().startswith(p.parent.parts[-3].replace("_", ""))
-    )
+    # The module that defines the impl: a namespace may hold two, such as
+    # the budgets' ledger beside its budgets.
+    path = next(p for p in impl_modules() if f"class {impl}(" in p.read_text())
     tree = ast.parse(path.read_text())
     calls = [
         call

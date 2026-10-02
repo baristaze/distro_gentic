@@ -105,8 +105,9 @@ async def status_of(
 async def test_a_park_whose_retry_time_came_is_woken_from_the_queue(tmp_path: Path) -> None:
     container = build_container(tmp_path)
     ctx = await sign_in(container)
+    # Past its retry time and the spread a park on a provider wakes across.
     due = Park(
-        reason=ParkReason.PROVIDER, unlock="anthropic", retry_at=utcnow() - timedelta(seconds=1)
+        reason=ParkReason.PROVIDER, unlock="anthropic", retry_at=utcnow() - timedelta(minutes=2)
     )
     later = Park(
         reason=ParkReason.PROVIDER, unlock="anthropic", retry_at=utcnow() + timedelta(hours=1)
