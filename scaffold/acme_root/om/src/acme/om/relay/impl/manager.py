@@ -546,7 +546,7 @@ class RelayManagerImpl(RelayManagerInterface):
         """The item's queue row, on the lane of the host that holds the
         workspace. An unsafe one is claimed once: a lost lease fails it in
         the queue's own sweep, never back to the queue."""
-        isolation, egress = asks(item.spec, item.location)
+        isolation, egress, reads = asks(item.spec, item.location)
         payload = ExecPayload(
             host_id=item.host_id,
             item_id=item.id,
@@ -557,7 +557,7 @@ class RelayManagerImpl(RelayManagerInterface):
             spec=item.spec,
             isolation=isolation,
             egress=egress,
-            reads=(item.location,),
+            reads=reads,
         )
         now = self._clock()
         await self._work.enqueue(

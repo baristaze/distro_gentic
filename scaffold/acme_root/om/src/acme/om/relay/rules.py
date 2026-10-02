@@ -77,9 +77,14 @@ def stale(sent: int | None, holding: int) -> bool:
     return sent is not None and sent < holding
 
 
-def asks(spec: IsolationSpec, location: str) -> tuple[HostIsolation | None, tuple[str, ...] | None]:
-    """What an item asks of its host's ceilings: its isolation and its
-    egress. Open egress asks for every destination, as None."""
+def asks(
+    spec: IsolationSpec, location: str
+) -> tuple[HostIsolation | None, tuple[str, ...] | None, tuple[str, ...]]:
+    """What an item asks of its host's ceilings: its isolation, its egress,
+    and the paths on the host its result reads. Open egress asks for every
+    destination, as None. A bare directory is a path on the host, which its
+    result reads; a container's or a VM's files are its own, and read no
+    path of the host's."""
     isolation = HOST_ISOLATION.get(spec.mode)
     match spec.egress.mode:
         case EgressMode.NONE:
@@ -88,7 +93,8 @@ def asks(spec: IsolationSpec, location: str) -> tuple[HostIsolation | None, tupl
             egress = spec.egress.hosts
         case EgressMode.OPEN:
             egress = None
-    return isolation, egress
+    reads = (location,) if spec.mode is IsolationMode.HOST else ()
+    return isolation, egress, reads
 
 
 def held_by(item: ExecItem, worker_id: str) -> bool:

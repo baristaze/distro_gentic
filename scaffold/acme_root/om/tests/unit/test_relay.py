@@ -258,7 +258,10 @@ async def test_a_relayed_call_runs_once_on_its_host_streamed_and_stored_under_it
     request_bytes = RunRequest(argv=("make", "deploy")).model_dump_json().encode()
     assert payload.item_id == exec_id(spec.key, request_bytes, 0)
     assert payload.key == spec.key and row.lane == host_lane(wall.holder.host_id)
-    assert row.max_attempts == 1 and (payload.isolation, payload.egress) == ("container", ())
+    assert row.max_attempts == 1
+    # What it asks of its host: a container's files are its own, so its
+    # result reads no path of the host's.
+    assert (payload.isolation, payload.egress, payload.reads) == ("container", (), ())
     assert elsewhere.handed == [] and await elsewhere.claim() is None
     # A resumed run reads the stored result and runs nothing again.
     epoch = await wall.managers.steps.begin_run(wall.owner, wall.workspace.id)
