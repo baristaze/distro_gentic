@@ -89,6 +89,9 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             "session_authorities": managers.attribution.purge_tenant,
             "models": managers.models.purge_tenant,
             "tools": managers.tools.purge_tenant,
+            # Its validation policies, then its runs, validations, and
+            # hypotheses and findings under the purge login.
+            "evidence": managers.evidence.purge_tenant,
             "placement": managers.placement.purge_tenant,
             "validation_sessions": managers.platform_agents.purge_tenant,
             # Every artifact's object, then its record, under the purge login.
