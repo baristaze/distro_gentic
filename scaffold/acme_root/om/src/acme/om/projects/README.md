@@ -51,8 +51,10 @@ one of the kinds of thing [Acme is made of](../../../../README.md).
 manager that the root wires in front of every other namespace: a session
 created with a parent or a hand-over gets its origin's row first, and one
 whose origin has none is refused when a row stands under its own id.
-`session_projects` is in `APPEND_ONLY_TABLES` and `PURGED_TABLES`, so its
-row goes under the purge login. ADR 2016 records the decisions.
+`impl/retention.py` answers retention's `SessionProjectInterface` from the
+same row. `session_projects` is in `APPEND_ONLY_TABLES` and
+`PURGED_TABLES`, so its row goes under the purge login. ADR 2016 records
+the decisions.
 -->
 
 ## How another namespace composes it
@@ -60,5 +62,6 @@ row goes under the purge login. ADR 2016 records the decisions.
 The root wires the projects' decorator in front of the [agent
 sessions](../agent_sessions/README.md), and the projects start a root
 session through the [agents](../agents/README.md). A namespace that keys
-a policy by project reads `project_of`; one that judges an outward write
-reads `work_repository`.
+a policy by project reads `project_of`, and
+[retention](../retention/README.md) takes a new session's project from
+here; one that judges an outward write reads `work_repository`.
