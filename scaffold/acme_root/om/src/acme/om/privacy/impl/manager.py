@@ -7,7 +7,7 @@ from uuid import UUID
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.base import Platform, new_id, utcnow
 from acme.om.context import Permission, TenantContext
-from acme.om.exceptions import PolicyFixed
+from acme.om.exceptions import NotFound, PolicyFixed
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import OutboxRow, outbox_row
 from acme.om.privacy.keys import SessionKeysInterface
@@ -86,7 +86,7 @@ class PrivacyManagerImpl(PrivacyManagerInterface):
 
     async def revoke_key(self, ctx: TenantContext, session_id: UUID) -> SessionPrivacy:
         ctx.require(Permission.WRITE)
-        await self._sessions.get_session(ctx, session_id)
+        await self._erasable(ctx, session_id)
         now = self._clock()
         record = SessionPrivacy(
             id=new_id(),
@@ -100,6 +100,15 @@ class PrivacyManagerImpl(PrivacyManagerInterface):
         if stored.revoked_at == now and stored.revoked_by == ctx.user_id:
             await self._relay_all(ctx, rows)
         return stored
+
+    async def _erasable(self, ctx: TenantContext, session_id: UUID) -> None:
+        """The tenant holds the session: a read finds it, or, for one marked
+        deleted, the record of its key does. `NotFound` otherwise."""
+        try:
+            await self._sessions.get_session(ctx, session_id)
+        except NotFound:
+            if await self._storage.read_privacy(ctx.org_id, session_id) is None:
+                raise
 
     async def rotate_key(self, ctx: TenantContext, session_id: UUID) -> int:
         ctx.require(Permission.WRITE)
