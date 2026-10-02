@@ -818,6 +818,7 @@ def build_managers(
             steps,
             tenancy,
             hosts,
+            projects,
             outbox,
             records,
             relay_options or RelayOptions(),

@@ -15,6 +15,7 @@ from uuid import UUID
 
 import pytest
 from contracts.agent_session_storage import make_session
+from contracts.project_storage import make_binding, make_project
 from host_support import Stack, probes
 
 from acme.apps.host.agent import HostAgent
@@ -58,9 +59,16 @@ class Relayed:
 
 @pytest.fixture
 async def relayed(api: Stack, tmp_path: Path) -> AsyncIterator[Relayed]:
+    yield await relay_to(api, tmp_path)
+
+
+async def relay_to(
+    api: Stack, tmp_path: Path, project_id: UUID | None = None, serves: UUID | None = None
+) -> Relayed:
     """A host of the tenant's pool that holds a session's workspace, a
     directory it runs commands in through the engine's local transport, and
-    the runner's relay to it."""
+    the runner's relay to it. With `serves`, the host's ceilings serve that
+    project alone, and the session belongs to `project_id`."""
     pool = await api.pool()
     where = tmp_path / "workspace"
     where.mkdir()
@@ -78,7 +86,7 @@ async def relayed(api: Stack, tmp_path: Path) -> AsyncIterator[Relayed]:
     host = HostAgent(
         api.settings(tmp_path / "home", await api.token(pool.id)),
         Ceilings(
-            projects=None,
+            projects=None if serves is None else frozenset({serves}),
             min_isolation=HostMode.directory,
             egress=frozenset(),
             readable=(str(where),),
@@ -91,6 +99,10 @@ async def relayed(api: Stack, tmp_path: Path) -> AsyncIterator[Relayed]:
     await host.start()
     managers = api.container.managers
     session = await managers.agent_sessions.create_session(api.owner, make_session())
+    if project_id is not None:
+        await api.container.storage.get_project_storage().bind_session(
+            api.owner.org_id, make_binding(session.id, project_id)
+        )
     await managers.hosts.place_session(api.owner, session.id, pool.id)
     host_id = UUID(host.credential.host_id)
     await managers.relay.bind_workspace(api.owner, session.id, host_id, str(where))
@@ -102,7 +114,7 @@ async def relayed(api: Stack, tmp_path: Path) -> AsyncIterator[Relayed]:
         last_poll=timedelta(milliseconds=20),
     )
     workspace = Workspace(id=session.id, org_id=api.owner.org_id, spec=DIRECTORY, location="")
-    yield Relayed(api, host, executor, runner, workspace, epoch, host_id)
+    return Relayed(api, host, executor, runner, workspace, epoch, host_id)
 
 
 def command(epoch: int, *argv: str, seconds: float = 30) -> CommandSpec:
@@ -211,6 +223,26 @@ async def test_an_item_past_the_hosts_ceilings_is_refused_at_once(relayed: Relay
     with pytest.raises(Exception, match="egress beyond this host's allowlist") as refused:
         await waiting
     assert getattr(refused.value, "code", None) == "refused_by_host"
+
+
+@pytest.mark.parametrize("served", [True, False])
+async def test_a_relayed_call_names_its_sessions_project_to_the_hosts_ceilings(
+    api: Stack, tmp_path: Path, served: bool
+) -> None:
+    project = await api.container.managers.projects.create_project(api.owner, make_project())
+    serves = project.id if served else new_id()
+    relayed = await relay_to(api, tmp_path, project.id, serves)
+    waiting = asyncio.ensure_future(
+        relayed.runner.run(relayed.workspace, command(relayed.epoch, "echo", "ours"), seal=NO_SEAL)
+    )
+    handed = await claims(relayed.host, waiting)
+    assert len(handed) == 1
+    if served:
+        ran = await waiting
+        assert (ran.exit_code, ran.stdout) == (0, "ours\n")
+    else:
+        with pytest.raises(Exception, match="a project this host does not serve"):
+            await waiting
 
 
 def _request() -> RequestContext:

@@ -22,6 +22,7 @@ from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import outbox_row, versioned_row
 from acme.om.placement.types.claimant import Claimant, ClaimantKind
 from acme.om.placement.types.work import ExecOperation, ExecPayload
+from acme.om.projects import ProjectsManagerInterface
 from acme.om.relay.exceptions import ContentNotKept, ItemNotHeld, NoWorkspaceHost, StaleExec
 from acme.om.relay.manager import RelayManagerInterface
 from acme.om.relay.rules import (
@@ -106,6 +107,7 @@ class RelayManagerImpl(RelayManagerInterface):
         steps: StepsManagerInterface,
         tenancy: TenancyManagerInterface,
         hosts: HostsManagerInterface,
+        projects: ProjectsManagerInterface,
         relay: OutboxRelayInterface,
         seal: RecordSealInterface,
         options: RelayOptions,
@@ -116,6 +118,7 @@ class RelayManagerImpl(RelayManagerInterface):
         self._steps = steps
         self._tenancy = tenancy
         self._hosts = hosts
+        self._projects = projects
         self._relay = relay
         self._seal = seal
         self._options = options
@@ -545,8 +548,10 @@ class RelayManagerImpl(RelayManagerInterface):
     async def _enqueue(self, ctx: TenantContext, item: ExecItem) -> None:
         """The item's queue row, on the lane of the host that holds the
         workspace. An unsafe one is claimed once: a lost lease fails it in
-        the queue's own sweep, never back to the queue."""
+        the queue's own sweep, never back to the queue. It names the
+        session's project, which a host's owner may hold its work to."""
         isolation, egress, reads = asks(item.spec, item.location)
+        project = await self._projects.project_of(ctx, item.session_id)
         payload = ExecPayload(
             host_id=item.host_id,
             item_id=item.id,
@@ -558,6 +563,7 @@ class RelayManagerImpl(RelayManagerInterface):
             isolation=isolation,
             egress=egress,
             reads=reads,
+            project_id=None if project is None else project.id,
         )
         now = self._clock()
         await self._work.enqueue(
