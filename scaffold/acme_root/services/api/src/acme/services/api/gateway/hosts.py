@@ -43,3 +43,13 @@ async def current_host(
 
 
 Host = Annotated[HostIdentity, Depends(current_host)]
+
+
+async def host_bearer(authorization: Annotated[str | None, Header()] = None) -> str:
+    """The credential a host called with, beside the identity `current_host`
+    resolved from it: a stream that outlives its first check asks after it
+    again."""
+    return bearer_of(authorization)
+
+
+HostBearer = Annotated[str, Depends(host_bearer)]

@@ -15,13 +15,14 @@ A request passes four layers, each in its own folder under
   and the request's deadline, the credential, rate limits, idempotency,
   the error envelope, and the webhook's signed body.
 - **Routers** (`routers/`). One module per namespace: tenancy with the
-  operator plane, events, media, agent sessions, hosts, and webhooks.
-  Each route makes one call into a service.
+  operator plane, events, media, agent sessions, hosts, the relay, and
+  webhooks. Each route makes one call into a service.
 - **Services** (`services/`). One interface per namespace, and its impl in
   `services/impl/`. An impl translates the request, calls a manager or a
   provider, and returns a view from `types/`.
 - **Realtime** (`realtime/`). The socket, its ticket, its bounded send
-  lanes, and the recheck that closes it when its credential ends.
+  lanes, and the recheck that closes it when its credential ends; and a
+  host's control stream, which ends with its credential too.
 
 `container.py` builds everything once per process, `app.py` assembles the
 app, and `main.py` is the `acme-api` command: `serve`, `migrate`,
@@ -115,6 +116,16 @@ app, and `main.py` is the `acme-api` command: `serve`, `migrate`,
   version_below_floor`, and what it is handed is read off the host's
   identity. (`/v1/hosts/enrollments`, `/v1/hosts/me/credentials`,
   `/v1/hosts/me/heartbeats`, `/v1/hosts/me/claims`, ADR 2003)
+- **The exec work a host holds.** With its own credential alone, a host
+  reads what an item it holds runs, pushes its output a part at a time
+  and how it ended, and renews its lease. Each push carries the bytes as
+  they crossed, in base64, and the hash the host declares of them; bytes
+  that do not match are `422 crossing_refused`, and an item the host does
+  not hold is `409 exec_not_held`. Its control stream is the one
+  long-lived connection it holds, opened from inside its wall: one JSON
+  line per wake, stop, or ping. (`/v1/hosts/me/exec/{item_id}`,
+  `.../parts`, `.../result`, `.../lease`, `/v1/hosts/me/control`,
+  ADR 2004)
 - **The identity provider's deliveries.** Outside `/v1`, since their
   shape is the provider's. No credential: the route checks the provider's
   signature over the body and its timestamp, and queues the delivery for
