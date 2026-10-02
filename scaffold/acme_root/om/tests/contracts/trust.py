@@ -36,6 +36,7 @@ from acme.om.exceptions import NotAuthorized
 from acme.om.root import Managers, build_managers
 from acme.om.steps.types.step import Step
 from acme.om.storage.impl.memory import StorageMemoryImpl
+from acme.om.storage.root import StorageInterface
 from acme.om.tenancy.rules import permissions_of
 from acme.om.tools.tool import ToolInterface
 from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule
@@ -124,7 +125,7 @@ class Placement(PlacementInterface):
 @dataclass
 class Trusted:
     infra: InfraLocalImpl
-    storage: StorageMemoryImpl
+    storage: StorageInterface
     managers: Managers
     trust: TrustManagers
     trust_options: TrustOptions
@@ -178,14 +179,22 @@ class Trusted:
                 return steps
 
 
-def trusted(tmp_path: Path, *, clients: ClientFactory = absent_client) -> Trusted:
+def trusted(
+    tmp_path: Path,
+    *,
+    clients: ClientFactory = absent_client,
+    storage: StorageInterface | None = None,
+    owner: TenantContext | None = None,
+) -> Trusted:
+    """`storage` None is the memory storage, and `owner` None a fresh
+    tenant's owner; a suite over Postgres hands in both."""
     infra = InfraLocalImpl(tmp_path)
     anthropic = ModelProviderScriptedImpl(ProviderName.ANTHROPIC)
     openai = ModelProviderScriptedImpl(ProviderName.OPENAI)
     providers = ModelProvidersOverImpl(
         {ProviderName.ANTHROPIC: anthropic, ProviderName.OPENAI: openai}
     )
-    storage = StorageMemoryImpl()
+    storage = storage or StorageMemoryImpl()
     transition = Transition()
     placement = Placement()
     probe = KeyProbeTwinImpl(refused=frozenset({"sk-refused"}))
@@ -242,7 +251,7 @@ def trusted(tmp_path: Path, *, clients: ClientFactory = absent_client) -> Truste
         anthropic=anthropic,
         sink=sink,
         clock=clock,
-        owner=context(Role.OWNER, make_org()),
+        owner=owner or context(Role.OWNER, make_org()),
         transition=transition,
         placement=placement,
         probe=probe,
