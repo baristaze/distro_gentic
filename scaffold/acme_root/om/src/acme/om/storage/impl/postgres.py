@@ -40,6 +40,11 @@ from acme.om.intake.storage import IntakeStorageInterface
 from acme.om.intake.storage.impl.postgres import IntakeStoragePostgresImpl
 from acme.om.knowledge.storage import KnowledgeStorageInterface
 from acme.om.knowledge.storage.impl.postgres import KnowledgeStoragePostgresImpl
+from acme.om.matrix.storage import MatrixStorageInterface, MatrixTenantStorageInterface
+from acme.om.matrix.storage.impl.postgres import (
+    MatrixStoragePostgresImpl,
+    MatrixTenantStoragePostgresImpl,
+)
 from acme.om.media.storage import MediaStorageInterface
 from acme.om.media.storage.impl.postgres import MediaStoragePostgresImpl
 from acme.om.models.storage import FillSetStorageInterface
@@ -236,6 +241,8 @@ class StoragePostgresImpl(StorageInterface):
         self._platform_agents = PlatformAgentsStoragePostgresImpl(sessions)
         self._relay = RelayStoragePostgresImpl(sessions)
         self._workspaces = WorkspaceStoragePostgresImpl(sessions)
+        self._matrix = MatrixStoragePostgresImpl(sessions)
+        self._matrix_tenants = MatrixTenantStoragePostgresImpl(sessions)
 
     def get_tenancy_storage(self) -> TenancyStorageInterface:
         return self._tenancy
@@ -332,6 +339,12 @@ class StoragePostgresImpl(StorageInterface):
 
     def get_workspace_storage(self) -> WorkspaceStorageInterface:
         return self._workspaces
+
+    def get_matrix_storage(self) -> MatrixStorageInterface:
+        return self._matrix
+
+    def get_matrix_tenant_storage(self) -> MatrixTenantStorageInterface:
+        return self._matrix_tenants
 
     async def healthcheck(self) -> bool:
         """A connect and a `SELECT 1` on every engine, each under the bounds its

@@ -27,6 +27,11 @@ from acme.om.intake.storage import IntakeStorageInterface
 from acme.om.intake.storage.impl.memory import IntakeStorageMemoryImpl
 from acme.om.knowledge.storage import KnowledgeStorageInterface
 from acme.om.knowledge.storage.impl.memory import KnowledgeStorageMemoryImpl
+from acme.om.matrix.storage import MatrixStorageInterface, MatrixTenantStorageInterface
+from acme.om.matrix.storage.impl.memory import (
+    MatrixStorageMemoryImpl,
+    MatrixTenantStorageMemoryImpl,
+)
 from acme.om.media.storage import MediaStorageInterface
 from acme.om.media.storage.impl.memory import MediaStorageMemoryImpl
 from acme.om.models.storage import FillSetStorageInterface
@@ -103,6 +108,8 @@ class StorageMemoryImpl(StorageInterface):
         self._platform_agents = PlatformAgentsStorageMemoryImpl(self._outbox)
         self._relay = RelayStorageMemoryImpl(self._outbox)
         self._workspaces = WorkspaceStorageMemoryImpl(self._outbox)
+        self._matrix = MatrixStorageMemoryImpl()
+        self._matrix_tenants = MatrixTenantStorageMemoryImpl()
 
     def get_tenancy_storage(self) -> TenancyStorageInterface:
         return self._tenancy
@@ -199,6 +206,12 @@ class StorageMemoryImpl(StorageInterface):
 
     def get_workspace_storage(self) -> WorkspaceStorageInterface:
         return self._workspaces
+
+    def get_matrix_storage(self) -> MatrixStorageInterface:
+        return self._matrix
+
+    def get_matrix_tenant_storage(self) -> MatrixTenantStorageInterface:
+        return self._matrix_tenants
 
     async def healthcheck(self) -> bool:
         return True
