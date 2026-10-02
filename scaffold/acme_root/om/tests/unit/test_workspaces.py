@@ -342,7 +342,7 @@ async def test_the_sessions_own_branch_and_pull_request_are_work_product_and_all
     assert await outward(WriteKind.PUSH, session_branch(new_id()))
     assert await outward(WriteKind.PULL_REQUEST, "release")
     assert await outward(WriteKind.OTHER, branch)
-    assert await outward(WriteKind.PUSH, branch, "https://git.example.com/acme/other.git")
+    assert await outward(WriteKind.PUSH, branch, "https://git.example.com/ajax/other.git")
 
     unbound = loop_of(tmp_path / "unbound", workspace_projects=ProjectsTwin(repository=None))
     unbound_session = await unbound.start("twinned")
@@ -377,7 +377,7 @@ async def test_what_a_session_delivered_is_read_from_the_workspace_this_host_hol
     held.hold(workspace)
     delivered = await products.delivered(loop.owner, session_id)
 
-    assert delivered is not None and delivered.project == "git.example.com/acme/app"
+    assert delivered is not None and delivered.project == "git.example.com/ajax/app"
     assert (delivered.base, delivered.head, delivered.dirty) == (BASE, "c" * 40, True)
     assert delivered.changes_work_product and delivered.changed == ("notes.txt",)
 

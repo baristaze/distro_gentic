@@ -20,7 +20,7 @@ from acme.om.workspaces.types.source import (
     Snapshot,
 )
 
-REPOSITORY = "https://git.example.com/acme/app.git"
+REPOSITORY = "https://git.example.com/ajax/app.git"
 BASE = "b" * 40
 """The commit the twin's branches start from."""
 

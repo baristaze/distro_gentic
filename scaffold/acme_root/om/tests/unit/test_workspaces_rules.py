@@ -251,7 +251,7 @@ def test_a_vanished_branch_is_rebuilt_only_when_its_fate_is_known(
 
 # Check 4: a session's own branch and pull request are its work product.
 
-BOUND = RepositoryBinding(project_id=new_id(), repository="https://git.example.com/acme/app.git")
+BOUND = RepositoryBinding(project_id=new_id(), repository="https://git.example.com/ajax/app.git")
 BRANCH = rules.session_branch(new_id())
 
 
@@ -260,12 +260,12 @@ BRANCH = rules.session_branch(new_id())
     [
         RepositoryWrite(repository=BOUND.repository, kind=WriteKind.PUSH, ref=BRANCH),
         RepositoryWrite(
-            repository="git@git.example.com:Acme/App",
+            repository="git@git.example.com:Ajax/App",
             kind=WriteKind.PUSH,
             ref=f"refs/heads/{BRANCH}",
         ),
         RepositoryWrite(
-            repository="https://bot:token@git.example.com/acme/app/",
+            repository="https://bot:token@git.example.com/ajax/app/",
             kind=WriteKind.PUSH,
             ref=rules.snapshot_ref(BRANCH, utcnow()),
         ),
@@ -300,7 +300,7 @@ def test_the_sessions_own_branch_and_pull_request_are_its_work_product(
         ),
         (
             RepositoryWrite(
-                repository="https://git.example.com/acme/other.git", kind=WriteKind.PUSH, ref=BRANCH
+                repository="https://git.example.com/ajax/other.git", kind=WriteKind.PUSH, ref=BRANCH
             ),
             "another repository",
         ),
