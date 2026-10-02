@@ -24,7 +24,7 @@ from acme.om.automations.types.automation import (
     TriggerKind,
 )
 from acme.om.base import new_id, utcnow
-from acme.om.context import AppContext, AppType, RequestContext, TenantContext
+from acme.om.context import AppContext, AppType, RequestContext, Role, TenantContext
 from acme.om.intake.rules import described
 from acme.om.intake.types.event import (
     Arrival,
@@ -86,13 +86,15 @@ async def test_a_failing_check_wakes_its_session_and_fires_a_bounded_run_over_po
     await platform.managers.agent_sessions.receive(owner, session_id, [said_first])
     platform.anthropic.add(reply(said("Pushed the fix.")))
     assert (await platform.loops.run(owner, session_id)).end is RunEnd.ENDED
+    # A person at the portal makes the automation, and it runs as them.
+    creator = platform.person(Role.ADMIN)
     now = utcnow()
     automation = Automation(
         id=new_id(),
         created_at=now,
         updated_at=now,
-        created_by=owner.user_id,
-        updated_by=owner.user_id,
+        created_by=creator.user_id,
+        updated_by=creator.user_id,
         name="triage failing checks",
         trigger=Trigger(kind=TriggerKind.EVENT, arrivals=("check",), effects=("wake_as_data",)),
         action=Action(
@@ -102,7 +104,7 @@ async def test_a_failing_check_wakes_its_session_and_fires_a_bounded_run_over_po
             cost_cap_micros=100_000_000, run_cap_micros=50_000_000, rate=1, concurrency=1
         ),
     )
-    await platform.automations.create_automation(owner, automation)
+    await platform.automations.create_automation(creator, automation)
     check = FeedbackEvent(
         id=new_id(),
         integration="forge",
