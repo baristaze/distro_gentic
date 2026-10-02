@@ -48,6 +48,8 @@ of](../../../../README.md).
   other text from outside is an event: the agent reads it quoted, as
   data, labelled with the origin the platform set, never one the event
   claims.
+- **Chat instructs only when it addresses the agent.** A chat message
+  that does not is any other person's comment, whoever wrote it.
 - **Noise never wakes the agent.** A bot, CI output, and a passing check
   wait for the next model call.
 - **The agent never fights a person.** A person's push parks its loop on
