@@ -15,7 +15,8 @@ uv run acme-station-daemon run                            # every start after it
 
 - **Starts with a credential of its own.** Its owner issues the lab's
   first one; the daemon trades it at its first start for its own, kept
-  owner-only in its home, and rotates that at half its life.
+  owner-only in its home, and rotates that at half its life, or at a
+  job's start or renewal when it would lapse before the lease.
 - **Claims only its lab's work.** It states the version of `station`
   work it reads, and nothing else. What it is handed is read off its
   credential.
@@ -36,7 +37,12 @@ uv run acme-station-daemon run                            # every start after it
   the lease was revoked, stops it too.
 - **Keeps working when the platform is gone.** The current job runs to
   its lease's end, then the station stops, and no new job is claimed
-  until the platform answers again.
+  until the platform answers again. A 5xx or a 429 is the platform gone
+  for a while: the call is asked again.
+- **Stops on a refused credential.** The station takes its controlled
+  stop, the job's report stays on the disk, and the daemon forgets the
+  credential and exits 3. Started again with a first credential its
+  owner issues, it sends what the disk holds.
 - **Keeps its evidence.** A job's report, every refused command in it,
   is on its disk before it is sent, and stays there until the platform
   recorded it.
@@ -69,8 +75,8 @@ per declared device and every other device closed.
 ## Conventions
 
 - Exit codes: 0 done, 1 the platform refused, 2 a setting or a file on
-  the host is wrong, 3 not enrolled, 4 the platform is unreachable at the
-  start.
+  the host is wrong, 3 not enrolled, or its credential refused, 4 the
+  platform is unreachable at the start.
 - `ACME_API_URL` names the platform. `ACME_DAEMON_HOME` (default
   `~/.config/acme-station-daemon`) holds `credential.json`, mode 600, the
   owner's `stations.toml`, the fence's `fence.json`, and the `reports/`

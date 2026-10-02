@@ -41,9 +41,12 @@ clock, from the moment it asked, so its deadline falls before the
 platform's. The platform grants a station again only after a lease's end
 plus a margin for clocks and the answer's way back.
 
-**The platform gone.** A daemon that cannot reach the platform lets its
-current job run to its lease's end on that clock, then stops the
-station, and claims no new job until the platform answers again.
+**The platform gone.** A daemon that cannot reach the platform, or that
+the platform answers with a passing error, lets its current job run to
+its lease's end on that clock, then stops the station, and claims no new
+job until the platform answers again. A daemon whose credential the
+platform refuses stops the station at once, keeps the job's report on
+its disk for the credential its owner issues next, and stops.
 
 **The platform's side stays small.** One live lease per station is the
 lease store's. A grant is one conditional write on the station's row,
