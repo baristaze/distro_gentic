@@ -122,7 +122,7 @@ from acme.om.workspaces import WorkspacesManagerInterface
 from acme.om.workspaces.git import WorkspaceGitInterface
 from acme.om.workspaces.impl.git import GitOptions, WorkspaceGitTransportImpl
 from acme.om.workspaces.impl.manager import WorkspacesManagerImpl, WorkspacesOptions
-from acme.om.workspaces.impl.projects import PullRequestsNullImpl, WorkspaceProjectsNullImpl
+from acme.om.workspaces.impl.projects import PullRequestsNullImpl, WorkspaceProjectsBoundImpl
 from acme.om.workspaces.impl.sessions import AgentSessionsPinnedImpl
 from acme.om.workspaces.impl.tools import HeldWorkspaces, ToolsManagerWorkspacesImpl
 from acme.om.workspaces.impl.work_product import WorkProductWorkspacesImpl
@@ -391,11 +391,11 @@ def build_managers(
     host its tools run on, offers beyond its provider; None offers nothing
     more, as a host of the platform's cloud. `workspace_projects` answers a
     session's project and the repository it binds, and `pull_requests` why
-    a session's branch is gone; None answers none of either, so a session
-    keeps its kind's egress, has no checkout, and acts outward with every
-    write to source control. `workspace_git` runs the checkout; None runs
-    it in the workspace through the transport. `workspaces_options` names
-    the networks no workspace reaches, and the sweep's batch."""
+    a session's branch is gone; None reads the projects' rows for the one,
+    and knows no pull request, so a branch gone for any reason fails
+    loudly. `workspace_git` runs the checkout; None runs it in the
+    workspace through the transport. `workspaces_options` names the
+    networks no workspace reaches, and the sweep's batch."""
     if platform_agents is not None:
         # Their tools read the managers built below, so each edge is bound
         # at call time.
@@ -488,7 +488,7 @@ def build_managers(
         tenancy,
         outbox,
         kinds,
-        workspace_projects or WorkspaceProjectsNullImpl(),
+        workspace_projects or WorkspaceProjectsBoundImpl(storage.get_project_storage()),
         pull_requests or PullRequestsNullImpl(),
         workspace_git
         or WorkspaceGitTransportImpl(infra.get_transport(), steps, records, GitOptions()),

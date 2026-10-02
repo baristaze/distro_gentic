@@ -16,7 +16,14 @@ class RepositoryBinding(Platform):
 
     project_id: UUID
     repository: str = Field(min_length=1, max_length=500)  # as it is cloned
-    default_branch: str = Field(default="main", min_length=1, max_length=200)
+    # The branch a new one is cut from; None is the repository's own
+    # default, its HEAD, as the repository answers it.
+    default_branch: str | None = Field(default=None, min_length=1, max_length=200)
+
+    @property
+    def base_ref(self) -> str:
+        """The ref the default branch is fetched by."""
+        return "HEAD" if self.default_branch is None else f"refs/heads/{self.default_branch}"
 
 
 class PullRequestFate(StrEnum):

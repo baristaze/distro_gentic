@@ -11,6 +11,7 @@ from typing import Any
 
 import pytest
 from contracts.loops import ASSISTANT, Loop, loop_over, reply, said
+from contracts.project_storage import make_project
 from contracts.workspaces import BASE, REPOSITORY, GitTwin, ProjectsTwin, PullRequestsTwin
 
 from acme.infra.workspaces import (
@@ -23,6 +24,7 @@ from acme.infra.workspaces import (
 from acme.infra.workspaces.twin import WorkspaceTwinImpl
 from acme.om.agents import ResultGateInterface
 from acme.om.agents.types.kind import AgentKind
+from acme.om.agents.types.request import Start
 from acme.om.agents.types.run import RunEnd
 from acme.om.base import new_id
 from acme.om.context import Role
@@ -450,3 +452,38 @@ async def test_what_a_session_delivered_is_read_from_the_workspace_this_host_hol
     loose = await unbound.managers.tools.prepare_workspace(unbound.owner, other, TWINNED.isolation)
     with pytest.raises(Unavailable):
         await unbound.managers.workspaces.delivery(unbound.owner, loose)
+
+
+# A session's project and its repository are the projects' rows.
+
+
+async def test_a_session_started_in_a_project_works_on_the_projects_repository(
+    tmp_path: Path,
+) -> None:
+    loop = loop_of(tmp_path)
+    project = await loop.managers.projects.create_project(loop.owner, make_project("octo/reports"))
+    listed = EgressAllowlist(
+        id=new_id(),
+        created_at=loop.clock(),
+        updated_at=loop.clock(),
+        created_by=loop.owner.user_id,
+        updated_by=loop.owner.user_id,
+        project_id=project.id,
+        rules=(SOURCE,),
+    )
+    await loop.managers.workspaces.write_allowlist(loop.owner, listed)
+
+    session = await loop.managers.projects.start_session(
+        loop.owner, project.id, Start(id=new_id(), kind="twinned", title="a report")
+    )
+
+    pinned = await loop.managers.workspaces.get_workspace(loop.owner, session.id)
+    assert (pinned.project_id, pinned.rules) == (project.id, (SOURCE,)), "its project's allowlist"
+    branch = session_branch(session.id)
+    own = RepositoryWrite(
+        repository="https://github.com/octo/reports.git", kind=WriteKind.PUSH, ref=branch
+    )
+    elsewhere = own.model_copy(update={"repository": "https://github.com/octo/other.git"})
+    workspaces = loop.managers.workspaces
+    assert not await workspaces.outward(loop.owner, session.id, own), "the project's repository"
+    assert await workspaces.outward(loop.owner, session.id, elsewhere)

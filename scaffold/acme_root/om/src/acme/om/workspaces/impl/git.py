@@ -57,7 +57,7 @@ whether the remote and the checkout hold it, and whether the checkout
 reached the remote's branch."""
 
 CUT = """set -eu
-git fetch -q --no-tags "$REPOSITORY" "+refs/heads/$BASE"
+git fetch -q --no-tags "$REPOSITORY" "$BASE"
 git checkout -q --force --no-track -B "$BRANCH" FETCH_HEAD
 git clean -q -fd
 echo cut
@@ -98,8 +98,8 @@ snapshot ref on the bound repository; prints the commit, or `-` when
 nothing was new, and whether the repository holds the branch."""
 
 CHECKOUT = """set -eu
-git fetch -q --no-tags "$REPOSITORY" "refs/heads/$BASE"
-tip="$(git ls-remote "$REPOSITORY" "refs/heads/$BASE" | cut -f1)"
+git fetch -q --no-tags "$REPOSITORY" "$BASE"
+tip="$(git ls-remote "$REPOSITORY" "$BASE" | awk -v ref="$BASE" '$2 == ref { print $1 }')"
 git cat-file -e "$tip^{commit}"
 head="$(git rev-parse HEAD)"
 base="$(git merge-base HEAD "$tip")"
@@ -157,14 +157,14 @@ class WorkspaceGitTransportImpl(WorkspaceGitInterface):
         env = {
             "REPOSITORY": binding.repository,
             "BRANCH": branch,
-            "BASE": binding.default_branch,
+            "BASE": binding.base_ref,
         }
         await self._run(ctx, workspace, "cut", CUT, env)
 
     async def checkout(
         self, ctx: TenantContext, workspace: Workspace, binding: RepositoryBinding
     ) -> Checkout:
-        env = {"REPOSITORY": binding.repository, "BASE": binding.default_branch}
+        env = {"REPOSITORY": binding.repository, "BASE": binding.base_ref}
         lines = await self._lines(ctx, workspace, "checkout", CHECKOUT, env)
         words = lines[0].split() if lines else []
         if len(words) != 4 or words[0] != "checkout":

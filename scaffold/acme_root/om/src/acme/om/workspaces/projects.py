@@ -2,8 +2,8 @@
 to, which keys the allowlist it pins, and the one repository that project
 binds, where its branch and pull request are its work product.
 
-The projects own both answers; this interface declares the two the
-workspaces need, so the rules here hold before a project exists. The null
+The projects own both answers; a root reads them from the projects' rows
+(`acme.om.workspaces.impl.projects.WorkspaceProjectsBoundImpl`). The null
 answers none: a session keeps its kind's egress, has no checkout, and every
 write it makes to source control acts outward
 (`acme.om.workspaces.impl.projects.WorkspaceProjectsNullImpl`)."""

@@ -229,10 +229,11 @@ def branch_plan(state: BranchState, *, seen: bool, fate: PullRequestFate | None)
     return BranchPlan.LOST if fate is None else BranchPlan.REBUILD
 
 
-def told_of_rebuild(branch: str, fate: PullRequestFate, base: str) -> str:
+def told_of_rebuild(branch: str, fate: PullRequestFate, base: str | None) -> str:
+    cut_from = "the repository's default branch" if base is None else base
     return (
         f"Your branch {branch} was deleted after its pull request was {fate.value}. "
-        f"It was cut again from {base}; its commits are in that pull request."
+        f"It was cut again from {cut_from}; its commits are in that pull request."
     )
 
 

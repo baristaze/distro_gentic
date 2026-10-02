@@ -89,10 +89,11 @@ rebuilt from.
   workspace is held to its pin. The loop sees the engine's interfaces.
 - The checkout runs in the workspace through the engine's transport,
   under the epoch of the run that holds the session.
-- A session's project and the repository it binds come from
-  `WorkspaceProjectsInterface`, and a gone branch's fate from
-  `PullRequestsInterface`. Their nulls answer none, so a session keeps
-  its kind's egress, has no checkout, and acts outward with every write.
+- A session's project and the repository it binds are the projects'
+  rows, read through `WorkspaceProjectsInterface`; a repository is cloned
+  over HTTPS and cut from its own default branch. A gone branch's fate
+  comes from `PullRequestsInterface`, whose null knows none, so a branch
+  gone for any reason ends the loop.
 - What a host offers beyond its provider is a `HostOffer`, its owner's
   and its probe's. The default offers nothing more: a host of the
   platform's cloud.
