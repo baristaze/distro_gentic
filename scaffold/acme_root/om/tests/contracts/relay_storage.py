@@ -45,6 +45,8 @@ CROSS_TENANT_CASES: frozenset[str] = frozenset(
 this module that presents another tenant's."""
 
 SPEC = IsolationSpec(mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode=EgressMode.NONE))
+SEALED = bytes(range(256))
+"""Sealed content is any bytes, none of them text."""
 
 
 def make_item(session_id: UUID | None = None, key: UUID | None = None) -> ExecItem:
@@ -66,7 +68,7 @@ def make_item(session_id: UUID | None = None, key: UUID | None = None) -> ExecIt
         spec=SPEC,
         deadline=now + timedelta(minutes=5),
         epoch=3,
-        request=b"sealed request",
+        request=SEALED + b"request",
         row_id=new_id(),
     )
 
@@ -90,7 +92,7 @@ def make_part(item: ExecItem, seq: int) -> ExecPart:
         row_id=item.row_id,
         seq=seq,
         stream="stdout",
-        text=f"sealed {seq}".encode(),
+        text=SEALED + str(seq).encode(),
         sha256="0" * 64,
     )
 
@@ -165,7 +167,7 @@ class RelayStorageContract:
             update={
                 "state": ExecState.DONE,
                 "outcome": ExecOutcome(exit_code=0),
-                "output": b"sealed output",
+                "output": SEALED + b"output",
                 "version": 2,
             }
         )

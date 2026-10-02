@@ -8,7 +8,7 @@ from enum import StrEnum
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import Field, TypeAdapter
+from pydantic import ConfigDict, Field, TypeAdapter
 
 from acme.infra.transports import FileEntry, SecretUse
 from acme.infra.workspaces import IsolationSpec
@@ -121,7 +121,10 @@ class ExecResult(Platform):
 class ExecItem(Identifiable, Trackable):
     """One operation of one call. Its id derives from the call's key, so the
     same call sent again meets it. Each time it goes on the queue it takes a
-    row of its own (`row_id`, the `dispatch`th), whose id derives from its."""
+    row of its own (`row_id`, the `dispatch`th), whose id derives from its.
+    What it seals is any bytes, so its JSON form spells them in base64."""
+
+    model_config = ConfigDict(ser_json_bytes="base64", val_json_bytes="base64")
 
     session_id: UUID
     key: UUID
@@ -149,7 +152,10 @@ class ExecItem(Identifiable, Trackable):
 
 class ExecPart(Identifiable, Created):
     """One part of an item's output, as its host streamed it, under the row
-    of the dispatch that printed it."""
+    of the dispatch that printed it. Its sealed text is any bytes, so its
+    JSON form spells them in base64."""
+
+    model_config = ConfigDict(ser_json_bytes="base64", val_json_bytes="base64")
 
     session_id: UUID
     row_id: UUID
