@@ -38,6 +38,8 @@ from acme.om.budgets.pricing import PricingInterface
 from acme.om.events import EventsManagerInterface
 from acme.om.events.impl.manager import EventsManagerImpl, EventsOptions
 from acme.om.exceptions import UnsafeConfiguration
+from acme.om.hosts import HostsManagerInterface
+from acme.om.hosts.impl.manager import HostsManagerImpl, HostsOptions
 from acme.om.idempotency import IdempotencyManagerInterface
 from acme.om.idempotency.impl.manager import IdempotencyManagerImpl, IdempotencyOptions
 from acme.om.media import MediaManagerInterface
@@ -118,6 +120,7 @@ class Managers:
     loop: LoopManagerInterface
     placement: PlacementManagerInterface
     placement_operator: PlacementOperatorManagerInterface
+    hosts: HostsManagerInterface
 
 
 LOCAL = "local"
@@ -250,6 +253,7 @@ def build_managers(
     domain_classes: tuple[str, ...] = (),
     loop_options: LoopOptions | None = None,
     placement_options: PlacementOptions | None = None,
+    hosts_options: HostsOptions | None = None,
     environment: str = LOCAL,
 ) -> Managers:
     """`integrations` is the root of the hosted services the managers front:
@@ -291,7 +295,9 @@ def build_managers(
     outage signal is infra's, and its model providers the integrations'.
 
     `placement_options` is the fair share of a tenant no operator gave one,
-    and the delay a loop over its share waits; None keeps the defaults."""
+    and the delay a loop over its share waits; None keeps the defaults.
+    `hosts_options` is the lives of a host's credentials, the window a host
+    counts as online, and its claim's lease; None keeps the defaults."""
     # The relay every core-role manager hands its outbox rows to. It reaches
     # the work manager through the root below, because a row of kind
     # `work.<kind>` is enqueued there: the work manager needs the tenancy
@@ -531,6 +537,16 @@ def build_managers(
             storage.get_tenancy_storage(),
             storage.get_event_storage(),
             infra.get_topics(),
+        ),
+        # A host's credential, its claims through placement, and where each
+        # session runs.
+        hosts=HostsManagerImpl(
+            storage.get_hosts_storage(),
+            placement,
+            agent_sessions,
+            tenancy,
+            outbox,
+            hosts_options or HostsOptions(),
         ),
     )
     return managers

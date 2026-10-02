@@ -17,6 +17,7 @@ from acme.om.agents.impl.manager import AgentsOptions
 from acme.om.attribution.impl.manager import AttributionOptions
 from acme.om.budgets.impl.manager import BudgetsOptions
 from acme.om.events.impl.manager import EventsOptions
+from acme.om.hosts.impl.manager import HostsOptions
 from acme.om.idempotency.impl.manager import IdempotencyOptions
 from acme.om.media.impl.manager import MediaOptions
 from acme.om.models.impl.manager import ModelsOptions
@@ -98,6 +99,7 @@ def worker_managers(
         models_options=ModelsOptions(purge_batch=batch),
         tools_options=ToolsOptions(purge_batch=batch),
         placement_options=PlacementOptions(purge_batch=batch),
+        hosts_options=HostsOptions(purge_batch=batch),
     )
 
 

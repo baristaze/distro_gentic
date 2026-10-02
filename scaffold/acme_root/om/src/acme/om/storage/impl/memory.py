@@ -10,6 +10,8 @@ from acme.om.budgets.storage import BudgetStorageInterface, LedgerStorageInterfa
 from acme.om.budgets.storage.impl.memory import BudgetStorageMemoryImpl, LedgerStorageMemoryImpl
 from acme.om.events.storage import EventStorageInterface
 from acme.om.events.storage.impl.memory import EventStorageMemoryImpl
+from acme.om.hosts.storage import HostsStorageInterface
+from acme.om.hosts.storage.impl.memory import HostsStorageMemoryImpl
 from acme.om.idempotency.storage import IdempotencyStorageInterface
 from acme.om.idempotency.storage.impl.memory import IdempotencyStorageMemoryImpl
 from acme.om.media.storage import MediaStorageInterface
@@ -60,6 +62,7 @@ class StorageMemoryImpl(StorageInterface):
         self._windows = WindowStorageMemoryImpl()
         self._tools = ToolStorageMemoryImpl(self._outbox)
         self._placement = PlacementStorageMemoryImpl()
+        self._hosts = HostsStorageMemoryImpl(self._outbox)
 
     def get_tenancy_storage(self) -> TenancyStorageInterface:
         return self._tenancy
@@ -114,6 +117,9 @@ class StorageMemoryImpl(StorageInterface):
 
     def get_placement_storage(self) -> PlacementStorageInterface:
         return self._placement
+
+    def get_hosts_storage(self) -> HostsStorageInterface:
+        return self._hosts
 
     async def healthcheck(self) -> bool:
         return True

@@ -126,6 +126,8 @@ tenantless = [
     "AgentSessionStorageInterface.read_purgeable",
     "EventStorageInterface.count_since",
     "EventStorageInterface.trim",
+    "HostsStorageInterface.read_enrollment_token_by_digest",
+    "HostsStorageInterface.read_host_by_credential_digest",
     "IdempotencyStorageInterface.purge_records",
     "MediaStorageInterface.purge_files_across_tenants",
     "MediaStorageInterface.read_purgeable",
@@ -189,7 +191,8 @@ sites = [
 builders = ["build_context"]
 
 # The entities a reader with no tenant takes, which carry their org_id: the
-# guideline's two, and the claimant the control plane claims for across
-# tenants, whose org_id is the wall it sits in.
+# guideline's two, the claimant the control plane claims for across
+# tenants, whose org_id is the wall it sits in, and the identity a host's
+# credential resolves to, found by its digest across tenants.
 [tool.arch-check.options.OM-02]
-tenantless = ["OutboxRow", "Event", "Claimant"]
+tenantless = ["OutboxRow", "Event", "Claimant", "HostIdentity"]
