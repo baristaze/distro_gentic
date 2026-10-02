@@ -62,6 +62,13 @@ class TrustStorageInterface(ABC):
         ...
 
     @abstractmethod
+    async def refuse_key(self, org_id: UUID, key: ProviderKey) -> bool:
+        """Writes `key` as refused, its version one past the stored one,
+        when the stored key is still live at that version; False, with
+        nothing changed, when it is not."""
+        ...
+
+    @abstractmethod
     async def touch_key(self, org_id: UUID, key_id: UUID, at: datetime) -> None:
         """Marks the key used at `at`, unless it was marked later already.
         Its version does not move: a use is no change of the key."""

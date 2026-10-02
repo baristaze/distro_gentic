@@ -168,23 +168,49 @@ def credential_of(account: Account | None) -> str:
             return account.key_ref
 
 
-def funding_of(
-    account: Account | None, plans: PlanCatalog, units: UnitScale, now: datetime
-) -> Funding:
-    """The account as one hold carries it. An account that is missing, whose
-    funding names no key, or whose plan the catalog does not hold, cannot
-    say who pays: `SpenderUnknown`, and nothing is spent.
+def carries_own_key(carried: str | None) -> bool:
+    """Whether a call's credential is one of a tenant's own keys: a key's
+    reference, which is a UUID. The platform's key goes by a name, never by
+    one."""
+    if carried is None:
+        return False
+    try:
+        UUID(carried)
+    except ValueError:
+        return False
+    return True
 
-    So is an account on its own key, for now: the loop calls the provider
-    on the one credential its root built, the platform's, so a call held
-    for the tenant's key would run on the platform's and be billed nothing.
-    It is refused until the tenant's credential reaches the call."""
+
+def funding_of(
+    account: Account | None,
+    plans: PlanCatalog,
+    units: UnitScale,
+    now: datetime,
+    *,
+    carried: str | None = None,
+) -> Funding:
+    """The account as one hold carries it, for a call going out on the key
+    `carried` names: the platform's, a tenant key's reference
+    (`carries_own_key`), or None when the caller cannot say. An account that
+    is missing, whose funding names no key, or whose plan the catalog does
+    not hold, cannot say who pays: `SpenderUnknown`, and nothing is spent.
+
+    So is an account on its own key for a call that does not carry one of
+    the tenant's keys: held for the tenant's key and run on the platform's,
+    it would be billed nothing. And so is an account the platform pays for a
+    call that carries a tenant's key, which the tenant would pay twice."""
     credential = credential_of(account)
     assert account is not None
+    own = carries_own_key(carried)
     if account.funding is FundingMode.OWN_KEY:
-        raise SpenderUnknown(
-            "the tenant's own key does not reach the call yet; nothing is spent on the platform's"
-        )
+        if not own:
+            raise SpenderUnknown(
+                "the call does not carry the tenant's own key; nothing is spent on the platform's"
+            )
+        assert carried is not None
+        credential = carried
+    elif own:
+        raise SpenderUnknown("the call carries a tenant's key, and the platform pays this tenant")
     plan = plans.get(account.plan)
     if plan is None:
         raise SpenderUnknown(f"the tenant's plan {account.plan_id} is unknown; nothing is spent")

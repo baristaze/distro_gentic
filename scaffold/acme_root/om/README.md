@@ -116,6 +116,19 @@ own turns, or a summary. A **fill** is the model that does it, and how. A
 session's **fill set** holds its fills, one per model role; a **switch**
 gives it a new version, and the session's history records each one.
 
+## The model matrix
+
+The **matrix** is the platform's answer to which model does which job.
+Its rows name an environment, a model role, an agent kind, a plan tier,
+and a workload class, or leave any of them open; the most specific row
+that matches a session answers it, and one row matches everything. The
+platform's operators publish it by **version**, and a session keeps the
+version it started with. A model enters only once it has a price and a
+passing **benchmark** for its job. A model its provider **retires** is
+switched off at the session's next loop. A tenant that pays its providers
+on its own keys calls on those keys, and may **choose** a fill among the
+ones the matrix qualified.
+
 ## What a model reads
 
 A **window** is the part of a session's history one call of a model
@@ -285,6 +298,9 @@ arrive twice, so the second copy gets the first one's answer.
   item that names the session.
 - A session's workspace names its org and its session, one each, and an
   egress allowlist its org and its project, one each.
+- The matrix and what its operators record of a model are the
+  platform's, no org's. A session's pin to a version, and an org's own
+  choice of fill, name their org, and go with it.
 
 ## One page per kind
 
@@ -300,6 +316,7 @@ arrive twice, so the second copy gets the first one's answer.
 - [Budgets](src/acme/om/budgets/README.md)
 - [Billing](src/acme/om/billing/README.md)
 - [Models](src/acme/om/models/README.md)
+- [The model matrix](src/acme/om/matrix/README.md)
 - [Windows](src/acme/om/windows/README.md)
 - [Tools](src/acme/om/tools/README.md)
 - [Evidence](src/acme/om/evidence/README.md)

@@ -19,11 +19,20 @@ from acme.om.context import TenantContext
 class MoneyGateInterface(BudgetGateInterface):
     @abstractmethod
     async def authorize_priced(
-        self, ctx: TenantContext, request: HoldRequest, priced: PricedAt | None
+        self,
+        ctx: TenantContext,
+        request: HoldRequest,
+        priced: PricedAt | None,
+        *,
+        credential: str | None = None,
     ) -> FundedHold | Refusal:
-        """`authorize`, for a call priced from the row `priced` names. Who
-        pays is read first: an account that cannot say is `SpenderUnknown`,
-        and nothing is held or spent. A call far above its session's norm
+        """`authorize`, for a call priced from the row `priced` names, going
+        out on the key `credential` names (None when the caller cannot say).
+        Who pays is read first: an account that cannot say is
+        `SpenderUnknown`, and nothing is held or spent; so is an account on
+        its own key for a call that does not carry one of the tenant's keys,
+        and an account the platform pays for a call that does. A call far
+        above its session's norm
         pages the operator and is `GateParked` for a person; a call no
         bucket covers is `GateParked` on the budget. Either way nothing is
         held. A refusal lists every limit it breaches."""

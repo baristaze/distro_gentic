@@ -43,6 +43,7 @@ from acme.om.intake.manager import IntakeManagerInterface
 from acme.om.intake.root import build_intake
 from acme.om.knowledge.manager import KnowledgeManagerInterface
 from acme.om.knowledge.root import KnowledgeLayer
+from acme.om.models.impl.credentials import CallCredentialsPlatformImpl
 from acme.om.notifications.manager import NotificationsManagerInterface
 from acme.om.notifications.root import build_notifications
 from acme.om.playbooks.manager import PlaybooksManagerInterface
@@ -281,7 +282,7 @@ def wired(
         managers.windows,
         managers.tools,
         CallGateBudgetImpl(managers.budget_gate, managers.pricing, managers.agent_sessions),
-        providers,
+        CallCredentialsPlatformImpl(providers),
         infra.get_outages(),
         StreamSinkMemoryImpl(),
         catalog,

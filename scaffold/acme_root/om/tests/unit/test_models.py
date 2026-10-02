@@ -109,7 +109,7 @@ async def test_the_resolver_refuses_a_model_with_no_price_row() -> None:
     ):
         resolver = ModelResolverTableImpl(prices, ResolverOptions(table=table))
         with pytest.raises(UnpricedModel):
-            await resolver.resolve(ctx, [MAIN], Eligibility())
+            await resolver.resolve(ctx, new_id(), [MAIN], Eligibility())
     resolver = ModelResolverTableImpl(prices, ResolverOptions(table=TABLE))
     with pytest.raises(UnpricedModel):
         resolver.check(UNLISTED)
@@ -128,24 +128,26 @@ async def test_a_root_resolves_only_what_the_list_table_prices(tmp_path: Path) -
         ResolverOptions(table=(RoleFill(role=MAIN, fill=unlisted_fill),)),
     )
     with pytest.raises(UnpricedModel):
-        await unlisted.resolve(ctx, [MAIN], Eligibility())
+        await unlisted.resolve(ctx, new_id(), [MAIN], Eligibility())
     resolver = ModelResolverTableImpl(ModelPricesNullImpl(), ResolverOptions())
     with pytest.raises(UnpricedModel):
-        await resolver.resolve(ctx, [SUMMARIZER], Eligibility())
+        await resolver.resolve(ctx, new_id(), [SUMMARIZER], Eligibility())
 
 
 async def test_a_role_resolves_within_the_sessions_eligibility() -> None:
     resolver = ModelResolverTableImpl(Priced(SONNET, SOL, HAIKU), ResolverOptions(table=TABLE))
     ctx = context(Role.MEMBER)
-    (main,) = await resolver.resolve(ctx, [MAIN], Eligibility(region="eu", zero_retention=True))
+    (main,) = await resolver.resolve(
+        ctx, new_id(), [MAIN], Eligibility(region="eu", zero_retention=True)
+    )
     assert (main.fill, main.fallbacks) == (REGIONAL, ()), "the one fill the session may run on"
-    both = await resolver.resolve(ctx, [SUMMARIZER, MAIN, MAIN], Eligibility())
+    both = await resolver.resolve(ctx, new_id(), [SUMMARIZER, MAIN, MAIN], Eligibility())
     assert [r.role for r in both] == [MAIN, SUMMARIZER]
     assert both[0].fallbacks == (SOL, REGIONAL)
     with pytest.raises(UnresolvedRole):
-        await resolver.resolve(ctx, ["title"], Eligibility())
+        await resolver.resolve(ctx, new_id(), ["title"], Eligibility())
     with pytest.raises(UnresolvedRole):
-        await resolver.resolve(ctx, [SUMMARIZER], Eligibility(zero_retention=True))
+        await resolver.resolve(ctx, new_id(), [SUMMARIZER], Eligibility(zero_retention=True))
 
 
 # A session's fill set, and its switches.
