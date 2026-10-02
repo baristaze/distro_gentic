@@ -93,6 +93,13 @@ markers = [
 package = "acme"
 exclude = ["clients/python/src/acme/client/schema.py"]
 
+# The platform's static checker (`make distro-check`), which `checkers/`
+# carries beside the engine's. The layout is the scaffold's, so only the
+# package is named, and the generated types are left out as above.
+[tool.distro-check]
+package = "acme"
+exclude = ["clients/python/src/acme/client/schema.py"]
+
 # The guideline's static checker (`make arch-check`). The layout is the
 # guideline's, so only the package and the project's own lists are named.
 [tool.arch-check]

@@ -123,3 +123,51 @@ beside its lens, whose Check line names the checker in the same change.
 Before it ships, it runs clean on the scaffold, which the engine's
 `tests/test_agentic_check.py` holds. A copy takes it with its next base
 move.
+
+## distro-check
+
+`distro-check` is the platform's static checker, beside the engine's in
+this member. It decides the parts of the platform's lenses a parser can
+decide, the way `agentic-check` decides the engine's, and `make
+distro-check`, the step of `make check` after `make agentic-check`,
+runs it in-tree:
+
+```bash
+uv run --package acme-checkers distro-check
+```
+
+It runs on the engine's checker: the parsed project, the rule and
+finding values, the runner, and the JSON report are `agentic_check`'s.
+What is the platform's own sits in `src/acme/distro_check/`: its lens
+catalog, its registry, its configuration table, its command line, and
+its rules. Its flags, its exit status, and its findings are the ones
+above.
+
+Its configuration is `[tool.distro-check]` in the root
+`pyproject.toml`, with the keys, the options, and the entries above:
+
+```toml
+[tool.distro-check]
+package = "acme"
+
+[tool.distro-check.options.PLC-10]
+modules = ["apps.host"]
+
+[[tool.distro-check.exception]]
+rule = "PLC-10"
+path = "apps/host/src/acme/apps/host/legacy.py"
+adr = "docs/adr/3001-the-legacy-host-imports-the-om.md"
+reason = "one line"
+```
+
+A rule whose lens states a `core` rule of the platform's spec takes no
+disable and no exception: a departure from it is a different platform.
+
+A rule is one function in `src/acme/distro_check/rules/<group>.py`,
+registered with `@rule("<LENS-ID>", ...)` from
+`acme.distro_check.registry`, with its tests in
+`tests/test_distro_check_rules.py` over a tree that
+`tests/distro_check_fixtures.py` builds. It is added in the platform,
+beside its lens, whose Check line names `distro-check` in the same
+change, and it runs clean on the scaffold, which the platform's
+`tests/test_distro_check.py` holds.

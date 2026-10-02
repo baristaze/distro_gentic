@@ -1,13 +1,14 @@
 [project]
 name = "acme-checkers"
 version = "0.1.0"
-description = "The engine's static checker, agentic-check: the lenses of the agentic_core spec a parser decides."
+description = "The static checkers of the layers beneath: the engine's agentic-check and the platform's distro-check, each deciding the lenses of its spec a parser can."
 requires-python = ">=3.14"
 # Standard library only: it reads the source with `ast` and never imports it.
 dependencies = []
 
 [project.scripts]
 agentic-check = "acme.agentic_check.cli:main"
+distro-check = "acme.distro_check.cli:main"
 
 [build-system]
 requires = ["hatchling"]
