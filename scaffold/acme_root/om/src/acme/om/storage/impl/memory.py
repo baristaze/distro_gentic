@@ -31,6 +31,8 @@ from acme.om.outbox.storage import OutboxStorageInterface
 from acme.om.outbox.storage.impl.memory import OutboxStorageMemoryImpl
 from acme.om.placement.storage import PlacementStorageInterface
 from acme.om.placement.storage.impl.memory import PlacementStorageMemoryImpl
+from acme.om.platform_agents.storage import PlatformAgentsStorageInterface
+from acme.om.platform_agents.storage.impl.memory import PlatformAgentsStorageMemoryImpl
 from acme.om.privacy.storage import PrivacyStorageInterface
 from acme.om.privacy.storage.impl.memory import PrivacyStorageMemoryImpl
 from acme.om.retention.storage import RetentionStorageInterface
@@ -79,6 +81,7 @@ class StorageMemoryImpl(StorageInterface):
         self._placement = PlacementStorageMemoryImpl()
         self._trust = TrustStorageMemoryImpl(self._outbox)
         self._hosts = HostsStorageMemoryImpl(self._outbox)
+        self._platform_agents = PlatformAgentsStorageMemoryImpl(self._outbox)
 
     def get_tenancy_storage(self) -> TenancyStorageInterface:
         return self._tenancy
@@ -151,6 +154,9 @@ class StorageMemoryImpl(StorageInterface):
 
     def get_hosts_storage(self) -> HostsStorageInterface:
         return self._hosts
+
+    def get_platform_agents_storage(self) -> PlatformAgentsStorageInterface:
+        return self._platform_agents
 
     async def healthcheck(self) -> bool:
         return True
