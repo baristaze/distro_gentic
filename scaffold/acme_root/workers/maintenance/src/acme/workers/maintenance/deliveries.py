@@ -135,6 +135,7 @@ class FeedbackDeliveriesImpl(DeliveryProviderInterface[FeedbackDelivery]):
             arrival=event.arrival.value,
             effect=routed.effect.value,
             caused_by=routed.caused_by,
+            platform=routed.platform,
             text=described(event),
         )
         await self._automations.fire(ctx, firing)

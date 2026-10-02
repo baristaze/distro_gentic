@@ -130,6 +130,7 @@ TABLE_SCOPES: dict[str, TableScope] = {
     "content_grants": TableScope(ScopeKind.ORG),
     "account_links": TableScope(ScopeKind.ORG),
     "work_bindings": TableScope(ScopeKind.ORG),
+    "platform_acts": TableScope(ScopeKind.ORG),
     "automations": TableScope(ScopeKind.ORG),
     "automation_runs": TableScope(ScopeKind.ORG),
     "playbooks": TableScope(ScopeKind.ORG),

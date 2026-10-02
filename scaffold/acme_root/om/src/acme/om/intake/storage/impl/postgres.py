@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from uuid import UUID
 
 from sqlalchemy import select
@@ -5,8 +6,9 @@ from sqlalchemy.dialects.postgresql import insert
 
 from acme.om.intake.storage import IntakeStorageInterface
 from acme.om.intake.storage.tables.account_links import AccountLinks
+from acme.om.intake.storage.tables.platform_acts import PlatformActs
 from acme.om.intake.storage.tables.work_bindings import WorkBindings
-from acme.om.intake.types.link import AccountLink, HandleKind, WorkBinding
+from acme.om.intake.types.link import AccountLink, HandleKind, PlatformAct, WorkBinding
 from acme.om.storage.impl.pg_base import PgStorageBase, delete_batch, deleted
 from acme.om.storage.utils.translation import to_model, to_values
 
@@ -72,9 +74,42 @@ class IntakeStoragePostgresImpl(PgStorageBase, IntakeStorageInterface):
             row = (await session.execute(stmt)).scalar_one_or_none()
             return None if row is None else to_model(row, WorkBinding)
 
+    async def record_act(self, org_id: UUID, act: PlatformAct) -> None:
+        # One act a name: the unique index decides, and the latest holds.
+        stmt = (
+            insert(PlatformActs)
+            .values(**to_values(act, PlatformActs), org_id=org_id)
+            .on_conflict_do_update(
+                index_elements=[PlatformActs.org_id, PlatformActs.integration, PlatformActs.ref],
+                set_={"id": act.id, "created_at": act.created_at, "session_id": act.session_id},
+            )
+        )
+        async with self._session_for(stmt, org_id=org_id) as session:
+            await session.execute(stmt)
+            await session.commit()
+
+    async def read_act(
+        self, org_id: UUID, integration: str, refs: Sequence[str]
+    ) -> PlatformAct | None:
+        if not refs:
+            return None
+        stmt = (
+            select(PlatformActs)
+            .where(
+                PlatformActs.org_id == org_id,
+                PlatformActs.integration == integration,
+                PlatformActs.ref.in_(list(refs)),
+            )
+            .order_by(PlatformActs.created_at.desc(), PlatformActs.id.desc())
+            .limit(1)
+        )
+        async with self._session_for(stmt, org_id=org_id) as session:
+            row = (await session.execute(stmt)).scalar_one_or_none()
+            return None if row is None else to_model(row, PlatformAct)
+
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:
         gone = 0
-        for table in (AccountLinks, WorkBindings):
+        for table in (AccountLinks, WorkBindings, PlatformActs):
             stmt = delete_batch(table, table.org_id == org_id, limit=limit)
             async with self._session_for(stmt, org_id=org_id) as session:
                 gone += deleted(await session.execute(stmt))

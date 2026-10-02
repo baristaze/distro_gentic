@@ -21,8 +21,11 @@ class Effect(StrEnum):
 
 class Routed(Platform):
     """The router's answer for one event, as its audit entry holds it.
-    `caused_by` is the session whose own act the event is, for an
-    automation to tell its own sessions' events from others'. `step_id` is
+    `caused_by` is the session whose act through the platform's account
+    the event is or follows from, as the acts it names were recorded,
+    whatever session the event reaches: an automation tells its own
+    sessions' events from others' by it, and a chain's hop follows it.
+    `platform` is set when the platform's account wrote the event. `step_id` is
     the input the session received, when it received one."""
 
     event_id: UUID
@@ -33,3 +36,4 @@ class Routed(Platform):
     step_id: UUID | None = None
     principal_id: UUID | None = None  # the mapped user a principal's message speaks for
     caused_by: UUID | None = None
+    platform: bool = False

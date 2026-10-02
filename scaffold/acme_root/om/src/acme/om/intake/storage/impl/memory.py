@@ -1,7 +1,8 @@
+from collections.abc import Sequence
 from uuid import UUID
 
 from acme.om.intake.storage import IntakeStorageInterface
-from acme.om.intake.types.link import AccountLink, HandleKind, WorkBinding
+from acme.om.intake.types.link import AccountLink, HandleKind, PlatformAct, WorkBinding
 from acme.om.storage.impl.memory_base import MemoryStorageBase, MemoryTable
 
 
@@ -10,6 +11,7 @@ class IntakeStorageMemoryImpl(MemoryStorageBase, IntakeStorageInterface):
         super().__init__()
         self._links: MemoryTable[AccountLink] = {}
         self._bindings: MemoryTable[WorkBinding] = {}
+        self._acts: MemoryTable[PlatformAct] = {}
 
     async def create_link(self, org_id: UUID, link: AccountLink) -> AccountLink:
         async with self._lock:
@@ -52,12 +54,36 @@ class IntakeStorageMemoryImpl(MemoryStorageBase, IntakeStorageInterface):
         ]
         return found[0] if found else None
 
+    async def record_act(self, org_id: UUID, act: PlatformAct) -> None:
+        async with self._lock:
+            # One act a name in a tenant: the unique index the table holds.
+            for held in self._rows(self._acts, org_id):
+                if (held.integration, held.ref) == (act.integration, act.ref):
+                    del self._acts[held.id]
+            self._put(self._acts, org_id, act)
+
+    async def read_act(
+        self, org_id: UUID, integration: str, refs: Sequence[str]
+    ) -> PlatformAct | None:
+        found = [
+            act
+            for act in self._rows(self._acts, org_id)
+            if act.integration == integration and act.ref in refs
+        ]
+        return max(found, key=lambda act: (act.created_at, act.id), default=None)
+
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:
         async with self._lock:
-            return _drop(self._links, org_id, limit) + _drop(self._bindings, org_id, limit)
+            return (
+                _drop(self._links, org_id, limit)
+                + _drop(self._bindings, org_id, limit)
+                + _drop(self._acts, org_id, limit)
+            )
 
 
-def _drop[E: AccountLink | WorkBinding](table: MemoryTable[E], org_id: UUID, limit: int) -> int:
+def _drop[E: AccountLink | WorkBinding | PlatformAct](
+    table: MemoryTable[E], org_id: UUID, limit: int
+) -> int:
     ids = [row.id for org, row in table.values() if org == org_id][:limit]
     for row_id in ids:
         del table[row_id]

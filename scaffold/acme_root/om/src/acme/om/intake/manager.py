@@ -7,6 +7,7 @@ everything else arrives as data. A chat approval counts only as a mapped
 user's."""
 
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from uuid import UUID
 
 from acme.om.context import TenantContext
@@ -38,13 +39,27 @@ class IntakeManagerInterface(ABC):
         ...
 
     @abstractmethod
+    async def record_act(
+        self, ctx: TenantContext, session_id: UUID, integration: str, refs: Sequence[str]
+    ) -> None:
+        """Records an act a session made through the platform's account, by
+        the integration's names for what it made (a comment's id, a commit),
+        so an event that is or follows from it names the session it came
+        from, whatever session that event reaches. The tool that acts calls
+        it before it acts. A session the tenant does not hold is
+        `NotFound`."""
+        ...
+
+    @abstractmethod
     async def route(self, ctx: TenantContext, event: FeedbackEvent) -> Routed:
         """Places an event, under the tenant's service context: finds its
         session, gives it its effect by the routing table, and delivers it.
         A principal's message is appended under the mapped user's live
         context; any other input is an event, data under the router's own
-        principal. A person's push hands the session over. Every event is
-        audited once with what it did, and a redelivery changes nothing."""
+        principal. A person's push hands the session over. The event's cause
+        is the session whose recorded act it names, wherever it routes. Every
+        event is audited once with what it did, and a redelivery changes
+        nothing."""
         ...
 
     @abstractmethod

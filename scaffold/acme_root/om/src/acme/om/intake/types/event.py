@@ -5,7 +5,7 @@ session it reaches, whether it wakes it, and in whose name it speaks."""
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Self
+from typing import Annotated, Self
 from uuid import UUID
 
 from pydantic import Field, model_validator
@@ -15,6 +15,8 @@ from acme.om.steps.types.content import MAX_NAME, Stored
 
 MAX_TEXT = 20_000
 """The most of an event's text a session receives; the rest is cut."""
+
+MAX_REFS = 20
 
 
 class Arrival(StrEnum):
@@ -66,13 +68,19 @@ class FeedbackEvent(Platform):
     """One event from outside. `id` is derived from the delivery that carried
     it, so a redelivery is the same event. `integration` names the system
     it came from, and `text` is what it says, which reaches a session as
-    data unless a principal wrote it."""
+    data unless a principal wrote it. `refs` are the integration's own
+    names for what the event is and what it follows from, such as a
+    comment's id or the commit a check ran on: an act of the platform's
+    account recorded under one of them is the event's cause."""
 
     id: UUID
     integration: Stored = Field(min_length=1, max_length=MAX_NAME)
     arrival: Arrival
     author: Author
     names: WorkNames
+    refs: tuple[Annotated[Stored, Field(min_length=1, max_length=MAX_NAME)], ...] = Field(
+        default=(), max_length=MAX_REFS
+    )
     text: Stored = Field(default="", max_length=MAX_TEXT)
     check: CheckState | None = None
     occurred_at: datetime

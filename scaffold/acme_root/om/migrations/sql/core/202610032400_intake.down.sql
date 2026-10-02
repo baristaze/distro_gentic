@@ -11,6 +11,8 @@ DROP POLICY tenant_fence ON core.automation_runs;
 DROP TABLE core.automation_runs;
 DROP POLICY tenant_fence ON core.automations;
 DROP TABLE core.automations;
+DROP POLICY tenant_fence ON core.platform_acts;
+DROP TABLE core.platform_acts;
 DROP POLICY tenant_fence ON core.work_bindings;
 DROP TABLE core.work_bindings;
 DROP POLICY tenant_fence ON core.account_links;

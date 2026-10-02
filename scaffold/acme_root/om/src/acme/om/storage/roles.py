@@ -55,6 +55,7 @@ TABLE_ROLES: dict[str, DatabaseRole] = {
     "content_grants": DatabaseRole.CORE,
     "account_links": DatabaseRole.CORE,
     "work_bindings": DatabaseRole.CORE,
+    "platform_acts": DatabaseRole.CORE,
     "automations": DatabaseRole.CORE,
     "automation_runs": DatabaseRole.CORE,
     "playbooks": DatabaseRole.CORE,

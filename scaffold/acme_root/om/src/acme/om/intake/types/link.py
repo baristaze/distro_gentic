@@ -34,3 +34,15 @@ class WorkBinding(Identifiable, Created):
     session_id: UUID
     kind: HandleKind
     handle: Stored = Field(min_length=1, max_length=MAX_NAME)
+
+
+class PlatformAct(Identifiable, Created):
+    """An act a session made through the platform's account, such as a
+    comment or a push, under the integration's name for what it made: a
+    comment's id, a commit. Every session acts through one account, so
+    this record, not the account, says which session an event that
+    follows from the act came from. The latest act under a name holds."""
+
+    integration: Stored = Field(min_length=1, max_length=MAX_NAME)
+    ref: Stored = Field(min_length=1, max_length=MAX_NAME)
+    session_id: UUID

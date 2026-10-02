@@ -1,10 +1,12 @@
-"""Storage of the intake swimlane: the tenant's account links and the work
-bindings of its sessions. Every operation takes org_id first."""
+"""Storage of the intake swimlane: the tenant's account links, the work
+bindings of its sessions, and the acts its sessions made through the
+platform's account. Every operation takes org_id first."""
 
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from uuid import UUID
 
-from acme.om.intake.types.link import AccountLink, HandleKind, WorkBinding
+from acme.om.intake.types.link import AccountLink, HandleKind, PlatformAct, WorkBinding
 
 
 class IntakeStorageInterface(ABC):
@@ -29,6 +31,19 @@ class IntakeStorageInterface(ABC):
     async def read_binding(
         self, org_id: UUID, kind: HandleKind, handle: str
     ) -> WorkBinding | None: ...
+
+    @abstractmethod
+    async def record_act(self, org_id: UUID, act: PlatformAct) -> None:
+        """The act, in place of any the tenant holds under its name: the
+        latest act under a name holds."""
+        ...
+
+    @abstractmethod
+    async def read_act(
+        self, org_id: UUID, integration: str, refs: Sequence[str]
+    ) -> PlatformAct | None:
+        """The latest act recorded under any of `refs`."""
+        ...
 
     @abstractmethod
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:

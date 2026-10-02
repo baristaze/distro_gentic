@@ -248,10 +248,12 @@ async def test_the_sessions_own_act_and_an_unnamed_session_deliver_nothing(
     platform: Wired,
 ) -> None:
     session_id = await bound(platform)
+    await platform.intake.record_act(platform.service, session_id, "chat", ("C-1",))
+    comment = event(Arrival.COMMENT, AuthorKind.PLATFORM, "acme-bot")
     own = await platform.intake.route(
-        platform.service, event(Arrival.COMMENT, AuthorKind.PLATFORM, "acme-bot")
+        platform.service, comment.model_copy(update={"refs": ("C-1",)})
     )
-    assert (own.effect, own.caused_by) == (Effect.OWN, session_id)
+    assert (own.effect, own.caused_by, own.platform) == (Effect.OWN, session_id, True)
     nowhere = event(Arrival.COMMENT).model_copy(update={"names": WorkNames(branch="elsewhere")})
     assert (await platform.intake.route(platform.service, nowhere)).effect is Effect.UNROUTED
     other_tenant = event(Arrival.COMMENT, session_id=new_id())

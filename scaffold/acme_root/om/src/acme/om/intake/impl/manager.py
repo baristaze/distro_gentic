@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import datetime
 from uuid import UUID
 
@@ -19,7 +19,7 @@ from acme.om.intake.manager import IntakeManagerInterface
 from acme.om.intake.rules import DELIVERED, Facts, effect_of, in_person, input_step
 from acme.om.intake.storage import IntakeStorageInterface
 from acme.om.intake.types.event import AuthorKind, ChatApproval, FeedbackEvent
-from acme.om.intake.types.link import AccountLink, HandleKind, WorkBinding
+from acme.om.intake.types.link import AccountLink, HandleKind, PlatformAct, WorkBinding
 from acme.om.intake.types.route import Effect, Routed
 from acme.om.steps.types.header import ParkReason
 from acme.om.steps.types.step import Step
@@ -93,9 +93,26 @@ class IntakeManagerImpl(IntakeManagerInterface):
             raise Conflict(f"{kind.value} {handle} is another session's work")
         return held
 
+    async def record_act(
+        self, ctx: TenantContext, session_id: UUID, integration: str, refs: Sequence[str]
+    ) -> None:
+        ctx.require(Permission.WRITE)
+        await self._sessions.get_session(ctx, session_id)
+        now = self._clock()
+        for ref in refs:
+            act = PlatformAct(
+                id=new_id(), created_at=now, integration=integration, ref=ref, session_id=session_id
+            )
+            await self._storage.record_act(ctx.org_id, act)
+
     async def route(self, ctx: TenantContext, event: FeedbackEvent) -> Routed:
         ctx.require(Permission.WRITE)
         session = await self._find(ctx, event)
+        # The cause follows the act the event names, not the session it
+        # reaches: every session acts through the one platform account.
+        act = None
+        if event.refs:
+            act = await self._storage.read_act(ctx.org_id, event.integration, event.refs)
         routed = Routed(
             event_id=event.id,
             integration=event.integration,
@@ -104,6 +121,12 @@ class IntakeManagerImpl(IntakeManagerInterface):
         )
         if session is not None:
             routed = await self._deliver(ctx, event, session)
+        routed = routed.model_copy(
+            update={
+                "caused_by": None if act is None else act.session_id,
+                "platform": event.author.kind is AuthorKind.PLATFORM,
+            }
+        )
         entry = audit_event(
             ctx,
             derived_id(event.id, event.occurred_at, "intake:routed"),
@@ -188,7 +211,6 @@ class IntakeManagerImpl(IntakeManagerInterface):
             arrival=event.arrival.value,
             effect=effect,
             session_id=session.id,
-            caused_by=session.id if effect is Effect.OWN else None,
         )
         if effect is Effect.HAND_OVER:
             # The agent stands down, whoever pushed: its loop parks on a

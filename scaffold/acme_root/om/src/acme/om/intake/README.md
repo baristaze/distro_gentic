@@ -11,6 +11,10 @@ of](../../../../README.md).
   from outside.
 - **Work binding**: a pull request or a branch that is a session's
   work, so an event that names it finds the session.
+- **Platform act**: an act a session made through the platform's one
+  account, such as a comment or a push, by the outside system's name
+  for what it made. An event that is or follows from that act names the
+  session it came from, wherever it lands.
 
 ## What can happen
 
@@ -35,7 +39,8 @@ of](../../../../README.md).
   effect.
 - **Approve from chat.** A person's yes or no to a call, clicked in chat,
   is decided as the user the chat account maps to.
-- **Link an account**, and **bind work** to a session.
+- **Link an account**, **bind work** to a session, and **record an
+  act** a session makes through the platform's account.
 
 ## The rules
 

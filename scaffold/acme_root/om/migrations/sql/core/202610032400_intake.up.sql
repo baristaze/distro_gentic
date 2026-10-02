@@ -26,6 +26,18 @@ CREATE TABLE core.work_bindings (
 );
 CREATE UNIQUE INDEX uq_work_bindings_org_id_kind_handle ON core.work_bindings (org_id, kind, handle);
 
+-- An act a session made through the platform's account, by the name of what it made.
+CREATE TABLE core.platform_acts (
+    id uuid NOT NULL,
+    org_id uuid NOT NULL,
+    created_at timestamptz NOT NULL,
+    integration text NOT NULL,
+    ref text NOT NULL,
+    session_id uuid NOT NULL,
+    CONSTRAINT pk_platform_acts PRIMARY KEY (id)
+);
+CREATE UNIQUE INDEX uq_platform_acts_org_id_integration_ref ON core.platform_acts (org_id, integration, ref);
+
 -- A tenant's automations: a trigger, an action, and limits of its own.
 CREATE TABLE core.automations (
     id uuid NOT NULL,
@@ -60,6 +72,7 @@ CREATE TABLE core.automation_runs (
     budget_id uuid,
     reserved_micros bigint NOT NULL,
     event_text text NOT NULL,
+    started_at timestamptz,
     closed_at timestamptz,
     CONSTRAINT pk_automation_runs PRIMARY KEY (id)
 );
@@ -139,6 +152,24 @@ CREATE POLICY tenant_fence ON core.account_links
 ALTER TABLE core.work_bindings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE core.work_bindings FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_fence ON core.work_bindings
+    USING (
+        org_id = NULLIF(current_setting('app.org_id', true), '')::uuid
+        OR (
+            current_setting('app.org_id', true) = '00000000-0000-0000-0000-000000000000'
+            AND current_user = 'acme_system'
+        )
+    )
+    WITH CHECK (
+        org_id = NULLIF(current_setting('app.org_id', true), '')::uuid
+        OR (
+            current_setting('app.org_id', true) = '00000000-0000-0000-0000-000000000000'
+            AND current_user = 'acme_system'
+        )
+    );
+
+ALTER TABLE core.platform_acts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE core.platform_acts FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_fence ON core.platform_acts
     USING (
         org_id = NULLIF(current_setting('app.org_id', true), '')::uuid
         OR (
