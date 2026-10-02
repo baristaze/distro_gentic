@@ -18,6 +18,7 @@ from acme.om.privacy.storage import PrivacyStorageInterface
 from acme.om.steps.storage import StepStorageInterface
 from acme.om.tenancy.storage import TenancyStorageInterface
 from acme.om.tools.storage import ToolStorageInterface
+from acme.om.trust.storage import TrustStorageInterface
 from acme.om.windows.storage import WindowStorageInterface
 from acme.om.work.storage import WorkStorageInterface
 
@@ -76,6 +77,9 @@ class StorageInterface(ABC):
 
     @abstractmethod
     def get_placement_storage(self) -> PlacementStorageInterface: ...
+
+    @abstractmethod
+    def get_trust_storage(self) -> TrustStorageInterface: ...
 
     @abstractmethod
     def get_hosts_storage(self) -> HostsStorageInterface: ...

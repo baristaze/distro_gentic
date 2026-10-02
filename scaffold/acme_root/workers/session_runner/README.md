@@ -43,7 +43,10 @@ inside the API ([ADR 1011](../../docs/adr/1011-a-sessions-loop-runs-in-a-worker-
   maintenance worker's.
 
 The runner holds the model providers' keys and runs tools in the
-workspaces its settings name. It holds no purge login.
+workspaces its settings name. It holds no purge login. Every call it
+runs passes the [trust](../../om/src/acme/om/trust/README.md) layer
+first: its audit entry is written with this runner as its executor, and
+a call whose secret would cross its session's wall is refused.
 
 ## What a product gives it
 
