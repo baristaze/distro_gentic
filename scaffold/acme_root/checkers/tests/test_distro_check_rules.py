@@ -209,6 +209,29 @@ def test_flt12_a_metric_labelled_by_an_unbounded_value_is_a_finding(tmp_path):
     ]
 
 
+LABELS = 'BY_TENANT = ("reason", "tenant")\nBOUNDED = ["reason"]\n'
+CONSTANTS = (
+    "from prometheus_client import Counter, Gauge\n\n"
+    "from acme.om.labels import BY_TENANT\nfrom acme.om import labels\n\n"
+    'BY_HOST = ["host", "plan_tier"]\n\n'
+    'A = Gauge("acme_a", "a", BY_HOST)\n'
+    'B = Counter("acme_b", "b", labelnames=BY_TENANT)\n'
+    'C = Counter("acme_c", "c", labels.BY_TENANT)\n'
+    'D = Counter("acme_d", "d", labels.BOUNDED)\n'
+)
+
+
+def test_flt12_label_names_a_module_constant_holds_are_read(tmp_path):
+    files = {"om/src/acme/om/labels.py": LABELS, "om/src/acme/om/parks.py": CONSTANTS}
+    write_project(tmp_path, files)
+    hits = found(tmp_path, "FLT-12")
+    assert [(path.rpartition("/")[2], line, m.split(",")[0]) for path, line, m in hits] == [
+        ("parks.py", 8, "labels a metric by 'host'"),
+        ("parks.py", 9, "labels a metric by 'tenant'"),
+        ("parks.py", 10, "labels a metric by 'tenant'"),
+    ]
+
+
 def test_flt12_bounded_labels_pass(tmp_path):
     write_project(tmp_path)
     assert found(tmp_path, "FLT-12") == []
