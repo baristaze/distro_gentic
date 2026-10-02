@@ -103,7 +103,8 @@ jobs:
         working-directory: ${{ env.COPY }}
         run: make setup
       # arch-check runs at the guideline release the copy pins, and
-      # agentic-check from the copy's own checkers/, so nothing fetches it.
+      # agentic-check and distro-check from the copy's own checkers/, so
+      # nothing fetches them.
       - name: make check
         working-directory: ${{ env.COPY }}
         run: make check

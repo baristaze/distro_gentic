@@ -36,6 +36,7 @@ from acme.om.playbooks.root import PlaybooksLayer
 from acme.om.projects.impl.manager import ProjectsOptions
 from acme.om.retention.impl.manager import RetentionOptions
 from acme.om.root import Managers, build_managers
+from acme.om.stations.impl.manager import StationsOptions
 from acme.om.steps.impl.manager import StepsOptions
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
@@ -126,6 +127,7 @@ def worker_managers(
         hosts_options=HostsOptions(purge_batch=batch),
         platform_agents_options=PlatformAgentsOptions(purge_batch=batch),
         projects_options=ProjectsOptions(purge_batch=batch),
+        stations_options=StationsOptions(purge_batch=batch),
         workspaces_options=WorkspacesOptions(purge_batch=batch),
     )
 

@@ -10,6 +10,7 @@ from acme.services.api.services.events import EventsServiceInterface
 from acme.services.api.services.hosts import HostsServiceInterface
 from acme.services.api.services.media import MediaServiceInterface
 from acme.services.api.services.realtime import RealtimeServiceInterface
+from acme.services.api.services.stations import StationsServiceInterface
 from acme.services.api.services.tenancy import TenancyServiceInterface
 from acme.services.api.services.webhooks import WebhooksServiceInterface
 
@@ -21,6 +22,7 @@ __all__ = [
     "MediaServiceInterface",
     "RealtimeServiceInterface",
     "ServicesInterface",
+    "StationsServiceInterface",
     "TenancyServiceInterface",
     "WebhooksServiceInterface",
 ]
@@ -50,3 +52,6 @@ class ServicesInterface(ABC):
 
     @abstractmethod
     def get_hosts_service(self) -> HostsServiceInterface: ...
+
+    @abstractmethod
+    def get_stations_service(self) -> StationsServiceInterface: ...
