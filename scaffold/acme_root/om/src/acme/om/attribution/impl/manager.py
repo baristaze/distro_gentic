@@ -168,6 +168,34 @@ class AttributionManagerImpl(AttributionManagerInterface):
         await self._relay_all(ctx, rows)
         return taken
 
+    async def follow_parent(self, ctx: TenantContext, session_id: UUID) -> SessionAuthority:
+        ctx.require(Permission.WRITE)
+        session = await self._sessions.get_session(ctx, session_id)
+        if session.parent_id is None:
+            raise ValidationFailed(f"agent session {session_id} has no parent to follow")
+        parent = await self._sessions.get_session_at_head(ctx, session.parent_id)
+        principal = call_principal(
+            await self._authority(ctx, parent.id),
+            parent.speaker,
+            child=parent.parent_id is not None,
+        )
+        authority = await self._authority(ctx, session_id)
+        if authority.principal == principal:
+            return authority
+        followed = SessionAuthority.model_validate(
+            {
+                **authority.model_dump(),
+                "principal": principal,
+                "version": authority.version + 1,
+                "updated_at": self._clock(),
+                "updated_by": ctx.user_id,
+            }
+        )
+        rows = (versioned_row(ctx, UPDATED, followed.id, followed.version),)
+        await self._storage.write_authority(ctx.org_id, followed, authority.version, rows)
+        await self._relay_all(ctx, rows)
+        return followed
+
     async def attribute_request(
         self, ctx: TenantContext, session_id: UUID, after_seq: int, delivered: Mapping[UUID, int]
     ) -> RequestAttribution:
