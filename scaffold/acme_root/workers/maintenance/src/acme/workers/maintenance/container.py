@@ -29,6 +29,7 @@ from acme.om.storage.root import StorageInterface
 from acme.om.tenancy.impl.manager import TenancyOptions
 from acme.om.tools.impl.manager import ToolsOptions
 from acme.om.work.impl.manager import WorkOptions
+from acme.om.workspaces.impl.manager import WorkspacesOptions
 from acme.workers.maintenance.settings import MaintenanceSettings
 
 log = logging.getLogger(__name__)
@@ -98,6 +99,7 @@ def worker_managers(
         models_options=ModelsOptions(purge_batch=batch),
         tools_options=ToolsOptions(purge_batch=batch),
         placement_options=PlacementOptions(purge_batch=batch),
+        workspaces_options=WorkspacesOptions(purge_batch=batch),
     )
 
 

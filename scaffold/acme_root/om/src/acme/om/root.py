@@ -91,6 +91,15 @@ from acme.om.windows.types.policy import CompactionPolicy
 from acme.om.work import WorkManagerInterface, WorkOperatorManagerInterface
 from acme.om.work.impl.manager import WorkManagerImpl, WorkOptions
 from acme.om.work.impl.operator import WorkOperatorManagerImpl
+from acme.om.workspaces import WorkspacesManagerInterface
+from acme.om.workspaces.git import WorkspaceGitInterface
+from acme.om.workspaces.impl.git import GitOptions, WorkspaceGitTransportImpl
+from acme.om.workspaces.impl.manager import WorkspacesManagerImpl, WorkspacesOptions
+from acme.om.workspaces.impl.projects import PullRequestsNullImpl, WorkspaceProjectsNullImpl
+from acme.om.workspaces.impl.sessions import AgentSessionsPinnedImpl
+from acme.om.workspaces.impl.tools import ToolsManagerWorkspacesImpl
+from acme.om.workspaces.projects import PullRequestsInterface, WorkspaceProjectsInterface
+from acme.om.workspaces.types.host import HostOffer
 
 
 @dataclass(frozen=True)
@@ -118,6 +127,7 @@ class Managers:
     loop: LoopManagerInterface
     placement: PlacementManagerInterface
     placement_operator: PlacementOperatorManagerInterface
+    workspaces: WorkspacesManagerInterface
 
 
 LOCAL = "local"
@@ -250,6 +260,11 @@ def build_managers(
     domain_classes: tuple[str, ...] = (),
     loop_options: LoopOptions | None = None,
     placement_options: PlacementOptions | None = None,
+    workspaces_options: WorkspacesOptions | None = None,
+    workspace_host: HostOffer | None = None,
+    workspace_projects: WorkspaceProjectsInterface | None = None,
+    pull_requests: PullRequestsInterface | None = None,
+    workspace_git: WorkspaceGitInterface | None = None,
     environment: str = LOCAL,
 ) -> Managers:
     """`integrations` is the root of the hosted services the managers front:
@@ -291,7 +306,17 @@ def build_managers(
     outage signal is infra's, and its model providers the integrations'.
 
     `placement_options` is the fair share of a tenant no operator gave one,
-    and the delay a loop over its share waits; None keeps the defaults."""
+    and the delay a loop over its share waits; None keeps the defaults.
+
+    The workspaces take five. `workspace_host` is what this process, the
+    host its tools run on, offers beyond its provider; None offers nothing
+    more, as a host of the platform's cloud. `workspace_projects` answers a
+    session's project and the repository it binds, and `pull_requests` why
+    a session's branch is gone; None answers none of either, so a session
+    keeps its kind's egress, has no checkout, and acts outward with every
+    write to source control. `workspace_git` runs the checkout; None runs
+    it in the workspace through the transport. `workspaces_options` names
+    the networks no workspace reaches, and the sweep's batch."""
     # The relay every core-role manager hands its outbox rows to. It reaches
     # the work manager through the root below, because a row of kind
     # `work.<kind>` is enqueued there: the work manager needs the tenancy
@@ -344,6 +369,7 @@ def build_managers(
     # The history first: a session's status is read off its steps. What a
     # step says reaches it through the sealing layer, by the session's policy.
     session_keys = SessionKeysImpl(storage.get_privacy_storage(), infra.get_keys())
+    records = record_seal or RecordSealKeysImpl(session_keys, storage.get_privacy_storage())
     steps = StepsManagerImpl(
         private_history(storage, session_keys, StepStorageMemoryImpl()),
         tenancy,
@@ -353,7 +379,23 @@ def build_managers(
         # bound at call time.
         instructs=lambda ctx, session_id: managers.agents.require_instructor(ctx, session_id),
     )
-    agent_sessions = AgentSessionsManagerImpl(
+    kinds = AgentKindCatalog(kinds=agent_kinds)
+    # Each session's workspace, pinned as the session is created: the
+    # decorator below pins it before the engine writes the session, and
+    # every namespace reaches the sessions through it. Its checkout runs in
+    # the workspace through the transport, under the session's epoch.
+    workspaces = WorkspacesManagerImpl(
+        storage.get_workspace_storage(),
+        tenancy,
+        outbox,
+        kinds,
+        workspace_projects or WorkspaceProjectsNullImpl(),
+        pull_requests or PullRequestsNullImpl(),
+        workspace_git
+        or WorkspaceGitTransportImpl(infra.get_transport(), steps, records, GitOptions()),
+        workspaces_options or WorkspacesOptions(),
+    )
+    engine_sessions = AgentSessionsManagerImpl(
         storage.get_agent_session_storage(),
         steps,
         tenancy,
@@ -366,6 +408,7 @@ def build_managers(
             managers, org_id, session_id, tree_id
         ),
     )
+    agent_sessions = AgentSessionsPinnedImpl(engine_sessions, workspaces)
     privacy = PrivacyManagerImpl(
         storage.get_privacy_storage(),
         session_keys,
@@ -410,7 +453,6 @@ def build_managers(
         outbox,
         attribution_options or AttributionOptions(),
     )
-    kinds = AgentKindCatalog(kinds=agent_kinds)
     agents = AgentsManagerImpl(
         storage.get_agent_storage(),
         agent_sessions,
@@ -451,7 +493,10 @@ def build_managers(
     # which answers whose authority each call runs under and the rule of
     # two. What a call keeps of its session's content goes under the
     # session's key: its input's hash, and its command's record.
-    tools = ToolsManagerImpl(
+    # Each workspace is held to its session's pin, refused by this host where
+    # it cannot give it, brought up to the session's branch, and kept before
+    # it goes.
+    engine_tools = ToolsManagerImpl(
         storage.get_tool_storage(),
         steps,
         tenancy,
@@ -461,8 +506,11 @@ def build_managers(
         infra.get_transport(),
         tools_options or ToolsOptions(),
         keyed_hash=privacy.keyed_hash,
-        record_seal=record_seal or RecordSealKeysImpl(session_keys, storage.get_privacy_storage()),
+        record_seal=records,
         attribution=attribution,
+    )
+    tools = ToolsManagerWorkspacesImpl(
+        engine_tools, workspaces, workspace_host or HostOffer(), local=environment == LOCAL
     )
     idempotency = IdempotencyManagerImpl(
         storage.get_idempotency_storage(), idempotency_options or IdempotencyOptions()
@@ -532,5 +580,6 @@ def build_managers(
             storage.get_event_storage(),
             infra.get_topics(),
         ),
+        workspaces=workspaces,
     )
     return managers

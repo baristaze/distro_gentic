@@ -8,6 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 from acme.infra.impl.local import InfraLocalImpl
@@ -245,10 +246,12 @@ def loop_over(
     owner: TenantContext | None = None,
     sink: StreamSinkMemoryImpl | None = None,
     jitter: Callable[[], float] = random.random,
+    **roots: Any,
 ) -> Loop:
     """`storage` None is the memory storage, and `owner` None a fresh
     tenant's owner; a suite over Postgres hands in both. `jitter` is what
-    the loop draws its retry waits from."""
+    the loop draws its retry waits from, and `roots` is what else the
+    managers are built with."""
     infra = InfraLocalImpl(tmp_path)
     anthropic = ModelProviderScriptedImpl(ProviderName.ANTHROPIC)
     openai = ModelProviderScriptedImpl(ProviderName.OPENAI)
@@ -265,6 +268,7 @@ def loop_over(
         agent_kinds=kinds,
         principal_context=live,
         tool_catalog=tuple(catalog.values()),
+        **roots,
     )
     clock = Clock()
 
