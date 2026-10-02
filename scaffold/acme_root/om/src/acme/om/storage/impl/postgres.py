@@ -299,6 +299,7 @@ class StoragePostgresImpl(StorageInterface):
 
     def get_platform_agents_storage(self) -> PlatformAgentsStorageInterface:
         return self._platform_agents
+
     def get_stations_storage(self) -> StationsStorageInterface:
         return self._stations
 
