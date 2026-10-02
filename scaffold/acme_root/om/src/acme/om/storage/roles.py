@@ -43,10 +43,13 @@ TABLE_ROLES: dict[str, DatabaseRole] = {
     "fill_sets": DatabaseRole.CORE,
     "artifacts": DatabaseRole.ACTIVITY,
     "tool_policies": DatabaseRole.CORE,
+    "billing_accounts": DatabaseRole.CORE,
+    "ledger_entries": DatabaseRole.ACTIVITY,
+    "ledger_counts": DatabaseRole.ACTIVITY,
 }
 
 APPEND_ONLY_TABLES: frozenset[str] = frozenset(
-    {"steps", "budget_holds", "budget_settlements", "artifacts"}
+    {"steps", "budget_holds", "budget_settlements", "artifacts", "ledger_entries"}
 )
 """Tables whose rows are written once: the serving logins hold SELECT and
 INSERT on them and never UPDATE or DELETE. The migration that creates one

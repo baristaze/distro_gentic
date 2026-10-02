@@ -98,6 +98,17 @@ and says which budgets are in the way and when each resets. A refused
 loop waits, never fails, until the budget is raised or resets. After
 the call, the hold is settled at what the call really cost.
 
+## Billing
+
+An **account** says who pays for an org's agents: the platform's key,
+billed to the org, or the org's own key. Every hold, settlement, and
+**charge** is an entry of one **ledger**, written once. A call on the
+platform's key is paid from **buckets** in a fixed order: the plan's
+included units, granted units, prepaid **credits**, and a line of credit.
+A credit counts only once the payment provider confirms it. A limit's
+day and week follow the org's time zone, and its month the billing
+period.
+
 ## Models
 
 A **model role** is a job an agent session hands a model: the agent's
@@ -199,6 +210,7 @@ arrive twice, so the second copy gets the first one's answer.
 - [Attribution](src/acme/om/attribution/README.md)
 - [Privacy](src/acme/om/privacy/README.md)
 - [Budgets](src/acme/om/budgets/README.md)
+- [Billing](src/acme/om/billing/README.md)
 - [Models](src/acme/om/models/README.md)
 - [Windows](src/acme/om/windows/README.md)
 - [Tools](src/acme/om/tools/README.md)
