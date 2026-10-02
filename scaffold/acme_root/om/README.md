@@ -249,6 +249,11 @@ arrive twice, so the second copy gets the first one's answer.
   deadline as the whole tree. A tree names its org, as its sessions do.
 - A step's content is sealed under its session's key, so revoking one
   key erases what one session said and nothing else.
+- A project names its org and binds one repository. A session started
+  under a project belongs to it, of its own org, from before it exists
+  and never moved; a session it spawns or hands work to belongs to the
+  same. A session the API starts names no project, and takes its org's
+  policies alone.
 - A session takes its tenant's retention policy as a snapshot when it is
   created, so a tightening reaches it and a loosening never does. A
   policy names its org, one each, and a snapshot its session.
@@ -279,6 +284,7 @@ arrive twice, so the second copy gets the first one's answer.
 - [Agents](src/acme/om/agents/README.md)
 - [Attribution](src/acme/om/attribution/README.md)
 - [Privacy](src/acme/om/privacy/README.md)
+- [Projects](src/acme/om/projects/README.md)
 - [Retention](src/acme/om/retention/README.md)
 - [Budgets](src/acme/om/budgets/README.md)
 - [Billing](src/acme/om/billing/README.md)
