@@ -6,7 +6,7 @@ from acme.om.outbox.storage import OutboxLandingInterface
 from acme.om.outbox.types.row import OutboxRow
 from acme.om.stations.rules import free, in_line_order
 from acme.om.stations.storage import StationsStorageInterface
-from acme.om.stations.types.daemon import DaemonCredential
+from acme.om.stations.types.daemon import DaemonCredential, Rotation
 from acme.om.stations.types.job import JobState, StationJob
 from acme.om.stations.types.lease import LeaseEnd, StationLease
 from acme.om.stations.types.line import EntryState, LineEntry
@@ -78,33 +78,53 @@ class StationsStorageMemoryImpl(MemoryStorageBase, StationsStorageInterface):
         return None
 
     async def rotate_daemon_credential(
-        self, org_id: UUID, retiring_id: UUID, retire_at: datetime, minted: DaemonCredential
-    ) -> bool:
+        self,
+        org_id: UUID,
+        retiring_id: UUID,
+        at: datetime,
+        retire_at: datetime,
+        minted: DaemonCredential,
+    ) -> Rotation:
         async with self._lock:
             retiring = self._get(self._credentials, org_id, retiring_id)
-            if retiring is None or retiring.lab_id != minted.lab_id:
-                return False
-            if retiring.expires_at <= minted.created_at:
-                return False
+            if (
+                retiring is None
+                or retiring.lab_id != minted.lab_id
+                or self._get(self._labs, org_id, minted.lab_id) is None
+            ):
+                return Rotation.MISSING
+            if retiring.revoked_at is not None:
+                return Rotation.REVOKED
+            if retiring.rotated_at is not None:
+                return Rotation.REUSED
             self._unique(minted)
             ends = min(retiring.expires_at, retire_at)
-            self._put(self._credentials, org_id, retiring.model_copy(update={"expires_at": ends}))
+            self._put(
+                self._credentials,
+                org_id,
+                retiring.model_copy(update={"rotated_at": at, "expires_at": ends}),
+            )
             self._insert(self._credentials, org_id, minted)
-            return True
+            return Rotation.ROTATED
 
-    async def end_daemon_credentials(
+    async def revoke_daemon(
         self, org_id: UUID, lab_id: UUID, at: datetime, outbox_rows: tuple[OutboxRow, ...]
     ) -> int:
         async with self._lock:
-            ended = 0
+            live = 0
             for credential in self._rows(self._credentials, org_id):
-                if credential.lab_id == lab_id and credential.expires_at > at:
-                    self._put(
-                        self._credentials, org_id, credential.model_copy(update={"expires_at": at})
-                    )
-                    ended += 1
+                if credential.lab_id != lab_id or credential.revoked_at is not None:
+                    continue
+                live += credential.expires_at > at
+                self._put(
+                    self._credentials,
+                    org_id,
+                    credential.model_copy(
+                        update={"revoked_at": at, "expires_at": min(credential.expires_at, at)}
+                    ),
+                )
             self._land(org_id, outbox_rows)
-            return ended
+            return live
 
     def _unique(self, credential: DaemonCredential) -> None:
         if credential.id in self._credentials or any(

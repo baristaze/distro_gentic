@@ -61,8 +61,10 @@ class StationsManagerInterface(ABC):
 
     @abstractmethod
     async def revoke_daemon(self, ctx: TenantContext, lab_id: UUID) -> int:
-        """Ends every credential of the lab's daemon at once: its next call is
-        refused. Returns how many ended. Requires the members permission."""
+        """Revokes every credential of the lab's daemon at once, by a mark no
+        clock reads past and no rotation lands beside: its next call is
+        refused. Returns how many were live. Requires the members
+        permission."""
         ...
 
     @abstractmethod
@@ -143,13 +145,16 @@ class StationsManagerInterface(ABC):
     @abstractmethod
     async def authenticate(self, rctx: RequestContext, credential: str) -> DaemonIdentity:
         """Platform-internal: the lab daemon behind a daemon credential.
-        Refuses any other kind of credential, and an ended one."""
+        Refuses any other kind of credential, a revoked one, and an ended
+        one; a rotated one presented past its grace revokes the lab's
+        daemon."""
         ...
 
     @abstractmethod
     async def rotate(self, rctx: RequestContext, daemon: DaemonIdentity) -> IssuedDaemonCredential:
         """Platform-internal: the daemon's next credential, in the clear once.
-        The one it called with ends after a short grace."""
+        The one it called with ends after a short grace. A credential rotates
+        once: rotated again, it revokes the lab's daemon."""
         ...
 
     @abstractmethod

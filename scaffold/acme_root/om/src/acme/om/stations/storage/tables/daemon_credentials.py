@@ -22,3 +22,5 @@ class DaemonCredentials(IdentifiableMixin, CreatedMixin, Base):
     issued_by: Mapped[UUID]
     digest: Mapped[str]
     expires_at: Mapped[datetime]
+    rotated_at: Mapped[datetime | None]
+    revoked_at: Mapped[datetime | None]

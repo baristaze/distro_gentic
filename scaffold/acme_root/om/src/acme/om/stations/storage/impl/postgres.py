@@ -16,7 +16,7 @@ from acme.om.stations.storage.tables.station_leases import StationLeases
 from acme.om.stations.storage.tables.station_line_entries import StationLineEntries
 from acme.om.stations.storage.tables.station_pools import StationPools
 from acme.om.stations.storage.tables.stations import Stations
-from acme.om.stations.types.daemon import DaemonCredential
+from acme.om.stations.types.daemon import DaemonCredential, Rotation
 from acme.om.stations.types.job import JobState, StationJob
 from acme.om.stations.types.lease import LeaseEnd, StationLease
 from acme.om.stations.types.line import EntryState, LineEntry
@@ -111,23 +111,46 @@ class StationsStoragePostgresImpl(PgStorageBase, StationsStorageInterface):
             return None if row is None else (row.org_id, to_model(row, DaemonCredential))
 
     async def rotate_daemon_credential(
-        self, org_id: UUID, retiring_id: UUID, retire_at: datetime, minted: DaemonCredential
-    ) -> bool:
-        stmt = (
-            update(DaemonCredentials)
+        self,
+        org_id: UUID,
+        retiring_id: UUID,
+        at: datetime,
+        retire_at: datetime,
+        minted: DaemonCredential,
+    ) -> Rotation:
+        # The lab's row lock is the one a revocation takes: of a rotation and
+        # a revocation at the same moment, the second reads what the first
+        # wrote. The credential's own lock makes a rotation once.
+        lab = (
+            select(Labs.id)
+            .where(Labs.org_id == org_id, Labs.id == minted.lab_id)
+            .with_for_update()
+        )
+        held = (
+            select(DaemonCredentials)
             .where(
                 DaemonCredentials.org_id == org_id,
                 DaemonCredentials.id == retiring_id,
                 DaemonCredentials.lab_id == minted.lab_id,
-                DaemonCredentials.expires_at > minted.created_at,
             )
-            .values(expires_at=func.least(DaemonCredentials.expires_at, retire_at))
-            .returning(DaemonCredentials.id)
+            .with_for_update()
         )
-        async with self._session_for(stmt, org_id=org_id) as session:
-            if (await session.execute(stmt)).scalar_one_or_none() is None:
+        async with self._session_for(held, org_id=org_id) as session:
+            if (await session.execute(lab)).scalar_one_or_none() is None:
                 await session.rollback()
-                return False
+                return Rotation.MISSING
+            retiring = (await session.execute(held)).scalar_one_or_none()
+            if retiring is None:
+                await session.rollback()
+                return Rotation.MISSING
+            if retiring.revoked_at is not None:
+                await session.rollback()
+                return Rotation.REVOKED
+            if retiring.rotated_at is not None:
+                await session.rollback()
+                return Rotation.REUSED
+            retiring.rotated_at = at
+            retiring.expires_at = min(retiring.expires_at, retire_at)
             session.add(to_row(minted, DaemonCredentials, org_id=org_id))
             try:
                 await session.commit()
@@ -137,23 +160,33 @@ class StationsStoragePostgresImpl(PgStorageBase, StationsStorageInterface):
                     f"daemon_credentials {minted.id}: "
                     f"{violated_constraint(error) or 'a unique key'} is taken"
                 ) from error
-            return True
+            return Rotation.ROTATED
 
-    async def end_daemon_credentials(
+    async def revoke_daemon(
         self, org_id: UUID, lab_id: UUID, at: datetime, outbox_rows: tuple[OutboxRow, ...]
     ) -> int:
-        stmt = (
-            update(DaemonCredentials)
-            .where(
-                DaemonCredentials.org_id == org_id,
-                DaemonCredentials.lab_id == lab_id,
-                DaemonCredentials.expires_at > at,
-            )
-            .values(expires_at=at)
-            .returning(DaemonCredentials.id)
+        lab = select(Labs.id).where(Labs.org_id == org_id, Labs.id == lab_id).with_for_update()
+        unrevoked = (
+            DaemonCredentials.org_id == org_id,
+            DaemonCredentials.lab_id == lab_id,
+            DaemonCredentials.revoked_at.is_(None),
         )
-        async with self._session_for(stmt, org_id=org_id) as session:
-            ended = len((await session.execute(stmt)).scalars().all())
+        live = (
+            select(func.count())
+            .select_from(DaemonCredentials)
+            .where(*unrevoked, DaemonCredentials.expires_at > at)
+        )
+        mark = (
+            update(DaemonCredentials)
+            .where(*unrevoked)
+            .values(revoked_at=at, expires_at=func.least(DaemonCredentials.expires_at, at))
+        )
+        async with self._session_for(mark, org_id=org_id) as session:
+            # Each statement after the lock reads what a rotation that held
+            # it before committed, its new credential included.
+            await session.execute(lab)
+            ended = (await session.execute(live)).scalar_one()
+            await session.execute(mark)
             for outbox_row in outbox_rows:
                 session.add(to_row(outbox_row, OutboxRows, org_id=org_id))
             await session.commit()

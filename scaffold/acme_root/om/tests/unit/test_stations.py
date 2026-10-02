@@ -452,16 +452,61 @@ async def test_a_daemon_calls_with_a_credential_of_its_own_kind(
     # It trades the one a person handled for its own, which lives an hour.
     own = await stations.rotate(request(), daemon)
     assert own.expires_at == clock.now + StationsOptions().credential_ttl
-    clock.advance(StationsOptions().rotation_grace)
-    with pytest.raises(CredentialExpired):
-        await stations.authenticate(request(), issued.credential)
     await stations.authenticate(request(), own.credential)
     member = await a_member(managers, "ajax", Role.MEMBER)
     with pytest.raises(NotAuthorized):
         await stations.issue_daemon_credential(member, lab.lab.id)
-    assert await stations.revoke_daemon(owner, lab.lab.id) == 1
+    # The first is live in its grace, and the revocation ends both.
+    assert await stations.revoke_daemon(owner, lab.lab.id) == 2
+    for credential in (issued.credential, own.credential):
+        with pytest.raises(CredentialExpired):
+            await stations.authenticate(request(), credential)
+
+
+async def test_a_credential_rotates_once_and_a_second_rotation_revokes_the_daemon(
+    managers: Managers, stations: StationsManagerImpl
+) -> None:
+    owner = await an_owner(managers)
+    lab = await a_lab(stations, owner)
+    _, daemon = await a_daemon(stations, owner, lab.lab)
+    own = await stations.rotate(request(), daemon)
+    with pytest.raises(CredentialExpired):
+        await stations.rotate(request(), daemon)
     with pytest.raises(CredentialExpired):
         await stations.authenticate(request(), own.credential)
+
+
+async def test_a_rotated_credential_past_its_grace_revokes_the_daemon(
+    managers: Managers, stations: StationsManagerImpl, clock: Clock
+) -> None:
+    owner = await an_owner(managers)
+    lab = await a_lab(stations, owner)
+    first, daemon = await a_daemon(stations, owner, lab.lab)
+    own = await stations.rotate(request(), daemon)
+    clock.advance(StationsOptions().rotation_grace)
+    with pytest.raises(CredentialExpired):
+        await stations.authenticate(request(), first)
+    with pytest.raises(CredentialExpired):
+        await stations.authenticate(request(), own.credential)
+
+
+async def test_a_rotation_on_a_clock_behind_the_revocation_is_refused(
+    managers: Managers, stations: StationsManagerImpl, clock: Clock
+) -> None:
+    owner = await an_owner(managers)
+    lab = await a_lab(stations, owner)
+    _, daemon = await a_daemon(stations, owner, lab.lab)
+    assert await stations.revoke_daemon(owner, lab.lab.id) == 1
+    # The daemon's rotation lands on a process whose clock trails the
+    # revoker's by a second: the revoked credential's end is still ahead of
+    # that clock, and its mark refuses the rotation all the same.
+    clock.advance(timedelta(seconds=-1))
+    with pytest.raises(CredentialExpired):
+        await stations.rotate(request(), daemon)
+    held = stations._storage  # pyright: ignore[reportPrivateUsage]
+    assert isinstance(held, StationsStorageMemoryImpl)
+    credentials = held._credentials.values()  # pyright: ignore[reportPrivateUsage]
+    assert all(credential.revoked_at is not None for _, credential in credentials)
 
 
 async def test_a_daemon_is_handed_its_labs_jobs_alone_under_the_floor(

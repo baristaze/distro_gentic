@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from uuid import UUID
 
 from acme.om.outbox.types.row import OutboxRow
-from acme.om.stations.types.daemon import DaemonCredential
+from acme.om.stations.types.daemon import DaemonCredential, Rotation
 from acme.om.stations.types.job import JobState, StationJob
 from acme.om.stations.types.lease import LeaseEnd, StationLease
 from acme.om.stations.types.line import LineEntry
@@ -75,20 +75,31 @@ class StationsStorageInterface(ABC):
 
     @abstractmethod
     async def rotate_daemon_credential(
-        self, org_id: UUID, retiring_id: UUID, retire_at: datetime, minted: DaemonCredential
-    ) -> bool:
-        """In one commit: the retiring credential ends at `retire_at`, when
-        that is sooner than its end, and `minted` lands. False, with nothing
-        landed, when the tenant holds no live retiring credential of that
-        lab."""
+        self,
+        org_id: UUID,
+        retiring_id: UUID,
+        at: datetime,
+        retire_at: datetime,
+        minted: DaemonCredential,
+    ) -> Rotation:
+        """A credential rotates once, under the lab's row lock, which a
+        revocation takes too. In one commit: the retiring credential is
+        marked rotated at `at` and ends at `retire_at` when that is sooner,
+        and `minted` lands. `REVOKED`, with nothing landed, when the
+        retiring credential is revoked; `REUSED` when it rotated already;
+        `MISSING` when the tenant holds no such credential of that lab, or
+        no such lab."""
         ...
 
     @abstractmethod
-    async def end_daemon_credentials(
+    async def revoke_daemon(
         self, org_id: UUID, lab_id: UUID, at: datetime, outbox_rows: tuple[OutboxRow, ...]
     ) -> int:
-        """Ends every live credential of the lab's daemon at `at`; returns how
-        many."""
+        """Marks every credential of the lab's daemon not yet revoked as
+        revoked at `at`, and ends it then, under the lab's row lock, so a
+        rotation either lands before and its credential is revoked with
+        the rest, or reads the mark and lands nothing. Returns how many of
+        them were live at `at`."""
         ...
 
     # The line.

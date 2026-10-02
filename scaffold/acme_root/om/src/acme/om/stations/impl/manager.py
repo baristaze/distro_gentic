@@ -53,6 +53,7 @@ from acme.om.stations.types.daemon import (
     DaemonCredential,
     DaemonIdentity,
     IssuedDaemonCredential,
+    Rotation,
 )
 from acme.om.stations.types.job import (
     ClaimedJob,
@@ -92,8 +93,8 @@ class StationsOptions(Platform):
     # its life, so one taken from a disk is worth an hour at most.
     first_credential_ttl: timedelta = timedelta(days=1)
     credential_ttl: timedelta = timedelta(hours=1)
-    # A rotated credential still works this long, so a daemon whose answer
-    # was lost rotates again with it.
+    # A rotated credential still works this long, so a call in flight with
+    # it still lands. It rotates once: a second rotation revokes the daemon.
     rotation_grace: timedelta = timedelta(minutes=1)
     # A lease that ran out is granted again only this long after: it covers
     # the clocks of the processes that grant, and the way back of the answer
@@ -210,7 +211,7 @@ class StationsManagerImpl(StationsManagerInterface):
         ctx.require(Permission.MANAGE_MEMBERS)
         await self._lab(ctx, lab_id)
         rows = (outbox_row(ctx, DAEMON_REVOKED, lab_id, {}),)
-        ended = await self._storage.end_daemon_credentials(ctx.org_id, lab_id, self._clock(), rows)
+        ended = await self._storage.revoke_daemon(ctx.org_id, lab_id, self._clock(), rows)
         await self._relay.relay_all(ctx.org_id, rows)
         return ended
 
@@ -395,8 +396,19 @@ class StationsManagerImpl(StationsManagerInterface):
         if found is None:
             raise InvalidCredential("unknown daemon credential")
         org_id, held = found
-        if held.expires_at <= self._clock():
-            raise CredentialExpired("daemon credential expired, rotated, or revoked")
+        if held.revoked_at is not None:
+            raise CredentialExpired("daemon credential revoked")
+        now = self._clock()
+        if held.expires_at <= now:
+            if held.rotated_at is not None:
+                # A rotated credential past its grace: the daemon that rotated
+                # it holds the next one, so whoever presents this one is a
+                # second daemon, or the first is.
+                await self._reused(rctx, org_id, held.lab_id, held.issued_by)
+                raise CredentialExpired(
+                    "daemon credential rotated already; the lab's daemon is revoked"
+                )
+            raise CredentialExpired("daemon credential expired")
         return DaemonIdentity(
             lab_id=held.lab_id,
             org_id=org_id,
@@ -411,9 +423,15 @@ class StationsManagerImpl(StationsManagerInterface):
             daemon.lab_id, daemon.issued_by, now, self._options.credential_ttl
         )
         retire_at = retired_at(daemon.expires_at, now, self._options.rotation_grace)
-        if not await self._storage.rotate_daemon_credential(
-            daemon.org_id, daemon.credential_id, retire_at, minted
-        ):
+        rotation = await self._storage.rotate_daemon_credential(
+            daemon.org_id, daemon.credential_id, now, retire_at, minted
+        )
+        if rotation is Rotation.REUSED:
+            await self._reused(rctx, daemon.org_id, daemon.lab_id, daemon.issued_by)
+            raise CredentialExpired(
+                "daemon credential rotated already; the lab's daemon is revoked"
+            )
+        if rotation is not Rotation.ROTATED:
             raise CredentialExpired("daemon credential expired, rotated, or revoked")
         return self._issued(secret, minted)
 
@@ -746,6 +764,21 @@ class StationsManagerImpl(StationsManagerInterface):
         return None
 
     # Helpers.
+
+    async def _reused(
+        self, rctx: RequestContext, org_id: UUID, lab_id: UUID, issued_by: UUID
+    ) -> None:
+        """A credential that rotated already, presented to rotate again or
+        after its grace: two daemons hold the lab's identity, the daemon and
+        a copy. Neither can be told from the other, so every credential of
+        the lab's daemon is revoked, and its owner issues it a first one
+        again. The person who issued the first answers for the revocation."""
+        ctx = await self._tenancy.service_context(rctx, org_id, issued_by)
+        rows = (outbox_row(ctx, DAEMON_REVOKED, lab_id, {"reason": "credential_reused"}),)
+        await self._storage.revoke_daemon(org_id, lab_id, self._clock(), rows)
+        await self._relay.relay_all(org_id, rows)
+        OUTCOMES.labels(subsystem="stations", outcome="credential_reused").inc()
+        log.warning("lab %s: a rotated daemon credential was presented again; revoked", lab_id)
 
     async def _leave_every_line(self, ctx: TenantContext, session_id: UUID) -> int:
         waiting = await self._storage.read_waiting(ctx.org_id, session_id, self._options.max_line)

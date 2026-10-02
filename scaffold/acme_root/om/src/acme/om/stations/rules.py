@@ -116,9 +116,9 @@ def renewed_until(current: datetime, now: datetime, length: timedelta) -> dateti
 
 
 def retired_at(expires_at: datetime, now: datetime, grace: timedelta) -> datetime:
-    """When a rotated daemon credential ends: after the grace, so a daemon
-    whose answer was lost can rotate again with it, and never later than it
-    would have."""
+    """When a rotated daemon credential ends: after the grace, so a call in
+    flight with it still lands, and never later than it would have. It does
+    not rotate again in the grace: a credential rotates once."""
     return min(expires_at, now + grace)
 
 

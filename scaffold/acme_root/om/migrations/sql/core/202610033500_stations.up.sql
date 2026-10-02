@@ -58,6 +58,8 @@ CREATE TABLE core.daemon_credentials (
     issued_by uuid NOT NULL,
     digest text NOT NULL,
     expires_at timestamptz NOT NULL,
+    rotated_at timestamptz,
+    revoked_at timestamptz,
     CONSTRAINT pk_daemon_credentials PRIMARY KEY (id)
 );
 CREATE UNIQUE INDEX uq_daemon_credentials_digest ON core.daemon_credentials (digest);

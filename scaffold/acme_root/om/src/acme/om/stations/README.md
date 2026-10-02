@@ -19,7 +19,10 @@ the kinds of thing [Acme is made of](../../../../README.md).
   (`std_`) no other credential has. The first is issued by an owner or an
   admin and lives a day; the daemon trades it at its start, and every
   one after lives an hour and is rotated at half its life. Only its
-  digest is kept.
+  digest is kept. A credential rotates once: rotated again, or presented
+  past its grace once rotated, it revokes the lab's daemon. A revocation
+  is a mark on each credential, taken under the lab's row lock as every
+  rotation is, so no clock reads past it and no rotation lands beside it.
 - **A line entry**: one session's ask, for a station or for any of a pool
   with the capabilities it needs, bound to the candidate under test and
   the procedure. Each pool and each station has a line, and a station's

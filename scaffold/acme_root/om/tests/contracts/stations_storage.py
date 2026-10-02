@@ -17,7 +17,7 @@ from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import new_id, utcnow
 from acme.om.exceptions import UniqueKeyTaken
 from acme.om.stations.storage import StationsStorageInterface
-from acme.om.stations.types.daemon import DaemonCredential
+from acme.om.stations.types.daemon import DaemonCredential, Rotation
 from acme.om.stations.types.job import JobState, StationCommand, StationJob
 from acme.om.stations.types.lease import LeaseEnd, StationLease
 from acme.om.stations.types.line import EntryState, LineEntry
@@ -36,7 +36,7 @@ CROSS_TENANT_CASES: frozenset[str] = frozenset(
         "read_lab_stations",
         "create_daemon_credential",
         "rotate_daemon_credential",
-        "end_daemon_credentials",
+        "revoke_daemon",
         "create_entry",
         "read_entry",
         "read_line",
@@ -247,39 +247,106 @@ class StationsStorageContract:
         with pytest.raises(UniqueKeyTaken):
             await storage.create_daemon_credential(new_id(), credential, ())
 
-    async def test_rotate_daemon_credential_retires_the_old_and_lands_the_new(
+    async def a_lab(self, storage: StationsStorageInterface, org: UUID) -> Lab:
+        lab = make_lab()
+        assert await storage.create_lab(org, lab, ())
+        return lab
+
+    async def test_rotate_daemon_credential_retires_the_old_and_lands_the_new_once(
         self, storage: StationsStorageInterface
     ) -> None:
         org = new_id()
-        first = make_credential(new_id())
+        lab = await self.a_lab(storage, org)
+        first = make_credential(lab.id)
         await storage.create_daemon_credential(org, first, ())
-        retire_at = utcnow() + timedelta(minutes=1)
-        second = make_credential(first.lab_id)
-        assert not await storage.rotate_daemon_credential(new_id(), first.id, retire_at, second)
+        at = utcnow()
+        retire_at = at + timedelta(minutes=1)
+        second = make_credential(lab.id)
+        assert (
+            await storage.rotate_daemon_credential(new_id(), first.id, at, retire_at, second)
+            is Rotation.MISSING
+        )
         assert await storage.read_daemon_credential_by_digest(second.digest) is None
-        assert await storage.rotate_daemon_credential(org, first.id, retire_at, second)
+        assert (
+            await storage.rotate_daemon_credential(org, first.id, at, retire_at, second)
+            is Rotation.ROTATED
+        )
         found = await storage.read_daemon_credential_by_digest(first.digest)
-        assert found is not None and found[1].expires_at == retire_at
+        assert found is not None
+        assert (found[1].expires_at, found[1].rotated_at) == (retire_at, at)
         assert await storage.read_daemon_credential_by_digest(second.digest) == (org, second)
+        # It rotates once: a second rotation of it lands nothing.
+        again = make_credential(lab.id)
+        assert (
+            await storage.rotate_daemon_credential(org, first.id, at, retire_at, again)
+            is Rotation.REUSED
+        )
+        assert await storage.read_daemon_credential_by_digest(again.digest) is None
         # Another lab's credential is no retiring one of this lab.
         third = make_credential(new_id())
-        assert not await storage.rotate_daemon_credential(org, second.id, retire_at, third)
+        assert (
+            await storage.rotate_daemon_credential(org, second.id, at, retire_at, third)
+            is Rotation.MISSING
+        )
 
-    async def test_end_daemon_credentials_ends_the_labs_alone(
+    async def test_revoke_daemon_marks_the_labs_alone(
         self, storage: StationsStorageInterface
     ) -> None:
         org = new_id()
-        lab_id = new_id()
-        mine, theirs = make_credential(lab_id), make_credential(new_id())
+        lab = await self.a_lab(storage, org)
+        mine, theirs = make_credential(lab.id), make_credential(new_id())
         await storage.create_daemon_credential(org, mine, ())
         await storage.create_daemon_credential(org, theirs, ())
         at = utcnow()
-        assert await storage.end_daemon_credentials(new_id(), lab_id, at, ()) == 0
-        assert await storage.end_daemon_credentials(org, lab_id, at, ()) == 1
-        ended = await storage.read_daemon_credential_by_digest(mine.digest)
+        assert await storage.revoke_daemon(new_id(), lab.id, at, ()) == 0
+        assert await storage.revoke_daemon(org, lab.id, at, ()) == 1
+        revoked = await storage.read_daemon_credential_by_digest(mine.digest)
         kept = await storage.read_daemon_credential_by_digest(theirs.digest)
-        assert ended is not None and ended[1].expires_at == at
-        assert kept is not None and kept[1].expires_at == theirs.expires_at
+        assert revoked is not None
+        assert (revoked[1].revoked_at, revoked[1].expires_at) == (at, at)
+        assert kept is not None and kept[1] == theirs
+        assert await storage.revoke_daemon(org, lab.id, at, ()) == 0
+
+    async def test_a_rotation_on_a_clock_behind_the_revocation_lands_nothing(
+        self, storage: StationsStorageInterface
+    ) -> None:
+        org = new_id()
+        lab = await self.a_lab(storage, org)
+        first = make_credential(lab.id)
+        await storage.create_daemon_credential(org, first, ())
+        revoked_at = utcnow()
+        assert await storage.revoke_daemon(org, lab.id, revoked_at, ()) == 1
+        # A process whose clock trails the revoker's by a second reads the
+        # mark, not an end it would still compare as ahead of it.
+        behind = revoked_at - timedelta(seconds=1)
+        minted = make_credential(lab.id)
+        rotation = await storage.rotate_daemon_credential(
+            org, first.id, behind, behind + timedelta(minutes=1), minted
+        )
+        assert rotation is Rotation.REVOKED
+        assert await storage.read_daemon_credential_by_digest(minted.digest) is None
+
+    async def test_a_rotation_raced_with_a_revocation_leaves_no_live_credential(
+        self, storage: StationsStorageInterface
+    ) -> None:
+        org = new_id()
+        lab = await self.a_lab(storage, org)
+        first = make_credential(lab.id)
+        await storage.create_daemon_credential(org, first, ())
+        at = utcnow()
+        minted = make_credential(lab.id)
+        run = await race(
+            storage.rotate_daemon_credential(org, first.id, at, at + timedelta(minutes=1), minted),
+            storage.revoke_daemon(org, lab.id, at, ()),
+        )
+        rotation, _ = run.outcomes
+        assert rotation in (Rotation.ROTATED, Rotation.REVOKED), run.summary()
+        for credential in (first, minted):
+            found = await storage.read_daemon_credential_by_digest(credential.digest)
+            if found is None:
+                assert credential is minted and rotation is Rotation.REVOKED
+                continue
+            assert found[1].revoked_at == at, run.summary()
 
     # The line.
 
