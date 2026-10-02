@@ -2,14 +2,14 @@
 each tenant's pins and choices, with their fence.
 
 Revision ID: 202610033700
-Revises: 202610033300
+Revises: 202610033400
 """
 
 from acme.om.storage.migrate import run_sql
 from acme.om.storage.roles import DatabaseRole
 
 revision = "202610033700"
-down_revision = "202610033300"
+down_revision = "202610033400"
 branch_labels = None
 depends_on = None
 

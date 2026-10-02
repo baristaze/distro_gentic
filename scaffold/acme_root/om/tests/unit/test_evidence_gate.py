@@ -403,6 +403,7 @@ async def test_a_root_given_no_gate_ends_every_success_through_the_evidence_gate
     verdict = await managers.agents.judge_result(
         ctx, session.id, Result(claim=Claim.SUCCEEDED, evidence=(run.id,))
     )
-    assert refused(verdict, "reads no work product")
+    # Nothing says what the session delivered, so no success counts.
+    assert refused(verdict, "cannot read what it judges")
     bare = Result(claim=Claim.SUCCEEDED, evidence=(new_id(),))
     assert refused(await managers.agents.judge_result(ctx, session.id, bare), "names no run")

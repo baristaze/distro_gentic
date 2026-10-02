@@ -31,6 +31,7 @@ from acme.om.tools.storage import ToolStorageInterface
 from acme.om.trust.storage import TrustStorageInterface
 from acme.om.windows.storage import WindowStorageInterface
 from acme.om.work.storage import WorkStorageInterface
+from acme.om.workspaces.storage import WorkspaceStorageInterface
 
 
 class StorageInterface(ABC):
@@ -123,6 +124,9 @@ class StorageInterface(ABC):
 
     @abstractmethod
     def get_platform_agents_storage(self) -> PlatformAgentsStorageInterface: ...
+
+    @abstractmethod
+    def get_workspace_storage(self) -> WorkspaceStorageInterface: ...
 
     @abstractmethod
     def get_matrix_storage(self) -> MatrixStorageInterface: ...

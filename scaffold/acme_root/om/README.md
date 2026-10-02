@@ -210,6 +210,20 @@ A **validation session** runs one check on a station, with no agent and
 no model. Its work waits in its lab's lane like any station work, and
 its run is recorded like any other run.
 
+## Where tools work
+
+A **workspace** is where a session's tools work: a checkout of the
+session's branch, on a machine a host prepared. It is a cache. Its
+branch, its commits, and its artifacts live elsewhere, and what a loop
+leaves uncommitted is pushed beside the branch before the machine goes.
+
+A session's **isolation** is fixed when the session is made, and every
+workspace it gets is held to it: a host that cannot give it says no, and
+the session waits rather than run on less. Its **egress** is its
+project's allowlist: the places its workspace may reach and what it may
+do there, or open egress, chosen on purpose and recorded with why. No
+workspace ever reaches the platform's own machines.
+
 ## What the platform writes for itself
 
 No person creates these and no screen shows them, but each belongs to
@@ -282,6 +296,8 @@ arrive twice, so the second copy gets the first one's answer.
   pool, whatever it asks for.
 - A validation session names its org, and its station work is a work
   item that names the session.
+- A session's workspace names its org and its session, one each, and an
+  egress allowlist its org and its project, one each.
 - The matrix and what its operators record of a model are the
   platform's, no org's. A session's pin to a version, and an org's own
   choice of fill, name their org, and go with it.
@@ -312,6 +328,7 @@ arrive twice, so the second copy gets the first one's answer.
 - [Playbooks](src/acme/om/playbooks/README.md)
 - [Knowledge](src/acme/om/knowledge/README.md)
 - [The platform's agents](src/acme/om/platform_agents/README.md)
+- [Workspaces](src/acme/om/workspaces/README.md)
 - [Events](src/acme/om/events/README.md)
 - [Outbox rows](src/acme/om/outbox/README.md)
 - [Work items](src/acme/om/work/README.md)

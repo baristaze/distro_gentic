@@ -152,6 +152,8 @@ TABLE_SCOPES: dict[str, TableScope] = {
     "validation_sessions": TableScope(ScopeKind.ORG),
     "projects": TableScope(ScopeKind.ORG),
     "session_projects": TableScope(ScopeKind.ORG),
+    "session_workspaces": TableScope(ScopeKind.ORG),
+    "egress_allowlists": TableScope(ScopeKind.ORG),
     "matrix_pins": TableScope(ScopeKind.ORG),
     "fill_overrides": TableScope(ScopeKind.ORG),
     # A tenant's rows that also belong to one person in it. A user's person

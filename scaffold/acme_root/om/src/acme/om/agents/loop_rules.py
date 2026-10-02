@@ -422,9 +422,12 @@ def ended_step(
     )
 
 
-def changed_step(step_id: UUID, at: datetime, session_id: UUID, loop_id: UUID) -> Step:
+def changed_step(
+    step_id: UUID, at: datetime, session_id: UUID, loop_id: UUID, text: str = HANDED_BACK
+) -> Step:
     """The notice that the world under the model changed: a person worked in
-    its environment by hand."""
+    its environment by hand, or the workspace was prepared over what its
+    last loop left (`Workspace.changed`)."""
     return Step(
         id=step_id,
         created_at=at,
@@ -434,7 +437,7 @@ def changed_step(step_id: UUID, at: datetime, session_id: UUID, loop_id: UUID) -
         actor=Actor.ENGINE,
         origin=Origin.ENGINE,
         header=MarkHeader(),
-        content=Content(blocks=(TextBlock(text=HANDED_BACK),)),
+        content=Content(blocks=(TextBlock(text=text),)),
     )
 
 

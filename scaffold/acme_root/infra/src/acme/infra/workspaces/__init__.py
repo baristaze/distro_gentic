@@ -7,7 +7,13 @@ Isolation is chosen up front and never weakened. A provider meets a spec
 whole or refuses it with `IsolationRefused`, before it creates anything, and
 never hands back a weaker place in its stead. A released workspace keeps its
 files and loses its instance: the next prepare under the same id finds the
-files again. A purged one keeps nothing."""
+files again. A purged one keeps nothing.
+
+What a workspace is rebuilt from may be gone for good, such as the branch a
+checkout tracks. A layer that prepares one then raises `WorkspaceLost`, and
+the loop ends, loudly; and what changed under the model since its last loop
+rides on the workspace it prepares (`Workspace.changed`), which the loop
+tells the model before its first call."""
 
 from abc import ABC, abstractmethod
 from collections.abc import Collection
@@ -18,7 +24,7 @@ from uuid import UUID
 from pydantic import Field, model_validator
 
 from acme.infra.base import InfraModel
-from acme.infra.exceptions import InfraValidationFailed
+from acme.infra.exceptions import InfraException, InfraValidationFailed
 
 __all__ = [
     "EgressMode",
@@ -28,6 +34,7 @@ __all__ = [
     "IsolationSpec",
     "ResourceLimits",
     "Workspace",
+    "WorkspaceLost",
     "WorkspaceProviderInterface",
     "refusal",
 ]
@@ -83,6 +90,10 @@ class Workspace(InfraModel):
     org_id: UUID
     spec: IsolationSpec
     location: str
+    # What changed under the model since its last loop, in words it reads:
+    # the loop writes it as an `environment_changed` step before its first
+    # call. None when nothing did.
+    changed: str | None = None
 
     @classmethod
     def absent(cls, org_id: UUID, workspace_id: UUID) -> Self:
@@ -97,6 +108,16 @@ class IsolationRefused(InfraValidationFailed):
     never met with something weaker."""
 
     code = "isolation_refused"
+
+
+class WorkspaceLost(InfraException):
+    """What a workspace is rebuilt from is gone, or cannot be brought in, and
+    nothing says how, such as a branch deleted under it or one that moved
+    on both sides: never rebuilt from something else in its stead, and the
+    loop that asked ends, loudly."""
+
+    http_status = 409
+    code = "workspace_lost"
 
 
 def refusal(

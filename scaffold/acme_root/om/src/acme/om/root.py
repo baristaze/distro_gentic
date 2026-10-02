@@ -43,7 +43,7 @@ from acme.om.evidence import (
 )
 from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
 from acme.om.evidence.impl.manager import EvidenceManagerImpl, EvidenceOptions
-from acme.om.evidence.impl.ports import ExecutorAbsentImpl, WorkProductAbsentImpl
+from acme.om.evidence.impl.ports import ExecutorAbsentImpl
 from acme.om.evidence.rules import PROTECTED_CEILING
 from acme.om.exceptions import UnsafeConfiguration
 from acme.om.hosts import HostsManagerInterface
@@ -122,6 +122,17 @@ from acme.om.windows.types.policy import CompactionPolicy
 from acme.om.work import WorkManagerInterface, WorkOperatorManagerInterface
 from acme.om.work.impl.manager import WorkManagerImpl, WorkOptions
 from acme.om.work.impl.operator import WorkOperatorManagerImpl
+from acme.om.workspaces import WorkspacesManagerInterface
+from acme.om.workspaces.git import RepositoryReaderInterface, WorkspaceGitInterface
+from acme.om.workspaces.impl.git import GitOptions, WorkspaceGitTransportImpl
+from acme.om.workspaces.impl.manager import WorkspacesManagerImpl, WorkspacesOptions
+from acme.om.workspaces.impl.projects import PullRequestsNullImpl, WorkspaceProjectsBoundImpl
+from acme.om.workspaces.impl.reader import RepositoryReaderGitImpl
+from acme.om.workspaces.impl.sessions import AgentSessionsPinnedImpl
+from acme.om.workspaces.impl.tools import HeldWorkspaces, ToolsManagerWorkspacesImpl
+from acme.om.workspaces.impl.work_product import WorkProductWorkspacesImpl
+from acme.om.workspaces.projects import PullRequestsInterface, WorkspaceProjectsInterface
+from acme.om.workspaces.types.host import HostOffer
 
 
 @dataclass(frozen=True)
@@ -151,6 +162,7 @@ class Managers:
     evidence: EvidenceManagerInterface
     placement: PlacementManagerInterface
     placement_operator: PlacementOperatorManagerInterface
+    workspaces: WorkspacesManagerInterface
     hosts: HostsManagerInterface
     platform_agents: PlatformAgentsManagerInterface
     projects: ProjectsManagerInterface
@@ -292,6 +304,12 @@ def build_managers(
     domain_classes: tuple[str, ...] = (),
     loop_options: LoopOptions | None = None,
     placement_options: PlacementOptions | None = None,
+    workspaces_options: WorkspacesOptions | None = None,
+    workspace_host: HostOffer | None = None,
+    workspace_projects: WorkspaceProjectsInterface | None = None,
+    pull_requests: PullRequestsInterface | None = None,
+    workspace_git: WorkspaceGitInterface | None = None,
+    workspace_reader: RepositoryReaderInterface | None = None,
     hosts_options: HostsOptions | None = None,
     platform_agents_options: PlatformAgentsOptions | None = None,
     platform_agents: PlatformAgents | None = None,
@@ -351,10 +369,13 @@ def build_managers(
     The evidence takes the platform's two ports: `executor`, the fresh
     executor validation runs on, and `work_product`, which reads what a
     session delivered, and which the result gate reads too. None wires the
-    loud nulls, which refuse every validation and every read, so no success
-    counts until a process wires a work product. Whatever `tools_options`
-    names, the tools take the platform's ceiling on a protected path beside
-    its ceilings.
+    loud null executor, which refuses every validation, and the workspaces'
+    work product, the session's branch as its repository holds it, with the
+    workspace this process holds for the session telling what was not
+    delivered; one it does not hold, or one of no bound repository, is
+    refused, so no success counts on a guess. Whatever
+    `tools_options` names, the tools take the platform's ceiling on a
+    protected path beside its ceilings.
 
     `tools_layer` wraps the tools manager before the loop and the root take
     it: a layer above the engine holds its own rules around every call, and
@@ -381,7 +402,19 @@ def build_managers(
     takes its tenant's policy unnarrowed; and
     `retention_options` the sweep's batches.
 
-    The platform's projects take `projects_options`, the purges' batch."""
+    The platform's projects take `projects_options`, the purges' batch.
+
+    The workspaces take six. `workspace_host` is what this process, the
+    host its tools run on, offers beyond its provider; None offers nothing
+    more, as a host of the platform's cloud. `workspace_projects` answers a
+    session's project and the repository it binds, and `pull_requests` why
+    a session's branch is gone; None reads the projects' rows for the one,
+    and knows no pull request, so a branch gone for any reason fails
+    loudly. `workspace_git` runs the checkout; None runs it in the
+    workspace through the transport. `workspace_reader` reads what a
+    session delivered from its repository; None fetches it into a fresh
+    repository of this process's own. `workspaces_options` names the
+    networks no workspace reaches, and the sweep's batch."""
     if platform_agents is not None:
         # Their tools read the managers built below, so each edge is bound
         # at call time.
@@ -454,6 +487,7 @@ def build_managers(
         KeyServiceLocalImpl(infra.get_keys()) if environment == LOCAL else infra.get_keys()
     )
     session_keys = SessionKeysImpl(storage.get_privacy_storage(), KeyServiceByTenantImpl(keys))
+    records = record_seal or RecordSealKeysImpl(session_keys, storage.get_privacy_storage())
     steps = StepsManagerImpl(
         private_history(storage, session_keys, StepStorageMemoryImpl()),
         tenancy,
@@ -462,6 +496,23 @@ def build_managers(
         # registry; they are built below on this manager, so the edge is
         # bound at call time.
         instructs=lambda ctx, session_id: managers.agents.require_instructor(ctx, session_id),
+    )
+    kinds = AgentKindCatalog(kinds=agent_kinds)
+    # Each session's workspace, pinned as the session is created: a
+    # decorator below pins it before the session is written. Its checkout
+    # runs in the workspace through the transport, under the session's
+    # epoch.
+    workspaces = WorkspacesManagerImpl(
+        storage.get_workspace_storage(),
+        tenancy,
+        outbox,
+        kinds,
+        workspace_projects or WorkspaceProjectsBoundImpl(storage.get_project_storage()),
+        pull_requests or PullRequestsNullImpl(),
+        workspace_git
+        or WorkspaceGitTransportImpl(infra.get_transport(), steps, records, GitOptions()),
+        workspace_reader or RepositoryReaderGitImpl(),
+        workspaces_options or WorkspacesOptions(),
     )
     engine_sessions = AgentSessionsManagerImpl(
         storage.get_agent_session_storage(),
@@ -503,10 +554,13 @@ def build_managers(
     )
     retained = AgentSessionsRetainedImpl(engine_sessions, retention, privacy)
     # Each session's project: a session spawned or handed over belongs to
-    # the project of the session it came from. Every other namespace reaches
-    # the sessions through the decorator, so no such session stands outside
-    # its origin's project.
-    agent_sessions = AgentSessionsInProjectImpl(retained, storage.get_project_storage())
+    # the project of the session it came from. And each session's workspace
+    # pinned once its project row stands, before its snapshot. Every other
+    # namespace reaches the sessions through the decorators, so no such
+    # session stands outside its origin's project, or unpinned.
+    agent_sessions = AgentSessionsInProjectImpl(
+        AgentSessionsPinnedImpl(retained, workspaces), storage.get_project_storage()
+    )
     # The gate reads the budgets of a call's scopes and holds on the ledger.
     budgets = BudgetsManagerImpl(
         storage.get_budget_storage(),
@@ -547,8 +601,10 @@ def build_managers(
         outbox,
         attribution_options or AttributionOptions(),
     )
-    kinds = AgentKindCatalog(kinds=agent_kinds)
-    products = work_product or WorkProductAbsentImpl()
+    # What a session delivered is read from its repository, and what it has
+    # not from the workspace this process holds for it.
+    held = HeldWorkspaces()
+    products = work_product or WorkProductWorkspacesImpl(workspaces, held)
     results = result_gate or ResultGateEvidenceImpl(storage.get_evidence_storage(), products)
     refuse_quiet_nulls(environment, results)
     agents = AgentsManagerImpl(
@@ -601,7 +657,7 @@ def build_managers(
     if PROTECTED_CEILING not in tool_options.ceilings.rules:
         ceilings = PolicyLayer(rules=(*tool_options.ceilings.rules, PROTECTED_CEILING))
         tool_options = tool_options.model_copy(update={"ceilings": ceilings})
-    tools: ToolsManagerInterface = ToolsManagerImpl(
+    engine_tools = ToolsManagerImpl(
         storage.get_tool_storage(),
         steps,
         tenancy,
@@ -611,8 +667,18 @@ def build_managers(
         infra.get_transport(),
         tool_options,
         keyed_hash=privacy.keyed_hash,
-        record_seal=record_seal or RecordSealKeysImpl(session_keys, storage.get_privacy_storage()),
+        record_seal=records,
         attribution=attribution,
+    )
+    # Each workspace is held to its session's pin, refused by this host where
+    # it cannot give it, brought up to the session's branch, and kept before
+    # it goes.
+    tools: ToolsManagerInterface = ToolsManagerWorkspacesImpl(
+        engine_tools,
+        workspaces,
+        workspace_host or HostOffer(),
+        local=environment == LOCAL,
+        held=held,
     )
     # What makes a result: the runs, the policies, and validation on the
     # executor, apart from every agent's workspace.
@@ -714,6 +780,7 @@ def build_managers(
             storage.get_event_storage(),
             infra.get_topics(),
         ),
+        workspaces=workspaces,
         # A host's credential, its claims through placement, and where each
         # session runs.
         hosts=HostsManagerImpl(

@@ -8,6 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 from acme.infra.impl.local import InfraLocalImpl
@@ -40,7 +41,6 @@ from acme.om.steps.types.step import Step, StepType
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.tenancy.rules import permissions_of
-from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.tools.tool import ToolInterface, ToolRuntime
 from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule, Target
 from acme.om.tools.types.tool import Effect, ToolClass, ToolInput, ToolSpec
@@ -257,7 +257,7 @@ def loop_over(
     work_product: WorkProductInterface | None = None,
     call_gate: Callable[[Managers, Clock], CallGateInterface] | None = None,
     models_layer: ModelsLayer | None = None,
-    tools_layer: Callable[[ToolsManagerInterface], ToolsManagerInterface] | None = None,
+    **roots: Any,
 ) -> Loop:
     """`storage` None is the memory storage, and `owner` None a fresh
     tenant's owner; a suite over Postgres hands in both. `jitter` is what
@@ -266,8 +266,9 @@ def loop_over(
     engine's suites read it; `executor` and `work_product` go to the root as
     they are. `call_gate` None is the budgets' gate behind the call gate; a
     suite of a gate of its own builds it from the managers and the clock.
-    `models_layer` and `tools_layer` go to the root as a platform's root
-    hands them in, and the loop takes the layer's call credentials."""
+    `models_layer` goes to the root as a platform's root hands it in, and
+    the loop takes the layer's call credentials; and `roots` is what else
+    the managers are built with."""
     infra = InfraLocalImpl(tmp_path)
     anthropic = ModelProviderScriptedImpl(ProviderName.ANTHROPIC)
     openai = ModelProviderScriptedImpl(ProviderName.OPENAI)
@@ -288,7 +289,7 @@ def loop_over(
         executor=executor,
         work_product=work_product,
         models_layer=models_layer,
-        tools_layer=tools_layer,
+        **roots,
     )
     clock = Clock()
 
