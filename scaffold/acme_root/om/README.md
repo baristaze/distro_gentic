@@ -166,6 +166,14 @@ own, which lasts an hour and which it renews itself. A session's
 org's pools. A session pinned to a pool with no host online waits, and
 says so; it never moves to the cloud unless a person moves it.
 
+When a pinned session's agent calls a tool, the call crosses the wall as
+an **exec item**: one command or file operation for the host that holds
+the session's workspace. The host claims it, runs it, streams what it
+prints back, and pushes how it ended, which is kept under the call's key.
+A call the agent may not repeat runs once, whatever crashes. The host
+holds one **control stream** open to the platform, which stops a command
+at once.
+
 ## What the platform writes for itself
 
 No person creates these and no screen shows them, but each belongs to
@@ -231,6 +239,9 @@ arrive twice, so the second copy gets the first one's answer.
 - A pool, its tokens, its hosts, their credentials, and a session's
   placement name their org. A host is handed only the work of its own
   pool, whatever it asks for.
+- An exec item, its output, its control messages, and a session's
+  workspace binding name their org. A host reads and answers only the
+  items it holds.
 
 ## One page per kind
 
@@ -250,6 +261,7 @@ arrive twice, so the second copy gets the first one's answer.
 - [Placement](src/acme/om/placement/README.md)
 - [Trust](src/acme/om/trust/README.md)
 - [Hosts](src/acme/om/hosts/README.md)
+- [Relay](src/acme/om/relay/README.md)
 - [Events](src/acme/om/events/README.md)
 - [Outbox rows](src/acme/om/outbox/README.md)
 - [Work items](src/acme/om/work/README.md)
