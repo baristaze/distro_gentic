@@ -60,6 +60,8 @@ from acme.om.windows.storage import WindowStorageInterface
 from acme.om.windows.storage.impl.memory import WindowStorageMemoryImpl
 from acme.om.work.storage import WorkStorageInterface
 from acme.om.work.storage.impl.memory import WorkStorageMemoryImpl
+from acme.om.workspaces.storage import WorkspaceStorageInterface
+from acme.om.workspaces.storage.impl.memory import WorkspaceStorageMemoryImpl
 
 
 class StorageMemoryImpl(StorageInterface):
@@ -97,6 +99,7 @@ class StorageMemoryImpl(StorageInterface):
         self._playbook = PlaybookStorageMemoryImpl(self._outbox)
         self._knowledge = KnowledgeStorageMemoryImpl(self._outbox)
         self._platform_agents = PlatformAgentsStorageMemoryImpl(self._outbox)
+        self._workspaces = WorkspaceStorageMemoryImpl(self._outbox)
 
     def get_tenancy_storage(self) -> TenancyStorageInterface:
         return self._tenancy
@@ -187,6 +190,9 @@ class StorageMemoryImpl(StorageInterface):
 
     def get_platform_agents_storage(self) -> PlatformAgentsStorageInterface:
         return self._platform_agents
+
+    def get_workspace_storage(self) -> WorkspaceStorageInterface:
+        return self._workspaces
 
     async def healthcheck(self) -> bool:
         return True

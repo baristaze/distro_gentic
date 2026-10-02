@@ -51,6 +51,7 @@ from contracts import (
     trust_storage,
     window_storage,
     work_storage,
+    workspace_storage,
 )
 
 import acme.om
@@ -164,6 +165,7 @@ CROSS_TENANT_CASES: dict[str, frozenset[str]] = {
     "PlaybookStorageInterface": playbook_storage.CROSS_TENANT_CASES,
     "KnowledgeStorageInterface": knowledge_storage.CROSS_TENANT_CASES,
     "WorkStorageInterface": work_storage.CROSS_TENANT_CASES,
+    "WorkspaceStorageInterface": workspace_storage.CROSS_TENANT_CASES,
 }
 """Which contract suite carries the cross-tenant cases of each storage
 interface. A namespace whose suite is not here has no evidence behind its
