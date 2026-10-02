@@ -85,12 +85,14 @@ version = "0.1.0"
 source = { editable = "apps/host" }
 dependencies = [
     { name = "acme-client" },
+    { name = "acme-infra" },
     { name = "typer" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "acme-client", editable = "clients/python" },
+    { name = "acme-infra", editable = "infra" },
     { name = "typer", specifier = ">=0.15" },
 ]
 

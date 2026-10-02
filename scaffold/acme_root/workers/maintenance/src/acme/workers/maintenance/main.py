@@ -101,6 +101,8 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             "placement": managers.placement.purge_tenant,
             "hosts": managers.hosts.purge_tenant,
             "validation_sessions": managers.platform_agents.purge_tenant,
+            # Its exec items with their output, its controls, its bindings.
+            "relay": managers.relay.purge_tenant,
             "stations": managers.stations.purge_tenant,
             "workspaces": managers.workspaces.purge_tenant,
             # Every artifact's object, then its record, under the purge login.
@@ -150,6 +152,9 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             # marked for the purge above. A tightened policy reaches each
             # session first.
             "retention": managers.retention.sweep,
+            # Each exec item whose host's lease ran out: an unsafe one ends
+            # `interrupted`, a repeatable one waits for its host again.
+            "relay": managers.relay.settle_expired,
         },
         # The media and session purges' batches are their own: a whole one
         # says there may be more.

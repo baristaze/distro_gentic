@@ -127,6 +127,7 @@ class ToolRuntime:
                 epoch=self._epoch,
                 deadline=self.deadline,
                 max_output=max_output,
+                effect=self._effect.value,
             ),
             self._on_output,
             seal=self._seal,

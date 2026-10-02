@@ -104,6 +104,20 @@ exclude = ["clients/python/src/acme/client/schema.py"]
 package = "acme"
 exclude = ["clients/python/src/acme/client/schema.py"]
 
+# A host runs the exec items it holds on its own disk, through the engine's
+# transports, isolation, and local secrets; it dials nothing through them.
+[[tool.distro-check.exception]]
+rule = "PLC-10"
+path = "apps/host/src/acme/apps/host/main.py"
+adr = "docs/adr/2004-a-tool-call-crosses-the-wall-as-keyed-exec-work-and-runs-once.md"
+reason = "a host runs the items it holds through the engine's container transport on its own disk, and reaches the platform through the client alone"
+
+[[tool.distro-check.exception]]
+rule = "PLC-10"
+path = "apps/host/src/acme/apps/host/relay.py"
+adr = "docs/adr/2004-a-tool-call-crosses-the-wall-as-keyed-exec-work-and-runs-once.md"
+reason = "a host runs the items it holds through the engine's container transport on its own disk, and reaches the platform through the client alone"
+
 # The guideline's static checker (`make arch-check`). The layout is the
 # guideline's, so only the package and the project's own lists are named.
 [tool.arch-check]
@@ -159,6 +173,7 @@ tenantless = [
     "OutboxStorageInterface.count_failed_since",
     "OutboxStorageInterface.oldest_pending_at",
     "OutboxStorageInterface.purge_done",
+    "RelayStorageInterface.read_expired",
     "RetentionStorageInterface.read_behind",
     "RetentionStorageInterface.read_due",
     "StationsStorageInterface.read_daemon_credential_by_digest",
@@ -219,8 +234,9 @@ builders = ["build_context"]
 
 # The entities a reader with no tenant takes, which carry their org_id: the
 # guideline's two, the claimant the control plane claims for across
-# tenants, whose org_id is the wall it sits in, and the identities a host's
+# tenants, whose org_id is the wall it sits in, the identities a host's
 # and a station daemon's credentials resolve to, each found by its digest
-# across tenants.
+# across tenants, and what a host reads of an exec item it holds, which
+# names the host's own tenant for the secret store it keys by tenant.
 [tool.arch-check.options.OM-02]
-tenantless = ["OutboxRow", "Event", "Claimant", "HostIdentity", "DaemonIdentity"]
+tenantless = ["OutboxRow", "Event", "Claimant", "HostIdentity", "DaemonIdentity", "ExecDetail"]

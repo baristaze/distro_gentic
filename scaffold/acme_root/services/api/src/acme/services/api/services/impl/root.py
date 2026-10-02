@@ -13,6 +13,7 @@ from acme.services.api.services import (
     HostsServiceInterface,
     MediaServiceInterface,
     RealtimeServiceInterface,
+    RelayServiceInterface,
     ServicesInterface,
     StationsServiceInterface,
     TenancyServiceInterface,
@@ -24,6 +25,7 @@ from acme.services.api.services.impl.events import EventsServiceImpl
 from acme.services.api.services.impl.hosts import HostsServiceImpl
 from acme.services.api.services.impl.media import MediaServiceImpl
 from acme.services.api.services.impl.realtime import RealtimeServiceImpl
+from acme.services.api.services.impl.relay import RelayServiceImpl
 from acme.services.api.services.impl.stations import StationsServiceImpl
 from acme.services.api.services.impl.tenancy import TenancyServiceImpl
 from acme.services.api.services.impl.webhooks import WebhooksServiceImpl
@@ -40,6 +42,7 @@ class ServicesImpl(ServicesInterface):
         webhooks: WebhooksServiceInterface,
         agent_sessions: AgentSessionsServiceInterface,
         hosts: HostsServiceInterface,
+        relay: RelayServiceInterface,
         stations: StationsServiceInterface,
     ) -> None:
         self._tenancy = tenancy
@@ -50,6 +53,7 @@ class ServicesImpl(ServicesInterface):
         self._webhooks = webhooks
         self._agent_sessions = agent_sessions
         self._hosts = hosts
+        self._relay = relay
         self._stations = stations
 
     def get_tenancy_service(self) -> TenancyServiceInterface:
@@ -75,6 +79,9 @@ class ServicesImpl(ServicesInterface):
 
     def get_hosts_service(self) -> HostsServiceInterface:
         return self._hosts
+
+    def get_relay_service(self) -> RelayServiceInterface:
+        return self._relay
 
     def get_stations_service(self) -> StationsServiceInterface:
         return self._stations
@@ -103,5 +110,6 @@ def build_services(
             managers.agent_sessions, managers.agents, managers.steps, managers.tools
         ),
         hosts=HostsServiceImpl(managers.hosts),
+        relay=RelayServiceImpl(managers.relay, infra.get_topics()),
         stations=StationsServiceImpl(managers.stations),
     )

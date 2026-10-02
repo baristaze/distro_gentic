@@ -32,11 +32,26 @@ uv run acme-host run          # every start after it
   or a version below the floor stops it.
 - **Holds its owner's ceilings.** Its owner writes `ceilings.toml` in its
   home: the projects it serves, its minimum isolation, its egress, the
-  paths a result may read, and whether it accepts people's commands.
+  paths a result may read, whether it accepts people's commands, and how
+  many items it runs at once.
   Every item it claims is held to them, and to the modes it probed,
   before anything runs. An item that does not say what it needs is read
   as asking the most. Nothing the platform sends changes a ceiling, and
   a host with no ceilings file does not start.
+- **Runs a tool call once, and stops it at once.** An `exec` item it
+  claims is a command or a file operation in a workspace it holds. It
+  runs it through its own transport, a container per session, sends
+  what it prints back a part at a time, and pushes how it ended, each
+  with the hash of the bytes it sends. It renews its lease while the
+  command runs, and waits out a renewal or a result the platform fails
+  to take while the lease lasts. Items run side by side, so a long
+  command holds up no other call. It holds one control stream open to
+  the platform, which wakes it to claim at once and stops a command at
+  once, and opens it again with the credential it holds whenever it
+  ends. An item past a
+  ceiling is answered as refused, so the agent reads why. A bare
+  directory runs only as the host's dedicated user, which no transport
+  here does yet, so an item at that mode is refused.
 
 ```toml
 projects = ["0192f1a4-6c1e-7a51-9b0c-2f8e5d4c3b2a"]   # or "all"
@@ -44,14 +59,18 @@ min_isolation = "container"                           # vm, container, or direct
 egress = ["github.com:443"]                           # or "open"
 readable = ["/srv/work"]
 people_commands = false
+items_at_once = 4
 ```
 
 <!-- agents-only
-What runs an item is the executor (`agent.ExecutorInterface`). Until the
-relay wires one, `ExecutorPendingImpl` runs nothing, and the item's lease
-runs out for the sweep to take back. The fields a host reads of an item
-are `project_id`, `isolation`, `egress`, `reads`, and `by_person` in its
-payload (`ceilings.ask_of`); a payload without them is refused.
+What runs an item is the executor (`agent.ExecutorInterface`), the
+relay's in `relay.ExecutorRelayImpl`, over the engine's transports by
+isolation mode (`main.host_transports`). It runs `EXEC` items alone; a
+`WORKSPACE` item is logged and left to its lease. The fields a host reads
+of an item are `project_id`, `isolation`, `egress`, `reads`, and
+`by_person` in its payload (`ceilings.ask_of`); a payload without them is
+refused. What the item runs it reads from the gateway while it holds it
+(`ApiClient.exec_detail`), never from the payload (ADR 2004).
 -->
 
 ## Conventions
@@ -60,10 +79,12 @@ payload (`ceilings.ask_of`); a payload without them is refused.
   the host is wrong, 3 not enrolled, 4 the platform is unreachable at
   startup, 5 a startup probe failed.
 - `ACME_API_URL` names the platform. `ACME_HOST_HOME` (default
-  `~/.config/acme-host`) holds `credential.json`, mode 600, and the
-  owner's `ceilings.toml`. `ACME_HOST_NAME` is the name it enrolls
-  under. `ACME_HOST_WORKSPACE_USER` is the user a bare-directory
-  workspace runs as.
+  `~/.config/acme-host`) holds `credential.json`, mode 600, the owner's
+  `ceilings.toml`, the host's own secret store, `secrets`, owner-only and
+  keyed by tenant first, and `records/`, where its transport keeps how
+  each command ended. `ACME_HOST_NAME` is the name it enrolls under.
+  `ACME_HOST_WORKSPACE_USER` is the user a bare-directory workspace runs
+  as.
 
 ## Test
 

@@ -5,9 +5,11 @@ the package that sends a request; every operation is a method that returns a
 typed view."""
 
 import asyncio
+import base64
+import hashlib
 import random
 import ssl
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from datetime import datetime
 from email.utils import parsedate_to_datetime
@@ -21,8 +23,12 @@ from acme.client.types import (
     AdvertisementBody,
     AgentSessionView,
     ClaimView,
+    ControlView,
+    CrossingKind,
     DeviceSignInView,
     EventView,
+    ExecDetailView,
+    ExecLeaseView,
     FilePageView,
     FileView,
     HostView,
@@ -45,6 +51,7 @@ from acme.client.types import (
     OperatorView,
     OperatorWorkItemView,
     OrgView,
+    OutputStream,
     PlatformSizeView,
     Role,
     SessionControl,
@@ -96,7 +103,16 @@ WIRE_FAILURES = (httpx.TransportError,)
 that outlasts the platform's absence, such as a workspace host, waits these
 out without naming the technology under the client."""
 
+CONTROL_IDLE_SECONDS = 60.0
+"""How long a host's control stream waits for a line before it is taken for
+lost and opened again: the platform pings well within it."""
+
 AppName = Literal["portal", "admin", "cli", "api"]
+
+
+def _declared(kind: CrossingKind, data: bytes) -> dict[str, Any]:
+    """What a sender declares of the bytes it sends across the wall."""
+    return {"kind": kind.value, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}
 
 
 def may_retry(method: str, idempotency_key: str | None = None) -> bool:
@@ -818,6 +834,65 @@ class ApiClient:
             "POST", "/v1/hosts/me/claims", json={"exec_version": exec_version}
         )
         return ClaimView.model_validate(answer)
+
+    # The exec work a host holds. Each push carries the bytes as they cross,
+    # in base64, and the hash the host declares of them, which the platform
+    # checks before it reads them. None is retried here: the host decides
+    # what a lost answer means for the item it holds.
+
+    async def exec_detail(self, item_id: UUID) -> ExecDetailView:
+        """What the host runs for an item it holds, opened."""
+        answer = await self.request("GET", f"/v1/hosts/me/exec/{item_id}")
+        return ExecDetailView.model_validate(answer)
+
+    async def push_exec_part(
+        self, item_id: UUID, seq: int, stream: OutputStream, data: bytes
+    ) -> None:
+        """One part of the item's output; one sent again lands once."""
+        await self.request(
+            "POST",
+            f"/v1/hosts/me/exec/{item_id}/parts",
+            json={
+                "seq": seq,
+                "stream": stream.value,
+                "data": base64.b64encode(data).decode(),
+                "crossing": _declared(CrossingKind.stream_part, data),
+            },
+        )
+
+    async def push_exec_result(self, item_id: UUID, data: bytes) -> None:
+        """How the item ended: the first settlement wins, and a result for
+        an item already settled is refused."""
+        await self.request(
+            "POST",
+            f"/v1/hosts/me/exec/{item_id}/result",
+            json={
+                "data": base64.b64encode(data).decode(),
+                "crossing": _declared(CrossingKind.result, data),
+            },
+        )
+
+    async def extend_exec_lease(self, item_id: UUID) -> ExecLeaseView:
+        answer = await self.request("POST", f"/v1/hosts/me/exec/{item_id}/lease")
+        return ExecLeaseView.model_validate(answer)
+
+    async def control_stream(self, after: UUID | None = None) -> AsyncIterator[ControlView]:
+        """The host's control stream, opened from here and held open: each
+        line as it arrives, until the platform ends it with the credential it
+        was opened with. A line that does not come within
+        `CONTROL_IDLE_SECONDS` takes the stream for lost."""
+        headers = {"Authorization": f"Bearer {self.token}"} if self.token else {}
+        params = {} if after is None else {"after": str(after)}
+        timeout = httpx.Timeout(self.timeout, read=CONTROL_IDLE_SECONDS)
+        async with self._http.stream(
+            "GET", "/v1/hosts/me/control", params=params, headers=headers, timeout=timeout
+        ) as response:
+            if response.is_error:
+                await response.aread()
+                raise _error_of(response)
+            async for line in response.aiter_lines():
+                if line.strip():
+                    yield ControlView.model_validate_json(line)
 
     # A station daemon's own calls, with a credential of its own that its
     # owner issued first and it rotates before it ends. None of them is
