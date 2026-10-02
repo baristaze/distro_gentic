@@ -10,6 +10,7 @@ from acme.om.budgets.storage import BudgetStorageInterface, LedgerStorageInterfa
 from acme.om.events.storage import EventStorageInterface
 from acme.om.evidence.storage import EvidenceStorageInterface
 from acme.om.idempotency.storage import IdempotencyStorageInterface
+from acme.om.matrix.storage import MatrixStorageInterface, MatrixTenantStorageInterface
 from acme.om.media.storage import MediaStorageInterface
 from acme.om.models.storage import FillSetStorageInterface
 from acme.om.orchestrations.storage import OrchestrationsStorageInterface
@@ -94,6 +95,12 @@ class StorageInterface(ABC):
 
     @abstractmethod
     def get_trust_storage(self) -> TrustStorageInterface: ...
+
+    @abstractmethod
+    def get_matrix_storage(self) -> MatrixStorageInterface: ...
+
+    @abstractmethod
+    def get_matrix_tenant_storage(self) -> MatrixTenantStorageInterface: ...
 
     @abstractmethod
     async def healthcheck(self) -> bool: ...

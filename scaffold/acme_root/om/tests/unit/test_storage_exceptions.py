@@ -31,6 +31,7 @@ from contracts import (
     fill_set_storage,
     idempotency_storage,
     ledger_storage,
+    matrix_storage,
     media_storage,
     money_ledger_storage,
     orchestration_storage,
@@ -119,6 +120,16 @@ STORAGE_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         ("OutboxStorageInterface", "oldest_pending_at"),
         # The outbox's dead-letter gauge, read across tenants like the lag's.
         ("OutboxStorageInterface", "count_failed_since"),
+        # The platform's model matrix and what its operators record of a
+        # model: global rows of the system scope, no tenant's.
+        ("MatrixStorageInterface", "create_version"),
+        ("MatrixStorageInterface", "read_version"),
+        ("MatrixStorageInterface", "read_latest"),
+        ("MatrixStorageInterface", "publish_version"),
+        ("MatrixStorageInterface", "add_result"),
+        ("MatrixStorageInterface", "read_results"),
+        ("MatrixStorageInterface", "add_retirement"),
+        ("MatrixStorageInterface", "read_retirements"),
     }
 )
 
@@ -133,6 +144,8 @@ CROSS_TENANT_CASES: dict[str, frozenset[str]] = {
     "FillSetStorageInterface": fill_set_storage.CROSS_TENANT_CASES,
     "IdempotencyStorageInterface": idempotency_storage.CROSS_TENANT_CASES,
     "LedgerStorageInterface": ledger_storage.CROSS_TENANT_CASES,
+    "MatrixStorageInterface": matrix_storage.CROSS_TENANT_CASES,
+    "MatrixTenantStorageInterface": matrix_storage.TENANT_CROSS_TENANT_CASES,
     "MediaStorageInterface": media_storage.CROSS_TENANT_CASES,
     "MoneyLedgerStorageInterface": money_ledger_storage.CROSS_TENANT_CASES,
     "OrchestrationsStorageInterface": orchestration_storage.CROSS_TENANT_CASES,

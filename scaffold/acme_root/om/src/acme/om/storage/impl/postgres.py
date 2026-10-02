@@ -32,6 +32,11 @@ from acme.om.evidence.storage import EvidenceStorageInterface
 from acme.om.evidence.storage.impl.postgres import EvidenceStoragePostgresImpl
 from acme.om.idempotency.storage import IdempotencyStorageInterface
 from acme.om.idempotency.storage.impl.postgres import IdempotencyStoragePostgresImpl
+from acme.om.matrix.storage import MatrixStorageInterface, MatrixTenantStorageInterface
+from acme.om.matrix.storage.impl.postgres import (
+    MatrixStoragePostgresImpl,
+    MatrixTenantStoragePostgresImpl,
+)
 from acme.om.media.storage import MediaStorageInterface
 from acme.om.media.storage.impl.postgres import MediaStoragePostgresImpl
 from acme.om.models.storage import FillSetStorageInterface
@@ -209,6 +214,8 @@ class StoragePostgresImpl(StorageInterface):
         self._evidence = EvidenceStoragePostgresImpl(sessions)
         self._placement = PlacementStoragePostgresImpl(sessions)
         self._trust = TrustStoragePostgresImpl(sessions)
+        self._matrix = MatrixStoragePostgresImpl(sessions)
+        self._matrix_tenants = MatrixTenantStoragePostgresImpl(sessions)
 
     def get_tenancy_storage(self) -> TenancyStorageInterface:
         return self._tenancy
@@ -278,6 +285,12 @@ class StoragePostgresImpl(StorageInterface):
 
     def get_trust_storage(self) -> TrustStorageInterface:
         return self._trust
+
+    def get_matrix_storage(self) -> MatrixStorageInterface:
+        return self._matrix
+
+    def get_matrix_tenant_storage(self) -> MatrixTenantStorageInterface:
+        return self._matrix_tenants
 
     async def healthcheck(self) -> bool:
         """A connect and a `SELECT 1` on every engine, each under the bounds its
