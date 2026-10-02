@@ -62,6 +62,7 @@ from acme.workers.session_runner.runs import LoopHandlerImpl
 from acme.workers.session_runner.settings import SessionRunnerSettings
 
 ENV_EXAMPLE = Path(__file__).resolve().parents[3] / ".env.example"
+COLLECTOR = ENV_EXAMPLE.parent / "deployment" / "local" / "otel-collector" / "collector.yml"
 APP = AppContext(type=AppType.PORTAL, version="portal@test")
 
 
@@ -243,6 +244,19 @@ def test_every_knob_of_the_runner_is_in_the_example_env() -> None:
     assert own
     for name in own:
         assert re.search(rf"^#?ACME_{name.upper()}=", text, re.MULTILINE), name
+
+
+def test_the_local_collector_scrapes_the_runner_on_its_metrics_port() -> None:
+    """The runner runs only as a host process, and what it exports (each
+    model call's tokens and spend, each outage report) reaches a dashboard
+    only through the collector's job for it."""
+    port = SessionRunnerSettings.model_fields["runner_metrics_port"].default
+    job = re.search(
+        r"- job_name: session_runner\n(?:\s+.*\n)*?\s+- targets: \[\"([^\"]+)\"\]",
+        COLLECTOR.read_text(),
+    )
+    assert job is not None, "the collector has no session_runner job"
+    assert job[1] == f"${{env:ACME_COLLECTOR_SCRAPE_HOST}}:{port}", job[1]
 
 
 def runner_over(tmp_path: Path) -> RunnerContainer:
