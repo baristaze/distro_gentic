@@ -18,9 +18,10 @@ strictly as a skill's (`check_skills.py`), and holds:
 
 The reviewer that `distro-review-full` fans out to,
 `agents/distro-reviewer.md`, carries the same procedure and the same
-report shape as the review skills, and nothing generates it. So, when
-the review template `skills/_template/review.SKILL.md` exists, the
-reviewer exists too and mirrors it:
+report shape as the review skills, and nothing generates it. So the
+two exist together: the reviewer without the review template
+`skills/_template/review.SKILL.md` is held to nothing, and fails. When
+the template exists, the reviewer exists too and mirrors it:
 
 - the four decision words (finding, pass, not applicable, unverified)
   appear in bold in the procedure of both, in the same order;
@@ -111,10 +112,13 @@ def decision_order(proc: str) -> list[str]:
 
 
 def check_mirror(errors: list[str]) -> None:
-    """When the review template exists, the reviewer exists and mirrors it: decision words, step count, report."""
-    if not TEMPLATE.is_file():
-        return
+    """The reviewer and the review template exist together, and the reviewer mirrors it: decision words, step count,
+    report."""
     t_rel, a_rel = str(TEMPLATE.relative_to(ROOT)), str(REVIEWER.relative_to(ROOT))
+    if not TEMPLATE.is_file():
+        if REVIEWER.is_file():
+            errors.append(f"{a_rel}: {t_rel} is missing, so nothing holds the reviewer to the review skills")
+        return
     if not REVIEWER.is_file():
         errors.append(f"{a_rel}: missing; distro-review-full fans out to it, and it mirrors {t_rel}")
         return

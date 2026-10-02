@@ -366,3 +366,11 @@ def test_a_review_skill_that_pre_approves_more_than_a_git_command_fails(repo, sk
     repo.edit(path, "allowed-tools: Read,", f"allowed-tools: Read, {entry},")
     assert skills.main() == 1
     assert f"{path}: {entry!r} lets a review run more than a git command with nobody asked" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("skill", ["distro-review-steps", "distro-review-full"])
+def test_a_review_skill_without_the_review_template_fails(repo, skills, capsys, skill):
+    (repo.root / "skills" / "_template" / "review.SKILL.md").unlink()
+    assert skills.main() == 1
+    expected = f"skills/{skill}/SKILL.md: skills/_template/review.SKILL.md is missing, so nothing holds the review skills"
+    assert expected in capsys.readouterr().out

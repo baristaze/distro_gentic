@@ -58,7 +58,8 @@ A folder that does not exist holds no skill, and passes. Rules:
   `distro-review-full` exists and names every group's review skill, so
   a group added to the table cannot go unreviewed. `make gen-skills`
   writes the group skills from one template; `make gen-skills-check`
-  holds them to it;
+  holds them to it. A review skill without that template,
+  `skills/_template/review.SKILL.md`, is held to nothing, and fails;
 - a review skill (`distro-review-*`) runs no file of the repository it
   reviews: every Bash entry of its allowed-tools is a git command, so
   none pre-approves an interpreter or a runner;
@@ -107,6 +108,8 @@ GROUP_ROW = re.compile(r"^\|\s*`([a-z]+)`\s*\|")
 """A row of the group table in `lenses/README.md`: its first cell is the group id, in backticks."""
 REVIEW = "distro-review-"
 FULL = "distro-review-full"
+TEMPLATE = SKILLS / "_template" / "review.SKILL.md"
+"""The template the group review skills are generated from and the reviewer mirrors."""
 NOT_GIT = (
     "lets a review run more than a git command with nobody asked; a review runs no file of the repository it "
     "reviews, so it pre-approves no interpreter and no runner"
@@ -369,6 +372,8 @@ def check_review(folder: Path, tools: str, text: str, groups: list[str], reviewe
     """A review skill pre-approves git commands alone; a group's review skill is one the lens table lists, and
     names its lens file. The group it reviews is added to `reviewed`."""
     rel = str((folder / "SKILL.md").relative_to(ROOT))
+    if not TEMPLATE.is_file():
+        errors.append(f"{rel}: {TEMPLATE.relative_to(ROOT)} is missing, so nothing holds the review skills to one procedure")
     for tool in (t.strip() for t in tools.split(",")):
         cmd = bash_command(tool)
         if cmd is not None and not cmd.startswith("git "):

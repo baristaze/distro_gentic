@@ -53,8 +53,13 @@ the changed text changes with it.
   is its folder's and starts with `distro-`, so it never collides with
   the guideline's `arch-*` or the engine's `agentic-*`.
   `scripts/check_skills.py` holds its frontmatter and the paths it
-  names, and one `distro-review-<group>` skill per row of the group
-  table in `lenses/README.md`, each named by `distro-review-full`.
+  names.
+- `skills/distro-review-<group>/SKILL.md` is generated, one per row of
+  the group table in `lenses/README.md`, from
+  `skills/_template/review.SKILL.md` (`make gen-skills`). Edit the
+  template or the lens file, never the generated skill;
+  `make gen-skills-check` fails on a stale one, and the gates fail on a
+  review skill or the reviewer without the template.
 - `agents/distro-<name>.md` is a Claude Code subagent a skill fans out
   to. `scripts/check_agents.py` holds its frontmatter and its
   `maxTurns`, and holds `agents/distro-reviewer.md` to the review

@@ -25,6 +25,12 @@ def test_no_agents_folder_and_no_review_template_pass(repo, agents, capsys):
     assert "agents ok: 0 agent(s)" in capsys.readouterr().out
 
 
+def test_a_reviewer_without_the_review_template_fails(repo, agents, capsys):
+    (repo.root / TEMPLATE).unlink()
+    assert agents.main() == 1
+    assert f"{AGENT}: {TEMPLATE} is missing, so nothing holds the reviewer to the review skills" in capsys.readouterr().out
+
+
 def test_a_review_template_without_its_reviewer_fails(repo, agents, capsys):
     (repo.root / AGENT).unlink()
     assert agents.main() == 1
