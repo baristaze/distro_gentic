@@ -61,7 +61,7 @@ report names their layers as not run.
 ## Develop
 
 ```bash
-make check       # everything CI runs
+make check       # the root gates
 make gen-toc     # regenerate the spec's Contents from its headings
 make gen-skills  # regenerate the review skills from the template and the lenses
 ```
