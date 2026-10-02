@@ -12,6 +12,7 @@ from acme.services.api.services import (
     AdminServiceInterface,
     AgentSessionsServiceInterface,
     EventsServiceInterface,
+    HostsServiceInterface,
     MediaServiceInterface,
     RealtimeServiceInterface,
     ServicesInterface,
@@ -59,6 +60,10 @@ def agent_sessions_service(connection: HTTPConnection) -> AgentSessionsServiceIn
     return services_of(connection).get_agent_sessions_service()
 
 
+def hosts_service(connection: HTTPConnection) -> HostsServiceInterface:
+    return services_of(connection).get_hosts_service()
+
+
 TenancyService = Annotated[TenancyServiceInterface, Depends(tenancy_service)]
 AdminService = Annotated[AdminServiceInterface, Depends(admin_service)]
 EventsService = Annotated[EventsServiceInterface, Depends(events_service)]
@@ -66,3 +71,4 @@ MediaService = Annotated[MediaServiceInterface, Depends(media_service)]
 RealtimeService = Annotated[RealtimeServiceInterface, Depends(realtime_service)]
 WebhooksService = Annotated[WebhooksServiceInterface, Depends(webhooks_service)]
 AgentSessionsService = Annotated[AgentSessionsServiceInterface, Depends(agent_sessions_service)]
+HostsService = Annotated[HostsServiceInterface, Depends(hosts_service)]

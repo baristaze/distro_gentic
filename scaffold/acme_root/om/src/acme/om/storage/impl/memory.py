@@ -19,6 +19,8 @@ from acme.om.events.storage import EventStorageInterface
 from acme.om.events.storage.impl.memory import EventStorageMemoryImpl
 from acme.om.evidence.storage import EvidenceStorageInterface
 from acme.om.evidence.storage.impl.memory import EvidenceStorageMemoryImpl
+from acme.om.hosts.storage import HostsStorageInterface
+from acme.om.hosts.storage.impl.memory import HostsStorageMemoryImpl
 from acme.om.idempotency.storage import IdempotencyStorageInterface
 from acme.om.idempotency.storage.impl.memory import IdempotencyStorageMemoryImpl
 from acme.om.intake.storage import IntakeStorageInterface
@@ -94,6 +96,7 @@ class StorageMemoryImpl(StorageInterface):
         self._evidence = EvidenceStorageMemoryImpl(self._outbox)
         self._placement = PlacementStorageMemoryImpl()
         self._trust = TrustStorageMemoryImpl(self._outbox)
+        self._hosts = HostsStorageMemoryImpl(self._outbox)
         self._intake = IntakeStorageMemoryImpl()
         self._automation = AutomationStorageMemoryImpl(self._outbox)
         self._playbook = PlaybookStorageMemoryImpl(self._outbox)
@@ -173,6 +176,9 @@ class StorageMemoryImpl(StorageInterface):
 
     def get_trust_storage(self) -> TrustStorageInterface:
         return self._trust
+
+    def get_hosts_storage(self) -> HostsStorageInterface:
+        return self._hosts
 
     def get_intake_storage(self) -> IntakeStorageInterface:
         return self._intake

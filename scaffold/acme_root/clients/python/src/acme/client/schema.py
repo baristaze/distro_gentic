@@ -35,6 +35,35 @@ class TtlDays(RootModel[int]):
     root: Annotated[int, Field(ge=1, le=90, title='Ttl Days')]
 
 
+class Capability(RootModel[str]):
+    root: Annotated[str, Field(pattern='^[a-z][a-z0-9_.-]{0,62}$')]
+
+
+class ClaimRequest(BaseModel):
+    """
+    The version of `exec` work the host reads, and nothing else: what it
+    is handed is its identity's to say.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    exec_version: Annotated[int, Field(ge=1, title='Exec Version')]
+
+
+class ClaimedWorkView(BaseModel):
+    """
+    One item a host was handed, under a lease, as `exec` work of
+    `wire_version`. `payload` is the item's, as its kind fixes it.
+    """
+    attempts: Annotated[int, Field(title='Attempts')]
+    id: Annotated[UUID, Field(title='Id')]
+    kind: Annotated[str, Field(title='Kind')]
+    lease_expires_at: Annotated[AwareDatetime | None, Field(title='Lease Expires At')]
+    payload: Annotated[dict[str, Any], Field(title='Payload')]
+    target_id: Annotated[UUID, Field(title='Target Id')]
+    wire_version: Annotated[int, Field(title='Wire Version')]
+
+
 class ConfirmTotpRequest(BaseModel):
     """
     The first code from the authenticator, which confirms the secret.
@@ -76,6 +105,19 @@ class CreateOrgRequest(BaseModel):
     owner_email: Annotated[str, Field(min_length=1, title='Owner Email')]
     owner_name: Annotated[str, Field(max_length=200, min_length=1, title='Owner Name')]
     slug: Annotated[str, Field(max_length=100, min_length=1, title='Slug')]
+
+
+class Label(RootModel[str]):
+    root: Annotated[str, Field(pattern='^[a-z][a-z0-9-]{0,62}$')]
+
+
+class CreatePoolRequest(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    labels: Annotated[list[Label] | None, Field(max_length=32, title='Labels')] = None
+    name: Annotated[str, Field(max_length=64, min_length=1, title='Name')]
+    region: Annotated[str, Field(pattern='^[a-z][a-z0-9-]{0,31}$', title='Region')]
 
 
 class Slug(RootModel[str]):
@@ -195,6 +237,15 @@ class DeviceTokenRequest(BaseModel):
     device_code: Annotated[str, Field(max_length=500, min_length=1, title='Device Code')]
 
 
+class EnrollmentTokenView(BaseModel):
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    created_by: Annotated[UUID, Field(title='Created By')]
+    expires_at: Annotated[AwareDatetime, Field(title='Expires At')]
+    id: Annotated[UUID, Field(title='Id')]
+    pool_id: Annotated[UUID, Field(title='Pool Id')]
+    revoked_at: Annotated[AwareDatetime | None, Field(title='Revoked At')]
+
+
 class EventView(BaseModel):
     """
     One record of the tenant's append-only stream, paged by `after_seq`.
@@ -259,6 +310,15 @@ class InvitationState(StrEnum):
     revoked = 'revoked'
 
 
+class IsolationMode(StrEnum):
+    """
+    The isolation levels a host can run a workspace at, strongest first.
+    """
+    vm = 'vm'
+    container = 'container'
+    directory = 'directory'
+
+
 class IssuedDownloadView(BaseModel):
     """
     A link to the file's bytes that works until `expires_at`. A null `url`
@@ -267,6 +327,28 @@ class IssuedDownloadView(BaseModel):
     """
     expires_at: Annotated[AwareDatetime, Field(title='Expires At')]
     url: Annotated[str | None, Field(title='Url')]
+
+
+class IssuedEnrollmentTokenView(BaseModel):
+    """
+    The token in the clear, once: it enrolls hosts into its pool until
+    it expires or is revoked. It is minted on every call, so a retry mints
+    another, and the one never read expires on its own.
+    """
+    enrollment: EnrollmentTokenView
+    token: Annotated[str | None, Field(title='Token')]
+
+
+class IssuedHostCredentialView(BaseModel):
+    """
+    The host's own credential in the clear, once, and the identity it
+    carries. It lives an hour; the host rotates it before then.
+    """
+    credential_id: Annotated[UUID, Field(title='Credential Id')]
+    expires_at: Annotated[AwareDatetime, Field(title='Expires At')]
+    host_id: Annotated[UUID, Field(title='Host Id')]
+    pool_id: Annotated[UUID, Field(title='Pool Id')]
+    token: Annotated[str | None, Field(title='Token')]
 
 
 class IssuedTicketView(BaseModel):
@@ -448,6 +530,16 @@ class Permission(StrEnum):
     manage_keys = 'manage_keys'
 
 
+class PlaceSessionRequest(BaseModel):
+    """
+    One of the tenant's pools, or None for the cloud.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    pool_id: Annotated[UUID | None, Field(title='Pool Id')]
+
+
 class PlatformSizeView(BaseModel):
     """
     How big the platform is, what the first responder to an alarm reads
@@ -461,6 +553,15 @@ class PlatformSizeView(BaseModel):
     since: Annotated[AwareDatetime, Field(title='Since')]
     tenants: Annotated[int, Field(title='Tenants')]
     users: Annotated[int, Field(title='Users')]
+
+
+class PoolView(BaseModel):
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    created_by: Annotated[UUID, Field(title='Created By')]
+    id: Annotated[UUID, Field(title='Id')]
+    labels: Annotated[list[str], Field(title='Labels')]
+    name: Annotated[str, Field(title='Name')]
+    region: Annotated[str, Field(title='Region')]
 
 
 class PurposeUsageView(BaseModel):
@@ -809,6 +910,26 @@ class AddMemberRequest(BaseModel):
     role: Role
 
 
+class AdvertisementBody(BaseModel):
+    """
+    What a host probed at its startup, and nothing it did not.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    capabilities: Annotated[list[Capability] | None, Field(max_length=64, title='Capabilities')] = None
+    isolation_modes: Annotated[list[IsolationMode] | None, Field(max_length=3, title='Isolation Modes')] = None
+    os: Annotated[str, Field(max_length=64, min_length=1, title='Os')]
+    shell: Annotated[str | None, Field(max_length=64, title='Shell')] = ''
+
+
+class AdvertisementView(BaseModel):
+    capabilities: Annotated[list[str], Field(title='Capabilities')]
+    isolation_modes: Annotated[list[IsolationMode], Field(title='Isolation Modes')]
+    os: Annotated[str, Field(title='Os')]
+    shell: Annotated[str, Field(title='Shell')]
+
+
 class AgentSessionView(BaseModel):
     """
     A session: its kind, its title, and its status, which follows its
@@ -837,6 +958,13 @@ class ApiKeyView(BaseModel):
     user_id: Annotated[UUID, Field(title='User Id')]
 
 
+class ClaimView(BaseModel):
+    """
+    What a claim answers: the item, or none when nothing is ready.
+    """
+    item: ClaimedWorkView | None
+
+
 class ControlRequest(BaseModel):
     """
     A control. An interrupt names the seq of the tool request it stops,
@@ -847,6 +975,19 @@ class ControlRequest(BaseModel):
     )
     command: SessionControl
     request_seq: Annotated[RequestSeq | None, Field(title='Request Seq')] = None
+
+
+class EnrollRequest(BaseModel):
+    """
+    A host's name and its report, beside its enrollment token. The pool
+    is the token's.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    advertisement: AdvertisementBody
+    exec_version: Annotated[int, Field(ge=1, title='Exec Version')]
+    name: Annotated[str, Field(max_length=64, min_length=1, title='Name')]
 
 
 class FilePageView(BaseModel):
@@ -860,6 +1001,30 @@ class FilePageView(BaseModel):
 
 class HTTPValidationError(BaseModel):
     detail: Annotated[list[ValidationError] | None, Field(title='Detail')] = None
+
+
+class HeartbeatRequest(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    advertisement: AdvertisementBody
+    exec_version: Annotated[int, Field(ge=1, title='Exec Version')]
+
+
+class HostView(BaseModel):
+    """
+    A host as its owner reads it: online while it called within the
+    window and reads a version of `exec` work the platform still hands.
+    """
+    advertisement: AdvertisementView
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    exec_version: Annotated[int, Field(title='Exec Version')]
+    id: Annotated[UUID, Field(title='Id')]
+    last_seen_at: Annotated[AwareDatetime, Field(title='Last Seen At')]
+    name: Annotated[str, Field(title='Name')]
+    online: Annotated[bool, Field(title='Online')]
+    pool_id: Annotated[UUID, Field(title='Pool Id')]
+    revoked_at: Annotated[AwareDatetime | None, Field(title='Revoked At')]
 
 
 class IdentityView(BaseModel):
@@ -1032,6 +1197,18 @@ class OrgPageView(BaseModel):
     """
     items: Annotated[list[OrgView], Field(title='Items')]
     next_cursor: Annotated[str | None, Field(title='Next Cursor')]
+
+
+class PlacementView(BaseModel):
+    """
+    Where a session runs. A pinned session with no host of its pool
+    online is `waiting`; it never moves to the cloud by itself.
+    """
+    hosts_online: Annotated[int, Field(title='Hosts Online')]
+    pool: PoolView | None
+    session_id: Annotated[UUID, Field(title='Session Id')]
+    version: Annotated[int, Field(title='Version')]
+    waiting: Annotated[bool, Field(title='Waiting')]
 
 
 class StepView(BaseModel):

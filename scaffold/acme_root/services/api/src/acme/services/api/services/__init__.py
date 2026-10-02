@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from acme.services.api.services.admin import AdminServiceInterface
 from acme.services.api.services.agent_sessions import AgentSessionsServiceInterface
 from acme.services.api.services.events import EventsServiceInterface
+from acme.services.api.services.hosts import HostsServiceInterface
 from acme.services.api.services.media import MediaServiceInterface
 from acme.services.api.services.realtime import RealtimeServiceInterface
 from acme.services.api.services.tenancy import TenancyServiceInterface
@@ -16,6 +17,7 @@ __all__ = [
     "AdminServiceInterface",
     "AgentSessionsServiceInterface",
     "EventsServiceInterface",
+    "HostsServiceInterface",
     "MediaServiceInterface",
     "RealtimeServiceInterface",
     "ServicesInterface",
@@ -45,3 +47,6 @@ class ServicesInterface(ABC):
 
     @abstractmethod
     def get_agent_sessions_service(self) -> AgentSessionsServiceInterface: ...
+
+    @abstractmethod
+    def get_hosts_service(self) -> HostsServiceInterface: ...

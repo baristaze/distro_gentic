@@ -20,6 +20,7 @@ from acme.om.automations.root import build_automations
 from acme.om.base import new_id
 from acme.om.budgets.impl.manager import BudgetsOptions
 from acme.om.events.impl.manager import EventsOptions
+from acme.om.hosts.impl.manager import HostsOptions
 from acme.om.idempotency.impl.manager import IdempotencyOptions
 from acme.om.intake.impl.manager import IntakeOptions
 from acme.om.intake.root import build_intake
@@ -121,6 +122,7 @@ def worker_managers(
         tools_options=ToolsOptions(purge_batch=batch),
         retention_options=RetentionOptions(sweep_batch=RETENTION_SWEEP_BATCH, purge_batch=batch),
         placement_options=PlacementOptions(purge_batch=batch),
+        hosts_options=HostsOptions(purge_batch=batch),
         platform_agents_options=PlatformAgentsOptions(purge_batch=batch),
         projects_options=ProjectsOptions(purge_batch=batch),
     )

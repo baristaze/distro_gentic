@@ -182,6 +182,14 @@ An org's **fair share** says which lane its loops wait in, its plan's or
 one of its own, and how many of them run at once. The platform's
 operators set it. A loop over it waits its turn and never fails.
 
+A **host** is a machine inside an org's own wall that runs its work. It
+joins a **host pool** once, with an **enrollment token** an owner or an
+admin issued, and from then on calls with a **host credential** of its
+own, which lasts an hour and which it renews itself. A session's
+**placement** says where it runs: the platform's cloud, or one of the
+org's pools. A session pinned to a pool with no host online waits, and
+says so; it never moves to the cloud unless a person moves it.
+
 ## The agents the platform ships
 
 The platform ships four kinds of agent. The **engineer** takes an
@@ -269,6 +277,9 @@ arrive twice, so the second copy gets the first one's answer.
   policy names its org and its project, one each.
 - A fair share names its org, one each, and the lane of every loop the
   org asks for is read off it.
+- A pool, its tokens, its hosts, their credentials, and a session's
+  placement name their org. A host is handed only the work of its own
+  pool, whatever it asks for.
 - A validation session names its org, and its station work is a work
   item that names the session.
 - The matrix and what its operators record of a model are the
@@ -295,6 +306,7 @@ arrive twice, so the second copy gets the first one's answer.
 - [Evidence](src/acme/om/evidence/README.md)
 - [Placement](src/acme/om/placement/README.md)
 - [Trust](src/acme/om/trust/README.md)
+- [Hosts](src/acme/om/hosts/README.md)
 - [Intake](src/acme/om/intake/README.md)
 - [Automations](src/acme/om/automations/README.md)
 - [Playbooks](src/acme/om/playbooks/README.md)

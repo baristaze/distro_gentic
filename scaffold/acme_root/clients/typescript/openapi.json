@@ -98,6 +98,80 @@
         "title": "AddMemberRequest",
         "type": "object"
       },
+      "AdvertisementBody": {
+        "additionalProperties": false,
+        "description": "What a host probed at its startup, and nothing it did not.",
+        "properties": {
+          "capabilities": {
+            "items": {
+              "pattern": "^[a-z][a-z0-9_.-]{0,62}$",
+              "type": "string"
+            },
+            "maxItems": 64,
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "isolation_modes": {
+            "items": {
+              "$ref": "#/components/schemas/IsolationMode"
+            },
+            "maxItems": 3,
+            "title": "Isolation Modes",
+            "type": "array"
+          },
+          "os": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Os",
+            "type": "string"
+          },
+          "shell": {
+            "default": "",
+            "maxLength": 64,
+            "title": "Shell",
+            "type": "string"
+          }
+        },
+        "required": [
+          "os"
+        ],
+        "title": "AdvertisementBody",
+        "type": "object"
+      },
+      "AdvertisementView": {
+        "properties": {
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "isolation_modes": {
+            "items": {
+              "$ref": "#/components/schemas/IsolationMode"
+            },
+            "title": "Isolation Modes",
+            "type": "array"
+          },
+          "os": {
+            "title": "Os",
+            "type": "string"
+          },
+          "shell": {
+            "title": "Shell",
+            "type": "string"
+          }
+        },
+        "required": [
+          "os",
+          "shell",
+          "capabilities",
+          "isolation_modes"
+        ],
+        "title": "AdvertisementView",
+        "type": "object"
+      },
       "AgentSessionView": {
         "description": "A session: its kind, its title, and its status, which follows its\nsteps. `pending` while an input waits for a run, `running` while a run\nholds its loop, `parked` while the loop waits, `idle` when no loop is\nopen.",
         "properties": {
@@ -251,6 +325,97 @@
         "title": "ApiKeyView",
         "type": "object"
       },
+      "ClaimRequest": {
+        "additionalProperties": false,
+        "description": "The version of `exec` work the host reads, and nothing else: what it\nis handed is its identity's to say.",
+        "properties": {
+          "exec_version": {
+            "minimum": 1.0,
+            "title": "Exec Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "exec_version"
+        ],
+        "title": "ClaimRequest",
+        "type": "object"
+      },
+      "ClaimView": {
+        "description": "What a claim answers: the item, or none when nothing is ready.",
+        "properties": {
+          "item": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClaimedWorkView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "item"
+        ],
+        "title": "ClaimView",
+        "type": "object"
+      },
+      "ClaimedWorkView": {
+        "description": "One item a host was handed, under a lease, as `exec` work of\n`wire_version`. `payload` is the item's, as its kind fixes it.",
+        "properties": {
+          "attempts": {
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "lease_expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lease Expires At"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "target_id": {
+            "format": "uuid",
+            "title": "Target Id",
+            "type": "string"
+          },
+          "wire_version": {
+            "title": "Wire Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "target_id",
+          "payload",
+          "lease_expires_at",
+          "attempts",
+          "wire_version"
+        ],
+        "title": "ClaimedWorkView",
+        "type": "object"
+      },
       "ConfirmTotpRequest": {
         "additionalProperties": false,
         "description": "The first code from the authenticator, which confirms the secret.",
@@ -344,6 +509,37 @@
           "owner_name"
         ],
         "title": "CreateOrgRequest",
+        "type": "object"
+      },
+      "CreatePoolRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "labels": {
+            "items": {
+              "pattern": "^[a-z][a-z0-9-]{0,62}$",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Labels",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "region": {
+            "pattern": "^[a-z][a-z0-9-]{0,31}$",
+            "title": "Region",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "region"
+        ],
+        "title": "CreatePoolRequest",
         "type": "object"
       },
       "CreateTeamOrgRequest": {
@@ -547,6 +743,84 @@
           "device_code"
         ],
         "title": "DeviceTokenRequest",
+        "type": "object"
+      },
+      "EnrollRequest": {
+        "additionalProperties": false,
+        "description": "A host's name and its report, beside its enrollment token. The pool\nis the token's.",
+        "properties": {
+          "advertisement": {
+            "$ref": "#/components/schemas/AdvertisementBody"
+          },
+          "exec_version": {
+            "minimum": 1.0,
+            "title": "Exec Version",
+            "type": "integer"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "advertisement",
+          "exec_version"
+        ],
+        "title": "EnrollRequest",
+        "type": "object"
+      },
+      "EnrollmentTokenView": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "format": "uuid",
+            "title": "Created By",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "pool_id": {
+            "format": "uuid",
+            "title": "Pool Id",
+            "type": "string"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          }
+        },
+        "required": [
+          "id",
+          "pool_id",
+          "expires_at",
+          "revoked_at",
+          "created_at",
+          "created_by"
+        ],
+        "title": "EnrollmentTokenView",
         "type": "object"
       },
       "ErrorBody": {
@@ -797,6 +1071,90 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "HeartbeatRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "advertisement": {
+            "$ref": "#/components/schemas/AdvertisementBody"
+          },
+          "exec_version": {
+            "minimum": 1.0,
+            "title": "Exec Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "advertisement",
+          "exec_version"
+        ],
+        "title": "HeartbeatRequest",
+        "type": "object"
+      },
+      "HostView": {
+        "description": "A host as its owner reads it: online while it called within the\nwindow and reads a version of `exec` work the platform still hands.",
+        "properties": {
+          "advertisement": {
+            "$ref": "#/components/schemas/AdvertisementView"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "exec_version": {
+            "title": "Exec Version",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_seen_at": {
+            "format": "date-time",
+            "title": "Last Seen At",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "online": {
+            "title": "Online",
+            "type": "boolean"
+          },
+          "pool_id": {
+            "format": "uuid",
+            "title": "Pool Id",
+            "type": "string"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          }
+        },
+        "required": [
+          "id",
+          "pool_id",
+          "name",
+          "advertisement",
+          "exec_version",
+          "last_seen_at",
+          "online",
+          "revoked_at",
+          "created_at"
+        ],
+        "title": "HostView",
+        "type": "object"
+      },
       "IdentityView": {
         "description": "The person behind the caller's user. `operator_role` is the allowlist\nentry: null for a person who is not an operator.",
         "properties": {
@@ -950,6 +1308,16 @@
         "title": "InviteMemberRequest",
         "type": "object"
       },
+      "IsolationMode": {
+        "description": "The isolation levels a host can run a workspace at, strongest first.",
+        "enum": [
+          "vm",
+          "container",
+          "directory"
+        ],
+        "title": "IsolationMode",
+        "type": "string"
+      },
       "IssuedApiKeyView": {
         "description": "The key in the clear is present on the first response only: the stored\noutcome of the create carries no secret, so a replay under the same\nIdempotency-Key answers with `key` null and `Idempotent-Replayed: true`. A\nclient that lost the first response revokes the key and issues another.",
         "properties": {
@@ -1000,6 +1368,76 @@
           "expires_at"
         ],
         "title": "IssuedDownloadView",
+        "type": "object"
+      },
+      "IssuedEnrollmentTokenView": {
+        "description": "The token in the clear, once: it enrolls hosts into its pool until\nit expires or is revoked. It is minted on every call, so a retry mints\nanother, and the one never read expires on its own.",
+        "properties": {
+          "enrollment": {
+            "$ref": "#/components/schemas/EnrollmentTokenView"
+          },
+          "token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token"
+          }
+        },
+        "required": [
+          "token",
+          "enrollment"
+        ],
+        "title": "IssuedEnrollmentTokenView",
+        "type": "object"
+      },
+      "IssuedHostCredentialView": {
+        "description": "The host's own credential in the clear, once, and the identity it\ncarries. It lives an hour; the host rotates it before then.",
+        "properties": {
+          "credential_id": {
+            "format": "uuid",
+            "title": "Credential Id",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "host_id": {
+            "format": "uuid",
+            "title": "Host Id",
+            "type": "string"
+          },
+          "pool_id": {
+            "format": "uuid",
+            "title": "Pool Id",
+            "type": "string"
+          },
+          "token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token"
+          }
+        },
+        "required": [
+          "token",
+          "credential_id",
+          "host_id",
+          "pool_id",
+          "expires_at"
+        ],
+        "title": "IssuedHostCredentialView",
         "type": "object"
       },
       "IssuedLoginView": {
@@ -1833,6 +2271,70 @@
         "title": "Permission",
         "type": "string"
       },
+      "PlaceSessionRequest": {
+        "additionalProperties": false,
+        "description": "One of the tenant's pools, or None for the cloud.",
+        "properties": {
+          "pool_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pool Id"
+          }
+        },
+        "required": [
+          "pool_id"
+        ],
+        "title": "PlaceSessionRequest",
+        "type": "object"
+      },
+      "PlacementView": {
+        "description": "Where a session runs. A pinned session with no host of its pool\nonline is `waiting`; it never moves to the cloud by itself.",
+        "properties": {
+          "hosts_online": {
+            "title": "Hosts Online",
+            "type": "integer"
+          },
+          "pool": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PoolView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          },
+          "waiting": {
+            "title": "Waiting",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "session_id",
+          "pool",
+          "hosts_online",
+          "waiting",
+          "version"
+        ],
+        "title": "PlacementView",
+        "type": "object"
+      },
       "PlatformSizeView": {
         "description": "How big the platform is, what the first responder to an alarm reads\nbefore it escalates: live tenants and users, and the events produced in\nthe twenty-four hours from `since` to `counted_at`. The maintenance\nworker counts it every few minutes, and this is its latest count:\n`counted_at` says how old the answer is.",
         "properties": {
@@ -1867,6 +2369,50 @@
           "counted_at"
         ],
         "title": "PlatformSizeView",
+        "type": "object"
+      },
+      "PoolView": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "format": "uuid",
+            "title": "Created By",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "labels": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Labels",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "region": {
+            "title": "Region",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "region",
+          "labels",
+          "created_at",
+          "created_by"
+        ],
+        "title": "PoolView",
         "type": "object"
       },
       "PurposeUsageView": {
@@ -4769,6 +5315,198 @@
         ]
       }
     },
+    "/v1/agent-sessions/{session_id}/placement": {
+      "get": {
+        "description": "Where the session runs; a pinned session with no host online waits.",
+        "operationId": "placement_of_v1_agent_sessions__session_id__placement_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlacementView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Placement Of",
+        "tags": [
+          "hosts"
+        ]
+      },
+      "put": {
+        "description": "A principal pins the session to a pool, or moves it to the cloud.",
+        "operationId": "place_session_v1_agent_sessions__session_id__placement_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlaceSessionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlacementView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Place Session",
+        "tags": [
+          "hosts"
+        ]
+      }
+    },
     "/v1/agent-sessions/{session_id}/steps": {
       "get": {
         "description": "The history in order, strictly after `after_seq`.",
@@ -6042,6 +6780,927 @@
         "summary": "List Events",
         "tags": [
           "events"
+        ]
+      }
+    },
+    "/v1/host-enrollment-tokens/{token_id}": {
+      "delete": {
+        "operationId": "revoke_enrollment_token_v1_host_enrollment_tokens__token_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Token Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrollmentTokenView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Enrollment Token",
+        "tags": [
+          "hosts"
+        ]
+      }
+    },
+    "/v1/host-pools": {
+      "get": {
+        "operationId": "get_pools_v1_host_pools_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PoolView"
+                  },
+                  "title": "Response Get Pools V1 Host Pools Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Pools",
+        "tags": [
+          "hosts"
+        ]
+      },
+      "post": {
+        "description": "A pool hosts enroll into. An owner's or an admin's.",
+        "operationId": "create_pool_v1_host_pools_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePoolRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PoolView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Pool",
+        "tags": [
+          "hosts"
+        ]
+      }
+    },
+    "/v1/host-pools/{pool_id}/enrollment-tokens": {
+      "post": {
+        "description": "A token that enrolls hosts into the pool, in the clear once. A retry\nmints another, so it takes no Idempotency-Key; the one never read\nexpires on its own.",
+        "operationId": "issue_enrollment_token_v1_host_pools__pool_id__enrollment_tokens_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pool_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Pool Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedEnrollmentTokenView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Issue Enrollment Token",
+        "tags": [
+          "hosts"
+        ]
+      }
+    },
+    "/v1/host-pools/{pool_id}/hosts": {
+      "get": {
+        "description": "The pool's hosts, each with whether it is online now.",
+        "operationId": "get_hosts_v1_host_pools__pool_id__hosts_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pool_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Pool Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/HostView"
+                  },
+                  "title": "Response Get Hosts V1 Host Pools  Pool Id  Hosts Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Hosts",
+        "tags": [
+          "hosts"
+        ]
+      }
+    },
+    "/v1/hosts/enrollments": {
+      "post": {
+        "description": "A host enrolls once, with its tenant's enrollment token as its bearer,\nand gets a credential of its own. A retry enrolls another host, so it\ntakes no Idempotency-Key.",
+        "operationId": "enroll_v1_hosts_enrollments_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrollRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedHostCredentialView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enroll",
+        "tags": [
+          "hosts"
+        ]
+      }
+    },
+    "/v1/hosts/me/claims": {
+      "post": {
+        "description": "The next item pinned to this host or its pool, or none. The body\nstates the version the host reads, and nothing it is handed.",
+        "operationId": "claim_v1_hosts_me_claims_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Claim",
+        "tags": [
+          "hosts"
+        ]
+      }
+    },
+    "/v1/hosts/me/credentials": {
+      "post": {
+        "description": "The host's next credential; the one it called with ends after a short\ngrace.",
+        "operationId": "rotate_v1_hosts_me_credentials_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedHostCredentialView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rotate",
+        "tags": [
+          "hosts"
+        ]
+      }
+    },
+    "/v1/hosts/me/heartbeats": {
+      "post": {
+        "operationId": "heartbeat_v1_hosts_me_heartbeats_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HeartbeatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Heartbeat",
+        "tags": [
+          "hosts"
+        ]
+      }
+    },
+    "/v1/hosts/{host_id}": {
+      "delete": {
+        "description": "Ends the host and its credentials at once; it is handed no more work.",
+        "operationId": "revoke_host_v1_hosts__host_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "host_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Host Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Host",
+        "tags": [
+          "hosts"
         ]
       }
     },

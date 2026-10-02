@@ -46,6 +46,8 @@ from acme.om.evidence.impl.manager import EvidenceManagerImpl, EvidenceOptions
 from acme.om.evidence.impl.ports import ExecutorAbsentImpl, WorkProductAbsentImpl
 from acme.om.evidence.rules import PROTECTED_CEILING
 from acme.om.exceptions import UnsafeConfiguration
+from acme.om.hosts import HostsManagerInterface
+from acme.om.hosts.impl.manager import HostsManagerImpl, HostsOptions
 from acme.om.idempotency import IdempotencyManagerInterface
 from acme.om.idempotency.impl.manager import IdempotencyManagerImpl, IdempotencyOptions
 from acme.om.media import MediaManagerInterface
@@ -149,6 +151,7 @@ class Managers:
     evidence: EvidenceManagerInterface
     placement: PlacementManagerInterface
     placement_operator: PlacementOperatorManagerInterface
+    hosts: HostsManagerInterface
     platform_agents: PlatformAgentsManagerInterface
     projects: ProjectsManagerInterface
 
@@ -289,6 +292,7 @@ def build_managers(
     domain_classes: tuple[str, ...] = (),
     loop_options: LoopOptions | None = None,
     placement_options: PlacementOptions | None = None,
+    hosts_options: HostsOptions | None = None,
     platform_agents_options: PlatformAgentsOptions | None = None,
     platform_agents: PlatformAgents | None = None,
     environment: str = LOCAL,
@@ -358,6 +362,8 @@ def build_managers(
 
     `placement_options` is the fair share of a tenant no operator gave one,
     and the delay a loop over its share waits; None keeps the defaults.
+    `hosts_options` is the lives of a host's credentials, the window a host
+    counts as online, and its claim's lease; None keeps the defaults.
 
     `platform_agents` ships the platform's agents, with the corpus its
     assistant answers from: their kinds join `agent_kinds` and their tools
@@ -707,6 +713,16 @@ def build_managers(
             storage.get_tenancy_storage(),
             storage.get_event_storage(),
             infra.get_topics(),
+        ),
+        # A host's credential, its claims through placement, and where each
+        # session runs.
+        hosts=HostsManagerImpl(
+            storage.get_hosts_storage(),
+            placement,
+            agent_sessions,
+            tenancy,
+            outbox,
+            hosts_options or HostsOptions(),
         ),
         platform_agents=platform,
         projects=projects,

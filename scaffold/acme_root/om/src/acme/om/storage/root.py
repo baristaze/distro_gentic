@@ -10,6 +10,7 @@ from acme.om.billing.storage import AccountStorageInterface, MoneyLedgerStorageI
 from acme.om.budgets.storage import BudgetStorageInterface, LedgerStorageInterface
 from acme.om.events.storage import EventStorageInterface
 from acme.om.evidence.storage import EvidenceStorageInterface
+from acme.om.hosts.storage import HostsStorageInterface
 from acme.om.idempotency.storage import IdempotencyStorageInterface
 from acme.om.intake.storage import IntakeStorageInterface
 from acme.om.knowledge.storage import KnowledgeStorageInterface
@@ -104,6 +105,9 @@ class StorageInterface(ABC):
 
     @abstractmethod
     def get_trust_storage(self) -> TrustStorageInterface: ...
+
+    @abstractmethod
+    def get_hosts_storage(self) -> HostsStorageInterface: ...
 
     @abstractmethod
     def get_intake_storage(self) -> IntakeStorageInterface: ...
