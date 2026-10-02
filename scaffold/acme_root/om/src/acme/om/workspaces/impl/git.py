@@ -24,7 +24,7 @@ from acme.om.exceptions import Unavailable
 from acme.om.steps import StepsManagerInterface
 from acme.om.tools.seal import RecordSealInterface
 from acme.om.workspaces.git import WorkspaceGitInterface
-from acme.om.workspaces.types.source import BranchState, RepositoryBinding, Snapshot
+from acme.om.workspaces.types.source import BranchState, Checkout, RepositoryBinding, Snapshot
 
 log = logging.getLogger(__name__)
 
@@ -89,6 +89,20 @@ snapshot ref; prints the commit, or `-` when nothing was new, and whether
 the remote holds the branch."""
 
 
+CHECKOUT = """set -eu
+head="$(git rev-parse HEAD)"
+base="$(git merge-base HEAD "origin/$BASE")"
+dirty=no
+if [ -n "$(git status --porcelain --untracked-files=all)" ]; then dirty=yes; fi
+echo "checkout $base $head $dirty"
+git -c core.quotePath=false diff --name-only "$base"
+git -c core.quotePath=false ls-files --others --exclude-standard
+"""
+"""Prints the base, the head, and whether the checkout is dirty on its first
+line, then every path changed from the base, committed, uncommitted, or
+new."""
+
+
 class GitOptions(Platform):
     # How long one operation may take, the clone and the push included.
     timeout: timedelta = timedelta(minutes=5)
@@ -130,6 +144,18 @@ class WorkspaceGitTransportImpl(WorkspaceGitInterface):
             ctx, workspace, "cut", CUT, {"BRANCH": branch, "BASE": binding.default_branch}
         )
 
+    async def checkout(
+        self, ctx: TenantContext, workspace: Workspace, binding: RepositoryBinding
+    ) -> Checkout:
+        lines = await self._lines(
+            ctx, workspace, "checkout", CHECKOUT, {"BASE": binding.default_branch}
+        )
+        words = lines[0].split() if lines else []
+        if len(words) != 4 or words[0] != "checkout":
+            raise Unavailable(f"the checkout of session {workspace.id} answered no state")
+        changed = tuple(sorted({line for line in lines[1:] if line}))
+        return Checkout(base=words[1], head=words[2], dirty=words[3] == "yes", changed=changed)
+
     async def snapshot(
         self, ctx: TenantContext, workspace: Workspace, branch: str, ref: str
     ) -> Snapshot:
@@ -157,10 +183,22 @@ class WorkspaceGitTransportImpl(WorkspaceGitInterface):
         script: str,
         env: dict[str, str],
     ) -> list[str]:
+        """The words of the last line a script printed."""
+        lines = await self._lines(ctx, workspace, operation, script, env)
+        return lines[-1].split() if lines else []
+
+    async def _lines(
+        self,
+        ctx: TenantContext,
+        workspace: Workspace,
+        operation: str,
+        script: str,
+        env: dict[str, str],
+    ) -> list[str]:
         """Runs one script under the epoch of the run that holds the session,
-        and answers the words of the last line it printed. A script that
-        fails is `Unavailable`, named by its exit and never by its output,
-        which is the session's content."""
+        and answers the lines it printed. A script that fails is
+        `Unavailable`, named by its exit and never by its output, which is
+        the session's content."""
         cursor = await self._steps.get_cursor(ctx, workspace.id)
         key = new_id()
         command = CommandSpec(
@@ -184,5 +222,4 @@ class WorkspaceGitTransportImpl(WorkspaceGitInterface):
                 "past its deadline" if result.timed_out else f"with exit {result.exit_code}",
             )
             raise Unavailable(f"the checkout's {operation} of session {workspace.id} failed")
-        lines = result.stdout.strip().splitlines()
-        return lines[-1].split() if lines else []
+        return result.stdout.strip().splitlines()

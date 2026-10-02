@@ -43,7 +43,7 @@ from acme.om.evidence import (
 )
 from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
 from acme.om.evidence.impl.manager import EvidenceManagerImpl, EvidenceOptions
-from acme.om.evidence.impl.ports import ExecutorAbsentImpl, WorkProductAbsentImpl
+from acme.om.evidence.impl.ports import ExecutorAbsentImpl
 from acme.om.evidence.rules import PROTECTED_CEILING
 from acme.om.exceptions import UnsafeConfiguration
 from acme.om.idempotency import IdempotencyManagerInterface
@@ -106,7 +106,8 @@ from acme.om.workspaces.impl.git import GitOptions, WorkspaceGitTransportImpl
 from acme.om.workspaces.impl.manager import WorkspacesManagerImpl, WorkspacesOptions
 from acme.om.workspaces.impl.projects import PullRequestsNullImpl, WorkspaceProjectsNullImpl
 from acme.om.workspaces.impl.sessions import AgentSessionsPinnedImpl
-from acme.om.workspaces.impl.tools import ToolsManagerWorkspacesImpl
+from acme.om.workspaces.impl.tools import HeldWorkspaces, ToolsManagerWorkspacesImpl
+from acme.om.workspaces.impl.work_product import WorkProductWorkspacesImpl
 from acme.om.workspaces.projects import PullRequestsInterface, WorkspaceProjectsInterface
 from acme.om.workspaces.types.host import HostOffer
 
@@ -325,10 +326,12 @@ def build_managers(
     The evidence takes the platform's two ports: `executor`, the fresh
     executor validation runs on, and `work_product`, which reads what a
     session delivered, and which the result gate reads too. None wires the
-    loud nulls, which refuse every validation and every read, so no success
-    counts until a process wires a work product. Whatever `tools_options`
-    names, the tools take the platform's ceiling on a protected path beside
-    its ceilings.
+    loud null executor, which refuses every validation, and the workspaces'
+    work product, read from the checkout of the workspace this process
+    holds for the session; one it does not hold, or one of no bound
+    repository, is refused, so no success counts on a guess. Whatever
+    `tools_options` names, the tools take the platform's ceiling on a
+    protected path beside its ceilings.
 
     `tools_layer` wraps the tools manager before the loop and the root take
     it: a layer above the engine holds its own rules around every call, and
@@ -482,7 +485,10 @@ def build_managers(
         outbox,
         attribution_options or AttributionOptions(),
     )
-    products = work_product or WorkProductAbsentImpl()
+    # What a session delivered is read from the checkout of the workspace
+    # this process holds for it.
+    held = HeldWorkspaces()
+    products = work_product or WorkProductWorkspacesImpl(workspaces, held)
     results = result_gate or ResultGateEvidenceImpl(storage.get_evidence_storage(), products)
     refuse_quiet_nulls(environment, results)
     agents = AgentsManagerImpl(
@@ -550,6 +556,7 @@ def build_managers(
         workspaces,
         workspace_host or HostOffer(),
         local=environment == LOCAL,
+        held=held,
     )
     # What makes a result: the runs, the policies, and validation on the
     # executor, apart from every agent's workspace.

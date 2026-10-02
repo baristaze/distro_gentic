@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 
 from acme.infra.workspaces import Workspace
 from acme.om.context import TenantContext
-from acme.om.workspaces.types.source import BranchState, RepositoryBinding, Snapshot
+from acme.om.workspaces.types.source import BranchState, Checkout, RepositoryBinding, Snapshot
 
 
 class WorkspaceGitInterface(ABC):
@@ -28,6 +28,15 @@ class WorkspaceGitInterface(ABC):
     ) -> None:
         """Checks `branch` out anew from the remote's default branch, over
         whatever the checkout held of it."""
+        ...
+
+    @abstractmethod
+    async def checkout(
+        self, ctx: TenantContext, workspace: Workspace, binding: RepositoryBinding
+    ) -> Checkout:
+        """What the checkout holds as it stands, read from git and never from
+        what the agent says: its base on the default branch, its head,
+        whether it is dirty, and the paths changed from the base."""
         ...
 
     @abstractmethod

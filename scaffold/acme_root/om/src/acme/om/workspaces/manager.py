@@ -15,6 +15,7 @@ from uuid import UUID
 from acme.infra.workspaces import IsolationSpec, Workspace
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.context import TenantContext
+from acme.om.evidence.types.validation import Delivery
 from acme.om.workspaces.types.egress import EgressAllowlist, EgressDecision, EgressRequest
 from acme.om.workspaces.types.source import RepositoryWrite
 from acme.om.workspaces.types.workspace import SessionWorkspace
@@ -69,6 +70,16 @@ class WorkspacesManagerInterface(ABC):
         the remote lacks is committed and pushed to a snapshot ref, and the
         next loop will be told. Raises when it is not pushed, so the caller
         lets nothing go that is not kept."""
+        ...
+
+    @abstractmethod
+    async def delivery(self, ctx: TenantContext, workspace: Workspace) -> Delivery:
+        """The session's work product as its prepared workspace holds it, read
+        from its checkout: the repository's name as its project, the base its
+        branch started from, its head, whether it is dirty, and the paths
+        changed from the base. `Unavailable` for a session whose project
+        binds no repository: nothing says what its work product is, so no
+        success counts on a guess."""
         ...
 
     # Egress, and what acts outward.

@@ -53,6 +53,17 @@ class Snapshot(Platform):
     remote_branch: bool = False
 
 
+class Checkout(Platform):
+    """What the checkout holds now: the commit its branch started from on the
+    default branch, its committed head, whether it holds uncommitted work,
+    and every path changed from that base, committed or not."""
+
+    base: str
+    head: str
+    dirty: bool = False
+    changed: tuple[str, ...] = ()
+
+
 class WriteKind(StrEnum):
     PUSH = "push"  # a ref moved on the remote
     # A pull request opened, edited, or commented on, named by its head.

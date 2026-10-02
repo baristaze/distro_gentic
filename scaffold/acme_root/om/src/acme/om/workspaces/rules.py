@@ -261,6 +261,12 @@ def _repository(name: str) -> str:
     return value.rstrip("/").removesuffix(".git")
 
 
+def project_key(binding: RepositoryBinding) -> str:
+    """The name a project's work product goes by in its evidence: its
+    repository's, as `host/owner/name`."""
+    return _repository(binding.repository).lstrip("/")
+
+
 def is_work_product(write: RepositoryWrite, binding: RepositoryBinding | None, branch: str) -> bool:
     """Whether a write is the session's own work product: a push to its own
     branch, or to a snapshot of it, and its own pull request, on the one

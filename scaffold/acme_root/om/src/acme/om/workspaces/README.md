@@ -96,3 +96,7 @@ rebuilt from.
   platform's cloud.
 - A tool that writes to source control sets its target's `outward` from
   `WorkspacesManagerInterface.outward`.
+- The evidence reads what a session delivered from the checkout of the
+  workspace this host holds for it (`impl/work_product.py`): its
+  repository's name as its project, its base, its head, whether it is
+  dirty, and the paths changed.

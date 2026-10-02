@@ -198,3 +198,28 @@ async def test_a_branch_the_remote_lost_fails_loudly_and_nothing_restarts_from_m
     assert git(here, "rev-parse", "--abbrev-ref", "HEAD") == branch
     assert git(here, "rev-parse", "HEAD") == checkout.main, "cut again from main"
     assert rebuilt.changed is not None and "merged" in rebuilt.changed
+
+
+# What a session delivered is read from git in its checkout.
+
+
+async def test_what_a_session_delivered_is_read_from_git_in_its_checkout(
+    checkout: Checkout,
+) -> None:
+    session_id = await checkout.session()
+    workspace = await checkout.prepare(session_id)
+    here = Path(workspace.location)
+    (here / "feature.txt").write_text("the feature\n")
+    git(here, "add", "feature.txt")
+    git(here, "-c", "user.name=a", "-c", "user.email=a@example.invalid", "commit", "-qm", "f")
+    (here / "README.md").write_text("the project, changed\n")
+    (here / "draft.txt").write_text("half done\n")
+
+    delivered = await checkout.managers.workspaces.delivery(checkout.ctx, workspace)
+
+    # The repository's name, as a project's evidence is keyed.
+    assert delivered.project == str(checkout.remote).lower().lstrip("/").removesuffix(".git")
+    assert delivered.base == checkout.main
+    assert delivered.head == git(here, "rev-parse", "HEAD") != checkout.main
+    assert delivered.dirty
+    assert delivered.changed == ("README.md", "draft.txt", "feature.txt")

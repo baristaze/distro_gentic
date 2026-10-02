@@ -10,9 +10,11 @@ from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agents.types.kind import AgentKindCatalog
 from acme.om.base import Platform, utcnow
 from acme.om.context import Permission, TenantContext
+from acme.om.evidence.types.validation import Delivery
 from acme.om.exceptions import (
     NotFound,
     PreconditionFailed,
+    Unavailable,
     UniqueKeyTaken,
     UnknownAgentKind,
     ValidationFailed,
@@ -197,6 +199,26 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         await self._update(
             ctx, workspace.id, notice=notice, branch_seen=seen, snapshot_ref=snapshot.ref
         )
+
+    async def delivery(self, ctx: TenantContext, workspace: Workspace) -> Delivery:
+        ctx.require(Permission.READ)
+        held = await self._storage.read_workspace(ctx.org_id, workspace.id)
+        binding = None if held is None else await self._binding(ctx, held)
+        if binding is None:
+            raise Unavailable(f"session {workspace.id} works on no bound repository")
+        checkout = await self._git.checkout(ctx, workspace, binding)
+        try:
+            return Delivery(
+                project=rules.project_key(binding),
+                base=checkout.base,
+                head=checkout.head,
+                dirty=checkout.dirty,
+                changed=checkout.changed,
+            )
+        except ValidationError as error:
+            raise Unavailable(
+                f"the work product of session {workspace.id}: {error}"[:300]
+            ) from None
 
     # Egress, and what acts outward.
 

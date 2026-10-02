@@ -14,12 +14,15 @@ from acme.om.workspaces.git import WorkspaceGitInterface
 from acme.om.workspaces.projects import PullRequestsInterface, WorkspaceProjectsInterface
 from acme.om.workspaces.types.source import (
     BranchState,
+    Checkout,
     PullRequestFate,
     RepositoryBinding,
     Snapshot,
 )
 
 REPOSITORY = "https://git.example.com/acme/app.git"
+BASE = "b" * 40
+"""The commit the twin's branches start from."""
 
 
 class ProjectsTwin(WorkspaceProjectsInterface):
@@ -59,6 +62,7 @@ class GitTwin(WorkspaceGitInterface):
     dirty: bool = False
     refuses_push: bool = False
     pushed: dict[str, str] = field(default_factory=lambda: dict[str, str]())
+    head: str = BASE
     cuts: list[str] = field(default_factory=lambda: list[str]())
 
     async def sync(
@@ -71,6 +75,12 @@ class GitTwin(WorkspaceGitInterface):
     ) -> None:
         self.cuts.append(branch)
         self.local.add(branch)
+
+    async def checkout(
+        self, ctx: TenantContext, workspace: Workspace, binding: RepositoryBinding
+    ) -> Checkout:
+        changed = ("notes.txt",) if self.dirty else ()
+        return Checkout(base=BASE, head=self.head, dirty=self.dirty, changed=changed)
 
     async def snapshot(
         self, ctx: TenantContext, workspace: Workspace, branch: str, ref: str

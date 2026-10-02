@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 from contracts.loops import ASSISTANT, Loop, loop_over, reply, said
-from contracts.workspaces import REPOSITORY, GitTwin, ProjectsTwin, PullRequestsTwin
+from contracts.workspaces import BASE, REPOSITORY, GitTwin, ProjectsTwin, PullRequestsTwin
 
 from acme.infra.workspaces import (
     EgressMode,
@@ -28,11 +28,13 @@ from acme.om.base import new_id
 from acme.om.context import Role
 from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
 from acme.om.evidence.impl.ports import WorkProductAbsentImpl
-from acme.om.exceptions import NotAuthorized, NotFound
+from acme.om.exceptions import NotAuthorized, NotFound, Unavailable
 from acme.om.steps.types.header import LoopOutcome, ParkReason
 from acme.om.steps.types.step import Step, StepType
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
+from acme.om.workspaces.impl.tools import HeldWorkspaces
+from acme.om.workspaces.impl.work_product import WorkProductWorkspacesImpl
 from acme.om.workspaces.rules import SNAPSHOT_PREFIX, session_branch
 from acme.om.workspaces.types.egress import (
     READ_ONLY,
@@ -349,3 +351,38 @@ async def test_the_sessions_own_branch_and_pull_request_are_work_product_and_all
     )
     assert await unbound.managers.workspaces.outward(unbound.owner, unbound_session, own)
 
+
+# What a session delivered, for the evidence: read from the checkout of the
+# workspace this host holds, never from what the agent says.
+
+
+async def test_what_a_session_delivered_is_read_from_the_workspace_this_host_holds(
+    tmp_path: Path,
+) -> None:
+    git = GitTwin(dirty=True, head="c" * 40)
+    loop = loop_of(tmp_path, workspace_projects=ProjectsTwin(), workspace_git=git)
+    assert isinstance(
+        loop.managers.evidence._work_product,  # pyright: ignore[reportAttributeAccessIssue]
+        WorkProductWorkspacesImpl,
+    ), "the root reads the evidence's work product from the workspaces"
+    session_id = await loop.start("twinned")
+    workspace = await loop.managers.tools.prepare_workspace(
+        loop.owner, session_id, TWINNED.isolation
+    )
+    held = HeldWorkspaces()
+    products = WorkProductWorkspacesImpl(loop.managers.workspaces, held)
+
+    with pytest.raises(Unavailable):
+        await products.delivered(loop.owner, session_id)
+    held.hold(workspace)
+    delivered = await products.delivered(loop.owner, session_id)
+
+    assert delivered is not None and delivered.project == "git.example.com/acme/app"
+    assert (delivered.base, delivered.head, delivered.dirty) == (BASE, "c" * 40, True)
+    assert delivered.changes_work_product and delivered.changed == ("notes.txt",)
+
+    unbound = loop_of(tmp_path / "unbound", workspace_projects=ProjectsTwin(repository=None))
+    other = await unbound.start("twinned")
+    loose = await unbound.managers.tools.prepare_workspace(unbound.owner, other, TWINNED.isolation)
+    with pytest.raises(Unavailable):
+        await unbound.managers.workspaces.delivery(unbound.owner, loose)

@@ -30,6 +30,24 @@ from acme.om.workspaces.types.host import HostOffer
 log = logging.getLogger(__name__)
 
 
+class HeldWorkspaces:
+    """The workspaces this host holds prepared, by session: from a prepare
+    that succeeded to the release that let it go. What a session delivered
+    is read from the one it holds (`WorkProductWorkspacesImpl`)."""
+
+    def __init__(self) -> None:
+        self._held: dict[UUID, Workspace] = {}
+
+    def get(self, session_id: UUID) -> Workspace | None:
+        return self._held.get(session_id)
+
+    def hold(self, workspace: Workspace) -> None:
+        self._held[workspace.id] = workspace
+
+    def let_go(self, session_id: UUID) -> None:
+        self._held.pop(session_id, None)
+
+
 class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
     def __init__(
         self,
@@ -38,11 +56,13 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         offer: HostOffer,
         *,
         local: bool,
+        held: HeldWorkspaces | None = None,
     ) -> None:
         self._inner = inner
         self._workspaces = workspaces
         self._offer = offer
         self._local = local
+        self._held = held or HeldWorkspaces()
         self._directories: set[UUID] = set()  # the directory workspaces live here
 
     # The workspace.
@@ -67,7 +87,7 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
             self._directories.discard(session_id)
             raise
         try:
-            return await self._workspaces.attach(ctx, workspace)
+            attached = await self._workspaces.attach(ctx, workspace)
         except BaseException:
             # Its instance goes, and its files stay as they were: nothing of
             # the loop ran in it.
@@ -77,6 +97,8 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
                 log.exception("session %s: the workspace was not released", session_id)
             self._directories.discard(session_id)
             raise
+        self._held.hold(attached)
+        return attached
 
     async def release_workspace(self, ctx: TenantContext, workspace: Workspace) -> None:
         if workspace.spec.mode is not IsolationMode.NONE:
@@ -84,10 +106,12 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
             # and its work stay.
             await self._workspaces.detach(ctx, workspace)
         await self._inner.release_workspace(ctx, workspace)
+        self._held.let_go(workspace.id)
         self._directories.discard(workspace.id)
 
     async def purge_workspace(self, org_id: UUID, session_id: UUID) -> None:
         await self._inner.purge_workspace(org_id, session_id)
+        self._held.let_go(session_id)
         self._directories.discard(session_id)
 
     # The engine's, unchanged.
