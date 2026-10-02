@@ -27,7 +27,7 @@ from uuid import UUID
 from acme.om.attribution.types.principal import Principal
 from acme.om.base import Platform, derived_id
 from acme.om.context import CredentialKind, TenantContext
-from acme.om.intake.types.event import Arrival, AuthorKind, CheckState, FeedbackEvent
+from acme.om.intake.types.event import MAX_TEXT, Arrival, AuthorKind, CheckState, FeedbackEvent
 from acme.om.intake.types.route import Effect
 from acme.om.steps.types.content import Content, TextBlock
 from acme.om.steps.types.header import InputHeader
@@ -96,14 +96,18 @@ ARRIVALS: dict[Arrival, str] = {
 
 def described(event: FeedbackEvent) -> str:
     """An event as the agent reads it, as data: a first line the platform
-    writes from the fields the integration read, then what it says."""
+    writes from the fields the integration read, then what it says, its end
+    cut so the whole stays within the text an event may carry."""
     on = event.names.pull_request or event.names.branch
     what = ARRIVALS[event.arrival]
     if event.check is not None:
         what = f"{what} {event.check.value}"
     head = f"{event.integration}: {what} by {event.author.kind.value} {event.author.name}"
     head = f"{head} on {on}" if on else head
-    return f"{head}\n{event.text}" if event.text else head
+    if not event.text:
+        return head[:MAX_TEXT]
+    room = max(MAX_TEXT - len(head) - 1, 0)
+    return f"{head}\n{event.text[:room]}"[:MAX_TEXT]
 
 
 def input_step(

@@ -29,7 +29,9 @@ from acme.om.base import new_id, utcnow
 from acme.om.context import TenantContext
 from acme.om.events.types.event import Event
 from acme.om.intake.impl.manager import ROUTED
+from acme.om.intake.rules import described
 from acme.om.intake.types.event import (
+    MAX_TEXT,
     Arrival,
     Author,
     AuthorKind,
@@ -226,4 +228,41 @@ async def test_an_event_from_outside_is_routed_and_fires_automations_once(
     # here refused, since this worker runs no agent kind.
     (run,) = await container.automations.get_runs(ctx, automation.id, 10)
     assert (run.event_id, run.refusal) == (event.id, Refusal.ACTION)
+    assert await depth(container) == (0, 0)
+
+
+async def test_an_event_at_the_text_cap_is_routed_and_fires_once(tmp_path: Path) -> None:
+    container = build_container(tmp_path)
+    ctx = await sign_in(container)
+    now = utcnow()
+    automation = Automation(
+        id=new_id(),
+        created_at=now,
+        updated_at=now,
+        created_by=ctx.user_id,
+        updated_by=ctx.user_id,
+        name="triage failing checks",
+        trigger=Trigger(kind=TriggerKind.EVENT, arrivals=("check",)),
+        action=Action(
+            kind=ActionKind.START_SESSION, brief="Find why.", agent_kind="triage", title="CI"
+        ),
+        limits=Limits(cost_cap_micros=10, run_cap_micros=1, rate=5, concurrency=1, queue=True),
+    )
+    await container.automations.create_automation(ctx, automation)
+    event = FeedbackEvent(
+        id=new_id(),
+        integration="forge",
+        arrival=Arrival.CHECK,
+        author=Author(kind=AuthorKind.BOT, external_id="ci", name="ci"),
+        names=WorkNames(branch="main"),
+        check=CheckState.FAILED,
+        text="x" * MAX_TEXT,
+        occurred_at=now,
+    )
+    assert len(described(event)) <= MAX_TEXT
+    consumer = consumer_of(container)
+    body = feedback_body(str(ctx.org_id), event)
+    assert await consumer.handle(await queued(container, body)) == "applied"
+    (run,) = await container.automations.get_runs(ctx, automation.id, 10)
+    assert run.event_id == event.id
     assert await depth(container) == (0, 0)
