@@ -30,6 +30,7 @@ from contracts import (
     event_storage,
     evidence_storage,
     fill_set_storage,
+    hosts_storage,
     idempotency_storage,
     intake_storage,
     knowledge_storage,
@@ -93,6 +94,10 @@ STORAGE_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         ("TenancyStorageInterface", "read_api_key_by_digest"),
         ("TenancyStorageInterface", "redeem_socket_ticket"),
         ("WorkStorageInterface", "claim_next"),
+        # A host's call names no tenant: its enrollment token or its
+        # credential is found by digest, which finds the tenant with it.
+        ("HostsStorageInterface", "read_enrollment_token_by_digest"),
+        ("HostsStorageInterface", "read_host_by_credential_digest"),
         # The sweep's requeue of expired leases: a named write in the system
         # scope, like the claim it undoes. A crashed worker's item waits one
         # pass for it, not the turn of its tenant in a ring of every tenant.
@@ -137,6 +142,7 @@ CROSS_TENANT_CASES: dict[str, frozenset[str]] = {
     "EventStorageInterface": event_storage.CROSS_TENANT_CASES,
     "EvidenceStorageInterface": evidence_storage.CROSS_TENANT_CASES,
     "FillSetStorageInterface": fill_set_storage.CROSS_TENANT_CASES,
+    "HostsStorageInterface": hosts_storage.CROSS_TENANT_CASES,
     "IdempotencyStorageInterface": idempotency_storage.CROSS_TENANT_CASES,
     "LedgerStorageInterface": ledger_storage.CROSS_TENANT_CASES,
     "MediaStorageInterface": media_storage.CROSS_TENANT_CASES,
@@ -243,6 +249,14 @@ REQUEST_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
         # The claim made on behalf of a host or a daemon, which rebuilds the
         # run's context from the item as the claim does.
         ("PlacementManagerInterface", "claim_for"),
+        # A host's calls: it is no person, so its enrollment, its credential,
+        # its beat, and its claim run from the request stage; the claim
+        # rebuilds the run's context from the item through placement.
+        ("HostsManagerInterface", "enroll"),
+        ("HostsManagerInterface", "authenticate"),
+        ("HostsManagerInterface", "rotate"),
+        ("HostsManagerInterface", "heartbeat"),
+        ("HostsManagerInterface", "claim"),
         # The sweep's requeue across tenants: a dead letter it makes is
         # written under its tenant's service context, minted from this stage
         # as the claim mints one.

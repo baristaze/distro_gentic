@@ -32,6 +32,8 @@ from acme.om.events.storage import EventStorageInterface
 from acme.om.events.storage.impl.postgres import EventStoragePostgresImpl
 from acme.om.evidence.storage import EvidenceStorageInterface
 from acme.om.evidence.storage.impl.postgres import EvidenceStoragePostgresImpl
+from acme.om.hosts.storage import HostsStorageInterface
+from acme.om.hosts.storage.impl.postgres import HostsStoragePostgresImpl
 from acme.om.idempotency.storage import IdempotencyStorageInterface
 from acme.om.idempotency.storage.impl.postgres import IdempotencyStoragePostgresImpl
 from acme.om.intake.storage import IntakeStorageInterface
@@ -222,6 +224,7 @@ class StoragePostgresImpl(StorageInterface):
         self._evidence = EvidenceStoragePostgresImpl(sessions)
         self._placement = PlacementStoragePostgresImpl(sessions)
         self._trust = TrustStoragePostgresImpl(sessions)
+        self._hosts = HostsStoragePostgresImpl(sessions)
         self._intake = IntakeStoragePostgresImpl(sessions)
         self._automation = AutomationStoragePostgresImpl(sessions)
         self._playbook = PlaybookStoragePostgresImpl(sessions)
@@ -299,6 +302,9 @@ class StoragePostgresImpl(StorageInterface):
 
     def get_trust_storage(self) -> TrustStorageInterface:
         return self._trust
+
+    def get_hosts_storage(self) -> HostsStorageInterface:
+        return self._hosts
 
     def get_intake_storage(self) -> IntakeStorageInterface:
         return self._intake

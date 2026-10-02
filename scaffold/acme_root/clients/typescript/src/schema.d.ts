@@ -333,6 +333,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/agent-sessions/{session_id}/placement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Placement Of
+         * @description Where the session runs; a pinned session with no host online waits.
+         */
+        get: operations["placement_of_v1_agent_sessions__session_id__placement_get"];
+        /**
+         * Place Session
+         * @description A principal pins the session to a pool, or moves it to the cloud.
+         */
+        put: operations["place_session_v1_agent_sessions__session_id__placement_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/agent-sessions/{session_id}/steps": {
         parameters: {
             query?: never;
@@ -553,6 +577,187 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/host-enrollment-tokens/{token_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke Enrollment Token */
+        delete: operations["revoke_enrollment_token_v1_host_enrollment_tokens__token_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/host-pools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Pools */
+        get: operations["get_pools_v1_host_pools_get"];
+        put?: never;
+        /**
+         * Create Pool
+         * @description A pool hosts enroll into. An owner's or an admin's.
+         */
+        post: operations["create_pool_v1_host_pools_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/host-pools/{pool_id}/enrollment-tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Issue Enrollment Token
+         * @description A token that enrolls hosts into the pool, in the clear once. A retry
+         *     mints another, so it takes no Idempotency-Key; the one never read
+         *     expires on its own.
+         */
+        post: operations["issue_enrollment_token_v1_host_pools__pool_id__enrollment_tokens_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/host-pools/{pool_id}/hosts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Hosts
+         * @description The pool's hosts, each with whether it is online now.
+         */
+        get: operations["get_hosts_v1_host_pools__pool_id__hosts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/hosts/enrollments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Enroll
+         * @description A host enrolls once, with its tenant's enrollment token as its bearer,
+         *     and gets a credential of its own. A retry enrolls another host, so it
+         *     takes no Idempotency-Key.
+         */
+        post: operations["enroll_v1_hosts_enrollments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/hosts/me/claims": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Claim
+         * @description The next item pinned to this host or its pool, or none. The body
+         *     states the version the host reads, and nothing it is handed.
+         */
+        post: operations["claim_v1_hosts_me_claims_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/hosts/me/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rotate
+         * @description The host's next credential; the one it called with ends after a short
+         *     grace.
+         */
+        post: operations["rotate_v1_hosts_me_credentials_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/hosts/me/heartbeats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Heartbeat */
+        post: operations["heartbeat_v1_hosts_me_heartbeats_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/hosts/{host_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke Host
+         * @description Ends the host and its credentials at once; it is handed no more work.
+         */
+        delete: operations["revoke_host_v1_hosts__host_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1032,6 +1237,34 @@ export interface components {
             role: components["schemas"]["Role"];
         };
         /**
+         * AdvertisementBody
+         * @description What a host probed at its startup, and nothing it did not.
+         */
+        AdvertisementBody: {
+            /** Capabilities */
+            capabilities?: string[];
+            /** Isolation Modes */
+            isolation_modes?: components["schemas"]["IsolationMode"][];
+            /** Os */
+            os: string;
+            /**
+             * Shell
+             * @default
+             */
+            shell: string;
+        };
+        /** AdvertisementView */
+        AdvertisementView: {
+            /** Capabilities */
+            capabilities: string[];
+            /** Isolation Modes */
+            isolation_modes: components["schemas"]["IsolationMode"][];
+            /** Os */
+            os: string;
+            /** Shell */
+            shell: string;
+        };
+        /**
          * AgentSessionView
          * @description A session: its kind, its title, and its status, which follows its
          *     steps. `pending` while an input waits for a run, `running` while a run
@@ -1105,6 +1338,51 @@ export interface components {
             user_id: string;
         };
         /**
+         * ClaimRequest
+         * @description The version of `exec` work the host reads, and nothing else: what it
+         *     is handed is its identity's to say.
+         */
+        ClaimRequest: {
+            /** Exec Version */
+            exec_version: number;
+        };
+        /**
+         * ClaimView
+         * @description What a claim answers: the item, or none when nothing is ready.
+         */
+        ClaimView: {
+            item: components["schemas"]["ClaimedWorkView"] | null;
+        };
+        /**
+         * ClaimedWorkView
+         * @description One item a host was handed, under a lease, as `exec` work of
+         *     `wire_version`. `payload` is the item's, as its kind fixes it.
+         */
+        ClaimedWorkView: {
+            /** Attempts */
+            attempts: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Lease Expires At */
+            lease_expires_at: string | null;
+            /** Payload */
+            payload: {
+                [key: string]: unknown;
+            };
+            /**
+             * Target Id
+             * Format: uuid
+             */
+            target_id: string;
+            /** Wire Version */
+            wire_version: number;
+        };
+        /**
          * ConfirmTotpRequest
          * @description The first code from the authenticator, which confirms the secret.
          */
@@ -1143,6 +1421,15 @@ export interface components {
             owner_name: string;
             /** Slug */
             slug: string;
+        };
+        /** CreatePoolRequest */
+        CreatePoolRequest: {
+            /** Labels */
+            labels?: string[];
+            /** Name */
+            name: string;
+            /** Region */
+            region: string;
         };
         /**
          * CreateTeamOrgRequest
@@ -1253,6 +1540,48 @@ export interface components {
         DeviceTokenRequest: {
             /** Device Code */
             device_code: string;
+        };
+        /**
+         * EnrollRequest
+         * @description A host's name and its report, beside its enrollment token. The pool
+         *     is the token's.
+         */
+        EnrollRequest: {
+            advertisement: components["schemas"]["AdvertisementBody"];
+            /** Exec Version */
+            exec_version: number;
+            /** Name */
+            name: string;
+        };
+        /** EnrollmentTokenView */
+        EnrollmentTokenView: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Pool Id
+             * Format: uuid
+             */
+            pool_id: string;
+            /** Revoked At */
+            revoked_at: string | null;
         };
         /** ErrorBody */
         ErrorBody: {
@@ -1378,6 +1707,48 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** HeartbeatRequest */
+        HeartbeatRequest: {
+            advertisement: components["schemas"]["AdvertisementBody"];
+            /** Exec Version */
+            exec_version: number;
+        };
+        /**
+         * HostView
+         * @description A host as its owner reads it: online while it called within the
+         *     window and reads a version of `exec` work the platform still hands.
+         */
+        HostView: {
+            advertisement: components["schemas"]["AdvertisementView"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Exec Version */
+            exec_version: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
+            /** Name */
+            name: string;
+            /** Online */
+            online: boolean;
+            /**
+             * Pool Id
+             * Format: uuid
+             */
+            pool_id: string;
+            /** Revoked At */
+            revoked_at: string | null;
+        };
         /**
          * IdentityView
          * @description The person behind the caller's user. `operator_role` is the allowlist
@@ -1459,6 +1830,12 @@ export interface components {
             role: components["schemas"]["Role"];
         };
         /**
+         * IsolationMode
+         * @description The isolation levels a host can run a workspace at, strongest first.
+         * @enum {string}
+         */
+        IsolationMode: "vm" | "container" | "directory";
+        /**
          * IssuedApiKeyView
          * @description The key in the clear is present on the first response only: the stored
          *     outcome of the create carries no secret, so a replay under the same
@@ -1484,6 +1861,46 @@ export interface components {
             expires_at: string;
             /** Url */
             url: string | null;
+        };
+        /**
+         * IssuedEnrollmentTokenView
+         * @description The token in the clear, once: it enrolls hosts into its pool until
+         *     it expires or is revoked. It is minted on every call, so a retry mints
+         *     another, and the one never read expires on its own.
+         */
+        IssuedEnrollmentTokenView: {
+            enrollment: components["schemas"]["EnrollmentTokenView"];
+            /** Token */
+            token: string | null;
+        };
+        /**
+         * IssuedHostCredentialView
+         * @description The host's own credential in the clear, once, and the identity it
+         *     carries. It lives an hour; the host rotates it before then.
+         */
+        IssuedHostCredentialView: {
+            /**
+             * Credential Id
+             * Format: uuid
+             */
+            credential_id: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /**
+             * Host Id
+             * Format: uuid
+             */
+            host_id: string;
+            /**
+             * Pool Id
+             * Format: uuid
+             */
+            pool_id: string;
+            /** Token */
+            token: string | null;
         };
         /**
          * IssuedLoginView
@@ -1908,6 +2325,33 @@ export interface components {
          */
         Permission: "read" | "write" | "manage_members" | "manage_keys";
         /**
+         * PlaceSessionRequest
+         * @description One of the tenant's pools, or None for the cloud.
+         */
+        PlaceSessionRequest: {
+            /** Pool Id */
+            pool_id: string | null;
+        };
+        /**
+         * PlacementView
+         * @description Where a session runs. A pinned session with no host of its pool
+         *     online is `waiting`; it never moves to the cloud by itself.
+         */
+        PlacementView: {
+            /** Hosts Online */
+            hosts_online: number;
+            pool: components["schemas"]["PoolView"] | null;
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+            /** Version */
+            version: number;
+            /** Waiting */
+            waiting: boolean;
+        };
+        /**
          * PlatformSizeView
          * @description How big the platform is, what the first responder to an alarm reads
          *     before it escalates: live tenants and users, and the events produced in
@@ -1932,6 +2376,30 @@ export interface components {
             tenants: number;
             /** Users */
             users: number;
+        };
+        /** PoolView */
+        PoolView: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Labels */
+            labels: string[];
+            /** Name */
+            name: string;
+            /** Region */
+            region: string;
         };
         /** PurposeUsageView */
         PurposeUsageView: {
@@ -3072,6 +3540,80 @@ export interface operations {
             };
         };
     };
+    placement_of_v1_agent_sessions__session_id__placement_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlacementView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    place_session_v1_agent_sessions__session_id__placement_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlaceSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlacementView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_steps_v1_agent_sessions__session_id__steps_get: {
         parameters: {
             query?: {
@@ -3565,6 +4107,361 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EventView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_enrollment_token_v1_host_enrollment_tokens__token_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                token_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnrollmentTokenView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_pools_v1_host_pools_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PoolView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_pool_v1_host_pools_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                "idempotency-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePoolRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PoolView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    issue_enrollment_token_v1_host_pools__pool_id__enrollment_tokens_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                pool_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuedEnrollmentTokenView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_hosts_v1_host_pools__pool_id__hosts_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                pool_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    enroll_v1_hosts_enrollments_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnrollRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuedHostCredentialView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    claim_v1_hosts_me_claims_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClaimRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClaimView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rotate_v1_hosts_me_credentials_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuedHostCredentialView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    heartbeat_v1_hosts_me_heartbeats_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HeartbeatRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_host_v1_hosts__host_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                host_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostView"];
                 };
             };
             /** @description Validation Error */

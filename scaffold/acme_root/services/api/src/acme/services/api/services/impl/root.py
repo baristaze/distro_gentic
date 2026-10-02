@@ -10,6 +10,7 @@ from acme.services.api.services import (
     AdminServiceInterface,
     AgentSessionsServiceInterface,
     EventsServiceInterface,
+    HostsServiceInterface,
     MediaServiceInterface,
     RealtimeServiceInterface,
     ServicesInterface,
@@ -19,6 +20,7 @@ from acme.services.api.services import (
 from acme.services.api.services.impl.admin import AdminServiceImpl
 from acme.services.api.services.impl.agent_sessions import AgentSessionsServiceImpl
 from acme.services.api.services.impl.events import EventsServiceImpl
+from acme.services.api.services.impl.hosts import HostsServiceImpl
 from acme.services.api.services.impl.media import MediaServiceImpl
 from acme.services.api.services.impl.realtime import RealtimeServiceImpl
 from acme.services.api.services.impl.tenancy import TenancyServiceImpl
@@ -35,6 +37,7 @@ class ServicesImpl(ServicesInterface):
         realtime: RealtimeServiceInterface,
         webhooks: WebhooksServiceInterface,
         agent_sessions: AgentSessionsServiceInterface,
+        hosts: HostsServiceInterface,
     ) -> None:
         self._tenancy = tenancy
         self._admin = admin
@@ -43,6 +46,7 @@ class ServicesImpl(ServicesInterface):
         self._realtime = realtime
         self._webhooks = webhooks
         self._agent_sessions = agent_sessions
+        self._hosts = hosts
 
     def get_tenancy_service(self) -> TenancyServiceInterface:
         return self._tenancy
@@ -65,6 +69,9 @@ class ServicesImpl(ServicesInterface):
     def get_agent_sessions_service(self) -> AgentSessionsServiceInterface:
         return self._agent_sessions
 
+    def get_hosts_service(self) -> HostsServiceInterface:
+        return self._hosts
+
 
 def build_services(
     managers: Managers,
@@ -86,4 +93,5 @@ def build_services(
         agent_sessions=AgentSessionsServiceImpl(
             managers.agent_sessions, managers.agents, managers.steps, managers.tools
         ),
+        hosts=HostsServiceImpl(managers.hosts),
     )
