@@ -21,6 +21,7 @@ from acme.om.idempotency.impl.manager import IdempotencyOptions
 from acme.om.media.impl.manager import MediaOptions
 from acme.om.models.impl.manager import ModelsOptions
 from acme.om.orchestrations.impl.manager import OrchestrationsOptions
+from acme.om.placement.impl.manager import PlacementOptions
 from acme.om.retention.impl.manager import RetentionOptions
 from acme.om.root import Managers, build_managers
 from acme.om.steps.impl.manager import StepsOptions
@@ -103,6 +104,7 @@ def worker_managers(
         models_options=ModelsOptions(purge_batch=batch),
         tools_options=ToolsOptions(purge_batch=batch),
         retention_options=RetentionOptions(sweep_batch=RETENTION_SWEEP_BATCH, purge_batch=batch),
+        placement_options=PlacementOptions(purge_batch=batch),
     )
 
 

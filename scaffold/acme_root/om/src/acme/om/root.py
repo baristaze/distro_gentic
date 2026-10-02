@@ -51,6 +51,9 @@ from acme.om.orchestrations import OrchestrationsManagerInterface
 from acme.om.orchestrations.impl.manager import OrchestrationsManagerImpl, OrchestrationsOptions
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.impl.relay import OutboxRelayImpl
+from acme.om.placement import PlacementManagerInterface, PlacementOperatorManagerInterface
+from acme.om.placement.impl.manager import PlacementManagerImpl, PlacementOptions
+from acme.om.placement.impl.operator import PlacementOperatorManagerImpl
 from acme.om.privacy import PrivacyManagerInterface
 from acme.om.privacy.impl.artifacts import ArtifactSealKeysImpl
 from acme.om.privacy.impl.keys import SessionKeysImpl
@@ -125,6 +128,8 @@ class Managers:
     agents: AgentsManagerInterface
     tools: ToolsManagerInterface
     loop: LoopManagerInterface
+    placement: PlacementManagerInterface
+    placement_operator: PlacementOperatorManagerInterface
 
 
 LOCAL = "local"
@@ -256,6 +261,7 @@ def build_managers(
     tool_catalog: tuple[ToolInterface, ...] = (),
     domain_classes: tuple[str, ...] = (),
     loop_options: LoopOptions | None = None,
+    placement_options: PlacementOptions | None = None,
     environment: str = LOCAL,
     tenant_keys: TenantKeysInterface | None = None,
     session_projects: SessionProjectInterface | None = None,
@@ -299,6 +305,9 @@ def build_managers(
     go to, None the quiet null, which drops them; and `loop_options`. Its
     outage signal is infra's, and its model providers the integrations'.
 
+    `placement_options` is the fair share of a tenant no operator gave one,
+    and the delay a loop over its share waits; None keeps the defaults.
+
     The platform's retention takes three. `tenant_keys` says whose key
     service holds each tenant's keys; None is infra's for every tenant, and
     in `local` the local key service over it, which destroys a session's key
@@ -338,6 +347,10 @@ def build_managers(
         events,
         infra.get_topics(),
         work_options or WorkOptions(),
+        # Every item goes to the lane where its environment is, which
+        # placement answers. Placement claims through this manager, so it is
+        # built below and the edge is bound at call time.
+        lanes=lambda org_id, item: managers.placement.lane_for(org_id, item),
     )
     media = MediaManagerImpl(
         storage.get_media_storage(),
@@ -507,6 +520,12 @@ def build_managers(
         outbox,
         operator_options or TenancyOperatorOptions(),
     )
+    placement = PlacementManagerImpl(
+        storage.get_placement_storage(),
+        work,
+        tenancy,
+        placement_options or PlacementOptions(),
+    )
     managers = Managers(
         tenancy=tenancy,
         tenancy_operator=tenancy_operator,
@@ -553,6 +572,13 @@ def build_managers(
             tool_catalog,
             loop_options or LoopOptions(),
             domain_classes=domain_classes,
+        ),
+        placement=placement,
+        placement_operator=PlacementOperatorManagerImpl(
+            storage.get_placement_storage(),
+            storage.get_tenancy_storage(),
+            storage.get_event_storage(),
+            infra.get_topics(),
         ),
     )
     return managers
