@@ -24,9 +24,10 @@ presents it for a day, until it is revoked. A host credential (`hst_`)
 is the host's alone. It lives an hour, and the host rotates it at half
 its life. A credential rotates once. The one it rotates away from still
 works for a minute, so a call in flight with it lands, and any older one
-ends. A second rotation of a credential means two machines hold it, and
-neither can be told from the other: it is refused, and the host and
-every credential it holds are revoked, so its owner sees it. Both kinds
+ends. A second rotation of a credential, or a call with it past its
+grace, means two machines hold the host's identity, and neither can be
+told from the other: it is refused, and the host and every credential it
+holds are revoked, so its owner sees it. Both kinds
 are kept as digests, unique across tenants, since a host's call names no
 tenant. The tenant's transitions know neither prefix, and a host's
 routes accept only `hst_`.
@@ -62,10 +63,13 @@ it did not probe, before anything runs.
   machine must hold when the platform is wrong.
 - A host offline for more than an hour has no live credential, and its
   owner enrolls it again with a new token.
-- A copy of a credential rotates beside its host only once before both
-  end, so a credential taken from a disk is worth an hour at most. A host
-  whose answer to a rotation is lost holds only the credential it rotated
-  away from, and its next rotation ends it: its owner enrolls it again.
+- A copy of a credential that rotates first holds the host's identity
+  until the host's next call, with the credential the copy rotated away
+  from: that call ends the host, the copy with it. A copy is never
+  refused while the host is silent, so its life is the host's silence.
+- A host whose answer to a rotation is lost holds only the credential it
+  rotated away from, and its next call past the grace ends it: its owner
+  enrolls it again.
 - A compromised control plane can still describe an item wrongly, such
   as its project. The host runs an item at no more than it asked, so a
   wrong isolation or egress widens nothing.

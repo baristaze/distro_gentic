@@ -105,8 +105,10 @@ class HostsManagerInterface(ABC):
     @abstractmethod
     async def authenticate(self, rctx: RequestContext, credential: str) -> HostIdentity:
         """Platform-internal: the host behind a host credential. Refuses any
-        other kind of credential, an expired or rotated one, and a revoked
-        host's."""
+        other kind of credential, an expired one, and a revoked host's. A
+        rotated credential presented past its grace means two machines hold
+        the host's identity: it is refused, and the host and every
+        credential it holds are revoked."""
         ...
 
     @abstractmethod

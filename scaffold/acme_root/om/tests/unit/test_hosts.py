@@ -238,16 +238,16 @@ async def test_a_credential_lives_an_hour_and_the_host_rotates_it(
     assert second.credential != first.credential and second.host_id == first.host_id
     assert second.expires_at == clock.now + HostsOptions().credential_ttl
     # The one it replaced works for the grace, so a call in flight with it
-    # lands, and is refused after it.
+    # lands; past it, the host calls with the next one.
     await hosts.authenticate(request(), first.credential)
     clock.advance(HostsOptions().rotation_grace)
-    with pytest.raises(CredentialExpired):
-        await hosts.authenticate(request(), first.credential)
     await hosts.authenticate(request(), second.credential)
-    # Unrotated, a credential ends with its life.
+    # Unrotated, a credential ends with its life, and only it ends.
     clock.advance(HostsOptions().credential_ttl)
     with pytest.raises(CredentialExpired):
         await hosts.authenticate(request(), second.credential)
+    (status,) = await hosts.get_hosts(owner, pool.id)
+    assert status.host.revoked_at is None
 
 
 async def test_a_copy_rotated_after_the_hosts_own_rotation_ends_the_host(
@@ -293,6 +293,29 @@ async def test_a_copy_rotating_every_half_hour_does_not_outlive_its_hour(
         for credential in (copy, forked.credential):
             with pytest.raises(CredentialExpired):
                 await hosts.authenticate(request(), credential)
+
+
+async def test_a_copy_that_rotates_first_ends_at_the_hosts_next_beat(
+    managers: Managers, hosts: HostsManagerImpl, clock: Clock
+) -> None:
+    owner = await an_owner(managers)
+    pool = await hosts.create_pool(owner, a_pool())
+    issued = await enrolled(hosts, owner, pool)
+    # The copy rotates 10 minutes in and every 30 minutes after, while the
+    # host is silent, past the grace of the credential it holds.
+    clock.advance(timedelta(minutes=10))
+    held = await hosts.rotate(request(), await hosts.authenticate(request(), issued.credential))
+    for _ in range(2):
+        clock.advance(timedelta(minutes=30))
+        held = await hosts.rotate(request(), await hosts.authenticate(request(), held.credential))
+    # The host's next beat, with the credential the copy rotated away from:
+    # refused, and the host and every credential it holds are revoked.
+    with pytest.raises(CredentialExpired):
+        await hosts.authenticate(request(), issued.credential)
+    (status,) = await hosts.get_hosts(owner, pool.id)
+    assert status.host.revoked_at == clock.now and not status.online
+    with pytest.raises(CredentialExpired):
+        await hosts.authenticate(request(), held.credential)
 
 
 async def test_a_revoked_host_is_refused_and_handed_nothing(
