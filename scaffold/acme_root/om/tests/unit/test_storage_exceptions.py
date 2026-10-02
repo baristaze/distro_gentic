@@ -27,6 +27,7 @@ from contracts import (
     automation_storage,
     budget_storage,
     event_storage,
+    evidence_storage,
     fill_set_storage,
     idempotency_storage,
     intake_storage,
@@ -123,6 +124,7 @@ CROSS_TENANT_CASES: dict[str, frozenset[str]] = {
     "AttributionStorageInterface": attribution_storage.CROSS_TENANT_CASES,
     "BudgetStorageInterface": budget_storage.CROSS_TENANT_CASES,
     "EventStorageInterface": event_storage.CROSS_TENANT_CASES,
+    "EvidenceStorageInterface": evidence_storage.CROSS_TENANT_CASES,
     "FillSetStorageInterface": fill_set_storage.CROSS_TENANT_CASES,
     "IdempotencyStorageInterface": idempotency_storage.CROSS_TENANT_CASES,
     "LedgerStorageInterface": ledger_storage.CROSS_TENANT_CASES,
@@ -182,6 +184,7 @@ MANAGER_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         ("AgentsManagerInterface", "purge_tree"),
         ("WindowsManagerInterface", "purge_artifacts"),
         ("ToolsManagerInterface", "purge_workspace"),
+        ("EvidenceManagerInterface", "purge_session"),
         # The sweep's gauges of the queue, read across tenants like the purge.
         ("WorkManagerInterface", "oldest_ready_age"),
         ("WorkManagerInterface", "failed_within"),
