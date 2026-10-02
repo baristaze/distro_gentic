@@ -33,7 +33,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from pathlib import PurePosixPath
-from typing import Self
+from typing import Literal, Self
 from uuid import UUID
 
 from pydantic import Field, model_validator
@@ -115,6 +115,10 @@ class CommandSpec(InfraModel):
     deadline: datetime  # when its whole process tree ends
     # The characters kept of each stream; past them, its head and its tail.
     max_output: int = Field(default=1_000_000, gt=0)
+    # What a repeat of it may do, as its tool declares. A transport that runs
+    # it on another machine, and may lose it midway, repeats only what a
+    # repeat cannot harm; a command that names no effect is never repeated.
+    effect: Literal["read_only", "idempotent", "unsafe"] = "unsafe"
 
     @model_validator(mode="after")
     def _one_name_one_variable(self) -> Self:
