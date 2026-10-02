@@ -7,7 +7,7 @@ from acme.om.retention.projects import SessionProjectInterface
 
 
 class SessionProjectNullImpl(SessionProjectInterface, QuietNull):
-    """No session belongs to a project yet: each takes its tenant's policy,
+    """Every session as one of no project: each takes its tenant's policy,
     which a project only narrows."""
 
     async def project_of(self, ctx: TenantContext, session: AgentSession) -> UUID | None:

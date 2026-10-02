@@ -32,6 +32,7 @@ from acme.om.placement.impl.manager import PlacementOptions
 from acme.om.platform_agents.impl.manager import PlatformAgentsOptions
 from acme.om.playbooks.impl.manager import PlaybooksOptions
 from acme.om.playbooks.root import PlaybooksLayer
+from acme.om.projects.impl.manager import ProjectsOptions
 from acme.om.retention.impl.manager import RetentionOptions
 from acme.om.root import Managers, build_managers
 from acme.om.steps.impl.manager import StepsOptions
@@ -121,6 +122,7 @@ def worker_managers(
         retention_options=RetentionOptions(sweep_batch=RETENTION_SWEEP_BATCH, purge_batch=batch),
         placement_options=PlacementOptions(purge_batch=batch),
         platform_agents_options=PlatformAgentsOptions(purge_batch=batch),
+        projects_options=ProjectsOptions(purge_batch=batch),
     )
 
 
