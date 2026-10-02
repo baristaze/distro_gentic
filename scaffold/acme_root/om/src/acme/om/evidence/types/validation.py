@@ -11,6 +11,7 @@ from pydantic import Field, model_validator
 from acme.om.base import Created, Identifiable, Platform
 from acme.om.evidence.types.contract import CheckDeclaration
 from acme.om.evidence.types.provenance import SHA256
+from acme.om.evidence.types.rate import RateRule
 from acme.om.evidence.types.record import PROJECT, VERSION, RunPurpose
 
 
@@ -36,7 +37,9 @@ class ExecutionRequest(Platform):
     """What a fresh executor is asked to run: the checks, at `version`, with
     their checks, fixtures, and runner taken from `source`, the protected
     source, and under an environment the executor sets. Nothing of the
-    agent's workspace or environment is in it."""
+    agent's workspace or environment is in it. Each check runs at most its
+    count of trials; one with a rate stops where `rates.stops_at` says its
+    rule stops, at the confidence given here, and nowhere else."""
 
     session_id: UUID
     project: str = Field(pattern=PROJECT)
@@ -45,11 +48,14 @@ class ExecutionRequest(Platform):
     source: str = Field(pattern=VERSION)
     checks: tuple[CheckDeclaration, ...] = Field(min_length=1)
     trials: tuple[int, ...] = Field(min_length=1)
+    rates: tuple[RateRule | None, ...] = ()
 
     @model_validator(mode="after")
     def _a_count_a_check(self) -> Self:
         if len(self.trials) != len(self.checks) or min(self.trials) < 1:
             raise ValueError("each check is asked for its own count of trials, at least one")
+        if self.rates and len(self.rates) != len(self.checks):
+            raise ValueError("a request names each check's rate, or none of them")
         if self.purpose is RunPurpose.WORK:
             raise ValueError("the executor runs a baseline or a validation, never the agent's work")
         return self
