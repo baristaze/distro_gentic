@@ -21,6 +21,7 @@ import inspect
 import pkgutil
 
 from contracts import (
+    account_storage,
     agent_session_storage,
     agent_storage,
     attribution_storage,
@@ -31,6 +32,7 @@ from contracts import (
     idempotency_storage,
     ledger_storage,
     media_storage,
+    money_ledger_storage,
     orchestration_storage,
     outbox_storage,
     placement_storage,
@@ -122,6 +124,7 @@ STORAGE_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
 )
 
 CROSS_TENANT_CASES: dict[str, frozenset[str]] = {
+    "AccountStorageInterface": account_storage.CROSS_TENANT_CASES,
     "AgentSessionStorageInterface": agent_session_storage.CROSS_TENANT_CASES,
     "AgentStorageInterface": agent_storage.CROSS_TENANT_CASES,
     "AttributionStorageInterface": attribution_storage.CROSS_TENANT_CASES,
@@ -132,6 +135,7 @@ CROSS_TENANT_CASES: dict[str, frozenset[str]] = {
     "IdempotencyStorageInterface": idempotency_storage.CROSS_TENANT_CASES,
     "LedgerStorageInterface": ledger_storage.CROSS_TENANT_CASES,
     "MediaStorageInterface": media_storage.CROSS_TENANT_CASES,
+    "MoneyLedgerStorageInterface": money_ledger_storage.CROSS_TENANT_CASES,
     "OrchestrationsStorageInterface": orchestration_storage.CROSS_TENANT_CASES,
     "OutboxStorageInterface": outbox_storage.CROSS_TENANT_CASES,
     "PlacementStorageInterface": placement_storage.CROSS_TENANT_CASES,
