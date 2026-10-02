@@ -16,6 +16,7 @@ from acme.services.api.services import (
     MediaServiceInterface,
     RealtimeServiceInterface,
     ServicesInterface,
+    StationsServiceInterface,
     TenancyServiceInterface,
     WebhooksServiceInterface,
 )
@@ -26,6 +27,7 @@ from acme.services.api.services.impl.fleet import FleetServiceImpl
 from acme.services.api.services.impl.hosts import HostsServiceImpl
 from acme.services.api.services.impl.media import MediaServiceImpl
 from acme.services.api.services.impl.realtime import RealtimeServiceImpl
+from acme.services.api.services.impl.stations import StationsServiceImpl
 from acme.services.api.services.impl.tenancy import TenancyServiceImpl
 from acme.services.api.services.impl.webhooks import WebhooksServiceImpl
 
@@ -42,6 +44,7 @@ class ServicesImpl(ServicesInterface):
         agent_sessions: AgentSessionsServiceInterface,
         hosts: HostsServiceInterface,
         fleet: FleetServiceInterface,
+        stations: StationsServiceInterface,
     ) -> None:
         self._tenancy = tenancy
         self._admin = admin
@@ -52,6 +55,7 @@ class ServicesImpl(ServicesInterface):
         self._agent_sessions = agent_sessions
         self._hosts = hosts
         self._fleet = fleet
+        self._stations = stations
 
     def get_tenancy_service(self) -> TenancyServiceInterface:
         return self._tenancy
@@ -80,6 +84,9 @@ class ServicesImpl(ServicesInterface):
     def get_fleet_service(self) -> FleetServiceInterface:
         return self._fleet
 
+    def get_stations_service(self) -> StationsServiceInterface:
+        return self._stations
+
 
 def build_services(
     managers: Managers,
@@ -104,4 +111,5 @@ def build_services(
         ),
         hosts=HostsServiceImpl(managers.hosts),
         fleet=FleetServiceImpl(managers.placement_operator, trust_operator),
+        stations=StationsServiceImpl(managers.stations),
     )

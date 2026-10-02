@@ -15,8 +15,8 @@ A request passes four layers, each in its own folder under
   and the request's deadline, the credential, rate limits, idempotency,
   the error envelope, and the webhook's signed body.
 - **Routers** (`routers/`). One module per namespace: tenancy with the
-  operator plane, events, media, agent sessions, hosts, and webhooks.
-  Each route makes one call into a service.
+  operator plane, events, media, agent sessions, hosts, stations, and
+  webhooks. Each route makes one call into a service.
 - **Services** (`services/`). One interface per namespace, and its impl in
   `services/impl/`. An impl translates the request, calls a manager or a
   provider, and returns a view from `types/`.
@@ -115,6 +115,27 @@ app, and `main.py` is the `acme-api` command: `serve`, `migrate`,
   version_below_floor`, and what it is handed is read off the host's
   identity. (`/v1/hosts/enrollments`, `/v1/hosts/me/credentials`,
   `/v1/hosts/me/heartbeats`, `/v1/hosts/me/claims`, ADR 2003)
+- **Stations.** An owner or an admin makes a lab, a station pool, and a
+  station, each under an Idempotency-Key; no route takes a station's
+  limits, which are its owner's, on its host. They issue a lab daemon's
+  first credential, shown once, and revoke the lab's. A principal joins
+  a session to a pool's line, or a station's in it, under an
+  Idempotency-Key, and is told its place and an estimate; reads the
+  line; leaves every line; releases a lease; and sends a job under it.
+  A person who manages the stations reorders a line and revokes a
+  lease. (`/v1/labs`, `/v1/station-pools`, `/v1/stations`,
+  `.../stations`, `/v1/labs/{lab_id}/daemon-credentials`,
+  `/v1/station-pools/{pool_id}/line`, `/v1/line-entries/{entry_id}/place`,
+  `/v1/agent-sessions/{session_id}/line-entries`,
+  `/v1/station-leases/{lease_id}/release`, `.../revocation`, `.../jobs`)
+- **A station daemon's own calls.** Every one carries the daemon's own
+  credential (`std_`), which no tenant route accepts: rotate it, claim,
+  renew the lease of the job it runs, and report the run. A claim states
+  only the version of `station` work the daemon reads; below the floor
+  it is `426 version_below_floor`. A renewal of a lease that ended is
+  `410 lease_ended`. (`/v1/station-daemon/credentials`,
+  `/v1/station-daemon/claims`, `/v1/station-daemon/jobs/{job_id}/renewals`,
+  `.../reports`, ADR 2006)
 - **The identity provider's deliveries.** Outside `/v1`, since their
   shape is the provider's. No credential: the route checks the provider's
   signature over the body and its timestamp, and queues the delivery for

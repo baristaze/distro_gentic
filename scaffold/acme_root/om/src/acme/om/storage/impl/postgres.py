@@ -65,6 +65,8 @@ from acme.om.projects.storage import ProjectStorageInterface
 from acme.om.projects.storage.impl.postgres import ProjectStoragePostgresImpl
 from acme.om.retention.storage import RetentionStorageInterface
 from acme.om.retention.storage.impl.postgres import RetentionStoragePostgresImpl
+from acme.om.stations.storage import StationsStorageInterface
+from acme.om.stations.storage.impl.postgres import StationsStoragePostgresImpl
 from acme.om.steps.storage import StepStorageInterface
 from acme.om.steps.storage.impl.postgres import StepStoragePostgresImpl
 from acme.om.storage.impl.pg_base import LoginSessions, ScopedConnection, SessionFactory
@@ -237,6 +239,7 @@ class StoragePostgresImpl(StorageInterface):
         self._playbook = PlaybookStoragePostgresImpl(sessions)
         self._knowledge = KnowledgeStoragePostgresImpl(sessions)
         self._platform_agents = PlatformAgentsStoragePostgresImpl(sessions)
+        self._stations = StationsStoragePostgresImpl(sessions)
         self._workspaces = WorkspaceStoragePostgresImpl(sessions)
         self._matrix = MatrixStoragePostgresImpl(sessions)
         self._matrix_tenants = MatrixTenantStoragePostgresImpl(sessions)
@@ -330,6 +333,9 @@ class StoragePostgresImpl(StorageInterface):
 
     def get_platform_agents_storage(self) -> PlatformAgentsStorageInterface:
         return self._platform_agents
+
+    def get_stations_storage(self) -> StationsStorageInterface:
+        return self._stations
 
     def get_workspace_storage(self) -> WorkspaceStorageInterface:
         return self._workspaces
