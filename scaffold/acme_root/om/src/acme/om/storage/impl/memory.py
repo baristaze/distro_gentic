@@ -31,6 +31,8 @@ from acme.om.tenancy.storage import TenancyStorageInterface
 from acme.om.tenancy.storage.impl.memory import TenancyStorageMemoryImpl
 from acme.om.tools.storage import ToolStorageInterface
 from acme.om.tools.storage.impl.memory import ToolStorageMemoryImpl
+from acme.om.trust.storage import TrustStorageInterface
+from acme.om.trust.storage.impl.memory import TrustStorageMemoryImpl
 from acme.om.windows.storage import WindowStorageInterface
 from acme.om.windows.storage.impl.memory import WindowStorageMemoryImpl
 from acme.om.work.storage import WorkStorageInterface
@@ -62,6 +64,7 @@ class StorageMemoryImpl(StorageInterface):
         self._windows = WindowStorageMemoryImpl()
         self._tools = ToolStorageMemoryImpl(self._outbox)
         self._placement = PlacementStorageMemoryImpl()
+        self._trust = TrustStorageMemoryImpl(self._outbox)
         self._workspaces = WorkspaceStorageMemoryImpl(self._outbox)
 
     def get_tenancy_storage(self) -> TenancyStorageInterface:
@@ -117,6 +120,9 @@ class StorageMemoryImpl(StorageInterface):
 
     def get_placement_storage(self) -> PlacementStorageInterface:
         return self._placement
+
+    def get_trust_storage(self) -> TrustStorageInterface:
+        return self._trust
 
     def get_workspace_storage(self) -> WorkspaceStorageInterface:
         return self._workspaces

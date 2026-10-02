@@ -61,6 +61,15 @@ class AttributionManagerInterface(ABC):
         ...
 
     @abstractmethod
+    async def follow_parent(self, ctx: TenantContext, session_id: UUID) -> SessionAuthority:
+        """A child takes the principal its parent's calls run under now, as a
+        take-over of the parent carries down to it: a child's principal is
+        its parent's, chosen by nobody, so no child holds more than its
+        parent. A child already under it is answered as stored; a session
+        with no parent is `ValidationFailed`."""
+        ...
+
+    @abstractmethod
     async def attribute_request(
         self, ctx: TenantContext, session_id: UUID, after_seq: int, delivered: Mapping[UUID, int]
     ) -> RequestAttribution:

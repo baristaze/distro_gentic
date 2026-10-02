@@ -254,6 +254,7 @@ def build_managers(
     principal_context: PrincipalContext | None = None,
     result_gate: ResultGateInterface | None = None,
     tools_options: ToolsOptions | None = None,
+    tools_layer: Callable[[ToolsManagerInterface], ToolsManagerInterface] | None = None,
     budget_gate: BudgetGateInterface | None = None,
     stream_sink: StreamSinkInterface | None = None,
     tool_catalog: tuple[ToolInterface, ...] = (),
@@ -304,6 +305,10 @@ def build_managers(
     the classes the adopter declares; `stream_sink`, the carrier its parts
     go to, None the quiet null, which drops them; and `loop_options`. Its
     outage signal is infra's, and its model providers the integrations'.
+
+    `tools_layer` wraps the tools manager before the loop and the root take
+    it: a layer above the engine holds its own rules around every call, and
+    sees each call the engine runs. None takes the tools manager as it is.
 
     `placement_options` is the fair share of a tenant no operator gave one,
     and the delay a loop over its share waits; None keeps the defaults.
@@ -493,9 +498,6 @@ def build_managers(
     # which answers whose authority each call runs under and the rule of
     # two. What a call keeps of its session's content goes under the
     # session's key: its input's hash, and its command's record.
-    # Each workspace is held to its session's pin, refused by this host where
-    # it cannot give it, brought up to the session's branch, and kept before
-    # it goes.
     engine_tools = ToolsManagerImpl(
         storage.get_tool_storage(),
         steps,
@@ -509,9 +511,14 @@ def build_managers(
         record_seal=records,
         attribution=attribution,
     )
-    tools = ToolsManagerWorkspacesImpl(
+    # Each workspace is held to its session's pin, refused by this host where
+    # it cannot give it, brought up to the session's branch, and kept before
+    # it goes.
+    tools: ToolsManagerInterface = ToolsManagerWorkspacesImpl(
         engine_tools, workspaces, workspace_host or HostOffer(), local=environment == LOCAL
     )
+    if tools_layer is not None:
+        tools = tools_layer(tools)
     idempotency = IdempotencyManagerImpl(
         storage.get_idempotency_storage(), idempotency_options or IdempotencyOptions()
     )

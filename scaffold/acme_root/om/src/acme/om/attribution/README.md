@@ -37,6 +37,8 @@ authority. The rest is read off the session and its
   session it came from runs under.
 - **Take over.** A person takes over a session that is no sub-agent: its
   calls run under them from then on.
+- **Follow.** A sub-agent takes the person its parent's calls run under
+  now, so a take-over of the parent can carry down to it.
 - **Speak.** A message is written in the name of whoever appends it;
   nobody writes one in another's name.
 - **Pay.** A model call is paid by the person behind the latest message
