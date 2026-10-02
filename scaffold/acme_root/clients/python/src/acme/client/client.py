@@ -8,6 +8,9 @@ import asyncio
 import random
 import ssl
 from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import datetime
+from email.utils import parsedate_to_datetime
 from typing import Any, Literal, cast
 from uuid import UUID, uuid4
 
@@ -15,14 +18,18 @@ import httpx
 import truststore
 
 from acme.client.types import (
+    AdvertisementBody,
     AgentSessionView,
+    ClaimView,
     DeviceSignInView,
     EventView,
     FilePageView,
     FileView,
+    HostView,
     InvitationPageView,
     InvitationView,
     IssuedDownloadView,
+    IssuedHostCredentialView,
     IssuedLoginView,
     IssuedSessionView,
     IssuedTicketView,
@@ -197,6 +204,16 @@ def _error_of(response: httpx.Response) -> ApiError:
     )
 
 
+@dataclass(frozen=True)
+class Health:
+    """What `/healthz` answers, and the server's clock as its `Date` header
+    says, to the second; None when no header came with it."""
+
+    status: str
+    version: str
+    server_time: datetime | None
+
+
 class ApiClient:
     """Async. `token` is the bearer every request carries; an operation that
     needs another credential (the sign-in flow) takes it as an argument."""
@@ -352,6 +369,25 @@ class ApiClient:
                 f"{method} {path} answered with something other than JSON",
                 response.headers.get(REQUEST_ID_HEADER),
             ) from None
+
+    async def health(self) -> Health:
+        """Liveness, with no credential, and the server's clock: the one
+        call whose header is read, since a host's startup checks its own
+        clock against it. A failure is raised as any other call's is."""
+        response = await self._http.get("/healthz")
+        if response.is_error:
+            raise _error_of(response)
+        body = response.json()
+        stamped = response.headers.get("Date")
+        try:
+            server_time = parsedate_to_datetime(stamped) if stamped else None
+        except TypeError, ValueError:
+            server_time = None
+        return Health(
+            status=str(body.get("status", "")),
+            version=str(body.get("version", "")),
+            server_time=server_time,
+        )
 
     # Tenancy
 
@@ -723,6 +759,57 @@ class ApiClient:
             params={"after_seq": after_seq, "limit": limit},
         )
         return StepPageView.model_validate(page)
+
+    # A workspace host's own calls. It enrolls once with its tenant's
+    # enrollment token, then calls with a credential of its own, which it
+    # rotates before it ends. None of them is retried: an enrollment twice
+    # is two hosts, and a lost rotation is rotated again with the credential
+    # it was meant to replace.
+
+    async def enroll_host(
+        self,
+        enrollment_token: str,
+        name: str,
+        advertisement: AdvertisementBody,
+        exec_version: int,
+    ) -> IssuedHostCredentialView:
+        """The host's own credential, in the clear once. The pool is the
+        token's to say, never the host's."""
+        answer = await self.request(
+            "POST",
+            "/v1/hosts/enrollments",
+            json={
+                "name": name,
+                "advertisement": advertisement.model_dump(mode="json", exclude_none=True),
+                "exec_version": exec_version,
+            },
+            token=enrollment_token,
+        )
+        return IssuedHostCredentialView.model_validate(answer)
+
+    async def rotate_host_credential(self) -> IssuedHostCredentialView:
+        """The host's next credential; the one this client holds ends after
+        a short grace."""
+        answer = await self.request("POST", "/v1/hosts/me/credentials")
+        return IssuedHostCredentialView.model_validate(answer)
+
+    async def host_heartbeat(self, advertisement: AdvertisementBody, exec_version: int) -> HostView:
+        answer = await self.request(
+            "POST",
+            "/v1/hosts/me/heartbeats",
+            json={
+                "advertisement": advertisement.model_dump(mode="json", exclude_none=True),
+                "exec_version": exec_version,
+            },
+        )
+        return HostView.model_validate(answer)
+
+    async def claim_host_work(self, exec_version: int) -> ClaimView:
+        """The next item pinned to this host or its pool, or none."""
+        answer = await self.request(
+            "POST", "/v1/hosts/me/claims", json={"exec_version": exec_version}
+        )
+        return ClaimView.model_validate(answer)
 
     # Events and the channel
 
