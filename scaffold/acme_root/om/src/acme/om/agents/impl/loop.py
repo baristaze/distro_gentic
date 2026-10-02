@@ -15,7 +15,7 @@ from acme.infra.exceptions import InfraException
 from acme.infra.outages import Outage, OutageSignalInterface
 from acme.infra.transports import OutputSink
 from acme.infra.workspaces import Workspace, WorkspaceLost
-from acme.integrations.model_providers import ModelProvidersInterface
+from acme.integrations.model_providers import ModelProviderInterface
 from acme.integrations.model_providers.calls import Finished, ModelCall, ModelReply
 from acme.integrations.model_providers.failures import ModelCallFailed
 from acme.integrations.model_providers.types import ErrorAnswer, ErrorKind, StopReason
@@ -41,6 +41,7 @@ from acme.om.exceptions import (
     CompactionFailed,
     ContextOverflow,
     GateParked,
+    NoCredential,
     NoSpender,
     NotAuthorized,
     NotFound,
@@ -53,6 +54,7 @@ from acme.om.exceptions import (
     UnresolvedRole,
     ValidationFailed,
 )
+from acme.om.models.credentials import CallClient, CallCredentialsInterface
 from acme.om.models.manager import ModelsManagerInterface
 from acme.om.models.types.fill import MAIN, SUMMARIZER, Eligibility, Fill
 from acme.om.steps import StepsManagerInterface
@@ -90,14 +92,17 @@ Sleep = Callable[[float], Awaitable[None]]
 
 HANDOVER_UNLOCK = "give_back"
 WORKSPACE_UNLOCK = "workspace"
+PERMISSION = "permission"
+"""The cause a park names for a credential error that is no refusal of the
+key: a permission, a region, or a model the key cannot reach."""
 NO_JOBS = (
     "this engine starts no job: a job tool's work and its completion are not wired to its loop yet"
 )
 
 
 class LoopOptions(Platform):
-    # The credential the loop's calls run on, as the outage signal names it:
-    # the platform's own key.
+    # The name of the platform's own key, as the outage signal keeps it,
+    # which a root gives the call credentials it wires.
     credential: str = Field(default="platform", min_length=1)
     retries: int = Field(default=2, ge=0)  # in-process retries of an error worth retrying
     # The first backoff, doubled after each, half of it fixed and half drawn
@@ -169,7 +174,7 @@ class LoopManagerImpl(LoopManagerInterface):
         windows: WindowsManagerInterface,
         tools: ToolsManagerInterface,
         gate: CallGateInterface,
-        providers: ModelProvidersInterface,
+        credentials: CallCredentialsInterface,
         outages: OutageSignalInterface,
         sink: StreamSinkInterface,
         catalog: Sequence[ToolInterface],
@@ -180,6 +185,8 @@ class LoopManagerImpl(LoopManagerInterface):
         domain_classes: Sequence[str] = (),
         jitter: Callable[[], float] = random.random,
     ) -> None:
+        """`credentials` answers the client each call runs on and the
+        credential it carries: the platform's key, or a tenant's."""
         self._jitter = jitter
         self._steps = steps
         self._sessions = sessions
@@ -190,7 +197,7 @@ class LoopManagerImpl(LoopManagerInterface):
         self._windows = windows
         self._tools = tools
         self._gate = gate
-        self._providers = providers
+        self._credentials = credentials
         self._outages = outages
         self._sink = sink
         self._catalog = tuple(catalog)
@@ -255,6 +262,10 @@ class LoopManagerImpl(LoopManagerInterface):
         )
         try:
             await self._models.resolve_fill_set(ctx, session_id, kind.roles, Eligibility())
+            if loop is None:
+                # A new loop: a fill gone since the last one switches here,
+                # between loops, and never inside one.
+                await self._models.renew_fill_set(ctx, session_id, epoch, loop_id)
         except (UnresolvedRole, UnpricedModel) as refused:
             log.warning("session %s resolves no fill: %s", session_id, refused.message)
             return await self._end(run, LoopOutcome.ERRORED)
@@ -370,11 +381,15 @@ class LoopManagerImpl(LoopManagerInterface):
         fill = fill_set.fill_for(MAIN)
         if fill is None:
             return await self._end(run, LoopOutcome.ERRORED)
+        try:
+            # The key the call goes out on, the tenant's own when it pays its
+            # provider: read per call, so a rotated key is never used.
+            used = await self._credentials.client_for(ctx, fill.provider)
+        except PlatformException as refused:
+            return await self._refused(run, refused)
         # A provider known to be failing for this credential parks the loop
         # at once, before anything is rendered, held, or spent.
-        outage = await self._outages.current(
-            fill.provider.value, self._options.credential, self._clock()
-        )
+        outage = await self._outages.current(fill.provider.value, used.credential, self._clock())
         if outage is not None:
             return await self._park(run, provider_park(fill, outage.retry_at))
         prompts = rules.kind_prompts(run.kind, run.registry)
@@ -389,15 +404,16 @@ class LoopManagerImpl(LoopManagerInterface):
                 )
         except ModelCallFailed as failed:
             # The compaction's call to the summarizer failed: its own
-            # provider's error, which no switch of the main role mends.
+            # provider's error, on the key that call went out on, which no
+            # switch of the main role mends.
             summarizer = fill_set.fill_for(SUMMARIZER) or fill
-            return await self._failed(run, summarizer, None, failed)
+            return await self._failed(run, summarizer, None, failed, failed.credential)
         except PlatformException as refused:
             return await self._refused(run, refused)
         try:
-            replied = await self._call(run, fill, rendered)
+            replied = await self._call(run, fill, rendered, used)
         except ModelCallFailed as failed:
-            return await self._failed(run, fill, rendered, failed)
+            return await self._failed(run, fill, rendered, failed, used.credential)
         except PlatformException as refused:
             return await self._refused(run, refused)
         run.failures, run.refused = 0, None
@@ -426,19 +442,30 @@ class LoopManagerImpl(LoopManagerInterface):
             case NoSpender() | SpenderUnknown():
                 park = Park(reason=ParkReason.PERSON, unlock=rules.SPENDER_UNLOCK)
                 return await self._park(run, park)
+            case NoCredential():
+                # The tenant's key for the provider is missing or refused:
+                # nothing runs on another, and a key saved unlocks it.
+                log.info("session %s: %s", run.session_id, refused.message)
+                park = Park(reason=ParkReason.PROVIDER, unlock=refused.unlock)
+                return await self._park(run, park)
             case CompactionFailed() | ContextOverflow() | Unavailable():
                 log.warning("session %s: %s", run.session_id, refused.message)
                 return await self._end(run, LoopOutcome.ERRORED)
             case _:
                 raise refused
 
-    async def _call(self, run: _Run, fill: Fill, rendered: RenderedRequest) -> Step:
+    async def _call(
+        self, run: _Run, fill: Fill, rendered: RenderedRequest, used: CallClient
+    ) -> Step:
         """One model call: who spoke and who pays, the gate's hold, the request
         persisted, the stream emitted as it arrives, and the response
-        persisted before anything acts on it."""
+        persisted before anything acts on it. The call goes out on `used`,
+        and the gate holds it knowing which key that is."""
         ctx, session_id = run.ctx, run.session_id
         said = rendered.attribution
-        hold = await self._gate.authorize(ctx, session_id, said.spender, MAIN, fill, rendered.call)
+        hold = await self._gate.authorize(
+            ctx, session_id, said.spender, MAIN, fill, rendered.call, credential=used.credential
+        )
         request = request_step(
             rendered, said, session_id, run.loop_id, new_id(), self._clock(), hold_id=hold
         )
@@ -450,7 +477,7 @@ class LoopManagerImpl(LoopManagerInterface):
             raise
         response_id = new_id()
         try:
-            reply = await self._stream(run, fill, rendered.call, response_id)
+            reply = await self._stream(run, used.client, rendered.call, response_id)
         except ModelCallFailed as failed:
             # Nothing streamed back: the call was refused before it was
             # processed, and the hold is released. A stream that broke is
@@ -473,12 +500,12 @@ class LoopManagerImpl(LoopManagerInterface):
         return stored
 
     async def _stream(
-        self, run: _Run, fill: Fill, call: ModelCall, response_id: UUID
+        self, run: _Run, client: ModelProviderInterface, call: ModelCall, response_id: UUID
     ) -> ModelReply:
         """The provider's stream, each part emitted as it arrives, never
         waited on; the reply is the one its last part carries."""
         numbers = itertools.count()
-        async for part in self._providers.get(fill.provider).stream(call):
+        async for part in client.stream(call):
             if isinstance(part, Finished):
                 return part.reply
             emitted = rules.stream_part(run.session_id, response_id, next(numbers), part)
@@ -497,12 +524,19 @@ class LoopManagerImpl(LoopManagerInterface):
                 log.warning("session %s: the stream sink failed", run.session_id, exc_info=True)
 
     async def _failed(
-        self, run: _Run, fill: Fill, rendered: RenderedRequest | None, failed: ModelCallFailed
+        self,
+        run: _Run,
+        fill: Fill,
+        rendered: RenderedRequest | None,
+        failed: ModelCallFailed,
+        credential: str | None,
     ) -> LoopRun | None:
         """A provider error, handled by its kind. `rendered` is the main
         request that failed, or None when the compaction's call did, which
-        neither falls back nor compacts again. None goes on to the next model
-        turn."""
+        neither falls back nor compacts again; `credential` names the key the
+        call went out on, so an outage or a refusal is that key's alone, and
+        None, when no call says, reports neither. None goes on to the next
+        model turn."""
         answer = failed.kind.answer
         now = self._clock()
         main = rendered is not None
@@ -519,13 +553,14 @@ class LoopManagerImpl(LoopManagerInterface):
             # parks at once until the retry time; this one falls back to its
             # next declared fallback when it has one, and parks too when not.
             retry_at = now + max(wait, self._options.outage_wait)
-            outage = Outage(
-                provider=fill.provider.value,
-                credential=self._options.credential,
-                kind=failed.kind.value,
-                retry_at=retry_at,
-            )
-            await self._outages.report(outage, now)
+            if credential is not None:
+                outage = Outage(
+                    provider=fill.provider.value,
+                    credential=credential,
+                    kind=failed.kind.value,
+                    retry_at=retry_at,
+                )
+                await self._outages.report(outage, now)
             if main and await self._fall_back(run, fill):
                 return None
             return await self._park(run, provider_park(fill, retry_at))
@@ -539,7 +574,16 @@ class LoopManagerImpl(LoopManagerInterface):
                 return None
             return await self._end(run, LoopOutcome.ERRORED)
         if answer is ErrorAnswer.PARK:
-            unlock = f"{fill.provider.value}:{failed.kind.value}"
+            cause = failed.kind.value
+            if failed.key_refused and credential is not None:
+                # The provider did not take the key itself: every session
+                # that needs it waits for a new one, and no other moves.
+                await self._credentials.refused(run.ctx, fill.provider, credential)
+            elif failed.kind is ErrorKind.CREDENTIAL:
+                # A permission the key lacks, a region it refuses, a model it
+                # cannot reach: this call's alone, so this session alone waits.
+                cause = PERMISSION
+            unlock = f"{fill.provider.value}:{cause}"
             return await self._park(run, Park(reason=ParkReason.PROVIDER, unlock=unlock))
         log.warning("session %s: %s", run.session_id, failed)
         return await self._end(run, LoopOutcome.ERRORED)

@@ -408,6 +408,18 @@ class UnresolvedRole(ModelsException, ValidationFailed):
     code = "unresolved_model_role"
 
 
+class NoCredential(ModelsException, PreconditionFailed):
+    """A call that needs a key the tenant does not hold, or holds no longer:
+    nothing is spent, nothing falls back to the platform's key, and the
+    session parks on the provider until a key is saved (`unlock`)."""
+
+    code = "no_credential"
+
+    def __init__(self, provider: str, message: str) -> None:
+        super().__init__(message)
+        self.unlock = f"{provider}:key"
+
+
 class WindowsException(PlatformException): ...
 
 
