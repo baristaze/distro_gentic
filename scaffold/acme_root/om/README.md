@@ -180,6 +180,9 @@ arrive twice, so the second copy gets the first one's answer.
   deadline as the whole tree. A tree names its org, as its sessions do.
 - A step's content is sealed under its session's key, so revoking one
   key erases what one session said and nothing else.
+- A project names its org and binds one repository. A session belongs
+  to at most one project, of its own org, set before it exists and
+  never moved; a session it spawns or hands work to belongs to the same.
 - Every model call passes the gate first, charged to the scopes it
   serves: its session, its tree, the person who pays, a project, a team,
   or the org. A budget, its holds, and their settlements name their org.
@@ -198,6 +201,7 @@ arrive twice, so the second copy gets the first one's answer.
 - [Agents](src/acme/om/agents/README.md)
 - [Attribution](src/acme/om/attribution/README.md)
 - [Privacy](src/acme/om/privacy/README.md)
+- [Projects](src/acme/om/projects/README.md)
 - [Budgets](src/acme/om/budgets/README.md)
 - [Models](src/acme/om/models/README.md)
 - [Windows](src/acme/om/windows/README.md)
