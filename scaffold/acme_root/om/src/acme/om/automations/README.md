@@ -25,14 +25,19 @@ is made of](../../../../README.md).
 ## The rules
 
 - **An automation ignores its own sessions' events,** unless it says it
-  wants them.
+  wants them. An event's session is the one whose recorded act it
+  follows, whatever session it reaches.
 - **A chain stops at its hop limit.** A firing on an event a run's
-  session caused is one hop past that run.
+  session caused is one hop past that run. An act of the platform's
+  account that names no recorded session fires nothing.
 - **The cost cap holds.** Each started run reserves its share, and a
   budget on the run's tree stops its spending there; the runs of a
   period and the runs still at work never reserve past the cap.
 - **The rate and the concurrency hold,** and a firing they stop is
-  queued or refused, as the automation says.
+  queued or refused, as the automation says. A run counts in the period
+  it starts in, however long it was queued.
+- **A run keeps the event's text only while it is queued.** The
+  session it starts holds it from then on.
 - **It runs as its creator,** read live at each firing: a creator who
   left fires nothing.
 - **The brief is the creator's word; the event is data.**

@@ -5,6 +5,8 @@ run, so two firings at once cannot both take the last of a limit.
 
 A firing passes these, in order, and the first that stops it says why:
 
+- an act of the platform's account that names no recorded session is
+  refused, since no hop can count its chain;
 - an event its own session caused is ignored, unless the automation
   declares it wants them;
 - a chain stops at its hop limit: a firing on an event a run's session
@@ -52,9 +54,12 @@ def hop_after(cause: AutomationRun | None) -> int:
     return 1 if cause is None else cause.hop + 1
 
 
-def ignored(automation: Automation, cause: AutomationRun | None) -> Refusal | None:
-    """Why a firing stops before any limit is asked: its own session's
-    event, or a chain at its hop limit."""
+def ignored(automation: Automation, firing: Firing, cause: AutomationRun | None) -> Refusal | None:
+    """Why a firing stops before any limit is asked: an act of the
+    platform's account that names no recorded session, whose chain no hop
+    can count; its own session's event; or a chain at its hop limit."""
+    if firing.platform and firing.caused_by is None:
+        return Refusal.UNATTRIBUTED
     own = cause is not None and cause.opened and cause.automation_id == automation.id
     if own and not automation.own_events:
         return Refusal.OWN_EVENT
@@ -74,10 +79,11 @@ def limited(limits: Limits, tally: Tally) -> Refusal | None:
     return None
 
 
-def admitted(run: AutomationRun, limits: Limits, tally: Tally) -> AutomationRun:
-    """A run asking to start, as its limits leave it: started with its run
-    cap reserved, queued when a limit stops it and the automation queues,
-    or refused."""
+def admitted(run: AutomationRun, limits: Limits, tally: Tally, now: datetime) -> AutomationRun:
+    """A run asking to start at `now`, as its limits leave it: started then,
+    with its run cap reserved, queued when a limit stops it and the
+    automation queues, or refused. Only a queued run keeps the event's
+    text, which it needs when it starts; a refused one never does."""
     stop = limited(limits, tally)
     if stop is None:
         return run.model_copy(
@@ -85,10 +91,18 @@ def admitted(run: AutomationRun, limits: Limits, tally: Tally) -> AutomationRun:
                 "status": RunStatus.STARTED,
                 "refusal": None,
                 "reserved_micros": limits.run_cap_micros,
+                "started_at": now,
             }
         )
-    status = RunStatus.QUEUED if limits.queue and stop in QUEUEABLE else RunStatus.REFUSED
-    return run.model_copy(update={"status": status, "refusal": stop, "reserved_micros": 0})
+    queued = limits.queue and stop in QUEUEABLE
+    return run.model_copy(
+        update={
+            "status": RunStatus.QUEUED if queued else RunStatus.REFUSED,
+            "refusal": stop,
+            "reserved_micros": 0,
+            "event_text": run.event_text if queued else "",
+        }
+    )
 
 
 def period_start(limits: Limits, now: datetime) -> datetime:
@@ -97,17 +111,24 @@ def period_start(limits: Limits, now: datetime) -> datetime:
 
 def holds(run: AutomationRun, since: datetime) -> bool:
     """Whether a run counts against the cost cap at `since`: it started in
-    the period, or it is still at work."""
-    return run.status is RunStatus.STARTED and (run.created_at >= since or run.closed_at is None)
+    the period, or it is still at work. A run counts from when it started,
+    never from when it was queued, so a run queued in one period and
+    started in the next counts in the next."""
+    started = run.started_at
+    return (
+        run.status is RunStatus.STARTED
+        and started is not None
+        and (started >= since or run.closed_at is None)
+    )
 
 
 def tally(runs: list[AutomationRun], since: datetime) -> Tally:
     """What `runs`, an automation's started runs, hold at `since`."""
-    started = [run for run in runs if run.status is RunStatus.STARTED]
+    started = [r for r in runs if r.status is RunStatus.STARTED and r.started_at is not None]
     return Tally(
-        started=sum(run.created_at >= since for run in started),
-        reserved_micros=sum(run.reserved_micros for run in started if holds(run, since)),
-        at_work=sum(run.closed_at is None for run in started),
+        started=sum(r.started_at is not None and r.started_at >= since for r in started),
+        reserved_micros=sum(r.reserved_micros for r in started if holds(r, since)),
+        at_work=sum(r.closed_at is None for r in started),
     )
 
 

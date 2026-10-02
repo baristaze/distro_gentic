@@ -122,6 +122,7 @@ class Refusal(StrEnum):
     CONCURRENCY = "concurrency"
     PRINCIPAL = "principal"  # its creator holds no place in the tenant now
     ACTION = "action"  # its action was refused: an unknown kind, a session gone
+    UNATTRIBUTED = "unattributed"  # the platform's own act, with no session recorded for it
 
 
 class AutomationRun(Identifiable, Created):
@@ -129,7 +130,10 @@ class AutomationRun(Identifiable, Created):
     chain: one for a firing on a person's event or a schedule, one more
     than the run whose session caused the event otherwise. `session_id` is
     the session it started or messaged; `budget_id` holds a started tree
-    to `reserved_micros`, its share of the cost cap."""
+    to `reserved_micros`, its share of the cost cap. A run counts against
+    its limits from `started_at`. `event_text` is the event as the session
+    will read it, kept only until the run starts or is refused: the
+    session's own history keeps it from then on."""
 
     automation_id: UUID
     event_id: UUID | None = None
@@ -142,6 +146,7 @@ class AutomationRun(Identifiable, Created):
     budget_id: UUID | None = None
     reserved_micros: int = Field(default=0, ge=0)
     event_text: Stored = Field(default="", max_length=MAX_BRIEF)
+    started_at: datetime | None = None
     closed_at: datetime | None = None
 
     @model_validator(mode="after")
@@ -153,7 +158,8 @@ class AutomationRun(Identifiable, Created):
 
 class Firing(Platform):
     """What fires an automation, as the router placed it: the event, the
-    routing table's effect, the session whose own act it was, and its text
+    routing table's effect, the session whose recorded act it is or follows
+    from, whether the platform's account wrote it, and its text
     as the agent reads it, which reaches a started session as data. A
     schedule's firing names no event."""
 
@@ -163,6 +169,7 @@ class Firing(Platform):
     arrival: Stored | None = None
     effect: Stored | None = None
     caused_by: UUID | None = None
+    platform: bool = False  # the platform's account wrote the event
     text: Stored = Field(default="", max_length=MAX_BRIEF)
 
     @model_validator(mode="after")

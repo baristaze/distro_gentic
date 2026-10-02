@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from acme.om.automations.rules import admitted, holds, tally
+from acme.om.automations.rules import admitted, holds, period_start, tally
 from acme.om.automations.storage import AutomationStorageInterface
 from acme.om.automations.types.automation import Automation, AutomationRun, Limits, RunStatus
 from acme.om.outbox.storage import OutboxLandingInterface
@@ -31,8 +31,9 @@ class AutomationStorageMemoryImpl(MemoryStorageBase, AutomationStorageInterface)
         return [a for a in rows if after is None or a.id > after][:limit]
 
     async def admit(
-        self, org_id: UUID, run: AutomationRun, limits: Limits, since: datetime
+        self, org_id: UUID, run: AutomationRun, limits: Limits, now: datetime
     ) -> AutomationRun:
+        since = period_start(limits, now)
         async with self._lock:
             held = self._get(self._runs, org_id, run.id)
             if held is not None and held.status is not RunStatus.QUEUED:
@@ -42,7 +43,7 @@ class AutomationStorageMemoryImpl(MemoryStorageBase, AutomationStorageInterface)
                 for r in self._rows(self._runs, org_id)
                 if r.automation_id == run.automation_id and holds(r, since)
             ]
-            landed = admitted(run, limits, tally(counted, since))
+            landed = admitted(run, limits, tally(counted, since), now)
             self._put(self._runs, org_id, landed)
             return landed
 

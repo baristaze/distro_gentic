@@ -4,7 +4,7 @@ from uuid import UUID
 from sqlalchemy import or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 
-from acme.om.automations.rules import admitted, tally
+from acme.om.automations.rules import admitted, period_start, tally
 from acme.om.automations.storage import AutomationStorageInterface
 from acme.om.automations.storage.tables.automation_runs import AutomationRuns
 from acme.om.automations.storage.tables.automations import Automations
@@ -42,8 +42,9 @@ class AutomationStoragePostgresImpl(PgStorageBase, AutomationStorageInterface):
             return [to_model(row, Automation) for row in rows]
 
     async def admit(
-        self, org_id: UUID, run: AutomationRun, limits: Limits, since: datetime
+        self, org_id: UUID, run: AutomationRun, limits: Limits, now: datetime
     ) -> AutomationRun:
+        since = period_start(limits, now)
         lock = (
             select(Automations.id)
             .where(Automations.org_id == org_id, Automations.id == run.automation_id)
@@ -68,12 +69,13 @@ class AutomationStoragePostgresImpl(PgStorageBase, AutomationStorageInterface):
                 AutomationRuns.org_id == org_id,
                 AutomationRuns.automation_id == run.automation_id,
                 AutomationRuns.status == STARTED,
-                or_(AutomationRuns.created_at >= since, AutomationRuns.closed_at.is_(None)),
+                AutomationRuns.started_at.is_not(None),
+                or_(AutomationRuns.started_at >= since, AutomationRuns.closed_at.is_(None)),
             )
             counted = [
                 to_model(row, AutomationRun) for row in (await db.execute(counting)).scalars()
             ]
-            landed = admitted(run, limits, tally(counted, since))
+            landed = admitted(run, limits, tally(counted, since), now)
             values = to_values(landed, AutomationRuns)
             write = (
                 insert(AutomationRuns)

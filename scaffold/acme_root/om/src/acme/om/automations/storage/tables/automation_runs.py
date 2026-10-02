@@ -34,4 +34,5 @@ class AutomationRuns(IdentifiableMixin, CreatedMixin, Base):
     budget_id: Mapped[UUID | None]
     reserved_micros: Mapped[int] = mapped_column(BigInteger)
     event_text: Mapped[str]
+    started_at: Mapped[datetime | None]
     closed_at: Mapped[datetime | None]

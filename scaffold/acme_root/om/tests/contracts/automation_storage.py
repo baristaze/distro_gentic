@@ -4,7 +4,6 @@ run. The cases named in `CROSS_TENANT_CASES` are the tenant fence's
 evidence: each one presents another tenant's identifier and asserts that
 nothing is found and nothing changes."""
 
-from datetime import timedelta
 from uuid import UUID
 
 from acme.om.automations.storage import AutomationStorageInterface
@@ -95,10 +94,8 @@ class AutomationStorageContract:
         org = new_id()
         automation = make_automation()
         await storage.create_automation(org, automation, ())
-        since = utcnow() - timedelta(days=1)
-        landed = [
-            await storage.admit(org, make_run(automation.id), LIMITS, since) for _ in range(4)
-        ]
+        now = utcnow()
+        landed = [await storage.admit(org, make_run(automation.id), LIMITS, now) for _ in range(4)]
         assert [r.status for r in landed] == [RunStatus.STARTED] * 3 + [RunStatus.REFUSED]
         assert [r.reserved_micros for r in landed] == [1_000_000] * 3 + [0]
         assert landed[3].refusal is Refusal.COST_CAP
@@ -109,9 +106,9 @@ class AutomationStorageContract:
         org = new_id()
         automation = make_automation()
         await storage.create_automation(org, automation, ())
-        since = utcnow() - timedelta(days=1)
+        now = utcnow()
         run = await race(
-            *(storage.admit(org, make_run(automation.id), LIMITS, since) for _ in range(6))
+            *(storage.admit(org, make_run(automation.id), LIMITS, now) for _ in range(6))
         )
         # Overlapped (Postgres), the automation's row orders the admissions;
         # not (memory), each one is asked against what the one before left.
@@ -126,14 +123,14 @@ class AutomationStorageContract:
         limits = LIMITS.model_copy(update={"concurrency": 1, "queue": True})
         automation = make_automation(limits)
         await storage.create_automation(org, automation, ())
-        since = utcnow() - timedelta(days=1)
-        first = await storage.admit(org, make_run(automation.id), limits, since)
-        queued = await storage.admit(org, make_run(automation.id), limits, since)
+        now = utcnow()
+        first = await storage.admit(org, make_run(automation.id), limits, now)
+        queued = await storage.admit(org, make_run(automation.id), limits, now)
         assert (queued.status, queued.refusal) == (RunStatus.QUEUED, Refusal.CONCURRENCY)
         assert await storage.read_queued_runs(org, automation.id, 10) == [queued]
-        assert await storage.admit(org, first, limits, since) == first
+        assert await storage.admit(org, first, limits, now) == first
         await storage.write_run(org, first.model_copy(update={"closed_at": utcnow()}))
-        again = await storage.admit(org, queued, limits, since)
+        again = await storage.admit(org, queued, limits, now)
         assert again.id == queued.id and again.status is RunStatus.STARTED
         assert await storage.read_queued_runs(org, automation.id, 10) == []
 
@@ -143,9 +140,9 @@ class AutomationStorageContract:
         org = new_id()
         automation = make_automation()
         await storage.create_automation(org, automation, ())
-        since = utcnow() - timedelta(days=1)
+        now = utcnow()
         session_id = new_id()
-        started = await storage.admit(org, make_run(automation.id), LIMITS, since)
+        started = await storage.admit(org, make_run(automation.id), LIMITS, now)
         with_session = started.model_copy(update={"session_id": session_id, "opened": True})
         await storage.write_run(org, with_session)
         refused = await storage.create_run(org, make_run(automation.id))
@@ -187,10 +184,10 @@ class AutomationStorageContract:
         automation = make_automation()
         await storage.create_automation(org_a, automation, ())
         await storage.create_automation(org_b, automation, ())
-        since = utcnow() - timedelta(days=1)
+        now = utcnow()
         for _ in range(3):
-            await storage.admit(org_a, make_run(automation.id), LIMITS, since)
-        theirs = await storage.admit(org_b, make_run(automation.id), LIMITS, since)
+            await storage.admit(org_a, make_run(automation.id), LIMITS, now)
+        theirs = await storage.admit(org_b, make_run(automation.id), LIMITS, now)
         assert theirs.status is RunStatus.STARTED
 
     async def test_create_run_of_another_tenant_is_not_read_here(
@@ -220,7 +217,7 @@ class AutomationStorageContract:
         org = new_id()
         automation = make_automation()
         await storage.create_automation(org, automation, ())
-        await storage.admit(org, make_run(automation.id), LIMITS, utcnow() - timedelta(days=1))
+        await storage.admit(org, make_run(automation.id), LIMITS, utcnow())
         assert await storage.read_open_runs(new_id(), automation.id, 10) == []
 
     async def test_read_queued_runs_of_another_tenant_finds_nothing(
@@ -230,9 +227,9 @@ class AutomationStorageContract:
         limits = LIMITS.model_copy(update={"rate": 1, "queue": True})
         automation = make_automation(limits)
         await storage.create_automation(org, automation, ())
-        since = utcnow() - timedelta(days=1)
-        await storage.admit(org, make_run(automation.id), limits, since)
-        await storage.admit(org, make_run(automation.id), limits, since)
+        now = utcnow()
+        await storage.admit(org, make_run(automation.id), limits, now)
+        await storage.admit(org, make_run(automation.id), limits, now)
         assert len(await storage.read_queued_runs(org, automation.id, 10)) == 1
         assert await storage.read_queued_runs(new_id(), automation.id, 10) == []
 
@@ -242,9 +239,7 @@ class AutomationStorageContract:
         org = new_id()
         automation = make_automation()
         await storage.create_automation(org, automation, ())
-        run = await storage.admit(
-            org, make_run(automation.id), LIMITS, utcnow() - timedelta(days=1)
-        )
+        run = await storage.admit(org, make_run(automation.id), LIMITS, utcnow())
         session_id = new_id()
         await storage.write_run(org, run.model_copy(update={"session_id": session_id}))
         assert await storage.read_session_run(new_id(), session_id) is None

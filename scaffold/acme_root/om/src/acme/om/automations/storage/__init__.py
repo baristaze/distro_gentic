@@ -30,12 +30,12 @@ class AutomationStorageInterface(ABC):
 
     @abstractmethod
     async def admit(
-        self, org_id: UUID, run: AutomationRun, limits: Limits, since: datetime
+        self, org_id: UUID, run: AutomationRun, limits: Limits, now: datetime
     ) -> AutomationRun:
-        """A run asking to start, written as its limits leave it
-        (`automations.rules.admitted`), with what its automation's runs
-        hold at `since` read in the same write, which no other admission of
-        the automation shares. A run written already as queued is written
+        """A run asking to start at `now`, written as its limits leave it
+        (`automations.rules.admitted`), with what its automation's runs hold
+        in the period that ends now read in the same write, which no other
+        admission of the automation shares. A run written already as queued is written
         over; one written otherwise answers as stored."""
         ...
 

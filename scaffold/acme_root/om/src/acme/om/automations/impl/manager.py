@@ -11,7 +11,7 @@ from acme.om.agents.types.request import Start
 from acme.om.attribution import PrincipalContext
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.automations.manager import AutomationsManagerInterface
-from acme.om.automations.rules import due, hop_after, ignored, matches, period_start
+from acme.om.automations.rules import due, hop_after, ignored, matches
 from acme.om.automations.storage import AutomationStorageInterface
 from acme.om.automations.types.automation import (
     ActionKind,
@@ -162,10 +162,10 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
             hop=hop_after(cause),
             event_text=firing.text,
         )
-        stop = ignored(automation, cause)
+        stop = ignored(automation, firing, cause)
         if stop is not None:
             return await self._storage.create_run(
-                ctx.org_id, run.model_copy(update={"refusal": stop})
+                ctx.org_id, run.model_copy(update={"refusal": stop, "event_text": ""})
             )
         return await self._admit(ctx, automation, run)
 
@@ -176,15 +176,18 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         creator = await self._creator(ctx, automation)
         if creator is None:
             refused = run.model_copy(
-                update={"status": RunStatus.REFUSED, "refusal": Refusal.PRINCIPAL}
+                update={
+                    "status": RunStatus.REFUSED,
+                    "refusal": Refusal.PRINCIPAL,
+                    "event_text": "",
+                }
             )
             if run.status is RunStatus.QUEUED:
                 await self._storage.write_run(ctx.org_id, refused)
                 return refused
             return await self._storage.create_run(ctx.org_id, refused)
         await self._close_finished(ctx, automation)
-        since = period_start(automation.limits, self._clock())
-        landed = await self._storage.admit(ctx.org_id, run, automation.limits, since)
+        landed = await self._storage.admit(ctx.org_id, run, automation.limits, self._clock())
         if landed.status is not RunStatus.STARTED or landed.session_id is not None:
             return landed
         try:
@@ -197,6 +200,7 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
                     "status": RunStatus.REFUSED,
                     "refusal": Refusal.ACTION,
                     "reserved_micros": 0,
+                    "event_text": "",
                     "closed_at": self._clock(),
                 }
             )
@@ -242,10 +246,6 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         else:
             assert action.session_id is not None
             session_id, budget_id = action.session_id, None
-        acted = run.model_copy(
-            update={"session_id": session_id, "opened": opened, "budget_id": budget_id}
-        )
-        await self._storage.write_run(ctx.org_id, acted)
         inputs: list[Step] = []
         if run.event_text:
             inputs.append(self._event_step(ctx, run, session_id))
@@ -258,6 +258,18 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         )
         inputs.append(brief)
         await self._sessions.receive(creator, session_id, inputs)
+        # The session's history holds the event from here on, under its key;
+        # the run keeps none of it. A run lost before this write is acted on
+        # again, under the same ids, and lands nothing twice.
+        acted = run.model_copy(
+            update={
+                "session_id": session_id,
+                "opened": opened,
+                "budget_id": budget_id,
+                "event_text": "",
+            }
+        )
+        await self._storage.write_run(ctx.org_id, acted)
         return acted
 
     def _event_step(self, ctx: TenantContext, run: AutomationRun, session_id: UUID) -> Step:
@@ -305,7 +317,8 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
                 except NotFound:
                     done = True
             if done:
-                await self._storage.write_run(ctx.org_id, run.model_copy(update={"closed_at": now}))
+                closed = run.model_copy(update={"closed_at": now, "event_text": ""})
+                await self._storage.write_run(ctx.org_id, closed)
 
     async def _creator(self, ctx: TenantContext, automation: Automation) -> TenantContext | None:
         """The creator's live context, read at the firing: none when they hold

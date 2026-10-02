@@ -4,6 +4,7 @@ and its cost cap, its rate, and its concurrency each stop a firing. The
 cost cap holds the spending itself: each session a run starts draws on a
 budget of its run's share. Every firing is a recorded run."""
 
+import itertools
 from datetime import timedelta
 from pathlib import Path
 from uuid import UUID
@@ -29,6 +30,16 @@ from acme.om.base import new_id, utcnow
 from acme.om.budgets.types.budget import BudgetScopeKind, WindowKind
 from acme.om.context import Role, TenantContext
 from acme.om.exceptions import NotAuthorized
+from acme.om.intake.rules import described
+from acme.om.intake.types.event import (
+    Arrival,
+    Author,
+    AuthorKind,
+    CheckState,
+    FeedbackEvent,
+    WorkNames,
+)
+from acme.om.intake.types.link import HandleKind
 from acme.om.steps.types.header import InputHeader, ParkReason
 from acme.om.steps.types.step import Actor, StepType
 
@@ -246,3 +257,157 @@ async def test_an_action_the_engine_refuses_is_a_refused_run_that_holds_nothing(
         Refusal.ACTION,
         0,
     )
+
+
+async def finish(platform: Wired, run: AutomationRun) -> None:
+    """The run's session answers, and its loop ends."""
+    assert run.session_id is not None
+    platform.anthropic.add(reply(said("Answered.")))
+    assert (await platform.loops.run(platform.owner, run.session_id)).end is RunEnd.ENDED
+
+
+async def test_a_queued_burst_drains_one_run_a_period_within_the_cap(
+    platform: Wired, creator: TenantContext
+) -> None:
+    # One run a day, and a cost cap of exactly one run's share.
+    one = limits(rate=1, cost_cap_micros=50 * DOLLAR, queue=True)
+    mine = await made(platform, creator, limits=one)
+    burst = [run for _ in range(3) for run in await fired(platform, comment())]
+    assert [r.status for r in burst] == [RunStatus.STARTED, RunStatus.QUEUED, RunStatus.QUEUED]
+    await finish(platform, burst[0])
+    assert await platform.automations.tick(platform.service) == ()
+    waiting = {burst[1].id, burst[2].id}
+    for _ in (1, 2):
+        platform.clock.now += timedelta(days=1, seconds=1)
+        (moved,) = await platform.automations.tick(platform.service)
+        assert moved.id in waiting and moved.status is RunStatus.STARTED
+        waiting.remove(moved.id)
+        assert moved.started_at == platform.clock.now
+        # The run that started counts in this period: nothing else starts.
+        assert await platform.automations.tick(platform.service) == ()
+        await finish(platform, moved)
+    runs = await platform.automations.get_runs(platform.owner, mine.id, 10)
+    starts = sorted(r.started_at for r in runs if r.started_at is not None)
+    assert len(starts) == 3
+    assert all(later - earlier > one.period for earlier, later in itertools.pairwise(starts))
+
+
+async def test_a_run_keeps_the_events_text_only_while_it_is_queued(
+    platform: Wired, creator: TenantContext
+) -> None:
+    await made(platform, creator, limits=limits(rate=1))
+    queues = await made(platform, creator, name="queues", limits=limits(rate=1, queue=True))
+    secret = "the staging password is hunter2"
+    started = await fired(platform, comment(text=secret))
+    later = await fired(platform, comment(text=secret))
+    assert all(run.event_text == "" for run in started)
+    by_status = {run.status: run for run in later}
+    assert by_status[RunStatus.REFUSED].event_text == ""
+    assert by_status[RunStatus.QUEUED].event_text == secret
+    platform.clock.now += timedelta(days=1, seconds=1)
+    (moved,) = await platform.automations.tick(platform.service)
+    assert moved.status is RunStatus.STARTED and moved.event_text == ""
+    stored = await platform.automations.get_runs(platform.owner, queues.id, 10)
+    assert all(secret not in run.event_text for run in stored)
+    # The session it started reads the event, as data.
+    assert moved.session_id is not None
+    events = [s for s in await platform.history(moved.session_id) if s.type is StepType.EVENT]
+    assert [secret in e.as_text() for e in events] == [True]
+
+
+# Chains through the platform's one account.
+
+
+async def deliver(platform: Wired, event: FeedbackEvent) -> dict[UUID, AutomationRun]:
+    """What the delivery consumer does with an event: route it, then fire
+    the tenant's automations with what the router answered."""
+    routed = await platform.intake.route(platform.service, event)
+    firing = Firing(
+        event_id=event.id,
+        occurred_at=event.occurred_at,
+        integration=event.integration,
+        arrival=event.arrival.value,
+        effect=routed.effect.value,
+        caused_by=routed.caused_by,
+        platform=routed.platform,
+        text=described(event),
+    )
+    runs = await platform.automations.fire(platform.service, firing)
+    return {run.automation_id: run for run in runs}
+
+
+def act_event(path: str, ref: str) -> FeedbackEvent:
+    """An event that follows from an act a session made through the
+    platform's account, on each path: a comment on another session's pull
+    request, a comment on a pull request no session is bound to, and a
+    failing check on a commit the session pushed to its own branch."""
+    author = Author(kind=AuthorKind.PLATFORM, external_id="acme-bot", name="acme-bot")
+    arrival, check = Arrival.COMMENT, None
+    if path == "another_sessions_pull_request":
+        names = WorkNames(pull_request=OTHER_PR)
+    elif path == "an_unbound_pull_request":
+        names = WorkNames(pull_request="acme/robot#99")
+    else:
+        author = Author(kind=AuthorKind.BOT, external_id="ci", name="ci")
+        names, arrival, check = WorkNames(branch=ref), Arrival.CHECK, CheckState.FAILED
+    return FeedbackEvent(
+        id=new_id(),
+        integration="forge",
+        arrival=arrival,
+        author=author,
+        names=names,
+        refs=(ref,),
+        check=check,
+        text="A comment the agent wrote." if check is None else "tests failed",
+        occurred_at=utcnow(),
+    )
+
+
+OTHER_PR = "acme/robot#12"
+PATHS = ["another_sessions_pull_request", "an_unbound_pull_request", "its_own_branch"]
+
+
+async def acted(platform: Wired, run: AutomationRun, path: str) -> FeedbackEvent:
+    """The run's session acts on `path`, recording the act as its tool
+    does; answers the event that comes back of it."""
+    assert run.session_id is not None
+    ref = f"ref-{new_id().hex[-12:]}"
+    if path == "its_own_branch":
+        await platform.intake.bind_work(platform.owner, run.session_id, HandleKind.BRANCH, ref)
+    await platform.intake.record_act(platform.service, run.session_id, "forge", (ref,))
+    return act_event(path, ref)
+
+
+@pytest.mark.parametrize("path", PATHS)
+async def test_a_chain_through_the_platform_account_stops_at_its_hop_limit(
+    platform: Wired, creator: TenantContext, path: str
+) -> None:
+    other = await platform.start()
+    await platform.intake.bind_work(platform.owner, other, HandleKind.PULL_REQUEST, OTHER_PR)
+    everything = Trigger(kind=TriggerKind.EVENT)
+    ping = await made(
+        platform, creator, name="ping", trigger=everything, limits=limits(hop_limit=2)
+    )
+    pong = await made(
+        platform, creator, name="pong", trigger=everything, limits=limits(hop_limit=2)
+    )
+    runs = await fired(platform, comment())
+    first = next(r for r in runs if r.automation_id == ping.id)
+    # Ping's session acts: ping ignores its own act, pong takes it a hop on.
+    runs_by = await deliver(platform, await acted(platform, first, path))
+    assert runs_by[ping.id].refusal is Refusal.OWN_EVENT
+    assert (runs_by[pong.id].status, runs_by[pong.id].hop) == (RunStatus.STARTED, 2)
+    # Pong's session acts: the chain is at its limit, and pong ignores its own.
+    runs_by = await deliver(platform, await acted(platform, runs_by[pong.id], path))
+    assert (runs_by[ping.id].refusal, runs_by[ping.id].hop) == (Refusal.HOP_LIMIT, 3)
+    assert runs_by[pong.id].refusal is Refusal.OWN_EVENT
+    assert all(run.session_id is None for run in runs_by.values())
+
+
+async def test_an_act_of_the_platform_account_with_no_recorded_session_fires_nothing(
+    platform: Wired, creator: TenantContext
+) -> None:
+    await made(platform, creator, trigger=Trigger(kind=TriggerKind.EVENT))
+    unrecorded = act_event("an_unbound_pull_request", "ref-never-recorded")
+    (run,) = (await deliver(platform, unrecorded)).values()
+    assert (run.status, run.refusal) == (RunStatus.REFUSED, Refusal.UNATTRIBUTED)
