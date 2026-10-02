@@ -310,6 +310,7 @@ arrive twice, so the second copy gets the first one's answer.
 - [Automations](src/acme/om/automations/README.md)
 - [Playbooks](src/acme/om/playbooks/README.md)
 - [Knowledge](src/acme/om/knowledge/README.md)
+- [Notifications](src/acme/om/notifications/README.md)
 - [The platform's agents](src/acme/om/platform_agents/README.md)
 - [Workspaces](src/acme/om/workspaces/README.md)
 - [Events](src/acme/om/events/README.md)

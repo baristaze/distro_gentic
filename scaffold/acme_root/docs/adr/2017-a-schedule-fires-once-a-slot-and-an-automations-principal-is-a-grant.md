@@ -1,0 +1,50 @@
+# ADR 2017: A schedule fires once a slot, and an automation's principal is a grant
+
+**Status**: accepted (2026-10-02)
+
+## Context
+
+Automations: "A trigger, an event with filters or a schedule, leads to an
+action ... An automation runs as its creator or as the tenant's
+automation principal." The guideline keeps time without a scheduler:
+every worker sweeps on its own timer, idempotent and serialized by the
+database ([Maintenance Without a Scheduler][g-sweep]). So every worker
+ticks every tenant, and a schedule must not fire once per worker.
+
+The engine names a steady principal "its creator, or a service principal
+the tenant grants", and asks the adopter's transition for a principal's
+live context at every call. The tenancy manager answers for a member and
+grants no service principal.
+
+## Decision
+
+**A schedule fires for a slot.** Its slots are its creation time and
+every period after it. A tick fires the slot it is in, under a run id
+derived from the automation and the slot, so the ticks of several
+workers in one slot meet one run, and the admission's lock on the
+automation's row serializes them. A slot that passed while no tick came
+is not fired late: a schedule fires at most once a period, never in a
+burst after an outage.
+
+**The automation principal is a grant.** A tenant holds one, with one
+role, granted in person by a person who manages its members, never above
+their own role and never the service role. A second grant changes the
+role and keeps the principal's id. Its live context is answered by its
+own transition, `automation_principals`, from the grant read at each
+call: the granted role's permissions and nothing else, whichever kind a
+step names it as. Every other principal falls through to the members'
+transition. A root that runs the sessions an automation starts hands the
+same transition to the managers, so their calls are answered by the grant.
+
+## Consequences
+
+- An automation run as the principal starts nothing its role cannot
+  start, though its creator could; the run is refused, with no session.
+- Changing the grant's role changes what every such session's next call
+  may do. No principal granted, such an automation fires nothing.
+- The transition is a second site that builds a tenant context beside the
+  tenancy manager's, and the stage checks list it.
+- A schedule's period is its own, not the sweep's: a sweep interval longer
+  than a period fires the schedule at the sweep's pace.
+
+[g-sweep]: https://github.com/baristaze/swe_guidelines/blob/v0.48.0/architecture.md#maintenance-without-a-scheduler
