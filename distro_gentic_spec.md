@@ -14,7 +14,7 @@ Repository](#the-repository)).
 ## How to Read This
 
 The conventions are [`agentic_core`'s How to Read
-This](agentic_core_spec.md#how-to-read-this): section tags in the
+This][e-read]: section tags in the
 guideline's sense, present-tense rules, **Principle** boxes, *Example*
 lines that illustrate and never add a rule, and `agents-only` comments
 for nuance only an agent needs.
@@ -25,13 +25,13 @@ for nuance only an agent needs.
   object model, interfaces, context, storage and its roles, the work
   queue and workers, the gateway, realtime, twins, deployment, and
   operations.
-- **The engine**, [`agentic_core`](agentic_core_spec.md): steps,
+- **The engine**, [`agentic_core`][e]: steps,
   sessions, context, models, tools, policy, the runtime interfaces,
   streams, steering, identity, agent kinds, budgets, parking, and
   privacy.
 
 This spec says only what a platform adds. Its examples come from
-[`rodeo`](robot_dev_agentic_platform_spec.md), a robot development
+`rodeo`, a robot development
 platform, because it is the hardest version of the problem: the physical
 world, scarce machines, safety, customer walls, and evidence that is
 more than pass or fail. A shape that holds there holds for software too.
@@ -235,7 +235,7 @@ later, rarely share a machine.
   worker does ([Shape of a Worker][g-worker]); the engine adds the
   writer epoch, which refuses a stale run's steps and commands
   ([`agentic_core` Durable by
-  Default](agentic_core_spec.md#durable-by-default)).
+  Default][e-durable]).
 
 A runner chooses the transport by the session's placement: a **direct
 transport** to a cloud workspace, or a **relay transport** to a host
@@ -427,7 +427,7 @@ line it stood in, and a session that no longer waits is never granted
 anything. Approvals a station job needs are asked before the session
 joins the line, bound to the candidate, the procedure, and the pool, and
 kept while the session holds its place ([`agentic_core`
-Approvals](agentic_core_spec.md#approvals)), so a lease never waits on a
+Approvals][e-approvals]), so a lease never waits on a
 person.
 
 ### Leases
@@ -482,7 +482,7 @@ station job.
 ### Live Streams
 
 The engine streams everything ([`agentic_core`
-Streams](agentic_core_spec.md#streams)); the platform carries it on two
+Streams][e-streams]); the platform carries it on two
 paths:
 
 - **The realtime channel** carries every change as the guideline's hint
@@ -506,7 +506,7 @@ window onto the evidence, never a second world beside it.
 
 A message from the portal, the CLI, or a chat surface reaches the
 session's inbox over the API, and the engine delivers it at its next
-model call ([`agentic_core` Steering](agentic_core_spec.md#steering)). A
+model call ([`agentic_core` Steering][e-steering]). A
 chat message counts as a principal's only when a chat user mapped to a
 platform user addresses it to the agent; everything else relayed from
 chat is data.
@@ -668,7 +668,7 @@ trials.
 `core`
 
 Work completes through one gated tool ([`agentic_core` Done Rules and
-the Result Gate](agentic_core_spec.md#done-rules-and-the-result-gate)).
+the Result Gate][e-gate]).
 It records the outcome (succeeded, failed, or inconclusive), the report,
 the uncertainties, and the runs each claim cites. It refuses a success
 that changed the work product unless the validation policy passed at the
@@ -712,7 +712,7 @@ and agent-kind version that produced it.
 
 The engine names the actor on every step, the principal on inputs and
 tool calls, and the spender on model requests ([`agentic_core` Who Is
-Who](agentic_core_spec.md#who-is-who)). The platform adds the machine,
+Who][e-who]). The platform adds the machine,
 and keeps four apart. Confusing any two is a defect.
 
 | Identity | What it is | Example |
@@ -737,7 +737,7 @@ that user.
 ### Untrusted by Default
 
 Text from outside is data ([`agentic_core` Only a Principal
-Instructs](agentic_core_spec.md#only-a-principal-instructs)). A comment,
+Instructs][e-principal]). A comment,
 an issue, a chat message relayed by an integration reaches the agent
 quoted and labelled, never as an instruction: the engine renders it so,
 and the platform sets its origin. A principal speaks only through the
@@ -755,7 +755,7 @@ workspace; otherwise the machine that executes the call resolves it from
 its own store, short-lived and scoped, injects it into that one process,
 redacts it everywhere, and audits its use by name ([`agentic_core`
 Secrets Never Enter a
-Step](agentic_core_spec.md#secrets-never-enter-a-step)). A cloud secret
+Step][e-secrets]). A cloud secret
 never reaches a customer's host; the per-session push token is minted
 for it ([Workspace Hosts](#workspace-hosts)). A workspace never holds a
 platform credential. A station's secrets and limits never leave its
@@ -774,7 +774,7 @@ need it.
 ### Exfiltration
 
 The rule of two ([`agentic_core` Bound What a Convinced Model Can
-Do](agentic_core_spec.md#bound-what-a-convinced-model-can-do)) is
+Do][e-convinced]) is
 enforced by policy, never hoped for. The platform sets the untrusted
 mark from the origin of what a session reads, and the egress allowlist
 ([Egress](#egress)) is what makes "beyond its allowlist" checkable. A
@@ -797,7 +797,7 @@ default.
 
 The engine meters every call and gates it before it starts
 ([`agentic_core` Bounds and
-Budgets](agentic_core_spec.md#bounds-and-budgets)). The platform
+Budgets][e-budgets]). The platform
 supplies everything behind the gate.
 
 ### Metering and Limits
@@ -838,7 +838,7 @@ are evaluated apart, and neither is ever reported as the other.
 The platform shares the engine's outage signal across its runners, one
 per provider and credential, in the shared cache, so a session meets a
 known outage in a second ([`agentic_core` Provider
-Errors](agentic_core_spec.md#provider-errors)). An unreachable cache is a
+Errors][e-provider-errors]). An unreachable cache is a
 declared degraded answer: calls proceed, and each session's own
 retries and its park on the provider hold. A tenant on its own key has a signal of its own, and a
 billing or credential error on that key parks only its sessions. An
@@ -863,7 +863,7 @@ platform's key.
 The platform is the expert on which model serves which task. It answers
 with a **matrix**: for each environment, model role, agent kind, plan
 tier, and workload class, a fill ([`agentic_core` Roles and
-Fills](agentic_core_spec.md#roles-and-fills)). The most specific row
+Fills][e-roles]). The most specific row
 wins, and a row that matches everything is required, so every question
 has an answer.
 
@@ -889,7 +889,7 @@ the matrix version just published, before the bill shows it.
 ## The Agents a Platform Ships
 
 One loop, many kinds ([`agentic_core` Agent
-Kinds](agentic_core_spec.md#agent-kinds)). A platform ships a few, each a
+Kinds][e-kinds]). A platform ships a few, each a
 profile with its own powers:
 
 - The **engineer** takes an objective to a validated, reviewable change.
@@ -921,7 +921,7 @@ What is stored where is a decision, never an accident.
 
 - **Storage.** Sessions live in `core`; steps, events, and audit are
   append-only, in `activity` ([`agentic_core`
-  History](agentic_core_spec.md#history)). Step content is sealed under a
+  History][e-history]). Step content is sealed under a
   key per session, and the keys live in a key service the tenant can
   revoke; a tenant may bring its own key service.
 - **Retention policy** is declared per tenant and narrowed per project:
@@ -1001,7 +1001,7 @@ run's request id across the runner, the host, and the steps it wrote
 
 The platform inherits the engine's deviations that hold for it, ASY-13
 and STO-32/STO-34 ([`agentic_core` Deviations from the
-Guideline](agentic_core_spec.md#deviations-from-the-guideline)), and
+Guideline][e-deviations]), and
 records two of its own:
 
 | Rule | Summary |
@@ -1039,7 +1039,7 @@ story; the rest is its planned shape:
 
 **Its first commit.** `distro_gentic` takes its base from
 `agentic_core`'s first stable release, by its tag, as [`agentic_core`
-Being Adopted](agentic_core_spec.md#being-adopted) describes, and main
+Being Adopted][e-adopted] describes, and main
 merges it ([Upgrade a copy of the scaffold][g-adopting]).
 
 ## What This Spec Does Not Cover
@@ -1052,7 +1052,7 @@ price table; and the threat model each deployment writes.
 
 ## Next: Rodeo
 
-[`rodeo`](robot_dev_agentic_platform_spec.md) is the reference product:
+`rodeo` is the reference product:
 `distro_gentic` plus robots. Its spec says what the physical world adds.
 
 [g]: https://github.com/baristaze/swe_guidelines/blob/v0.47.0/architecture.md
@@ -1076,3 +1076,21 @@ price table; and the threat model each deployment writes.
 [g-roundtrip]: https://github.com/baristaze/swe_guidelines/blob/v0.47.0/architecture.md#the-telemetry-round-trip
 [g-lenses]: https://github.com/baristaze/swe_guidelines/blob/v0.47.0/lenses/README.md
 [g-adopting]: https://github.com/baristaze/swe_guidelines/blob/v0.47.0/docs/adopting.md#upgrade-a-copy-of-the-scaffold
+[e]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md
+[e-read]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#how-to-read-this
+[e-durable]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#durable-by-default
+[e-approvals]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#approvals
+[e-streams]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#streams
+[e-steering]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#steering
+[e-gate]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#done-rules-and-the-result-gate
+[e-who]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#who-is-who
+[e-principal]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#only-a-principal-instructs
+[e-secrets]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#secrets-never-enter-a-step
+[e-convinced]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#bound-what-a-convinced-model-can-do
+[e-budgets]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#bounds-and-budgets
+[e-provider-errors]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#provider-errors
+[e-roles]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#roles-and-fills
+[e-kinds]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#agent-kinds
+[e-history]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#history
+[e-deviations]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#deviations-from-the-guideline
+[e-adopted]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#being-adopted
