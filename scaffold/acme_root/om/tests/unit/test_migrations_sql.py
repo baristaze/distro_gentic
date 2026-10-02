@@ -91,6 +91,9 @@ def test_role_metadata_holds_only_that_role() -> None:
         "budget_holds",
         "budget_settlements",
         "artifacts",
+        "execution_records",
+        "validations",
+        "inferences",
         "ledger_entries",
         "ledger_counts",
     }

@@ -43,6 +43,10 @@ TABLE_ROLES: dict[str, DatabaseRole] = {
     "fill_sets": DatabaseRole.CORE,
     "artifacts": DatabaseRole.ACTIVITY,
     "tool_policies": DatabaseRole.CORE,
+    "validation_policies": DatabaseRole.CORE,
+    "execution_records": DatabaseRole.ACTIVITY,
+    "validations": DatabaseRole.ACTIVITY,
+    "inferences": DatabaseRole.ACTIVITY,
     "fair_shares": DatabaseRole.CORE,
     "secret_declarations": DatabaseRole.CORE,
     "provider_keys": DatabaseRole.CORE,
@@ -53,7 +57,16 @@ TABLE_ROLES: dict[str, DatabaseRole] = {
 }
 
 APPEND_ONLY_TABLES: frozenset[str] = frozenset(
-    {"steps", "budget_holds", "budget_settlements", "artifacts", "ledger_entries"}
+    {
+        "steps",
+        "budget_holds",
+        "budget_settlements",
+        "artifacts",
+        "execution_records",
+        "validations",
+        "inferences",
+        "ledger_entries",
+    }
 )
 """Tables whose rows are written once: the serving logins hold SELECT and
 INSERT on them and never UPDATE or DELETE. The migration that creates one
@@ -68,6 +81,9 @@ PURGED_TABLES: frozenset[str] = frozenset(
         "artifacts",
         "session_authorities",
         "agent_trees",
+        "execution_records",
+        "validations",
+        "inferences",
     }
 )
 """The tables the purge login reaches: a session, its history and its

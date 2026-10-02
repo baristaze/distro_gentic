@@ -19,6 +19,7 @@ from acme.om.agent_sessions.impl.manager import AgentSessionsOptions
 from acme.om.agent_sessions.limits import deadline_park
 from acme.om.agent_sessions.types.agent_session import AgentSession, SessionStatus
 from acme.om.agents import ResultGateInterface
+from acme.om.agents.impl.gate import ResultGateNullImpl
 from acme.om.agents.rules import after_turn, claim_refusal, tree_refusal
 from acme.om.agents.types.kind import AgentKind, AgentKindCatalog, DoneRule, TreeLimits
 from acme.om.agents.types.request import Handoff, Spawn, Start
@@ -444,8 +445,14 @@ async def test_a_handoff_carries_its_mark(managers: Managers) -> None:
 
 
 async def test_a_result_passes_the_gate_and_the_null_gate_marks_it_unverified(
-    tmp_path: Path, managers: Managers
+    tmp_path: Path,
 ) -> None:
+    managers = build_managers(
+        StorageMemoryImpl(),
+        InfraLocalImpl(tmp_path),
+        agent_kinds=KINDS,
+        result_gate=ResultGateNullImpl(),
+    )
     ctx = context(Role.MEMBER)
     sid = (await start(managers, ctx)).id
     cited = Result(claim=Claim.SUCCEEDED, evidence=(new_id(),))
