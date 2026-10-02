@@ -102,6 +102,9 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             # Each session's project row, then the tenant's projects.
             "projects": managers.projects.purge_tenant,
             "budgets": managers.budgets.purge_tenant,
+            # Its secrets' names, its keys' records with their values in the
+            # store, and its operators' content grants.
+            "trust": container.trust.trust.purge_tenant,
             # Deletes nothing: what a call held and spent stays, so a
             # tenant whose ledger remains is never marked purged.
             "ledger": managers.budgets.purge_ledger,
