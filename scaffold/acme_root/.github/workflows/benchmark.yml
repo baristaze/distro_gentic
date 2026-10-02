@@ -1,0 +1,67 @@
+# The acceptance scenarios, judged and recorded as benchmarks, dispatched
+# by a person. Never on a push or a pull request: a model's answers vary
+# from run to run, so no gate a code change needs waits on one, and a
+# product's scenarios call real providers and spend.
+#
+# Integrations run as their twins and the model on real providers, the
+# way the guideline's own benchmark runs. The scaffold's one case is a
+# rehearsal: scripted sessions stand in for the agent, so it spends
+# nothing and proves the job's wiring, from the stack to a recorded
+# benchmark. A product adds its scenarios beside it, and the keys its
+# agents call with as secrets of the `benchmark` environment, which a
+# person approves each dispatch of.
+name: benchmark
+run-name: benchmark on ${{ github.ref_name }}
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One run at a time, and a running one is never cancelled: a run in
+# progress may have spent on its providers already.
+concurrency:
+  group: benchmark-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # uv sync and uv run fail instead of rewriting a stale uv.lock.
+  UV_LOCKED: "1"
+
+jobs:
+  benchmark:
+    name: every acceptance scenario, judged and recorded
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: benchmark
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      - run: uv sync --all-packages
+      - run: cp .env.example .env
+      - run: make infra-up
+      - run: make migrate
+      # The stack goes with the runner, so the job writes what it recorded
+      # to a folder it uploads with the run; each qualification it records
+      # with the model matrix cites this run's address, which holds it.
+      - run: make benchmark
+        env:
+          BENCHMARK_EXPORT: ${{ runner.temp }}/benchmark-export
+          BENCHMARK_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      # Every benchmark the run recorded, each trial's verdict with the
+      # hidden suite's runs and its cost, and the matrix's rows they fed:
+      # kept with the run, a regressed or failed one too, before the stack
+      # goes. 400 days is the longest GitHub keeps an artifact; the
+      # repository's own retention setting caps it.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: benchmark-export
+          path: ${{ runner.temp }}/benchmark-export
+          if-no-files-found: warn
+          retention-days: 400
+      - run: make infra-down
+        if: always()
