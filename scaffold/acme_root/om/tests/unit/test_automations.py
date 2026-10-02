@@ -14,8 +14,6 @@ from contracts.intake import WORKER, Wired, wired
 from contracts.loops import reply, said, use
 from pydantic import ValidationError
 
-from acme.om.agent_sessions.types.agent_session import AgentSession
-from acme.om.agents.types.request import Start
 from acme.om.agents.types.run import RunEnd
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.automations.types.automation import (
@@ -32,7 +30,7 @@ from acme.om.automations.types.automation import (
     Trigger,
     TriggerKind,
 )
-from acme.om.base import new_id, utcnow
+from acme.om.base import Platform, new_id, utcnow
 from acme.om.budgets.types.budget import BudgetScopeKind, WindowKind
 from acme.om.context import RequestContext, Role, TenantContext
 from acme.om.evidence.types.provenance import Provenance
@@ -50,6 +48,8 @@ from acme.om.intake.types.link import HandleKind
 from acme.om.steps.types.header import InputHeader, ParkReason
 from acme.om.steps.types.step import Actor, StepType
 from acme.om.tenancy.rules import permissions_of
+from acme.om.tools.tool import ToolRuntime
+from acme.om.tools.types.tool import ToolInput
 
 DOLLAR = 1_000_000  # micros
 
@@ -557,11 +557,12 @@ async def test_an_automation_run_as_the_principal_holds_its_role_alone(
 
 
 async def test_an_automation_run_as_the_principal_holds_no_more_than_its_creator(
-    platform: Wired, creator: TenantContext, monkeypatch: pytest.MonkeyPatch
+    platform: Wired, creator: TenantContext
 ) -> None:
     """A member makes no automation that runs as a principal granted above
-    them. An admin's fires at no more than the admin holds at the firing,
-    whatever the grant becomes, and fires nothing once the admin left."""
+    them. An admin's fires while the grant is at most what the admin holds
+    at the firing, and fires nothing once the admin is moved below the
+    grant or has left."""
     await platform.automations.grant_principal(platform.owner, Role.ADMIN)
     member = platform.person(Role.MEMBER)
     with pytest.raises(NotAuthorized):
@@ -571,33 +572,62 @@ async def test_an_automation_run_as_the_principal_holds_no_more_than_its_creator
     await platform.automations.create_automation(
         creator, scheduled(creator, runs_as=RunsAs.AUTOMATION_PRINCIPAL)
     )
-    roles: list[Role] = []
-    start = platform.managers.agents.start_session
-
-    async def starting(ctx: TenantContext, request: Start) -> AgentSession:
-        roles.append(ctx.role)
-        return await start(ctx, request)
-
-    monkeypatch.setattr(platform.managers.agents, "start_session", starting)
-    await platform.automations.grant_principal(platform.owner, Role.OWNER)
     (run,) = await platform.automations.tick(platform.service)
-    assert run.status is RunStatus.STARTED and roles == [Role.ADMIN]
-    platform.members.roles[creator.user_id] = Role.VIEWER
+    assert run.status is RunStatus.STARTED and run.session_id is not None
+    platform.members.roles[creator.user_id] = Role.MEMBER
     platform.clock.now += timedelta(hours=1)
     (lowered,) = await platform.automations.tick(platform.service)
-    assert (lowered.status, lowered.refusal) == (RunStatus.REFUSED, Refusal.ACTION)
-    assert roles == [Role.ADMIN, Role.VIEWER]
+    assert (lowered.status, lowered.refusal, lowered.session_id) == (
+        RunStatus.REFUSED,
+        Refusal.PRINCIPAL,
+        None,
+    )
     del platform.members.roles[creator.user_id]
     platform.clock.now += timedelta(hours=1)
     (gone,) = await platform.automations.tick(platform.service)
     assert (gone.status, gone.refusal) == (RunStatus.REFUSED, Refusal.PRINCIPAL)
 
 
-async def test_an_automation_run_as_no_granted_principal_fires_nothing(
+async def test_a_grant_raised_above_an_automations_creator_fires_no_session(
+    platform: Wired, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A member's automation made at a member grant makes its calls as a
+    member. Once the grant is raised to owner, it fires no session, so no
+    call of it runs above its creator."""
+    member = platform.person(Role.MEMBER)
+    await platform.automations.grant_principal(platform.owner, Role.MEMBER)
+    await platform.automations.create_automation(
+        member, scheduled(member, runs_as=RunsAs.AUTOMATION_PRINCIPAL)
+    )
+    roles: list[Role] = []
+    run_lookup = platform.lookup.run
+
+    async def running(ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> Platform:
+        roles.append(ctx.role)
+        return await run_lookup(ctx, call_input, runtime)
+
+    monkeypatch.setattr(platform.lookup, "run", running)
+    (run,) = await platform.automations.tick(platform.service)
+    assert run.status is RunStatus.STARTED and run.session_id is not None
+    platform.anthropic.add(reply(use("lookup")), reply(said("Looked it up.")))
+    assert (await platform.loops.run(platform.service, run.session_id)).end is RunEnd.ENDED
+    assert roles == [Role.MEMBER]
+    await platform.automations.grant_principal(platform.owner, Role.OWNER)
+    platform.clock.now += timedelta(hours=1)
+    (raised,) = await platform.automations.tick(platform.service)
+    assert (raised.status, raised.refusal, raised.session_id) == (
+        RunStatus.REFUSED,
+        Refusal.PRINCIPAL,
+        None,
+    )
+    assert roles == [Role.MEMBER], "no call ran at the raised grant"
+
+
+async def test_an_automation_run_as_the_principal_is_made_only_once_one_is_granted(
     platform: Wired, creator: TenantContext
 ) -> None:
-    await platform.automations.create_automation(
-        creator, scheduled(creator, runs_as=RunsAs.AUTOMATION_PRINCIPAL)
-    )
-    (run,) = await platform.automations.tick(platform.service)
-    assert (run.status, run.refusal) == (RunStatus.REFUSED, Refusal.PRINCIPAL)
+    with pytest.raises(NotAuthorized):
+        await platform.automations.create_automation(
+            creator, scheduled(creator, runs_as=RunsAs.AUTOMATION_PRINCIPAL)
+        )
+    assert await platform.automations.tick(platform.service) == ()

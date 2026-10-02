@@ -148,7 +148,7 @@ class Refusal(StrEnum):
     COST_CAP = "cost_cap"
     RATE = "rate"
     CONCURRENCY = "concurrency"
-    PRINCIPAL = "principal"  # its creator holds no place now, or no automation principal is granted
+    PRINCIPAL = "principal"  # its creator left, or the principal is ungranted or above its creator
     ACTION = "action"  # its action was refused: an unknown kind, a session gone
     UNATTRIBUTED = "unattributed"  # the platform's own act, with no session recorded for it
 

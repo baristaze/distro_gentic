@@ -35,17 +35,24 @@ call: the granted role's permissions and nothing else, whichever kind a
 step names it as. Every other principal falls through to the members'
 transition. A root that runs the sessions an automation starts hands the
 same transition to the managers, so their calls are answered by the grant.
-An automation that runs as the principal is made only by a person whose
-own role is at least the grant, and each firing holds the lower of the
-grant and its creator's role then: nobody lends themselves a role
-through the principal, and a creator who left fires nothing.
+An automation that runs as the principal is made only once the principal
+is granted, and only by a person whose own role is at least the grant.
+Each firing reads the grant and its creator's role then, and is refused,
+starting no session, when the grant is above that role or the creator
+left: nobody lends themselves a role through the principal. The check is
+at the firing, since the transition answers each call by the grant alone
+and knows no creator. A session already running when the grant is
+raised, or its creator moved below it, makes its remaining calls at the
+grant.
 
 ## Consequences
 
 - An automation run as the principal starts nothing its role cannot
   start, though its creator could; the run is refused, with no session.
 - Changing the grant's role changes what every such session's next call
-  may do. No principal granted, such an automation fires nothing.
+  may do. A grant raised above an automation's creator stops its next
+  firing, not a session it already started.
+- Before a principal is granted, no automation that runs as it is made.
 - The transition is a second site that builds a tenant context beside the
   tenancy manager's, and the stage checks list it.
 - A schedule's period is its own, not the sweep's: a sweep interval longer

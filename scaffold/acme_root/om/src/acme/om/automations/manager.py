@@ -24,9 +24,9 @@ class AutomationsManagerInterface(ABC):
         """The create, announced, by a person in person: a context an
         agent's call runs under is `NotAuthorized`, so no agent sets work
         going for itself. Its creator is the caller, whom it runs as. One
-        that runs as the automation principal is `NotAuthorized` to a
-        caller whose role is below the principal's grant. An id written
-        already answers the automation as stored."""
+        that runs as the automation principal is `NotAuthorized` before a
+        principal is granted, and to a caller whose role is below the
+        grant. An id written already answers the automation as stored."""
         ...
 
     @abstractmethod

@@ -39,7 +39,7 @@ from acme.om.steps.types.content import Content, TextBlock
 from acme.om.steps.types.header import InputHeader
 from acme.om.steps.types.step import Actor, Origin, Step, StepType
 from acme.om.tenancy import TenancyManagerInterface
-from acme.om.tenancy.rules import permissions_of, role_at_most
+from acme.om.tenancy.rules import role_at_most
 
 log = logging.getLogger(__name__)
 
@@ -88,7 +88,9 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
             raise NotAuthorized("an automation is made by a person, never by an agent's call")
         if automation.runs_as is RunsAs.AUTOMATION_PRINCIPAL:
             granted = await self._storage.read_principal(ctx.org_id)
-            if granted is not None and not role_at_most(granted.role, ctx.role):
+            if granted is None:
+                raise NotAuthorized("an automation runs as no principal before one is granted")
+            if not role_at_most(granted.role, ctx.role):
                 raise NotAuthorized(
                     f"a {ctx.role.value} makes no automation that runs as a {granted.role.value}"
                 )
@@ -379,9 +381,11 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
     async def _runs_as(self, ctx: TenantContext, automation: Automation) -> TenantContext | None:
         """The live context the automation's action runs under, read at the
         firing: its creator's, or the tenant's automation principal's as the
-        transition answers for its grant, at no more than the creator's role
-        then. None when the creator holds no place in the tenant now, or no
-        principal is granted."""
+        transition answers for its grant. None when the creator holds no
+        place in the tenant now, no principal is granted, or the grant is
+        above the creator's role now: the session's calls are answered by
+        the grant alone, so a firing that would lend its creator a role
+        starts nothing."""
         try:
             creator = await self._live(
                 ctx, ctx.org_id, Principal(kind=PrincipalKind.PERSON, id=automation.created_by)
@@ -399,14 +403,9 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
             )
         except NotAuthorized:
             return None
-        if role_at_most(live.role, creator.role):
-            return live
-        # A grant raised past its creator, or a creator moved down since:
-        # the firing holds the creator's role, never the grant's.
-        security = live.security.model_copy(
-            update={"role": creator.role, "permissions": permissions_of(creator.role)}
-        )
-        return live.model_copy(update={"security": security})
+        if not role_at_most(live.role, creator.role):
+            return None
+        return live
 
     async def _audit(self, ctx: TenantContext, granted: AutomationPrincipal) -> None:
         facts = {"role": granted.role.value}
