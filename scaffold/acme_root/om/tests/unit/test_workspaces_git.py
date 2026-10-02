@@ -116,6 +116,19 @@ class Checkout:
     async def release(self, workspace: Workspace) -> None:
         await self.managers.tools.release_workspace(self.ctx, workspace)
 
+    def push_as_a_person(self, tmp_path: Path, branch: str, name: str) -> str:
+        """A person's commit on the session's branch, pushed from a clone of
+        their own; answers its sha."""
+        clone = tmp_path / f"clone-{name}"
+        subprocess.run(
+            ["git", "clone", "-q", "-b", branch, str(self.remote), str(clone)], check=True
+        )
+        (clone / f"{name}.txt").write_text("a person's fix\n")
+        git(clone, "add", f"{name}.txt")
+        git(clone, "-c", "user.name=p", "-c", "user.email=p@example.invalid", "commit", "-qm", name)
+        git(clone, "push", "-q", "origin", branch)
+        return git(clone, "rev-parse", "HEAD")
+
     def snapshots(self, branch: str) -> list[str]:
         refs = git(self.remote, "for-each-ref", "--format=%(refname)", f"{SNAPSHOT_PREFIX}/")
         return [ref for ref in refs.splitlines() if ref.startswith(f"{SNAPSHOT_PREFIX}/{branch}/")]
@@ -200,6 +213,48 @@ async def test_a_branch_the_remote_lost_fails_loudly_and_nothing_restarts_from_m
     assert git(here, "rev-parse", "--abbrev-ref", "HEAD") == branch
     assert git(here, "rev-parse", "HEAD") == checkout.main, "cut again from main"
     assert rebuilt.changed is not None and "merged" in rebuilt.changed
+
+
+# The branch is brought up to what its repository holds.
+
+
+async def test_a_persons_push_between_loops_is_in_the_next_loops_checkout(
+    checkout: Checkout, tmp_path: Path
+) -> None:
+    session_id = await checkout.session()
+    branch = session_branch(session_id)
+    workspace = await checkout.prepare(session_id)
+    here = Path(workspace.location)
+    git(here, "push", "-q", "origin", branch)
+    await checkout.release(workspace)
+    theirs = checkout.push_as_a_person(tmp_path, branch, "fix")
+
+    again = await checkout.prepare(session_id)
+
+    assert again.location == workspace.location, "the warm checkout"
+    assert git(here, "rev-parse", "HEAD") == theirs
+    assert (here / "fix.txt").read_text() == "a person's fix\n"
+
+
+async def test_a_branch_that_moved_here_and_on_its_repository_fails_loudly(
+    checkout: Checkout, tmp_path: Path
+) -> None:
+    session_id = await checkout.session()
+    branch = session_branch(session_id)
+    workspace = await checkout.prepare(session_id)
+    here = Path(workspace.location)
+    git(here, "push", "-q", "origin", branch)
+    (here / "mine.txt").write_text("the agent's\n")
+    git(here, "add", "mine.txt")
+    git(here, "-c", "user.name=a", "-c", "user.email=a@example.invalid", "commit", "-qm", "m")
+    mine = git(here, "rev-parse", "HEAD")
+    await checkout.release(workspace)
+    checkout.push_as_a_person(tmp_path, branch, "fix")
+
+    with pytest.raises(WorkspaceLost, match=branch):
+        await checkout.prepare(session_id)
+
+    assert git(here, "rev-parse", "HEAD") == mine, "nothing was merged or reset"
 
 
 # What a session delivered is read from git in its checkout.

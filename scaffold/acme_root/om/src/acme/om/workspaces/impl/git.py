@@ -29,24 +29,32 @@ from acme.om.workspaces.types.source import BranchState, Checkout, RepositoryBin
 log = logging.getLogger(__name__)
 
 SYNC = """set -eu
-if [ ! -d .git ]; then
-  git init -q .
+if [ ! -d .git ]; then git init -q .; fi
+if git remote get-url origin >/dev/null 2>&1; then
+  git remote set-url origin "$REPOSITORY"
+else
   git remote add origin "$REPOSITORY"
 fi
-git fetch -q --prune origin
+git fetch -q --prune origin "+refs/heads/*:refs/remotes/origin/*"
 remote=no
 if git rev-parse -q --verify "refs/remotes/origin/$BRANCH" >/dev/null; then remote=yes; fi
 held=no
 if git rev-parse -q --verify "refs/heads/$BRANCH" >/dev/null; then held=yes; fi
+moved=yes
 if [ "$held" = yes ]; then
   git checkout -q "$BRANCH"
+  if [ "$remote" = yes ] && ! git merge -q --ff-only "refs/remotes/origin/$BRANCH" >/dev/null 2>&1; then
+    moved=no
+  fi
 elif [ "$remote" = yes ]; then
   git checkout -q -b "$BRANCH" --track "origin/$BRANCH"
 fi
-echo "branch $remote $held"
+echo "branch $remote $held $moved"
 """
-"""Brings the bound repository in and the branch out, where either side
-holds it; prints whether the remote and the checkout hold it."""
+"""Points `origin` at the bound repository, brings it in, and the branch
+out where either side holds it, fast-forwarded to the remote's; prints
+whether the remote and the checkout hold it, and whether the checkout
+reached the remote's branch."""
 
 CUT = """set -eu
 git checkout -q --force --no-track -B "$BRANCH" "origin/$BASE"
@@ -138,9 +146,10 @@ class WorkspaceGitTransportImpl(WorkspaceGitInterface):
         words = await self._run(
             ctx, workspace, "sync", SYNC, {"REPOSITORY": binding.repository, "BRANCH": branch}
         )
-        if len(words) != 3 or words[0] != "branch":
+        if len(words) != 4 or words[0] != "branch":
             raise Unavailable(f"the checkout of session {workspace.id} answered no branch")
-        return BranchState(remote=words[1] == "yes", local=words[2] == "yes")
+        remote, local, moved = (word == "yes" for word in words[1:])
+        return BranchState(remote=remote, local=local, diverged=remote and local and not moved)
 
     async def cut(
         self, ctx: TenantContext, workspace: Workspace, binding: RepositoryBinding, branch: str

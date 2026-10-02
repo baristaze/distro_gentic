@@ -111,9 +111,10 @@ class IsolationRefused(InfraValidationFailed):
 
 
 class WorkspaceLost(InfraException):
-    """What a workspace is rebuilt from is gone, and nothing says why, such
-    as a branch deleted under it: never rebuilt from something else in its
-    stead, and the loop that asked ends, loudly."""
+    """What a workspace is rebuilt from is gone, or cannot be brought in, and
+    nothing says how, such as a branch deleted under it or one that moved
+    on both sides: never rebuilt from something else in its stead, and the
+    loop that asked ends, loudly."""
 
     http_status = 409
     code = "workspace_lost"

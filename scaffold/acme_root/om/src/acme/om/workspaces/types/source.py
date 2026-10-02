@@ -31,12 +31,16 @@ class BranchState(Platform):
 
     remote: bool  # the bound repository holds it
     local: bool  # the workspace's checkout holds it
+    # Both hold it, and the checkout's has commits the remote's lacks while
+    # the remote's has moved too: no fast-forward reaches it.
+    diverged: bool = False
 
 
 class BranchPlan(StrEnum):
     """What a prepare does with the session's branch (`rules.branch_plan`)."""
 
     TRACK = "track"  # the remote holds it: the work goes on from it
+    DIVERGED = "diverged"  # it moved here and there both: the loop fails, loudly
     KEEP = "keep"  # never pushed, and the checkout holds it: the work goes on
     CUT = "cut"  # never pushed, held nowhere: cut from the default branch
     REBUILD = "rebuild"  # gone after its pull request closed: cut again, and told

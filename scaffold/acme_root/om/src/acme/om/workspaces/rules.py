@@ -219,9 +219,11 @@ def branch_plan(state: BranchState, *, seen: bool, fate: PullRequestFate | None)
     tracked. One the remote never held is kept where the checkout holds it,
     and cut from the default branch where nothing does. One the remote held
     and lost is rebuilt only when its pull request was merged or closed;
-    anything else fails, and nothing restarts from the default branch."""
+    anything else fails, and nothing restarts from the default branch. A
+    branch that moved on the remote and in the checkout both fails too:
+    nothing merges the two silently."""
     if state.remote:
-        return BranchPlan.TRACK
+        return BranchPlan.DIVERGED if state.diverged else BranchPlan.TRACK
     if not seen:
         return BranchPlan.KEEP if state.local else BranchPlan.CUT
     return BranchPlan.LOST if fate is None else BranchPlan.REBUILD

@@ -146,17 +146,20 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
             if not state.remote and seen:
                 fate = await self._pull_requests.fate_of(ctx, binding, held.branch)
             plan = rules.branch_plan(state, seen=seen, fate=fate)
-            if plan is BranchPlan.LOST:
+            if plan in (BranchPlan.LOST, BranchPlan.DIVERGED):
+                why = (
+                    "is gone from its repository, and nothing says why"
+                    if plan is BranchPlan.LOST
+                    else "moved here and on its repository both, and nothing merges them"
+                )
                 log.error(
-                    "session %s of org %s: its branch %s is gone, and nothing says why",
+                    "session %s of org %s: its branch %s %s",
                     workspace.id,
                     ctx.org_id,
                     held.branch,
+                    why,
                 )
-                raise WorkspaceLost(
-                    f"the branch {held.branch} of session {workspace.id} is gone from its "
-                    "repository, and nothing says why"
-                )
+                raise WorkspaceLost(f"the branch {held.branch} of session {workspace.id} {why}")
             if plan in (BranchPlan.CUT, BranchPlan.REBUILD):
                 await self._git.cut(ctx, workspace, binding, held.branch)
             if plan is BranchPlan.REBUILD and fate is not None:

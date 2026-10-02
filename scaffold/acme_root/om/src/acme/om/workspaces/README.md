@@ -39,12 +39,13 @@ rebuilt from.
   2005](../../../../../docs/adr/2005-a-workspace-no-host-can-give-parks-the-loop-and-a-lost-one-ends-it.md)).
   Then the checkout is brought up to the session's branch on the
   repository its project binds.
-- **The branch.** One the remote holds is tracked, and one never pushed
-  is kept, or cut from the default branch on the session's first loop.
-  One the remote held and lost is rebuilt from the default branch only
-  when its pull request was merged or closed, and the loop is told.
-  Anything else ends the loop, loudly; nothing restarts silently from
-  the default branch.
+- **The branch.** One the remote holds is tracked, fast-forwarded to
+  what the remote holds, and one never pushed is kept, or cut from the
+  default branch on the session's first loop. One the remote held and
+  lost is rebuilt from the default branch only when its pull request was
+  merged or closed, and the loop is told. One that moved on both sides,
+  or vanished for no known reason, ends the loop, loudly; nothing
+  restarts silently from the default branch.
 - **Release.** Before an instance goes, what its checkout holds that the
   remote lacks is committed to a snapshot ref beside the session's
   branch, never on it, and pushed. The branch, the index, and the files

@@ -229,10 +229,16 @@ def test_a_host_takes_what_it_can_give_and_its_owner_sets_its_directory_sessions
 # Check 2: a vanished branch is rebuilt only when its fate is known.
 
 
+def test_a_branch_that_moved_on_both_sides_is_never_merged_silently() -> None:
+    state = BranchState(remote=True, local=True, diverged=True)
+    assert rules.branch_plan(state, seen=True, fate=None) is BranchPlan.DIVERGED
+
+
 @pytest.mark.parametrize(
     ("remote", "local", "seen", "fate", "plan"),
     [
         (True, False, False, None, BranchPlan.TRACK),
+        (True, True, True, PullRequestFate.MERGED, BranchPlan.TRACK),
         (True, True, True, None, BranchPlan.TRACK),
         (False, True, False, None, BranchPlan.KEEP),
         (False, False, False, None, BranchPlan.CUT),

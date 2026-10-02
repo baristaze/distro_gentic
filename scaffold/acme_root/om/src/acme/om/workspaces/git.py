@@ -16,10 +16,11 @@ class WorkspaceGitInterface(ABC):
     async def sync(
         self, ctx: TenantContext, workspace: Workspace, binding: RepositoryBinding, branch: str
     ) -> BranchState:
-        """Clones the bound repository into a workspace that holds none,
-        fetches it, and checks out `branch` where the remote or the checkout
-        holds it. Where neither does, nothing is checked out: what follows is
-        the caller's (`rules.branch_plan`)."""
+        """Points the checkout's `origin` at the bound repository, fetches it,
+        and checks out `branch` where the remote or the checkout holds it,
+        fast-forwarded to the remote's. Where neither does, nothing is
+        checked out, and where the two have diverged, nothing is merged: what
+        follows is the caller's (`rules.branch_plan`)."""
         ...
 
     @abstractmethod

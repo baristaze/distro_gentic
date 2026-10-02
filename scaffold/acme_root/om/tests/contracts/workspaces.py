@@ -63,12 +63,14 @@ class GitTwin(WorkspaceGitInterface):
     refuses_push: bool = False
     pushed: dict[str, str] = field(default_factory=lambda: dict[str, str]())
     head: str = BASE
+    diverged: bool = False  # the session's branch moved here and on the remote both
     cuts: list[str] = field(default_factory=lambda: list[str]())
 
     async def sync(
         self, ctx: TenantContext, workspace: Workspace, binding: RepositoryBinding, branch: str
     ) -> BranchState:
-        return BranchState(remote=branch in self.remote, local=branch in self.local)
+        remote, local = branch in self.remote, branch in self.local
+        return BranchState(remote=remote, local=local, diverged=remote and local and self.diverged)
 
     async def cut(
         self, ctx: TenantContext, workspace: Workspace, binding: RepositoryBinding, branch: str

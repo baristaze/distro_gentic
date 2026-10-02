@@ -201,6 +201,23 @@ async def test_a_workspace_whose_work_is_not_pushed_is_not_let_go(tmp_path: Path
     assert held.snapshot_ref is None and held.notice is None
 
 
+async def test_a_branch_that_moved_here_and_on_its_repository_ends_the_loop_loudly(
+    tmp_path: Path,
+) -> None:
+    git = GitTwin()
+    loop = loop_of(tmp_path, workspace_projects=ProjectsTwin(), workspace_git=git)
+    session_id = await loop.start("twinned")
+    branch = session_branch(session_id)
+    git.remote.add(branch)
+    git.local.add(branch)
+    git.diverged = True
+
+    run = await one_loop(loop, session_id)
+
+    assert run.outcome is LoopOutcome.ERRORED and loop.anthropic.calls == []
+    assert git.cuts == [], "nothing merged or cut"
+
+
 async def test_a_vanished_branch_with_no_known_reason_ends_the_loop_loudly(
     tmp_path: Path,
 ) -> None:
