@@ -94,7 +94,8 @@ async def serve(agent: HostAgent) -> None:
     """Claims while there is work, waits a beat when there is none, and waits
     out a failure the host outlasts (`HostAgent.turn`)."""
     while True:
-        await asyncio.sleep(await agent.turn())
+        wait = await agent.turn()
+        await asyncio.sleep(wait)
 
 
 def _guarded(coroutine: Coroutine[Any, Any, None]) -> None:
