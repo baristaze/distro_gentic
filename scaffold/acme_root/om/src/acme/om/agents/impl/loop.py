@@ -14,7 +14,7 @@ from pydantic import Field, ValidationError
 from acme.infra.exceptions import InfraException
 from acme.infra.outages import Outage, OutageSignalInterface
 from acme.infra.transports import OutputSink
-from acme.infra.workspaces import Workspace
+from acme.infra.workspaces import Workspace, WorkspaceLost
 from acme.integrations.model_providers import ModelProvidersInterface
 from acme.integrations.model_providers.calls import Finished, ModelCall, ModelReply
 from acme.integrations.model_providers.failures import ModelCallFailed
@@ -87,6 +87,7 @@ Sleep = Callable[[float], Awaitable[None]]
 """How the loop waits, injected beside its clock, so a test never sleeps."""
 
 HANDOVER_UNLOCK = "give_back"
+WORKSPACE_UNLOCK = "workspace"
 NO_JOBS = (
     "this engine starts no job: a job tool's work and its completion are not wired to its loop yet"
 )
@@ -113,6 +114,9 @@ class LoopOptions(Platform):
     # The same call failing this many times in a row, and each multiple of
     # it, earns the model a notice to change its approach.
     repeats_noticed: int = Field(default=3, ge=1)
+    # How long a loop no host can give its workspace waits, parked on the
+    # resource, before it asks again.
+    workspace_wait: timedelta = timedelta(minutes=1)
 
 
 @dataclass
@@ -257,13 +261,27 @@ class LoopManagerImpl(LoopManagerInterface):
             # is never made, and nothing is spent on a loop that cannot run.
             run.workspace = await self._tools.prepare_workspace(ctx, session_id, kind.isolation)
         except InfraException as refused:
-            # A provider that cannot meet the spec refuses it whole: no
-            # weaker workspace, and no call spent on a loop that cannot run.
-            if refused.code != ISOLATION_REFUSED:
+            if refused.code == ISOLATION_REFUSED:
+                # No host can give it the workspace yet: no weaker one, and
+                # no call spent. It waits on the resource and asks again.
+                log.warning("session %s waits for a workspace: %s", session_id, refused)
+                retry_at = self._clock() + self._options.workspace_wait
+                park = Park(reason=ParkReason.RESOURCE, unlock=WORKSPACE_UNLOCK, retry_at=retry_at)
+                return await self._park(run, park)
+            if refused.code != WorkspaceLost.code:
                 raise
-            log.warning("session %s has no workspace: %s", session_id, refused)
+            # What the workspace is rebuilt from is gone: nothing restarts
+            # from scratch in its stead.
+            log.error("session %s lost its workspace: %s", session_id, refused)
             return await self._end(run, LoopOutcome.ERRORED)
         try:
+            if run.workspace.changed is not None:
+                # What changed under the model since its last loop, told
+                # before it calls.
+                changed = rules.changed_step(
+                    new_id(), self._clock(), session_id, loop_id, run.workspace.changed
+                )
+                await self._steps.append_steps(ctx, session_id, epoch, [changed])
             return await self._drive(run, history)
         except StaleWriter:
             # The claim is another run's, or a person's who took the
