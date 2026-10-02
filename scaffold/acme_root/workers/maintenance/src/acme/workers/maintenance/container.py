@@ -24,6 +24,7 @@ from acme.om.media.impl.manager import MediaOptions
 from acme.om.models.impl.manager import ModelsOptions
 from acme.om.orchestrations.impl.manager import OrchestrationsOptions
 from acme.om.placement.impl.manager import PlacementOptions
+from acme.om.relay.impl.manager import RelayOptions
 from acme.om.retention.impl.manager import RetentionOptions
 from acme.om.root import Managers, build_managers
 from acme.om.steps.impl.manager import StepsOptions
@@ -113,6 +114,7 @@ def worker_managers(
         retention_options=RetentionOptions(sweep_batch=RETENTION_SWEEP_BATCH, purge_batch=batch),
         placement_options=PlacementOptions(purge_batch=batch),
         hosts_options=HostsOptions(purge_batch=batch),
+        relay_options=RelayOptions(purge_batch=batch),
     )
 
 
