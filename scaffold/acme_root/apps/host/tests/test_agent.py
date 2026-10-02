@@ -21,7 +21,7 @@ from acme.client.types import ClaimedWorkView, IsolationMode
 from acme.om.base import new_id, utcnow
 from acme.om.hosts import rules
 from acme.om.hosts.rules import WireType
-from acme.om.placement.rules import host_lane, pool_lane
+from acme.om.placement.rules import pool_lane
 from acme.om.placement.types.work import WorkspaceOperation
 from acme.om.work.types.work_item import WorkItem, WorkKind
 
@@ -40,6 +40,12 @@ class Recording(ExecutorInterface):
 
     async def run(self, item: ClaimedWorkView, ask: Ask) -> None:
         self.ran.append(item)
+
+    async def refuse(self, item: ClaimedWorkView, reasons: list[str]) -> None:
+        return None
+
+    def stop(self, item_id: UUID, kind: str) -> bool:
+        return False
 
 
 class Clock:
@@ -170,7 +176,6 @@ async def test_a_host_runs_only_its_pools_work_and_only_within_its_ceilings(
     ran = Recording()
     host = agent(api, tmp_path, await api.token(ours.id), executor=ran)
     await host.start()
-    host_id = host.credential.host_id
     prepare = {"operation": WorkspaceOperation.PREPARE.value, "pool_id": str(ours.id)}
     fits = await enqueue(api, WorkKind.WORKSPACE, {**prepare, **fitting()}, pool_lane(ours.id))
     await enqueue(
@@ -179,13 +184,12 @@ async def test_a_host_runs_only_its_pools_work_and_only_within_its_ceilings(
         {**prepare, "pool_id": str(theirs.id), **fitting()},
         pool_lane(theirs.id),
     )
-    on_host = host_lane(UUID(host_id))
     persons = await enqueue(
-        api, WorkKind.EXEC, {"host_id": host_id, **fitting(by_person=True)}, on_host
+        api, WorkKind.WORKSPACE, {**prepare, **fitting(by_person=True)}, pool_lane(ours.id)
     )
-    # As today's payloads are: where it runs, and nothing of what it asks.
+    # Where it runs, and nothing of what it asks.
     silent = await api.container.managers.work.enqueue(
-        api.owner, an_item(api, WorkKind.EXEC, {"host_id": host_id})
+        api.owner, an_item(api, WorkKind.WORKSPACE, prepare)
     )
     handled = []
     while (one := await host.tick()) is not None:

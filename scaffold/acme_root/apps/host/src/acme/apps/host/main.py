@@ -6,9 +6,11 @@ host is wrong, 3 not enrolled, 4 the platform is unreachable, 5 a startup
 probe failed."""
 
 import asyncio
+import contextlib
 import logging
 import sys
 from collections.abc import Coroutine
+from datetime import timedelta
 from importlib.metadata import PackageNotFoundError, version
 from typing import Any, NoReturn
 
@@ -19,7 +21,15 @@ from acme.apps.host import ceilings
 from acme.apps.host.agent import HostAgent, NotEnrolled
 from acme.apps.host.config import BadSetting, Settings, settings_from_env
 from acme.apps.host.probe import Misconfigured, real_probes, startup
+from acme.apps.host.relay import ExecutorRelayImpl
 from acme.client.client import ApiClient, ApiError
+from acme.infra.secrets.local import SecretsLocalImpl
+from acme.infra.transports import TransportInterface
+from acme.infra.transports.broker import BrokerNullImpl
+from acme.infra.transports.container import TransportContainerImpl
+from acme.infra.workspaces import IsolationMode
+
+log = logging.getLogger(__name__)
 
 EXIT_REFUSED = 1
 EXIT_USAGE = 2
@@ -78,24 +88,79 @@ def run() -> None:
     settings = settings_from_env()
 
     async def go() -> None:
+        agents: list[HostAgent] = []
+        executor = ExecutorRelayImpl(lambda: agents[0].client(), host_transports(settings))
         agent = HostAgent(
             settings,
             ceilings.load(settings.ceilings_path),
             real_probes(settings.workspace_user),
             lambda token: build_client(settings.api_url, token),
+            executor,
         )
+        agents.append(agent)
         await agent.start()
         await serve(agent, settings)
 
     _guarded(go())
 
 
+def host_transports(settings: Settings) -> dict[IsolationMode, TransportInterface]:
+    """The transports this host runs work through: a container per session,
+    on its local Docker. A bare directory runs only as the host's dedicated
+    user, which no transport here does yet, so an item at that mode is
+    refused rather than run as the host's own user."""
+    secrets = SecretsLocalImpl(settings.secrets_path)
+    container = TransportContainerImpl(
+        settings.records_path, secrets, BrokerNullImpl(), timedelta(seconds=30)
+    )
+    return {IsolationMode.CONTAINER: container}
+
+
 async def serve(agent: HostAgent, settings: Settings) -> None:
-    """Claims while there is work, and waits a beat when there is none."""
+    """Claims while there is work, and waits when there is none: a beat, or
+    less when the control stream wakes it. It beats and rotates its
+    credential on a loop of its own, so a long command keeps the host
+    online and its credential live."""
+    beside = [
+        asyncio.ensure_future(listen(agent)),
+        asyncio.ensure_future(keep_alive(agent, settings)),
+    ]
+    try:
+        while True:
+            handled = await agent.claim_once()
+            if handled is None:
+                agent.woken.clear()
+                with contextlib.suppress(TimeoutError):
+                    await asyncio.wait_for(agent.woken.wait(), settings.beat_seconds)
+    finally:
+        for task in beside:
+            task.cancel()
+
+
+async def keep_alive(agent: HostAgent, settings: Settings) -> None:
+    """Rotates the credential when it is due and beats, every beat."""
     while True:
-        handled = await agent.tick()
-        if handled is None:
-            await asyncio.sleep(settings.beat_seconds)
+        await asyncio.sleep(settings.beat_seconds)
+        try:
+            await agent.rotate_if_due()
+            await agent.beat()
+        except (ApiError, httpx.TransportError) as error:
+            log.warning("the beat failed: %s", error)
+
+
+async def listen(agent: HostAgent) -> None:
+    """The control stream, opened again whenever it ends: with the
+    credential the host holds then, after a short wait that grows while the
+    platform cannot be reached."""
+    wait = 1.0
+    while True:
+        try:
+            await agent.listen()
+            wait = 1.0
+        except (ApiError, httpx.TransportError) as error:
+            log.warning("the control stream ended: %s", error)
+            wait = min(wait * 2, 30.0)
+        await asyncio.sleep(wait)
 
 
 def _guarded(coroutine: Coroutine[Any, Any, None]) -> None:

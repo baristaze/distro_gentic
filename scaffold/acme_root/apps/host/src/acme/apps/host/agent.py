@@ -2,24 +2,33 @@
 with its tenant's enrollment token, or picks up the credential it already
 holds. From then on it beats, rotates its credential at half its life, and
 claims: what it is handed is held to its owner's ceilings, and only then
-given to the executor. Every connection is opened from here, outward.
+given to the executor. Beside its claims it holds one long-lived control
+stream open, which wakes it to claim at once and stops an item it runs at
+once. Every connection is opened from here, outward.
 
 What runs an item is the executor's (`ExecutorInterface`): the relay of a
-tool call into a workspace, its output, and its result. Until one is
-wired, `ExecutorPendingImpl` runs nothing, and the item's lease runs out
-for the platform's sweep to take back."""
+tool call into a workspace, its output, and its result
+(`relay.ExecutorRelayImpl`). `ExecutorPendingImpl` runs nothing, and the
+item's lease runs out for the platform's sweep to take back."""
 
+import asyncio
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from uuid import UUID
 
 from acme.apps.host.ceilings import Ask, Ceilings, ask_of, refusals
 from acme.apps.host.config import Credential, Settings, load_credential, save_credential
 from acme.apps.host.probe import Probed, Probes, startup
 from acme.client.client import ApiClient, ApiError
-from acme.client.types import ClaimedWorkView, IsolationMode, IssuedHostCredentialView
+from acme.client.types import (
+    ClaimedWorkView,
+    ControlKind,
+    IsolationMode,
+    IssuedHostCredentialView,
+)
 
 log = logging.getLogger(__name__)
 
@@ -38,12 +47,30 @@ class ExecutorInterface(ABC):
         """Runs an item the ceilings let through, at no more than it asked."""
         ...
 
+    @abstractmethod
+    async def refuse(self, item: ClaimedWorkView, reasons: list[str]) -> None:
+        """Answers an item the ceilings refused, before anything ran, so the
+        run that sent it reads why."""
+        ...
+
+    @abstractmethod
+    def stop(self, item_id: UUID, kind: str) -> bool:
+        """Ends an item that runs here, at once, as the control stream says;
+        whether one did."""
+        ...
+
 
 class ExecutorPendingImpl(ExecutorInterface):
     """No executor yet: the item is logged and left to its lease."""
 
     async def run(self, item: ClaimedWorkView, ask: Ask) -> None:
         log.warning("item %s (%s) has no executor on this host yet", item.id, item.kind)
+
+    async def refuse(self, item: ClaimedWorkView, reasons: list[str]) -> None:
+        return None
+
+    def stop(self, item_id: UUID, kind: str) -> bool:
+        return False
 
 
 @dataclass(frozen=True)
@@ -76,6 +103,9 @@ class HostAgent:
         self._now = now
         self._probed: Probed | None = None
         self._credential: Credential | None = None
+        self.woken = asyncio.Event()
+        """Set when the control stream says work reached this host's lanes."""
+        self._seen: UUID | None = None  # the last control message the host saw
 
     @property
     def probed(self) -> Probed:
@@ -138,9 +168,30 @@ class HostAgent:
         refused = refusals(self._ceilings, self._modes(), ask)
         if refused:
             log.warning("item %s refused: %s", answer.item.id, "; ".join(refused))
+            await self._executor.refuse(answer.item, refused)
         else:
             await self._executor.run(answer.item, ask)
         return Handled(item=answer.item, refused=refused)
+
+    def client(self) -> ApiClient:
+        """A client that calls with this host's credential as it is now."""
+        return self._client_for(self.credential.token)
+
+    async def listen(self) -> None:
+        """The control stream, held open from here until the platform ends
+        it with the credential it was opened with: a wake sets `woken`, and
+        a stop ends the item it names at once. The last message seen is
+        where the next stream starts."""
+        async with self.client() as client:
+            async for message in client.control_stream(self._seen):
+                if message.id is not None:
+                    self._seen = message.id
+                if message.kind is ControlKind.wake:
+                    self.woken.set()
+                elif message.item_id is not None and self._executor.stop(
+                    message.item_id, message.kind.value
+                ):
+                    log.info("item %s stopped: %s", message.item_id, message.kind.value)
 
     async def tick(self) -> Handled | None:
         """One turn of the host's loop: rotate when due, beat, claim."""

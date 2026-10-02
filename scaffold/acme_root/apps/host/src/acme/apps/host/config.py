@@ -17,6 +17,8 @@ from pathlib import Path
 DEFAULT_API_URL = "http://127.0.0.1:8000"
 CREDENTIAL_FILE = "credential.json"
 CEILINGS_FILE = "ceilings.toml"
+SECRETS_FILE = "secrets"
+RECORDS_FOLDER = "records"
 
 
 class BadSetting(ValueError):
@@ -41,6 +43,17 @@ class Settings:
     @property
     def ceilings_path(self) -> Path:
         return self.home / CEILINGS_FILE
+
+    @property
+    def secrets_path(self) -> Path:
+        """The host's own secret store, owner-only, keyed by tenant first:
+        `org/<org_id>/<name>=value` lines."""
+        return self.home / SECRETS_FILE
+
+    @property
+    def records_path(self) -> Path:
+        """Where its transport records how each command ended."""
+        return self.home / RECORDS_FOLDER
 
 
 def settings_from_env() -> Settings:
