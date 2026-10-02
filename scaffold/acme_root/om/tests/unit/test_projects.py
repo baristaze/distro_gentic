@@ -55,10 +55,10 @@ def managers(tmp_path: Path) -> Managers:
 
 
 def a_start(kind: str = "delivery") -> Start:
-    return Start(id=new_id(), kind=kind, title="the arm drops the part before the bin")
+    return Start(id=new_id(), kind=kind, title="the weekly report is missing a total")
 
 
-async def a_project(managers: Managers, ctx: TenantContext, path: str = "acme/arm") -> Project:
+async def a_project(managers: Managers, ctx: TenantContext, path: str = "octo/reports") -> Project:
     return await managers.projects.create_project(ctx, make_project(path))
 
 
@@ -82,15 +82,15 @@ async def test_a_project_is_its_tenants_and_written_by_who_configures_it(
 
 
 def test_a_repository_is_one_value_in_any_case_and_a_bad_one_is_refused() -> None:
-    assert Repository(host="GitHub.com", path="Acme/Arm") == Repository(
-        host="github.com", path="acme/arm"
+    assert Repository(host="GitHub.com", path="Octo/Reports") == Repository(
+        host="github.com", path="octo/reports"
     )
     for host, path in (
-        ("github.com", "arm"),
-        ("github.com", "acme/../arm"),
-        ("github.com", "/acme/arm"),
-        ("localhost", "acme/arm"),
-        ("github.com", "acme/arm/"),
+        ("github.com", "reports"),
+        ("github.com", "octo/../reports"),
+        ("github.com", "/octo/reports"),
+        ("localhost", "octo/reports"),
+        ("github.com", "octo/reports/"),
     ):
         with pytest.raises(ValidationError):
             Repository(host=host, path=path)
@@ -124,7 +124,7 @@ async def test_another_tenants_project_starts_nothing(managers: Managers) -> Non
 async def test_a_sessions_project_never_moves(managers: Managers) -> None:
     org = make_org()
     admin, member = context(Role.ADMIN, org), context(Role.MEMBER, org)
-    first, second = await a_project(managers, admin), await a_project(managers, admin, "acme/bin")
+    first, second = await a_project(managers, admin), await a_project(managers, admin, "octo/ledger")
     start = a_start()
     session = await managers.projects.start_session(member, first.id, start)
     assert await managers.projects.start_session(member, first.id, start) == session
@@ -182,7 +182,7 @@ async def test_a_projects_retention_narrowing_reaches_its_sessions(managers: Man
     policy alone."""
     org = make_org()
     admin, member = context(Role.ADMIN, org), context(Role.MEMBER, org)
-    narrow, other = await a_project(managers, admin), await a_project(managers, admin, "acme/bin")
+    narrow, other = await a_project(managers, admin), await a_project(managers, admin, "octo/ledger")
     tenant, week = RetentionPolicy(content_lifetime=timedelta(days=30)), timedelta(days=7)
     current = await managers.retention.get_policy(admin)
     narrowing = ProjectRetention(
@@ -210,16 +210,16 @@ async def test_only_the_bound_repository_is_work_product(managers: Managers) -> 
     any for a session of no project."""
     org = make_org()
     admin, member = context(Role.ADMIN, org), context(Role.MEMBER, org)
-    arm, bin_ = await a_project(managers, admin), await a_project(managers, admin, "acme/bin")
-    on_arm = await managers.projects.start_session(member, arm.id, a_start())
-    on_bin = await managers.projects.start_session(member, bin_.id, a_start())
+    reports, ledger = await a_project(managers, admin), await a_project(managers, admin, "octo/ledger")
+    on_reports = await managers.projects.start_session(member, reports.id, a_start())
+    on_ledger = await managers.projects.start_session(member, ledger.id, a_start())
     loose = await managers.agents.start_session(member, a_start())
     work = managers.projects.work_repository
-    assert await work(member, on_arm.id) == Repository(host="github.com", path="ACME/arm")
-    assert await work(member, on_arm.id) != bin_.repository
-    assert await work(member, on_bin.id) == bin_.repository
+    assert await work(member, on_reports.id) == Repository(host="github.com", path="OCTO/reports")
+    assert await work(member, on_reports.id) != ledger.repository
+    assert await work(member, on_ledger.id) == ledger.repository
     assert await work(member, loose.id) is None
-    assert await work(context(Role.OWNER), on_arm.id) is None, "another tenant's is none"
+    assert await work(context(Role.OWNER), on_reports.id) is None, "another tenant's is none"
 
 
 async def test_a_sessions_row_goes_with_its_purge_and_a_living_tenant_keeps_all(

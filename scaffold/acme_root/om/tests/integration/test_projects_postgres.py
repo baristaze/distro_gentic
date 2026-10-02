@@ -77,12 +77,12 @@ async def an_org(managers: Managers) -> TenantContext:
     return owner
 
 
-async def a_project(managers: Managers, ctx: TenantContext, path: str = "acme/arm") -> Project:
+async def a_project(managers: Managers, ctx: TenantContext, path: str = "octo/reports") -> Project:
     return await managers.projects.create_project(ctx, make_project(path))
 
 
 def a_start() -> Start:
-    return Start(id=new_id(), kind="delivery", title="the arm drops the part before the bin")
+    return Start(id=new_id(), kind="delivery", title="the weekly report is missing a total")
 
 
 async def rows(
@@ -131,7 +131,7 @@ async def test_a_sessions_project_never_changes(
     managers: Managers, pg_sessions: LoginSessions
 ) -> None:
     ctx = await an_org(managers)
-    first, second = await a_project(managers, ctx), await a_project(managers, ctx, "acme/bin")
+    first, second = await a_project(managers, ctx), await a_project(managers, ctx, "octo/ledger")
     start = a_start()
     session = await managers.projects.start_session(ctx, first.id, start)
     with pytest.raises(ProjectFixed):
@@ -153,22 +153,22 @@ async def test_a_sessions_project_never_changes(
 
 async def test_only_the_bound_repository_is_work_product(managers: Managers) -> None:
     ctx, other = await an_org(managers), await an_org(managers)
-    arm, bin_ = await a_project(managers, ctx), await a_project(managers, ctx, "acme/bin")
-    on_arm = await managers.projects.start_session(ctx, arm.id, a_start())
-    on_bin = await managers.projects.start_session(ctx, bin_.id, a_start())
+    reports, ledger = await a_project(managers, ctx), await a_project(managers, ctx, "octo/ledger")
+    on_reports = await managers.projects.start_session(ctx, reports.id, a_start())
+    on_ledger = await managers.projects.start_session(ctx, ledger.id, a_start())
     loose = await managers.agents.start_session(ctx, a_start())
     work = managers.projects.work_repository
-    assert await work(ctx, on_arm.id) == arm.repository != bin_.repository
-    assert await work(ctx, on_bin.id) == bin_.repository
+    assert await work(ctx, on_reports.id) == reports.repository != ledger.repository
+    assert await work(ctx, on_ledger.id) == ledger.repository
     assert await work(ctx, loose.id) is None
-    assert await work(other, on_arm.id) is None
+    assert await work(other, on_reports.id) is None
 
 
 async def test_a_projects_retention_narrowing_reaches_its_sessions(
     managers: Managers, pg_sessions: LoginSessions
 ) -> None:
     ctx = await an_org(managers)
-    narrow, other = await a_project(managers, ctx), await a_project(managers, ctx, "acme/bin")
+    narrow, other = await a_project(managers, ctx), await a_project(managers, ctx, "octo/ledger")
     week = timedelta(days=7)
     current = await managers.retention.get_policy(ctx)
     narrowing = ProjectRetention(

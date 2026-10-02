@@ -28,7 +28,7 @@ CROSS_TENANT_CASES: frozenset[str] = frozenset(
 in this module that presents another tenant's."""
 
 
-def make_project(path: str = "acme/arm") -> Project:
+def make_project(path: str = "octo/reports") -> Project:
     now, by = utcnow(), new_id()
     return Project(
         id=new_id(),
@@ -36,7 +36,7 @@ def make_project(path: str = "acme/arm") -> Project:
         updated_at=now,
         created_by=by,
         updated_by=by,
-        name="the arm's firmware",
+        name="the weekly reports",
         repository=Repository(host="github.com", path=path),
     )
 
@@ -63,7 +63,7 @@ class ProjectStorageContract:
         self, storage: ProjectStorageInterface
     ) -> None:
         org, session = new_id(), new_id()
-        first, second = make_project(), make_project("acme/gripper")
+        first, second = make_project(), make_project("octo/ledger")
         for project in (first, second):
             await storage.create_project(org, project, ())
         bound = make_binding(session, first.id)

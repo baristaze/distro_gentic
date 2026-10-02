@@ -19,7 +19,7 @@ HOST = r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])
 
 REPOSITORY_PATH = r"^[a-z0-9_][a-z0-9_.-]*(/[a-z0-9_][a-z0-9_.-]*)+$"
 """A repository's path on its host: an owner, any groups, and a name, such
-as `acme/arm`. No segment starts with a dot, so none is `.` or `..`."""
+as `octo/reports`. No segment starts with a dot, so none is `.` or `..`."""
 
 
 class Repository(Platform):
