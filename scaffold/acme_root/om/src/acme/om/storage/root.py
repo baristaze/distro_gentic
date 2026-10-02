@@ -19,6 +19,7 @@ from acme.om.tenancy.storage import TenancyStorageInterface
 from acme.om.tools.storage import ToolStorageInterface
 from acme.om.windows.storage import WindowStorageInterface
 from acme.om.work.storage import WorkStorageInterface
+from acme.om.workspaces.storage import WorkspaceStorageInterface
 
 
 class StorageInterface(ABC):
@@ -75,6 +76,9 @@ class StorageInterface(ABC):
 
     @abstractmethod
     def get_placement_storage(self) -> PlacementStorageInterface: ...
+
+    @abstractmethod
+    def get_workspace_storage(self) -> WorkspaceStorageInterface: ...
 
     @abstractmethod
     async def healthcheck(self) -> bool: ...
