@@ -12,8 +12,8 @@ from acme.om.attribution.rules import principal_of
 from acme.om.base import Platform, new_id, utcnow
 from acme.om.context import Permission, RequestContext, TenantContext
 from acme.om.evidence import EvidenceManagerInterface
-from acme.om.evidence.types.provenance import Dependency
-from acme.om.evidence.types.record import Environment, ExecutionRecord, RunPurpose
+from acme.om.evidence.types.provenance import Dependency, Provenance
+from acme.om.evidence.types.record import Environment, ExecutionRecord, RunOutcome, RunPurpose
 from acme.om.exceptions import (
     CredentialExpired,
     InvalidCredential,
@@ -476,6 +476,13 @@ class StationsManagerImpl(StationsManagerInterface):
             if job.lab_id != daemon.lab_id:
                 return ClaimedJob(item=item)
             now = self._clock()
+            if job.state is JobState.RUNNING:
+                # Its item is claimed again: the answer of the claim before
+                # never reached the daemon, or the daemon lost the job. It is
+                # settled by a run that reached no verdict, and never runs
+                # twice.
+                await self._interrupted(ctx, job, item, now)
+                continue
             running = StationJob.model_validate(
                 {
                     **job.model_dump(),
@@ -493,7 +500,12 @@ class StationsManagerImpl(StationsManagerInterface):
                 await self._work.fail_for_good(ctx, item, f"station job {job.id} runs once")
                 continue
             await self._relay.relay_all(ctx.org_id, rows)
-            seconds = await self._renewed(ctx.org_id, running, now, self._options.job_lease)
+            # The job's hold starts at its claim, not when it was sent: a job
+            # that waited on its lab's lane behind another station's keeps
+            # its lease, unless a grant took its station meanwhile.
+            seconds = await self._renewed(
+                ctx.org_id, running, now, self._options.job_lease, lapsed=True
+            )
             return ClaimedJob(item=item, job=running, lease_seconds=seconds or 0.0)
 
     async def renew(self, rctx: RequestContext, daemon: DaemonIdentity, job_id: UUID) -> LeaseTime:
@@ -520,7 +532,25 @@ class StationsManagerImpl(StationsManagerInterface):
         if job.state is not JobState.RUNNING:
             raise JobSettled(f"station job {job_id} is {job.state.value}")
         ctx = await self._tenancy.service_context(rctx, daemon.org_id, job.created_by)
-        now = self._clock()
+        finished = await self._settle(ctx, job, report, self._clock(), self._claimed(job))
+        if finished is None:
+            stored = await self._storage.read_job(daemon.org_id, job_id)
+            if stored is not None and stored.run_id == report.run_id:
+                return stored
+            raise JobSettled(f"station job {job_id} was settled meanwhile")
+        if report.refused:
+            OUTCOMES.labels(subsystem="stations", outcome="command_refused").inc(
+                len(report.refused)
+            )
+        return finished
+
+    async def _settle(
+        self, ctx: TenantContext, job: StationJob, report: JobReport, now: datetime, item: WorkItem
+    ) -> StationJob | None:
+        """A running job's run recorded and the job finished, its item
+        complete, and its lease handed on: a validation's goes back to the
+        line, and a session's lasts its station's hold time. None, with the
+        job as it was, when it was settled meanwhile."""
         # The run is the evidence: its record is written once, with every
         # command the station's guard refused in it.
         await self._evidence.record_run(ctx, self._record(job, report, now))
@@ -534,21 +564,14 @@ class StationsManagerImpl(StationsManagerInterface):
             }
         )
         rows = (outbox_row(ctx, JOB_UPDATED, job.id, {"state": JobState.FINISHED.value}),)
-        if not await self._storage.write_job(daemon.org_id, finished, JobState.RUNNING, rows):
-            stored = await self._storage.read_job(daemon.org_id, job_id)
-            if stored is not None and stored.run_id == report.run_id:
-                return stored
-            raise JobSettled(f"station job {job_id} was settled meanwhile")
-        await self._relay.relay_all(daemon.org_id, rows)
-        if report.refused:
-            OUTCOMES.labels(subsystem="stations", outcome="command_refused").inc(
-                len(report.refused)
-            )
+        if not await self._storage.write_job(ctx.org_id, finished, JobState.RUNNING, rows):
+            return None
+        await self._relay.relay_all(ctx.org_id, rows)
         try:
-            await self._work.complete(ctx, self._claimed(job))
+            await self._work.complete(ctx, item)
         except LeaseLost:
-            log.warning("station job %s: its work item was taken back before its report", job.id)
-        lease = await self._storage.read_lease(daemon.org_id, job.lease_id)
+            log.warning("station job %s: its work item was taken back before it settled", job.id)
+        lease = await self._storage.read_lease(ctx.org_id, job.lease_id)
         if lease is not None and lease.entry_id is None:
             # A validation's run finishes its session, with no agent and no
             # model, and its station goes back to the line at once.
@@ -558,10 +581,30 @@ class StationsManagerImpl(StationsManagerInterface):
             return finished
         # Its session is parked again until its next job: the lease lasts
         # the station's hold time from here.
-        station = await self._storage.read_station(daemon.org_id, job.station_id)
+        station = await self._storage.read_station(ctx.org_id, job.station_id)
         if station is not None:
-            await self._renewed(daemon.org_id, job, now, timedelta(seconds=station.hold_seconds))
+            await self._renewed(ctx.org_id, job, now, timedelta(seconds=station.hold_seconds))
         return finished
+
+    async def _interrupted(
+        self, ctx: TenantContext, job: StationJob, item: WorkItem, now: datetime
+    ) -> None:
+        """A running job whose item came back: its run is recorded as one
+        that reached no verdict, which finishes a validation as
+        inconclusive, and the item claimed now completes with it."""
+        OUTCOMES.labels(subsystem="stations", outcome="job_interrupted").inc()
+        report = JobReport(
+            run_id=new_id(),
+            outcome=RunOutcome.ERRORED,
+            started_at=min(job.updated_at, now),
+            finished_at=now,
+            commands_run=0,
+            adapter="none",
+            provenance=Provenance.UNAVAILABLE,
+            daemon_version="unreported",
+        )
+        if await self._settle(ctx, job, report, now, item) is None:
+            await self._work.fail_for_good(ctx, item, f"station job {job.id} runs once")
 
     # The grant.
 
@@ -668,15 +711,26 @@ class StationsManagerImpl(StationsManagerInterface):
         return ended
 
     async def _renewed(
-        self, org_id: UUID, job: StationJob, now: datetime, length: timedelta
+        self,
+        org_id: UUID,
+        job: StationJob,
+        now: datetime,
+        length: timedelta,
+        *,
+        lapsed: bool = False,
     ) -> float | None:
         """The seconds a job's lease has left once renewed for `length` from
-        now, never shortened; None when it is no longer live."""
+        now, never shortened; None when it is no longer live. With `lapsed`,
+        a lease past its end that no grant took over renews too."""
         lease = await self._storage.read_lease(org_id, job.lease_id)
-        if lease is None or lease.ended_at is not None or lease.expires_at <= now:
+        if lease is None or lease.ended_at is not None:
+            return None
+        if lease.expires_at <= now and not lapsed:
             return None
         until = renewed_until(lease.expires_at, now, length)
-        renewed = await self._storage.renew_lease(org_id, lease.id, job.token, now, until)
+        renewed = await self._storage.renew_lease(
+            org_id, lease.id, job.token, now, until, lapsed=lapsed
+        )
         return None if renewed is None else seconds_left(renewed.expires_at, now)
 
     # A validation session's station.

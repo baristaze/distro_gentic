@@ -359,15 +359,24 @@ class StationsStoragePostgresImpl(PgStorageBase, StationsStorageInterface):
             return None if row is None else to_model(row, StationLease)
 
     async def renew_lease(
-        self, org_id: UUID, lease_id: UUID, token: int, now: datetime, until: datetime
+        self,
+        org_id: UUID,
+        lease_id: UUID,
+        token: int,
+        now: datetime,
+        until: datetime,
+        *,
+        lapsed: bool = False,
     ) -> StationLease | None:
+        # A lapsed lease renews only while the station's row still names it
+        # at its token: a grant since would have moved both.
         hold = (
             update(Stations)
             .where(
                 Stations.org_id == org_id,
                 Stations.lease_id == lease_id,
                 Stations.token == token,
-                Stations.held_until > now,
+                *(() if lapsed else (Stations.held_until > now,)),
             )
             .values(held_until=until, updated_at=now)
             .returning(Stations.id)
@@ -378,7 +387,7 @@ class StationsStoragePostgresImpl(PgStorageBase, StationsStorageInterface):
                 StationLeases.org_id == org_id,
                 StationLeases.id == lease_id,
                 StationLeases.ended_at.is_(None),
-                StationLeases.expires_at > now,
+                *(() if lapsed else (StationLeases.expires_at > now,)),
             )
             .values(expires_at=until, updated_at=now)
             .returning(StationLeases)

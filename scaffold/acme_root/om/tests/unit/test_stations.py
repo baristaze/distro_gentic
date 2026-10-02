@@ -621,25 +621,58 @@ async def test_a_held_lease_lasts_the_hold_time_while_its_session_waits(
     assert expired is not None and expired.ended is LeaseEnd.EXPIRED
 
 
-async def test_a_finished_job_is_never_run_twice(
+async def test_a_running_job_claimed_again_is_settled_with_no_verdict_and_never_run_twice(
     managers: Managers, stations: StationsManagerImpl, storage: StorageMemoryImpl
 ) -> None:
     owner = await an_owner(managers)
     lab = await a_lab(stations, owner)
     _, daemon = await a_daemon(stations, owner, lab.lab)
-    _, _, job_id = await a_job(managers, stations, owner, lab)
+    session, lease, job_id = await a_job(managers, stations, owner, lab)
     first = await stations.claim(request(), daemon, 1)
     assert first is not None
-    # The queue hands the same item again, as its sweep does after a lost
-    # claim: it is failed for good, and the job is not handed twice.
+    # The claim's answer never reached the daemon: the queue hands the same
+    # item again, as its sweep does after a lost claim.
     work = managers.work
     await work.release(
         await managers.tenancy.service_context(request(), owner.org_id, owner.user_id),
         first.item,
     )
     assert await stations.claim(request(), daemon, 1) is None
+    settled = await stations._storage.read_job(owner.org_id, job_id)  # pyright: ignore[reportPrivateUsage]
+    assert settled is not None and settled.state is JobState.FINISHED
+    (run,) = (await managers.evidence.get_runs(owner, session, None, 10)).items
+    assert (run.id, run.outcome) == (settled.run_id, RunOutcome.ERRORED)
     (item,) = [item for item in queued(storage) if item.target_id == job_id]
-    assert item.status is WorkStatus.FAILED
+    assert item.status is WorkStatus.DONE
+    # The session keeps its station for its next job.
+    held = await held_by(stations, owner, lab.first)
+    assert held is not None and held.id == lease.id
+
+
+async def test_a_job_queued_behind_another_stations_job_is_claimed_with_its_hold(
+    managers: Managers, stations: StationsManagerImpl, clock: Clock
+) -> None:
+    owner = await an_owner(managers)
+    lab = await a_lab(stations, owner)
+    _, daemon = await a_daemon(stations, owner, lab.lab)
+    leases = []
+    for station in (lab.first, lab.second):
+        await join(stations, owner, await a_waiting_session(managers, owner), lab.pool, station)
+        lease = await held_by(stations, owner, station)
+        assert lease is not None
+        await stations.submit_job(
+            owner, new_id(), lease.id, (StationCommand(operation="apply"),)
+        )
+        leases.append(lease)
+    first = await stations.claim(request(), daemon, 1)
+    assert first is not None and first.lease_seconds > 0
+    # The daemon runs the first station's job past the second's hold and
+    # the margin, while the second's job waits on the lab's lane.
+    clock.advance(timedelta(seconds=lab.second.hold_seconds) + StationsOptions().skew_margin)
+    second = await stations.claim(request(), daemon, 1)
+    assert second is not None and second.job is not None
+    assert second.job.lease_id == leases[1].id
+    assert second.lease_seconds == StationsOptions().job_lease.total_seconds()
 
 
 # A validation session's run.
@@ -697,6 +730,31 @@ async def test_the_daemons_report_finishes_a_validation_session_with_no_model_ca
     assert not [item for item in queued(storage) if item.kind is WorkKind.LOOP]
     assert await held_by(stations, owner, lab.first) is None
     assert await held_by(stations, owner, lab.second) is None
+
+
+async def test_a_validation_whose_claim_was_lost_finishes_inconclusive(
+    managers: Managers, stations: StationsManagerImpl, storage: StorageMemoryImpl
+) -> None:
+    owner = await an_owner(managers)
+    lab = await a_lab(stations, owner)
+    _, daemon = await a_daemon(stations, owner, lab.lab)
+    validation = await managers.platform_agents.start_validation(
+        owner,
+        ValidationStart(id=new_id(), lab_id=lab.lab.id, check_name="measure", check_version="v2"),
+    )
+    first = await stations.claim(request(), daemon, 1)
+    assert first is not None and first.job is not None
+    await managers.work.release(
+        await managers.tenancy.service_context(request(), owner.org_id, owner.user_id),
+        first.item,
+    )
+    assert await stations.claim(request(), daemon, 1) is None
+    finished = await managers.platform_agents.get_validation(owner, validation.id)
+    assert finished.status is ValidationStatus.FINISHED
+    (run,) = (await managers.evidence.get_runs(owner, validation.id, None, 10)).items
+    assert (run.id, run.outcome) == (finished.run_id, RunOutcome.ERRORED)
+    # Its station goes back to the line.
+    assert await held_by(stations, owner, lab.first) is None
 
 
 async def test_a_validation_never_takes_a_station_a_session_waits_for(

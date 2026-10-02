@@ -165,11 +165,21 @@ class StationsStorageInterface(ABC):
 
     @abstractmethod
     async def renew_lease(
-        self, org_id: UUID, lease_id: UUID, token: int, now: datetime, until: datetime
+        self,
+        org_id: UUID,
+        lease_id: UUID,
+        token: int,
+        now: datetime,
+        until: datetime,
+        *,
+        lapsed: bool = False,
     ) -> StationLease | None:
         """The lease, and the station's hold with it, last until `until`: a
         write conditional on the lease being live at `now` and the station
-        held by it at `token`. None, with nothing written, otherwise."""
+        held by it at `token`. None, with nothing written, otherwise. With
+        `lapsed`, a lease past its end renews too, so long as it was never
+        ended and no grant took its station since: the station's row still
+        names it at `token`."""
         ...
 
     @abstractmethod

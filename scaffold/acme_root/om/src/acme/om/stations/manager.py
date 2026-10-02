@@ -164,12 +164,15 @@ class StationsManagerInterface(ABC):
         """Platform-internal: the next item of the daemon's lab, claimed by
         placement from the lab's lane alone, read off its identity. Refused,
         before any claim, when the version of `station` work it reads is
-        below the floor. A job's lease is renewed for its run, and the answer
-        says how long it has left. A validation session's item becomes a job
-        under a lease of its own, on a free station of its lab that no
-        session waits for; with none free, it waits on its lane. A job
-        claimed again after it ran is failed for good, never run twice. None
-        when nothing is ready."""
+        below the floor. A job's lease is renewed for its run from the claim,
+        even past its end while it waited on the lane, unless a grant took
+        its station since; the answer says how long it has left. A
+        validation session's item becomes a job under a lease of its own, on
+        a free station of its lab that no session waits for; with none free,
+        it waits on its lane. A running job whose item is claimed again is
+        settled by a run that reached no verdict, which finishes a
+        validation as inconclusive, and is never run twice. None when
+        nothing is ready."""
         ...
 
     @abstractmethod

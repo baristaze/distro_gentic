@@ -526,6 +526,33 @@ class StationsStorageContract:
         # Past its end, a lease is not renewed: it is gone, whoever waits.
         assert await storage.renew_lease(org, lease.id, lease.token, until, until + HOLD) is None
 
+    async def test_a_lapsed_lease_renews_only_while_its_station_names_it(
+        self, storage: StationsStorageInterface
+    ) -> None:
+        org = new_id()
+        station, lease = await self.held(storage, org)
+        lapsed_at = lease.expires_at + MARGIN + timedelta(seconds=1)
+        until = lapsed_at + timedelta(minutes=1)
+        assert await storage.renew_lease(org, lease.id, lease.token, lapsed_at, until) is None
+        renewed = await storage.renew_lease(
+            org, lease.id, lease.token, lapsed_at, until, lapsed=True
+        )
+        assert renewed is not None and renewed.expires_at == until
+        held = await storage.read_station(org, station.id)
+        assert held is not None and held.held_until == until
+        # Lapsed again, its station is granted to another: it renews no more.
+        later = until + MARGIN + timedelta(seconds=1)
+        pool = await storage.read_pool(org, held.pool_id)
+        assert pool is not None
+        entry = await self.waiting(storage, org, pool, rank=2.0)
+        assert await storage.grant(org, make_lease(held, entry, later), MARGIN, ())
+        assert (
+            await storage.renew_lease(
+                org, lease.id, lease.token, later, later + HOLD, lapsed=True
+            )
+            is None
+        )
+
     async def test_end_lease_frees_the_station_once(
         self, storage: StationsStorageInterface
     ) -> None:

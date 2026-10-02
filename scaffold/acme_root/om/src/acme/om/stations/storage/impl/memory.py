@@ -251,11 +251,20 @@ class StationsStorageMemoryImpl(MemoryStorageBase, StationsStorageInterface):
         return self._get(self._leases, org_id, lease_id)
 
     async def renew_lease(
-        self, org_id: UUID, lease_id: UUID, token: int, now: datetime, until: datetime
+        self,
+        org_id: UUID,
+        lease_id: UUID,
+        token: int,
+        now: datetime,
+        until: datetime,
+        *,
+        lapsed: bool = False,
     ) -> StationLease | None:
         async with self._lock:
             lease = self._get(self._leases, org_id, lease_id)
-            if lease is None or lease.ended_at is not None or lease.expires_at <= now:
+            if lease is None or lease.ended_at is not None:
+                return None
+            if lease.expires_at <= now and not lapsed:
                 return None
             station = self._get(self._stations, org_id, lease.station_id)
             if station is None or station.lease_id != lease_id or station.token != token:
