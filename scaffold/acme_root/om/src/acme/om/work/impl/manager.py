@@ -162,11 +162,12 @@ class WorkManagerImpl(WorkManagerInterface):
 
     async def _land(self, org_id: UUID, queued: WorkItem) -> WorkItem:
         """The insert both enqueues share: the payload against the shape its kind
-        fixes, the lane `lanes` answers, the create, and the wake. Ids are minted above storage, so the
-        only way to present one twice is a retry, and a retry must not create
-        twice: the insert reports an id, or an idempotency key, already
-        written and nothing changes, a claim on the row included, so the row
-        as stored is the answer and it was announced when it landed."""
+        fixes, the lane `lanes` answers, the create, and the wake. Ids are
+        minted above storage, so the only way to present one twice is a retry,
+        and a retry must not create twice: the insert reports an id, or an
+        idempotency key, already written and nothing changes, a claim on the
+        row included, so the row as stored is the answer and it was announced
+        when it landed."""
         try:
             WORK_PAYLOADS[queued.kind].model_validate(queued.payload)
         except ValidationError as error:
