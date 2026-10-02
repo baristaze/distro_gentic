@@ -27,7 +27,7 @@ class StationLeases(IdentifiableMixin, TrackableMixin, Base):
     station_id: Mapped[UUID]
     lab_id: Mapped[UUID]
     pool_id: Mapped[UUID]
-    entry_id: Mapped[UUID]
+    entry_id: Mapped[UUID | None]
     session_id: Mapped[UUID]
     token: Mapped[int]
     expires_at: Mapped[datetime]

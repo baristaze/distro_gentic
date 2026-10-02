@@ -72,6 +72,17 @@ class StationsStoragePostgresImpl(PgStorageBase, StationsStorageInterface):
             row = (await session.execute(stmt)).scalar_one_or_none()
             return None if row is None else to_model(row, Station)
 
+    async def read_lab_stations(self, org_id: UUID, lab_id: UUID, limit: int) -> list[Station]:
+        stmt = (
+            select(Stations)
+            .where(Stations.org_id == org_id, Stations.lab_id == lab_id)
+            .order_by(Stations.id)
+            .limit(limit)
+        )
+        async with self._session_for(stmt, org_id=org_id) as session:
+            rows = (await session.execute(stmt)).scalars().all()
+            return [to_model(row, Station) for row in rows]
+
     async def read_stations(self, org_id: UUID, pool_id: UUID, limit: int) -> list[Station]:
         stmt = (
             select(Stations)
@@ -287,7 +298,10 @@ class StationsStoragePostgresImpl(PgStorageBase, StationsStorageInterface):
             if (await session.execute(hold)).scalar_one_or_none() is None:
                 await session.rollback()
                 return False
-            if (await session.execute(settle)).scalar_one_or_none() is None:
+            if (
+                lease.entry_id is not None
+                and (await session.execute(settle)).scalar_one_or_none() is None
+            ):
                 await session.rollback()
                 return False
             await session.execute(expire)

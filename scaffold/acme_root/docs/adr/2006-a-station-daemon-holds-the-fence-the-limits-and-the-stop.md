@@ -56,6 +56,13 @@ of `station` work it reads: its lab, its tenant, and its lane are the
 credential's. It renews only the lease of a job it claimed, and grants
 itself nothing.
 
+**A validation session takes a lease too.** It stands in no line, since
+no loop waits for it. At its claim, the platform grants it a free station
+of its lab that no session waits for in line, by the same conditional
+write, and its check is the job's one command. Otherwise it waits on its
+lab's lane. The daemon fences and guards it as any job, and its report
+finishes the session and gives the station back to the line.
+
 **A refused command is evidence.** The daemon writes the job's report,
 every refused command in it, to its disk before it sends it, and keeps
 it there until the platform recorded it. The platform records the run as

@@ -160,8 +160,11 @@ class StationsManagerInterface(ABC):
         placement from the lab's lane alone, read off its identity. Refused,
         before any claim, when the version of `station` work it reads is
         below the floor. A job's lease is renewed for its run, and the answer
-        says how long it has left. A job claimed again after it ran is failed
-        for good, never run twice. None when nothing is ready."""
+        says how long it has left. A validation session's item becomes a job
+        under a lease of its own, on a free station of its lab that no
+        session waits for; with none free, it waits on its lane. A job
+        claimed again after it ran is failed for good, never run twice. None
+        when nothing is ready."""
         ...
 
     @abstractmethod
@@ -178,7 +181,8 @@ class StationsManagerInterface(ABC):
     ) -> StationJob:
         """Platform-internal: the run of a job of the daemon's lab is recorded
         as an execution record, every refused command in it, the job is
-        finished, its claim settled, and its lease goes back to the hold
-        time its parked session has. A report again with the same run
-        answers the job as stored; with another, JobSettled."""
+        finished, and its claim settled. Its lease goes back to the hold
+        time its parked session has; a validation session's run finishes
+        that session instead, and its lease ends. A report again with the
+        same run answers the job as stored; with another, JobSettled."""
         ...

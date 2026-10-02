@@ -53,6 +53,11 @@ class StationsStorageInterface(ABC):
         """The pool's stations in id order, at most `limit`."""
         ...
 
+    @abstractmethod
+    async def read_lab_stations(self, org_id: UUID, lab_id: UUID, limit: int) -> list[Station]:
+        """The lab's stations in id order, at most `limit`."""
+        ...
+
     # A lab's daemon.
 
     @abstractmethod
@@ -137,11 +142,11 @@ class StationsStorageInterface(ABC):
         lease and its token by a conditional write that fails while a live
         lease holds it: one ended, or past its end by more than `margin` at
         `lease.created_at`, does not. The token is one above the station's,
-        and `lease.token` must say so. The entry the lease settles goes from
-        waiting to granted by a write conditional on its waiting, the lease
-        the station held before ends as expired, and `lease` lands. False,
-        with nothing landed, when the station is held, its token moved, or
-        the entry no longer waits."""
+        and `lease.token` must say so. The entry the lease settles, when it
+        names one, goes from waiting to granted by a write conditional on its
+        waiting, the lease the station held before ends as expired, and
+        `lease` lands. False, with nothing landed, when the station is held,
+        its token moved, or the entry no longer waits."""
         ...
 
     @abstractmethod

@@ -56,6 +56,10 @@ class StationsStorageMemoryImpl(MemoryStorageBase, StationsStorageInterface):
         found = [s for s in self._rows(self._stations, org_id) if s.pool_id == pool_id]
         return found[:limit]
 
+    async def read_lab_stations(self, org_id: UUID, lab_id: UUID, limit: int) -> list[Station]:
+        found = [s for s in self._rows(self._stations, org_id) if s.lab_id == lab_id]
+        return found[:limit]
+
     # A lab's daemon.
 
     async def create_daemon_credential(
@@ -177,12 +181,16 @@ class StationsStorageMemoryImpl(MemoryStorageBase, StationsStorageInterface):
         async with self._lock:
             now = lease.created_at
             station = self._get(self._stations, org_id, lease.station_id)
-            entry = self._get(self._entries, org_id, lease.entry_id)
-            if station is None or entry is None or lease.id in self._leases:
+            entry = (
+                None if lease.entry_id is None else self._get(self._entries, org_id, lease.entry_id)
+            )
+            if station is None or lease.id in self._leases:
                 return False
             if not free(station, now, margin) or station.token != lease.token - 1:
                 return False
-            if entry.state is not EntryState.WAITING:
+            if lease.entry_id is not None and (
+                entry is None or entry.state is not EntryState.WAITING
+            ):
                 return False
             for held in self._rows(self._leases, org_id):
                 if held.station_id == station.id and held.ended_at is None:
@@ -202,19 +210,20 @@ class StationsStorageMemoryImpl(MemoryStorageBase, StationsStorageInterface):
                     }
                 ),
             )
-            self._put(
-                self._entries,
-                org_id,
-                entry.model_copy(
-                    update={
-                        "state": EntryState.GRANTED,
-                        "lease_id": lease.id,
-                        "settled_at": now,
-                        "updated_at": now,
-                        "updated_by": lease.created_by,
-                    }
-                ),
-            )
+            if entry is not None:
+                self._put(
+                    self._entries,
+                    org_id,
+                    entry.model_copy(
+                        update={
+                            "state": EntryState.GRANTED,
+                            "lease_id": lease.id,
+                            "settled_at": now,
+                            "updated_at": now,
+                            "updated_by": lease.created_by,
+                        }
+                    ),
+                )
             self._insert(self._leases, org_id, lease, outbox_rows)
             return True
 

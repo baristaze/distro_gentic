@@ -21,10 +21,11 @@ from acme.om.agents.loop_rules import ended_step
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext, Role, TenantContext
 from acme.om.evidence.types.provenance import Provenance
-from acme.om.evidence.types.record import RunOutcome
+from acme.om.evidence.types.record import CaseTally, RunOutcome
 from acme.om.exceptions import CredentialExpired, InvalidCredential, NotAuthorized, NotFound
 from acme.om.hosts.exceptions import VersionBelowFloor
 from acme.om.placement.rules import lab_lane
+from acme.om.platform_agents.types.validation import ValidationStart, ValidationStatus
 from acme.om.root import Managers, build_managers
 from acme.om.stations.exceptions import JobSettled, LeaseEnded
 from acme.om.stations.impl.manager import StationsManagerImpl, StationsOptions
@@ -40,7 +41,7 @@ from acme.om.steps.types.step import StepType
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import CREDENTIAL_PREFIXES
 from acme.om.work.storage.impl.memory import WorkStorageMemoryImpl
-from acme.om.work.types.work_item import WorkItem, WorkStatus
+from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
 
 APP = AppContext(type=AppType.PORTAL, version="portal@test")
 DAEMON_APP = AppContext(type=AppType.API, version="station-daemon@test")
@@ -84,6 +85,7 @@ def stations(managers: Managers, storage: StorageMemoryImpl, clock: Clock) -> St
         managers.placement,
         managers.agent_sessions,
         managers.evidence,
+        managers.platform_agents,
         managers.work,
         managers.tenancy,
         managers.outbox,
@@ -587,3 +589,78 @@ async def test_a_finished_job_is_never_run_twice(
     assert await stations.claim(request(), daemon, 1) is None
     (item,) = [item for item in queued(storage) if item.target_id == job_id]
     assert item.status is WorkStatus.FAILED
+
+
+# A validation session's run.
+
+
+async def test_the_daemons_report_finishes_a_validation_session_with_no_model_call(
+    managers: Managers, stations: StationsManagerImpl, storage: StorageMemoryImpl, clock: Clock
+) -> None:
+    owner = await an_owner(managers)
+    lab = await a_lab(stations, owner)
+    _, daemon = await a_daemon(stations, owner, lab.lab)
+    validation = await managers.platform_agents.start_validation(
+        owner,
+        ValidationStart(
+            id=new_id(),
+            lab_id=lab.lab.id,
+            check_name="measure",
+            check_version="v2",
+            parameters={"speed": 0.2},
+        ),
+    )
+    claimed = await stations.claim(request(), daemon, 1)
+    assert claimed is not None and claimed.job is not None
+    job = claimed.job
+    assert (job.id, job.session_id, job.procedure, job.candidate) == (
+        validation.id,
+        validation.id,
+        "measure",
+        "v2",
+    )
+    assert job.commands == (StationCommand(operation="measure", parameters={"speed": 0.2}),)
+    # It holds its station by a lease of its own, as any grant does.
+    lease = await stations._storage.read_lease(owner.org_id, job.lease_id)  # pyright: ignore[reportPrivateUsage]
+    assert lease is not None and (lease.entry_id, lease.token) == (None, 1)
+    report = JobReport(
+        run_id=new_id(),
+        outcome=RunOutcome.PASSED,
+        started_at=clock.now,
+        finished_at=clock.now,
+        commands_run=1,
+        cases=CaseTally(passed=1),
+        adapter="twin:station-1",
+        provenance=Provenance.TWIN,
+        daemon_version="station-daemon@test",
+    )
+    await stations.report(request(), daemon, job.id, report)
+    finished = await managers.platform_agents.get_validation(owner, validation.id)
+    assert (finished.status, finished.run_id) == (ValidationStatus.FINISHED, report.run_id)
+    (run,) = (await managers.evidence.get_runs(owner, validation.id, None, 10)).items
+    assert (run.check, run.check_version, run.outcome) == ("measure", "v2", RunOutcome.PASSED)
+    # No model was called: nothing asked for a loop, and its station is free.
+    assert not [item for item in queued(storage) if item.kind is WorkKind.LOOP]
+    assert await held_by(stations, owner, lab.first) is None
+    assert await held_by(stations, owner, lab.second) is None
+
+
+async def test_a_validation_never_takes_a_station_a_session_waits_for(
+    managers: Managers, stations: StationsManagerImpl
+) -> None:
+    owner = await an_owner(managers)
+    lab = await a_lab(stations, owner)
+    _, daemon = await a_daemon(stations, owner, lab.lab)
+    # A session in the pool's line, not parked yet: no station is granted
+    # to it, and none goes to a validation ahead of it.
+    running, _, _ = await a_running_session(managers, owner)
+    await join(stations, owner, running, lab.pool)
+    validation = await managers.platform_agents.start_validation(
+        owner,
+        ValidationStart(id=new_id(), lab_id=lab.lab.id, check_name="measure", check_version="v2"),
+    )
+    assert await stations.claim(request(), daemon, 1) is None
+    assert await held_by(stations, owner, lab.first) is None
+    assert await held_by(stations, owner, lab.second) is None
+    waiting = await managers.platform_agents.get_validation(owner, validation.id)
+    assert waiting.status is ValidationStatus.QUEUED

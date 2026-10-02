@@ -19,17 +19,19 @@ class LeaseEnd(StrEnum):
 
 
 class StationLease(Identifiable, Trackable):
-    """One grant of one station to one session. `token` is the station's
-    count of grants at this one, so a later grant's is always greater. A
-    live lease has no end; it is renewed by the daemon during a job, and
-    while its session is parked it lasts the station's hold time."""
+    """One grant of one station to one session: an agent session that
+    waited in line, named by `entry_id`, or a validation session, which
+    stands in no line and has none. `token` is the station's count of
+    grants at this one, so a later grant's is always greater. A live lease
+    has no end; it is renewed by the daemon during a job, and while an
+    agent session is parked it lasts the station's hold time."""
 
     MANAGER_OWNED_FIELDS: ClassVar[tuple[str, ...]] = ("expires_at", "ended_at", "ended")
 
     station_id: UUID
     lab_id: UUID
     pool_id: UUID
-    entry_id: UUID
+    entry_id: UUID | None
     session_id: UUID
     token: int = Field(ge=1)
     expires_at: datetime

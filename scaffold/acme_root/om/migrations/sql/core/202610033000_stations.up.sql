@@ -48,6 +48,7 @@ CREATE TABLE core.stations (
     CONSTRAINT pk_stations PRIMARY KEY (id)
 );
 CREATE INDEX ix_stations_org_id_pool_id ON core.stations (org_id, pool_id);
+CREATE INDEX ix_stations_org_id_lab_id ON core.stations (org_id, lab_id);
 
 CREATE TABLE core.daemon_credentials (
     id uuid NOT NULL,
@@ -99,7 +100,7 @@ CREATE TABLE core.station_leases (
     station_id uuid NOT NULL,
     lab_id uuid NOT NULL,
     pool_id uuid NOT NULL,
-    entry_id uuid NOT NULL,
+    entry_id uuid,
     session_id uuid NOT NULL,
     token integer NOT NULL,
     expires_at timestamptz NOT NULL,

@@ -25,8 +25,9 @@ the kinds of thing [Acme is made of](../../../../README.md).
   the procedure. Each pool and each station has a line, and a station's
   own line and its pool's are served together, in rank order.
 - **A lease**: a time-limited, renewable right to one station, with a
-  fencing token one above the station's last. It is the session's, never
-  a work item's.
+  fencing token one above the station's last. It is a session's, never a
+  work item's: an agent session's that waited in line, or a validation
+  session's.
 - **A job**: what a session sends a station under its lease: operations
   with their parameters, data and never code. Its station, its token,
   and what it runs are the lease's.
@@ -51,6 +52,12 @@ the kinds of thing [Acme is made of](../../../../README.md).
   run. The report lands the run as an execution record, every refused
   command in it, settles the job's claim, and puts the lease back to its
   hold time.
+- **Run a validation.** A validation session's station work is claimed
+  like any other. It takes a free station of its lab that no session
+  waits for, by a lease of its own with no line entry, and its check is
+  the job's one command. The daemon's report finishes the session, with
+  no agent and no model, and gives the station back to the line. With no
+  such station free, it waits on its lab's lane.
 - **Release or revoke a lease.** The session lets it go, or a person who
   manages the stations ends it. A revoked lease's session is told, and
   the daemon refuses the lease's next renewal and stops the station.

@@ -15,9 +15,13 @@ from daemon_support import Monotonic, Stack
 from acme.apps.station_daemon.config import load_credential
 from acme.apps.station_daemon.daemon import LeaseClock, StationDaemon
 from acme.client.types import StationJobView
+from acme.om.base import new_id
 from acme.om.evidence.types.provenance import Provenance
 from acme.om.evidence.types.record import ExecutionRecord, RunOutcome
+from acme.om.platform_agents.types.validation import ValidationStart, ValidationStatus
 from acme.om.stations.types.lease import StationLease
+from acme.om.work.storage.impl.memory import WorkStorageMemoryImpl
+from acme.om.work.types.work_item import WorkKind
 
 
 async def runs_of(api: Stack, lease: StationLease) -> list[ExecutionRecord]:
@@ -160,6 +164,34 @@ async def test_a_revoked_lease_stops_the_station_at_the_daemons_next_renewal(
     # station took its controlled stop.
     assert twin.calls == ["stop:hold", "restore", "apply", "apply", "stop:hold"]
     assert ran.refused[0]["reason"] == "lease_ended" and ran.reported
+
+
+async def test_the_daemons_report_finishes_a_validation_session_with_no_model_call(
+    api: Stack, tmp_path: Path
+) -> None:
+    daemon, twin = await api.daemon(tmp_path)
+    validations = api.container.managers.platform_agents
+    started = await validations.start_validation(
+        api.owner,
+        ValidationStart(
+            id=new_id(),
+            lab_id=api.lab.id,
+            check_name="measure",
+            check_version="v2",
+            parameters={"speed": 0.2},
+        ),
+    )
+    ran = await daemon.tick()
+    assert ran is not None and ran.reported and ran.refused == []
+    assert twin.calls == ["stop:hold", "restore", "measure"]
+    finished = await validations.get_validation(api.owner, started.id)
+    assert finished.status is ValidationStatus.FINISHED
+    assert str(finished.run_id) == ran.report["run_id"]
+    # Nothing in its path asked for a loop, so no model was called.
+    work = api.container.storage.get_work_storage()
+    assert isinstance(work, WorkStorageMemoryImpl)
+    items = [item for _, item in work._items.values()]  # pyright: ignore[reportPrivateUsage]
+    assert [item.kind for item in items] == [WorkKind.STATION]
 
 
 def clock_for(daemon: StationDaemon, seconds: float) -> LeaseClock:

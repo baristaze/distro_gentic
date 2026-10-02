@@ -33,6 +33,7 @@ CROSS_TENANT_CASES: frozenset[str] = frozenset(
         "create_station",
         "read_station",
         "read_stations",
+        "read_lab_stations",
         "create_daemon_credential",
         "rotate_daemon_credential",
         "end_daemon_credentials",
@@ -202,6 +203,8 @@ class StationsStorageContract:
             [station, second], key=lambda s: s.id
         )
         assert len(await storage.read_stations(org, pool.id, 1)) == 1
+        assert await storage.read_lab_stations(org, station.lab_id, 10) == [station]
+        assert await storage.read_lab_stations(org, new_id(), 10) == []
 
     async def test_create_and_read_lab_pool_and_station_of_another_tenant_find_nothing(
         self, storage: StationsStorageInterface
@@ -217,6 +220,7 @@ class StationsStorageContract:
         assert await storage.read_pool(other, pool.id) is None
         assert await storage.read_station(other, station.id) is None
         assert await storage.read_stations(other, pool.id, 10) == []
+        assert await storage.read_lab_stations(other, station.lab_id, 10) == []
 
     # A daemon's credentials.
 
@@ -395,6 +399,21 @@ class StationsStorageContract:
         assert await storage.leave(org, (entry.id,), utcnow(), new_id()) == 1
         assert not await storage.grant(org, make_lease(station, entry, utcnow()), MARGIN, ())
         assert await storage.read_station(org, station.id) == station
+
+    async def test_a_grant_that_settles_no_entry_holds_the_station_alone(
+        self, storage: StationsStorageInterface
+    ) -> None:
+        org = new_id()
+        pool, station = await self.a_station(storage, org)
+        entry = await self.waiting(storage, org, pool)
+        lease = make_lease(station, entry, utcnow()).model_copy(update={"entry_id": None})
+        assert await storage.grant(org, lease, MARGIN, ())
+        held = await storage.read_station(org, station.id)
+        assert held is not None and (held.lease_id, held.token) == (lease.id, 1)
+        untouched = await storage.read_entry(org, entry.id)
+        assert untouched is not None and untouched.state is EntryState.WAITING
+        # It is a live lease like any other: no second grant beside it.
+        assert not await storage.grant(org, make_lease(held, entry, utcnow()), MARGIN, ())
 
     async def test_two_grants_of_one_station_raced_land_one(
         self, storage: StationsStorageInterface

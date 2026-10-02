@@ -716,12 +716,14 @@ def build_managers(
         projects=projects,
         # The line a session waits in for a station, the lease a grant gives,
         # and a lab daemon's calls: its claims through placement, its
-        # renewals, and its runs' records through evidence.
+        # renewals, and its runs' records through evidence; a validation
+        # session's run finishes it.
         stations=StationsManagerImpl(
             storage.get_stations_storage(),
             placement,
             agent_sessions,
             evidence,
+            platform,
             work,
             tenancy,
             outbox,

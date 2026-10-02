@@ -1,3 +1,4 @@
+import contextlib
 import logging
 import secrets
 from collections.abc import Callable, Sequence
@@ -28,6 +29,8 @@ from acme.om.outbox.types.row import outbox_row
 from acme.om.placement import PlacementManagerInterface
 from acme.om.placement.types.claimant import Claimant, ClaimantKind
 from acme.om.placement.types.work import StationPayload
+from acme.om.platform_agents import PlatformAgentsManagerInterface
+from acme.om.platform_agents.types.validation import ValidationSession, ValidationStatus
 from acme.om.stations.exceptions import JobSettled, LeaseEnded
 from acme.om.stations.manager import StationsManagerInterface
 from acme.om.stations.rules import (
@@ -102,6 +105,9 @@ class StationsOptions(Platform):
     # How long the daemon holds a claimed job's work item; renewed with the
     # lease.
     claim_lease: timedelta = timedelta(seconds=60)
+    # How long a validation waits on its lab's lane when every station of
+    # its lab is held, or waited for in line, before it is claimed again.
+    validation_retry: timedelta = timedelta(seconds=30)
     grant_attempts: int = 3  # a grant lost to another writer is tried again this often
     max_line: int = 500  # the most entries of one pool's line read at once
     max_stations: int = 200  # the most stations of one pool read at once
@@ -121,6 +127,7 @@ class StationsManagerImpl(StationsManagerInterface):
         placement: PlacementManagerInterface,
         sessions: AgentSessionsManagerInterface,
         evidence: EvidenceManagerInterface,
+        validations: PlatformAgentsManagerInterface,
         work: WorkManagerInterface,
         tenancy: TenancyManagerInterface,
         relay: OutboxRelayInterface,
@@ -131,6 +138,7 @@ class StationsManagerImpl(StationsManagerInterface):
         self._placement = placement
         self._sessions = sessions
         self._evidence = evidence
+        self._validations = validations
         self._work = work
         self._tenancy = tenancy
         self._relay = relay
@@ -300,7 +308,11 @@ class StationsManagerImpl(StationsManagerInterface):
     async def revoke_lease(self, ctx: TenantContext, lease_id: UUID) -> StationLease:
         ctx.require(Permission.MANAGE_MEMBERS)
         ended = await self._end(ctx, lease_id, LeaseEnd.REVOKED)
-        entry = await self._storage.read_entry(ctx.org_id, ended.entry_id)
+        entry = (
+            None
+            if ended.entry_id is None
+            else await self._storage.read_entry(ctx.org_id, ended.entry_id)
+        )
         if entry is not None:
             # The holding session reads it at its next request; an idle one
             # is not woken for it.
@@ -424,7 +436,22 @@ class StationsManagerImpl(StationsManagerInterface):
                 return None
             ctx, item = claimed
             job = await self._storage.read_job(ctx.org_id, item.target_id)
-            if job is None or job.lab_id != daemon.lab_id:
+            if job is None:
+                validation = await self._validation(ctx, item.target_id)
+                if validation is None or validation.lab_id != daemon.lab_id:
+                    return ClaimedJob(item=item)
+                if validation.status is ValidationStatus.FINISHED:
+                    await self._work.fail_for_good(
+                        ctx, item, f"validation session {validation.id} runs its check once"
+                    )
+                    continue
+                job = await self._validation_job(ctx, validation)
+                if job is None:
+                    # Every station of its lab is held, or a session waits in
+                    # line for it: the validation waits its turn on its lane.
+                    await self._work.defer(ctx, item, self._options.validation_retry)
+                    continue
+            if job.lab_id != daemon.lab_id:
                 return ClaimedJob(item=item)
             now = self._clock()
             running = StationJob.model_validate(
@@ -499,6 +526,14 @@ class StationsManagerImpl(StationsManagerInterface):
             await self._work.complete(ctx, self._claimed(job))
         except LeaseLost:
             log.warning("station job %s: its work item was taken back before its report", job.id)
+        lease = await self._storage.read_lease(daemon.org_id, job.lease_id)
+        if lease is not None and lease.entry_id is None:
+            # A validation's run finishes its session, with no agent and no
+            # model, and its station goes back to the line at once.
+            await self._validations.finish_validation(ctx, job.session_id, report.run_id)
+            with contextlib.suppress(LeaseEnded):
+                await self._end(ctx, lease.id, LeaseEnd.RELEASED)
+            return finished
         # Its session is parked again until its next job: the lease lasts
         # the station's hold time from here.
         station = await self._storage.read_station(daemon.org_id, job.station_id)
@@ -621,6 +656,90 @@ class StationsManagerImpl(StationsManagerInterface):
         until = renewed_until(lease.expires_at, now, length)
         renewed = await self._storage.renew_lease(org_id, lease.id, job.token, now, until)
         return None if renewed is None else seconds_left(renewed.expires_at, now)
+
+    # A validation session's station.
+
+    async def _validation(self, ctx: TenantContext, target_id: UUID) -> ValidationSession | None:
+        try:
+            return await self._validations.get_validation(ctx, target_id)
+        except NotFound:
+            return None
+
+    async def _validation_job(
+        self, ctx: TenantContext, validation: ValidationSession
+    ) -> StationJob | None:
+        """A validation's run, as a job under a lease of its own: a free
+        station of its lab that no session waits for in line, granted by the
+        same conditional write as any grant, so it never goes ahead of a
+        session in line nor beside a live lease. Its one command is its check,
+        with its parameters. None when no station of its lab is free."""
+        margin = self._options.skew_margin
+        stations = await self._storage.read_lab_stations(
+            ctx.org_id, validation.lab_id, self._options.max_stations
+        )
+        for station in stations:
+            now = self._clock()
+            if not free(station, now, margin):
+                continue
+            line = await self._storage.read_line(
+                ctx.org_id, station.pool_id, self._options.max_line
+            )
+            if any(serves(station, entry) for entry in line):
+                continue
+            lease = StationLease(
+                id=new_id(),
+                created_at=now,
+                updated_at=now,
+                created_by=validation.created_by,
+                updated_by=validation.created_by,
+                station_id=station.id,
+                lab_id=station.lab_id,
+                pool_id=station.pool_id,
+                entry_id=None,
+                session_id=validation.id,
+                token=station.token + 1,
+                expires_at=now + self._options.job_lease,
+            )
+            rows = (
+                outbox_row(
+                    ctx,
+                    LEASE_GRANTED,
+                    lease.id,
+                    {"station_id": str(station.id), "token": lease.token},
+                ),
+            )
+            if not await self._storage.grant(ctx.org_id, lease, margin, rows):
+                continue
+            await self._relay.relay_all(ctx.org_id, rows)
+            job = StationJob(
+                id=validation.id,
+                created_at=now,
+                updated_at=now,
+                created_by=validation.created_by,
+                updated_by=validation.created_by,
+                lease_id=lease.id,
+                station_id=station.id,
+                lab_id=station.lab_id,
+                session_id=validation.id,
+                token=lease.token,
+                project=validation.check_name,
+                candidate=validation.check_version,
+                procedure=validation.check_name,
+                procedure_version=validation.check_version,
+                commands=(
+                    StationCommand(
+                        operation=validation.check_name, parameters=validation.parameters
+                    ),
+                ),
+            )
+            created = (outbox_row(ctx, JOB_CREATED, job.id, {"lease_id": str(lease.id)}),)
+            if not await self._storage.create_job(ctx.org_id, job, created):
+                # Another claim made it first: this grant goes back.
+                await self._end(ctx, lease.id, LeaseEnd.RELEASED)
+                return await self._storage.read_job(ctx.org_id, job.id)
+            await self._relay.relay_all(ctx.org_id, created)
+            return job
+        return None
 
     # Helpers.
 
