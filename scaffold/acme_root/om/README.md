@@ -145,6 +145,20 @@ An org's **fair share** says which lane its loops wait in, its plan's or
 one of its own, and how many of them run at once. The platform's
 operators set it. A loop over it waits its turn and never fails.
 
+## Where tools work
+
+A **workspace** is where a session's tools work: a checkout of the
+session's branch, on a machine a host prepared. It is a cache. Its
+branch, its commits, and its artifacts live elsewhere, and what a loop
+leaves uncommitted is pushed beside the branch before the machine goes.
+
+A session's **isolation** is fixed when the session is made, and every
+workspace it gets is held to it: a host that cannot give it says no, and
+the session waits rather than run on less. Its **egress** is its
+project's allowlist: the places its workspace may reach and what it may
+do there, or open egress, chosen on purpose and recorded with why. No
+workspace ever reaches the platform's own machines.
+
 ## What the platform writes for itself
 
 No person creates these and no screen shows them, but each belongs to
@@ -201,6 +215,8 @@ arrive twice, so the second copy gets the first one's answer.
   where it stopped.
 - A fair share names its org, one each, and the lane of every loop the
   org asks for is read off it.
+- A session's workspace names its org and its session, one each, and an
+  egress allowlist its org and its project, one each.
 
 ## One page per kind
 
@@ -216,6 +232,7 @@ arrive twice, so the second copy gets the first one's answer.
 - [Windows](src/acme/om/windows/README.md)
 - [Tools](src/acme/om/tools/README.md)
 - [Placement](src/acme/om/placement/README.md)
+- [Workspaces](src/acme/om/workspaces/README.md)
 - [Events](src/acme/om/events/README.md)
 - [Outbox rows](src/acme/om/outbox/README.md)
 - [Work items](src/acme/om/work/README.md)

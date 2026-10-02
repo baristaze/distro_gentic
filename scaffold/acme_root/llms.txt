@@ -28,6 +28,7 @@ served to it. Exposure is by listing, never by folder.
 - [Windows](om/src/acme/om/windows/README.md): what a model reads: the request rendered from the history, the window sized for its model, the pinned zone, compaction into summaries, and artifacts
 - [Tools](om/src/acme/om/tools/README.md): the tool contract, the registry, policy by class and target, approvals bound to one call, failures, recovery by effect, jobs
 - [Placement](om/src/acme/om/placement/README.md): the lane each kind of a session's work runs from, the claim the control plane makes for a host or a daemon, and each tenant's fair share of the loops, held at the claim
+- [Workspaces](om/src/acme/om/workspaces/README.md): a session's workspace as a cache of durable state: its isolation pinned at creation and refused by a host that cannot give it, its work pushed to a snapshot ref before release, its branch rebuilt only when its fate is known, its egress a project's allowlist of destinations and methods, and its own branch and pull request its work product
 - [Infrastructure](infra/README.md): cache, buckets, topics, queues, secrets, keys, the outage signal, observability, workspaces and the transport; what each promises and which twin runs where
 - [Integrations](integrations/README.md): the identity provider, its twin, the absent provider, and the webhook check; the model providers, their adapters, and the scripted twin
 - [The API process](services/api/README.md): the routes by area, the gateway's guarantees, the subcommands
