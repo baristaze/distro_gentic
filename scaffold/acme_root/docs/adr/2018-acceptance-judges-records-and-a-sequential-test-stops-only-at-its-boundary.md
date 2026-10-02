@@ -57,9 +57,16 @@ row an operator records, written once, and no purge reaches it. What
 it shows of a model goes to the model matrix: for each model role whose
 fill the candidate changed, the model passed the scenario when the
 candidate did not regress, and that result is what qualifies it there.
+Only a run whose arms ran one agent kind at one version says anything of
+a model; when the kind or its version changed too, the score is either's,
+and the run qualifies nothing.
 
 **The benchmark job is dispatched, never gating.** It runs `make
-benchmark` over its own stack. The scaffold's case is a rehearsal with
+benchmark` over its own stack. That stack goes with the runner, so the
+job exports every benchmark it recorded, each trial's verdict with the
+hidden suite's runs and its cost, and the matrix's rows they fed, to a
+file it uploads as the run's artifact, before the stack goes. Each
+qualification an operator records cites that run's URL. The scaffold's case is a rehearsal with
 scripted sessions; a product adds its scenarios, its agents on real
 providers.
 
@@ -72,3 +79,6 @@ providers.
   none open; the link bites once the kind records them.
 - A benchmark costs both arms' trials every run, and a regression is a
   flag for a person, never a block.
+- The export outlives the runner, not the repository's artifact
+  retention, at most 400 days: a result meant to outlast it is copied
+  out of the artifact by a person.

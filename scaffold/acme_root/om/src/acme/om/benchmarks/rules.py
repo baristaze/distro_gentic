@@ -65,13 +65,19 @@ def regressed(candidate: ArmResult, baseline: ArmResult) -> bool:
     return candidate.score < baseline.score
 
 
-def qualifications(benchmark: Benchmark) -> tuple[BenchmarkRun, ...]:
+def qualifications(benchmark: Benchmark, run: str) -> tuple[BenchmarkRun, ...]:
     """What a benchmark shows the model matrix: for each model role whose
     fill the candidate changed, whether its model held up against the
     baseline's on the scenario. It passed when the candidate did not
-    regress. A run that changed only the agent kind's version says nothing
-    of a model."""
-    before = {found.role: found.fill for found in benchmark.baseline.fills}
+    regress. Each cites `run`, where the benchmark's export is kept: the
+    benchmark job's run, which holds it as an artifact. Only a run whose
+    arms ran one agent kind at one version says anything of a model: when
+    the kind or its version changed too, the score is either's, and it
+    qualifies nothing."""
+    candidate, baseline = benchmark.candidate, benchmark.baseline
+    if (candidate.kind, candidate.kind_version) != (baseline.kind, baseline.kind_version):
+        return ()
+    before = {found.role: found.fill for found in baseline.fills}
     return tuple(
         BenchmarkRun(
             provider=found.fill.provider,
@@ -79,8 +85,8 @@ def qualifications(benchmark: Benchmark) -> tuple[BenchmarkRun, ...]:
             role=found.role,
             benchmark=benchmark.scenario,
             passed=not benchmark.regressed,
-            run=f"benchmark {benchmark.id}",
+            run=f"{run}, benchmark {benchmark.id}",
         )
-        for found in benchmark.candidate.fills
+        for found in candidate.fills
         if before.get(found.role) != found.fill
     )

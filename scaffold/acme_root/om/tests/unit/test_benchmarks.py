@@ -17,6 +17,9 @@ from acme.om.exceptions import NotAuthorized, NotFound, ValidationFailed
 WHOLE, NOTHING = 0, 7
 """Links a trial's chain lacks: none, or all seven."""
 
+RUN = "https://github.com/acme/acme/actions/runs/1"
+"""The benchmark job's run its export is kept with."""
+
 
 @pytest.fixture
 def benchmarks() -> BenchmarksManagerImpl:
@@ -67,19 +70,32 @@ async def test_a_benchmark_qualifies_the_model_it_changed_for_the_matrix(
 ) -> None:
     admin = operator()
     held = await benchmarks.record(admin, make_trials([WHOLE, WHOLE], [WHOLE, WHOLE]))
-    (run,) = qualifications(held)
+    (run,) = qualifications(held, RUN)
     assert (run.ref.name, run.role, run.benchmark) == (
         "anthropic/claude-opus-5-5",
         "main",
         "orders-vanish",
     )
-    assert run.passed and run.run == f"benchmark {held.id}"
+    assert run.passed and run.run == f"{RUN}, benchmark {held.id}"
     lower = await benchmarks.record(admin, make_trials([WHOLE, NOTHING], [WHOLE, WHOLE]))
-    assert [found.passed for found in qualifications(lower)] == [False]
+    assert [found.passed for found in qualifications(lower, RUN)] == [False]
     # A run that changed only the kind's version says nothing of a model.
-    kind_only = CANDIDATE.model_copy(update={"fills": BASELINE.fills})
+    kind_only = CANDIDATE.model_copy(update={"fills": BASELINE.fills, "kind_version": 3})
     same = make_trials([WHOLE], [WHOLE]).model_copy(update={"candidate": kind_only})
-    assert qualifications(await benchmarks.record(admin, same)) == ()
+    assert qualifications(await benchmarks.record(admin, same), RUN) == ()
+
+
+async def test_a_run_that_changed_the_kind_beside_the_model_qualifies_nothing(
+    benchmarks: BenchmarksManagerImpl,
+) -> None:
+    # The model changed, and so did the kind's version, or the kind: a
+    # score either way could be either's, so neither credits nor blames it.
+    admin = operator()
+    for moved in ({"kind_version": 3}, {"kind": "reviewer"}):
+        candidate = CANDIDATE.model_copy(update=moved)
+        for broken in (WHOLE, NOTHING):
+            run = make_trials([broken], [WHOLE]).model_copy(update={"candidate": candidate})
+            assert qualifications(await benchmarks.record(admin, run), RUN) == ()
 
 
 # The arms interleave on one station.

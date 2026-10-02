@@ -9,13 +9,15 @@ twin, so the rehearsal spends nothing and proves the job's wiring end to
 end. A product adds its own scenarios beside it, its agents on real
 providers. `make benchmark` runs it, and no gate a code change needs
 does. It needs a migrated stack (`make migrate`), and keeps what it
-records: no case here empties a table."""
+records: no case here empties a table, and the export (`conftest.py`)
+keeps it past the stack, for the workflow to upload."""
 
 from collections.abc import AsyncIterator
 from pathlib import Path
 
 import pytest
 from contracts.acceptance import EXPORT, judged_trials
+from contracts.benchmark_export import Export
 from contracts.benchmark_storage import BASELINE, CANDIDATE, operator
 from contracts.rehearsal import world_over
 
@@ -45,7 +47,7 @@ async def storage(
 
 
 async def test_the_scenarios_trials_are_judged_and_recorded(
-    storage: StoragePostgresImpl, tmp_path: Path
+    storage: StoragePostgresImpl, tmp_path: Path, export: Export
 ) -> None:
     world = await world_over(storage, tmp_path)
     trials = await judged_trials(world.parts, world.owner, PAIRS)
@@ -54,11 +56,16 @@ async def test_the_scenarios_trials_are_judged_and_recorded(
     )
     admin = operator()
     recorded = await world.managers.benchmarks.record(admin, run)
+    matrix = MatrixLayer(storage).build(world.managers).matrix_operator
+    shown = qualifications(recorded, export.run)
+    fed = [await matrix.record_benchmark(admin, found) for found in shown]
+    export.keep(recorded, fed)
     assert await world.managers.benchmarks.get(admin, recorded.id) == recorded
     assert recorded.candidate_result.trials == recorded.baseline_result.trials == PAIRS
-    matrix = MatrixLayer(storage).build(world.managers).matrix_operator
-    fed = [await matrix.record_benchmark(admin, run) for run in qualifications(recorded)]
-    assert [(found.model, found.passed) for found in fed] == [("claude-opus-5-5", True)]
+    cited = f"{export.run}, benchmark {recorded.id}"
+    assert [(found.model, found.passed, found.run) for found in fed] == [
+        ("claude-opus-5-5", True, cited)
+    ]
     print(
         f"\n{EXPORT.name}: candidate {recorded.candidate_result.score:.3f}"
         f" against baseline {recorded.baseline_result.score:.3f},"

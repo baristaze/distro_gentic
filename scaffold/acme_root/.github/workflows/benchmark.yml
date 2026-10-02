@@ -44,6 +44,24 @@ jobs:
       - run: cp .env.example .env
       - run: make infra-up
       - run: make migrate
+      # The stack goes with the runner, so the job writes what it recorded
+      # to a folder it uploads with the run; each qualification it records
+      # with the model matrix cites this run's address, which holds it.
       - run: make benchmark
+        env:
+          BENCHMARK_EXPORT: ${{ runner.temp }}/benchmark-export
+          BENCHMARK_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      # Every benchmark the run recorded, each trial's verdict with the
+      # hidden suite's runs and its cost, and the matrix's rows they fed:
+      # kept with the run, a regressed or failed one too, before the stack
+      # goes. 400 days is the longest GitHub keeps an artifact; the
+      # repository's own retention setting caps it.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: benchmark-export
+          path: ${{ runner.temp }}/benchmark-export
+          if-no-files-found: warn
+          retention-days: 400
       - run: make infra-down
         if: always()

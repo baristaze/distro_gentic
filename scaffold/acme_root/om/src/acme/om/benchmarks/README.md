@@ -40,7 +40,8 @@ made of](../../../../README.md).
   purges it.
 - **It feeds the matrix.** For each model role whose fill the candidate
   changed, the run passed the model when the candidate did not regress
-  (`rules.qualifications`).
+  (`rules.qualifications`), and only when both arms ran one agent kind at
+  one version. Each result cites the job's run, which keeps the export.
 
 <!-- agents-only
 The pure rules are `rules.py`: `schedule` gives the order, and
