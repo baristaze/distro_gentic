@@ -26,6 +26,7 @@ from acme.workers.maintenance.accounts import DeleteAccountHandlerImpl, DeleteOr
 from acme.workers.maintenance.container import (
     AGENT_SESSION_PURGE_BATCH,
     MEDIA_PURGE_BATCH,
+    RETENTION_SWEEP_BATCH,
     WorkerContainer,
 )
 from acme.workers.maintenance.deliveries import (
@@ -103,6 +104,8 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             # Each session's key versions, then its privacy record: the
             # content sealed under them is noise from the first batch.
             "privacy": managers.privacy.purge_tenant,
+            # Each session's retention snapshot, then the tenant's policy.
+            "retention": managers.retention.purge_tenant,
             "budgets": managers.budgets.purge_tenant,
             # Its secrets' names, its keys' records with their values in the
             # store, and its operators' content grants.
@@ -124,12 +127,18 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             # A session marked deleted past its retention: claimed, then its
             # history, then its row.
             "agent_sessions": unstaged(managers.agent_sessions.purge_across_tenants),
+            # Each session past its content's life: its key destroyed by the
+            # tenant's key service, revoked, and audited; past its shape's,
+            # marked for the purge above. A tightened policy reaches each
+            # session first.
+            "retention": managers.retention.sweep,
         },
         # The media and session purges' batches are their own: a whole one
         # says there may be more.
         across_batches={
             "media": MEDIA_PURGE_BATCH,
             "agent_sessions": AGENT_SESSION_PURGE_BATCH,
+            "retention": RETENTION_SWEEP_BATCH,
         },
         # The platform's size, counted across tenants once an interval and
         # kept as the tally the operator plane reads instead of counting.
