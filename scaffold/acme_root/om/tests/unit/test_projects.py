@@ -124,7 +124,10 @@ async def test_another_tenants_project_starts_nothing(managers: Managers) -> Non
 async def test_a_sessions_project_never_moves(managers: Managers) -> None:
     org = make_org()
     admin, member = context(Role.ADMIN, org), context(Role.MEMBER, org)
-    first, second = await a_project(managers, admin), await a_project(managers, admin, "octo/ledger")
+    first, second = (
+        await a_project(managers, admin),
+        await a_project(managers, admin, "octo/ledger"),
+    )
     start = a_start()
     session = await managers.projects.start_session(member, first.id, start)
     assert await managers.projects.start_session(member, first.id, start) == session
@@ -182,7 +185,10 @@ async def test_a_projects_retention_narrowing_reaches_its_sessions(managers: Man
     policy alone."""
     org = make_org()
     admin, member = context(Role.ADMIN, org), context(Role.MEMBER, org)
-    narrow, other = await a_project(managers, admin), await a_project(managers, admin, "octo/ledger")
+    narrow, other = (
+        await a_project(managers, admin),
+        await a_project(managers, admin, "octo/ledger"),
+    )
     tenant, week = RetentionPolicy(content_lifetime=timedelta(days=30)), timedelta(days=7)
     current = await managers.retention.get_policy(admin)
     narrowing = ProjectRetention(
@@ -210,7 +216,10 @@ async def test_only_the_bound_repository_is_work_product(managers: Managers) -> 
     any for a session of no project."""
     org = make_org()
     admin, member = context(Role.ADMIN, org), context(Role.MEMBER, org)
-    reports, ledger = await a_project(managers, admin), await a_project(managers, admin, "octo/ledger")
+    reports, ledger = (
+        await a_project(managers, admin),
+        await a_project(managers, admin, "octo/ledger"),
+    )
     on_reports = await managers.projects.start_session(member, reports.id, a_start())
     on_ledger = await managers.projects.start_session(member, ledger.id, a_start())
     loose = await managers.agents.start_session(member, a_start())
