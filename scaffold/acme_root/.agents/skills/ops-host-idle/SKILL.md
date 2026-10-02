@@ -47,11 +47,12 @@ and name the refresh the preamble gives.
 
 ## Procedure
 
-1. Run `uv run acme-ops size --env <env>`, which refuses an env file
-   that holds the provisioner's token. When it refuses, stop, and give
-   the person the line it printed. Any other answer is not that refusal,
-   the platform's size or an error of its own, and the run goes on. In the cloud, check the profile as
-   Role and credential states.
+1. In the cloud, check the profile as Role and credential states,
+   before any other command; locally there is none to check. Then run
+   `uv run acme-ops size --env <env>`, which refuses an env file that
+   holds the provisioner's token. When it refuses, stop, and give the
+   person the line it printed. Any other answer is not that refusal, the
+   platform's size or an error of its own, and the run goes on.
 2. Read who the operator plane admitted, and go on only on
    `operator_role: read`:
 

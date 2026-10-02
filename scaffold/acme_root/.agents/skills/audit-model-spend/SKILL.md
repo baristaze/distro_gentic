@@ -41,11 +41,12 @@ block below does. Never print a token.
 
 ## Procedure
 
-1. Run `uv run acme-ops size --env <env>`, which refuses an env file
-   that holds the provisioner's token. When it refuses, stop, and give
-   the person the line it printed. Any other answer is not that refusal,
-   the platform's size or an error of its own, and the run goes on. In the cloud, check the profile as
-   Role and credential states. Make the report's folder,
+1. In the cloud, check the profile as Role and credential states,
+   before any other command; locally there is none to check. Then run
+   `uv run acme-ops size --env <env>`, which refuses an env file that
+   holds the provisioner's token. When it refuses, stop, and give the
+   person the line it printed. Any other answer is not that refusal, the
+   platform's size or an error of its own, and the run goes on. Make the report's folder,
    `~/Downloads/acme_model_spend_<yyyy-mm-dd>/` (`mkdir -p`).
 2. Read the window's spend by plan, and its tokens by plan and kind,
    once each. Locally:

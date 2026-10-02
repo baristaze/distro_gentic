@@ -1070,6 +1070,17 @@ def test_a_platform_skill_names_its_role_and_ops_readme_gives_it_the_same(
     assert "Refuse any profile wider than the investigate role." in _prose(name)
 
 
+@pytest.mark.parametrize("name", [*PLATFORM])
+def test_a_platform_skill_checks_its_profile_before_any_other_command(name: str) -> None:
+    """Role and credential puts the profile's check before any other
+    command, so the first step runs it, before the size and before any
+    read of the operator plane."""
+    first = _prose(name).split("## Procedure", 1)[1].split(" 2. ", 1)[0]
+    check = first.find("1. In the cloud, check the profile as Role and credential states")
+    assert check != -1, first[:120]
+    assert check < first.find("acme-ops size"), first[:120]
+
+
 # The one route each supporter reads of its tenant: an aggregate of what
 # the platform knows, never a list, never the tenant's own words.
 STANDING = {

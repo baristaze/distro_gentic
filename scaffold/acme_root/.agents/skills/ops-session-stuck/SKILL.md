@@ -49,11 +49,12 @@ and name the refresh the preamble gives.
 
 ## Procedure
 
-1. Run `uv run acme-ops size --env <env>`, which refuses an env file
-   that holds the provisioner's token. When it refuses, stop, and give
-   the person the line it printed. Any other answer is not that refusal,
-   the platform's size or an error of its own, and the run goes on. In the cloud, check the profile as
-   Role and credential states.
+1. In the cloud, check the profile as Role and credential states,
+   before any other command; locally there is none to check. Then run
+   `uv run acme-ops size --env <env>`, which refuses an env file that
+   holds the provisioner's token. When it refuses, stop, and give the
+   person the line it printed. Any other answer is not that refusal, the
+   platform's size or an error of its own, and the run goes on.
 2. Read who the operator plane admitted. The `jq` keeps the role and
    the domain of the operator's address, never the address:
 
@@ -96,7 +97,7 @@ and name the refresh the preamble gives.
    | `status` is `parked`, `park.reason` is `resource` | A workspace or a scarce resource it waits for, which `park.unlock` names | none: it tries again at `park.retry_at` |
    | `status` is `parked`, `park.reason` is `person`, `pause`, or `handover` | A person holds it: an approval, a question, a pause, or the environment | the tenant's people, on their own screens |
    | `status` is `parked`, `park.reason` is `job` or `children` | Its tool job or its sub-agents have not reported | none, unless `changed_at` is days old |
-   | `status` is `pending`, `loop` is null | An input waits and no loop item exists | `ops-investigate`: the outbox's relay |
+   | `status` is `pending`, `loop` is null or `loop.status` is `done` | An input waits and no loop item is open for it | `ops-investigate`: the outbox's relay |
    | `status` is `pending`, `loop.status` is `queued`, `loop.running_ahead` at or above `concurrency` | Its tenant's share holds it: that many of its loops run ahead | an operator raises the share (`PUT /v1/admin/orgs/<org_id>/share`, the write token's) |
    | `status` is `pending`, `loop.status` is `queued`, `loop.available_at` after now | It waits for its time: a delay its last claim set | none |
    | `status` is `pending`, `loop.status` is `queued` | It is `loop.ready_ahead` items into its lane `loop.lane`, and no runner took it | `ops-investigate`: the runners serving that lane |
