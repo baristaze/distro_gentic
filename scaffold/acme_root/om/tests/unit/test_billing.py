@@ -147,7 +147,9 @@ async def test_a_cap_and_a_bill_read_the_same_row_of_one_versioned_table(tmp_pat
     first = money.prices.price_at(LIST_PRICES.version, fill.provider.value, fill.model)
     assert first is not None
 
-    hold_id = await money.calls.authorize(owner, session_id, spender(owner), MAIN, fill, call)
+    hold_id = await money.calls.authorize(
+        owner, session_id, spender(owner), MAIN, fill, call, credential="platform"
+    )
 
     hold = await money.gate.read_hold(owner, hold_id)
     assert hold.priced == PricedAt(

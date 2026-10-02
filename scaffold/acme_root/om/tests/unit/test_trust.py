@@ -358,8 +358,8 @@ async def test_a_rotated_key_is_never_served_from_a_client_cached_by_its_old_ref
     trust, clients = platform.trust.trust, platform.trust.provider_clients
     owner = platform.owner
     first = await trust.save_provider_key(owner, ProviderName.ANTHROPIC, "sk-first")
-    served = await clients.client_for(owner, ProviderName.ANTHROPIC)
-    assert served is await clients.client_for(owner, ProviderName.ANTHROPIC), "cached"
+    served = (await clients.client_for(owner, ProviderName.ANTHROPIC)).client
+    assert served is (await clients.client_for(owner, ProviderName.ANTHROPIC)).client, "cached"
     assert isinstance(served, KeyedClient) and served.value == "sk-first"
     # A second process, whose cache took the first key before the rotation.
     elsewhere = ProviderClientsCachedImpl(
@@ -368,16 +368,18 @@ async def test_a_rotated_key_is_never_served_from_a_client_cached_by_its_old_ref
         factory,
         use_grain=timedelta(minutes=5),
     )
-    held_there = await elsewhere.client_for(owner, ProviderName.ANTHROPIC)
+    held_there = (await elsewhere.client_for(owner, ProviderName.ANTHROPIC)).client
     assert isinstance(held_there, KeyedClient) and held_there.value == "sk-first"
 
     second = await trust.save_provider_key(owner, ProviderName.ANTHROPIC, "sk-second")
 
     assert second.id != first.id, "a rotation mints a new reference"
     now_served = await clients.client_for(owner, ProviderName.ANTHROPIC)
+    assert now_served.reference == second.id, "served by its own reference"
+    now_served = now_served.client
     assert isinstance(now_served, KeyedClient) and now_served.value == "sk-second"
     assert served.closed, "the old reference's client is dropped and closed"
-    there = await elsewhere.client_for(owner, ProviderName.ANTHROPIC)
+    there = (await elsewhere.client_for(owner, ProviderName.ANTHROPIC)).client
     assert isinstance(there, KeyedClient) and there.value == "sk-second"
     assert there is not held_there and held_there.closed, "the other process's too"
     secrets = platform.infra.get_secrets()

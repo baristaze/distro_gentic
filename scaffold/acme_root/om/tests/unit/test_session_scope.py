@@ -42,6 +42,8 @@ IMPL_INTERFACES: dict[str, str] = {
     "WindowStoragePostgresImpl": "WindowStorageInterface",
     "ToolStoragePostgresImpl": "ToolStorageInterface",
     "HostsStoragePostgresImpl": "HostsStorageInterface",
+    "MatrixStoragePostgresImpl": "MatrixStorageInterface",
+    "MatrixTenantStoragePostgresImpl": "MatrixTenantStorageInterface",
     "BenchmarkStoragePostgresImpl": "BenchmarkStorageInterface",
 }
 """Which interface each Postgres impl answers, so a method found in the source
