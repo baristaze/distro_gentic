@@ -16,7 +16,6 @@ from acme.integrations.root import IntegrationsInterface
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.impl.manager import AgentSessionsManagerImpl, AgentSessionsOptions
 from acme.om.agents import AgentsManagerInterface, ResultGateInterface
-from acme.om.agents.impl.gate import ResultGateNullImpl
 from acme.om.agents.impl.loop import LoopManagerImpl, LoopOptions
 from acme.om.agents.impl.manager import AgentsManagerImpl, AgentsOptions
 from acme.om.agents.impl.sink import StreamSinkNullImpl
@@ -37,6 +36,15 @@ from acme.om.budgets.impl.pricing import PricingTableImpl
 from acme.om.budgets.pricing import PricingInterface
 from acme.om.events import EventsManagerInterface
 from acme.om.events.impl.manager import EventsManagerImpl, EventsOptions
+from acme.om.evidence import (
+    EvidenceManagerInterface,
+    ExecutorInterface,
+    WorkProductInterface,
+)
+from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
+from acme.om.evidence.impl.manager import EvidenceManagerImpl, EvidenceOptions
+from acme.om.evidence.impl.ports import ExecutorAbsentImpl, WorkProductAbsentImpl
+from acme.om.evidence.rules import PROTECTED_CEILING
 from acme.om.exceptions import UnsafeConfiguration
 from acme.om.idempotency import IdempotencyManagerInterface
 from acme.om.idempotency.impl.manager import IdempotencyManagerImpl, IdempotencyOptions
@@ -83,6 +91,7 @@ from acme.om.tools import ToolsManagerInterface
 from acme.om.tools.impl.manager import ToolsManagerImpl, ToolsOptions
 from acme.om.tools.seal import RecordSealInterface
 from acme.om.tools.tool import ToolInterface
+from acme.om.tools.types.policy import PolicyLayer
 from acme.om.windows import WindowsManagerInterface
 from acme.om.windows.gate import CallGateInterface
 from acme.om.windows.hashes import PromptHashInterface
@@ -119,20 +128,22 @@ class Managers:
     agents: AgentsManagerInterface
     tools: ToolsManagerInterface
     loop: LoopManagerInterface
+    evidence: EvidenceManagerInterface
     placement: PlacementManagerInterface
     placement_operator: PlacementOperatorManagerInterface
     projects: ProjectsManagerInterface
 
 
 LOCAL = "local"
-"""The one environment a root accepts a quiet null budget gate or ledger in."""
+"""The one environment a root accepts a quiet null budget gate, ledger, or
+result gate in."""
 
 
-def refuse_quiet_spend(environment: str, *capabilities: object) -> None:
-    """Outside `local`, a root refuses a quiet null budget gate or ledger at
-    boot: every model call would pass a gate that holds nothing, and spend
-    outside every budget. A loud null is no such risk: it refuses each call
-    itself."""
+def refuse_quiet_nulls(environment: str, *capabilities: object) -> None:
+    """Outside `local`, a root refuses a quiet null budget gate, ledger, or
+    result gate at boot: every model call would pass a gate that holds
+    nothing, and spend outside every budget, and every success would end
+    unverified. A loud null is no such risk: it refuses each call itself."""
     if environment == LOCAL:
         return
     for capability in capabilities:
@@ -146,14 +157,15 @@ def refuse_quiet_spend(environment: str, *capabilities: object) -> None:
 async def purge_held(
     managers: Managers, org_id: UUID, session_id: UUID, tree_id: UUID | None
 ) -> None:
-    """What the windows, the tools, attribution, the projects, and the
-    agents hold of a session the sweep purges: its artifacts, and its
-    workspace with its transport's records, which go with its history, its
-    authority, its project's row, and its tree when it was the tree's last
-    session."""
+    """What the windows, the tools, attribution, the evidence, the projects,
+    and the agents hold of a session the sweep purges: its artifacts, and
+    its workspace with its transport's records, which go with its history,
+    its authority, its runs, its project's row, and its tree when it was
+    the tree's last session."""
     await managers.windows.purge_artifacts(org_id, session_id)
     await managers.tools.purge_workspace(org_id, session_id)
     await managers.attribution.purge_authority(org_id, session_id)
+    await managers.evidence.purge_session(org_id, session_id)
     await managers.projects.purge_session(org_id, session_id)
     if tree_id is not None:
         await managers.agents.purge_tree(org_id, tree_id)
@@ -258,6 +270,9 @@ def build_managers(
     loop_options: LoopOptions | None = None,
     placement_options: PlacementOptions | None = None,
     environment: str = LOCAL,
+    evidence_options: EvidenceOptions | None = None,
+    executor: ExecutorInterface | None = None,
+    work_product: WorkProductInterface | None = None,
     projects_options: ProjectsOptions | None = None,
 ) -> Managers:
     """`integrations` is the root of the hosted services the managers front:
@@ -290,13 +305,22 @@ def build_managers(
     every tool call asks; and `result_gate`, the gate a result passes. None
     wires the tenancy manager's own, which answers for a person by the
     membership they hold at the call and for no service principal, and the
-    null gate, which accepts a result and marks it unverified.
+    evidence's gate over `work_product`. Outside `environment` `local`, a
+    quiet null result gate is refused at boot (`UnsafeConfiguration`).
 
     The loop takes the rest: `tool_catalog`, the adopter's tools, of which a
     session's registry holds those its kind names, with `domain_classes`,
     the classes the adopter declares; `stream_sink`, the carrier its parts
     go to, None the quiet null, which drops them; and `loop_options`. Its
     outage signal is infra's, and its model providers the integrations'.
+
+    The evidence takes the platform's two ports: `executor`, the fresh
+    executor validation runs on, and `work_product`, which reads what a
+    session delivered, and which the result gate reads too. None wires the
+    loud nulls, which refuse every validation and every read, so no success
+    counts until a process wires a work product. Whatever `tools_options`
+    names, the tools take the platform's ceiling on a protected path beside
+    its ceilings.
 
     `tools_layer` wraps the tools manager before the loop and the root take
     it: a layer above the engine holds its own rules around every call, and
@@ -405,7 +429,7 @@ def build_managers(
     gate = budget_gate or BudgetGateImpl(
         storage.get_budget_storage(), storage.get_ledger_storage(), BudgetGateOptions()
     )
-    refuse_quiet_spend(environment, gate, storage.get_ledger_storage())
+    refuse_quiet_nulls(environment, gate, storage.get_ledger_storage())
     # The one source of prices, which the resolver asks before it answers a
     # fill and the gate prices every call by.
     pricing = PricingTableImpl()
@@ -430,12 +454,15 @@ def build_managers(
         attribution_options or AttributionOptions(),
     )
     kinds = AgentKindCatalog(kinds=agent_kinds)
+    products = work_product or WorkProductAbsentImpl()
+    results = result_gate or ResultGateEvidenceImpl(storage.get_evidence_storage(), products)
+    refuse_quiet_nulls(environment, results)
     agents = AgentsManagerImpl(
         storage.get_agent_storage(),
         agent_sessions,
         steps,
         attribution,
-        result_gate or ResultGateNullImpl(),
+        results,
         kinds,
         tenancy,
         outbox,
@@ -470,6 +497,10 @@ def build_managers(
     # which answers whose authority each call runs under and the rule of
     # two. What a call keeps of its session's content goes under the
     # session's key: its input's hash, and its command's record.
+    tool_options = tools_options or ToolsOptions()
+    if PROTECTED_CEILING not in tool_options.ceilings.rules:
+        ceilings = PolicyLayer(rules=(*tool_options.ceilings.rules, PROTECTED_CEILING))
+        tool_options = tool_options.model_copy(update={"ceilings": ceilings})
     tools: ToolsManagerInterface = ToolsManagerImpl(
         storage.get_tool_storage(),
         steps,
@@ -478,10 +509,20 @@ def build_managers(
         outbox,
         infra.get_workspaces(),
         infra.get_transport(),
-        tools_options or ToolsOptions(),
+        tool_options,
         keyed_hash=privacy.keyed_hash,
         record_seal=record_seal or RecordSealKeysImpl(session_keys, storage.get_privacy_storage()),
         attribution=attribution,
+    )
+    # What makes a result: the runs, the policies, and validation on the
+    # executor, apart from every agent's workspace.
+    evidence = EvidenceManagerImpl(
+        storage.get_evidence_storage(),
+        tenancy,
+        outbox,
+        executor or ExecutorAbsentImpl(),
+        products,
+        evidence_options or EvidenceOptions(),
     )
     if tools_layer is not None:
         tools = tools_layer(tools)
@@ -557,6 +598,7 @@ def build_managers(
             loop_options or LoopOptions(),
             domain_classes=domain_classes,
         ),
+        evidence=evidence,
         placement=placement,
         placement_operator=PlacementOperatorManagerImpl(
             storage.get_placement_storage(),
