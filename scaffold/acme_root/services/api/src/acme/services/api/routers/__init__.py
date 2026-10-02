@@ -9,13 +9,14 @@ from collections.abc import Sequence
 
 from fastapi import APIRouter
 
-from acme.services.api.realtime import socket
+from acme.services.api.realtime import control, socket
 from acme.services.api.routers import (
     admin,
     agent_sessions,
     events,
     hosts,
     media,
+    relay,
     stations,
     tenancy,
 )
@@ -31,6 +32,9 @@ HOSTED: dict[str, tuple[APIRouter, ...]] = {
     # A tenant's pools and hosts, and a host's own calls: enroll, rotate,
     # beat, and claim.
     "hosts": (hosts.router,),
+    # The exec work a host holds and its control stream: a host's own calls,
+    # each opened from inside its wall.
+    "relay": (relay.router, control.router),
     # A tenant's labs, pools, and stations, the line, leases, and jobs, and a
     # lab daemon's own calls: rotate, claim, renew, and report.
     "stations": (stations.router,),

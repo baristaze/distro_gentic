@@ -65,6 +65,8 @@ from acme.om.privacy.storage import PrivacyStorageInterface
 from acme.om.privacy.storage.impl.postgres import PrivacyStoragePostgresImpl
 from acme.om.projects.storage import ProjectStorageInterface
 from acme.om.projects.storage.impl.postgres import ProjectStoragePostgresImpl
+from acme.om.relay.storage import RelayStorageInterface
+from acme.om.relay.storage.impl.postgres import RelayStoragePostgresImpl
 from acme.om.retention.storage import RetentionStorageInterface
 from acme.om.retention.storage.impl.postgres import RetentionStoragePostgresImpl
 from acme.om.stations.storage import StationsStorageInterface
@@ -242,6 +244,7 @@ class StoragePostgresImpl(StorageInterface):
         self._knowledge = KnowledgeStoragePostgresImpl(sessions)
         self._platform_agents = PlatformAgentsStoragePostgresImpl(sessions)
         self._benchmarks = BenchmarkStoragePostgresImpl(sessions)
+        self._relay = RelayStoragePostgresImpl(sessions)
         self._stations = StationsStoragePostgresImpl(sessions)
         self._workspaces = WorkspaceStoragePostgresImpl(sessions)
         self._matrix = MatrixStoragePostgresImpl(sessions)
@@ -339,6 +342,9 @@ class StoragePostgresImpl(StorageInterface):
 
     def get_benchmark_storage(self) -> BenchmarkStorageInterface:
         return self._benchmarks
+
+    def get_relay_storage(self) -> RelayStorageInterface:
+        return self._relay
 
     def get_stations_storage(self) -> StationsStorageInterface:
         return self._stations

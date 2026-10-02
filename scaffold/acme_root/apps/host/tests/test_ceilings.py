@@ -54,7 +54,7 @@ def test_the_owners_file_is_read_and_a_missing_one_starts_nothing(tmp_path: Path
         load(path)
     path.write_text(
         f'projects = ["{PROJECT}"]\nmin_isolation = "vm"\negress = "open"\n'
-        'readable = ["/srv/work/"]\npeople_commands = true\n'
+        'readable = ["/srv/work/"]\npeople_commands = true\nitems_at_once = 8\n'
     )
     assert load(path) == Ceilings(
         projects=frozenset({PROJECT}),
@@ -62,10 +62,17 @@ def test_the_owners_file_is_read_and_a_missing_one_starts_nothing(tmp_path: Path
         egress=None,
         readable=("/srv/work",),
         people_commands=True,
+        items_at_once=8,
     )
     path.write_text('projects = "all"\n')
     assert load(path) == Ceilings(projects=None)
-    for wrong in ('readable = ["srv"]\n', 'min_isolation = "none"\n', "lanes = []\n"):
+    for wrong in (
+        'readable = ["srv"]\n',
+        'min_isolation = "none"\n',
+        "lanes = []\n",
+        "items_at_once = 0\n",
+        "items_at_once = true\n",
+    ):
         path.write_text(wrong)
         with pytest.raises(BadSetting):
             load(path)
