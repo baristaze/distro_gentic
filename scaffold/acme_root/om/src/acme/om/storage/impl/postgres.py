@@ -23,6 +23,8 @@ from acme.om.budgets.storage.impl.postgres import (
 )
 from acme.om.events.storage import EventStorageInterface
 from acme.om.events.storage.impl.postgres import EventStoragePostgresImpl
+from acme.om.evidence.storage import EvidenceStorageInterface
+from acme.om.evidence.storage.impl.postgres import EvidenceStoragePostgresImpl
 from acme.om.idempotency.storage import IdempotencyStorageInterface
 from acme.om.idempotency.storage.impl.postgres import IdempotencyStoragePostgresImpl
 from acme.om.media.storage import MediaStorageInterface
@@ -190,6 +192,7 @@ class StoragePostgresImpl(StorageInterface):
         self._fill_sets = FillSetStoragePostgresImpl(sessions)
         self._windows = WindowStoragePostgresImpl(sessions)
         self._tools = ToolStoragePostgresImpl(sessions)
+        self._evidence = EvidenceStoragePostgresImpl(sessions)
 
     def get_tenancy_storage(self) -> TenancyStorageInterface:
         return self._tenancy
@@ -241,6 +244,9 @@ class StoragePostgresImpl(StorageInterface):
 
     def get_tool_storage(self) -> ToolStorageInterface:
         return self._tools
+
+    def get_evidence_storage(self) -> EvidenceStorageInterface:
+        return self._evidence
 
     async def healthcheck(self) -> bool:
         """A connect and a `SELECT 1` on every engine, each under the bounds its

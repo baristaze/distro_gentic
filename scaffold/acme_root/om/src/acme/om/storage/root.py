@@ -7,6 +7,7 @@ from acme.om.agents.storage import AgentStorageInterface
 from acme.om.attribution.storage import AttributionStorageInterface
 from acme.om.budgets.storage import BudgetStorageInterface, LedgerStorageInterface
 from acme.om.events.storage import EventStorageInterface
+from acme.om.evidence.storage import EvidenceStorageInterface
 from acme.om.idempotency.storage import IdempotencyStorageInterface
 from acme.om.media.storage import MediaStorageInterface
 from acme.om.models.storage import FillSetStorageInterface
@@ -71,6 +72,9 @@ class StorageInterface(ABC):
 
     @abstractmethod
     def get_tool_storage(self) -> ToolStorageInterface: ...
+
+    @abstractmethod
+    def get_evidence_storage(self) -> EvidenceStorageInterface: ...
 
     @abstractmethod
     async def healthcheck(self) -> bool: ...
