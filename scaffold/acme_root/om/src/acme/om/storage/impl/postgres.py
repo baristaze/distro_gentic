@@ -47,8 +47,12 @@ from acme.om.outbox.storage import OutboxStorageInterface
 from acme.om.outbox.storage.impl.postgres import OutboxStoragePostgresImpl
 from acme.om.placement.storage import PlacementStorageInterface
 from acme.om.placement.storage.impl.postgres import PlacementStoragePostgresImpl
+from acme.om.platform_agents.storage import PlatformAgentsStorageInterface
+from acme.om.platform_agents.storage.impl.postgres import PlatformAgentsStoragePostgresImpl
 from acme.om.privacy.storage import PrivacyStorageInterface
 from acme.om.privacy.storage.impl.postgres import PrivacyStoragePostgresImpl
+from acme.om.projects.storage import ProjectStorageInterface
+from acme.om.projects.storage.impl.postgres import ProjectStoragePostgresImpl
 from acme.om.retention.storage import RetentionStorageInterface
 from acme.om.retention.storage.impl.postgres import RetentionStoragePostgresImpl
 from acme.om.steps.storage import StepStorageInterface
@@ -203,6 +207,7 @@ class StoragePostgresImpl(StorageInterface):
         self._agents = AgentStoragePostgresImpl(sessions)
         self._attribution = AttributionStoragePostgresImpl(sessions)
         self._privacy = PrivacyStoragePostgresImpl(sessions)
+        self._projects = ProjectStoragePostgresImpl(sessions)
         self._retention = RetentionStoragePostgresImpl(sessions)
         self._budgets = BudgetStoragePostgresImpl(sessions)
         self._ledger = LedgerStoragePostgresImpl(sessions)
@@ -214,6 +219,7 @@ class StoragePostgresImpl(StorageInterface):
         self._evidence = EvidenceStoragePostgresImpl(sessions)
         self._placement = PlacementStoragePostgresImpl(sessions)
         self._trust = TrustStoragePostgresImpl(sessions)
+        self._platform_agents = PlatformAgentsStoragePostgresImpl(sessions)
         self._matrix = MatrixStoragePostgresImpl(sessions)
         self._matrix_tenants = MatrixTenantStoragePostgresImpl(sessions)
 
@@ -253,6 +259,9 @@ class StoragePostgresImpl(StorageInterface):
     def get_privacy_storage(self) -> PrivacyStorageInterface:
         return self._privacy
 
+    def get_project_storage(self) -> ProjectStorageInterface:
+        return self._projects
+
     def get_retention_storage(self) -> RetentionStorageInterface:
         return self._retention
 
@@ -285,6 +294,9 @@ class StoragePostgresImpl(StorageInterface):
 
     def get_trust_storage(self) -> TrustStorageInterface:
         return self._trust
+
+    def get_platform_agents_storage(self) -> PlatformAgentsStorageInterface:
+        return self._platform_agents
 
     def get_matrix_storage(self) -> MatrixStorageInterface:
         return self._matrix

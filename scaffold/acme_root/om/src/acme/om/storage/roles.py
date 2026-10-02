@@ -56,6 +56,9 @@ TABLE_ROLES: dict[str, DatabaseRole] = {
     "billing_accounts": DatabaseRole.CORE,
     "ledger_entries": DatabaseRole.ACTIVITY,
     "ledger_counts": DatabaseRole.ACTIVITY,
+    "validation_sessions": DatabaseRole.CORE,
+    "projects": DatabaseRole.CORE,
+    "session_projects": DatabaseRole.CORE,
     "matrix_versions": DatabaseRole.CORE,
     "benchmark_results": DatabaseRole.CORE,
     "model_retirements": DatabaseRole.CORE,
@@ -73,6 +76,7 @@ APPEND_ONLY_TABLES: frozenset[str] = frozenset(
         "validations",
         "inferences",
         "ledger_entries",
+        "session_projects",
         "benchmark_results",
     }
 )
@@ -92,11 +96,12 @@ PURGED_TABLES: frozenset[str] = frozenset(
         "execution_records",
         "validations",
         "inferences",
+        "session_projects",
     }
 )
 """The tables the purge login reaches: a session, its history and its
-artifacts, its authority, and its tree, which go together when the session
-is purged. It holds SELECT and DELETE on them and nothing
+artifacts, its authority, its tree, its runs, and its project's row, which
+go together when the session is purged. It holds SELECT and DELETE on them and nothing
 else, granted by the migrations that admit it and again by the login
 command, and the tenant fence admits it within the tenant its transaction
 names and never under the system scope (ADR 1010)."""

@@ -182,6 +182,26 @@ An org's **fair share** says which lane its loops wait in, its plan's or
 one of its own, and how many of them run at once. The platform's
 operators set it. A loop over it waits its turn and never fails.
 
+## The agents the platform ships
+
+The platform ships four kinds of agent. The **engineer** takes an
+objective to a validated, reviewable change in a workspace of its own.
+**Analysis** reads what a run produced and turns it into findings. The
+**planner** turns findings into tasks, and hands new work to an
+engineer. The **platform assistant** answers the people who set up and
+run their part of the platform: it explains the product from its
+documentation and cites it, reads where a session stands, drafts the
+tool policy for a person to apply, and hands engineering work to an
+engineer. It acts on a person's own permissions, and it has no
+workspace, no repository, no shell, and no station.
+
+Nothing chooses an agent for a message: a person chooses by choosing
+the session they type in.
+
+A **validation session** runs one check on a station, with no agent and
+no model. Its work waits in its lab's lane like any station work, and
+its run is recorded like any other run.
+
 ## What the platform writes for itself
 
 No person creates these and no screen shows them, but each belongs to
@@ -228,6 +248,11 @@ arrive twice, so the second copy gets the first one's answer.
   deadline as the whole tree. A tree names its org, as its sessions do.
 - A step's content is sealed under its session's key, so revoking one
   key erases what one session said and nothing else.
+- A project names its org and binds one repository. A session started
+  under a project belongs to it, of its own org, from before it exists
+  and never moved; a session it spawns or hands work to belongs to the
+  same. A session the API starts names no project, and takes its org's
+  policies alone.
 - A session takes its tenant's retention policy as a snapshot when it is
   created, so a tightening reaches it and a loosening never does. A
   policy names its org, one each, and a snapshot its session.
@@ -244,6 +269,8 @@ arrive twice, so the second copy gets the first one's answer.
   policy names its org and its project, one each.
 - A fair share names its org, one each, and the lane of every loop the
   org asks for is read off it.
+- A validation session names its org, and its station work is a work
+  item that names the session.
 - The matrix and what its operators record of a model are the
   platform's, no org's. A session's pin to a version, and an org's own
   choice of fill, name their org, and go with it.
@@ -257,6 +284,7 @@ arrive twice, so the second copy gets the first one's answer.
 - [Agents](src/acme/om/agents/README.md)
 - [Attribution](src/acme/om/attribution/README.md)
 - [Privacy](src/acme/om/privacy/README.md)
+- [Projects](src/acme/om/projects/README.md)
 - [Retention](src/acme/om/retention/README.md)
 - [Budgets](src/acme/om/budgets/README.md)
 - [Billing](src/acme/om/billing/README.md)
@@ -267,6 +295,7 @@ arrive twice, so the second copy gets the first one's answer.
 - [Evidence](src/acme/om/evidence/README.md)
 - [Placement](src/acme/om/placement/README.md)
 - [Trust](src/acme/om/trust/README.md)
+- [The platform's agents](src/acme/om/platform_agents/README.md)
 - [Events](src/acme/om/events/README.md)
 - [Outbox rows](src/acme/om/outbox/README.md)
 - [Work items](src/acme/om/work/README.md)

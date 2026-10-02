@@ -94,6 +94,7 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             # hypotheses and findings under the purge login.
             "evidence": managers.evidence.purge_tenant,
             "placement": managers.placement.purge_tenant,
+            "validation_sessions": managers.platform_agents.purge_tenant,
             # Every artifact's object, then its record, under the purge login.
             "artifacts": managers.windows.purge_tenant,
             # The history, then its sessions, both under the purge login: a
@@ -103,6 +104,8 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             # Each session's key versions, then its privacy record: the
             # content sealed under them is noise from the first batch.
             "privacy": managers.privacy.purge_tenant,
+            # Each session's project row, then the tenant's projects.
+            "projects": managers.projects.purge_tenant,
             # Each session's retention snapshot, then the tenant's policy.
             "retention": managers.retention.purge_tenant,
             "budgets": managers.budgets.purge_tenant,

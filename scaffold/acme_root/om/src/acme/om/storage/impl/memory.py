@@ -34,8 +34,12 @@ from acme.om.outbox.storage import OutboxStorageInterface
 from acme.om.outbox.storage.impl.memory import OutboxStorageMemoryImpl
 from acme.om.placement.storage import PlacementStorageInterface
 from acme.om.placement.storage.impl.memory import PlacementStorageMemoryImpl
+from acme.om.platform_agents.storage import PlatformAgentsStorageInterface
+from acme.om.platform_agents.storage.impl.memory import PlatformAgentsStorageMemoryImpl
 from acme.om.privacy.storage import PrivacyStorageInterface
 from acme.om.privacy.storage.impl.memory import PrivacyStorageMemoryImpl
+from acme.om.projects.storage import ProjectStorageInterface
+from acme.om.projects.storage.impl.memory import ProjectStorageMemoryImpl
 from acme.om.retention.storage import RetentionStorageInterface
 from acme.om.retention.storage.impl.memory import RetentionStorageMemoryImpl
 from acme.om.steps.storage import StepStorageInterface
@@ -70,6 +74,7 @@ class StorageMemoryImpl(StorageInterface):
         self._agents = AgentStorageMemoryImpl(self._outbox)
         self._attribution = AttributionStorageMemoryImpl(self._outbox)
         self._privacy = PrivacyStorageMemoryImpl(self._outbox)
+        self._projects = ProjectStorageMemoryImpl(self._outbox)
         self._retention = RetentionStorageMemoryImpl(self._outbox)
         self._budgets = BudgetStorageMemoryImpl(self._outbox)
         self._ledger = LedgerStorageMemoryImpl()
@@ -81,6 +86,7 @@ class StorageMemoryImpl(StorageInterface):
         self._evidence = EvidenceStorageMemoryImpl(self._outbox)
         self._placement = PlacementStorageMemoryImpl()
         self._trust = TrustStorageMemoryImpl(self._outbox)
+        self._platform_agents = PlatformAgentsStorageMemoryImpl(self._outbox)
         self._matrix = MatrixStorageMemoryImpl()
         self._matrix_tenants = MatrixTenantStorageMemoryImpl()
 
@@ -120,6 +126,9 @@ class StorageMemoryImpl(StorageInterface):
     def get_privacy_storage(self) -> PrivacyStorageInterface:
         return self._privacy
 
+    def get_project_storage(self) -> ProjectStorageInterface:
+        return self._projects
+
     def get_retention_storage(self) -> RetentionStorageInterface:
         return self._retention
 
@@ -152,6 +161,9 @@ class StorageMemoryImpl(StorageInterface):
 
     def get_trust_storage(self) -> TrustStorageInterface:
         return self._trust
+
+    def get_platform_agents_storage(self) -> PlatformAgentsStorageInterface:
+        return self._platform_agents
 
     def get_matrix_storage(self) -> MatrixStorageInterface:
         return self._matrix

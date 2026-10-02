@@ -64,6 +64,10 @@ from acme.om.outbox.impl.relay import OutboxRelayImpl
 from acme.om.placement import PlacementManagerInterface, PlacementOperatorManagerInterface
 from acme.om.placement.impl.manager import PlacementManagerImpl, PlacementOptions
 from acme.om.placement.impl.operator import PlacementOperatorManagerImpl
+from acme.om.platform_agents import PlatformAgentsManagerInterface
+from acme.om.platform_agents.catalog import PlatformAgents, refuse_reach, with_shipped
+from acme.om.platform_agents.impl.manager import PlatformAgentsManagerImpl, PlatformAgentsOptions
+from acme.om.platform_agents.kinds import SHIPPED
 from acme.om.privacy import PrivacyManagerInterface
 from acme.om.privacy.impl.artifacts import ArtifactSealKeysImpl
 from acme.om.privacy.impl.keys import SessionKeysImpl
@@ -73,6 +77,10 @@ from acme.om.privacy.impl.records import RecordSealKeysImpl
 from acme.om.privacy.impl.routed_steps import StepStorageRoutedImpl
 from acme.om.privacy.impl.sealed_steps import StepStorageSealedImpl
 from acme.om.privacy.keys import SessionKeysInterface
+from acme.om.projects import ProjectsManagerInterface
+from acme.om.projects.impl.manager import ProjectsManagerImpl, ProjectsOptions
+from acme.om.projects.impl.retention import SessionProjectBoundImpl
+from acme.om.projects.impl.sessions import AgentSessionsInProjectImpl
 from acme.om.retention import RetentionManagerInterface
 from acme.om.retention.impl.keys import (
     KeyServiceByTenantImpl,
@@ -80,7 +88,6 @@ from acme.om.retention.impl.keys import (
     TenantKeysImpl,
 )
 from acme.om.retention.impl.manager import RetentionManagerImpl, RetentionOptions
-from acme.om.retention.impl.projects import SessionProjectNullImpl
 from acme.om.retention.impl.sessions import AgentSessionsRetainedImpl
 from acme.om.retention.keys import TenantKeysInterface
 from acme.om.retention.projects import SessionProjectInterface
@@ -142,6 +149,8 @@ class Managers:
     evidence: EvidenceManagerInterface
     placement: PlacementManagerInterface
     placement_operator: PlacementOperatorManagerInterface
+    platform_agents: PlatformAgentsManagerInterface
+    projects: ProjectsManagerInterface
 
 
 LOCAL = "local"
@@ -167,14 +176,16 @@ def refuse_quiet_nulls(environment: str, *capabilities: object) -> None:
 async def purge_held(
     managers: Managers, org_id: UUID, session_id: UUID, tree_id: UUID | None
 ) -> None:
-    """What the windows, the tools, attribution, the evidence, and the agents
-    hold of a session the sweep purges: its artifacts, and its workspace with
-    its transport's records, which go with its history, its authority, its
-    runs, and its tree when it was the tree's last session."""
+    """What the windows, the tools, attribution, the evidence, the projects,
+    and the agents hold of a session the sweep purges: its artifacts, and
+    its workspace with its transport's records, which go with its history,
+    its authority, its runs, its project's row, and its tree when it was
+    the tree's last session."""
     await managers.windows.purge_artifacts(org_id, session_id)
     await managers.tools.purge_workspace(org_id, session_id)
     await managers.attribution.purge_authority(org_id, session_id)
     await managers.evidence.purge_session(org_id, session_id)
+    await managers.projects.purge_session(org_id, session_id)
     if tree_id is not None:
         await managers.agents.purge_tree(org_id, tree_id)
 
@@ -278,6 +289,8 @@ def build_managers(
     domain_classes: tuple[str, ...] = (),
     loop_options: LoopOptions | None = None,
     placement_options: PlacementOptions | None = None,
+    platform_agents_options: PlatformAgentsOptions | None = None,
+    platform_agents: PlatformAgents | None = None,
     environment: str = LOCAL,
     tenant_keys: TenantKeysInterface | None = None,
     session_projects: SessionProjectInterface | None = None,
@@ -285,6 +298,7 @@ def build_managers(
     evidence_options: EvidenceOptions | None = None,
     executor: ExecutorInterface | None = None,
     work_product: WorkProductInterface | None = None,
+    projects_options: ProjectsOptions | None = None,
 ) -> Managers:
     """`integrations` is the root of the hosted services the managers front:
     the identity provider, which the tenancy manager signs people in and
@@ -345,14 +359,37 @@ def build_managers(
     `placement_options` is the fair share of a tenant no operator gave one,
     and the delay a loop over its share waits; None keeps the defaults.
 
+    `platform_agents` ships the platform's agents, with the corpus its
+    assistant answers from: their kinds join `agent_kinds` and their tools
+    join `tool_catalog`, ahead of the adopter's. A catalog that holds two
+    tools of one name, or lets the assistant reach past reading and handing
+    work on, is refused at boot (`UnsafeConfiguration`). None ships none.
+
     The platform's retention takes three. `tenant_keys` says whose key
     service holds each tenant's keys; None is infra's for every tenant, and
     in `local` the local key service over it, which destroys a session's key
     and reports it as a tenant's own service does. Elsewhere infra's holds
     the tenant's key alone, and the engine's revocation is the
-    destruction. `session_projects` names a new session's project, None
-    none, so each session takes its tenant's policy unnarrowed; and
-    `retention_options` the sweep's batches."""
+    destruction. `session_projects` names a new session's project; None
+    reads the row the projects' start wrote, and a session with no row
+    takes its tenant's policy unnarrowed; and
+    `retention_options` the sweep's batches.
+
+    The platform's projects take `projects_options`, the purges' batch."""
+    if platform_agents is not None:
+        # Their tools read the managers built below, so each edge is bound
+        # at call time.
+        agent_kinds = (*SHIPPED, *agent_kinds)
+        tool_catalog = with_shipped(
+            platform_agents,
+            tool_catalog,
+            domain_classes,
+            sessions=lambda: managers.agent_sessions,
+            policies=lambda: managers.tools,
+            agents=lambda: managers.agents,
+            evidence=lambda: managers.evidence,
+        )
+        refuse_reach(agent_kinds, tool_catalog)
     # The relay every core-role manager hands its outbox rows to. It reaches
     # the work manager through the root below, because a row of kind
     # `work.<kind>` is enqueued there: the work manager needs the tenancy
@@ -455,10 +492,15 @@ def build_managers(
         tenancy,
         events,
         outbox,
-        session_projects or SessionProjectNullImpl(),
+        session_projects or SessionProjectBoundImpl(storage.get_project_storage()),
         retention_options or RetentionOptions(),
     )
-    agent_sessions = AgentSessionsRetainedImpl(engine_sessions, retention, privacy)
+    retained = AgentSessionsRetainedImpl(engine_sessions, retention, privacy)
+    # Each session's project: a session spawned or handed over belongs to
+    # the project of the session it came from. Every other namespace reaches
+    # the sessions through the decorator, so no such session stands outside
+    # its origin's project.
+    agent_sessions = AgentSessionsInProjectImpl(retained, storage.get_project_storage())
     # The gate reads the budgets of a call's scopes and holds on the ledger.
     budgets = BudgetsManagerImpl(
         storage.get_budget_storage(),
@@ -593,6 +635,24 @@ def build_managers(
         tenancy,
         placement_options or PlacementOptions(),
     )
+    # The validation sessions: station work on the queue, with no agent.
+    platform = PlatformAgentsManagerImpl(
+        storage.get_platform_agents_storage(),
+        tenancy,
+        outbox,
+        platform_agents_options or PlatformAgentsOptions(),
+    )
+    # The projects start a root session through the agents, under a project
+    # of the caller's tenant, and answer each session's project to the
+    # namespaces that key a policy by it.
+    projects = ProjectsManagerImpl(
+        storage.get_project_storage(),
+        agent_sessions,
+        agents,
+        tenancy,
+        outbox,
+        projects_options or ProjectsOptions(),
+    )
     managers = Managers(
         tenancy=tenancy,
         tenancy_operator=tenancy_operator,
@@ -648,5 +708,7 @@ def build_managers(
             storage.get_event_storage(),
             infra.get_topics(),
         ),
+        platform_agents=platform,
+        projects=projects,
     )
     return managers
