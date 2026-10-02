@@ -5,6 +5,7 @@ from enum import StrEnum
 from uuid import UUID
 
 from acme.om.base import Platform
+from acme.om.evidence.types.provenance import Provenance
 
 
 class Effect(StrEnum):
@@ -27,10 +28,12 @@ class Routed(Platform):
     whose own work it lands on. An automation tells its own sessions'
     events from others' by it, and a chain's hop follows it.
     `platform` is set when the platform's account wrote the event. `step_id` is
-    the input the session received, when it received one."""
+    the input the session received, when it received one. `provenance` is
+    what served the event: a twin's is never taken for the real system's."""
 
     event_id: UUID
     integration: str
+    provenance: Provenance
     arrival: str
     effect: Effect
     session_id: UUID | None = None

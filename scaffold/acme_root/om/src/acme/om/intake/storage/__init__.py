@@ -22,6 +22,16 @@ class IntakeStorageInterface(ABC):
     ) -> AccountLink | None: ...
 
     @abstractmethod
+    async def read_user_links(self, org_id: UUID, user_id: UUID, limit: int) -> list[AccountLink]:
+        """The accounts linked to a user of the tenant, by integration."""
+        ...
+
+    @abstractmethod
+    async def delete_link(self, org_id: UUID, integration: str, external_id: str) -> bool:
+        """The account's link gone; False when the tenant held none."""
+        ...
+
+    @abstractmethod
     async def create_binding(self, org_id: UUID, binding: WorkBinding) -> WorkBinding:
         """The binding, or the one the tenant holds for the handle already,
         which answers instead: one session a handle."""
