@@ -15,6 +15,7 @@ from acme.integrations.root import IntegrationsInterface
 from acme.om.agent_sessions.impl.manager import AgentSessionsOptions
 from acme.om.agents.impl.manager import AgentsOptions
 from acme.om.attribution.impl.manager import AttributionOptions
+from acme.om.base import new_id
 from acme.om.budgets.impl.manager import BudgetsOptions
 from acme.om.events.impl.manager import EventsOptions
 from acme.om.idempotency.impl.manager import IdempotencyOptions
@@ -28,6 +29,11 @@ from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.tenancy.impl.manager import TenancyOptions
 from acme.om.tools.impl.manager import ToolsOptions
+from acme.om.trust.impl.keys import KeyProbeAbsentImpl
+from acme.om.trust.impl.manager import TrustOptions
+from acme.om.trust.impl.placement import PlacementCloudImpl
+from acme.om.trust.root import TrustLayer
+from acme.om.trust.types.identities import Executor, ExecutorKind
 from acme.om.work.impl.manager import WorkOptions
 from acme.workers.maintenance.settings import MaintenanceSettings
 
@@ -115,6 +121,18 @@ class WorkerContainer:
         self.infra = infra
         self.managers = managers
         self.integrations = integrations
+        # The trust swimlane, for its purge: the sweep runs no tool call, so
+        # its placement and its probe are the defaults that act on nothing.
+        executor = Executor(
+            kind=ExecutorKind.CLOUD, credential_id=new_id(), label=settings.worker_id
+        )
+        self.trust = TrustLayer(
+            storage,
+            infra,
+            placement=PlacementCloudImpl(executor),
+            probe=KeyProbeAbsentImpl(),
+            options=TrustOptions(purge_batch=settings.worker_purge_batch),
+        ).build(managers)
 
     @property
     def identity_provider(self) -> IdentityProviderInterface:

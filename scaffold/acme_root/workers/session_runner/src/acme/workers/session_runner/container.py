@@ -13,11 +13,16 @@ from acme.infra.root import InfraInterface
 from acme.integrations.impl.configured import IntegrationsConfiguredImpl
 from acme.integrations.root import IntegrationsInterface
 from acme.om.agents.types.kind import AgentKind
+from acme.om.base import new_id
 from acme.om.evidence import ExecutorInterface, WorkProductInterface
 from acme.om.root import Managers, build_managers
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.tools.tool import ToolInterface
+from acme.om.trust.impl.keys import KeyProbeAbsentImpl
+from acme.om.trust.impl.placement import PlacementCloudImpl
+from acme.om.trust.root import TrustLayer
+from acme.om.trust.types.identities import Executor, ExecutorKind
 from acme.workers.session_runner.settings import SessionRunnerSettings
 
 log = logging.getLogger(__name__)
@@ -90,7 +95,14 @@ class RunnerContainer:
         executor: ExecutorInterface | None = None,
         work_product: WorkProductInterface | None = None,
     ) -> RunnerContainer:
-        """The managers over whichever roots the caller chose."""
+        """The managers over whichever roots the caller chose, every tool call
+        held to the trust swimlane's rules: audited with its four answers,
+        this runner its executor, and refused a secret that would cross its
+        session's wall."""
+        runner = Executor(kind=ExecutorKind.CLOUD, credential_id=new_id(), label=settings.runner_id)
+        trust = TrustLayer(
+            storage, infra, placement=PlacementCloudImpl(runner), probe=KeyProbeAbsentImpl()
+        )
         managers = build_managers(
             storage,
             infra,
@@ -101,7 +113,9 @@ class RunnerContainer:
             domain_classes=domain_classes,
             executor=executor,
             work_product=work_product,
+            tools_layer=trust.tools,
         )
+        trust.build(managers)
         return cls(settings, storage, infra, integrations, managers)
 
     async def start(self) -> None:

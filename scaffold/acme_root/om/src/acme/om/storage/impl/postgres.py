@@ -49,6 +49,8 @@ from acme.om.tenancy.storage import TenancyStorageInterface
 from acme.om.tenancy.storage.impl.postgres import TenancyStoragePostgresImpl
 from acme.om.tools.storage import ToolStorageInterface
 from acme.om.tools.storage.impl.postgres import ToolStoragePostgresImpl
+from acme.om.trust.storage import TrustStorageInterface
+from acme.om.trust.storage.impl.postgres import TrustStoragePostgresImpl
 from acme.om.windows.storage import WindowStorageInterface
 from acme.om.windows.storage.impl.postgres import WindowStoragePostgresImpl
 from acme.om.work.storage import WorkStorageInterface
@@ -196,6 +198,7 @@ class StoragePostgresImpl(StorageInterface):
         self._tools = ToolStoragePostgresImpl(sessions)
         self._evidence = EvidenceStoragePostgresImpl(sessions)
         self._placement = PlacementStoragePostgresImpl(sessions)
+        self._trust = TrustStoragePostgresImpl(sessions)
 
     def get_tenancy_storage(self) -> TenancyStorageInterface:
         return self._tenancy
@@ -253,6 +256,9 @@ class StoragePostgresImpl(StorageInterface):
 
     def get_placement_storage(self) -> PlacementStorageInterface:
         return self._placement
+
+    def get_trust_storage(self) -> TrustStorageInterface:
+        return self._trust
 
     async def healthcheck(self) -> bool:
         """A connect and a `SELECT 1` on every engine, each under the bounds its

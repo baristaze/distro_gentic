@@ -256,6 +256,7 @@ def build_managers(
     principal_context: PrincipalContext | None = None,
     result_gate: ResultGateInterface | None = None,
     tools_options: ToolsOptions | None = None,
+    tools_layer: Callable[[ToolsManagerInterface], ToolsManagerInterface] | None = None,
     budget_gate: BudgetGateInterface | None = None,
     stream_sink: StreamSinkInterface | None = None,
     tool_catalog: tuple[ToolInterface, ...] = (),
@@ -313,6 +314,10 @@ def build_managers(
     counts until a process wires a work product. Whatever `tools_options`
     names, the tools take the platform's ceiling on a protected path beside
     its ceilings.
+
+    `tools_layer` wraps the tools manager before the loop and the root take
+    it: a layer above the engine holds its own rules around every call, and
+    sees each call the engine runs. None takes the tools manager as it is.
 
     `placement_options` is the fair share of a tenant no operator gave one,
     and the delay a loop over its share waits; None keeps the defaults."""
@@ -482,7 +487,7 @@ def build_managers(
     if PROTECTED_CEILING not in tool_options.ceilings.rules:
         ceilings = PolicyLayer(rules=(*tool_options.ceilings.rules, PROTECTED_CEILING))
         tool_options = tool_options.model_copy(update={"ceilings": ceilings})
-    tools = ToolsManagerImpl(
+    tools: ToolsManagerInterface = ToolsManagerImpl(
         storage.get_tool_storage(),
         steps,
         tenancy,
@@ -505,6 +510,8 @@ def build_managers(
         products,
         evidence_options or EvidenceOptions(),
     )
+    if tools_layer is not None:
+        tools = tools_layer(tools)
     idempotency = IdempotencyManagerImpl(
         storage.get_idempotency_storage(), idempotency_options or IdempotencyOptions()
     )
