@@ -12,11 +12,11 @@ from uuid import UUID
 
 from acme.om.agents.rules import OUTCOMES
 from acme.om.agents.types.result import Claim, Verdict
-from acme.om.evidence.rates import corrected, rate_claim
+from acme.om.evidence.rates import corrected, rate_claim, stops_at
 from acme.om.evidence.types.acceptance import Leak, Surface
 from acme.om.evidence.types.contract import CheckDeclaration, Offer
 from acme.om.evidence.types.policy import Requirement, ValidationPolicy
-from acme.om.evidence.types.rate import AbortRule, RateRule
+from acme.om.evidence.types.rate import AbortRule, Bound, RateRule
 from acme.om.evidence.types.record import ExecutionRecord, RunOutcome, RunPurpose
 from acme.om.evidence.types.validation import Delivery, ExecutionRequest, Validation
 from acme.om.steps.types.header import LoopOutcome
@@ -123,6 +123,21 @@ def trials_of(requirements: Iterable[Requirement]) -> dict[str, int]:
     return counts
 
 
+def stopping_rules(requirements: Sequence[Requirement]) -> dict[str, RateRule]:
+    """The rule each rated check's trials stop by, as the executor runs them
+    and the gate judges them: the rate of the requirement that declares the
+    most trials, at the confidence corrected for every rate judged together."""
+    rated = sum(1 for requirement in requirements if requirement.rate is not None)
+    rules: dict[str, RateRule] = {}
+    for requirement in requirements:
+        rule = requirement.rate
+        held = rules.get(requirement.check)
+        if rule is not None and (held is None or rule.trials > held.trials):
+            confidence = corrected(rule.confidence, rated)
+            rules[requirement.check] = rule.model_copy(update={"confidence": confidence})
+    return rules
+
+
 def execution_request(
     session_id: UUID,
     policy: ValidationPolicy,
@@ -150,6 +165,7 @@ def execution_request(
     if not needed:
         return "the policy asks for no check of this change: there is nothing to validate"
     counts = trials_of(needed)
+    rules = stopping_rules(needed)
     checks = tuple(policy.declared(name) for name in sorted(counts))
     for check in checks:
         refusal = compatibility_refusal(check, offer)
@@ -163,6 +179,7 @@ def execution_request(
         source=delivery.base,
         checks=checks,
         trials=tuple(counts[check.name] for check in checks),
+        rates=tuple(rules.get(check.name) for check in checks),
     )
 
 
@@ -239,7 +256,8 @@ def judge(claim: Claim, reading: Reading) -> Verdict:
     unwritten = provenance_refusal(reading.validations, reading.records, delivery.head)
     if unwritten is not None:
         return refused(unwritten)
-    unmet = unmet_requirements(needed, reading.records, delivery.head)
+    order = {run: at for found in reading.validations for at, run in enumerate(found.records)}
+    unmet = unmet_requirements(needed, reading.records, delivery.head, order)
     if unmet:
         return refused(f"the validation at {delivery.head} did not pass: " + "; ".join(unmet))
     return accepted(LoopOutcome.SUCCEEDED)
@@ -276,7 +294,10 @@ def provenance_refusal(
 
 
 def unmet_requirements(
-    needed: Sequence[Requirement], records: Sequence[ExecutionRecord], head: str
+    needed: Sequence[Requirement],
+    records: Sequence[ExecutionRecord],
+    head: str,
+    order: Mapping[UUID, int] | None = None,
 ) -> list[str]:
     """What the runs at the head leave unmet. A plain requirement needs a
     passing run at its grade and no run of its check that did not pass: a
@@ -285,8 +306,10 @@ def unmet_requirements(
     and its declared count, and needs every batch's bound under the declared
     rate: a batch that failed still counts after a later one passes, so
     validating again until the bound holds never passes. Its confidence is
-    corrected for the number of rates judged together. A double's run is
-    below every grade, and a run that passed no case does not pass."""
+    corrected for the number of rates judged together. A batch is read in
+    the order its validation lists its runs (`order`), which is the order
+    they ran. A double's run is below every grade, and a run that passed no
+    case does not pass."""
     unmet: list[str] = []
     rated = sum(1 for requirement in needed if requirement.rate is not None)
     for requirement in needed:
@@ -303,7 +326,8 @@ def unmet_requirements(
             continue
         rule = requirement.rate
         batches: dict[UUID | None, list[ExecutionRecord]] = {}
-        for record in runs:
+        ran = sorted(runs, key=lambda record: (order or {}).get(record.id, len(runs)))
+        for record in ran:
             batches.setdefault(record.validation_id, []).append(record)
         if not batches:
             unmet.append(f"{name} ran 0 of the {rule.trials} trials declared")
@@ -321,18 +345,29 @@ def batch_refusal(
     floor: int,
     confidence: float,
 ) -> list[str]:
-    """Why one validation's trials of a check leave its rate unmet: trials
-    below the grade, fewer trials than declared, a safety stop the rule
-    leaves without a conclusion, or a bound above the declared rate."""
+    """Why one validation's trials of a check, in the order they ran, leave
+    its rate unmet: trials below the grade, fewer trials than a fixed count
+    declared, a sequential test stopped anywhere but where its rule stops
+    it, a safety stop the rule leaves without a conclusion, or a bound above
+    the declared rate."""
     below = sum(1 for record in batch if record.provenance.strength < floor)
     if below:
         return [f"{name} ran {below} trials below the grade"]
-    if len(batch) < rule.trials:
+    if rule.bound is Bound.SEQUENTIAL:
+        stop = stops_at(rule, [not record.passing for record in batch], confidence)
+        if stop is None:
+            return [f"{name} ran {len(batch)} trials, and its sequential test had not stopped"]
+        if stop < len(batch):
+            return [
+                f"{name} ran {len(batch)} trials, on past trial {stop}, "
+                "where its sequential test stopped"
+            ]
+    elif len(batch) < rule.trials:
         return [f"{name} ran {len(batch)} of the {rule.trials} trials declared"]
     aborted = sum(1 for record in batch if record.outcome is RunOutcome.ABORTED)
     if aborted and rule.aborted is AbortRule.INCONCLUSIVE:
         return [f"{name} had {aborted} trials a safety stop ended"]
-    claim = rate_claim(name, head, batch, confidence, rule.bound)
+    claim = rate_claim(name, head, batch, confidence, rule.bound, rule.alternative)
     if claim.upper > rule.max_rate:
         return [f"{name}: {claim.render()}, above the {rule.max_rate:.2%} declared"]
     return []
