@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from acme.om.agents.types.result import Claim, Result, Verdict
-from acme.om.evidence.rules import folded, protected_paths
+from acme.om.evidence.rules import named, protected_paths
 from acme.om.evidence.types.acceptance import Break, Leak, Link, Scenario
 from acme.om.evidence.types.inference import Inference, InferenceKind
 from acme.om.evidence.types.policy import Grade
@@ -21,16 +21,14 @@ from acme.om.steps.types.header import LoopOutcome
 
 def scenario_refusal(scenario: Scenario) -> str | None:
     """Why a scenario measures nothing: an objective that names its root
-    cause or its hidden suite, or a hidden check that shares a name with a
-    visible one."""
-    objective = f" {folded(scenario.objective)} "
-    named = [
-        marker
-        for marker in (*scenario.root_cause, *scenario.hidden.markers)
-        if f" {folded(marker)} " in objective
-    ]
-    if named:
-        return f"the objective names what it hides: {sorted(named)}"
+    cause or its hidden suite, by the match a scan makes; a hidden suite
+    kept at the base, in the tree the agent's workspace checks out; or a
+    hidden check that shares a name with a visible one."""
+    told = named((*scenario.root_cause, *scenario.hidden.markers), scenario.objective)
+    if told:
+        return f"the objective names what it hides: {sorted(told)}"
+    if scenario.hidden.source == scenario.base:
+        return "the hidden suite's source is the base, which the agent's workspace checks out"
     shared = sorted({check.name for check in scenario.hidden.checks} & set(scenario.visible))
     if shared:
         return f"the hidden suite shares a check with the visible one: {shared}"
@@ -80,7 +78,7 @@ def judge_chain(scenario: Scenario, chain: Chain) -> tuple[Break, ...]:
         for validation in chain.validations
         if validation.purpose is RunPurpose.VALIDATION and validation.version == head
     )
-    breaks.extend(_baseline(scenario, chain, at_head))
+    breaks.extend(_baseline(scenario, chain))
     breaks.extend(_hypotheses(chain.inferences))
     breaks.extend(_validation(chain.verdict))
     breaks.extend(_report(chain.result, at_head))
@@ -96,9 +94,10 @@ def judge_chain(scenario: Scenario, chain: Chain) -> tuple[Break, ...]:
     return tuple(breaks)
 
 
-def _baseline(scenario: Scenario, chain: Chain, at_head: Sequence[Validation]) -> list[Break]:
-    """A baseline at the scenario's base, taken before any validation at the
-    head, in which a visible check did not pass: the defect, reproduced."""
+def _baseline(scenario: Scenario, chain: Chain) -> list[Break]:
+    """A baseline at the scenario's base, taken before the session validated
+    any change, at any head, in which a visible check did not pass: the
+    defect, reproduced before a fix was tried."""
     delivery = chain.delivery
     if delivery is not None and delivery.base != scenario.base:
         reason = f"the work started from {delivery.base}, not the scenario's base {scenario.base}"
@@ -110,7 +109,14 @@ def _baseline(scenario: Scenario, chain: Chain, at_head: Sequence[Validation]) -
     ]
     if not baselines:
         return [Break(link=Link.BASELINE, reason=f"no baseline ran at the base {scenario.base}")]
-    first_change = min((validation.created_at for validation in at_head), default=None)
+    first_change = min(
+        (
+            validation.created_at
+            for validation in chain.validations
+            if validation.purpose is RunPurpose.VALIDATION
+        ),
+        default=None,
+    )
     before = [
         validation
         for validation in baselines

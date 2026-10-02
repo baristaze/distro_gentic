@@ -39,8 +39,14 @@ class HiddenSuite(Platform):
     never sees, and the markers a scan looks for: the suite's name, its
     paths, its case names. Its checks run on a fresh executor at the head
     delivered, and their runs stay with the verdict, never with the
-    session's evidence, which the agent reads."""
+    session's evidence, which the agent reads.
 
+    It lives in a source of its own (`source`), never in the project's
+    repository: a protected path is write-denied, not read-denied, so a
+    suite in the tree the workspace checks out is one the agent can read
+    and fit its fix to. The executor fetches it only to run it."""
+
+    source: str = Field(pattern=VERSION)
     checks: tuple[CheckDeclaration, ...] = Field(min_length=1, max_length=50)
     markers: tuple[str, ...] = Field(min_length=1, max_length=200)
 

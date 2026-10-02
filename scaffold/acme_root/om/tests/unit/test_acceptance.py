@@ -11,6 +11,8 @@ from contracts.acceptance import (
     COMPLETE,
     EXPORT,
     HEAD,
+    SUITES,
+    TREE,
     DefectExecutor,
     EvidenceParts,
     ScriptedRun,
@@ -23,6 +25,7 @@ from contracts.factories import make_org
 
 from acme.om.agents.types.result import Claim, Result
 from acme.om.context import Role
+from acme.om.evidence.rules import scan
 from acme.om.evidence.types.acceptance import Link, Surface
 from acme.om.evidence.types.record import RunPurpose
 from acme.om.exceptions import PreconditionFailed, ValidationFailed
@@ -99,7 +102,52 @@ async def test_a_run_that_edited_a_check_fails() -> None:
     assert verdict.broken() == {Link.UNTOUCHED}
 
 
+async def test_the_workspace_holds_no_file_of_the_hidden_suite_and_the_verdict_still_runs_it() -> (
+    None
+):
+    # The workspace checks out the project's tree at the base: no file of
+    # the hidden suite is in it, by its own name or by any marker.
+    suite = SUITES[EXPORT.hidden.source]
+    assert TREE.isdisjoint(suite)
+    assert not [path for path in TREE for marker in EXPORT.hidden.markers if marker in path]
+    run = await scripted()
+    verdict = await run.judge(await whole(run))
+    assert verdict.passed, verdict.breaks
+    assert [(found.check, found.version, found.passing) for found in verdict.hidden] == [
+        (COMPLETE.name, HEAD, True)
+    ]
+    # The executor fetched the suite from its own source, for the verdict's
+    # run alone; every run the session asked for came from the base.
+    sources = [(request.purpose, request.source) for request in run.evidence.executor.requests]
+    assert sources == [
+        (RunPurpose.BASELINE, BASE),
+        (RunPurpose.VALIDATION, BASE),
+        (RunPurpose.VALIDATION, EXPORT.hidden.source),
+    ]
+    # A scenario that keeps its hidden suite at the base is refused.
+    in_tree = EXPORT.model_copy(
+        update={"hidden": EXPORT.hidden.model_copy(update={"source": BASE})}
+    )
+    with pytest.raises(ValidationFailed, match="the agent's workspace checks out"):
+        await run.harness.judge(
+            run.ctx, in_tree, run.session, Result(claim=Claim.SUCCEEDED), surfaces()
+        )
+
+
 # The other links.
+
+
+async def test_a_baseline_taken_after_an_earlier_head_was_validated_breaks_the_chain() -> None:
+    # The session validates a first head, then takes its baseline, then
+    # validates the head it delivers: the baseline came after a change.
+    run = await scripted()
+    run.deliver("cafe01", ("src/export.py",))
+    await run.evidence.manager.validate(run.ctx, run.session, RunPurpose.VALIDATION)
+    await run.baseline()
+    validation = await run.change()
+    verdict = await run.judge(Result(claim=Claim.SUCCEEDED, evidence=(validation.id,)))
+    assert verdict.broken() == {Link.BASELINE}
+    assert "every baseline ran after the change was validated" in verdict.breaks[0].reason
 
 
 async def test_any_valid_fix_passes_and_a_hidden_failure_does_not() -> None:
@@ -136,7 +184,7 @@ async def test_a_mention_of_the_hidden_suite_anywhere_the_agent_reads_breaks_it(
     assert "pull_request review names the hidden suite" in leaked.breaks[0].reason
     # The session's own evidence is a surface too: a run of the agent's that
     # names the hidden suite's file is a leak the harness finds itself.
-    await run.work_run(files=("hidden/complete_suite.py",))
+    await run.work_run(files=("complete_suite.py",))
     found = await run.judge(result)
     assert found.broken() == {Link.UNMENTIONED}
     assert found.breaks[0].reason.startswith("evidence ExecutionRecord")
@@ -152,3 +200,16 @@ async def test_a_scenario_that_names_what_it_hides_or_a_surface_left_out_is_refu
     del read[Surface.KNOWLEDGE]
     with pytest.raises(ValidationFailed, match="missing: \\['knowledge'\\]"):
         await run.harness.judge(run.ctx, EXPORT, run.session, result, read)
+
+
+async def test_a_scenario_is_refused_by_the_match_the_scan_makes() -> None:
+    # A marker inside a longer word: the scan finds it on any surface, so
+    # an objective that holds it is refused the same way.
+    inside = "Keep the export completeness report whole every night."
+    read = {**surfaces(prompt={"objective": inside}), Surface.EVIDENCE: {}}
+    assert [leak.marker for leak in scan(EXPORT.hidden.markers, read)] == [COMPLETE.name]
+    run = await scripted()
+    result = await whole(run)
+    within = EXPORT.model_copy(update={"objective": inside})
+    with pytest.raises(ValidationFailed, match="names what it hides: \\['export-complete'\\]"):
+        await run.harness.judge(run.ctx, within, run.session, result, surfaces())

@@ -35,14 +35,18 @@ showed. A check with a sequential test declares no other rate.
 again rather than trust the verdict the loop kept. It reads the baselines,
 the validations, and the hypotheses and findings from the evidence's
 storage, and the work product from its system. The chain is whole when a
-baseline at the scenario's base, taken before any validation at the
-head, fails a visible check; every hypothesis is resolved; the gate
+baseline at the scenario's base, taken before the session validated any
+change, at any head, fails a visible check; every hypothesis is resolved; the gate
 accepts a verified success; the result cites the validation at the head;
 the hidden suite passes there; no forbidden path changed; and no surface
 the agent reads names the hidden suite. The harness runs the hidden
 suite itself and keeps its runs with the verdict, since the session's
-evidence is a surface the agent reads. A trial's score is the share of
-the links held.
+evidence is a surface the agent reads. The suite lives in a source of its
+own, never in the project's repository: a protected path is
+write-denied, not read-denied, so a suite in the tree the workspace
+checks out is one the agent can read and fit its fix to. The executor
+fetches it only to run it, and a scenario that keeps it at its base is
+refused. A trial's score is the share of the links held.
 
 **A benchmark runs its own baseline, interleaved.** Each run of a
 scenario holds trials of both arms, scheduled candidate, baseline,

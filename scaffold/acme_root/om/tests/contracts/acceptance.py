@@ -29,6 +29,16 @@ from contracts.evidence_storage import HASH, make_record
 BASE = "base0"
 HEAD = "c0ffee"
 
+TREE = frozenset({"src/export.py", "src/pages.py", "tests/test_export.py", "service/app.py"})
+"""The project's repository at the base: what a session's workspace checks
+out."""
+
+SUITE = "suites/orders-vanish@1"
+SUITES = {SUITE: frozenset({"complete_suite.py"})}
+"""Each hidden suite's own source and the files it holds: a store apart
+from the project's repository, which the executor fetches from only when
+it runs the suite, and no workspace holds."""
+
 COMPLETE = CheckDeclaration(
     name="export-complete",
     version="1",
@@ -44,13 +54,15 @@ EXPORT = Scenario(
     objective="Some orders never reach the nightly export. Make every one of them reach it.",
     root_cause=("page boundary",),
     visible=("unit",),
-    hidden=HiddenSuite(checks=(COMPLETE,), markers=("export-complete", "hidden/complete_suite.py")),
-    forbidden=("tests/**", "hidden/**", "service/**"),
+    hidden=HiddenSuite(
+        source=SUITE, checks=(COMPLETE,), markers=("export-complete", "complete_suite.py")
+    ),
+    forbidden=("tests/**", "service/**"),
 )
 """The defect is a page boundary the objective never names. The project's
 `unit` check shows it at the base; the hidden `export-complete` suite
-judges the fix by behavior; the checks and the service under test are off
-limits."""
+judges the fix by behavior, from a source of its own; the checks and the
+service under test are off limits."""
 
 
 def surfaces(**extra: Mapping[str, str]) -> dict[Surface, dict[str, str]]:
@@ -69,13 +81,16 @@ def surfaces(**extra: Mapping[str, str]) -> dict[Surface, dict[str, str]]:
 @dataclass
 class DefectExecutor(ScriptedExecutor):
     """An executor over a defect: at a version in `broken` the visible check
-    fails, and the hidden suite passes unless `hidden_passes` says not."""
+    fails, and the hidden suite passes unless `hidden_passes` says not. It
+    finds the hidden suite only in the suite's own source: asked for it
+    from anywhere else, as from the project's tree, its check fails."""
 
     broken: frozenset[str] = frozenset({BASE})
     hidden_passes: bool = True
 
     async def run(self, ctx: TenantContext, request: ExecutionRequest) -> ExecutorReport:
-        broken, hidden = request.version in self.broken, self.hidden_passes
+        broken = request.version in self.broken
+        hidden = self.hidden_passes and request.source in SUITES
 
         def outcome(check: str, trial: int) -> str:
             if check == COMPLETE.name:

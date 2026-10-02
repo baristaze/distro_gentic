@@ -404,8 +404,19 @@ def scan(
     leaks: list[Leak] = []
     for surface in Surface:
         for item, text in surfaces[surface].items():
-            padded = f" {folded(text)} "
-            for marker, needle in folded_markers.items():
-                if needle in padded:
-                    leaks.append(Leak(surface=surface, item=item, marker=marker))
+            for marker in _named(folded_markers, text):
+                leaks.append(Leak(surface=surface, item=item, marker=marker))
     return tuple(leaks)
+
+
+def named(markers: Collection[str], text: str) -> tuple[str, ...]:
+    """The markers `text` names, as a scan reads both: folded, and each
+    marker found anywhere in the text, inside a longer word too."""
+    return _named({marker: folded(marker) for marker in markers}, text)
+
+
+def _named(needles: Mapping[str, str], text: str) -> tuple[str, ...]:
+    """The markers whose folded form (`needles`) the folded `text` holds:
+    the one match `scan` and `named` make."""
+    haystack = folded(text)
+    return tuple(marker for marker, needle in needles.items() if needle in haystack)

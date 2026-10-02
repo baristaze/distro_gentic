@@ -125,9 +125,10 @@ class AcceptanceHarnessImpl(AcceptanceHarnessInterface):
         delivery: Delivery | None,
         verdict_id: UUID,
     ) -> tuple[tuple[ExecutionRecord, ...], tuple[Break, ...]]:
-        """The hidden suite at the head, on a fresh executor, from the
-        scenario's base as its protected source. Its runs belong to the
-        verdict: none is stored where the session's evidence is."""
+        """The hidden suite at the head, on a fresh executor, from its own
+        source, which no workspace holds: the executor fetches it for this
+        run alone. Its runs belong to the verdict: none is stored where the
+        session's evidence is."""
         if delivery is None:
             return (), ()
         offer = await self._executor.offer(ctx)
@@ -140,7 +141,7 @@ class AcceptanceHarnessImpl(AcceptanceHarnessInterface):
             project=scenario.project,
             purpose=RunPurpose.VALIDATION,
             version=delivery.head,
-            source=scenario.base,
+            source=scenario.hidden.source,
             checks=scenario.hidden.checks,
             trials=(1,) * len(scenario.hidden.checks),
         )

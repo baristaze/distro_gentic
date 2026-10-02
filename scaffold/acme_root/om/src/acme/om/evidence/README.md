@@ -78,7 +78,9 @@ of](../../../../README.md).
   left could bring it there; a batch that stops anywhere else is not the
   test declared. A fixed count runs every trial, whatever the first ones
   showed.
-- **The hidden suite stays hidden.** A scan of every surface the agent
+- **The hidden suite stays hidden.** It lives in a source of its own,
+  never in the project's repository the workspace checks out, and the
+  executor fetches it only to run it. A scan of every surface the agent
   reads finds any mention of it.
 - **Acceptance judges the chain, never the files.** A failing baseline at
   the base before the change, every hypothesis resolved, a validation the
