@@ -36,6 +36,8 @@ TABLE_ROLES: dict[str, DatabaseRole] = {
     "step_cursors": DatabaseRole.ACTIVITY,
     "session_privacy": DatabaseRole.CORE,
     "session_keys": DatabaseRole.CORE,
+    "retention_policies": DatabaseRole.CORE,
+    "session_retention": DatabaseRole.CORE,
     "budgets": DatabaseRole.CORE,
     "budget_tallies": DatabaseRole.ACTIVITY,
     "budget_holds": DatabaseRole.ACTIVITY,
