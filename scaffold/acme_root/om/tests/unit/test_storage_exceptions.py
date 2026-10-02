@@ -26,6 +26,7 @@ from contracts import (
     agent_storage,
     attribution_storage,
     automation_storage,
+    benchmark_storage,
     budget_storage,
     event_storage,
     evidence_storage,
@@ -131,6 +132,11 @@ STORAGE_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         ("OutboxStorageInterface", "oldest_pending_at"),
         # The outbox's dead-letter gauge, read across tenants like the lag's.
         ("OutboxStorageInterface", "count_failed_since"),
+        # What the benchmark job showed: global rows of the system scope, the
+        # platform's own record, no tenant's.
+        ("BenchmarkStorageInterface", "create_benchmark"),
+        ("BenchmarkStorageInterface", "read_benchmark"),
+        ("BenchmarkStorageInterface", "read_history"),
     }
 )
 
@@ -139,6 +145,7 @@ CROSS_TENANT_CASES: dict[str, frozenset[str]] = {
     "AgentSessionStorageInterface": agent_session_storage.CROSS_TENANT_CASES,
     "AgentStorageInterface": agent_storage.CROSS_TENANT_CASES,
     "AttributionStorageInterface": attribution_storage.CROSS_TENANT_CASES,
+    "BenchmarkStorageInterface": benchmark_storage.CROSS_TENANT_CASES,
     "BudgetStorageInterface": budget_storage.CROSS_TENANT_CASES,
     "EventStorageInterface": event_storage.CROSS_TENANT_CASES,
     "EvidenceStorageInterface": evidence_storage.CROSS_TENANT_CASES,

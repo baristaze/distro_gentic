@@ -18,6 +18,8 @@ from acme.om.attribution.storage import AttributionStorageInterface
 from acme.om.attribution.storage.impl.postgres import AttributionStoragePostgresImpl
 from acme.om.automations.storage import AutomationStorageInterface
 from acme.om.automations.storage.impl.postgres import AutomationStoragePostgresImpl
+from acme.om.benchmarks.storage import BenchmarkStorageInterface
+from acme.om.benchmarks.storage.impl.postgres import BenchmarkStoragePostgresImpl
 from acme.om.billing.storage import AccountStorageInterface, MoneyLedgerStorageInterface
 from acme.om.billing.storage.impl.postgres import (
     AccountStoragePostgresImpl,
@@ -232,6 +234,7 @@ class StoragePostgresImpl(StorageInterface):
         self._playbook = PlaybookStoragePostgresImpl(sessions)
         self._knowledge = KnowledgeStoragePostgresImpl(sessions)
         self._platform_agents = PlatformAgentsStoragePostgresImpl(sessions)
+        self._benchmarks = BenchmarkStoragePostgresImpl(sessions)
         self._workspaces = WorkspaceStoragePostgresImpl(sessions)
 
     def get_tenancy_storage(self) -> TenancyStorageInterface:
@@ -323,6 +326,9 @@ class StoragePostgresImpl(StorageInterface):
 
     def get_platform_agents_storage(self) -> PlatformAgentsStorageInterface:
         return self._platform_agents
+
+    def get_benchmark_storage(self) -> BenchmarkStorageInterface:
+        return self._benchmarks
 
     def get_workspace_storage(self) -> WorkspaceStorageInterface:
         return self._workspaces

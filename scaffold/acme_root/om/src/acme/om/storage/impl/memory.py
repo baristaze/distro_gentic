@@ -8,6 +8,8 @@ from acme.om.attribution.storage import AttributionStorageInterface
 from acme.om.attribution.storage.impl.memory import AttributionStorageMemoryImpl
 from acme.om.automations.storage import AutomationStorageInterface
 from acme.om.automations.storage.impl.memory import AutomationStorageMemoryImpl
+from acme.om.benchmarks.storage import BenchmarkStorageInterface
+from acme.om.benchmarks.storage.impl.memory import BenchmarkStorageMemoryImpl
 from acme.om.billing.storage import AccountStorageInterface, MoneyLedgerStorageInterface
 from acme.om.billing.storage.impl.memory import (
     AccountStorageMemoryImpl,
@@ -99,6 +101,7 @@ class StorageMemoryImpl(StorageInterface):
         self._playbook = PlaybookStorageMemoryImpl(self._outbox)
         self._knowledge = KnowledgeStorageMemoryImpl(self._outbox)
         self._platform_agents = PlatformAgentsStorageMemoryImpl(self._outbox)
+        self._benchmarks = BenchmarkStorageMemoryImpl()
         self._workspaces = WorkspaceStorageMemoryImpl(self._outbox)
 
     def get_tenancy_storage(self) -> TenancyStorageInterface:
@@ -190,6 +193,9 @@ class StorageMemoryImpl(StorageInterface):
 
     def get_platform_agents_storage(self) -> PlatformAgentsStorageInterface:
         return self._platform_agents
+
+    def get_benchmark_storage(self) -> BenchmarkStorageInterface:
+        return self._benchmarks
 
     def get_workspace_storage(self) -> WorkspaceStorageInterface:
         return self._workspaces

@@ -93,6 +93,9 @@ TABLE_SCOPES: dict[str, TableScope] = {
     # The operator plane's own: the platform's size as the sweep last counted
     # it, one row that is no tenant's.
     "platform_sizes": TableScope(ScopeKind.SYSTEM),
+    # What the benchmark job showed of a candidate against its baseline: the
+    # platform's own record, no tenant's.
+    "benchmarks": TableScope(ScopeKind.SYSTEM),
     # A tenant's own rows. An org's `org_id` is its own id.
     "orgs": TableScope(ScopeKind.ORG),
     "invitations": TableScope(ScopeKind.ORG),

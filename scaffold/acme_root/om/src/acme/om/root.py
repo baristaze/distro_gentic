@@ -29,6 +29,8 @@ from acme.om.attribution.impl.manager import (
     members_context,
 )
 from acme.om.base import utcnow
+from acme.om.benchmarks import BenchmarksManagerInterface
+from acme.om.benchmarks.impl.manager import BenchmarksManagerImpl
 from acme.om.budgets import BudgetGateInterface, BudgetsManagerInterface
 from acme.om.budgets.impl.gate import BudgetGateImpl, BudgetGateOptions
 from acme.om.budgets.impl.manager import BudgetsManagerImpl, BudgetsOptions
@@ -164,6 +166,7 @@ class Managers:
     hosts: HostsManagerInterface
     platform_agents: PlatformAgentsManagerInterface
     projects: ProjectsManagerInterface
+    benchmarks: BenchmarksManagerInterface
 
 
 LOCAL = "local"
@@ -774,5 +777,6 @@ def build_managers(
         ),
         platform_agents=platform,
         projects=projects,
+        benchmarks=BenchmarksManagerImpl(storage.get_benchmark_storage()),
     )
     return managers
