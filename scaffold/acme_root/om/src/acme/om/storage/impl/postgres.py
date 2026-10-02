@@ -48,6 +48,8 @@ from acme.om.outbox.storage import OutboxStorageInterface
 from acme.om.outbox.storage.impl.postgres import OutboxStoragePostgresImpl
 from acme.om.placement.storage import PlacementStorageInterface
 from acme.om.placement.storage.impl.postgres import PlacementStoragePostgresImpl
+from acme.om.platform_agents.storage import PlatformAgentsStorageInterface
+from acme.om.platform_agents.storage.impl.postgres import PlatformAgentsStoragePostgresImpl
 from acme.om.playbooks.storage import PlaybookStorageInterface
 from acme.om.playbooks.storage.impl.postgres import PlaybookStoragePostgresImpl
 from acme.om.privacy.storage import PrivacyStorageInterface
@@ -221,6 +223,7 @@ class StoragePostgresImpl(StorageInterface):
         self._automation = AutomationStoragePostgresImpl(sessions)
         self._playbook = PlaybookStoragePostgresImpl(sessions)
         self._knowledge = KnowledgeStoragePostgresImpl(sessions)
+        self._platform_agents = PlatformAgentsStoragePostgresImpl(sessions)
 
     def get_tenancy_storage(self) -> TenancyStorageInterface:
         return self._tenancy
@@ -302,6 +305,9 @@ class StoragePostgresImpl(StorageInterface):
 
     def get_knowledge_storage(self) -> KnowledgeStorageInterface:
         return self._knowledge
+
+    def get_platform_agents_storage(self) -> PlatformAgentsStorageInterface:
+        return self._platform_agents
 
     async def healthcheck(self) -> bool:
         """A connect and a `SELECT 1` on every engine, each under the bounds its

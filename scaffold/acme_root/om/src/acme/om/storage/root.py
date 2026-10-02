@@ -18,6 +18,7 @@ from acme.om.models.storage import FillSetStorageInterface
 from acme.om.orchestrations.storage import OrchestrationsStorageInterface
 from acme.om.outbox.storage import OutboxStorageInterface
 from acme.om.placement.storage import PlacementStorageInterface
+from acme.om.platform_agents.storage import PlatformAgentsStorageInterface
 from acme.om.playbooks.storage import PlaybookStorageInterface
 from acme.om.privacy.storage import PrivacyStorageInterface
 from acme.om.retention.storage import RetentionStorageInterface
@@ -110,6 +111,9 @@ class StorageInterface(ABC):
 
     @abstractmethod
     def get_knowledge_storage(self) -> KnowledgeStorageInterface: ...
+
+    @abstractmethod
+    def get_platform_agents_storage(self) -> PlatformAgentsStorageInterface: ...
 
     @abstractmethod
     async def healthcheck(self) -> bool: ...

@@ -35,6 +35,8 @@ from acme.om.outbox.storage import OutboxStorageInterface
 from acme.om.outbox.storage.impl.memory import OutboxStorageMemoryImpl
 from acme.om.placement.storage import PlacementStorageInterface
 from acme.om.placement.storage.impl.memory import PlacementStorageMemoryImpl
+from acme.om.platform_agents.storage import PlatformAgentsStorageInterface
+from acme.om.platform_agents.storage.impl.memory import PlatformAgentsStorageMemoryImpl
 from acme.om.playbooks.storage import PlaybookStorageInterface
 from acme.om.playbooks.storage.impl.memory import PlaybookStorageMemoryImpl
 from acme.om.privacy.storage import PrivacyStorageInterface
@@ -88,6 +90,7 @@ class StorageMemoryImpl(StorageInterface):
         self._automation = AutomationStorageMemoryImpl(self._outbox)
         self._playbook = PlaybookStorageMemoryImpl(self._outbox)
         self._knowledge = KnowledgeStorageMemoryImpl(self._outbox)
+        self._platform_agents = PlatformAgentsStorageMemoryImpl(self._outbox)
 
     def get_tenancy_storage(self) -> TenancyStorageInterface:
         return self._tenancy
@@ -169,6 +172,9 @@ class StorageMemoryImpl(StorageInterface):
 
     def get_knowledge_storage(self) -> KnowledgeStorageInterface:
         return self._knowledge
+
+    def get_platform_agents_storage(self) -> PlatformAgentsStorageInterface:
+        return self._platform_agents
 
     async def healthcheck(self) -> bool:
         return True

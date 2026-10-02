@@ -29,6 +29,7 @@ from acme.om.media.impl.manager import MediaOptions
 from acme.om.models.impl.manager import ModelsOptions
 from acme.om.orchestrations.impl.manager import OrchestrationsOptions
 from acme.om.placement.impl.manager import PlacementOptions
+from acme.om.platform_agents.impl.manager import PlatformAgentsOptions
 from acme.om.playbooks.impl.manager import PlaybooksOptions
 from acme.om.playbooks.root import PlaybooksLayer
 from acme.om.retention.impl.manager import RetentionOptions
@@ -119,6 +120,7 @@ def worker_managers(
         tools_options=ToolsOptions(purge_batch=batch),
         retention_options=RetentionOptions(sweep_batch=RETENTION_SWEEP_BATCH, purge_batch=batch),
         placement_options=PlacementOptions(purge_batch=batch),
+        platform_agents_options=PlatformAgentsOptions(purge_batch=batch),
     )
 
 
