@@ -10,7 +10,7 @@
 # oldest pending row, which the Postgres queue alarms read; then the
 # platform's signals, each by bounded labels alone: the parked sessions by
 # reason and age, the ready loops by plan tier, the hosts by state, the model
-# cache's hit rate, and the spend by plan.
+# cache's hit rate, and the spend by matrix version.
 #
 # The body is dashboard.json.tftpl, a JSON document with interpolations and
 # nothing else (no template loops), so the test can read it as JSON. The

@@ -88,7 +88,7 @@ provider calls and credentials, and adds `audit-model-spend`.
 | `audit-credential-lifetimes` | none (local) | How long each credential works after it is revoked, on each channel. |
 | `audit-provider-calls` | none (local) | Every call to a provider, flow by flow, and which to remove, fold, move, or cache. |
 | `audit-deploy-time` | Investigator | Where a deploy's minutes go, and what would shorten it. |
-| `audit-model-spend` | Investigator | What model calls spend by plan, the cache's hit rate, and what rebuilt caches cost. |
+| `audit-model-spend` | Investigator | What model calls spend by matrix version, the cache's hit rate, and what rebuilt caches cost. |
 
 `tickets-triage` reads the tracker and the repository, and holds none of
 these roles.

@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import ValidationError
 
-from acme.infra.observability import MODEL_SPEND_MICROS, MODEL_TOKENS, OUTCOMES
+from acme.infra.observability import OUTCOMES
 from acme.integrations.model_providers.calls import ModelCall
 from acme.integrations.model_providers.types import Usage
 from acme.om.agent_sessions import AgentSessionsManagerInterface
@@ -52,7 +52,13 @@ from acme.om.exceptions import (
 )
 from acme.om.models.types.fill import Fill, ModelRole
 from acme.om.windows.gate import CallGateInterface
-from acme.om.windows.impl.gate import scopes_of
+from acme.om.windows.impl.gate import (
+    UNPINNED,
+    PinnedVersion,
+    count_settled,
+    scopes_of,
+    version_label,
+)
 from acme.om.windows.rules import call_shape
 
 log = logging.getLogger(__name__)
@@ -157,9 +163,6 @@ class MoneyGateImpl(MoneyGateInterface):
             )
             OUTCOMES.labels(subsystem="billing", outcome="overshoot").inc()
         OUTCOMES.labels(subsystem="billing", outcome=f"settled_{stored.bill.kind}").inc()
-        if hold.priced is not None and stored.spent.cost_micros:
-            # A model call's spend, once per hold, by the plan the gate read.
-            MODEL_SPEND_MICROS.labels(plan=hold.funding.plan.id).inc(stored.spent.cost_micros)
         return stored
 
     async def read_hold(self, ctx: TenantContext, hold_id: UUID) -> FundedHold:
@@ -247,17 +250,24 @@ class MoneyCallGateImpl(CallGateInterface):
     """The face the windows and the loop read, over the money gate. A model
     call's worst case is priced from the price table in force and held with
     the row it was read from; its usage is billed from that same row, after
-    the next version is read and in another process too."""
+    the next version is read and in another process too. Every settled call
+    counts its tokens and its spend under the matrix version `version` reads
+    of its session at the hold; a settle in another process counts them
+    under `none`."""
 
     def __init__(
         self,
         gate: MoneyGateInterface,
         prices: PriceBookInterface,
         sessions: AgentSessionsManagerInterface,
+        *,
+        version: PinnedVersion | None = None,
     ) -> None:
         self._gate = gate
         self._prices = prices
         self._sessions = sessions
+        self._version = version
+        self._labels: dict[UUID, str] = {}
 
     async def authorize(
         self,
@@ -271,6 +281,7 @@ class MoneyCallGateImpl(CallGateInterface):
         credential: str,
     ) -> UUID:
         session = await self._sessions.get_session(ctx, session_id)
+        label = await version_label(self._version, ctx, session_id)
         priced = PricedAt(
             version=self._prices.version, provider=fill.provider.value, model=fill.model
         )
@@ -285,6 +296,7 @@ class MoneyCallGateImpl(CallGateInterface):
         answer = await self._gate.authorize_priced(ctx, request, priced, credential=credential)
         if isinstance(answer, Refusal):
             raise BudgetRefused(answer)
+        self._labels[answer.id] = label
         return answer.id
 
     async def settle(
@@ -306,14 +318,6 @@ class MoneyCallGateImpl(CallGateInterface):
                 )
                 price = self._prices.price_at(version, provider, model)
             bill = Billed(usage=usage_spend(usage, price))
-            # The cache's share of the prompt, by the plan the gate read: a
-            # fall in `cache_read` against the rest is a cache rebuilt.
-            plan = hold.funding.plan.id
-            for kind, tokens in (
-                ("input", usage.input),
-                ("cache_read", usage.cache_read),
-                ("cache_write", usage.cache_write),
-                ("output", usage.output + usage.thinking),
-            ):
-                MODEL_TOKENS.labels(plan=plan, kind=kind).inc(tokens)
-        await self._gate.settle(ctx, hold_id, bill)
+        label = self._labels.pop(hold_id, UNPINNED)
+        settlement = await self._gate.settle(ctx, hold_id, bill)
+        count_settled(label, usage if billed else None, settlement)

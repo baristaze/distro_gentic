@@ -541,7 +541,7 @@
     {
       "id": 13,
       "type": "timeseries",
-      "title": "Model cache hit rate by plan",
+      "title": "Model cache hit rate by matrix version",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -576,15 +576,15 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (plan) (rate(acme_model_tokens_total{kind=\"cache_read\"}[5m])) / sum by (plan) (rate(acme_model_tokens_total{kind=~\"input|cache_read|cache_write\"}[5m]))",
-          "legendFormat": "{{plan}}"
+          "expr": "sum by (matrix_version) (rate(acme_model_tokens_total{kind=\"cache_read\"}[5m])) / sum by (matrix_version) (rate(acme_model_tokens_total{kind=~\"input|cache_read|cache_write\"}[5m]))",
+          "legendFormat": "{{matrix_version}}"
         }
       ]
     },
     {
       "id": 14,
       "type": "timeseries",
-      "title": "Model spend per minute by plan, in dollars",
+      "title": "Model spend per minute by matrix version, in dollars",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -618,8 +618,8 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (plan) (increase(acme_model_spend_micros_total[1m])) / 1e6",
-          "legendFormat": "{{plan}}"
+          "expr": "sum by (matrix_version) (increase(acme_model_spend_micros_total[1m])) / 1e6",
+          "legendFormat": "{{matrix_version}}"
         }
       ]
     }

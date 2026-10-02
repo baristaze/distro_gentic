@@ -10,7 +10,7 @@ percentile from the statistic set a histogram is exported as, so the cloud
 widget reads the load balancer's p95 over every route, and its title says so
 instead of claiming a per-route line it cannot draw. And its metric math
 divides one series by another, never one search's series by another's, so
-the cloud's cache hit rate is every plan's together.
+the cloud's cache hit rate is every matrix version's together.
 
 Both end on the platform's row: the parks, the ready loops, the hosts, the
 model cache, and the spend. Every label they draw is bounded, and so is
@@ -45,8 +45,8 @@ FLEET_PANELS = {
     "Parked sessions by reason and age": "acme_sessions_parked",
     "Ready loops by plan tier": "acme_loops_ready",
     "Hosts by state": "acme_hosts",
-    "Model cache hit rate by plan": "acme_model_tokens_total",
-    "Model spend per minute by plan, in dollars": "acme_model_spend_micros_total",
+    "Model cache hit rate by matrix version": "acme_model_tokens_total",
+    "Model spend per minute by matrix version, in dollars": "acme_model_spend_micros_total",
 }
 """The platform's row, the last of both dashboards, by local title, and the
 metric each one draws."""
@@ -61,19 +61,22 @@ BOUNDED_LABELS = {
     "age",
     "plan_tier",
     "state",
-    "plan",
+    "matrix_version",
     "kind",
 }
 """Every label a process exports, each with a closed set of values: a route
-template, a status, an outcome, a park's reason and age, a plan or its tier,
-a host's state, a kind of token. Any other label is a new review."""
+template, a status, an outcome, a park's reason and age, a plan's tier, a
+host's state, a published matrix version, a kind of token. Any other label
+is a new review."""
 
 CLOUD_DIMENSIONS = {"environment", "service", "OTelLib"}
 """The dimensions the collector adds to every series in the cloud."""
 
 CLOUD_TITLE_FOR = {
     "HTTP latency p95 by route": "HTTP latency p95, all routes, at the load balancer",
-    "Model cache hit rate by plan": "Model cache hit rate, every plan together",
+    "Model cache hit rate by matrix version": (
+        "Model cache hit rate, every matrix version together"
+    ),
 }
 """A local panel whose cloud widget carries another title, and the one it carries."""
 

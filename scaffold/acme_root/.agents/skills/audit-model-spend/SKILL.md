@@ -1,6 +1,6 @@
 ---
 name: audit-model-spend
-description: "Audit what the platform's model calls spend, in one environment, with a read-only credential: the spend by plan, the prompt tokens read from a cache, written to one, and sent uncached, the hit rate by plan, and what rebuilt caches cost, over a window; then a report with verdicts and proposed tickets. Every read is an aggregate of the signals (Prometheus locally, CloudWatch in the cloud), the same series the operator dashboard draws. Never changes anything."
+description: "Audit what the platform's model calls spend, in one environment, with a read-only credential: the spend by matrix version, the prompt tokens read from a cache, written to one, and sent uncached, the hit rate by matrix version, and what rebuilt caches cost, over a window; then a report with verdicts and proposed tickets. Every read is an aggregate of the signals (Prometheus locally, CloudWatch in the cloud), the same series the operator dashboard draws. Never changes anything."
 allowed-tools: Read, Grep, Glob, Write, Bash(aws:*), Bash(curl:*), Bash(jq:*), Bash(mkdir:*), Bash(uv run acme-ops size:*)
 ---
 
@@ -9,8 +9,9 @@ allowed-tools: Read, Grep, Glob, Write, Bash(aws:*), Bash(curl:*), Bash(jq:*), B
 Where the model money goes, and how much of it a cache could have
 saved. Every settled model call counts its prompt tokens by how they
 were billed (read from a cache, written to one, or sent uncached), its
-output, and its reference cost, each by the plan the gate read. A cache
-read is the cheap token; a cache write is a cache rebuilt, paid above
+output, and its reference cost, each by the matrix version its session
+was pinned to: `none` when no matrix pinned it. A cache read is the
+cheap token; a cache write is a cache rebuilt, paid above
 the uncached rate. A fall in the hit rate is a cache that is rebuilt,
 which the dashboard shows before the bill does.
 
@@ -28,7 +29,7 @@ seven days by default.
 ## Role and credential
 
 Investigator, read-only, and no tenant's rows: every number is a
-series by plan and kind of token, never by tenant. `--env local` needs
+series by matrix version and kind of token, never by tenant. `--env local` needs
 the compose stack with the `devx` profile up (`make devx-up`) and the
 env file; no cloud credential. `--env staging` and `--env production`
 run under `acme-<env>-investigate`, checked with
@@ -46,17 +47,18 @@ block below does. Never print a token.
    `uv run acme-ops size --env <env>`, which refuses an env file that
    holds the provisioner's token. When it refuses, stop, and give the
    person the line it printed. Any other answer is not that refusal, the
-   platform's size or an error of its own, and the run goes on. Make the report's folder,
-   `~/Downloads/acme_model_spend_<yyyy-mm-dd>/` (`mkdir -p`).
-2. Read the window's spend by plan, and its tokens by plan and kind,
-   once each. Locally:
+   platform's size or an error of its own, and the run goes on. Make
+   the report's folder, `~/Downloads/acme_model_spend_<yyyy-mm-dd>/`
+   (`mkdir -p`).
+2. Read the window's spend by matrix version, and its tokens by matrix
+   version and kind, once each. Locally:
 
    ```bash
    set -a; . ~/.config/acme/ops/<env>.env; set +a
    curl -sG "$ACME_PROMETHEUS_URL/api/v1/query" \
-     --data-urlencode 'query=sum by (plan) (increase(acme_model_spend_micros_total[<since>])) / 1e6'
+     --data-urlencode 'query=sum by (matrix_version) (increase(acme_model_spend_micros_total[<since>])) / 1e6'
    curl -sG "$ACME_PROMETHEUS_URL/api/v1/query" \
-     --data-urlencode 'query=sum by (plan, kind) (increase(acme_model_tokens_total[<since>]))'
+     --data-urlencode 'query=sum by (matrix_version, kind) (increase(acme_model_tokens_total[<since>]))'
    ```
 
    In the cloud, by the dashboard's schemas, an hour a datapoint:
@@ -66,27 +68,26 @@ block below does. Never print a token.
      --start-time <start> --end-time <end> --output text \
      --query 'MetricDataResults[?length(Values) > `0`].[Id,Label,sum(Values)]' \
      --metric-data-queries '[
-       {"Id":"spend","Period":3600,"Label":"${PROP('"'"'Dim.plan'"'"')}","Expression":"SEARCH('"'"'{\"Acme\",OTelLib,environment,plan,service} MetricName=\"acme_model_spend_micros_total\" environment=\"<env>\"'"'"', '"'"'Sum'"'"', 3600)"},
-       {"Id":"tokens","Period":3600,"Label":"${PROP('"'"'Dim.plan'"'"')} ${PROP('"'"'Dim.kind'"'"')}","Expression":"SEARCH('"'"'{\"Acme\",OTelLib,environment,kind,plan,service} MetricName=\"acme_model_tokens_total\" environment=\"<env>\"'"'"', '"'"'Sum'"'"', 3600)"}
+       {"Id":"spend","Period":3600,"Label":"${PROP('"'"'Dim.matrix_version'"'"')}","Expression":"SEARCH('"'"'{\"Acme\",OTelLib,environment,matrix_version,service} MetricName=\"acme_model_spend_micros_total\" environment=\"<env>\"'"'"', '"'"'Sum'"'"', 3600)"},
+       {"Id":"tokens","Period":3600,"Label":"${PROP('"'"'Dim.matrix_version'"'"')} ${PROP('"'"'Dim.kind'"'"')}","Expression":"SEARCH('"'"'{\"Acme\",OTelLib,environment,kind,matrix_version,service} MetricName=\"acme_model_tokens_total\" environment=\"<env>\"'"'"', '"'"'Sum'"'"', 3600)"}
      ]'
    ```
 
    A `spend` line is millionths of a dollar; divide by 1,000,000. A
    query that answers nothing is written as "none in the window", never
    read again with a wider window.
-3. Compute, per plan: the hit rate, `cache_read / (input + cache_read +
+3. Compute, per matrix version: the hit rate, `cache_read / (input + cache_read +
    cache_write)`; the share of the prompt written to a cache,
    `cache_write / (input + cache_read + cache_write)`; and the spend's
    share of the whole. The price of a cache write against an uncached
    token is the price table's, in `om/src/acme/om/budgets/` (read it
    with `Read`), so the cost of rebuilt caches is the cache writes at
-   the write rate's premium over the input rate, per plan, as an
-   estimate the report labels so.
-4. Judge each plan: a hit rate under half, or cache writes above a
-   tenth of the prompt, is a finding; so is a plan whose spend share is
-   far above its share of tokens. The spend by the matrix version a
-   session started on is a series of its own once the matrix records
-   its version on each call; until then the report says it is not read.
+   the write rate's premium over the input rate, per matrix version, as
+   an estimate the report labels so.
+4. Judge each matrix version: a hit rate under half, or cache writes
+   above a tenth of the prompt, is a finding; so is a version whose
+   spend share is far above its share of tokens. `none` is every call
+   whose session no matrix pinned, judged the same way.
 5. Write the report, with each finding's proposed ticket: what to
    change (a prompt's stable prefix, a cache breakpoint, a fill), the
    evidence, and the effort. The audit proposes; it never fixes.
@@ -97,7 +98,8 @@ block below does. Never print a token.
   aggregates and writes its report under `~/Downloads/`.
 - Never modifies a tracked file, never commits, never opens a pull
   request.
-- No tenant's rows and no series by tenant: the plan is the finest cut.
+- No tenant's rows and no series by tenant: the matrix version is the
+  finest cut.
 - No secret value read or printed: the env file is sourced and never
   read.
 
@@ -110,9 +112,9 @@ block below does. Never print a token.
 
 **Answer.** <one sentence: where the money goes, and what a cache would save>
 
-| Plan | Spend ($) | Share | Hit rate | Cache writes | Verdict |
+| Matrix version | Spend ($) | Share | Hit rate | Cache writes | Verdict |
 |---|---|---|---|---|---|
-| <plan> | <n> | <p>% | <p>% | <p>% of prompt | ok / finding |
+| <version or none> | <n> | <p>% | <p>% | <p>% of prompt | ok / finding |
 
 ## Findings, by impact
 
@@ -124,6 +126,5 @@ block below does. Never print a token.
 
 ## Not verified
 
-- Spend by matrix version: not read; the series waits on the matrix.
 - <anything else the run could not read>
 ```

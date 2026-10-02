@@ -337,16 +337,16 @@
       "width": 12,
       "height": 6,
       "properties": {
-        "title": "Model cache hit rate, every plan together",
+        "title": "Model cache hit rate, every matrix version together",
         "view": "timeSeries",
         "stacked": false,
         "region": "${region}",
         "period": 60,
         "yAxis": { "left": { "min": 0, "label": "percent" } },
         "metrics": [
-          [ { "expression": "SUM(SEARCH('{\"Acme\",OTelLib,environment,kind,plan,service} MetricName=\"acme_model_tokens_total\" environment=\"${environment}\" kind=\"cache_read\"', 'Sum', 60))", "id": "read", "visible": false } ],
-          [ { "expression": "SUM(SEARCH('{\"Acme\",OTelLib,environment,kind,plan,service} MetricName=\"acme_model_tokens_total\" environment=\"${environment}\" kind=\"input\"', 'Sum', 60))", "id": "uncached", "visible": false } ],
-          [ { "expression": "SUM(SEARCH('{\"Acme\",OTelLib,environment,kind,plan,service} MetricName=\"acme_model_tokens_total\" environment=\"${environment}\" kind=\"cache_write\"', 'Sum', 60))", "id": "written", "visible": false } ],
+          [ { "expression": "SUM(SEARCH('{\"Acme\",OTelLib,environment,kind,matrix_version,service} MetricName=\"acme_model_tokens_total\" environment=\"${environment}\" kind=\"cache_read\"', 'Sum', 60))", "id": "read", "visible": false } ],
+          [ { "expression": "SUM(SEARCH('{\"Acme\",OTelLib,environment,kind,matrix_version,service} MetricName=\"acme_model_tokens_total\" environment=\"${environment}\" kind=\"input\"', 'Sum', 60))", "id": "uncached", "visible": false } ],
+          [ { "expression": "SUM(SEARCH('{\"Acme\",OTelLib,environment,kind,matrix_version,service} MetricName=\"acme_model_tokens_total\" environment=\"${environment}\" kind=\"cache_write\"', 'Sum', 60))", "id": "written", "visible": false } ],
           [ { "expression": "100 * read / (read + uncached + written)", "id": "rate", "label": "cache hit rate" } ]
         ]
       }
@@ -358,14 +358,14 @@
       "width": 12,
       "height": 6,
       "properties": {
-        "title": "Model spend per minute by plan, in dollars",
+        "title": "Model spend per minute by matrix version, in dollars",
         "view": "timeSeries",
         "stacked": false,
         "region": "${region}",
         "period": 60,
         "yAxis": { "left": { "min": 0, "label": "dollars" } },
         "metrics": [
-          [ { "expression": "SEARCH('{\"Acme\",OTelLib,environment,plan,service} MetricName=\"acme_model_spend_micros_total\" environment=\"${environment}\"', 'Sum', 60) / 1000000", "id": "spend" } ]
+          [ { "expression": "SEARCH('{\"Acme\",OTelLib,environment,matrix_version,service} MetricName=\"acme_model_spend_micros_total\" environment=\"${environment}\"', 'Sum', 60) / 1000000", "id": "spend" } ]
         ]
       }
     }

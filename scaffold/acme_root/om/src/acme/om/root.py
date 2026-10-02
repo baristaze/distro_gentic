@@ -344,9 +344,11 @@ def build_managers(
     no row of its own resolves nowhere.
 
     `models_layer` is a layer's own models: its resolver in place of the
-    table, a face over the models manager every namespace reaches, and the
-    client each model call runs on. None keeps the engine's: the table, the
-    manager as it is, and every call on the platform's key.
+    table, a face over the models manager every namespace reaches, the
+    client each model call runs on, and the version each session is pinned
+    to, which its calls' tokens and spend count under. None keeps the
+    engine's: the table, the manager as it is, every call on the platform's
+    key, and every call counted under `none`.
 
     `call_gate` is the budget gate every model call passes, the loop's and a
     compaction's, and `prompt_hash` the key service's hash a request's
@@ -649,8 +651,14 @@ def build_managers(
         if models_layer is None
         else models_layer.credentials(providers)
     )
-    # The one gate every model call passes, priced from the one source.
-    calls = call_gate or CallGateBudgetImpl(gate, pricing, agent_sessions)
+    # The one gate every model call passes, priced from the one source, and
+    # the place each call's tokens and spend are counted.
+    calls = call_gate or CallGateBudgetImpl(
+        gate,
+        pricing,
+        agent_sessions,
+        version=None if models_layer is None else models_layer.version,
+    )
     windows = WindowsManagerImpl(
         storage.get_window_storage(),
         steps,
