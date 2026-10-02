@@ -4,6 +4,7 @@ holds connections."""
 
 from abc import ABC, abstractmethod
 
+from acme.integrations.events import IntegrationInterface
 from acme.integrations.identity import IdentityProviderInterface
 from acme.integrations.model_providers import ModelProvidersInterface
 
@@ -14,6 +15,12 @@ class IntegrationsInterface(ABC):
 
     @abstractmethod
     def get_model_providers(self) -> ModelProvidersInterface: ...
+
+    @abstractmethod
+    def get_integration(self, name: str) -> IntegrationInterface:
+        """The integration of that name; `ProviderUnavailable` for one this
+        process holds none of."""
+        ...
 
     @abstractmethod
     def describe(self) -> list[str]:
