@@ -17,6 +17,13 @@ SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
+# The scaffold's checkers are importable from its source tree, so
+# `test_distro_check.py` reads `acme.distro_check` without installing it.
+# They need Python 3.11 (`tomllib`); that module skips itself on 3.10.
+CHECKERS = Path(__file__).resolve().parent.parent / "scaffold" / "acme_root" / "checkers" / "src"
+if str(CHECKERS) not in sys.path:
+    sys.path.insert(0, str(CHECKERS))
+
 
 SPEC = """\
 # distro_gentic
