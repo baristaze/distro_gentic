@@ -16,12 +16,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-import httpx
-
 from acme.apps.host.ceilings import Ask, Ceilings, ask_of, refusals
 from acme.apps.host.config import Credential, Settings, load_credential, save_credential
 from acme.apps.host.probe import Probed, Probes, startup
-from acme.client.client import ApiClient, ApiError
+from acme.client.client import WIRE_FAILURES, ApiClient, ApiError
 from acme.client.types import ClaimedWorkView, IsolationMode, IssuedHostCredentialView
 
 log = logging.getLogger(__name__)
@@ -179,7 +177,7 @@ class HostAgent:
                 raise
             log.warning("the platform failed: %s %s", error.status, error.code)
             return self._backoff(error.retry_after)
-        except httpx.TransportError as error:
+        except WIRE_FAILURES as error:
             log.warning("the platform is unreachable: %s", error)
             return self._backoff(None)
         self._failures = 0
