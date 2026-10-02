@@ -70,6 +70,9 @@ the changed text changes with it.
   meet the guideline's (below 1000) or the engine's (1001 to 1999). Its
   skills sit in `.agents/skills/`, and its `.claude/skills` is a link to
   them; `scripts/check_skills.py` holds their frontmatter and the link.
+  The `scaffold` branch holds the engine's `scaffold/` folder unchanged,
+  and main merges each engine release with a merge commit, never a
+  squash (`agentic-upgrade-scaffold`).
 - `.claude-plugin/` holds the plugin and marketplace manifests; the
   repository root is the plugin, `distro-gentic`. `plugin.json` carries
   the one release version, and `scripts/check_version.py` holds every
@@ -109,6 +112,16 @@ each part is held from the change that adds it.
 ```bash
 make check                          # the root gates
 claude plugin validate . --strict   # the manifests (when claude is installed)
+```
+
+The scaffold's gates run in a copy of it, as CI's `scaffold` job runs
+them. A copy named `distro` runs its stack as the compose project
+`distro`, on the ports its `.env.example` names:
+
+```bash
+python3 scaffold/new.py ../distro && cd ../distro
+make setup && make check            # the copy's fast gate
+cp .env.example .env && make infra-up migrate migrate-check test-integration
 ```
 
 `.github/pins/` holds every tool version the Makefile and CI run.
