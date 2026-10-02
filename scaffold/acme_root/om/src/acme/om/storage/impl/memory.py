@@ -6,6 +6,8 @@ from acme.om.agents.storage import AgentStorageInterface
 from acme.om.agents.storage.impl.memory import AgentStorageMemoryImpl
 from acme.om.attribution.storage import AttributionStorageInterface
 from acme.om.attribution.storage.impl.memory import AttributionStorageMemoryImpl
+from acme.om.automations.storage import AutomationStorageInterface
+from acme.om.automations.storage.impl.memory import AutomationStorageMemoryImpl
 from acme.om.billing.storage import AccountStorageInterface, MoneyLedgerStorageInterface
 from acme.om.billing.storage.impl.memory import (
     AccountStorageMemoryImpl,
@@ -19,6 +21,10 @@ from acme.om.evidence.storage import EvidenceStorageInterface
 from acme.om.evidence.storage.impl.memory import EvidenceStorageMemoryImpl
 from acme.om.idempotency.storage import IdempotencyStorageInterface
 from acme.om.idempotency.storage.impl.memory import IdempotencyStorageMemoryImpl
+from acme.om.intake.storage import IntakeStorageInterface
+from acme.om.intake.storage.impl.memory import IntakeStorageMemoryImpl
+from acme.om.knowledge.storage import KnowledgeStorageInterface
+from acme.om.knowledge.storage.impl.memory import KnowledgeStorageMemoryImpl
 from acme.om.media.storage import MediaStorageInterface
 from acme.om.media.storage.impl.memory import MediaStorageMemoryImpl
 from acme.om.models.storage import FillSetStorageInterface
@@ -31,6 +37,8 @@ from acme.om.placement.storage import PlacementStorageInterface
 from acme.om.placement.storage.impl.memory import PlacementStorageMemoryImpl
 from acme.om.platform_agents.storage import PlatformAgentsStorageInterface
 from acme.om.platform_agents.storage.impl.memory import PlatformAgentsStorageMemoryImpl
+from acme.om.playbooks.storage import PlaybookStorageInterface
+from acme.om.playbooks.storage.impl.memory import PlaybookStorageMemoryImpl
 from acme.om.privacy.storage import PrivacyStorageInterface
 from acme.om.privacy.storage.impl.memory import PrivacyStorageMemoryImpl
 from acme.om.projects.storage import ProjectStorageInterface
@@ -81,6 +89,10 @@ class StorageMemoryImpl(StorageInterface):
         self._evidence = EvidenceStorageMemoryImpl(self._outbox)
         self._placement = PlacementStorageMemoryImpl()
         self._trust = TrustStorageMemoryImpl(self._outbox)
+        self._intake = IntakeStorageMemoryImpl()
+        self._automation = AutomationStorageMemoryImpl(self._outbox)
+        self._playbook = PlaybookStorageMemoryImpl(self._outbox)
+        self._knowledge = KnowledgeStorageMemoryImpl(self._outbox)
         self._platform_agents = PlatformAgentsStorageMemoryImpl(self._outbox)
 
     def get_tenancy_storage(self) -> TenancyStorageInterface:
@@ -154,6 +166,18 @@ class StorageMemoryImpl(StorageInterface):
 
     def get_trust_storage(self) -> TrustStorageInterface:
         return self._trust
+
+    def get_intake_storage(self) -> IntakeStorageInterface:
+        return self._intake
+
+    def get_automation_storage(self) -> AutomationStorageInterface:
+        return self._automation
+
+    def get_playbook_storage(self) -> PlaybookStorageInterface:
+        return self._playbook
+
+    def get_knowledge_storage(self) -> KnowledgeStorageInterface:
+        return self._knowledge
 
     def get_platform_agents_storage(self) -> PlatformAgentsStorageInterface:
         return self._platform_agents

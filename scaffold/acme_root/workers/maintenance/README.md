@@ -10,7 +10,10 @@ side, started in `main.py`.
 - **The delivery consumer** (`deliveries.py`) long-polls `Queues.WEBHOOKS`,
   where the API queues each provider's verified delivery, and applies it
   once in the org it names. A message that can never apply is dropped; any
-  other failure comes back.
+  other failure comes back. An integration's event (`feedback`) is routed
+  to the session it names by [intake](../../om/src/acme/om/intake/README.md),
+  then fires the tenant's
+  [automations](../../om/src/acme/om/automations/README.md).
 - **The sweep** (`loop.py`) runs on a timer, within a budget. It requeues
   expired leases, relays the outbox, purges every row past its retention
   (`settings.py`), counts the platform's size, and logs the queue's gauges.
