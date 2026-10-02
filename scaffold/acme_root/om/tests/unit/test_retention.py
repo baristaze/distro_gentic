@@ -59,6 +59,7 @@ class Roots:
         projects: SessionProjectInterface | None = None,
         *,
         custody: bool = True,
+        options: RetentionOptions | None = None,
     ) -> None:
         self.platform = KeyServiceLocalImpl(KeyServiceMemoryImpl())
         self.own = KeyServiceLocalImpl(KeyServiceMemoryImpl())
@@ -73,6 +74,7 @@ class Roots:
             tenant_keys=self.keys,
             session_projects=self.projects,
         )
+        self.options = options or RetentionOptions()
         self.now = utcnow()
 
     def at(self, later: timedelta) -> RetentionManagerInterface:
@@ -91,7 +93,7 @@ class Roots:
             self.managers.events,
             self.managers.outbox,
             self.projects,
-            RetentionOptions(),
+            self.options,
             clock=clock,
         )
 
@@ -293,6 +295,84 @@ async def test_a_deleted_tenants_expired_content_is_destroyed_without_its_contex
     assert snapshot is not None and snapshot.destruction == report
     assert snapshot.shape_expired_at is not None
     assert await roots.sweep(MONTH + DAY * 2) == 0, "nothing of it is due again"
+
+
+@pytest.mark.parametrize("custody", [True, False])
+async def test_content_of_a_session_deleted_before_it_expires_is_unreadable_after_a_restore(
+    tmp_path: Path, custody: bool
+) -> None:
+    """A session marked deleted is hidden from every read, and its key is
+    revoked all the same when its content expires: the engine reaches it,
+    with or without a key service that holds the session's key, and a
+    restore reads back nothing it said."""
+    roots = Roots(tmp_path, custody=custody)
+    owner = await roots.tenant()
+    await roots.declare(owner, a_policy(WEEK, MONTH))
+    session = await roots.session_saying(owner)
+    await roots.managers.agent_sessions.delete_session(owner, session.id)
+
+    assert await roots.sweep(WEEK + DAY) == 1
+    ring = await roots.storage.get_privacy_storage().read_keys(owner.org_id, session.id)
+    assert ring.revoked and all(key.is_destroyed() for key in ring.keys)
+    (entry,) = await roots.audited(owner)
+    assert entry["reported"] is custody
+    if not custody:
+        assert entry["revoked_at"] is not None
+    await roots.managers.agent_sessions.restore_session(owner, session.id)
+    assert await roots.said(owner, session.id) == []
+
+
+async def test_content_is_never_expired_while_nothing_says_its_key_is_gone(
+    tmp_path: Path,
+) -> None:
+    """A deleted tenant has no context for the engine to revoke under, and a
+    key service that holds the tenant's key alone reports nothing: the
+    snapshot stays unexpired and waits out its next attempt, out of every
+    pass's read meanwhile."""
+    roots = Roots(tmp_path, custody=False)
+    owner = await roots.tenant()
+    await roots.declare(owner, a_policy(WEEK))
+    session = await roots.session_saying(owner)
+    tenancy = roots.storage.get_tenancy_storage()
+    org = await tenancy.read_org(owner.org_id)
+    assert org is not None
+    await tenancy.write_org(org.id, org.model_copy(update={"deleted_at": utcnow()}))
+
+    assert await roots.sweep(WEEK + DAY) == 1
+    retention = roots.storage.get_retention_storage()
+    snapshot = await retention.read_snapshot(owner.org_id, session.id)
+    assert snapshot is not None and snapshot.content_expired_at is None
+    assert snapshot.next_attempt_at == roots.now + WEEK + DAY + roots.options.retry_after
+    assert await roots.audited(owner) == []
+    assert await roots.sweep(WEEK + DAY) == 0, "out of the read until its next attempt"
+    assert await roots.sweep(WEEK + DAY + roots.options.retry_after) == 1
+
+
+async def test_a_session_stuck_past_its_shapes_life_holds_back_no_other_tenant(
+    tmp_path: Path,
+) -> None:
+    """A batch of one. A session with a loop open past its shape's life
+    cannot be marked: its content expires all the same, it waits for its
+    next attempt, and the next pass takes up another tenant's expired
+    content."""
+    roots = Roots(tmp_path, options=RetentionOptions(sweep_batch=1))
+    busy = await roots.tenant()
+    await roots.declare(busy, a_policy(WEEK, MONTH))
+    stuck = await roots.session_saying(busy)
+    await roots.managers.agent_sessions.receive(busy, stuck.id, [make_message(stuck.id, "more")])
+    other = await roots.tenant()
+    await roots.declare(other, a_policy(WEEK))
+    waiting = await roots.session_saying(other)
+
+    assert await roots.sweep(MONTH + DAY) == 1
+    taken = await roots.managers.retention.get_snapshot(busy, stuck.id)
+    assert taken.content_expired_at is not None and taken.shape_expired_at is None
+    assert taken.next_attempt_at is not None
+    assert await roots.managers.agent_sessions.get_session(busy, stuck.id), "not marked yet"
+    assert await roots.said(other, waiting.id) == [SAID]
+
+    assert await roots.sweep(MONTH + DAY) == 1
+    assert await roots.said(other, waiting.id) == []
 
 
 # The snapshot: tightening reaches it at the next sweep, loosening never.

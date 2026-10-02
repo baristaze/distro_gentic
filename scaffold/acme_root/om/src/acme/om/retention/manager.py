@@ -56,12 +56,16 @@ class RetentionManagerInterface(ABC):
         service context minted for each tenant from `rctx`. First, at most a
         batch of snapshots take what their tenant's policy has tightened
         since they last read it. Then, at most a batch of sessions past an
-        expiry: each whose content expired has its key destroyed by the
-        tenant's key service, revoked through the engine, and the
-        destruction audited as the service reported it; each whose shape
-        expired is marked deleted. A session that fails fails no other, and
-        the next pass takes it up again. Returns the larger of the two
-        counts, so a whole batch says there may be more."""
+        expiry: each whose content expired has its key revoked through the
+        engine, a session marked deleted included, and destroyed by the
+        tenant's key service, and the destruction audited as the service
+        reported it; each whose shape expired is marked deleted. Content
+        never waits on shape. A content is expired only once the engine or
+        the key service says its key is gone. What cannot finish yet, a
+        loop still open or a step that failed, takes the session out of
+        every pass's read until its next attempt, so no session holds back
+        another. Returns the larger of the two counts, so a whole batch says
+        there may be more."""
         ...
 
     @abstractmethod

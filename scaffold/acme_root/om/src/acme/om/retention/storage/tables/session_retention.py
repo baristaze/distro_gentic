@@ -45,4 +45,5 @@ class SessionRetentionRows(IdentifiableMixin, CreatedMixin, Base):
     content_expired_at: Mapped[datetime | None]
     destruction: Mapped[dict[str, Any] | None] = mapped_column(JSONB())
     shape_expired_at: Mapped[datetime | None]
+    next_attempt_at: Mapped[datetime | None]
     version: Mapped[int]

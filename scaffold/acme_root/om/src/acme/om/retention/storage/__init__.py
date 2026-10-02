@@ -71,7 +71,8 @@ class RetentionStorageInterface(ABC):
     async def read_due(self, now: datetime, limit: int) -> list[tuple[UUID, SessionRetention]]:
         """Cross-tenant: the sweep's read, in the system scope, of at most
         `limit` snapshots whose content or whose shape has expired by `now`
-        and is not yet taken up, each named with its tenant."""
+        and is not yet taken up, each named with its tenant. A snapshot whose
+        next attempt is after `now` is left out."""
         ...
 
     @abstractmethod

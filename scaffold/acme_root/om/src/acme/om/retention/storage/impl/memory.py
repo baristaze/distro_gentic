@@ -86,15 +86,18 @@ class RetentionStorageMemoryImpl(MemoryStorageBase, RetentionStorageInterface):
         return [
             (org_id, snapshot)
             for org_id, snapshot in self._rows_across_tenants(self._snapshots)
-            if (
-                snapshot.content_expires_at is not None
-                and snapshot.content_expires_at <= now
-                and snapshot.content_expired_at is None
-            )
-            or (
-                snapshot.shape_expires_at is not None
-                and snapshot.shape_expires_at <= now
-                and snapshot.shape_expired_at is None
+            if (snapshot.next_attempt_at is None or snapshot.next_attempt_at <= now)
+            and (
+                (
+                    snapshot.content_expires_at is not None
+                    and snapshot.content_expires_at <= now
+                    and snapshot.content_expired_at is None
+                )
+                or (
+                    snapshot.shape_expires_at is not None
+                    and snapshot.shape_expires_at <= now
+                    and snapshot.shape_expired_at is None
+                )
             )
         ][:limit]
 

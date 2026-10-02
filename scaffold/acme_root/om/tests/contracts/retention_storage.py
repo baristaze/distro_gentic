@@ -189,13 +189,19 @@ class RetentionStorageContract:
         )
         young = make_snapshot(taken_at=now)
         forever = make_snapshot(taken_at=now - MONTH * 12, content=None, shape=None)
-        for snapshot in (content, shape, taken_up):
+        waiting = moved(
+            make_snapshot(taken_at=now - MONTH * 2), next_attempt_at=now + timedelta(minutes=5)
+        )
+        retried = moved(
+            make_snapshot(taken_at=now - MONTH * 2), next_attempt_at=now - timedelta(minutes=5)
+        )
+        for snapshot in (content, shape, taken_up, waiting, retried):
             await storage.create_snapshot(org, snapshot)
         for snapshot in (young, forever):
             await storage.create_snapshot(other, snapshot)
         found = await storage.read_due(now, 100)
         ours = {(o, s.id) for o, s in found if o in (org, other)}
-        assert ours == {(org, content.id), (org, shape.id)}
+        assert ours == {(org, content.id), (org, shape.id), (org, retried.id)}
         assert len(await storage.read_due(now, 1)) == 1
 
     # The purge of a tenant past its retention.

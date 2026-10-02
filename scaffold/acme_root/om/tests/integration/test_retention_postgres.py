@@ -208,3 +208,29 @@ async def test_a_tightening_reaches_the_snapshot_row_and_a_loosening_does_not(
         tightened.content_expires_at,
     )
     assert loosened.policy_version == 3
+
+
+async def test_a_session_deleted_before_its_content_expires_has_its_key_rows_emptied(
+    storage: StoragePostgresImpl,
+    managers: Managers,
+    keys: KeyServiceLocalImpl,
+    pg_sessions: LoginSessions,
+) -> None:
+    owner = await an_org(managers, RetentionPolicy(content_lifetime=WEEK, shape_lifetime=MONTH))
+    session = await a_session_saying(managers, owner)
+    await managers.agent_sessions.delete_session(owner, session)
+
+    assert await sweep(storage, managers, keys, WEEK + DAY) == 1
+
+    (gone,) = await rows(
+        pg_sessions,
+        DatabaseRole.CORE,
+        "SELECT wrapped, destroyed_at FROM core.session_keys"
+        " WHERE org_id = :org AND session_id = :session",
+        owner.org_id,
+        session=session,
+    )
+    assert gone["wrapped"] is None and gone["destroyed_at"] is not None
+    await managers.agent_sessions.restore_session(owner, session)
+    steps = (await managers.steps.get_steps(owner, session, 0, 10)).items
+    assert [step.content.state.value for step in steps] == ["absent"]

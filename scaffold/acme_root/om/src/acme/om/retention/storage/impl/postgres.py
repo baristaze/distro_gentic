@@ -148,9 +148,15 @@ class RetentionStoragePostgresImpl(PgStorageBase, RetentionStorageInterface):
     async def read_due(self, now: datetime, limit: int) -> list[tuple[UUID, SessionRetention]]:
         # No order: the batch is any `limit` of the rows the two partial
         # indexes hold past `now`, so a backlog is never sorted to take one.
+        # A row a pass could not finish waits out its next attempt, so the
+        # rows that cannot move yet never fill every pass's batch.
         stmt = (
             select(SessionRetentionRows)
             .where(
+                or_(
+                    SessionRetentionRows.next_attempt_at.is_(None),
+                    SessionRetentionRows.next_attempt_at <= now,
+                ),
                 or_(
                     and_(
                         SessionRetentionRows.content_expires_at.is_not(None),
@@ -162,7 +168,7 @@ class RetentionStoragePostgresImpl(PgStorageBase, RetentionStorageInterface):
                         SessionRetentionRows.shape_expired_at.is_(None),
                         SessionRetentionRows.shape_expires_at <= now,
                     ),
-                )
+                ),
             )
             .limit(limit)
         )

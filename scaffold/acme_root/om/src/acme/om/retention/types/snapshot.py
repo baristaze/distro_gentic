@@ -42,6 +42,9 @@ class SessionRetention(Identifiable, Created):
     destruction: KeyDestruction | None = None
     # When the sweep marked the session deleted, its shape past its life.
     shape_expired_at: datetime | None = None
+    # When the sweep takes the session up again, after a pass that could not
+    # finish what was due: until then it is out of every pass's read.
+    next_attempt_at: datetime | None = None
     version: int = Field(default=1, ge=1)
 
     @model_validator(mode="after")

@@ -30,6 +30,7 @@ CREATE TABLE core.session_retention (
     content_expired_at timestamptz,
     destruction jsonb,
     shape_expired_at timestamptz,
+    next_attempt_at timestamptz,
     version integer NOT NULL,
     CONSTRAINT pk_session_retention PRIMARY KEY (id)
 );

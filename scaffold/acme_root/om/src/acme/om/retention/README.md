@@ -37,12 +37,17 @@ is made of](../../../../README.md).
 - **Sweep.** Once a pass, across tenants:
   - A snapshot takes what its tenant's policy has tightened since it was
     taken. A loosening leaves it as it was.
-  - Past its content's life, the session's key is destroyed by its
-    tenant's key service, the engine revokes it, and the audit holds the
-    destruction as the service reported it. Content at rest that its
-    policy no longer lets rest expires at that sweep.
+  - Past its content's life, the engine revokes the session's key, a
+    session marked deleted included, its tenant's key service destroys
+    it, and the audit holds the destruction as the service reported it.
+    The content counts as expired only once one of them says the key is
+    gone. Content at rest that its policy no longer lets rest expires at
+    that sweep.
   - Past its shape's life, the session is marked deleted, and the
-    engine's purge removes it. That mark is never undone.
+    engine's purge removes it. That mark is never undone. A session with
+    a loop still open is marked at a later pass.
+  - What a pass cannot finish waits for its next attempt, out of every
+    pass's read meanwhile, so no session holds back another.
 - **Revoke the tenant's key.** The tenant does it in its own key service.
   From then on nothing of that tenant's content opens, and every other
   tenant reads and writes as before.

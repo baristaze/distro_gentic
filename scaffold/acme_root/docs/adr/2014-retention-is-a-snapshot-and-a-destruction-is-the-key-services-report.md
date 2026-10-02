@@ -47,15 +47,24 @@ service: the platform's, or the one the tenant brought.
 Such a service refuses every version of a destroyed key from then on,
 and answers with its own report: the service, the key, the time by its
 clock, and its receipt. The sweep writes that report into the audit as
-it came, then revokes the key through the engine. A service that holds
-the tenant's key alone, as the engine's do, has nothing of the session
-to destroy: the engine's revocation is the destruction, and the audit
-entry says no service reported it. In `local`, the root wires the local
-key service, which keeps each session's key in its process over infra's.
+it came, and revokes the key through the engine, which reaches a session
+marked deleted too while the tenant holds the record of its key. The
+content counts as expired only once the engine or the service says the
+key is gone. A service that holds the tenant's key alone, as the
+engine's do, has nothing of the session to destroy: the engine's
+revocation is the destruction, and the audit entry says no service
+reported it. In `local`, the root wires the local key service, which
+keeps each session's key in its process over infra's.
 
 **The shape's end is the engine's mark.** Past its shape's lifetime, the
 sweep marks the session deleted through the engine, and the engine's
 purge removes it. The mark the sweep made is never undone.
+
+**What cannot finish waits out of the read.** A session with a loop still
+open cannot be marked, and a key service that does not answer destroys
+nothing. The sweep records what finished, content never waiting on
+shape, and puts the session out of every pass's read until its next
+attempt, so no batch fills with sessions that cannot move.
 
 **A deleted tenant is swept without its context.** No context is minted
 for it, so the sweep asks its key service to destroy each expired key,
@@ -75,6 +84,9 @@ reads the bytes only once both match.
 - Outside `local`, infra's key service holds the tenant's key alone, so
   a destruction there is the engine's and unreported, until a cloud key
   service that holds each session's key is wired behind the router.
+- The engine's revocation reaches a session marked deleted while the
+  tenant holds the record of its key: the engine's privacy manager
+  changes for it, and the next move of the base reconciles it.
 - A snapshot outlives its purged session until its tenant's purge, with
   ids and times and no content.
 - A tenant brings its own key service before its first session: a key

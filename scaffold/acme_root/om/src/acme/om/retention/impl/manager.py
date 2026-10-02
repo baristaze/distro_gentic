@@ -1,6 +1,6 @@
 import logging
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from acme.infra.exceptions import InfraException, KeyRefused
@@ -48,6 +48,9 @@ KEY_DESTROYED = "retention.key.destroyed"
 class RetentionOptions(Platform):
     sweep_batch: int = 100  # snapshots one read of the sweep takes up at most
     purge_batch: int = 1000  # rows one purge statement deletes at most
+    # How long a session a pass could not finish waits before a pass takes
+    # it up again: a loop still open, a key service that did not answer.
+    retry_after: timedelta = timedelta(minutes=10)
 
 
 class RetentionManagerImpl(RetentionManagerInterface):
@@ -205,10 +208,11 @@ class RetentionManagerImpl(RetentionManagerInterface):
                 await self._expire(org_id, contexts[org_id], snapshot, now)
             except Exception:
                 log.exception(
-                    "session %s of org %s stays due: its retention failed",
+                    "session %s of org %s waits for its next attempt: its retention failed",
                     snapshot.session_id,
                     org_id,
                 )
+                await self._defer(org_id, snapshot, now)
         return max(len(behind), len(due))
 
     async def _context(self, rctx: RequestContext, org_id: UUID) -> TenantContext | None:
@@ -222,23 +226,68 @@ class RetentionManagerImpl(RetentionManagerInterface):
     async def _expire(
         self, org_id: UUID, ctx: TenantContext | None, snapshot: SessionRetention, now: datetime
     ) -> None:
-        """What a due session's snapshot asks for, then the snapshot's write.
-        Each step is safe to take again, so a pass that fails before the
-        write leaves the session to the next, which repeats it."""
-        update: dict[str, object] = {}
+        """What a due snapshot asks for, then one write of it. The content and
+        the shape each finish on their own: what finished is recorded, and
+        what cannot finish yet takes the snapshot out of every pass's read
+        until its next attempt. Each step is safe to take again."""
+        update: dict[str, object] = {"next_attempt_at": None}
+        waits = False
         if content_due(snapshot, now):
-            report = await self._destroy(org_id, snapshot.session_id)
-            if ctx is not None:
-                await self._revoke(ctx, snapshot, report)
-            update |= {"content_expired_at": now, "destruction": report}
-        if shape_due(snapshot, now) and (ctx is None or await self._mark(ctx, snapshot.session_id)):
-            update["shape_expired_at"] = now
-        if not update:
-            return
+            gone, report = await self._expire_content(org_id, ctx, snapshot)
+            if gone:
+                update |= {"content_expired_at": now, "destruction": report}
+            else:
+                waits = True
+        if shape_due(snapshot, now):
+            if ctx is None or await self._mark(ctx, snapshot.session_id):
+                update["shape_expired_at"] = now
+            else:
+                waits = True
+        if waits:
+            update["next_attempt_at"] = now + self._options.retry_after
         done = SessionRetention.model_validate(
             {**snapshot.model_dump(), **update, "version": snapshot.version + 1}
         )
         await self._storage.write_snapshot(org_id, done, snapshot.version)
+
+    async def _defer(self, org_id: UUID, snapshot: SessionRetention, now: datetime) -> None:
+        """The snapshot out of every pass's read until its next attempt, after
+        a pass that failed on it; a write that fails too leaves it as it was."""
+        later = snapshot.model_copy(
+            update={
+                "next_attempt_at": now + self._options.retry_after,
+                "version": snapshot.version + 1,
+            }
+        )
+        try:
+            await self._storage.write_snapshot(org_id, later, snapshot.version)
+        except Exception:
+            log.exception("session %s of org %s stays due", snapshot.session_id, org_id)
+
+    async def _expire_content(
+        self, org_id: UUID, ctx: TenantContext | None, snapshot: SessionRetention
+    ) -> tuple[bool, KeyDestruction | None]:
+        """Whether the session's key is gone, and the key service's report.
+        The engine revokes the key, a session marked deleted included, and
+        the tenant's key service destroys it. The key is gone only when one
+        of them says so; then the audit entry is written. A session the
+        tenant holds no key of has nothing to destroy, and is gone with no
+        entry. A tenant deleted has no context, so its service alone can
+        say so."""
+        session_id = snapshot.session_id
+        revoked_at: datetime | None = None
+        keyless = False
+        if ctx is not None:
+            try:
+                revoked_at = (await self._privacy.revoke_key(ctx, session_id)).revoked_at
+            except NotFound:
+                keyless = True
+        report = await self._destroy(org_id, session_id)
+        if report is None and revoked_at is None:
+            return keyless, None
+        if ctx is not None:
+            await self._audit(ctx, snapshot, report, revoked_at)
+        return True, report
 
     async def _destroy(self, org_id: UUID, session_id: UUID) -> KeyDestruction | None:
         """The session's key destroyed by the tenant's key service, and its
@@ -252,24 +301,21 @@ class RetentionManagerImpl(RetentionManagerInterface):
             if error.code != KeyRefused.code:
                 raise
             # The tenant revoked its own key: nothing of it opens, and its
-            # service reports nothing more. The engine's revocation follows.
+            # service reports nothing more. The engine's revocation stands.
             return None
 
-    async def _revoke(
-        self, ctx: TenantContext, snapshot: SessionRetention, report: KeyDestruction | None
+    async def _audit(
+        self,
+        ctx: TenantContext,
+        snapshot: SessionRetention,
+        report: KeyDestruction | None,
+        revoked_at: datetime | None,
     ) -> None:
-        """The engine's revocation, which empties every wrapped copy the
-        engine keeps and takes no content again; then the audit entry. The
-        entry holds the key service's report as it came. With no report, it
-        says so, and when the engine revoked the key. A session marked
-        deleted is past every read, and the engine's revocation does not
-        reach it: its entry holds no time, and its purge takes the rest."""
+        """The audit entry of a destruction: the key service's report as it
+        came, or, with none, that no service reported it and when the engine
+        revoked the key."""
         session_id = snapshot.session_id
         facts: dict[str, object]
-        try:
-            revoked_at = (await self._privacy.revoke_key(ctx, session_id)).revoked_at
-        except NotFound:
-            revoked_at = None
         if report is not None:
             facts = {
                 "reported": True,
