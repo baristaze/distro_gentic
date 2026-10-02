@@ -22,3 +22,4 @@ class HostCredentials(IdentifiableMixin, CreatedMixin, Base):
     host_id: Mapped[UUID]
     digest: Mapped[str]
     expires_at: Mapped[datetime]
+    rotated_at: Mapped[datetime | None]

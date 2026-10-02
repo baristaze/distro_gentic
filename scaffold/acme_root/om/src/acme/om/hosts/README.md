@@ -27,8 +27,10 @@ of](../../../../README.md).
   probed, and gets its credential. The tenant and the pool are the
   token's; the host names neither.
 - **Rotate.** A host trades its credential for the next one. The one it
-  called with still works for a minute, so a host whose answer was lost
-  rotates again with it.
+  called with still works for a minute, so a call in flight with it
+  lands. A credential rotates once: a second rotation of it means two
+  machines hold it, and it revokes the host and every credential it
+  holds, for its owner to see and to enroll it again.
 - **Beat.** A host says it is online, and what it probed. The platform
   keeps what it is told and adds nothing to it.
 - **Claim.** A host asks for work, stating the version of `exec` work it

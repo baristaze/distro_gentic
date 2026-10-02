@@ -237,8 +237,8 @@ async def test_a_credential_lives_an_hour_and_the_host_rotates_it(
     second = await hosts.rotate(request(), identity)
     assert second.credential != first.credential and second.host_id == first.host_id
     assert second.expires_at == clock.now + HostsOptions().credential_ttl
-    # The one it replaced works for the grace, so a lost answer is retried,
-    # and is refused after it.
+    # The one it replaced works for the grace, so a call in flight with it
+    # lands, and is refused after it.
     await hosts.authenticate(request(), first.credential)
     clock.advance(HostsOptions().rotation_grace)
     with pytest.raises(CredentialExpired):
@@ -248,6 +248,51 @@ async def test_a_credential_lives_an_hour_and_the_host_rotates_it(
     clock.advance(HostsOptions().credential_ttl)
     with pytest.raises(CredentialExpired):
         await hosts.authenticate(request(), second.credential)
+
+
+async def test_a_copy_rotated_after_the_hosts_own_rotation_ends_the_host(
+    managers: Managers, hosts: HostsManagerImpl, clock: Clock
+) -> None:
+    owner = await an_owner(managers)
+    pool = await hosts.create_pool(owner, a_pool())
+    issued = await enrolled(hosts, owner, pool)
+    copy = issued.credential  # taken from the host's disk
+    clock.advance(timedelta(minutes=30))
+    rotated = await hosts.rotate(request(), await hosts.authenticate(request(), issued.credential))
+    # The copy still authenticates in the grace, and rotates: refused, since
+    # a credential rotates once, and the host and its credentials end.
+    copied = await hosts.authenticate(request(), copy)
+    with pytest.raises(CredentialExpired):
+        await hosts.rotate(request(), copied)
+    for credential in (copy, rotated.credential):
+        with pytest.raises(CredentialExpired):
+            await hosts.authenticate(request(), credential)
+    (status,) = await hosts.get_hosts(owner, pool.id)
+    assert status.host.revoked_at == clock.now and not status.online
+
+
+async def test_a_copy_rotating_every_half_hour_does_not_outlive_its_hour(
+    managers: Managers, hosts: HostsManagerImpl, clock: Clock
+) -> None:
+    owner = await an_owner(managers)
+    pool = await hosts.create_pool(owner, a_pool())
+    issued = await enrolled(hosts, owner, pool)
+    copy = issued.credential
+    # The copy rotates first, at half the credential's life, for a fresh hour.
+    clock.advance(timedelta(minutes=30))
+    forked = await hosts.rotate(request(), await hosts.authenticate(request(), copy))
+    # The host rotates the same credential: two machines hold it, and both end.
+    with pytest.raises(CredentialExpired):
+        await hosts.rotate(request(), await hosts.authenticate(request(), issued.credential))
+    with pytest.raises(CredentialExpired):
+        await hosts.authenticate(request(), forked.credential)
+    # Every half hour after, the copy is refused, and past the hour nothing
+    # it ever held authenticates.
+    for _ in range(2):
+        clock.advance(timedelta(minutes=30))
+        for credential in (copy, forked.credential):
+            with pytest.raises(CredentialExpired):
+                await hosts.authenticate(request(), credential)
 
 
 async def test_a_revoked_host_is_refused_and_handed_nothing(

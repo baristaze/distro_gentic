@@ -12,7 +12,7 @@ import pytest
 from acme.om.base import new_id, utcnow
 from acme.om.exceptions import PreconditionFailed, UniqueKeyTaken
 from acme.om.hosts.storage import HostsStorageInterface
-from acme.om.hosts.types.credential import EnrollmentToken, HostCredential
+from acme.om.hosts.types.credential import EnrollmentToken, HostCredential, Rotation
 from acme.om.hosts.types.host import Advertisement, Host, HostReport, IsolationMode
 from acme.om.hosts.types.placement import SessionPlacement
 from acme.om.hosts.types.pool import HostPool
@@ -258,29 +258,55 @@ class HostsStorageContract:
     ) -> None:
         org = new_id()
         host, credential = await self.enrolled(storage, org)
+        now = utcnow()
         minted = make_credential(host.id)
-        retire_at = utcnow() + timedelta(minutes=1)
-        assert await storage.rotate_credential(org, credential.id, retire_at, minted)
+        grace_end = now + timedelta(minutes=1)
+        rotated = await storage.rotate_credential(org, credential.id, now, grace_end, minted)
+        assert rotated is Rotation.ROTATED
         old = await storage.read_host_by_credential_digest(credential.digest)
-        assert old is not None and old[1].expires_at == retire_at
+        assert old is not None and (old[1].expires_at, old[1].rotated_at) == (grace_end, now)
         assert await storage.read_host_by_credential_digest(minted.digest) == (org, minted, host)
-        # A later end never stretches one that is sooner.
-        sooner = old[1].expires_at
-        assert await storage.rotate_credential(
-            org, credential.id, sooner + timedelta(hours=5), make_credential(host.id)
+        # The next rotation, inside the last one's grace, ends that one at
+        # once, and a later end never stretches a sooner one.
+        at = now + timedelta(seconds=30)
+        third = make_credential(host.id)
+        rotated = await storage.rotate_credential(
+            org, minted.id, at, at + timedelta(hours=5), third
         )
-        again = await storage.read_host_by_credential_digest(credential.digest)
-        assert again is not None and again[1].expires_at == sooner
+        assert rotated is Rotation.ROTATED
+        first = await storage.read_host_by_credential_digest(credential.digest)
+        assert first is not None and first[1].expires_at == at
+        second = await storage.read_host_by_credential_digest(minted.digest)
+        assert second is not None
+        assert (second[1].expires_at, second[1].rotated_at) == (minted.expires_at, at)
+        assert await storage.read_host_by_credential_digest(third.digest) == (org, third, host)
+
+    async def test_a_credential_rotates_once(self, storage: HostsStorageInterface) -> None:
+        org = new_id()
+        host, credential = await self.enrolled(storage, org)
+        now = utcnow()
+        grace_end = now + timedelta(minutes=1)
+        first = await storage.rotate_credential(
+            org, credential.id, now, grace_end, make_credential(host.id)
+        )
+        assert first is Rotation.ROTATED
+        copy = make_credential(host.id)
+        again = await storage.rotate_credential(org, credential.id, now, grace_end, copy)
+        assert again is Rotation.REUSED
+        assert await storage.read_host_by_credential_digest(copy.digest) is None
 
     async def test_rotate_credential_of_another_tenant_or_host_changes_nothing(
         self, storage: HostsStorageInterface
     ) -> None:
         org = new_id()
         host, credential = await self.enrolled(storage, org)
+        now = utcnow()
         minted = make_credential(host.id)
-        assert not await storage.rotate_credential(new_id(), credential.id, utcnow(), minted)
+        missing = await storage.rotate_credential(new_id(), credential.id, now, now, minted)
+        assert missing is Rotation.MISSING
         stranger = make_credential(new_id())
-        assert not await storage.rotate_credential(org, credential.id, utcnow(), stranger)
+        missing = await storage.rotate_credential(org, credential.id, now, now, stranger)
+        assert missing is Rotation.MISSING
         assert await storage.read_host_by_credential_digest(minted.digest) is None
         assert await storage.read_host_by_credential_digest(stranger.digest) is None
         found = await storage.read_host_by_credential_digest(credential.digest)

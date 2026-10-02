@@ -112,8 +112,11 @@ class HostsManagerInterface(ABC):
     @abstractmethod
     async def rotate(self, rctx: RequestContext, host: HostIdentity) -> IssuedHostCredential:
         """Platform-internal: the host's next credential, in the clear once.
-        The one it called with ends after a short grace, so a host whose
-        answer was lost rotates again with it."""
+        The one it called with ends after a short grace, so a call in flight
+        with it lands, and every older one ends now. A credential rotates
+        once: a second rotation of it means two machines hold it, so it is
+        refused with CredentialExpired, and the host and every credential
+        it holds are revoked."""
         ...
 
     @abstractmethod

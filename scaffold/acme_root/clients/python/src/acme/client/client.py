@@ -763,8 +763,7 @@ class ApiClient:
     # A workspace host's own calls. It enrolls once with its tenant's
     # enrollment token, then calls with a credential of its own, which it
     # rotates before it ends. None of them is retried: an enrollment twice
-    # is two hosts, and a lost rotation is rotated again with the credential
-    # it was meant to replace.
+    # is two hosts, and a credential rotated twice ends its host.
 
     async def enroll_host(
         self,

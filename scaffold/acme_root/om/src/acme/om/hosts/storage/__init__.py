@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from uuid import UUID
 
-from acme.om.hosts.types.credential import EnrollmentToken, HostCredential
+from acme.om.hosts.types.credential import EnrollmentToken, HostCredential, Rotation
 from acme.om.hosts.types.host import Host, HostReport
 from acme.om.hosts.types.placement import SessionPlacement
 from acme.om.hosts.types.pool import HostPool
@@ -92,12 +92,16 @@ class HostsStorageInterface(ABC):
         self,
         org_id: UUID,
         retiring_id: UUID,
+        at: datetime,
         retire_at: datetime,
         minted: HostCredential,
-    ) -> bool:
-        """In one commit: the retiring credential ends at `retire_at`, when
-        that is sooner than its end, and `minted` lands. False, with nothing
-        landed, when the tenant holds no retiring credential of that host."""
+    ) -> Rotation:
+        """A credential rotates once. In one commit: the retiring credential
+        is marked rotated at `at` and ends at `retire_at` when that is
+        sooner, every other live credential of the host ends at `at`, and
+        `minted` lands. `REUSED`, with nothing landed, when the retiring
+        credential rotated already; `MISSING` when the tenant holds no
+        retiring credential of that host."""
         ...
 
     @abstractmethod
