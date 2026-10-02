@@ -145,6 +145,14 @@ An org's **fair share** says which lane its loops wait in, its plan's or
 one of its own, and how many of them run at once. The platform's
 operators set it. A loop over it waits its turn and never fails.
 
+A **host** is a machine inside an org's own wall that runs its work. It
+joins a **host pool** once, with an **enrollment token** an owner or an
+admin issued, and from then on calls with a **host credential** of its
+own, which lasts an hour and which it renews itself. A session's
+**placement** says where it runs: the platform's cloud, or one of the
+org's pools. A session pinned to a pool with no host online waits, and
+says so; it never moves to the cloud unless a person moves it.
+
 ## What the platform writes for itself
 
 No person creates these and no screen shows them, but each belongs to
@@ -201,6 +209,9 @@ arrive twice, so the second copy gets the first one's answer.
   where it stopped.
 - A fair share names its org, one each, and the lane of every loop the
   org asks for is read off it.
+- A pool, its tokens, its hosts, their credentials, and a session's
+  placement name their org. A host is handed only the work of its own
+  pool, whatever it asks for.
 
 ## One page per kind
 
@@ -216,6 +227,7 @@ arrive twice, so the second copy gets the first one's answer.
 - [Windows](src/acme/om/windows/README.md)
 - [Tools](src/acme/om/tools/README.md)
 - [Placement](src/acme/om/placement/README.md)
+- [Hosts](src/acme/om/hosts/README.md)
 - [Events](src/acme/om/events/README.md)
 - [Outbox rows](src/acme/om/outbox/README.md)
 - [Work items](src/acme/om/work/README.md)
