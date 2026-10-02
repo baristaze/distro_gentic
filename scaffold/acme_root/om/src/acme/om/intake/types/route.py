@@ -23,8 +23,9 @@ class Routed(Platform):
     """The router's answer for one event, as its audit entry holds it.
     `caused_by` is the session whose act through the platform's account
     the event is or follows from, as the acts it names were recorded,
-    whatever session the event reaches: an automation tells its own
-    sessions' events from others' by it, and a chain's hop follows it.
+    whatever session the event reaches; with no act recorded, the session
+    whose own work it lands on. An automation tells its own sessions'
+    events from others' by it, and a chain's hop follows it.
     `platform` is set when the platform's account wrote the event. `step_id` is
     the input the session received, when it received one."""
 

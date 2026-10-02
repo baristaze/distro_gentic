@@ -57,7 +57,8 @@ class IntakeManagerInterface(ABC):
         A principal's message is appended under the mapped user's live
         context; any other input is an event, data under the router's own
         principal. A person's push hands the session over. The event's cause
-        is the session whose recorded act it names, wherever it routes. Every
+        is the session whose recorded act it names, wherever it routes, and
+        else the session whose work it lands on. Every
         event is audited once with what it did, and a redelivery changes
         nothing."""
         ...

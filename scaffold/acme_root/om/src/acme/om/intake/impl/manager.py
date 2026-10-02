@@ -121,9 +121,15 @@ class IntakeManagerImpl(IntakeManagerInterface):
         )
         if session is not None:
             routed = await self._deliver(ctx, event, session)
+        # With no act recorded, an event on a session's own work (its id,
+        # its pull request, its branch) follows from that session, as a
+        # check on its branch follows from its push.
+        cause = act.session_id if act is not None else None
+        if cause is None and session is not None:
+            cause = session.id
         routed = routed.model_copy(
             update={
-                "caused_by": None if act is None else act.session_id,
+                "caused_by": cause,
                 "platform": event.author.kind is AuthorKind.PLATFORM,
             }
         )

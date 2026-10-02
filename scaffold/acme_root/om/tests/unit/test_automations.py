@@ -411,3 +411,28 @@ async def test_an_act_of_the_platform_account_with_no_recorded_session_fires_not
     unrecorded = act_event("an_unbound_pull_request", "ref-never-recorded")
     (run,) = (await deliver(platform, unrecorded)).values()
     assert (run.status, run.refusal) == (RunStatus.REFUSED, Refusal.UNATTRIBUTED)
+
+
+async def test_a_failing_check_on_a_sessions_branch_follows_that_session_with_no_act_recorded(
+    platform: Wired, creator: TenantContext
+) -> None:
+    everything = Trigger(kind=TriggerKind.EVENT)
+    starter = await made(platform, creator, name="starter", trigger=everything)
+    (first,) = await fired(platform, comment())
+    assert first.session_id is not None and first.hop == 1
+    other = await made(platform, creator, name="other", trigger=everything)
+    branch = f"agent/{new_id().hex[-12:]}"
+    await platform.intake.bind_work(platform.owner, first.session_id, HandleKind.BRANCH, branch)
+    # Nothing recorded the push: the check comes from CI, on the branch.
+    check = FeedbackEvent(
+        id=new_id(),
+        integration="forge",
+        arrival=Arrival.CHECK,
+        author=Author(kind=AuthorKind.BOT, external_id="ci", name="ci"),
+        names=WorkNames(branch=branch),
+        check=CheckState.FAILED,
+        occurred_at=utcnow(),
+    )
+    runs_by = await deliver(platform, check)
+    assert runs_by[starter.id].refusal is Refusal.OWN_EVENT
+    assert (runs_by[other.id].status, runs_by[other.id].hop) == (RunStatus.STARTED, 2)

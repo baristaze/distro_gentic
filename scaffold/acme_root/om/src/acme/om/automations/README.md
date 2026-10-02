@@ -26,7 +26,8 @@ is made of](../../../../README.md).
 
 - **An automation ignores its own sessions' events,** unless it says it
   wants them. An event's session is the one whose recorded act it
-  follows, whatever session it reaches.
+  follows, whatever session it reaches, and else the session whose work
+  it lands on.
 - **A chain stops at its hop limit.** A firing on an event a run's
   session caused is one hop past that run. An act of the platform's
   account that names no recorded session fires nothing.
