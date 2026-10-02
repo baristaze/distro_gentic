@@ -147,6 +147,17 @@ change. A **validation** runs those checks on a fresh executor, apart
 from the agent, at the version delivered; the **result gate** counts a
 success only on its runs.
 
+## Where work runs
+
+Each kind of work a session makes runs where what it needs is: its loop
+on the platform's runners, a command on the machine that holds its
+workspace, work on a station beside the station. A **lane** is where an
+item waits for that place.
+
+An org's **fair share** says which lane its loops wait in, its plan's or
+one of its own, and how many of them run at once. The platform's
+operators set it. A loop over it waits its turn and never fails.
+
 ## What the platform writes for itself
 
 No person creates these and no screen shows them, but each belongs to
@@ -204,6 +215,8 @@ arrive twice, so the second copy gets the first one's answer.
 - A run, a validation, a hypothesis, and a finding belong to one session
   and name its org; they go when the session is purged. A validation
   policy names its org and its project, one each.
+- A fair share names its org, one each, and the lane of every loop the
+  org asks for is read off it.
 
 ## One page per kind
 
@@ -219,6 +232,7 @@ arrive twice, so the second copy gets the first one's answer.
 - [Windows](src/acme/om/windows/README.md)
 - [Tools](src/acme/om/tools/README.md)
 - [Evidence](src/acme/om/evidence/README.md)
+- [Placement](src/acme/om/placement/README.md)
 - [Events](src/acme/om/events/README.md)
 - [Outbox rows](src/acme/om/outbox/README.md)
 - [Work items](src/acme/om/work/README.md)
