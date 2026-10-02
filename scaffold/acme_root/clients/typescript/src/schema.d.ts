@@ -313,6 +313,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/agent-sessions/{session_id}/line-entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Leave
+         * @description The session leaves every line it stands in.
+         */
+        delete: operations["leave_v1_agent_sessions__session_id__line_entries_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/agent-sessions/{session_id}/messages": {
         parameters: {
             query?: never;
@@ -815,6 +835,72 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/labs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Lab
+         * @description A lab, the place one station daemon serves. An owner's or an admin's.
+         */
+        post: operations["create_lab_v1_labs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/labs/{lab_id}/daemon-credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Issue Daemon Credential
+         * @description The lab daemon's first credential, in the clear once. A retry mints
+         *     another, so it takes no Idempotency-Key; the one never read ends on its
+         *     own.
+         */
+        post: operations["issue_daemon_credential_v1_labs__lab_id__daemon_credentials_post"];
+        /**
+         * Revoke Daemon
+         * @description Ends every credential of the lab's daemon at once.
+         */
+        delete: operations["revoke_daemon_v1_labs__lab_id__daemon_credentials_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/line-entries/{entry_id}/place": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Reorder
+         * @description A person who manages the stations moves an entry in its line.
+         */
+        put: operations["reorder_v1_line_entries__entry_id__place_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me": {
         parameters: {
             query?: never;
@@ -1155,6 +1241,236 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/station-daemon/claims": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Claim
+         * @description The next item of the daemon's lab, or none. The body states the
+         *     version the daemon reads, and nothing it is handed.
+         */
+        post: operations["claim_v1_station_daemon_claims_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/station-daemon/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rotate
+         * @description The daemon's next credential; the one it called with ends after a
+         *     short grace.
+         */
+        post: operations["rotate_v1_station_daemon_credentials_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/station-daemon/jobs/{job_id}/renewals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Renew
+         * @description The lease of a job the daemon runs, renewed; 410 once it ended.
+         */
+        post: operations["renew_v1_station_daemon_jobs__job_id__renewals_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/station-daemon/jobs/{job_id}/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report
+         * @description The run of a job the daemon ran, its refused commands in it.
+         */
+        post: operations["report_v1_station_daemon_jobs__job_id__reports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/station-leases/{lease_id}/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit Job
+         * @description A job under a live lease, for the lab's daemon to claim.
+         */
+        post: operations["submit_job_v1_station_leases__lease_id__jobs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/station-leases/{lease_id}/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Release Lease
+         * @description The holding session lets the lease go; the station goes to the next
+         *     in line.
+         */
+        post: operations["release_lease_v1_station_leases__lease_id__release_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/station-leases/{lease_id}/revocation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke Lease
+         * @description A person who manages the stations ends the lease; its session is
+         *     told, and the station takes its controlled stop.
+         */
+        post: operations["revoke_lease_v1_station_leases__lease_id__revocation_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/station-pools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Pool
+         * @description A pool of stations of one kind, with its line.
+         */
+        post: operations["create_pool_v1_station_pools_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/station-pools/{pool_id}/line": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Line
+         * @description The pool's line in the order it is served.
+         */
+        get: operations["get_line_v1_station_pools__pool_id__line_get"];
+        put?: never;
+        /**
+         * Join
+         * @description The session joins the pool's line, or one station's in it, and is
+         *     told its place and an estimate.
+         */
+        post: operations["join_v1_station_pools__pool_id__line_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/station-pools/{pool_id}/stations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Stations
+         * @description The pool's stations, each with the lease that holds it.
+         */
+        get: operations["get_stations_v1_station_pools__pool_id__stations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/stations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Station
+         * @description A station of a lab, in a pool. Its limits are not sent: they are its
+         *     owner's, on its host.
+         */
+        post: operations["add_station_v1_stations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/users": {
         parameters: {
             query?: never;
@@ -1354,6 +1670,24 @@ export interface components {
              */
             user_id: string;
         };
+        /** CaseTallyBody */
+        CaseTallyBody: {
+            /**
+             * Failed
+             * @default 0
+             */
+            failed: number;
+            /**
+             * Passed
+             * @default 0
+             */
+            passed: number;
+            /**
+             * Skipped
+             * @default 0
+             */
+            skipped: number;
+        };
         /**
          * ClaimRequest
          * @description The version of `exec` work the host reads, and nothing else: what it
@@ -1369,6 +1703,34 @@ export interface components {
          */
         ClaimView: {
             item: components["schemas"]["ClaimedWorkView"] | null;
+        };
+        /**
+         * ClaimedStationWorkView
+         * @description One item a daemon was handed, as `station` work of `wire_version`.
+         */
+        ClaimedStationWorkView: {
+            /** Attempts */
+            attempts: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Lease Expires At */
+            lease_expires_at: string | null;
+            /** Payload */
+            payload: {
+                [key: string]: unknown;
+            };
+            /**
+             * Target Id
+             * Format: uuid
+             */
+            target_id: string;
+            /** Wire Version */
+            wire_version: number;
         };
         /**
          * ClaimedWorkView
@@ -1400,6 +1762,28 @@ export interface components {
             wire_version: number;
         };
         /**
+         * CommandBody
+         * @description One operation for the station's adapter, with its parameters: data,
+         *     never code.
+         */
+        CommandBody: {
+            /** Operation */
+            operation: string;
+            /** Parameters */
+            parameters?: {
+                [key: string]: unknown;
+            };
+        };
+        /** CommandView */
+        CommandView: {
+            /** Operation */
+            operation: string;
+            /** Parameters */
+            parameters: {
+                [key: string]: unknown;
+            };
+        };
+        /**
          * ConfirmTotpRequest
          * @description The first code from the authenticator, which confirms the secret.
          */
@@ -1422,6 +1806,11 @@ export interface components {
             command: components["schemas"]["SessionControl"];
             /** Request Seq */
             request_seq?: number | null;
+        };
+        /** CreateLabRequest */
+        CreateLabRequest: {
+            /** Name */
+            name: string;
         };
         /**
          * CreateOrgRequest
@@ -1447,6 +1836,47 @@ export interface components {
             name: string;
             /** Region */
             region: string;
+        };
+        /**
+         * CreateStationPoolRequest
+         * @description `job_seconds` is the declared length of one holding, which a place's
+         *     estimate reads.
+         */
+        CreateStationPoolRequest: {
+            /**
+             * Job Seconds
+             * @default 600
+             */
+            job_seconds: number;
+            /** Name */
+            name: string;
+        };
+        /**
+         * CreateStationRequest
+         * @description A station of a lab, in a pool. `hold_seconds` is how long a lease
+         *     outlives a job while its session is parked. No limit of the station's
+         *     travels here: they are its owner's, on its host.
+         */
+        CreateStationRequest: {
+            /** Capabilities */
+            capabilities?: string[];
+            /**
+             * Hold Seconds
+             * @default 300
+             */
+            hold_seconds: number;
+            /**
+             * Lab Id
+             * Format: uuid
+             */
+            lab_id: string;
+            /** Name */
+            name: string;
+            /**
+             * Pool Id
+             * Format: uuid
+             */
+            pool_id: string;
         };
         /**
          * CreateTeamOrgRequest
@@ -1865,6 +2295,30 @@ export interface components {
             key: string | null;
         };
         /**
+         * IssuedDaemonCredentialView
+         * @description The lab daemon's credential in the clear, once: it lives a day, for
+         *     its owner to install it, and the daemon rotates it from then on.
+         */
+        IssuedDaemonCredentialView: {
+            /**
+             * Credential Id
+             * Format: uuid
+             */
+            credential_id: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /**
+             * Lab Id
+             * Format: uuid
+             */
+            lab_id: string;
+            /** Token */
+            token: string | null;
+        };
+        /**
          * IssuedDownloadView
          * @description A link to the file's bytes that works until `expires_at`. A null `url`
          *     means the store cannot sign one: the bytes come from
@@ -2010,6 +2464,87 @@ export interface components {
             url: string | null;
         };
         /**
+         * JobReportRequest
+         * @description What the daemon says of a job it ran. `run_id` is the daemon's, so a
+         *     retried report lands once. A run a refusal ended is `aborted`, names
+         *     the refusal in `abort`, and lists every refused command.
+         */
+        JobReportRequest: {
+            /** Abort */
+            abort?: string | null;
+            /** Adapter */
+            adapter: string;
+            cases?: components["schemas"]["CaseTallyBody"];
+            /** Commands Run */
+            commands_run: number;
+            /** Daemon Version */
+            daemon_version: string;
+            /**
+             * Finished At
+             * Format: date-time
+             */
+            finished_at: string;
+            outcome: components["schemas"]["RunOutcome"];
+            provenance: components["schemas"]["Provenance"];
+            /** Refused */
+            refused?: components["schemas"]["RefusalBody"][];
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+        };
+        /**
+         * JoinLineRequest
+         * @description A session's ask: one station of the pool, or any that serves, with
+         *     the capabilities it needs; and what it binds, the candidate under test,
+         *     the procedure, and its version.
+         */
+        JoinLineRequest: {
+            /** Candidate */
+            candidate: string;
+            /** Capabilities */
+            capabilities?: string[];
+            /** Procedure */
+            procedure: string;
+            /** Procedure Version */
+            procedure_version: string;
+            /** Project */
+            project: string;
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+            /** Station Id */
+            station_id?: string | null;
+        };
+        /** LabView */
+        LabView: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /**
          * LastOwnerDetail
          * @description What a `last_owner` refusal carries: every team org the person is the
          *     last owner of, which they hand on or delete before their account goes.
@@ -2017,6 +2552,117 @@ export interface components {
         LastOwnerDetail: {
             /** Orgs */
             orgs: components["schemas"]["OwnedOrgRef"][];
+        };
+        /** LeaseTimeView */
+        LeaseTimeView: {
+            /** Fencing Token */
+            fencing_token: number;
+            /**
+             * Lease Id
+             * Format: uuid
+             */
+            lease_id: string;
+            /** Seconds */
+            seconds: number;
+        };
+        /** LeaseView */
+        LeaseView: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Ended */
+            ended: string | null;
+            /** Ended At */
+            ended_at: string | null;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Fencing Token */
+            fencing_token: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Lab Id
+             * Format: uuid
+             */
+            lab_id: string;
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+            /**
+             * Station Id
+             * Format: uuid
+             */
+            station_id: string;
+        };
+        /** LeftLinesView */
+        LeftLinesView: {
+            /** Left */
+            left: number;
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+        };
+        /** LineEntryView */
+        LineEntryView: {
+            /** Candidate */
+            candidate: string;
+            /** Capabilities */
+            capabilities: string[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Lease Id */
+            lease_id: string | null;
+            /**
+             * Pool Id
+             * Format: uuid
+             */
+            pool_id: string;
+            /** Procedure */
+            procedure: string;
+            /** Procedure Version */
+            procedure_version: string;
+            /** Project */
+            project: string;
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+            /** State */
+            state: string;
+            /** Station Id */
+            station_id: string | null;
+        };
+        /**
+         * LinePlaceView
+         * @description An entry, how many wait ahead of it, and the estimate of its wait.
+         */
+        LinePlaceView: {
+            entry: components["schemas"]["LineEntryView"];
+            /** Estimate Seconds */
+            estimate_seconds: number;
+            /** Position */
+            position: number;
         };
         /**
          * LogoutRequest
@@ -2418,6 +3064,12 @@ export interface components {
             /** Region */
             region: string;
         };
+        /**
+         * Provenance
+         * @description From the strongest to the weakest.
+         * @enum {string}
+         */
+        Provenance: "real" | "twin" | "double" | "unavailable";
         /** PurposeUsageView */
         PurposeUsageView: {
             /** Count */
@@ -2430,11 +3082,53 @@ export interface components {
             /** Size Bytes */
             size_bytes: number;
         };
+        /** RefusalBody */
+        RefusalBody: {
+            /** Detail */
+            detail: string;
+            /** Operation */
+            operation: string;
+            reason: components["schemas"]["RefusalReason"];
+            /**
+             * Refused At
+             * Format: date-time
+             */
+            refused_at: string;
+        };
+        /**
+         * RefusalReason
+         * @description Why the daemon did not run a command.
+         * @enum {string}
+         */
+        RefusalReason: "fenced" | "limit" | "unknown_operation" | "lease_ended";
+        /**
+         * ReorderRequest
+         * @description The waiting entry this one goes ahead of, or null for the end.
+         */
+        ReorderRequest: {
+            /** Before */
+            before: string | null;
+        };
+        /** RevokedDaemonView */
+        RevokedDaemonView: {
+            /** Credentials Ended */
+            credentials_ended: number;
+            /**
+             * Lab Id
+             * Format: uuid
+             */
+            lab_id: string;
+        };
         /**
          * Role
          * @enum {string}
          */
         Role: "owner" | "admin" | "member" | "viewer" | "service";
+        /**
+         * RunOutcome
+         * @enum {string}
+         */
+        RunOutcome: "passed" | "failed" | "errored" | "aborted";
         /**
          * SecondFactorRequest
          * @description The code from an authenticator, presented with a sign-in credential.
@@ -2613,6 +3307,147 @@ export interface components {
             size_bytes: number;
         };
         /**
+         * StationClaimRequest
+         * @description The version of `station` work the daemon reads, and nothing else:
+         *     what it is handed is its identity's to say.
+         */
+        StationClaimRequest: {
+            /** Station Version */
+            station_version: number;
+        };
+        /**
+         * StationClaimView
+         * @description What a claim answers: the item, the job it names, and how many
+         *     seconds the job's lease has left, which the daemon times on its own
+         *     monotonic clock. No item when nothing is ready; no job for an item that
+         *     names none.
+         */
+        StationClaimView: {
+            item: components["schemas"]["ClaimedStationWorkView"] | null;
+            job?: components["schemas"]["StationJobView"] | null;
+            /**
+             * Lease Seconds
+             * @default 0
+             */
+            lease_seconds: number;
+        };
+        /**
+         * StationJobView
+         * @description A job under a lease: its station and token are the lease's, and what
+         *     it runs the lease's ask bound.
+         */
+        StationJobView: {
+            /** Candidate */
+            candidate: string;
+            /** Commands */
+            commands: components["schemas"]["CommandView"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Fencing Token */
+            fencing_token: number;
+            /** Finished At */
+            finished_at: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Lab Id
+             * Format: uuid
+             */
+            lab_id: string;
+            /**
+             * Lease Id
+             * Format: uuid
+             */
+            lease_id: string;
+            /** Procedure */
+            procedure: string;
+            /** Procedure Version */
+            procedure_version: string;
+            /** Project */
+            project: string;
+            /** Run Id */
+            run_id: string | null;
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+            /** State */
+            state: string;
+            /**
+             * Station Id
+             * Format: uuid
+             */
+            station_id: string;
+        };
+        /** StationPoolView */
+        StationPoolView: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Job Seconds */
+            job_seconds: number;
+            /** Name */
+            name: string;
+        };
+        /**
+         * StationView
+         * @description A station, with the highest fencing token granted on it and the
+         *     lease that holds it, while one does.
+         */
+        StationView: {
+            /** Capabilities */
+            capabilities: string[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Fencing Token */
+            fencing_token: number;
+            /** Held Until */
+            held_until: string | null;
+            /** Hold Seconds */
+            hold_seconds: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Lab Id
+             * Format: uuid
+             */
+            lab_id: string;
+            /** Lease Id */
+            lease_id: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Pool Id
+             * Format: uuid
+             */
+            pool_id: string;
+        };
+        /**
          * StepPageView
          * @description One page of a session's history, after the seq the request named.
          *     With `has_more`, the next page starts after the last step's seq.
@@ -2709,6 +3544,11 @@ export interface components {
             floor: number;
             /** Head */
             head: number;
+        };
+        /** SubmitJobRequest */
+        SubmitJobRequest: {
+            /** Commands */
+            commands: components["schemas"]["CommandBody"][];
         };
         /**
          * ToolFailure
@@ -3504,6 +4344,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StepView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    leave_v1_agent_sessions__session_id__line_entries_delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeftLinesView"];
                 };
             };
             /** @description Validation Error */
@@ -4636,6 +5511,153 @@ export interface operations {
             };
         };
     };
+    create_lab_v1_labs_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                "idempotency-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateLabRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LabView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    issue_daemon_credential_v1_labs__lab_id__daemon_credentials_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                lab_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuedDaemonCredentialView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_daemon_v1_labs__lab_id__daemon_credentials_delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                lab_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevokedDaemonView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reorder_v1_line_entries__entry_id__place_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReorderRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinePlaceView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     me_v1_me_get: {
         parameters: {
             query?: never;
@@ -5554,6 +6576,446 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    claim_v1_station_daemon_claims_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StationClaimRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StationClaimView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rotate_v1_station_daemon_credentials_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuedDaemonCredentialView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    renew_v1_station_daemon_jobs__job_id__renewals_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaseTimeView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    report_v1_station_daemon_jobs__job_id__reports_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobReportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StationJobView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_job_v1_station_leases__lease_id__jobs_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                "idempotency-key"?: string | null;
+            };
+            path: {
+                lease_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubmitJobRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StationJobView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    release_lease_v1_station_leases__lease_id__release_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                lease_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaseView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_lease_v1_station_leases__lease_id__revocation_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                lease_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaseView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_pool_v1_station_pools_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                "idempotency-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateStationPoolRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StationPoolView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_line_v1_station_pools__pool_id__line_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                pool_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinePlaceView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    join_v1_station_pools__pool_id__line_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                "idempotency-key"?: string | null;
+            };
+            path: {
+                pool_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JoinLineRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinePlaceView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_stations_v1_station_pools__pool_id__stations_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                pool_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StationView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_station_v1_stations_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                "idempotency-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateStationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StationView"];
                 };
             };
             /** @description Validation Error */

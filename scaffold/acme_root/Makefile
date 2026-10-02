@@ -47,7 +47,7 @@ SCRAPE_PORT ?= $(ACME_COLLECTOR_SCRAPE_PORT)
 # `make arch-check ARCH_CHECK="python3 ../swe_guidelines/checkers/arch_check.py"`.
 ARCH_CHECK ?= uvx --python "$(shell cat .python-version)" --from "git+https://github.com/baristaze/swe_guidelines@v0.48.0\#subdirectory=checkers" arch-check
 
-.PHONY: help setup up down reset urls infra-up buckets devx-up stack-up infra-down infra-reset collector-scrape migrate seed migrate-check benchmark-boot check lint format-check typecheck arch-check agentic-check test-unit test-integration test-telemetry test-live traffic openapi
+.PHONY: help setup up down reset urls infra-up buckets devx-up stack-up infra-down infra-reset collector-scrape migrate seed migrate-check benchmark-boot check lint format-check typecheck arch-check agentic-check distro-check test-unit test-integration test-telemetry test-live traffic openapi
 
 # This Makefile alone, never $(MAKEFILE_LIST): the includes above put
 # .env.example and .env in that list, and grep prefixes every match with the
@@ -196,7 +196,7 @@ migrate-check: ## Compare every role's ORM metadata with the migrated schema
 benchmark-boot: ## Time the imports and the construction of every root
 	uv run --package acme-api python scripts/benchmark_boot.py
 
-check: lint format-check typecheck arch-check agentic-check test-unit ## The fast local gate
+check: lint format-check typecheck arch-check agentic-check distro-check test-unit ## The fast local gate
 	@if [ -d apps ]; then pnpm run lint && pnpm run typecheck && pnpm run test; fi
 
 lint: ## Ruff lint
@@ -215,6 +215,11 @@ arch-check: ## The guideline's static checks, configured in pyproject.toml
 # at the engine release of this project's base, and nothing is fetched.
 agentic-check: ## The engine's static checks, configured in pyproject.toml
 	uv run --package acme-checkers agentic-check
+
+# The platform's checker sits beside the engine's in the same member, so it
+# runs in-tree too, at the platform release of this project's base.
+distro-check: ## The platform's static checks, configured in pyproject.toml
+	uv run --package acme-checkers distro-check
 
 test-unit: ## Unit tests over the memory impls
 	uv run pytest -q -m "not integration and not e2e and not telemetry and not live"

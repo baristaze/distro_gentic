@@ -107,9 +107,8 @@ Ids are the group prefix and two digits: `PLC`, `WSP`, `STN`, `WAT`,
   scaffold, `scaffold/acme_root/<path>` in backticks, that show the rule
   as code. A review reads the file and compares the code with it. A lens
   has one only where a scaffold file shows its rule plainly.
-- **Check** reads `review` when the review alone judges the lens, and
-  every lens reads so while no checker decides one. The platform's
-  checker is named `distro-check`, and its rules go under
+- **Check** reads `review` when the review alone judges the lens. The
+  platform's checker is named `distro-check`, and its rules go under
   `scaffold/acme_root/checkers/src/acme/distro_check/rules/`, beside
   the engine's checker. A lens it decides says so in the guideline's two
   sentences: "`distro-check` decides it." when it decides the whole

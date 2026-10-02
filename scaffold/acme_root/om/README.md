@@ -190,6 +190,15 @@ own, which lasts an hour and which it renews itself. A session's
 org's pools. A session pinned to a pool with no host online waits, and
 says so; it never moves to the cloud unless a person moves it.
 
+A **station** is a scarce, located thing work needs, in a **lab** that
+one **station daemon** serves inside an org's wall, and in a **pool** of
+stations of its kind. A session that needs one joins a **line** and waits
+in it, parked. A free station goes to the first in line that waits, as a
+**lease** with a **fencing token** that grows with every grant, and the
+session sends **jobs** under it. The daemon fences every job by its
+token and holds the station's limits, which are its owner's and never
+the platform's.
+
 ## The agents the platform ships
 
 The platform ships four kinds of agent. The **engineer** takes an
@@ -296,6 +305,9 @@ arrive twice, so the second copy gets the first one's answer.
   pool, whatever it asks for.
 - A validation session names its org, and its station work is a work
   item that names the session.
+- A lab, a pool, a station, a daemon's credentials, a line entry, a
+  lease, and a job name their org. A daemon is handed only its own lab's
+  work, and renews only the lease of a job it claimed.
 - A session's workspace names its org and its session, one each, and an
   egress allowlist its org and its project, one each.
 - The matrix and what its operators record of a model are the
@@ -329,6 +341,7 @@ arrive twice, so the second copy gets the first one's answer.
 - [Knowledge](src/acme/om/knowledge/README.md)
 - [Notifications](src/acme/om/notifications/README.md)
 - [The platform's agents](src/acme/om/platform_agents/README.md)
+- [Stations](src/acme/om/stations/README.md)
 - [Workspaces](src/acme/om/workspaces/README.md)
 - [Events](src/acme/om/events/README.md)
 - [Outbox rows](src/acme/om/outbox/README.md)

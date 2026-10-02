@@ -39,6 +39,7 @@ served to it. Exposure is by listing, never by folder.
 - [Knowledge](om/src/acme/om/knowledge/README.md): what a session recalls by trigger as it starts, as data, and only once a person reviewed it
 - [Notifications](om/src/acme/om/notifications/README.md): a park that needs a person tells exactly the people who can clear it, on their channels, with the link to the one action
 - [The platform's agents](om/src/acme/om/platform_agents/README.md): the engineer, analysis, the planner, and the platform assistant as profiles over the one loop; the assistant's reach and its corpus from this map; the validation session, with no agent
+- [Stations](om/src/acme/om/stations/README.md): labs, station pools, and stations; the line a session waits in, parked; a lease fenced by a token that grows with every grant, by one conditional write; the jobs sent under it; and a lab daemon's claims, renewals, and reports
 - [Workspaces](om/src/acme/om/workspaces/README.md): a session's workspace as a cache of durable state: its isolation pinned at creation and refused by a host that cannot give it, its work pushed to a snapshot ref before release, its branch rebuilt only when its fate is known, its egress a project's allowlist of destinations and methods, and its own branch and pull request its work product
 - [Infrastructure](infra/README.md): cache, buckets, topics, queues, secrets, keys, the outage signal, observability, workspaces and the transport; what each promises and which twin runs where
 - [Integrations](integrations/README.md): the identity provider, its twin, the absent provider, and the webhook check; the model providers, their adapters, and the scripted twin
@@ -57,6 +58,7 @@ served to it. Exposure is by listing, never by folder.
 - [The company site](apps/site/README.md): the static page and where it is served
 - [The command line](apps/cli/README.md): the terminal client and its exit codes
 - [The workspace host](apps/host/README.md): the program a tenant runs inside its wall: its probes, its enrollment, its owner's ceilings, and its exit codes
+- [The station daemon](apps/station_daemon/README.md): the program on a station's host: its fence, its owner's limits, its lease on its own clock, the reports it keeps until recorded, its device access, and its exit codes
 - [The TypeScript client](clients/typescript/README.md): the one client every browser app imports
 - [The Python client](clients/python/README.md): the one client every Python caller goes through
 - [The engine's checker](checkers/README.md): agentic-check, the engine's lenses a parser decides, its configuration, and its exceptions
