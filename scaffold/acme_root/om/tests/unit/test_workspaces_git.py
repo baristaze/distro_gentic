@@ -89,7 +89,9 @@ class Checkout:
         subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(self.remote)], check=True)
         subprocess.run(["git", "init", "-q", "-b", "main", str(seed)], check=True)
         (seed / "README.md").write_text("the project\n")
-        git(seed, "add", "README.md")
+        (seed / "checks").mkdir()
+        (seed / "checks" / "test_guard.py").write_text("def test_guard(): ...\n")
+        git(seed, "add", "README.md", "checks")
         git(seed, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-qm", "1")
         git(seed, "push", "-q", str(self.remote), "main")
         self.main = git(self.remote, "rev-parse", "main")
@@ -223,3 +225,34 @@ async def test_what_a_session_delivered_is_read_from_git_in_its_checkout(
     assert delivered.head == git(here, "rev-parse", "HEAD") != checkout.main
     assert delivered.dirty
     assert delivered.changed == ("README.md", "draft.txt", "feature.txt")
+
+
+async def test_an_agent_that_moves_its_default_branch_still_delivers_the_protected_edit(
+    checkout: Checkout,
+) -> None:
+    session_id = await checkout.session()
+    workspace = await checkout.prepare(session_id)
+    here = Path(workspace.location)
+    (here / "checks" / "test_guard.py").write_text("def test_guard(): assert True\n")
+    git(here, "-c", "user.name=a", "-c", "user.email=a@example.invalid", "commit", "-qam", "e")
+    # The checkout's own idea of the default branch, moved past the edit.
+    git(here, "update-ref", "refs/remotes/origin/main", "HEAD")
+
+    delivered = await checkout.managers.workspaces.delivery(checkout.ctx, workspace)
+
+    assert delivered.base == checkout.main, "the base is the repository's, not the checkout's"
+    assert "checks/test_guard.py" in delivered.changed
+
+
+async def test_a_moved_protected_check_is_delivered_by_the_path_it_left(
+    checkout: Checkout,
+) -> None:
+    session_id = await checkout.session()
+    workspace = await checkout.prepare(session_id)
+    here = Path(workspace.location)
+    git(here, "mv", "checks/test_guard.py", "checks/test_other.py")
+    git(here, "-c", "user.name=a", "-c", "user.email=a@example.invalid", "commit", "-qm", "mv")
+
+    delivered = await checkout.managers.workspaces.delivery(checkout.ctx, workspace)
+
+    assert {"checks/test_guard.py", "checks/test_other.py"} <= set(delivered.changed)

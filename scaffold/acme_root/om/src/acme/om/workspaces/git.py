@@ -35,8 +35,10 @@ class WorkspaceGitInterface(ABC):
         self, ctx: TenantContext, workspace: Workspace, binding: RepositoryBinding
     ) -> Checkout:
         """What the checkout holds as it stands, read from git and never from
-        what the agent says: its base on the default branch, its head,
-        whether it is dirty, and the paths changed from the base."""
+        what the agent says: its base, where its head meets the bound
+        repository's default branch as the repository answers it, never a
+        ref the checkout holds; its head; whether it is dirty; and every path
+        changed from the base, a moved file by both its paths."""
         ...
 
     @abstractmethod

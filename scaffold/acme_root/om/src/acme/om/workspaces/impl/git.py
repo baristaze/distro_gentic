@@ -90,17 +90,22 @@ the remote holds the branch."""
 
 
 CHECKOUT = """set -eu
+git fetch -q --no-tags "$REPOSITORY" "refs/heads/$BASE"
+tip="$(git ls-remote "$REPOSITORY" "refs/heads/$BASE" | cut -f1)"
+git cat-file -e "$tip^{commit}"
 head="$(git rev-parse HEAD)"
-base="$(git merge-base HEAD "origin/$BASE")"
+base="$(git merge-base HEAD "$tip")"
 dirty=no
 if [ -n "$(git status --porcelain --untracked-files=all)" ]; then dirty=yes; fi
 echo "checkout $base $head $dirty"
-git -c core.quotePath=false diff --name-only "$base"
+git -c core.quotePath=false diff --no-renames --name-only "$base"
 git -c core.quotePath=false ls-files --others --exclude-standard
 """
 """Prints the base, the head, and whether the checkout is dirty on its first
 line, then every path changed from the base, committed, uncommitted, or
-new."""
+new. The base is where HEAD meets the bound repository's default branch as
+the repository answers it now, never a ref the checkout holds, and a moved
+file lists the path it left as well as the one it took."""
 
 
 class GitOptions(Platform):
@@ -147,9 +152,8 @@ class WorkspaceGitTransportImpl(WorkspaceGitInterface):
     async def checkout(
         self, ctx: TenantContext, workspace: Workspace, binding: RepositoryBinding
     ) -> Checkout:
-        lines = await self._lines(
-            ctx, workspace, "checkout", CHECKOUT, {"BASE": binding.default_branch}
-        )
+        env = {"REPOSITORY": binding.repository, "BASE": binding.default_branch}
+        lines = await self._lines(ctx, workspace, "checkout", CHECKOUT, env)
         words = lines[0].split() if lines else []
         if len(words) != 4 or words[0] != "checkout":
             raise Unavailable(f"the checkout of session {workspace.id} answered no state")
