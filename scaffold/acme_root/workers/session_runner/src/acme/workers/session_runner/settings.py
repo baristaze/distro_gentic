@@ -13,6 +13,7 @@ from pydantic_settings import SettingsConfigDict
 
 from acme.infra.impl.settings import InfraSettings
 from acme.integrations.settings import IntegrationsSettings
+from acme.om.placement.rules import DEFAULT_TIER, tier_lane
 from acme.om.storage.settings import StorageSettings
 
 
@@ -30,7 +31,9 @@ class SessionRunnerSettings(StorageSettings, InfraSettings, IntegrationsSettings
     metrics_host: str = "127.0.0.1"
     runner_metrics_port: int = 9465
     runner_id: str = Field(default_factory=default_runner_id)
-    runner_lane: str = "default"
+    # The loop lane it claims from: a plan tier's, or a tenant's own
+    # (`acme.om.placement.rules`). Each lane in use has runners of its own.
+    runner_lane: str = tier_lane(DEFAULT_TIER)
     # Each is a count or a duration the claim loop divides or waits on, so
     # zero is a broken setting, refused at start, as the maintenance
     # worker's are. A loop runs for minutes, so a runner holds few at once;
