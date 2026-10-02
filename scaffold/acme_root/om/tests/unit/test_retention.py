@@ -1,0 +1,513 @@
+"""Retention over the memory roots and the local key service.
+
+A session takes its tenant's policy as a snapshot when it is created. The
+sweep folds a tightening into the snapshot and never a loosening; when the
+content expires, the tenant's key service destroys the session's key, the
+engine revokes it, and the audit holds the destruction as the service
+reported it; when the shape expires, the session is marked deleted. A
+tenant that revokes its own key makes its own content unreadable and no
+other tenant's. And a crossing whose bytes do not match the hash they
+crossed with is refused."""
+
+import json
+from datetime import datetime, timedelta
+from pathlib import Path
+from uuid import UUID
+
+import pytest
+from contracts.agent_session_storage import make_session
+from contracts.doubles import APP, context
+from contracts.step_storage import make_message
+
+from acme.infra.exceptions import KeyRefused
+from acme.infra.impl.local import InfraLocalImpl
+from acme.infra.keys import KeyServiceInterface, WrappedKey
+from acme.infra.keys.memory import KeyServiceMemoryImpl
+from acme.om.agent_sessions.types.agent_session import AgentSession
+from acme.om.base import new_id, utcnow
+from acme.om.context import RequestContext, Role, TenantContext
+from acme.om.exceptions import NotAuthorized, NotFound, PreconditionFailed, ValidationFailed
+from acme.om.privacy.types.session_privacy import StorageMode
+from acme.om.retention.crossing import CrossingKind, CrossingRefused, declared, verified
+from acme.om.retention.impl.keys import KeyServiceLocalImpl, TenantKeysImpl
+from acme.om.retention.impl.manager import KEY_DESTROYED, RetentionManagerImpl, RetentionOptions
+from acme.om.retention.impl.projects import SessionProjectNullImpl
+from acme.om.retention.manager import RetentionManagerInterface
+from acme.om.retention.projects import SessionProjectInterface
+from acme.om.retention.rules import tighter
+from acme.om.retention.types.policy import ProjectRetention, RetentionPolicy
+from acme.om.root import Managers, build_managers
+from acme.om.steps.types.content import ContentState
+from acme.om.storage.impl.memory import StorageMemoryImpl
+
+DAY = timedelta(days=1)
+WEEK = timedelta(days=7)
+MONTH = timedelta(days=30)
+SAID = "the pump log shows a pressure spike at 14:02"
+"""What a session says, which no shape repeats."""
+
+
+class Roots:
+    """The memory roots with the platform's key service and a tenant's own
+    one, and a retention manager whose clock a case moves. The platform's
+    is the local key service, or, with `custody` off, infra's memory one,
+    which holds the tenant's key alone, as a deployed root's does."""
+
+    def __init__(
+        self,
+        tmp_path: Path,
+        projects: SessionProjectInterface | None = None,
+        *,
+        custody: bool = True,
+    ) -> None:
+        self.platform = KeyServiceLocalImpl(KeyServiceMemoryImpl())
+        self.own = KeyServiceLocalImpl(KeyServiceMemoryImpl())
+        self.owners: dict[UUID, KeyServiceInterface] = {}
+        platform: KeyServiceInterface = self.platform if custody else KeyServiceMemoryImpl()
+        self.keys = TenantKeysImpl(platform, self.owners)
+        self.storage = StorageMemoryImpl()
+        self.projects = projects or SessionProjectNullImpl()
+        self.managers: Managers = build_managers(
+            self.storage,
+            InfraLocalImpl(tmp_path),
+            tenant_keys=self.keys,
+            session_projects=self.projects,
+        )
+        self.now = utcnow()
+
+    def at(self, later: timedelta) -> RetentionManagerInterface:
+        """The retention manager as the sweep holds it, `later` from now."""
+        moment = self.now + later
+
+        def clock() -> datetime:
+            return moment
+
+        return RetentionManagerImpl(
+            self.storage.get_retention_storage(),
+            self.keys,
+            self.managers.privacy,
+            self.managers.agent_sessions,
+            self.managers.tenancy,
+            self.managers.events,
+            self.managers.outbox,
+            self.projects,
+            RetentionOptions(),
+            clock=clock,
+        )
+
+    async def sweep(self, later: timedelta = timedelta(0)) -> int:
+        return await self.at(later).sweep(RequestContext(request_id=new_id(), app=APP))
+
+    async def tenant(self, *, own_keys: bool = False) -> TenantContext:
+        """A live tenant's owner, whose org the sweep mints a context for;
+        with its own key service when `own_keys`."""
+        tail = new_id().hex[-8:]
+        owner, org = await self.managers.tenancy.bootstrap(
+            RequestContext(request_id=new_id(), app=APP),
+            "Ajax",
+            f"ajax-{tail}",
+            f"a-{tail}@x.test",
+            "Ann",
+        )
+        if own_keys:
+            self.owners[org.id] = self.own
+        return owner
+
+    async def declare(
+        self,
+        ctx: TenantContext,
+        policy: RetentionPolicy,
+        projects: tuple[ProjectRetention, ...] = (),
+    ) -> None:
+        current = await self.managers.retention.get_policy(ctx)
+        await self.managers.retention.write_policy(
+            ctx, current.model_copy(update={"policy": policy, "projects": projects})
+        )
+
+    async def session_saying(self, ctx: TenantContext, text: str = SAID) -> AgentSession:
+        session = await self.managers.agent_sessions.create_session(ctx, make_session())
+        await self.managers.steps.append_inputs(ctx, session.id, [make_message(session.id, text)])
+        return session
+
+    async def said(self, ctx: TenantContext, session_id: UUID) -> list[str]:
+        steps = (await self.managers.steps.get_steps(ctx, session_id, 0, 50)).items
+        return [step.as_text() for step in steps if step.content.state is ContentState.PLAIN]
+
+    async def audited(self, ctx: TenantContext) -> list[dict[str, object]]:
+        events = await self.managers.events.get_events(ctx, 0, 100)
+        return [dict(e.payload) for e in events if e.kind == KEY_DESTROYED]
+
+
+class OneProject(SessionProjectInterface):
+    def __init__(self) -> None:
+        self.project_id = new_id()
+
+    async def project_of(self, ctx: TenantContext, session: AgentSession) -> UUID | None:
+        return self.project_id
+
+
+@pytest.fixture
+def roots(tmp_path: Path) -> Roots:
+    return Roots(tmp_path)
+
+
+def a_policy(
+    content: timedelta | None,
+    shape: timedelta | None = None,
+    mode: StorageMode = StorageMode.SEALED,
+    region: str | None = None,
+) -> RetentionPolicy:
+    return RetentionPolicy(
+        content_lifetime=content, shape_lifetime=shape, storage_mode=mode, region=region
+    )
+
+
+# The content's life: its key destroyed, and the destruction audited.
+
+
+async def test_expired_content_is_unreadable_its_key_destroyed_and_audited_as_reported(
+    roots: Roots,
+) -> None:
+    """Past its content's life, nothing the session said reads back through
+    the engine or opens under the key service, a copy of its wrapped key
+    kept from before included; the audit holds one entry, the key service's
+    report as the service's own log holds it; the shape stays."""
+    owner = await roots.tenant()
+    await roots.declare(owner, a_policy(WEEK, MONTH))
+    session = await roots.session_saying(owner)
+    assert await roots.said(owner, session.id) == [SAID]
+    ring = await roots.storage.get_privacy_storage().read_keys(owner.org_id, session.id)
+    (kept,) = ring.keys
+    assert kept.wrapped is not None and kept.wrapping is not None
+    copy = WrappedKey(blob=kept.wrapped, wrapping=kept.wrapping)
+
+    assert await roots.sweep(WEEK - DAY) == 0, "within its life, nothing is due"
+    assert await roots.said(owner, session.id) == [SAID]
+
+    assert await roots.sweep(WEEK + DAY) == 1
+    steps = (await roots.managers.steps.get_steps(owner, session.id, 0, 50)).items
+    assert [step.content.state for step in steps] == [ContentState.ABSENT]
+    assert SAID not in json.dumps([step.model_dump(mode="json") for step in steps])
+    ring = await roots.storage.get_privacy_storage().read_keys(owner.org_id, session.id)
+    assert ring.revoked and all(key.is_destroyed() for key in ring.keys)
+    with pytest.raises(KeyRefused):
+        await roots.platform.unwrap(owner.org_id, session.id, kept.version, copy)
+
+    (report,) = roots.platform.log(owner.org_id)
+    assert await roots.audited(owner) == [
+        {
+            "reported": True,
+            "service": report.service,
+            "key": report.key,
+            "destroyed_at": report.destroyed_at.isoformat(),
+            "receipt": report.receipt,
+        }
+    ]
+    snapshot = await roots.managers.retention.get_snapshot(owner, session.id)
+    assert snapshot.destruction == report and snapshot.content_expired_at is not None
+    assert await roots.managers.agent_sessions.get_session(owner, session.id), "the shape stays"
+
+    assert await roots.sweep(WEEK + DAY * 2) == 0, "taken up once"
+    assert len(await roots.audited(owner)) == 1
+
+
+async def test_a_tenants_own_key_service_destroys_its_key_and_logs_it_alone(
+    roots: Roots,
+) -> None:
+    """A tenant that brought its own key service finds the destruction in
+    that service's log, the report the audit holds; the platform's service
+    logs the other tenant's alone."""
+    own = await roots.tenant(own_keys=True)
+    other = await roots.tenant()
+    for ctx in (own, other):
+        await roots.declare(ctx, a_policy(WEEK))
+    mine, theirs = await roots.session_saying(own), await roots.session_saying(other)
+    assert await roots.sweep(WEEK + DAY) == 2
+    (report,) = roots.own.log(own.org_id)
+    assert report.key.endswith(str(mine.id))
+    assert roots.own.log(other.org_id) == ()
+    (platform_report,) = roots.platform.log(other.org_id)
+    assert platform_report.key.endswith(str(theirs.id))
+    assert roots.platform.log(own.org_id) == ()
+    (entry,) = await roots.audited(own)
+    assert entry["receipt"] == report.receipt
+    assert await roots.said(own, mine.id) == [] and await roots.said(other, theirs.id) == []
+
+
+async def test_a_key_service_holding_the_tenants_key_alone_leaves_the_engine_to_destroy(
+    tmp_path: Path,
+) -> None:
+    """Infra's key service as a deployed root wires it holds no session's
+    key: the engine's revocation is the destruction, and the audit says no
+    service reported it, and when the engine revoked."""
+    roots = Roots(tmp_path, custody=False)
+    owner = await roots.tenant()
+    await roots.declare(owner, a_policy(WEEK))
+    session = await roots.session_saying(owner)
+    assert await roots.sweep(WEEK + DAY) == 1
+    assert await roots.said(owner, session.id) == []
+    privacy = await roots.managers.privacy.get_privacy(owner, session.id)
+    assert privacy.revoked_at is not None
+    assert await roots.audited(owner) == [
+        {"reported": False, "revoked_at": privacy.revoked_at.isoformat()}
+    ]
+    assert (await roots.managers.retention.get_snapshot(owner, session.id)).destruction is None
+
+
+async def test_content_expiring_after_its_tenant_revoked_its_key_is_revoked_all_the_same(
+    roots: Roots,
+) -> None:
+    """A tenant's service that revoked the tenant's key destroys nothing more
+    and reports nothing; the engine's revocation still takes the content,
+    and the audit says no service reported it."""
+    owner = await roots.tenant()
+    await roots.declare(owner, a_policy(WEEK))
+    session = await roots.session_saying(owner)
+    roots.platform.revoke(owner.org_id)
+    assert await roots.sweep(WEEK + DAY) == 1
+    privacy = await roots.managers.privacy.get_privacy(owner, session.id)
+    assert privacy.revoked_at is not None
+    assert roots.platform.log(owner.org_id) == ()
+    assert await roots.audited(owner) == [
+        {"reported": False, "revoked_at": privacy.revoked_at.isoformat()}
+    ]
+
+
+async def test_a_deleted_tenants_expired_content_is_destroyed_without_its_context(
+    roots: Roots,
+) -> None:
+    """No context is minted for a tenant deleted, and its purge takes its
+    sessions; its key service still destroys each expired key, and the
+    snapshot keeps the report, so the sweep moves on past it."""
+    owner = await roots.tenant()
+    await roots.declare(owner, a_policy(WEEK, MONTH))
+    session = await roots.session_saying(owner)
+    tenancy = roots.storage.get_tenancy_storage()
+    org = await tenancy.read_org(owner.org_id)
+    assert org is not None
+    await tenancy.write_org(org.id, org.model_copy(update={"deleted_at": utcnow()}))
+
+    assert await roots.sweep(MONTH + DAY) == 1
+    (report,) = roots.platform.log(owner.org_id)
+    snapshot = await roots.storage.get_retention_storage().read_snapshot(owner.org_id, session.id)
+    assert snapshot is not None and snapshot.destruction == report
+    assert snapshot.shape_expired_at is not None
+    assert await roots.sweep(MONTH + DAY * 2) == 0, "nothing of it is due again"
+
+
+# The snapshot: tightening reaches it at the next sweep, loosening never.
+
+
+async def test_a_tightening_reaches_an_existing_session_at_the_next_sweep(roots: Roots) -> None:
+    owner = await roots.tenant()
+    await roots.declare(owner, a_policy(MONTH))
+    session = await roots.session_saying(owner)
+    taken = await roots.managers.retention.get_snapshot(owner, session.id)
+    assert taken.content_expires_at == taken.created_at + MONTH
+
+    await roots.declare(owner, a_policy(WEEK))
+    unswept = await roots.managers.retention.get_snapshot(owner, session.id)
+    assert unswept.policy.content_lifetime == MONTH, "nothing reaches it before the sweep"
+
+    await roots.sweep()
+    swept = await roots.managers.retention.get_snapshot(owner, session.id)
+    assert swept.policy.content_lifetime == WEEK
+    assert swept.content_expires_at == taken.created_at + WEEK
+    await roots.sweep(WEEK + DAY)
+    assert await roots.said(owner, session.id) == []
+
+
+async def test_a_loosening_leaves_an_existing_sessions_snapshot_as_it_was(roots: Roots) -> None:
+    owner = await roots.tenant()
+    await roots.declare(owner, a_policy(WEEK, MONTH))
+    session = await roots.session_saying(owner)
+    taken = await roots.managers.retention.get_snapshot(owner, session.id)
+
+    await roots.declare(owner, a_policy(None))
+    await roots.sweep()
+    swept = await roots.managers.retention.get_snapshot(owner, session.id)
+    assert (swept.policy, swept.content_expires_at, swept.shape_expires_at) == (
+        taken.policy,
+        taken.content_expires_at,
+        taken.shape_expires_at,
+    )
+    later = await roots.session_saying(owner)
+    assert (await roots.managers.retention.get_snapshot(owner, later.id)).policy == a_policy(None)
+
+    await roots.sweep(WEEK + DAY)
+    assert await roots.said(owner, session.id) == [], "the old session keeps its own life"
+    assert await roots.said(owner, later.id) == [SAID], "a new one takes the loosened policy"
+
+
+async def test_content_at_rest_goes_at_the_next_sweep_when_the_policy_keeps_none(
+    roots: Roots,
+) -> None:
+    """Tightened to memory-only, a sealed session's content at rest expires
+    when the sweep folds it, whatever its lifetime said."""
+    owner = await roots.tenant()
+    session = await roots.session_saying(owner)
+    assert (await roots.managers.retention.get_snapshot(owner, session.id)).at_rest
+    await roots.declare(owner, a_policy(None, mode=StorageMode.MEMORY_ONLY))
+    await roots.sweep()
+    assert (await roots.managers.retention.get_snapshot(owner, session.id)).content_expired_at
+    await roots.sweep()
+    assert await roots.said(owner, session.id) == []
+
+
+async def test_a_memory_only_policy_chooses_the_engines_storage_before_the_history(
+    roots: Roots,
+) -> None:
+    owner = await roots.tenant()
+    await roots.declare(owner, RetentionPolicy(storage_mode=StorageMode.MEMORY_ONLY))
+    session = await roots.managers.agent_sessions.create_session(owner, make_session())
+    privacy = await roots.managers.privacy.get_privacy(owner, session.id)
+    assert privacy.policy.mode is StorageMode.MEMORY_ONLY
+    assert not (await roots.managers.retention.get_snapshot(owner, session.id)).at_rest
+
+
+async def test_a_project_narrows_its_tenants_policy_and_never_widens_it(tmp_path: Path) -> None:
+    project = OneProject()
+    roots = Roots(tmp_path, project)
+    owner = await roots.tenant()
+    narrowing = ProjectRetention(project_id=project.project_id, policy=a_policy(WEEK))
+    widening = ProjectRetention(project_id=project.project_id, policy=a_policy(None))
+    await roots.declare(owner, a_policy(MONTH, region="eu-central-1"), (narrowing,))
+    narrowed = await roots.session_saying(owner)
+    snapshot = await roots.managers.retention.get_snapshot(owner, narrowed.id)
+    assert (snapshot.project_id, snapshot.policy.content_lifetime) == (project.project_id, WEEK)
+    assert snapshot.policy.region == "eu-central-1"
+
+    await roots.declare(owner, a_policy(MONTH), (widening,))
+    widened = await roots.session_saying(owner)
+    snapshot = await roots.managers.retention.get_snapshot(owner, widened.id)
+    assert snapshot.policy.content_lifetime == MONTH, "a project never loosens its tenant"
+
+    elsewhere = ProjectRetention(
+        project_id=project.project_id, policy=RetentionPolicy(region="us-east-1")
+    )
+    with pytest.raises(ValidationFailed):
+        await roots.declare(owner, RetentionPolicy(region="eu-central-1"), (elsewhere,))
+
+
+async def test_a_child_session_belongs_to_its_parents_project(tmp_path: Path) -> None:
+    project = OneProject()
+    roots = Roots(tmp_path, project)
+    owner = await roots.tenant()
+    narrowing = ProjectRetention(project_id=project.project_id, policy=a_policy(WEEK))
+    await roots.declare(owner, a_policy(MONTH), (narrowing,))
+    parent = await roots.managers.agent_sessions.create_session(owner, make_session())
+    project.project_id = new_id()
+    child = await roots.managers.agent_sessions.create_session(owner, make_session(parent=parent))
+    snapshot = await roots.managers.retention.get_snapshot(owner, child.id)
+    assert snapshot.project_id == narrowing.project_id
+    assert snapshot.policy.content_lifetime == WEEK
+
+
+# The shape's life.
+
+
+async def test_expired_shape_marks_the_session_deleted_for_good(roots: Roots) -> None:
+    owner = await roots.tenant()
+    await roots.declare(owner, a_policy(WEEK, MONTH))
+    session = await roots.session_saying(owner)
+    await roots.sweep(WEEK + DAY)
+    assert await roots.managers.agent_sessions.get_session(owner, session.id)
+    await roots.sweep(MONTH + DAY)
+    with pytest.raises(NotFound):
+        await roots.managers.agent_sessions.get_session(owner, session.id)
+    with pytest.raises(NotFound):
+        await roots.managers.agent_sessions.restore_session(owner, session.id)
+    assert (await roots.managers.retention.get_snapshot(owner, session.id)).shape_expired_at
+
+
+# The tenant's key, revoked.
+
+
+async def test_a_revoked_tenant_key_makes_its_content_unreadable_and_nothing_else(
+    roots: Roots,
+) -> None:
+    """Both tenants on the one platform key service: the tenant that revokes
+    its key can neither read nor write content, and the other reads and
+    writes as before."""
+    revoking, other = await roots.tenant(), await roots.tenant()
+    gone = await roots.session_saying(revoking, "the revoking tenant's notes")
+    kept = await roots.session_saying(other, "the other tenant's notes")
+
+    roots.platform.revoke(revoking.org_id)
+
+    with pytest.raises(KeyRefused):
+        await roots.said(revoking, gone.id)
+    with pytest.raises(KeyRefused):
+        await roots.managers.steps.append_inputs(revoking, gone.id, [make_message(gone.id, "more")])
+    assert await roots.said(other, kept.id) == ["the other tenant's notes"]
+    await roots.managers.steps.append_inputs(other, kept.id, [make_message(kept.id, "more")])
+    assert await roots.said(other, kept.id) == ["the other tenant's notes", "more"]
+    fresh = await roots.session_saying(other, "a new session")
+    assert await roots.said(other, fresh.id) == ["a new session"]
+
+
+# The policy's own rules.
+
+
+async def test_the_policy_is_written_by_who_manages_members_and_by_its_version(
+    roots: Roots,
+) -> None:
+    owner = await roots.tenant()
+    first = await roots.managers.retention.get_policy(owner)
+    assert first.version == 0
+    member = context(Role.MEMBER)
+    with pytest.raises(NotAuthorized):
+        await roots.managers.retention.write_policy(member, first)
+    written = await roots.managers.retention.write_policy(
+        owner, first.model_copy(update={"policy": a_policy(WEEK)})
+    )
+    assert written.version == 1
+    with pytest.raises(PreconditionFailed):
+        await roots.managers.retention.write_policy(owner, first)
+    assert await roots.managers.retention.get_policy(owner) == written
+
+
+def test_tighter_takes_the_stricter_of_each_field_and_is_its_own_identity() -> None:
+    loose = RetentionPolicy()
+    strict = RetentionPolicy(
+        content_lifetime=DAY,
+        shape_lifetime=WEEK,
+        storage_mode=StorageMode.MEMORY_ONLY,
+        zero_retention=True,
+        region="eu-central-1",
+    )
+    assert tighter(loose, strict) == strict == tighter(strict, loose)
+    assert tighter(loose, loose) == loose
+    mixed = tighter(a_policy(DAY, MONTH), a_policy(WEEK, WEEK))
+    assert (mixed.content_lifetime, mixed.shape_lifetime) == (DAY, WEEK)
+    assert tighter(RetentionPolicy(region="a"), RetentionPolicy(region="b")).region == "a"
+
+
+def test_a_policy_keeps_content_within_its_shape_and_nothing_at_rest_at_zero() -> None:
+    with pytest.raises(ValueError, match="outlives"):
+        a_policy(MONTH, WEEK)
+    with pytest.raises(ValueError, match="outlives"):
+        a_policy(None, WEEK)
+    with pytest.raises(ValueError, match="memory only"):
+        RetentionPolicy(zero_retention=True)
+
+
+# What crosses the wall.
+
+
+def test_a_crossing_whose_hash_does_not_verify_is_refused() -> None:
+    """The payload a sender declared reads back; a byte changed, a payload
+    swapped for another of the same size, or a size that differs is
+    refused, and the refusal never carries what crossed."""
+    payload = b"result: 412 checks passed at 9f2c1e0"
+    crossing = declared(CrossingKind.RESULT, payload)
+    assert verified(crossing, payload) == payload
+    changed = payload[:-1] + b"1"
+    swapped = b"result: 000 checks passed at 9f2c1e0"
+    for other in (changed, swapped, payload + b" ", b""):
+        with pytest.raises(CrossingRefused) as refused:
+            verified(crossing, other)
+        assert "checks" not in str(refused.value)
+    forged = crossing.model_copy(update={"sha256": declared(CrossingKind.RESULT, swapped).sha256})
+    with pytest.raises(CrossingRefused):
+        verified(forged, payload)
