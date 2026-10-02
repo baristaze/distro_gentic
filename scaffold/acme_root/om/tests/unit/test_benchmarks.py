@@ -58,7 +58,7 @@ async def test_a_lower_score_than_its_baseline_is_flagged(
     # One link short in one trial is a lower score too.
     short = await benchmarks.record(admin, make_trials([WHOLE, 1], [WHOLE, WHOLE]))
     assert short.regressed and short.candidate_result.score == pytest.approx(1 - 1 / 14)
-    history = await benchmarks.history(admin, "grip-slips", 10)
+    history = await benchmarks.history(admin, "orders-vanish", 10)
     assert [found.id for found in history] == [short.id, higher.id, level.id, lower.id]
 
 
@@ -71,7 +71,7 @@ async def test_a_benchmark_qualifies_the_model_it_changed_for_the_matrix(
     assert (run.ref.name, run.role, run.benchmark) == (
         "anthropic/claude-opus-5-5",
         "main",
-        "grip-slips",
+        "orders-vanish",
     )
     assert run.passed and run.run == f"benchmark {held.id}"
     lower = await benchmarks.record(admin, make_trials([WHOLE, NOTHING], [WHOLE, WHOLE]))
@@ -111,7 +111,7 @@ async def test_trials_that_do_not_interleave_are_refused(
     admin = operator()
     with pytest.raises(ValidationFailed, match=words):
         await benchmarks.record(admin, run)
-    assert await benchmarks.history(admin, "grip-slips", 10) == ()
+    assert await benchmarks.history(admin, "orders-vanish", 10) == ()
 
 
 async def test_trials_on_two_stations_are_refused(benchmarks: BenchmarksManagerImpl) -> None:

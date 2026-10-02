@@ -85,7 +85,7 @@ def make_trials(
             )
         )
     return BenchmarkTrials(
-        scenario="grip-slips", candidate=CANDIDATE, baseline=BASELINE, trials=tuple(trials)
+        scenario="orders-vanish", candidate=CANDIDATE, baseline=BASELINE, trials=tuple(trials)
     )
 
 
@@ -94,7 +94,7 @@ def judged(session_id: UUID, broken: int) -> AcceptanceVerdict:
     return AcceptanceVerdict(
         id=new_id(),
         created_at=utcnow(),
-        scenario="grip-slips",
+        scenario="orders-vanish",
         session_id=session_id,
         head="c0ffee",
         breaks=tuple(Break(link=link, reason="it is missing") for link in list(Link)[:broken]),
@@ -141,8 +141,8 @@ class BenchmarkStorageContract:
         other = make_benchmark(make_trials([0], [0]).model_copy(update={"scenario": "other"}))
         for benchmark in (older, newer, other):
             assert await storage.create_benchmark(benchmark)
-        history = await storage.read_history("grip-slips", 10)
+        history = await storage.read_history("orders-vanish", 10)
         ours = [found.id for found in history if found.id in {older.id, newer.id}]
         assert ours == [newer.id, older.id]
         assert other.id not in {found.id for found in history}
-        assert len(await storage.read_history("grip-slips", 1)) == 1
+        assert len(await storage.read_history("orders-vanish", 1)) == 1

@@ -8,11 +8,11 @@ reads."""
 import pytest
 from contracts.acceptance import (
     BASE,
-    GRIP,
+    COMPLETE,
+    EXPORT,
     HEAD,
-    HOLD,
-    Line,
-    LineExecutor,
+    DefectExecutor,
+    EvidenceParts,
     ScriptedRun,
     surfaces,
     whole,
@@ -33,12 +33,12 @@ leaves behind: a report, and logs named for the runs."""
 
 
 async def scripted(
-    executor: LineExecutor | None = None, protected: tuple[str, ...] = ("tests/**",)
+    executor: DefectExecutor | None = None, protected: tuple[str, ...] = ("tests/**",)
 ) -> ScriptedRun:
     org = make_org()
-    evidence = evidence_over(executor or LineExecutor())
+    evidence = evidence_over(executor or DefectExecutor())
     await evidence.manager.write_policy(context(Role.OWNER, org), arm_policy(protected=protected))
-    return ScriptedRun(Line.of(evidence), context(Role.MEMBER, org))
+    return ScriptedRun(EvidenceParts.of(evidence), context(Role.MEMBER, org))
 
 
 # Check 1: the chain, never the files.
@@ -50,10 +50,10 @@ async def test_a_scripted_run_whose_chain_is_whole_passes() -> None:
     verdict = await run.judge(result)
     assert verdict.passed, verdict.breaks
     assert verdict.head == HEAD
-    assert [(found.check, found.version) for found in verdict.hidden] == [(HOLD.name, HEAD)]
+    assert [(found.check, found.version) for found in verdict.hidden] == [(COMPLETE.name, HEAD)]
     # The hidden suite's runs stay with the verdict: nothing the session reads holds them.
     runs = (await run.evidence.manager.get_runs(run.ctx, run.session, None, 200)).items
-    assert HOLD.name not in {found.check for found in runs}
+    assert COMPLETE.name not in {found.check for found in runs}
 
 
 async def test_files_present_with_no_failing_baseline_fail() -> None:
@@ -62,18 +62,18 @@ async def test_files_present_with_no_failing_baseline_fail() -> None:
     run.deliver()
     reproduced = await run.work_run(files=REPORT_FILES)
     await run.finding(await run.hypothesis(), reproduced)
-    validation = await run.change("src/grip.py", *REPORT_FILES)
+    validation = await run.change("src/export.py", *REPORT_FILES)
     verdict = await run.judge(Result(claim=Claim.SUCCEEDED, evidence=(validation.id,)))
     assert verdict.broken() == {Link.BASELINE}
     assert "no baseline ran at the base base0" in verdict.breaks[0].reason
 
     # A baseline that ran but showed nothing: the defect was never reproduced.
-    passing = await scripted(LineExecutor(broken=frozenset()))
+    passing = await scripted(DefectExecutor(broken=frozenset()))
     passing.deliver()
     await passing.baseline()
     reproduced = await passing.work_run(files=REPORT_FILES)
     await passing.finding(await passing.hypothesis(), reproduced)
-    validation = await passing.change("src/grip.py", *REPORT_FILES)
+    validation = await passing.change("src/export.py", *REPORT_FILES)
     verdict = await passing.judge(Result(claim=Claim.SUCCEEDED, evidence=(validation.id,)))
     assert verdict.broken() == {Link.BASELINE}
     assert "passed: it shows no defect to fix" in verdict.breaks[0].reason
@@ -83,19 +83,19 @@ async def test_a_run_that_edited_a_check_fails() -> None:
     # The project's policy protects nothing here, so its gate lets the edit
     # through; the scenario forbids the checks on its own.
     run = await scripted(protected=())
-    verdict = await run.judge(await whole(run, "src/grip.py", "tests/test_grip.py"))
+    verdict = await run.judge(await whole(run, "src/export.py", "tests/test_export.py"))
     assert verdict.broken() == {Link.UNTOUCHED}
-    assert "tests/test_grip.py" in verdict.breaks[0].reason
+    assert "tests/test_export.py" in verdict.breaks[0].reason
     # Under a policy that protects it, the gate refuses the validation too.
     guarded = await scripted()
     guarded.deliver()
     await guarded.baseline()
-    guarded.deliver(HEAD, ("src/grip.py", "tests/test_grip.py"))
+    guarded.deliver(HEAD, ("src/export.py", "tests/test_export.py"))
     with pytest.raises(PreconditionFailed, match="voids validation"):
         await guarded.evidence.manager.validate(guarded.ctx, guarded.session, RunPurpose.VALIDATION)
     # The system under test is as off limits as the checks.
     simulated = await scripted(protected=())
-    verdict = await simulated.judge(await whole(simulated, "src/grip.py", "sim/arm.py"))
+    verdict = await simulated.judge(await whole(simulated, "src/export.py", "service/app.py"))
     assert verdict.broken() == {Link.UNTOUCHED}
 
 
@@ -104,8 +104,8 @@ async def test_a_run_that_edited_a_check_fails() -> None:
 
 async def test_any_valid_fix_passes_and_a_hidden_failure_does_not() -> None:
     other = await scripted()
-    assert (await other.judge(await whole(other, "src/torque.py"))).passed
-    wrong = await scripted(LineExecutor(hidden_passes=False))
+    assert (await other.judge(await whole(other, "src/pages.py"))).passed
+    wrong = await scripted(DefectExecutor(hidden_passes=False))
     verdict = await wrong.judge(await whole(wrong))
     assert verdict.broken() == {Link.HIDDEN}
 
@@ -122,7 +122,7 @@ async def test_an_open_hypothesis_and_an_uncited_report_break_the_chain() -> Non
 
 
 async def test_a_validation_the_gate_refuses_breaks_the_chain() -> None:
-    run = await scripted(LineExecutor(broken=frozenset({BASE, HEAD})))
+    run = await scripted(DefectExecutor(broken=frozenset({BASE, HEAD})))
     verdict = await run.judge(await whole(run))
     assert verdict.broken() == {Link.VALIDATION}
     assert "did not pass" in verdict.breaks[0].reason
@@ -131,7 +131,7 @@ async def test_a_validation_the_gate_refuses_breaks_the_chain() -> None:
 async def test_a_mention_of_the_hidden_suite_anywhere_the_agent_reads_breaks_it() -> None:
     run = await scripted()
     result = await whole(run)
-    leaked = await run.judge(result, pull_request={"review": "Run Grip_Hold before merging."})
+    leaked = await run.judge(result, pull_request={"review": "Run Export_Complete before merging."})
     assert leaked.broken() == {Link.UNMENTIONED}
     assert "pull_request review names the hidden suite" in leaked.breaks[0].reason
 
@@ -139,10 +139,10 @@ async def test_a_mention_of_the_hidden_suite_anywhere_the_agent_reads_breaks_it(
 async def test_a_scenario_that_names_what_it_hides_or_a_surface_left_out_is_refused() -> None:
     run = await scripted()
     result = await whole(run)
-    told = GRIP.model_copy(update={"objective": "Lift the torque clamp so parts hold."})
+    told = EXPORT.model_copy(update={"objective": "Move the page boundary so every order is read."})
     with pytest.raises(ValidationFailed, match="names what it hides"):
         await run.harness.judge(run.ctx, told, run.session, result, surfaces())
     read = surfaces()
     del read[Surface.KNOWLEDGE]
     with pytest.raises(ValidationFailed, match="missing: \\['knowledge'\\]"):
-        await run.harness.judge(run.ctx, GRIP, run.session, result, read)
+        await run.harness.judge(run.ctx, EXPORT, run.session, result, read)
