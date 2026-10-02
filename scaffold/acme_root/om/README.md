@@ -180,6 +180,9 @@ arrive twice, so the second copy gets the first one's answer.
   deadline as the whole tree. A tree names its org, as its sessions do.
 - A step's content is sealed under its session's key, so revoking one
   key erases what one session said and nothing else.
+- A session takes its tenant's retention policy as a snapshot when it is
+  created, so a tightening reaches it and a loosening never does. A
+  policy names its org, one each, and a snapshot its session.
 - Every model call passes the gate first, charged to the scopes it
   serves: its session, its tree, the person who pays, a project, a team,
   or the org. A budget, its holds, and their settlements name their org.
@@ -198,6 +201,7 @@ arrive twice, so the second copy gets the first one's answer.
 - [Agents](src/acme/om/agents/README.md)
 - [Attribution](src/acme/om/attribution/README.md)
 - [Privacy](src/acme/om/privacy/README.md)
+- [Retention](src/acme/om/retention/README.md)
 - [Budgets](src/acme/om/budgets/README.md)
 - [Models](src/acme/om/models/README.md)
 - [Windows](src/acme/om/windows/README.md)
