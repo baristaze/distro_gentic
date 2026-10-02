@@ -350,8 +350,8 @@ def build_managers(
     and reports it as a tenant's own service does. Elsewhere infra's holds
     the tenant's key alone, and the engine's revocation is the
     destruction. `session_projects` names a new session's project; None
-    reads the row the projects' start wrote, so a session started under
-    no project takes its tenant's policy unnarrowed; and
+    reads the row the projects' start wrote, and a session with no row
+    takes its tenant's policy unnarrowed; and
     `retention_options` the sweep's batches.
 
     The platform's projects take `projects_options`, the purges' batch."""

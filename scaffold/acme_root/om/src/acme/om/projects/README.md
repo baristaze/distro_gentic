@@ -20,14 +20,15 @@ one of the kinds of thing [Acme is made of](../../../../README.md).
 
 - **Create a project.** The tenant's owners and admins create it, with
   its repository. The repository never moves.
-- **Start a session under a project.** The session belongs to the
-  project from its first moment. A project of another tenant is not
-  found, and nothing is started.
+- **Start a session under a project.** Every surface that starts a
+  session names its project, and the session belongs to it from its
+  first moment. A project of another tenant is not found, and nothing
+  is started.
 - **Spawn or hand over.** A session that another session spawns, or
   hands work to, belongs to the same project as that session.
 - **Ask a session's project.** A namespace that sets a policy per
-  project asks here. A session started outside any project has none, and
-  its tenant's policies are the only ones it takes.
+  project asks here. A session with no project row answers none, never
+  another project.
 - **Ask where a session's work lands.** A session's own branch and pull
   request count as its work product only on its project's repository.
   Anywhere else, a write is an outward write.
@@ -39,12 +40,14 @@ one of the kinds of thing [Acme is made of](../../../../README.md).
 - **A session's project is its tenant's.** A session is never started
   under another tenant's project, and no tenant reads another's
   projects.
-- **A session's project never moves.** A second start under another
-  project is refused. A session started under no project stays under
-  none. The database holds this too: no serving login may rewrite or
-  remove the row.
+- **Every session belongs to exactly one project.** Its project is set
+  before it exists and never moves: a second start under another
+  project is refused, and so is a project named later for a session
+  that already stands. The database holds this too: no serving login
+  may rewrite or remove the row.
 - **Work product lands on one repository.** A session's project's
-  repository is the only one, and a session of no project has none.
+  repository is the only one. A session with no project row has none,
+  so no write of it is work product.
 
 <!-- agents-only
 `impl/sessions.py` holds the decorator over the engine's sessions

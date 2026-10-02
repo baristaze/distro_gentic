@@ -205,7 +205,7 @@ arrive twice, so the second copy gets the first one's answer.
 - A step's content is sealed under its session's key, so revoking one
   key erases what one session said and nothing else.
 - A project names its org and binds one repository. A session belongs
-  to at most one project, of its own org, set before it exists and
+  to exactly one project, of its own org, set before it exists and
   never moved; a session it spawns or hands work to belongs to the same.
 - A session takes its tenant's retention policy as a snapshot when it is
   created, so a tightening reaches it and a loosening never does. A

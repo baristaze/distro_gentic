@@ -9,8 +9,7 @@ from acme.om.retention.projects import SessionProjectInterface
 class SessionProjectBoundImpl(SessionProjectInterface):
     """Retention's question, answered from the row the projects' start wrote
     before the session: so a project's narrowing reaches its sessions. A
-    session started under no project has no row, and takes its tenant's
-    policy unnarrowed."""
+    session with no row takes its tenant's policy unnarrowed."""
 
     def __init__(self, storage: ProjectStorageInterface) -> None:
         self._storage = storage

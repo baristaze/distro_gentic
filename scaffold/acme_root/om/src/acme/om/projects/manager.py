@@ -46,15 +46,15 @@ class ProjectsManagerInterface(ABC):
 
     @abstractmethod
     async def project_of(self, ctx: TenantContext, session_id: UUID) -> Project | None:
-        """The project the session belongs to, None for a session of no
-        project, whose policies are its tenant's alone."""
+        """The project the session belongs to; None for a session with no
+        project row, never another project."""
         ...
 
     @abstractmethod
     async def work_repository(self, ctx: TenantContext, session_id: UUID) -> Repository | None:
         """The one repository the session's own branch and pull request
-        count as work product on: its project's. None for a session of no
-        project, so no write of it is work product."""
+        count as work product on: its project's. None for a session with no
+        project row, so no write of it is work product."""
         ...
 
     @abstractmethod

@@ -44,10 +44,11 @@ row already standing under its id is `ProjectFixed`. So a child never
 escapes into its tenant's looser policies, and never into a project its
 origin is not in.
 
-**A session started outside the projects has none.** The engine's own
-start stays as it is, and such a session takes its tenant's policies
-alone. The namespaces read `project_of`, which answers None for it, and
-`work_repository`, under which no write of it is work product.
+**Every surface that starts a session names a project.** A surface
+that starts sessions for people starts them through the projects'
+start, and the engine's own start stays beneath it. A session with no
+row reads as none: `project_of` answers None, never another project, and
+`work_repository` none, so no write of it is work product.
 
 ## Consequences
 
@@ -57,5 +58,5 @@ alone. The namespaces read `project_of`, which answers None for it, and
 - A start that fails after its row is written leaves the row. A retry
   under the same id and project goes on from it; any other use of the
   id is refused.
-- A surface that starts sessions for people names a project, or its
-  sessions take their tenant's policies alone.
+- Every surface that starts sessions for people names a project, the
+  API's start among them.
