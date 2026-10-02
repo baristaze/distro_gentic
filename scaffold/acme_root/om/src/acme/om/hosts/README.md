@@ -38,7 +38,8 @@ of](../../../../README.md).
 - **Revoke.** An owner or an admin ends a token, or a host and every
   credential it holds, at once.
 - **Place a session.** A principal pins it to a pool, or moves it back to
-  the cloud. Nothing else moves it.
+  the cloud. Nothing else moves it. A sub-agent runs where its tree's
+  root runs, so only a root is placed.
 - **Purge.** A tenant deleted past its retention loses all of it.
 
 ## The rules

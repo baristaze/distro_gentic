@@ -8,7 +8,12 @@ from acme.infra.observability import OUTCOMES
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.base import Platform, new_id, utcnow
 from acme.om.context import AppContext, Permission, RequestContext, TenantContext
-from acme.om.exceptions import CredentialExpired, InvalidCredential, NotFound
+from acme.om.exceptions import (
+    CredentialExpired,
+    InvalidCredential,
+    NotFound,
+    ValidationFailed,
+)
 from acme.om.hosts.exceptions import VersionBelowFloor
 from acme.om.hosts.manager import HostsManagerInterface
 from acme.om.hosts.rules import (
@@ -198,7 +203,12 @@ class HostsManagerImpl(HostsManagerInterface):
         self, ctx: TenantContext, session_id: UUID, pool_id: UUID | None
     ) -> SessionPlacement:
         ctx.require(Permission.WRITE)
-        await self._sessions.get_session(ctx, session_id)
+        session = await self._sessions.get_session(ctx, session_id)
+        if session.root_id != session.id:
+            raise ValidationFailed(
+                f"session {session_id} is a sub-agent: it runs where its root "
+                f"{session.root_id} runs, so place its root"
+            )
         if pool_id is not None:
             await self._pool(ctx, pool_id)
         stored = await self._storage.read_placement(ctx.org_id, session_id)
@@ -230,8 +240,9 @@ class HostsManagerImpl(HostsManagerInterface):
 
     async def placement_of(self, ctx: TenantContext, session_id: UUID) -> PlacementState:
         ctx.require(Permission.READ)
-        await self._sessions.get_session(ctx, session_id)
-        placed = await self._storage.read_placement(ctx.org_id, session_id)
+        session = await self._sessions.get_session(ctx, session_id)
+        # A sub-agent runs where its tree's root runs.
+        placed = await self._storage.read_placement(ctx.org_id, session.root_id)
         if placed is None:
             return PlacementState(session_id=session_id)
         if placed.pool_id is None:

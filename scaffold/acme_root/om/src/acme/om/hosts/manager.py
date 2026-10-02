@@ -68,15 +68,17 @@ class HostsManagerInterface(ABC):
     ) -> SessionPlacement:
         """A principal sets where the session runs: one of the tenant's pools,
         or the cloud with None. This is the one way a session's placement
-        changes. Requires the write permission. NotFound when the tenant
-        holds no such session or pool."""
+        changes, and it places a tree's root: a sub-agent runs where its
+        root runs, and placing one is `ValidationFailed`. Requires the write
+        permission. NotFound when the tenant holds no such session or pool."""
         ...
 
     @abstractmethod
     async def placement_of(self, ctx: TenantContext, session_id: UUID) -> PlacementState:
         """Where the session runs and how many of its pool's hosts are online:
-        a pinned session with none online waits, and reads so here. NotFound
-        when the tenant holds no such session."""
+        a pinned session with none online waits, and reads so here. A
+        sub-agent reads its root's. NotFound when the tenant holds no such
+        session."""
         ...
 
     @abstractmethod

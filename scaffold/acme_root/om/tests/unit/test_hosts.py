@@ -15,7 +15,13 @@ from contracts.agent_session_storage import make_session
 from acme.infra.impl.local import InfraLocalImpl
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext, Role, TenantContext
-from acme.om.exceptions import CredentialExpired, InvalidCredential, NotAuthorized, NotFound
+from acme.om.exceptions import (
+    CredentialExpired,
+    InvalidCredential,
+    NotAuthorized,
+    NotFound,
+    ValidationFailed,
+)
 from acme.om.hosts import rules
 from acme.om.hosts.exceptions import PinnedToHosts, VersionBelowFloor
 from acme.om.hosts.impl.manager import HostsManagerImpl, HostsOptions
@@ -456,7 +462,9 @@ async def test_trust_reads_a_pinned_session_inside_the_wall_and_runs_none_of_its
     pool = await hosts.create_pool(owner, a_pool())
     session = await managers.agent_sessions.create_session(owner, make_session())
     runner = Executor(kind=ExecutorKind.CLOUD, credential_id=new_id(), label="runner-1")
-    placement = PlacementHostsImpl(storage.get_hosts_storage(), runner)
+    placement = PlacementHostsImpl(
+        storage.get_hosts_storage(), storage.get_agent_session_storage(), runner
+    )
     assert not await placement.inside_wall(owner.org_id, session.id)
     assert await placement.executor_of(owner.org_id, session.id) == runner
     await hosts.place_session(owner, session.id, pool.id)
@@ -468,3 +476,30 @@ async def test_trust_reads_a_pinned_session_inside_the_wall_and_runs_none_of_its
     assert isinstance(refused.value, NotAuthorized)
     await hosts.place_session(owner, session.id, None)
     assert await placement.executor_of(owner.org_id, session.id) == runner
+
+
+async def test_a_sub_agent_runs_where_its_root_runs(
+    managers: Managers, hosts: HostsManagerImpl, storage: StorageMemoryImpl
+) -> None:
+    owner = await an_owner(managers)
+    pool = await hosts.create_pool(owner, a_pool())
+    root = await managers.agent_sessions.create_session(owner, make_session())
+    child = await managers.agent_sessions.create_session(owner, make_session(parent=root))
+    grandchild = await managers.agent_sessions.create_session(owner, make_session(parent=child))
+    runner = Executor(kind=ExecutorKind.CLOUD, credential_id=new_id(), label="runner-1")
+    placement = PlacementHostsImpl(
+        storage.get_hosts_storage(), storage.get_agent_session_storage(), runner
+    )
+    await hosts.place_session(owner, root.id, pool.id)
+    for sub in (child, grandchild):
+        assert await placement.inside_wall(owner.org_id, sub.id)
+        with pytest.raises(PinnedToHosts):
+            await placement.executor_of(owner.org_id, sub.id)
+        state = await hosts.placement_of(owner, sub.id)
+        assert state.session_id == sub.id and state.pool == pool and state.waiting
+    # A sub-agent is never placed apart from its root.
+    with pytest.raises(ValidationFailed):
+        await hosts.place_session(owner, child.id, None)
+    assert await placement.inside_wall(owner.org_id, child.id)
+    await hosts.place_session(owner, root.id, None)
+    assert await placement.executor_of(owner.org_id, grandchild.id) == runner
