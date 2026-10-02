@@ -54,7 +54,11 @@ whenever the change is narrower than the tree.
    (`/agentic-core:agentic-review-full` in Claude Code) and the
    guideline's `arch-review-full` (`/swe-guidelines:arch-review-full`).
    Follow each one's procedure as it is written, up to the launch of its
-   reviewers. A layer whose skill the host does not list is not run:
+   reviewers, with one exception: each finds its own folder from the
+   base directory the host names when it loads that skill, never by
+   `realpath`. The guideline's checker run is that skill's own step,
+   and the host may ask the person first. A layer whose skill the host
+   does not list is not run:
    the report says so, and names the plugin that holds it. This skill
    never judges a lens of that layer in its place.
 4. Where the agent can start subagents, launch every reviewer of the
