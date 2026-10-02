@@ -22,14 +22,15 @@ that merely exists holds no machine.
 
 **Source.** Workspaces and Isolation, A Workspace Is a Cache.
 
-**Look for.** The instance's lifecycle: what holds it after a loop, the
-grace, and the release on archive and on cancel; anything kept only in
-the workspace.
+**Look for.** The instance's lifecycle: what holds it after a loop
+ends, the grace, and the release on archive and on cancel; anything kept
+only in the workspace.
 
-**Violation.** An instance kept past its grace, or kept after the
-session is archived or cancelled; a commit or an artifact whose only
-copy is in the workspace; a session that holds a machine with no loop
-running and no grace left.
+**Violation.** An instance kept after a loop ends and its grace runs
+out, or kept after the session is archived or cancelled; a commit or an
+artifact whose only copy is in the workspace. (A loop parked on a
+hand-over has not ended: taking control keeps the workspace, as WAT-05
+says.)
 
 **Severity.** medium
 
@@ -175,8 +176,8 @@ otherwise.
 that number.
 
 **Violation.** A host that offers only a bare directory and runs several
-sessions at once without its owner's setting; a number the control plane
-sets instead of the owner.
+sessions at once without its owner's setting; a number set only in the
+control plane, instead of by the owner on the host.
 
 **Severity.** high
 
@@ -199,8 +200,8 @@ chosen and recorded.
 **Violation.** Egress open by default, or an allowlist of destinations
 with no methods; source control reached with a credential wider than the
 session's branch; a registry reached directly or with a write method;
-open egress with no recorded policy choice; a connection into a
-workspace from outside.
+open egress with no recorded policy choice; a connection opened from
+outside into a workspace inside a customer's wall.
 
 **Severity.** high
 

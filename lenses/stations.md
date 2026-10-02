@@ -188,8 +188,9 @@ adapter, and streams what the station sees. It grants itself nothing.
 **Look for.** The daemon's credential and its permissions; every path by
 which the daemon comes to hold a lease or a work item.
 
-**Violation.** A daemon that creates or extends its own lease, or runs
-station work no grant gave it; a daemon credential with permissions
+**Violation.** A daemon that creates its own lease, or extends one
+other than through the lease store's renewal, or runs station work no
+grant gave it; a daemon credential with permissions
 beyond its station work, its leases, and its streams. (A connection
 opened into the wall is PLC-10.)
 

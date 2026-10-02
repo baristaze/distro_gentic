@@ -128,7 +128,8 @@ against; how acceptance and benchmarks run.
 
 **Violation.** An integration with no twin; a gating suite that reaches
 a real integration or a real model provider; acceptance or a benchmark
-wired as a gate. (A twin's record taken for real evidence is EVD-03.)
+wired as a gate on a code change. (A twin's record taken for real
+evidence is EVD-03.)
 
 **Severity.** medium
 

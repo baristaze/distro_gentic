@@ -235,9 +235,10 @@ listener or inbound port they open; any platform code that dials an
 address inside a customer's wall.
 
 **Violation.** A platform service that opens a connection to a host or a
-daemon: a callback URL, an inbound port, a push to the host's address; a
-host or a daemon deployed as a process of the platform's deployment, or
-reaching the platform by anything but the gateway.
+daemon inside a customer's wall: a callback URL, an inbound port, a push
+to its address; a host or a daemon inside a customer's wall deployed as
+a process of the platform's deployment, or reaching the platform by
+anything but the gateway.
 
 **Severity.** high
 
@@ -340,8 +341,8 @@ ceilings).
 **Look for.** Where the owner's ceilings are kept and checked on the
 host; every message from the control plane that could change one.
 
-**Violation.** A ceiling kept or checked in the control plane; a work
-item, a policy, or a setting from the control plane that serves another
+**Violation.** A ceiling kept or checked only in the control plane; a
+work item, a policy, or a setting from the control plane that serves another
 project, lowers the minimum isolation, widens egress or the readable
 paths, or turns on people's commands.
 
