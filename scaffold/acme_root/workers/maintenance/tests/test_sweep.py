@@ -50,6 +50,7 @@ from acme.om.events.manager import audit_event
 from acme.om.media.types.file import File
 from acme.om.orchestrations.types.orchestration import OrchestrationKind, OrchestrationStatus
 from acme.om.outbox import OutboxRelayInterface
+from acme.om.placement.types.standing import Count, FleetCounts
 from acme.om.privacy.types.session_privacy import SessionKey, SessionPrivacy
 from acme.om.steps.types.header import InputHeader
 from acme.om.steps.types.page import StepCursor
@@ -62,6 +63,7 @@ from acme.om.work.types.work_item import WorkStatus
 from acme.workers.maintenance.container import WorkerContainer
 from acme.workers.maintenance.loop import (
     AcrossStep,
+    FleetStep,
     LoopOptions,
     PurgeStep,
     TallyStep,
@@ -180,6 +182,7 @@ def sweeping(
     outbox: OutboxRelayInterface | None = None,
     across: dict[str, AcrossStep] | None = None,
     tally: TallyStep | None = None,
+    fleet: FleetStep | None = None,
 ) -> WorkerLoop:
     return WorkerLoop(
         work=work,
@@ -187,6 +190,7 @@ def sweeping(
         purges=purges,
         across=across,
         tally=tally,
+        fleet=fleet,
         handlers={},
         topics=container.infra.get_topics(),
         liveness=container.infra.get_cache(CacheScope.WORKER_LIVENESS),
@@ -684,6 +688,42 @@ async def test_a_gauge_that_cannot_be_read_is_left_off_the_line_and_as_it_was(
     assert line["outbox_oldest_pending_seconds"] == 0
     assert REGISTRY.get_sample_value("acme_work_oldest_ready_seconds") == 900
     assert REGISTRY.get_sample_value("acme_outbox_failed_recently") == 4
+
+
+async def test_a_pass_sets_the_platforms_gauges_whole_by_their_labels(tmp_path: Path) -> None:
+    """The parks, the ready loops, and the hosts, each cleared and set
+    whole from one read: a tier no loop waits on any more leaves the gauge,
+    and a read that fails leaves every gauge as it was."""
+    container = build_container(tmp_path)
+    reads: list[FleetCounts | Exception] = [
+        FleetCounts(
+            parked=(Count(labels=("provider", "under_1h"), value=4),),
+            loops_ready=(Count(labels=("pro",), value=2), Count(labels=("(own)",), value=1)),
+            hosts=(Count(labels=("online",), value=3),),
+        ),
+        FleetCounts(parked=(), loops_ready=(Count(labels=("standard",), value=5),), hosts=()),
+        RuntimeError("the database is down"),
+    ]
+
+    async def fleet() -> FleetCounts:
+        read = reads.pop(0)
+        if isinstance(read, Exception):
+            raise read
+        return read
+
+    loop = sweeping(container, listed(service_contexts(0)), {}, fast_options(), fleet=fleet)
+    await loop._sweep_once()  # pyright: ignore[reportPrivateUsage]
+    sample = REGISTRY.get_sample_value
+    assert sample("acme_sessions_parked", {"reason": "provider", "age": "under_1h"}) == 4
+    assert sample("acme_loops_ready", {"plan_tier": "pro"}) == 2
+    assert sample("acme_loops_ready", {"plan_tier": "(own)"}) == 1
+    assert sample("acme_hosts", {"state": "online"}) == 3
+    await loop._sweep_once()  # pyright: ignore[reportPrivateUsage]
+    assert sample("acme_loops_ready", {"plan_tier": "pro"}) is None
+    assert sample("acme_loops_ready", {"plan_tier": "standard"}) == 5
+    assert sample("acme_hosts", {"state": "online"}) is None
+    await loop._sweep_once()  # pyright: ignore[reportPrivateUsage]
+    assert sample("acme_loops_ready", {"plan_tier": "standard"}) == 5
 
 
 class Tally:

@@ -6,6 +6,7 @@ shares it, so one session's discovery parks every other.
 It fails open, as the cache does: a cache that cannot be reached is a miss,
 and a miss says nothing is known."""
 
+import logging
 from datetime import datetime, timedelta
 from urllib.parse import quote
 
@@ -13,7 +14,10 @@ from pydantic import ValidationError
 
 from acme.infra.base import SYSTEM_SCOPE
 from acme.infra.cache import CacheInterface
+from acme.infra.observability import OUTCOMES
 from acme.infra.outages import Outage, OutageSignalInterface
+
+log = logging.getLogger(__name__)
 
 LEAST_TTL = timedelta(milliseconds=1)
 
@@ -40,6 +44,17 @@ class OutageSignalCacheImpl(OutageSignalInterface):
         ttl = max(outage.retry_at - now, LEAST_TTL)
         key = outage_key(outage.provider, outage.credential)
         await self._cache.put(SYSTEM_SCOPE, key, outage.model_dump_json().encode(), ttl)
+        # The one line that names which provider and credential fail: the
+        # credential by its name (`platform`, or a tenant key's id), never
+        # its value. The count carries no name, so its label stays bounded.
+        log.warning(
+            "outage reported: provider %s, credential %s, %s, until %s",
+            outage.provider,
+            outage.credential,
+            outage.kind,
+            outage.retry_at.isoformat(),
+        )
+        OUTCOMES.labels(subsystem="outages", outcome="reported").inc()
 
     async def current(self, provider: str, credential: str, now: datetime) -> Outage | None:
         value = await self._cache.get(SYSTEM_SCOPE, outage_key(provider, credential))

@@ -87,6 +87,33 @@ OUTBOX_FAILED_RECENTLY = Gauge(
     "Outbox rows that failed for good in the last fifteen minutes",
 )
 
+# The platform's signals, each by bounded labels alone: a reason, an age, a
+# plan or its tier, a state, a kind of token. A view of one tenant, one host,
+# or one session is an operator-plane read, never a label. The three gauges
+# are the sweep's reads across every tenant, set once a pass; the two
+# counters move as each model call settles.
+SESSIONS_PARKED = Gauge(
+    "acme_sessions_parked",
+    "Parked sessions across every tenant, by park reason and how long ago they last changed",
+    ["reason", "age"],
+)
+LOOPS_READY = Gauge(
+    "acme_loops_ready",
+    "Loops ready for a runner, by the plan tier of their lane; every tenant's own lane is one",
+    ["plan_tier"],
+)
+HOSTS = Gauge("acme_hosts", "Workspace hosts not revoked, by state", ["state"])
+MODEL_TOKENS = Counter(
+    "acme_model_tokens_total",
+    "Prompt and output tokens of settled model calls, by plan and kind",
+    ["plan", "kind"],
+)
+MODEL_SPEND_MICROS = Counter(
+    "acme_model_spend_micros_total",
+    "Reference cost of settled model calls, in millionths, by plan",
+    ["plan"],
+)
+
 
 @dataclass(frozen=True)
 class ProcessIdentity:

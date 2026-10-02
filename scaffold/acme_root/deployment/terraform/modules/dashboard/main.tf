@@ -5,9 +5,12 @@
 # latency; the rows after them are what only the cloud has: the database,
 # the cache, the queue, and the tasks, then the reads with a latency alarm,
 # the age of each queue's oldest message, and the sweep's pass duration,
-# which the alarms read. The last row is both dashboards' again: the work
-# queue's oldest ready item, its items failed of late, and the outbox's
-# oldest pending row, which the Postgres queue alarms read.
+# which the alarms read. The last two rows are both dashboards' again: the
+# work queue's oldest ready item, its items failed of late, and the outbox's
+# oldest pending row, which the Postgres queue alarms read; then the
+# platform's signals, each by bounded labels alone: the parked sessions by
+# reason and age, the ready loops by plan tier, the hosts by state, the model
+# cache's hit rate, and the spend by plan.
 #
 # The body is dashboard.json.tftpl, a JSON document with interpolations and
 # nothing else (no template loops), so the test can read it as JSON. The
@@ -25,11 +28,13 @@
 # a series has or matches nothing, so each schema carries it. The namespace
 # is in double quotes, which a name with a space needs.
 #
-# Latency is the one panel that differs. The exporter writes a histogram as
-# a statistic set (count, sum, minimum, maximum), from which CloudWatch
-# computes no percentile, so a per-route p95 would draw a flat zero. The
-# widget reads the load balancer's TargetResponseTime p95 instead: every
-# route together, and titled so.
+# Two panels differ. The exporter writes a histogram as a statistic set
+# (count, sum, minimum, maximum), from which CloudWatch computes no
+# percentile, so a per-route p95 would draw a flat zero. The widget reads the
+# load balancer's TargetResponseTime p95 instead: every route together, and
+# titled so. And metric math divides one series by another, never one
+# search's series by another's, so the cache hit rate is every plan's
+# together, and titled so.
 
 data "aws_region" "current" {}
 

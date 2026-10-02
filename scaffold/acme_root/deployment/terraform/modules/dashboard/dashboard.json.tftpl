@@ -275,6 +275,99 @@
         "yAxis": { "left": { "min": 0, "label": "rows" } },
         "metrics": [["Acme", "acme_outbox_failed_recently", { "label": "failed" }]]
       }
+    },
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 36,
+      "width": 8,
+      "height": 6,
+      "properties": {
+        "title": "Parked sessions by reason and age",
+        "view": "timeSeries",
+        "stacked": false,
+        "region": "${region}",
+        "period": 60,
+        "yAxis": { "left": { "min": 0, "label": "sessions" } },
+        "metrics": [
+          [ { "expression": "SEARCH('{\"Acme\",OTelLib,age,environment,reason,service} MetricName=\"acme_sessions_parked\" environment=\"${environment}\"', 'Maximum', 60)", "id": "parked" } ]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 8,
+      "y": 36,
+      "width": 8,
+      "height": 6,
+      "properties": {
+        "title": "Ready loops by plan tier",
+        "view": "timeSeries",
+        "stacked": false,
+        "region": "${region}",
+        "period": 60,
+        "yAxis": { "left": { "min": 0, "label": "loops" } },
+        "metrics": [
+          [ { "expression": "SEARCH('{\"Acme\",OTelLib,environment,plan_tier,service} MetricName=\"acme_loops_ready\" environment=\"${environment}\"', 'Maximum', 60)", "id": "ready" } ]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 16,
+      "y": 36,
+      "width": 8,
+      "height": 6,
+      "properties": {
+        "title": "Hosts by state",
+        "view": "timeSeries",
+        "stacked": false,
+        "region": "${region}",
+        "period": 60,
+        "yAxis": { "left": { "min": 0, "label": "hosts" } },
+        "metrics": [
+          [ { "expression": "SEARCH('{\"Acme\",OTelLib,environment,service,state} MetricName=\"acme_hosts\" environment=\"${environment}\"', 'Maximum', 60)", "id": "hosts" } ]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 42,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Model cache hit rate, every plan together",
+        "view": "timeSeries",
+        "stacked": false,
+        "region": "${region}",
+        "period": 60,
+        "yAxis": { "left": { "min": 0, "label": "percent" } },
+        "metrics": [
+          [ { "expression": "SUM(SEARCH('{\"Acme\",OTelLib,environment,kind,plan,service} MetricName=\"acme_model_tokens_total\" environment=\"${environment}\" kind=\"cache_read\"', 'Sum', 60))", "id": "read", "visible": false } ],
+          [ { "expression": "SUM(SEARCH('{\"Acme\",OTelLib,environment,kind,plan,service} MetricName=\"acme_model_tokens_total\" environment=\"${environment}\" kind=\"input\"', 'Sum', 60))", "id": "uncached", "visible": false } ],
+          [ { "expression": "SUM(SEARCH('{\"Acme\",OTelLib,environment,kind,plan,service} MetricName=\"acme_model_tokens_total\" environment=\"${environment}\" kind=\"cache_write\"', 'Sum', 60))", "id": "written", "visible": false } ],
+          [ { "expression": "100 * read / (read + uncached + written)", "id": "rate", "label": "cache hit rate" } ]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12,
+      "y": 42,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Model spend per minute by plan, in dollars",
+        "view": "timeSeries",
+        "stacked": false,
+        "region": "${region}",
+        "period": 60,
+        "yAxis": { "left": { "min": 0, "label": "dollars" } },
+        "metrics": [
+          [ { "expression": "SEARCH('{\"Acme\",OTelLib,environment,plan,service} MetricName=\"acme_model_spend_micros_total\" environment=\"${environment}\"', 'Sum', 60) / 1000000", "id": "spend" } ]
+        ]
+      }
     }
   ]
 }

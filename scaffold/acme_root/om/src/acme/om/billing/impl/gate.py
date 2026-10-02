@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import ValidationError
 
-from acme.infra.observability import OUTCOMES
+from acme.infra.observability import MODEL_SPEND_MICROS, MODEL_TOKENS, OUTCOMES
 from acme.integrations.model_providers.calls import ModelCall
 from acme.integrations.model_providers.types import Usage
 from acme.om.agent_sessions import AgentSessionsManagerInterface
@@ -152,6 +152,9 @@ class MoneyGateImpl(MoneyGateInterface):
             )
             OUTCOMES.labels(subsystem="billing", outcome="overshoot").inc()
         OUTCOMES.labels(subsystem="billing", outcome=f"settled_{stored.bill.kind}").inc()
+        if hold.priced is not None and stored.spent.cost_micros:
+            # A model call's spend, once per hold, by the plan the gate read.
+            MODEL_SPEND_MICROS.labels(plan=hold.funding.plan.id).inc(stored.spent.cost_micros)
         return stored
 
     async def read_hold(self, ctx: TenantContext, hold_id: UUID) -> FundedHold:
@@ -296,4 +299,14 @@ class MoneyCallGateImpl(CallGateInterface):
                 )
                 price = self._prices.price_at(version, provider, model)
             bill = Billed(usage=usage_spend(usage, price))
+            # The cache's share of the prompt, by the plan the gate read: a
+            # fall in `cache_read` against the rest is a cache rebuilt.
+            plan = hold.funding.plan.id
+            for kind, tokens in (
+                ("input", usage.input),
+                ("cache_read", usage.cache_read),
+                ("cache_write", usage.cache_write),
+                ("output", usage.output + usage.thinking),
+            ):
+                MODEL_TOKENS.labels(plan=plan, kind=kind).inc(tokens)
         await self._gate.settle(ctx, hold_id, bill)

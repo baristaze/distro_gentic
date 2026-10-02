@@ -33,7 +33,11 @@ local Grafana dashboard by title: targets up, requests and responses per
 second, p95 latency, and outcomes per second. The rest are the cloud's:
 the database, the cache, the queue, the running tasks, the sweep's pass
 duration, the work queue's oldest ready item, and the outbox's oldest
-pending row. Application metrics live in the `Acme` namespace.
+pending row. Both end on the platform's row: the parked sessions by
+reason and age, the ready loops by plan tier, the hosts by state, the
+model cache's hit rate, and the spend by plan. Each signal is labelled
+by bounded values alone; a view of one tenant, host, or session is an
+operator-plane read. Application metrics live in the `Acme` namespace.
 
 ```bash
 aws cloudwatch get-dashboard --dashboard-name acme-staging \
