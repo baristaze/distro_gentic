@@ -74,12 +74,14 @@ class WorkspacesManagerInterface(ABC):
 
     @abstractmethod
     async def delivery(self, ctx: TenantContext, workspace: Workspace) -> Delivery:
-        """The session's work product as its prepared workspace holds it, read
-        from its checkout: the repository's name as its project, the base its
-        branch started from, its head, whether it is dirty, and the paths
-        changed from the base. `Unavailable` for a session whose project
-        binds no repository: nothing says what its work product is, so no
-        success counts on a guess."""
+        """The session's work product: its branch as the bound repository
+        holds it, read outside the workspace (`RepositoryReaderInterface`),
+        with the repository's name as its project, the base its branch
+        started from, its head, and the paths changed from the base; and
+        dirty when the checkout holds work that is not there, uncommitted or
+        not pushed. `Unavailable` for a session whose project binds no
+        repository: nothing says what its work product is, so no success
+        counts on a guess."""
         ...
 
     # Egress, and what acts outward.

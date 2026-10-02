@@ -62,10 +62,12 @@ alone.
 - The snapshot and the checkout run in the workspace through the
   transport, under the epoch of the run that holds the session, with the
   workspace's own credentials.
-- The evidence's work product is read from the checkout of the workspace
-  this process holds for the session, in place of the loud null. A
-  session whose workspace this process does not hold, or whose project
-  binds no repository, is still read as nothing, and counts no success.
+- The evidence's work product is the session's branch as its bound
+  repository holds it, fetched into a fresh repository of the platform's
+  own, in place of the loud null; the checkout of the workspace this
+  process holds tells only what was not delivered. A session whose
+  workspace this process does not hold, or whose project binds no
+  repository, is still read as nothing, and counts no success.
 - The engine's loop gains the park, the lost end, and the told change,
   and its workspace interface gains `changed` and `WorkspaceLost`. The
   next move of the base merges over all four.

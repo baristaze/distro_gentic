@@ -23,7 +23,7 @@ from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import OutboxRow, versioned_row
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.workspaces import rules
-from acme.om.workspaces.git import WorkspaceGitInterface
+from acme.om.workspaces.git import RepositoryReaderInterface, WorkspaceGitInterface
 from acme.om.workspaces.manager import WorkspacesManagerInterface
 from acme.om.workspaces.projects import PullRequestsInterface, WorkspaceProjectsInterface
 from acme.om.workspaces.storage import WorkspaceStorageInterface
@@ -59,6 +59,7 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         projects: WorkspaceProjectsInterface,
         pull_requests: PullRequestsInterface,
         git: WorkspaceGitInterface,
+        reader: RepositoryReaderInterface,
         options: WorkspacesOptions,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
@@ -69,6 +70,7 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         self._projects = projects
         self._pull_requests = pull_requests
         self._git = git
+        self._reader = reader
         self._options = options
         self._clock = clock
         self._internal = rules.networks(options.internal_networks) + rules.networks(
@@ -215,16 +217,20 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         ctx.require(Permission.READ)
         held = await self._storage.read_workspace(ctx.org_id, workspace.id)
         binding = None if held is None else await self._binding(ctx, held)
-        if binding is None:
+        if held is None or binding is None:
             raise Unavailable(f"session {workspace.id} works on no bound repository")
-        checkout = await self._git.checkout(ctx, workspace, binding)
+        # What was delivered is read from the repository, outside the
+        # workspace; the checkout tells only what was not: work uncommitted,
+        # or committed and not pushed.
+        delivered = await self._reader.delivered(binding, held.branch)
+        local = await self._git.checkout(ctx, workspace)
         try:
             return Delivery(
                 project=rules.project_key(binding),
-                base=checkout.base,
-                head=checkout.head,
-                dirty=checkout.dirty,
-                changed=checkout.changed,
+                base=delivered.base,
+                head=delivered.head,
+                dirty=local.dirty or local.head != delivered.head,
+                changed=delivered.changed,
             )
         except ValidationError as error:
             raise Unavailable(

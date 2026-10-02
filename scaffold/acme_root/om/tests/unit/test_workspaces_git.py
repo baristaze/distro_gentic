@@ -267,26 +267,35 @@ async def test_a_branch_that_moved_here_and_on_its_repository_fails_loudly(
 # What a session delivered is read from git in its checkout.
 
 
-async def test_what_a_session_delivered_is_read_from_git_in_its_checkout(
-    checkout: Checkout,
-) -> None:
+def commit(here: Path, message: str) -> str:
+    """Commits everything the checkout holds, as the agent would, and
+    answers the commit."""
+    git(here, "add", "-A")
+    git(here, "-c", "user.name=a", "-c", "user.email=a@example.invalid", "commit", "-qm", message)
+    return git(here, "rev-parse", "HEAD")
+
+
+async def test_what_a_session_delivered_is_read_from_its_repository(checkout: Checkout) -> None:
     session_id = await checkout.session()
+    branch = session_branch(session_id)
     workspace = await checkout.prepare(session_id)
     here = Path(workspace.location)
     (here / "feature.txt").write_text("the feature\n")
-    git(here, "add", "feature.txt")
-    git(here, "-c", "user.name=a", "-c", "user.email=a@example.invalid", "commit", "-qm", "f")
+    pushed = commit(here, "f")
+    git(here, "push", "-q", "origin", branch)
     (here / "README.md").write_text("the project, changed\n")
-    (here / "draft.txt").write_text("half done\n")
 
     delivered = await checkout.managers.workspaces.delivery(checkout.ctx, workspace)
 
     # The repository's name, as a project's evidence is keyed.
     assert delivered.project == str(checkout.remote).lower().lstrip("/").removesuffix(".git")
-    assert delivered.base == checkout.main
-    assert delivered.head == git(here, "rev-parse", "HEAD") != checkout.main
-    assert delivered.dirty
-    assert delivered.changed == ("README.md", "draft.txt", "feature.txt")
+    assert (delivered.base, delivered.head) == (checkout.main, pushed)
+    assert delivered.changed == ("feature.txt",), "what the repository holds, and no more"
+    assert delivered.dirty, "the checkout holds work it has not delivered"
+
+    commit(here, "not pushed")
+    ahead = await checkout.managers.workspaces.delivery(checkout.ctx, workspace)
+    assert ahead.head == pushed and ahead.dirty, "a commit not pushed is not delivered"
 
 
 async def test_an_agent_that_moves_its_default_branch_still_delivers_the_protected_edit(
@@ -296,7 +305,8 @@ async def test_an_agent_that_moves_its_default_branch_still_delivers_the_protect
     workspace = await checkout.prepare(session_id)
     here = Path(workspace.location)
     (here / "checks" / "test_guard.py").write_text("def test_guard(): assert True\n")
-    git(here, "-c", "user.name=a", "-c", "user.email=a@example.invalid", "commit", "-qam", "e")
+    commit(here, "e")
+    git(here, "push", "-q", "origin", session_branch(session_id))
     # The checkout's own idea of the default branch, moved past the edit.
     git(here, "update-ref", "refs/remotes/origin/main", "HEAD")
 
@@ -313,8 +323,50 @@ async def test_a_moved_protected_check_is_delivered_by_the_path_it_left(
     workspace = await checkout.prepare(session_id)
     here = Path(workspace.location)
     git(here, "mv", "checks/test_guard.py", "checks/test_other.py")
-    git(here, "-c", "user.name=a", "-c", "user.email=a@example.invalid", "commit", "-qm", "mv")
+    commit(here, "mv")
+    git(here, "push", "-q", "origin", session_branch(session_id))
 
     delivered = await checkout.managers.workspaces.delivery(checkout.ctx, workspace)
 
     assert {"checks/test_guard.py", "checks/test_other.py"} <= set(delivered.changed)
+
+
+async def test_a_checkout_that_redirects_its_repository_still_delivers_the_protected_edit(
+    checkout: Checkout, tmp_path: Path
+) -> None:
+    session_id = await checkout.session()
+    workspace = await checkout.prepare(session_id)
+    here = Path(workspace.location)
+    (here / "checks" / "test_guard.py").write_text("def test_guard(): assert True\n")
+    edited = commit(here, "e")
+    git(here, "push", "-q", "origin", session_branch(session_id))
+    # A repository of the agent's own whose default branch is its edit, and
+    # the checkout's config sending the bound repository's URL there.
+    decoy = tmp_path / "decoy.git"
+    git(tmp_path, "clone", "-q", "--bare", str(checkout.remote), str(decoy))
+    git(here, "push", "-q", str(decoy), f"{edited}:refs/heads/main", "--force")
+    git(here, "config", f"url.{decoy}.insteadOf", str(checkout.remote))
+
+    delivered = await checkout.managers.workspaces.delivery(checkout.ctx, workspace)
+
+    assert (delivered.base, delivered.head) == (checkout.main, edited)
+    assert "checks/test_guard.py" in delivered.changed
+
+
+async def test_a_replacement_the_agent_made_still_delivers_the_protected_edit(
+    checkout: Checkout,
+) -> None:
+    session_id = await checkout.session()
+    workspace = await checkout.prepare(session_id)
+    here = Path(workspace.location)
+    (here / "checks" / "test_guard.py").write_text("def test_guard(): assert True\n")
+    edited = commit(here, "e")
+    git(here, "push", "-q", "origin", session_branch(session_id))
+    # The edit replaced by the default branch's commit, here and on the
+    # repository both.
+    git(here, "replace", edited, checkout.main)
+    git(here, "push", "-q", "origin", "refs/replace/*:refs/replace/*")
+
+    delivered = await checkout.managers.workspaces.delivery(checkout.ctx, workspace)
+
+    assert delivered.head == edited and "checks/test_guard.py" in delivered.changed

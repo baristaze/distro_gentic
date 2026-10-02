@@ -98,22 +98,15 @@ snapshot ref on the bound repository; prints the commit, or `-` when
 nothing was new, and whether the repository holds the branch."""
 
 CHECKOUT = """set -eu
-git fetch -q --no-tags "$REPOSITORY" "$BASE"
-tip="$(git ls-remote "$REPOSITORY" "$BASE" | awk -v ref="$BASE" '$2 == ref { print $1 }')"
-git cat-file -e "$tip^{commit}"
-head="$(git rev-parse HEAD)"
-base="$(git merge-base HEAD "$tip")"
+head=-
+if git rev-parse -q --verify HEAD >/dev/null; then head="$(git rev-parse HEAD)"; fi
 dirty=no
 if [ -n "$(git status --porcelain --untracked-files=all)" ]; then dirty=yes; fi
-echo "checkout $base $head $dirty"
-git -c core.quotePath=false diff --no-renames --name-only "$base"
-git -c core.quotePath=false ls-files --others --exclude-standard
+echo "checkout $head $dirty"
 """
-"""Prints the base, the head, and whether the checkout is dirty on its first
-line, then every path changed from the base, committed, uncommitted, or
-new. The base is where HEAD meets the bound repository's default branch as
-the repository answers it now, never a ref the checkout holds, and a moved
-file lists the path it left as well as the one it took."""
+"""Prints the checkout's HEAD, `-` before its first commit, and whether it
+holds uncommitted work: what the checkout says of itself, which tells only
+what was not delivered."""
 
 
 class GitOptions(Platform):
@@ -161,16 +154,11 @@ class WorkspaceGitTransportImpl(WorkspaceGitInterface):
         }
         await self._run(ctx, workspace, "cut", CUT, env)
 
-    async def checkout(
-        self, ctx: TenantContext, workspace: Workspace, binding: RepositoryBinding
-    ) -> Checkout:
-        env = {"REPOSITORY": binding.repository, "BASE": binding.base_ref}
-        lines = await self._lines(ctx, workspace, "checkout", CHECKOUT, env)
-        words = lines[0].split() if lines else []
-        if len(words) != 4 or words[0] != "checkout":
+    async def checkout(self, ctx: TenantContext, workspace: Workspace) -> Checkout:
+        words = await self._run(ctx, workspace, "checkout", CHECKOUT, {})
+        if len(words) != 3 or words[0] != "checkout":
             raise Unavailable(f"the checkout of session {workspace.id} answered no state")
-        changed = tuple(sorted({line for line in lines[1:] if line}))
-        return Checkout(base=words[1], head=words[2], dirty=words[3] == "yes", changed=changed)
+        return Checkout(head=None if words[1] == "-" else words[1], dirty=words[2] == "yes")
 
     async def snapshot(
         self,

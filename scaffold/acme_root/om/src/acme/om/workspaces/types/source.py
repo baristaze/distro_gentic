@@ -65,13 +65,23 @@ class Snapshot(Platform):
 
 
 class Checkout(Platform):
-    """What the checkout holds now: the commit its branch started from on the
-    default branch, its committed head, whether it holds uncommitted work,
-    and every path changed from that base, committed or not."""
+    """What the checkout holds now, as it says itself: its HEAD, None before
+    its first commit, and whether it holds uncommitted work. It tells the
+    work the session has not delivered, never what it delivered."""
+
+    head: str | None = None
+    dirty: bool = False
+
+
+class Delivered(Platform):
+    """What the bound repository holds of a session's branch, read by the
+    platform outside the session's workspace: the commit the branch started
+    from on the default branch, its head there, and every path changed from
+    that base. A branch the repository does not hold delivered nothing: its
+    head is its base."""
 
     base: str
     head: str
-    dirty: bool = False
     changed: tuple[str, ...] = ()
 
 

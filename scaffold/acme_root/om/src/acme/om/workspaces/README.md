@@ -99,7 +99,9 @@ rebuilt from.
   platform's cloud.
 - A tool that writes to source control sets its target's `outward` from
   `WorkspacesManagerInterface.outward`.
-- The evidence reads what a session delivered from the checkout of the
-  workspace this host holds for it (`impl/work_product.py`): its
-  repository's name as its project, its base, its head, whether it is
-  dirty, and the paths changed.
+- The evidence reads what a session delivered (`impl/work_product.py`):
+  its branch as the bound repository holds it, fetched into a fresh
+  repository of the platform's own with nothing of the agent's config,
+  refs, or replacements (`impl/reader.py`), giving the base, the head,
+  and the paths changed; and dirty when the checkout this host holds has
+  work that is not there.

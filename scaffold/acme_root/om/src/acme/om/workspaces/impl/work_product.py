@@ -1,8 +1,9 @@
-"""What a session delivered, for the evidence: read from the checkout of the
-workspace this host holds for it, never from what the agent says of it. A
-session whose workspace this host does not hold, or whose project binds no
-repository, has nothing read, and says so, so no success counts on a
-guess."""
+"""What a session delivered, for the evidence: its branch as the bound
+repository holds it, read outside the workspace, never from what the agent
+says of it, with the checkout of the workspace this host holds telling
+only what was not delivered. A session whose workspace this host does not
+hold, or whose project binds no repository, has nothing read, and says
+so, so no success counts on a guess."""
 
 from uuid import UUID
 

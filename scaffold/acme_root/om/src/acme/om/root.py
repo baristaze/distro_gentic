@@ -119,10 +119,11 @@ from acme.om.work import WorkManagerInterface, WorkOperatorManagerInterface
 from acme.om.work.impl.manager import WorkManagerImpl, WorkOptions
 from acme.om.work.impl.operator import WorkOperatorManagerImpl
 from acme.om.workspaces import WorkspacesManagerInterface
-from acme.om.workspaces.git import WorkspaceGitInterface
+from acme.om.workspaces.git import RepositoryReaderInterface, WorkspaceGitInterface
 from acme.om.workspaces.impl.git import GitOptions, WorkspaceGitTransportImpl
 from acme.om.workspaces.impl.manager import WorkspacesManagerImpl, WorkspacesOptions
 from acme.om.workspaces.impl.projects import PullRequestsNullImpl, WorkspaceProjectsBoundImpl
+from acme.om.workspaces.impl.reader import RepositoryReaderGitImpl
 from acme.om.workspaces.impl.sessions import AgentSessionsPinnedImpl
 from acme.om.workspaces.impl.tools import HeldWorkspaces, ToolsManagerWorkspacesImpl
 from acme.om.workspaces.impl.work_product import WorkProductWorkspacesImpl
@@ -302,6 +303,7 @@ def build_managers(
     workspace_projects: WorkspaceProjectsInterface | None = None,
     pull_requests: PullRequestsInterface | None = None,
     workspace_git: WorkspaceGitInterface | None = None,
+    workspace_reader: RepositoryReaderInterface | None = None,
     platform_agents_options: PlatformAgentsOptions | None = None,
     platform_agents: PlatformAgents | None = None,
     environment: str = LOCAL,
@@ -356,9 +358,10 @@ def build_managers(
     executor validation runs on, and `work_product`, which reads what a
     session delivered, and which the result gate reads too. None wires the
     loud null executor, which refuses every validation, and the workspaces'
-    work product, read from the checkout of the workspace this process
-    holds for the session; one it does not hold, or one of no bound
-    repository, is refused, so no success counts on a guess. Whatever
+    work product, the session's branch as its repository holds it, with the
+    workspace this process holds for the session telling what was not
+    delivered; one it does not hold, or one of no bound repository, is
+    refused, so no success counts on a guess. Whatever
     `tools_options` names, the tools take the platform's ceiling on a
     protected path beside its ceilings.
 
@@ -387,14 +390,16 @@ def build_managers(
 
     The platform's projects take `projects_options`, the purges' batch.
 
-    The workspaces take five. `workspace_host` is what this process, the
+    The workspaces take six. `workspace_host` is what this process, the
     host its tools run on, offers beyond its provider; None offers nothing
     more, as a host of the platform's cloud. `workspace_projects` answers a
     session's project and the repository it binds, and `pull_requests` why
     a session's branch is gone; None reads the projects' rows for the one,
     and knows no pull request, so a branch gone for any reason fails
     loudly. `workspace_git` runs the checkout; None runs it in the
-    workspace through the transport. `workspaces_options` names the
+    workspace through the transport. `workspace_reader` reads what a
+    session delivered from its repository; None fetches it into a fresh
+    repository of this process's own. `workspaces_options` names the
     networks no workspace reaches, and the sweep's batch."""
     if platform_agents is not None:
         # Their tools read the managers built below, so each edge is bound
@@ -492,6 +497,7 @@ def build_managers(
         pull_requests or PullRequestsNullImpl(),
         workspace_git
         or WorkspaceGitTransportImpl(infra.get_transport(), steps, records, GitOptions()),
+        workspace_reader or RepositoryReaderGitImpl(),
         workspaces_options or WorkspacesOptions(),
     )
     engine_sessions = AgentSessionsManagerImpl(
@@ -576,8 +582,8 @@ def build_managers(
         outbox,
         attribution_options or AttributionOptions(),
     )
-    # What a session delivered is read from the checkout of the workspace
-    # this process holds for it.
+    # What a session delivered is read from its repository, and what it has
+    # not from the workspace this process holds for it.
     held = HeldWorkspaces()
     products = work_product or WorkProductWorkspacesImpl(workspaces, held)
     results = result_gate or ResultGateEvidenceImpl(storage.get_evidence_storage(), products)

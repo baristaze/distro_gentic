@@ -12,7 +12,14 @@ from typing import Any
 import pytest
 from contracts.loops import ASSISTANT, Loop, loop_over, reply, said
 from contracts.project_storage import make_project
-from contracts.workspaces import BASE, REPOSITORY, GitTwin, ProjectsTwin, PullRequestsTwin
+from contracts.workspaces import (
+    BASE,
+    REPOSITORY,
+    GitTwin,
+    ProjectsTwin,
+    PullRequestsTwin,
+    ReaderTwin,
+)
 
 from acme.infra.workspaces import (
     EgressMode,
@@ -425,7 +432,10 @@ async def test_what_a_session_delivered_is_read_from_the_workspace_this_host_hol
     tmp_path: Path,
 ) -> None:
     git = GitTwin(head="c" * 40)
-    loop = loop_of(tmp_path, workspace_projects=ProjectsTwin(), workspace_git=git)
+    reader = ReaderTwin(head="c" * 40, changed=("checks/test_guard.py",))
+    loop = loop_of(
+        tmp_path, workspace_projects=ProjectsTwin(), workspace_git=git, workspace_reader=reader
+    )
     assert isinstance(
         loop.managers.evidence._work_product,  # pyright: ignore[reportAttributeAccessIssue]
         WorkProductWorkspacesImpl,
@@ -445,7 +455,13 @@ async def test_what_a_session_delivered_is_read_from_the_workspace_this_host_hol
 
     assert delivered is not None and delivered.project == "git.example.com/ajax/app"
     assert (delivered.base, delivered.head, delivered.dirty) == (BASE, "c" * 40, True)
-    assert delivered.changes_work_product and delivered.changed == ("notes.txt",)
+    assert delivered.changed == ("checks/test_guard.py",), "as the repository holds it"
+    git.dirty = False
+    clean = await products.delivered(loop.owner, session_id)
+    assert clean is not None and not clean.dirty, "the checkout holds nothing undelivered"
+    git.head = "d" * 40
+    ahead = await products.delivered(loop.owner, session_id)
+    assert ahead is not None and ahead.dirty, "a commit the repository lacks is not delivered"
 
     unbound = loop_of(tmp_path / "unbound", workspace_projects=ProjectsTwin(repository=None))
     other = await unbound.start("twinned")

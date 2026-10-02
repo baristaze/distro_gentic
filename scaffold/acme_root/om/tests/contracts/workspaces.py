@@ -10,11 +10,12 @@ from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.base import new_id
 from acme.om.context import TenantContext
 from acme.om.exceptions import Unavailable
-from acme.om.workspaces.git import WorkspaceGitInterface
+from acme.om.workspaces.git import RepositoryReaderInterface, WorkspaceGitInterface
 from acme.om.workspaces.projects import PullRequestsInterface, WorkspaceProjectsInterface
 from acme.om.workspaces.types.source import (
     BranchState,
     Checkout,
+    Delivered,
     PullRequestFate,
     RepositoryBinding,
     Snapshot,
@@ -81,11 +82,8 @@ class GitTwin(WorkspaceGitInterface):
         self.local.add(branch)
         self.dirty = False  # what the checkout held is gone with the cut
 
-    async def checkout(
-        self, ctx: TenantContext, workspace: Workspace, binding: RepositoryBinding
-    ) -> Checkout:
-        changed = ("notes.txt",) if self.dirty else ()
-        return Checkout(base=BASE, head=self.head, dirty=self.dirty, changed=changed)
+    async def checkout(self, ctx: TenantContext, workspace: Workspace) -> Checkout:
+        return Checkout(head=self.head, dirty=self.dirty)
 
     async def snapshot(
         self,
@@ -103,3 +101,15 @@ class GitTwin(WorkspaceGitInterface):
         commit = new_id().hex[:12]
         self.pushed[ref] = commit
         return Snapshot(ref=ref, commit=commit, remote_branch=branch in self.remote)
+
+
+@dataclass
+class ReaderTwin(RepositoryReaderInterface):
+    """What the bound repository holds of the session's branch, as a test
+    sets it."""
+
+    head: str = BASE
+    changed: tuple[str, ...] = ()
+
+    async def delivered(self, binding: RepositoryBinding, branch: str) -> Delivered:
+        return Delivered(base=BASE, head=self.head, changed=self.changed)

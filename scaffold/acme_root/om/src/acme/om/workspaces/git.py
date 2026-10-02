@@ -8,7 +8,13 @@ from abc import ABC, abstractmethod
 
 from acme.infra.workspaces import Workspace
 from acme.om.context import TenantContext
-from acme.om.workspaces.types.source import BranchState, Checkout, RepositoryBinding, Snapshot
+from acme.om.workspaces.types.source import (
+    BranchState,
+    Checkout,
+    Delivered,
+    RepositoryBinding,
+    Snapshot,
+)
 
 
 class WorkspaceGitInterface(ABC):
@@ -33,14 +39,10 @@ class WorkspaceGitInterface(ABC):
         ...
 
     @abstractmethod
-    async def checkout(
-        self, ctx: TenantContext, workspace: Workspace, binding: RepositoryBinding
-    ) -> Checkout:
-        """What the checkout holds as it stands, read from git and never from
-        what the agent says: its base, where its head meets the bound
-        repository's default branch as the repository answers it, never a
-        ref the checkout holds; its head; whether it is dirty; and every path
-        changed from the base, a moved file by both its paths."""
+    async def checkout(self, ctx: TenantContext, workspace: Workspace) -> Checkout:
+        """What the checkout says of itself: its HEAD and whether it holds
+        uncommitted work. The agent can write all of it, so it tells only
+        what was not delivered (`RepositoryReaderInterface`)."""
         ...
 
     @abstractmethod
@@ -57,4 +59,21 @@ class WorkspaceGitInterface(ABC):
         commit the remote lacks. A clean checkout the remote holds whole
         pushes nothing. Raises when the push does not land, so nothing is let
         go, or cut over, that is not kept."""
+        ...
+
+
+class RepositoryReaderInterface(ABC):
+    """What a session delivered, read from the bound repository by the
+    platform, outside anything the agent can write: never in its checkout,
+    whose config, refs, and replacements the agent holds. A root wires the
+    reader that fetches into a fresh repository of the platform's own
+    (`acme.om.workspaces.impl.reader.RepositoryReaderGitImpl`)."""
+
+    @abstractmethod
+    async def delivered(self, binding: RepositoryBinding, branch: str) -> Delivered:
+        """The bound repository's default branch and the session's `branch`
+        there, fetched by the repository's URL: where the branch meets the
+        default branch, its head, and every path changed between them, a
+        moved file by both its paths. `Unavailable` when the repository
+        cannot be read."""
         ...
