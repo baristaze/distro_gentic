@@ -28,12 +28,14 @@ from acme.client.types import (
     HostView,
     InvitationPageView,
     InvitationView,
+    IssuedDaemonCredentialView,
     IssuedDownloadView,
     IssuedHostCredentialView,
     IssuedLoginView,
     IssuedSessionView,
     IssuedTicketView,
     IssuedUploadView,
+    LeaseTimeView,
     MembershipChoicePageView,
     MembershipChoiceView,
     MeView,
@@ -49,6 +51,8 @@ from acme.client.types import (
     SignedOutView,
     SignInStartView,
     SsoLinkView,
+    StationClaimView,
+    StationJobView,
     StepPageView,
     StepView,
     StorageUsageView,
@@ -810,6 +814,39 @@ class ApiClient:
             "POST", "/v1/hosts/me/claims", json={"exec_version": exec_version}
         )
         return ClaimView.model_validate(answer)
+
+    # A station daemon's own calls, with a credential of its own that its
+    # owner issued first and it rotates before it ends. None of them is
+    # retried: a lost rotation is rotated again with the credential it was
+    # meant to replace, and a report is the daemon's to send again, under
+    # the run id it minted, which lands once.
+
+    async def rotate_daemon_credential(self) -> IssuedDaemonCredentialView:
+        """The daemon's next credential; the one this client holds ends after
+        a short grace."""
+        answer = await self.request("POST", "/v1/station-daemon/credentials")
+        return IssuedDaemonCredentialView.model_validate(answer)
+
+    async def claim_station_work(self, station_version: int) -> StationClaimView:
+        """The next item of the daemon's lab, the job it names, and how long
+        the job's lease has left; or none."""
+        answer = await self.request(
+            "POST", "/v1/station-daemon/claims", json={"station_version": station_version}
+        )
+        return StationClaimView.model_validate(answer)
+
+    async def renew_station_job(self, job_id: UUID) -> LeaseTimeView:
+        """The lease of a job the daemon runs, renewed; `lease_ended` once it
+        ran out, was released, or was revoked."""
+        answer = await self.request("POST", f"/v1/station-daemon/jobs/{job_id}/renewals")
+        return LeaseTimeView.model_validate(answer)
+
+    async def report_station_job(self, job_id: UUID, report: dict[str, Any]) -> StationJobView:
+        """The run of a job the daemon ran, every refused command in it."""
+        answer = await self.request(
+            "POST", f"/v1/station-daemon/jobs/{job_id}/reports", json=report
+        )
+        return StationJobView.model_validate(answer)
 
     # Events and the channel
 
