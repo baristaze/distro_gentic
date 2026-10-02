@@ -16,6 +16,7 @@ from contracts.doubles import Members
 from contracts.loops import loop_over, reply, said, use
 
 from acme.infra.impl.local import InfraLocalImpl
+from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
 from acme.om.agents.types.run import RunEnd
 from acme.om.base import new_id, utcnow
 from acme.om.context import (
@@ -40,7 +41,7 @@ from acme.om.placement.rules import (
     tier_lane,
 )
 from acme.om.placement.types.claimant import Claimant, ClaimantKind
-from acme.om.placement.types.work import WorkspaceOperation
+from acme.om.placement.types.work import ExecOperation, ExecPayload, WorkspaceOperation
 from acme.om.root import Managers, build_managers
 from acme.om.steps.rules import message_step
 from acme.om.steps.types.header import LoopOutcome
@@ -111,7 +112,21 @@ def an_item(ctx: TenantContext, kind: WorkKind, payload: Mapping[str, object]) -
 
 
 def exec_on(host: UUID) -> dict[str, object]:
-    return {"host_id": str(host)}
+    """An `exec` item's payload as the relay writes one, for `host`."""
+    spec = IsolationSpec(mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode=EgressMode.NONE))
+    payload = ExecPayload(
+        host_id=host,
+        item_id=new_id(),
+        session_id=new_id(),
+        key=new_id(),
+        operation=ExecOperation.RUN,
+        effect="unsafe",
+        spec=spec,
+        isolation="container",
+        egress=(),
+        reads=("/srv/work",),
+    )
+    return payload.model_dump(mode="json")
 
 
 def prepare_in(pool: UUID) -> dict[str, object]:

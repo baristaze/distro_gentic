@@ -4,18 +4,57 @@ environment is. The work queue fixes them per kind (`WORK_PAYLOADS`); the
 kinds that carry what a host or a daemon runs add their fields here."""
 
 from enum import StrEnum
+from typing import Literal
 from uuid import UUID
 
 from pydantic import model_validator
 
+from acme.infra.workspaces import IsolationSpec
 from acme.om.base import Platform
+
+ExecEffect = Literal["read_only", "idempotent", "unsafe"]
+"""What a repeat of an `exec` item may do: its tool's effect, as the engine
+names it."""
+
+HostIsolation = Literal["vm", "container", "directory"]
+"""The isolation a host runs a workspace at, as the hosts name it."""
+
+
+class ExecOperation(StrEnum):
+    """The one thing an `exec` item does in its workspace: an operation of
+    the engine's transport."""
+
+    RUN = "run"  # a command
+    READ_FILE = "read_file"
+    WRITE_FILE = "write_file"
+    LIST_FILES = "list_files"
 
 
 class ExecPayload(Platform):
-    """A command or a file operation for the host that holds the session's
-    workspace. Its item goes to that host's lane."""
+    """`exec` work at wire version 1: one operation of a tool call, for the
+    host that holds the session's workspace. Its item goes to that host's
+    lane.
+
+    It names the relay's item and what a repeat of it may do, never what it
+    runs: the command, the path, and the bytes are the session's content,
+    sealed under its key in the relay's record with the deadline and the
+    writer epoch, and a host reads them through the gateway while it holds
+    the item. The fields after `spec` are what the item asks of its host,
+    which the host holds to its owner's ceilings before anything runs; a
+    field left None asks the most."""
 
     host_id: UUID
+    item_id: UUID  # the relay's item, whose id derives from the call's key
+    session_id: UUID
+    key: UUID  # the tool request's idempotency key
+    operation: ExecOperation
+    effect: ExecEffect
+    spec: IsolationSpec  # the session's isolation
+    isolation: HostIsolation | None
+    egress: tuple[str, ...] | None  # None is open egress
+    reads: tuple[str, ...]  # the paths on the host its result reads
+    by_person: bool = False
+    project_id: UUID | None = None
 
 
 class WorkspaceOperation(StrEnum):
