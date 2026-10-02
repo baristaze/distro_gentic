@@ -2,22 +2,22 @@
 with its fence, a user's accounts read as their channels, and the
 notifications a park sends, with their fence.
 
-Revision ID: 202610033900
-Revises: 202610033700
+Revision ID: 202610034500
+Revises: 202610034200
 """
 
 from acme.om.storage.migrate import run_sql
 from acme.om.storage.roles import DatabaseRole
 
-revision = "202610033900"
-down_revision = "202610033700"
+revision = "202610034500"
+down_revision = "202610034200"
 branch_labels = None
 depends_on = None
 
 
 def upgrade() -> None:
-    run_sql(DatabaseRole.CORE, "202610033900_notifications.up.sql")
+    run_sql(DatabaseRole.CORE, "202610034500_notifications.up.sql")
 
 
 def downgrade() -> None:
-    run_sql(DatabaseRole.CORE, "202610033900_notifications.down.sql")
+    run_sql(DatabaseRole.CORE, "202610034500_notifications.down.sql")
