@@ -130,6 +130,7 @@ class StorageInterface(ABC):
     @abstractmethod
     def get_benchmark_storage(self) -> BenchmarkStorageInterface: ...
 
+    @abstractmethod
     def get_stations_storage(self) -> StationsStorageInterface: ...
 
     @abstractmethod
