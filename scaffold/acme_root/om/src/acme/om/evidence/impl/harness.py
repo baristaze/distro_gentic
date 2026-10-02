@@ -1,10 +1,10 @@
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import datetime
 from uuid import UUID
 
 from acme.om.agents.gate import ResultGateInterface
 from acme.om.agents.types.result import Result
-from acme.om.base import Platform, new_id, utcnow
+from acme.om.base import Identifiable, Platform, new_id, utcnow
 from acme.om.context import Permission, TenantContext
 from acme.om.evidence.acceptance import Chain, evidence_text, judge_chain, scenario_refusal
 from acme.om.evidence.collector import collect, digest
@@ -13,11 +13,13 @@ from acme.om.evidence.harness import AcceptanceHarnessInterface
 from acme.om.evidence.rules import compatibility_refusal, scan
 from acme.om.evidence.storage import EvidenceStorageInterface
 from acme.om.evidence.types.acceptance import AcceptanceVerdict, Break, Link, Scenario, Surface
-from acme.om.evidence.types.inference import Inference
 from acme.om.evidence.types.record import ExecutionRecord, RunPurpose
 from acme.om.evidence.types.validation import Delivery, ExecutionRequest
 from acme.om.evidence.work_product import WorkProductInterface
 from acme.om.exceptions import ValidationFailed
+
+PAGE = 500
+"""Rows one read of the session's runs, or its inferences, takes."""
 
 
 class AcceptanceOptions(Platform):
@@ -74,15 +76,16 @@ class AcceptanceHarnessImpl(AcceptanceHarnessInterface):
         validations = tuple(
             await self._storage.read_validations(ctx.org_id, session_id, None, bound + 1)
         )
-        records = tuple(
-            await self._storage.read_validation_records(
-                ctx.org_id,
-                session_id,
-                [validation.id for validation in validations],
-                self._options.max_runs + 1,
-            )
+        # Every run of the session, the agent's own beside the executor's:
+        # the chain is judged from the executor's, and the scan reads them all.
+        records = await _paged(
+            lambda after: self._storage.read_records(ctx.org_id, session_id, after, PAGE),
+            self._options.max_runs,
         )
-        inferences = await self._inferences(ctx, session_id)
+        inferences = await _paged(
+            lambda after: self._storage.read_inferences(ctx.org_id, session_id, after, PAGE),
+            self._options.max_inferences,
+        )
         unread: list[Break] = []
         if len(validations) > bound or len(records) > self._options.max_runs:
             unread.append(Break(link=Link.BASELINE, reason="more runs than the harness reads"))
@@ -113,17 +116,6 @@ class AcceptanceHarnessImpl(AcceptanceHarnessInterface):
             breaks=breaks,
             hidden=hidden,
         )
-
-    async def _inferences(self, ctx: TenantContext, session_id: UUID) -> tuple[Inference, ...]:
-        found: list[Inference] = []
-        after: UUID | None = None
-        while len(found) <= self._options.max_inferences:
-            page = await self._storage.read_inferences(ctx.org_id, session_id, after, 500)
-            found.extend(page)
-            if len(page) < 500:
-                break
-            after = page[-1].id
-        return tuple(found)
 
     async def _hidden(
         self,
@@ -169,3 +161,19 @@ class AcceptanceHarnessImpl(AcceptanceHarnessInterface):
         except ValidationFailed as refused:
             return (), (Break(link=Link.HIDDEN, reason=refused.message),)
         return records, ()
+
+
+async def _paged[T: Identifiable](
+    read: Callable[[UUID | None], Awaitable[Sequence[T]]], bound: int
+) -> tuple[T, ...]:
+    """Every row a paged read answers, oldest first, until one more than
+    `bound` is in hand: a caller that finds more than `bound` read too many."""
+    found: list[T] = []
+    after: UUID | None = None
+    while len(found) <= bound:
+        page = await read(after)
+        found.extend(page)
+        if len(page) < PAGE:
+            break
+        after = page[-1].id
+    return tuple(found)

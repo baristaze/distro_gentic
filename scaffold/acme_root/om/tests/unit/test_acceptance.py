@@ -134,6 +134,12 @@ async def test_a_mention_of_the_hidden_suite_anywhere_the_agent_reads_breaks_it(
     leaked = await run.judge(result, pull_request={"review": "Run Export_Complete before merging."})
     assert leaked.broken() == {Link.UNMENTIONED}
     assert "pull_request review names the hidden suite" in leaked.breaks[0].reason
+    # The session's own evidence is a surface too: a run of the agent's that
+    # names the hidden suite's file is a leak the harness finds itself.
+    await run.work_run(files=("hidden/complete_suite.py",))
+    found = await run.judge(result)
+    assert found.broken() == {Link.UNMENTIONED}
+    assert found.breaks[0].reason.startswith("evidence ExecutionRecord")
 
 
 async def test_a_scenario_that_names_what_it_hides_or_a_surface_left_out_is_refused() -> None:
