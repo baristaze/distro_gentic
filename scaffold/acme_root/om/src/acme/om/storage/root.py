@@ -100,6 +100,7 @@ class StorageInterface(ABC):
     @abstractmethod
     def get_hosts_storage(self) -> HostsStorageInterface: ...
 
+    @abstractmethod
     def get_platform_agents_storage(self) -> PlatformAgentsStorageInterface: ...
 
     @abstractmethod
