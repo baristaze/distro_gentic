@@ -16,7 +16,7 @@ is one of the kinds of thing [Acme is made of](../../../../README.md).
   each declares, in order. It has versions: the first is the session's,
   and each switch makes the next.
 - **Resolver**: what picks a session's fills, from a table a product
-  sets. The engine never picks a model itself.
+  sets, or a layer's own. The engine never picks a model itself.
 - **Prices**: whether a model has a price of its own in the one source
   of prices, the budgets' list table. The resolver asks before it picks
   a model, so a model with no row is never picked.
@@ -25,6 +25,12 @@ is one of the kinds of thing [Acme is made of](../../../../README.md).
 
 - **Resolve.** A session's model roles get their fills once, within what
   the session requires, and keep them.
+- **Renew.** At the start of each loop, a fill that is gone switches to
+  the one that serves its role now. The table never retires a model; a
+  layer's resolver may.
+- **Call.** Each call asks which client it runs on, and names the key it
+  carries to the gate and to the outage signal: the platform's, or a
+  tenant's own.
 - **Switch.** A fill changes when its provider fails and a declared
   fallback takes over, when a model is retired or a better one comes, or
   when a policy says so. The history records the switch, naming both

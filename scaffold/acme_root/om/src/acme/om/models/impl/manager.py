@@ -60,7 +60,7 @@ class ModelsManagerImpl(ModelsManagerInterface):
             created_at=self._clock(),
             session_id=session_id,
             version=1,
-            roles=await self._resolver.resolve(ctx, roles, eligibility),
+            roles=await self._resolver.resolve(ctx, session_id, roles, eligibility),
             eligibility=eligibility,
         )
         try:
@@ -70,6 +70,14 @@ class ModelsManagerImpl(ModelsManagerInterface):
             # session keeps that one.
             return await self._head(ctx, session_id)
         return first
+
+    async def renew_fill_set(
+        self, ctx: TenantContext, session_id: UUID, epoch: int, loop_id: UUID
+    ) -> FillSet:
+        ctx.require(Permission.WRITE)
+        # The table never retires a model: a fill goes only by a provider's
+        # error, which the loop answers with a declared fallback.
+        return await self._head(ctx, session_id)
 
     async def get_fill_set(self, ctx: TenantContext, session_id: UUID) -> FillSet:
         ctx.require(Permission.READ)
