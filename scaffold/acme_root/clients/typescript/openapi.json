@@ -7673,7 +7673,7 @@
     },
     "/v1/hosts/me/control": {
       "get": {
-        "description": "The host's one long-lived stream, opened from inside its wall: one\nJSON line per message, wake-ups and each stop of an item it holds as it\nis made, after the message `after` names. It ends with the credential it\nopened with; the host opens it again with the next.",
+        "description": "The host's control stream, after the message `after` names.",
         "operationId": "control_v1_hosts_me_control_get",
         "parameters": [
           {
@@ -7691,22 +7691,6 @@
                 }
               ],
               "title": "After"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
             }
           },
           {
@@ -7739,6 +7723,22 @@
                 }
               ],
               "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
             }
           }
         ],

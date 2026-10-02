@@ -714,10 +714,7 @@ export interface paths {
         };
         /**
          * Control
-         * @description The host's one long-lived stream, opened from inside its wall: one
-         *     JSON line per message, wake-ups and each stop of an item it holds as it
-         *     is made, after the message `after` names. It ends with the credential it
-         *     opened with; the host opens it again with the next.
+         * @description The host's control stream, after the message `after` names.
          */
         get: operations["control_v1_hosts_me_control_get"];
         put?: never;
@@ -4596,9 +4593,9 @@ export interface operations {
                 after?: string | null;
             };
             header?: {
-                authorization?: string | null;
                 "x-app"?: string | null;
                 "x-app-version"?: string | null;
+                authorization?: string | null;
             };
             path?: never;
             cookie?: never;
