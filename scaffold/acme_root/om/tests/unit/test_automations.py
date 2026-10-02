@@ -13,6 +13,8 @@ import pytest
 from contracts.intake import WORKER, Wired, wired
 from contracts.loops import reply, said, use
 
+from acme.om.agent_sessions.types.agent_session import AgentSession
+from acme.om.agents.types.request import Start
 from acme.om.agents.types.run import RunEnd
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.automations.types.automation import (
@@ -521,6 +523,43 @@ async def test_an_automation_run_as_the_principal_holds_its_role_alone(
         Refusal.ACTION,
         None,
     )
+
+
+async def test_an_automation_run_as_the_principal_holds_no_more_than_its_creator(
+    platform: Wired, creator: TenantContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A member makes no automation that runs as a principal granted above
+    them. An admin's fires at no more than the admin holds at the firing,
+    whatever the grant becomes, and fires nothing once the admin left."""
+    await platform.automations.grant_principal(platform.owner, Role.ADMIN)
+    member = platform.person(Role.MEMBER)
+    with pytest.raises(NotAuthorized):
+        await platform.automations.create_automation(
+            member, scheduled(member, runs_as=RunsAs.AUTOMATION_PRINCIPAL)
+        )
+    await platform.automations.create_automation(
+        creator, scheduled(creator, runs_as=RunsAs.AUTOMATION_PRINCIPAL)
+    )
+    roles: list[Role] = []
+    start = platform.managers.agents.start_session
+
+    async def starting(ctx: TenantContext, request: Start) -> AgentSession:
+        roles.append(ctx.role)
+        return await start(ctx, request)
+
+    monkeypatch.setattr(platform.managers.agents, "start_session", starting)
+    await platform.automations.grant_principal(platform.owner, Role.OWNER)
+    (run,) = await platform.automations.tick(platform.service)
+    assert run.status is RunStatus.STARTED and roles == [Role.ADMIN]
+    platform.members.roles[creator.user_id] = Role.VIEWER
+    platform.clock.now += timedelta(hours=1)
+    (lowered,) = await platform.automations.tick(platform.service)
+    assert (lowered.status, lowered.refusal) == (RunStatus.REFUSED, Refusal.ACTION)
+    assert roles == [Role.ADMIN, Role.VIEWER]
+    del platform.members.roles[creator.user_id]
+    platform.clock.now += timedelta(hours=1)
+    (gone,) = await platform.automations.tick(platform.service)
+    assert (gone.status, gone.refusal) == (RunStatus.REFUSED, Refusal.PRINCIPAL)
 
 
 async def test_an_automation_run_as_no_granted_principal_fires_nothing(

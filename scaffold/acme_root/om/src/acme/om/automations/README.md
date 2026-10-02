@@ -50,7 +50,10 @@ is made of](../../../../README.md).
   left fires nothing. **Or as the automation principal,** whose grant is
   read at each firing and at each call its sessions make: they hold that
   role's authority and no more, never the creator's and never the
-  service role's. With no principal granted, it fires nothing.
+  service role's. With no principal granted, it fires nothing. Only a
+  person whose role is at least the grant makes one, and its firing
+  holds no more than its creator's role then: a creator who left fires
+  nothing.
 - **A slot fires once.** Its run's id is derived from the automation and
   the slot, so several workers at once make one run.
 - **The brief is the creator's word; the event is data.**
