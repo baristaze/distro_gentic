@@ -140,6 +140,8 @@ tenantless = [
     "OutboxStorageInterface.count_failed_since",
     "OutboxStorageInterface.oldest_pending_at",
     "OutboxStorageInterface.purge_done",
+    "RetentionStorageInterface.read_behind",
+    "RetentionStorageInterface.read_due",
     "TenancyStorageInterface.clear_failed_sign_ins",
     "TenancyStorageInterface.confirm_totp",
     "TenancyStorageInterface.count_orgs",
