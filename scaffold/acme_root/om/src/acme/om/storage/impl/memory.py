@@ -52,6 +52,8 @@ from acme.om.projects.storage import ProjectStorageInterface
 from acme.om.projects.storage.impl.memory import ProjectStorageMemoryImpl
 from acme.om.retention.storage import RetentionStorageInterface
 from acme.om.retention.storage.impl.memory import RetentionStorageMemoryImpl
+from acme.om.stations.storage import StationsStorageInterface
+from acme.om.stations.storage.impl.memory import StationsStorageMemoryImpl
 from acme.om.steps.storage import StepStorageInterface
 from acme.om.steps.storage.impl.memory import StepStorageMemoryImpl
 from acme.om.storage.root import StorageInterface
@@ -104,6 +106,7 @@ class StorageMemoryImpl(StorageInterface):
         self._playbook = PlaybookStorageMemoryImpl(self._outbox)
         self._knowledge = KnowledgeStorageMemoryImpl(self._outbox)
         self._platform_agents = PlatformAgentsStorageMemoryImpl(self._outbox)
+        self._stations = StationsStorageMemoryImpl(self._outbox)
         self._workspaces = WorkspaceStorageMemoryImpl(self._outbox)
         self._matrix = MatrixStorageMemoryImpl()
         self._matrix_tenants = MatrixTenantStorageMemoryImpl()
@@ -197,6 +200,9 @@ class StorageMemoryImpl(StorageInterface):
 
     def get_platform_agents_storage(self) -> PlatformAgentsStorageInterface:
         return self._platform_agents
+
+    def get_stations_storage(self) -> StationsStorageInterface:
+        return self._stations
 
     def get_workspace_storage(self) -> WorkspaceStorageInterface:
         return self._workspaces

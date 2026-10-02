@@ -97,6 +97,7 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             "placement": managers.placement.purge_tenant,
             "hosts": managers.hosts.purge_tenant,
             "validation_sessions": managers.platform_agents.purge_tenant,
+            "stations": managers.stations.purge_tenant,
             "workspaces": managers.workspaces.purge_tenant,
             # Every artifact's object, then its record, under the purge login.
             "artifacts": managers.windows.purge_tenant,
