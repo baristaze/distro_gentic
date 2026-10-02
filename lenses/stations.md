@@ -72,9 +72,11 @@ binds; whether a held lease can wait for an approval.
 
 **Violation.** An approval asked after the grant, or while the lease is
 held; an approval not bound to the candidate, the procedure, and the
-pool; an approval dropped while the session still holds its place.
+pool; an approval dropped while the session still holds its place. (An
+approval not bound to what it lets run is the engine's TOL-07, which
+grades it high.)
 
-**Severity.** medium
+**Severity.** high
 
 **Check.** review
 

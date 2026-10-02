@@ -36,16 +36,19 @@ platform's own beside the guideline's queue.
 comes back into the same session. A review comment reopens the work; it
 never starts a conversation that has forgotten the old one. An event
 finds its session by the pull request, the branch, or the session id it
-names.
+names. A failing check wakes the session, and so does a ticket reopened
+or reassigned to the agent.
 
 **Source.** What Closes a Loop; Work In, Results Out, Feedback Routing.
 
 **Look for.** How the router maps an event to a session; what an event
-about delivered work does.
+about delivered work does; what a failing check and a reopened ticket
+do to a parked or an idle session.
 
 **Violation.** Feedback on delivered work that starts a new session, or
 a fresh history; an event matched to a session by anything but the pull
-request, the branch, or the session id it names.
+request, the branch, or the session id it names; a failing check, or a
+ticket reopened or reassigned to the agent, that does not wake it.
 
 **Severity.** high
 
@@ -66,8 +69,9 @@ session is recorded only.
 arrival does to a parked, an idle, and an archived session.
 
 **Violation.** A bot's comment, CI output, or a passing check that wakes
-the session; a failing check or a reopened ticket that does not; an
-arrival other than a principal's message that wakes an archived session.
+the session; an arrival other than a principal's message that wakes an
+archived session. (A failing check or a reopened ticket that does not
+wake the session is INT-02.)
 
 **Severity.** medium
 

@@ -164,9 +164,11 @@ or in a tool that branches on where the workspace is.
 
 **Violation.** A transport chosen by anything but the session's
 placement; the engine or a tool that branches on cloud or wall, or
-reaches a host other than through the transport interface.
+reaches a host other than through the transport interface. (A tool that
+reaches past the transport is the engine's TOL-13, which grades it
+high.)
 
-**Severity.** medium
+**Severity.** high
 
 **Check.** review
 
