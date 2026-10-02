@@ -16,9 +16,29 @@ from worker_support import build_container, ended, sign_in
 from acme.infra.queues import QueueMessage, Queues
 from acme.integrations.identity import ProvidedDelivery
 from acme.integrations.identity.twin import IdentityProviderTwinImpl
+from acme.om.automations.types.automation import (
+    Action,
+    ActionKind,
+    Automation,
+    Limits,
+    Refusal,
+    Trigger,
+    TriggerKind,
+)
 from acme.om.base import new_id, utcnow
 from acme.om.context import TenantContext
 from acme.om.events.types.event import Event
+from acme.om.intake.impl.manager import ROUTED
+from acme.om.intake.rules import described
+from acme.om.intake.types.event import (
+    MAX_TEXT,
+    Arrival,
+    Author,
+    AuthorKind,
+    CheckState,
+    FeedbackEvent,
+    WorkNames,
+)
 from acme.workers.maintenance.container import WorkerContainer
 from acme.workers.maintenance.deliveries import DeliveryConsumer, DeliveryOptions
 from acme.workers.maintenance.main import build_consumer
@@ -158,4 +178,91 @@ async def test_the_consumer_runs_until_it_is_stopped(tmp_path: Path) -> None:
     consumer.stop()
     await ended(running)
     assert len(await received(container, ctx)) == 1
+    assert await depth(container) == (0, 0)
+
+
+def feedback_body(org_id: str, event: FeedbackEvent) -> bytes:
+    """The message an integration's ingress queues for a verified event."""
+    delivery = {"org_id": org_id, "event": event.model_dump(mode="json")}
+    return json.dumps(
+        {"idempotency_key": str(event.id), "provider": "feedback", "delivery": delivery}
+    ).encode()
+
+
+async def test_an_event_from_outside_is_routed_and_fires_automations_once(
+    tmp_path: Path,
+) -> None:
+    container = build_container(tmp_path)
+    ctx = await sign_in(container)
+    now = utcnow()
+    automation = Automation(
+        id=new_id(),
+        created_at=now,
+        updated_at=now,
+        created_by=ctx.user_id,
+        updated_by=ctx.user_id,
+        name="triage failing checks",
+        trigger=Trigger(kind=TriggerKind.EVENT, arrivals=("check",)),
+        action=Action(
+            kind=ActionKind.START_SESSION, brief="Find why.", agent_kind="triage", title="CI"
+        ),
+        limits=Limits(cost_cap_micros=10, run_cap_micros=1, rate=5, concurrency=1),
+    )
+    await container.automations.create_automation(ctx, automation)
+    event = FeedbackEvent(
+        id=new_id(),
+        integration="forge",
+        arrival=Arrival.CHECK,
+        author=Author(kind=AuthorKind.BOT, external_id="ci", name="ci"),
+        names=WorkNames(branch="main"),
+        check=CheckState.FAILED,
+        occurred_at=now,
+    )
+    consumer = consumer_of(container)
+    for _ in range(2):
+        assert await consumer.handle(await queued(container, feedback_body(str(ctx.org_id), event)))
+    events = await container.managers.events.get_events(ctx, after_seq=0, limit=100)
+    (routed,) = [e for e in events if e.kind == ROUTED]
+    assert routed.payload["effect"] == "unrouted"
+    # The automation fired once on the event, and its run is recorded,
+    # here refused, since this worker runs no agent kind.
+    (run,) = await container.automations.get_runs(ctx, automation.id, 10)
+    assert (run.event_id, run.refusal) == (event.id, Refusal.ACTION)
+    assert await depth(container) == (0, 0)
+
+
+async def test_an_event_at_the_text_cap_is_routed_and_fires_once(tmp_path: Path) -> None:
+    container = build_container(tmp_path)
+    ctx = await sign_in(container)
+    now = utcnow()
+    automation = Automation(
+        id=new_id(),
+        created_at=now,
+        updated_at=now,
+        created_by=ctx.user_id,
+        updated_by=ctx.user_id,
+        name="triage failing checks",
+        trigger=Trigger(kind=TriggerKind.EVENT, arrivals=("check",)),
+        action=Action(
+            kind=ActionKind.START_SESSION, brief="Find why.", agent_kind="triage", title="CI"
+        ),
+        limits=Limits(cost_cap_micros=10, run_cap_micros=1, rate=5, concurrency=1, queue=True),
+    )
+    await container.automations.create_automation(ctx, automation)
+    event = FeedbackEvent(
+        id=new_id(),
+        integration="forge",
+        arrival=Arrival.CHECK,
+        author=Author(kind=AuthorKind.BOT, external_id="ci", name="ci"),
+        names=WorkNames(branch="main"),
+        check=CheckState.FAILED,
+        text="x" * MAX_TEXT,
+        occurred_at=now,
+    )
+    assert len(described(event)) <= MAX_TEXT
+    consumer = consumer_of(container)
+    body = feedback_body(str(ctx.org_id), event)
+    assert await consumer.handle(await queued(container, body)) == "applied"
+    (run,) = await container.automations.get_runs(ctx, automation.id, 10)
+    assert run.event_id == event.id
     assert await depth(container) == (0, 0)
