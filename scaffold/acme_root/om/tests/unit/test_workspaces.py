@@ -36,7 +36,7 @@ from acme.om.agents import ResultGateInterface
 from acme.om.agents.types.kind import AgentKind
 from acme.om.agents.types.request import Start
 from acme.om.agents.types.run import RunEnd
-from acme.om.base import new_id
+from acme.om.base import Identifiable, Trackable, new_id
 from acme.om.context import Role, TenantContext
 from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
 from acme.om.evidence.impl.ports import WorkProductAbsentImpl
@@ -63,6 +63,7 @@ from acme.om.workspaces.types.source import (
     Snapshot,
     WriteKind,
 )
+from acme.om.workspaces.types.workspace import SessionWorkspace
 
 
 def kind(name: str, mode: IsolationMode, egress: EgressMode = EgressMode.OPEN) -> AgentKind:
@@ -670,3 +671,10 @@ async def test_a_sessions_purge_takes_its_workspace_row(tmp_path: Path) -> None:
     with pytest.raises(NotFound):
         await workspaces.get_workspace(loop.owner, session_id)
     assert (await workspaces.get_workspace(loop.owner, other)).id == other
+
+
+def test_every_field_of_a_sessions_workspace_is_its_managers() -> None:
+    # No caller writes one: the pin sets its isolation, and the loops the rest.
+    mixins = set(Identifiable.model_fields) | set(Trackable.model_fields)
+    own = set(SessionWorkspace.model_fields) - mixins
+    assert own == set(SessionWorkspace.MANAGER_OWNED_FIELDS)
