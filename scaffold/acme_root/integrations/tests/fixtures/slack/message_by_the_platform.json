@@ -1,0 +1,19 @@
+{
+  "token": "Jhj5dZrVaK7ZwHHjRyZWjbDl",
+  "team_id": "T0TEAM001",
+  "api_app_id": "A0APP0001",
+  "event": {
+    "type": "message",
+    "channel": "D0DIRECT01",
+    "channel_type": "im",
+    "user": "U0PLATFRM",
+    "bot_id": "B0BOT0001",
+    "text": "A call waits on your approval.",
+    "ts": "1790000050.000150",
+    "metadata": {"event_type": "platform_act", "event_payload": {"mark": "0b0e9a52-6a7e-4f43-9d1c-3c2b8c1f7e11"}},
+    "team": "T0TEAM001"
+  },
+  "type": "event_callback",
+  "event_id": "Ev0PLATFORM1",
+  "event_time": 1790000050
+}

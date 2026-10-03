@@ -281,7 +281,7 @@ class WorkspaceGitTransportImpl(WorkspaceGitInterface):
         commit = None if words[1] == "-" else words[1]
         if commit is not None:
             bundle = await self._bundle(workspace, int(words[3]))
-            await self._source_control.push(binding, ref, commit, bundle)
+            await self._source_control.push(ctx, binding, ref, commit, bundle)
         return Snapshot(ref=ref, commit=commit, remote_branch=words[2] == "yes")
 
     async def outgoing(

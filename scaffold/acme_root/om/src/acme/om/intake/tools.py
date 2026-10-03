@@ -17,6 +17,7 @@ from pydantic import Field
 
 from acme.infra.exceptions import InfraException
 from acme.integrations.events import IntegrationInterface
+from acme.integrations.exceptions import ProviderRefused
 from acme.om.base import Platform
 from acme.om.context import TenantContext
 from acme.om.exceptions import ToolFailed
@@ -46,9 +47,12 @@ class Commented(Platform):
 
 class CommentImpl(ToolInterface):
     """Comments on a pull request or a ticket of the forge, as the platform's
-    account. The act is recorded under the call's key before the comment is
-    posted, so an event the forge sends before the post answers still names
-    the session; then under the forge's id for the comment."""
+    account, through the installation of the forge that holds its
+    repository, and only once the session's own tenant connected it: any
+    other is refused before anything is recorded or posted. The act is
+    recorded under the call's key before the comment is posted, so an event
+    the forge sends before the post answers still names the session; then
+    under the forge's id for the comment."""
 
     SPEC: ClassVar[ToolSpec] = ToolSpec(
         name=COMMENT,
@@ -94,12 +98,29 @@ class CommentImpl(ToolInterface):
     ) -> Platform:
         assert isinstance(call_input, CommentInput)
         intake = self._intake()
+        forge = self._integrations(FORGE)
         mark = str(runtime.key)
+        try:
+            installation = await forge.installation_of(call_input.on)
+        except InfraException as failed:
+            raise ToolFailed(
+                ToolFailure.PERMANENT
+                if isinstance(failed, ProviderRefused)
+                else ToolFailure.TRANSIENT,
+                f"the forge named no installation of {call_input.on}: {failed.message}",
+            ) from None
+        if await intake.tenant_of(ctx, FORGE, installation) != ctx.org_id:
+            raise ToolFailed(
+                ToolFailure.DENIED,
+                f"no installation of the forge this tenant connected holds {call_input.on}",
+            )
         # Recorded before the act: the forge's event may come back before the
         # post answers.
         await intake.record_act(ctx, runtime.session_id, FORGE, (mark,))
         try:
-            posted = await self._integrations(FORGE).post(call_input.on, call_input.text, mark)
+            posted = await forge.post(
+                call_input.on, call_input.text, mark, installation=installation
+            )
         except InfraException as failed:
             raise ToolFailed(
                 ToolFailure.TRANSIENT, f"the forge took no comment: {failed.message}"

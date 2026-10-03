@@ -1,0 +1,6 @@
+{
+  "ok": true,
+  "channel": "D0DIRECT01",
+  "ts": "1790000300.000400",
+  "message": {"type": "message", "user": "U0PLATFRM", "bot_id": "B0BOT0001", "text": "A call waits on your approval.", "ts": "1790000300.000400"}
+}

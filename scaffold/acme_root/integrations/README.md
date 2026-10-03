@@ -67,14 +67,25 @@ with a message that says so; only the one named is written;
 a second opening of one branch answers the pull request it opened.
 
 What served an event is the integration's word (`provenance`), never the
-delivery's, so a twin's event is a twin's whatever its body claims.
+delivery's, so a twin's event is a twin's whatever its body claims. A
+delivery that checks out and is the system's check of the address it
+delivers to, a ping or a challenge, is `Acknowledged`: the ingress answers
+it with what the system asks back and queues nothing. Any other delivery
+that is no event the router reads is refused.
 
 | Implementation | What it is |
 |----------------|------------|
-| `events/twin.py` | The twin of every integration, in memory. It signs its own deliveries (`Twin-Signature`, HMAC-SHA256 over `<timestamp>.<body>`, a five-minute window) and its installations' grants the same way, records each message posted through it and each ref and pull request it took, and, made to write (`writes`, as the local stack's forge twin is), pushes each ref's commits to the repository for real (`events/git.py`), with a repository's credential where it is given one, says `twin` on every record it writes, and mints every id as `twin_`. Refused at boot outside `local` and `test`. |
-| `events.IntegrationAbsentImpl` | The integration of a process with none configured: every delivery and every post is unavailable, `503`. |
+| `events/twin.py` | The twin of every integration, in memory. It signs its own deliveries (`Twin-Signature`, HMAC-SHA256 over `<timestamp>.<body>`, a five-minute window) and its installations' grants the same way, records each message posted through it and each ref and pull request it took, has one installation per repository owner (`twin_installation_<owner>`), which holds that owner's repositories, and refuses a forge write through any other, and, made to write (`writes`, as the local stack's forge twin is), pushes each ref's commits to the repository for real (`events/git.py`), with a repository's credential where it is given one, says `twin` on every record it writes, and mints every id as `twin_`. Refused at boot outside `local` and `test`. |
+| `events/github.py` | The forge as a GitHub App ([ADR 2027](../docs/adr/2027-the-forge-is-a-github-app-and-the-chat-a-slack-app.md)). It signs a JWT with the App's private key and trades it for each installation's token, which it holds in memory, as a secret, until fifteen minutes before it expires, and never logs or writes. A grant is the setup redirect's query, the installation and a code for the person who installed the App, and counts once GitHub lists the installation among that person's and its signed record of the install names that person as its installer. A write goes through the installation its caller names, once the caller finds the writing tenant connected the one that holds the repository (`installation_of`); a push hands git that token for the repository's URL alone. |
+| `events/github_wire.py` | GitHub's signature (`X-Hub-Signature-256`, HMAC-SHA256 of the body) and the reading of its comments, reviews, reopened or assigned issues, check suites, statuses, and pushes; a delivery's id is the digest of the body, since GitHub signs no id and no time. `checks_state` folds GitHub's outcomes into passed, failed, or not yet. |
+| `events/slack.py` | The chat as a Slack app. It posts with the app's bot token, the platform's mark in the message's metadata. A grant is the code of the app's install, and counts once Slack names its workspace for it and that workspace is the bot token's own; a grant from any other is refused. |
+| `events/slack_wire.py` | Slack's signature (`X-Slack-Signature`, HMAC-SHA256 of `v0:<timestamp>:<body>`, a five-minute window) and the reading of its messages; its address check is acknowledged with its challenge. |
+| `events.IntegrationAbsentImpl` | The integration of a process with none configured, or of a client missing a setting, which it names: every delivery and every post is unavailable, `503`. |
 
-A real client of a forge or a chat is not built yet.
+A client's tests run over the system's recorded deliveries and answers in
+`tests/fixtures/`, and reach no network. The ones that reach GitHub or
+Slack are marked `live` and run by hand (`make test-live`), never in a
+gate.
 
 ## Settings
 
@@ -87,6 +98,10 @@ A real client of a forge or a chat is not built yet.
 | `ACME_WORKOS_BASE_URL`, `ACME_WORKOS_TIMEOUT_SECONDS` | Where the client calls, and the timeout of every call. |
 | `ACME_INTEGRATIONS` | `twin` or `none` (the default): what serves the forge and the chat. The twin is refused at boot outside `local` and `test`. |
 | `ACME_FORGE_TWIN_USERNAME`, `ACME_FORGE_TWIN_PASSWORD` | The credential the forge's twin pushes with, for a repository behind basic authentication. Unset, it pushes with none. Refused at boot outside `local` and `test`. |
+| `ACME_FORGE_INTEGRATION`, `ACME_CHAT_INTEGRATION` | What serves the forge (`github`, `twin`, or `none`) and the chat (`slack`, `twin`, or `none`), where it is not what `ACME_INTEGRATIONS` says. Unset follows it. A twin is refused at boot outside `local` and `test`. |
+| `ACME_GITHUB_APP_ID`, `ACME_GITHUB_PRIVATE_KEY`, `ACME_GITHUB_WEBHOOK_SECRET`, `ACME_GITHUB_CLIENT_ID`, `ACME_GITHUB_CLIENT_SECRET`, `ACME_GITHUB_ACCOUNT` | The GitHub App: its id, its private key (a PEM), its webhook's secret, its OAuth client, and its bot's login, the platform's own account (`<slug>[bot]`). Without any of them the forge is absent, and says which. |
+| `ACME_SLACK_BOT_TOKEN`, `ACME_SLACK_SIGNING_SECRET`, `ACME_SLACK_CLIENT_ID`, `ACME_SLACK_CLIENT_SECRET`, `ACME_SLACK_ACCOUNT` | The Slack app: its bot token, its signing secret, its OAuth client, and its bot's user id, the platform's own account. Without any of them the chat is absent, and says which. |
+| `ACME_GITHUB_API_URL`, `ACME_GITHUB_WEB_URL`, `ACME_SLACK_API_URL`, `ACME_GITHUB_TIMEOUT_SECONDS`, `ACME_SLACK_TIMEOUT_SECONDS` | Where each client calls, and the timeout of every call. |
 
 [The WorkOS runbook](../docs/runbooks/providers/workos.md) sets them up.
 
@@ -137,6 +152,8 @@ platform's keys; empty or `off` leaves a provider with none),
 - **A request's deadline on every call a request makes**, shared by
   every call of the request; a worker's calls carry none
   ([ADR 0069](../docs/adr/0069-a-request-has-a-deadline-its-provider-calls-share.md)).
+  The forge's and the chat's interface takes no deadline, so their calls
+  carry their timeout alone.
 - **One exception family.** `ProviderUnavailable` is `503`,
   `ProviderRefused` `400`, `ProviderConflict` `409`. The key never
   appears in a message.
