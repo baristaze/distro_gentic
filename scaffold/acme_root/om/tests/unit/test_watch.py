@@ -17,9 +17,12 @@ from contracts.loops import Clock, loop_over, reply, said
 from pydantic import SecretStr
 
 from acme.infra.impl.local import InfraLocalImpl
+from acme.infra.streams.memory import StreamsMemoryImpl
+from acme.infra.topics.memory import TopicsMemoryImpl
 from acme.infra.transports import CommandSpec, RecordSeal, StaleCommand
 from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec, Workspace
 from acme.om.agent_sessions.types.agent_session import SessionStatus
+from acme.om.agents.impl.sink import StreamSinkMemoryImpl
 from acme.om.agents.types.run import RunEnd
 from acme.om.base import new_id, utcnow
 from acme.om.context import (
@@ -31,6 +34,7 @@ from acme.om.context import (
     TenantContext,
     build_context,
 )
+from acme.om.events import EventsManagerInterface
 from acme.om.exceptions import NotAuthorized, NotFound, StaleWriter
 from acme.om.hosts.impl.manager import HostsOptions
 from acme.om.hosts.types.host import Advertisement, Enrollment, HostIdentity
@@ -59,7 +63,13 @@ from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import permissions_of
 from acme.om.watch.exceptions import CommandRunning, LiveReadRefused, NotHandedOver
 from acme.om.watch.impl.manager import SENT, TAKEN, WatchOptions
-from acme.om.watch.impl.stream import StreamOptions, StreamServiceMemoryImpl
+from acme.om.watch.impl.stream import (
+    COMPLETED,
+    OPENED,
+    PARTS,
+    StreamOptions,
+    StreamServiceImpl,
+)
 from acme.om.watch.manager import WatchManagerInterface
 from acme.om.watch.root import build_watch
 from acme.om.watch.rules import signed, verified
@@ -101,7 +111,7 @@ class Watched:
     host: HostIdentity
     session_id: UUID
     epoch: int
-    stream: StreamServiceMemoryImpl
+    stream: StreamServiceImpl
     watch: WatchManagerInterface
     clock: Clock
 
@@ -139,7 +149,10 @@ async def watched(tmp_path: Path) -> Watched:
     await managers.workspaces.pinned(owner, session.id, CONTAINER)
     epoch = await managers.steps.begin_run(owner, session.id)
     clock = Clock()
-    stream = StreamServiceMemoryImpl(clock=clock)
+    infra = InfraLocalImpl(tmp_path / "streams")
+    stream = StreamServiceImpl(
+        StreamsMemoryImpl(clock), infra.get_topics(), lambda: managers.events
+    )
     watch = build_watch(managers, stream, WatchOptions(live_read_key=KEY), clock=clock)
     return Watched(managers, owner, in_person(owner), host, session.id, epoch, stream, watch, clock)
 
@@ -155,6 +168,16 @@ def text(session_id: UUID, step_id: UUID, n: int, words: str = "word ") -> TextP
     return TextPart(session_id=session_id, step_id=step_id, n=n, index=0, text=words)
 
 
+def no_events() -> EventsManagerInterface:
+    raise AssertionError("only parts are written: no event is")
+
+
+def service(options: StreamOptions | None = None, clock: Clock | None = None) -> StreamServiceImpl:
+    """A stream service over the memory streams, as a local root builds it."""
+    streams = StreamsMemoryImpl() if clock is None else StreamsMemoryImpl(clock)
+    return StreamServiceImpl(streams, TopicsMemoryImpl(), no_events, options)
+
+
 # Check 1: a live-read handle reads only its own session's stream, expires,
 # and a reader resumes from the part it last saw.
 
@@ -167,6 +190,10 @@ async def test_a_live_read_reads_its_own_session_and_resumes_after_the_last_part
     for n in range(3):
         watched.stream.emit(text(watched.session_id, mine, n))
         watched.stream.emit(text(other.id, theirs, n))
+    # A part that names this session's stream from another session is not
+    # its own, and no read of this session finds it.
+    watched.stream.emit(text(other.id, mine, 3))
+    await watched.stream.flush()
     live = await watched.watch.open_live(watched.person, watched.session_id)
 
     page = await watched.watch.read_live(request(), live.handle, ())
@@ -176,6 +203,7 @@ async def test_a_live_read_reads_its_own_session_and_resumes_after_the_last_part
 
     watched.stream.emit(text(watched.session_id, mine, 3))
     watched.stream.emit(text(watched.session_id, mine, 4))
+    await watched.stream.flush()
     page = await watched.watch.read_live(request(), live.handle, (Seen(step_id=mine, n=2),))
     assert [part.n for part in page.streams[0].parts] == [3, 4]
 
@@ -207,6 +235,7 @@ async def test_a_live_read_handle_is_issued_only_for_a_session_the_viewer_sees(
 async def test_a_live_read_handle_expires(watched: Watched) -> None:
     step = new_id()
     watched.stream.emit(text(watched.session_id, step, 0))
+    await watched.stream.flush()
     live = await watched.watch.open_live(watched.person, watched.session_id)
     assert live.expires_at == watched.clock.now + LIFE
     assert (await watched.watch.read_live(request(), live.handle, ())).streams
@@ -219,60 +248,109 @@ async def test_a_live_read_handle_expires(watched: Watched) -> None:
 # it loses no record.
 
 
-def test_each_open_stream_is_bounded_and_a_slow_reader_loses_the_oldest() -> None:
+async def test_each_open_stream_is_bounded_and_a_slow_reader_loses_the_oldest() -> None:
     clock = Clock()
-    options = StreamOptions(max_parts=4, max_bytes=250, max_streams=2, max_open=3)
-    stream = StreamServiceMemoryImpl(options, clock)
-    session, step = new_id(), new_id()
+    session, step, big = new_id(), new_id(), new_id()
+    size = len(PARTS.dump_json(text(session, big, 0, "x" * 100)))
+    options = StreamOptions(max_parts=4, max_bytes=size * 5 // 2, max_streams=2, max_open=3)
+    stream = service(options, clock)
     for n in range(10):
         stream.emit(text(session, step, n))
-    (live,) = stream.read(session, (Seen(step_id=step, n=3),))
+    await stream.flush()
+    (live,) = await stream.read(session, (Seen(step_id=step, n=3),))
     assert [part.n for part in live.parts] == [6, 7, 8, 9] and live.first == 6 and live.dropped
 
     # By bytes: the newest part always stays.
-    big = new_id()
     for n in range(4):
         stream.emit(text(session, big, n, "x" * 100))
-    held = {s.step_id: s for s in stream.read(session, ())}
+    await stream.flush()
+    held = {s.step_id: s for s in await stream.read(session, ())}
     assert [part.n for part in held[big].parts] == [2, 3]
 
     # By streams: a session's third, and the platform's fourth, closes the
     # stream that heard nothing longest.
     stream.emit(text(session, new_id(), 0))
-    assert step not in {s.step_id for s in stream.read(session, ())}
+    await stream.flush()
+    assert step not in {s.step_id for s in await stream.read(session, ())}
     elsewhere = new_id()
     stream.emit(text(elsewhere, new_id(), 0))
     stream.emit(text(elsewhere, new_id(), 0))
-    assert len(stream.read(session, ())) + len(stream.read(elsewhere, ())) == 3
+    await stream.flush()
+    assert len(await stream.read(session, ())) + len(await stream.read(elsewhere, ())) == 3
 
     # A part sent again lands once; a stream that hears nothing closes.
     last = new_id()
     stream.emit(text(elsewhere, last, 0))
     stream.emit(text(elsewhere, last, 0))
-    assert [len(s.parts) for s in stream.read(elsewhere, ()) if s.step_id == last] == [1]
+    await stream.flush()
+    assert [len(s.parts) for s in await stream.read(elsewhere, ()) if s.step_id == last] == [1]
     clock.now += StreamOptions().idle
-    assert stream.read(session, ()) == () and stream.read(elsewhere, ()) == ()
+    assert await stream.read(session, ()) == () and await stream.read(elsewhere, ()) == ()
 
 
-async def test_losing_the_buffer_loses_no_record(tmp_path: Path) -> None:
-    loop = loop_over(tmp_path)
+class Told(StreamSinkMemoryImpl):
+    """A memory sink that also keeps when each stream opened and completed,
+    in order with the parts."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.told: list[tuple[str, UUID]] = []
+
+    def emit(self, part: TextPart) -> None:  # type: ignore[override]
+        super().emit(part)
+        self.told.append(("part", part.step_id))
+
+    def opened(self, ctx: TenantContext, session_id: UUID, step_id: UUID) -> None:
+        self.told.append((OPENED, step_id))
+
+    def completed(self, ctx: TenantContext, session_id: UUID, step_id: UUID) -> None:
+        self.told.append((COMPLETED, step_id))
+
+
+async def test_a_stream_holds_its_cap_and_once_it_is_gone_its_step_is_whole(
+    tmp_path: Path,
+) -> None:
+    told = Told()
+    loop = loop_over(tmp_path, sink=told)
     session_id = await loop.start()
     await loop.say(session_id, "What is the total?")
     answer = "The total is twelve, as the records of the last quarter show it."
     loop.anthropic.add(reply(said(answer)))
     await loop.loops.run(loop.owner, session_id)
-
-    stream = StreamServiceMemoryImpl(StreamOptions(max_parts=2))
-    for part in loop.sink.parts:
-        stream.emit(part)
-    (live,) = stream.read(session_id, ())
-    assert len(live.parts) == 2 and live.dropped, "the buffer let go of the oldest parts"
-
-    lost = StreamServiceMemoryImpl()  # the service restarted: every buffer gone
-    assert lost.read(session_id, ()) == ()
     steps = await loop.history(session_id)
     (response,) = [step for step in steps if step.type is StepType.MODEL_RESPONSE]
+    # The loop opens the response's stream before its first part, and
+    # completes it after its last.
+    assert told.told[0] == (OPENED, response.id) and told.told[-1] == (COMPLETED, response.id)
+    assert {kind for kind, _ in told.told[1:-1]} == {"part"} and len(told.parts) > 2
+
+    stream = StreamServiceImpl(
+        StreamsMemoryImpl(),
+        loop.infra.get_topics(),
+        lambda: loop.managers.events,
+        StreamOptions(max_parts=2),
+    )
+    stream.opened(loop.owner, session_id, response.id)
+    for part in told.parts:
+        stream.emit(part)
+    await stream.flush()
+    (live,) = await stream.read(session_id, ())
+    assert len(live.parts) == 2 and live.dropped, "the stream let go of the oldest parts"
+
+    stream.completed(loop.owner, session_id, response.id)
+    await stream.flush()
+    assert await stream.read(session_id, ()) == (), "a completed stream is gone"
     assert response.id == live.step_id and response.as_text() == answer
+    events = await loop.managers.events.get_events(loop.owner, 0, 200)
+    changes = [
+        (e.kind, e.target_id, e.payload["step_id"])
+        for e in events
+        if e.kind.startswith("watch.stream.")
+    ]
+    assert changes == [
+        (OPENED, session_id, str(response.id)),
+        (COMPLETED, session_id, str(response.id)),
+    ]
 
 
 # Check 4: under take control the agent writes nothing, and every command the

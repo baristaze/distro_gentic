@@ -15,10 +15,11 @@ does; a chat message counts as a person's only as
   the handle expires. It is signed, the way a presigned URL is, so a
   read needs no session of its own and no database.
 - **The stream service's buffers**: the parts of each open stream, a
-  bounded buffer per stream. A stream is the parts of one step. Nothing
-  else: the step each adds up to is the record. No root hands the
-  service to the loop as its sink yet, so until a carrier brings a
-  runner's parts to it, a read finds nothing open.
+  bounded buffer per stream on the shared cache. A stream is the parts of
+  one step. Nothing else: the step each adds up to is the record. The
+  session runner writes them as its loop streams, and the API reads them,
+  so a viewer watches a step from a process other than the one that runs
+  it.
 
 It keeps no table. A person's command is the relay's `exec` item, and
 the record that it is theirs is an entry in the tenant's event stream.
@@ -31,6 +32,9 @@ the record that it is theirs is an entry in the tenant's event stream.
   the part after the last one the reader saw. A late viewer reads the
   buffered tail; a slow one loses the oldest parts, never the newest,
   and is told so.
+- **A stream opens and completes.** Each is an entry in the tenant's
+  event stream, under the session, and a hint on the realtime channel.
+  A completed stream is gone from the cache: its step is stored.
 - **Take control.** The agent stands down: a new writer epoch fences
   the run that held the loop, which parks on a hand-over, and what that
   run still runs on the host is stopped. The session, its workspace,
@@ -62,9 +66,18 @@ the record that it is theirs is an entry in the tenant's event stream.
   the session takes it.
 
 <!-- agents-only
-The service is `impl/stream.StreamServiceMemoryImpl`, which implements
-the loop's `StreamSinkInterface`, though no root passes it to
-`build_managers` as `stream_sink`; `StreamOptions` bounds parts and bytes a stream,
+The service is `impl/stream.StreamServiceImpl` over infra's
+`StreamsInterface` (Valkey when the cache is, memory otherwise), built
+by `root.build_stream`. It implements the loop's `StreamSinkInterface`:
+the session runner passes it to `build_managers` as `stream_sink`, and
+the API to `build_watch`. An emit, `opened`, or `completed` is queued
+(at most `max_queued`, the oldest dropped) and written in order by one
+task: parts of a step in one append to the stream `step_id` of the
+group `session_id`; `opened` and `completed` as `watch.stream.opened`
+and `watch.stream.completed`, appended under the session with the
+step's id, then published as `ENTITY_CHANGED`; `completed` ends the
+stream first. A read keeps a part only when it names the session and
+the step it is read under. `StreamOptions` bounds parts and bytes a stream,
 streams a session and overall, and closes a stream idle past `idle`. The
 handle is `rules.signed`/`rules.verified` (HMAC-SHA256 over a purpose
 prefix and the `Grant`), keyed by `WatchOptions.live_read_key`; none
@@ -83,8 +96,9 @@ current epoch, unless `stop`. ADR 2007 records the scoped read.
 
 ## How another namespace composes it
 
-A root builds it with `build_watch(managers, stream)`, over a stream
-service. No root hands that service to the loop as its sink yet: the
-API's is read by the watch alone, and finds nothing open. The API issues the handle, serves
+A root builds it with `build_watch(managers, stream)`, over the stream
+service `build_stream(infra, events)` builds. The session runner hands
+the same kind of service to the loop as its sink, so the API's reads
+find what the runners stream. The API issues the handle, serves
 the read by the handle alone, and serves take control, a command, and
 give back as the person.

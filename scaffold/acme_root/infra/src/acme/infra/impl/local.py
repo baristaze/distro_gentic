@@ -16,6 +16,8 @@ from acme.infra.queues.memory import QueueMemoryImpl
 from acme.infra.root import InfraInterface
 from acme.infra.secrets import SecretsInterface
 from acme.infra.secrets.local import SecretsLocalImpl
+from acme.infra.streams import StreamsInterface
+from acme.infra.streams.memory import StreamsMemoryImpl
 from acme.infra.topics import TopicsInterface
 from acme.infra.topics.memory import TopicsMemoryImpl
 from acme.infra.transports import CredentialBrokerInterface, TransportInterface
@@ -37,6 +39,7 @@ class InfraLocalImpl(InfraInterface):
         self._secrets = SecretsLocalImpl(root / "secrets.env")
         self._keys = KeyServiceMemoryImpl()
         self._outages = OutageSignalCacheImpl(self._caches[CacheScope.OUTAGE])
+        self._streams = StreamsMemoryImpl()
         self._workspaces = WorkspaceTwinImpl()
         self._broker = BrokerTwinImpl()
         self._transport = TransportTwinImpl(self._secrets, self._broker)
@@ -62,6 +65,9 @@ class InfraLocalImpl(InfraInterface):
     def get_outages(self) -> OutageSignalInterface:
         return self._outages
 
+    def get_streams(self) -> StreamsInterface:
+        return self._streams
+
     def get_workspaces(self) -> WorkspaceProviderInterface:
         return self._workspaces
 
@@ -80,6 +86,7 @@ class InfraLocalImpl(InfraInterface):
             self._secrets.describe(),
             self._keys.describe(),
             self._outages.describe(),
+            self._streams.describe(),
             self._workspaces.describe(),
             self._transport.describe(),
             self._broker.describe(),
@@ -89,12 +96,14 @@ class InfraLocalImpl(InfraInterface):
         for capability in (self._topics, self._buckets, self._queues, self._secrets, self._keys):
             await capability.start()
         await self._outages.start()
+        await self._streams.start()
         for runtime in (self._broker, self._workspaces, self._transport):
             await runtime.start()
 
     async def close(self) -> None:
         for runtime in (self._transport, self._workspaces, self._broker):
             await runtime.close()
+        await self._streams.close()
         await self._outages.close()
         for cache in self._caches.values():
             await cache.close()

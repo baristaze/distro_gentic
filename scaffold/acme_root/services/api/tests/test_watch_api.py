@@ -43,6 +43,7 @@ async def test_a_live_read_is_served_by_its_handle_alone_for_its_own_session(
     for n in range(3):
         container.stream.emit(part(mine.id, step, n))
     container.stream.emit(part(other.id, new_id(), 0))
+    await container.stream.flush()
 
     opened = await client.post(f"/v1/agent-sessions/{mine.id}/live", headers=owner)
     assert opened.status_code == 200, opened.text
@@ -55,6 +56,7 @@ async def test_a_live_read_is_served_by_its_handle_alone_for_its_own_session(
     assert stream["step_id"] == str(step) and [p["n"] for p in stream["parts"]] == [0, 1, 2]
 
     container.stream.emit(part(mine.id, step, 3))
+    await container.stream.flush()
     resumed = await client.get("/v1/live", params={"handle": handle, "after": f"{step}:2"})
     assert [p["n"] for p in resumed.json()["streams"][0]["parts"]] == [3]
 

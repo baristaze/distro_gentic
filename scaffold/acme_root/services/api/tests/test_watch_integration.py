@@ -46,6 +46,7 @@ async def test_a_viewer_watches_and_a_person_takes_control_over_the_stack(
         container.stream.emit(
             TextPart(session_id=session.id, step_id=step, n=0, index=0, text="Looking")
         )
+        await container.stream.flush()
         opened = await client.post(f"/v1/agent-sessions/{session.id}/live", headers=owner)
         read = await client.get("/v1/live", params={"handle": opened.json()["handle"]})
         assert read.status_code == 200, read.text

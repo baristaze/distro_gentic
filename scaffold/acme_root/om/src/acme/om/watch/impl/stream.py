@@ -1,19 +1,35 @@
-from collections import OrderedDict, deque
+import asyncio
+import logging
+from collections import deque
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from dataclasses import dataclass
+from datetime import timedelta
 from uuid import UUID
 
-from pydantic import Field
+from pydantic import Field, TypeAdapter, ValidationError
 
-from acme.om.base import Platform, utcnow
+from acme.infra.streams import StreamBounds, StreamsInterface
+from acme.infra.topics import EntityChangedPayload, Topics, TopicsInterface
+from acme.om.base import Platform, new_id
+from acme.om.context import TenantContext
+from acme.om.events import EventsManagerInterface
+from acme.om.events.manager import audit_event
 from acme.om.steps.types.stream import StreamPart
 from acme.om.watch.stream import StreamServiceInterface
 from acme.om.watch.types.live import LiveStream, Seen
 
+log = logging.getLogger(__name__)
+
+OPENED = "watch.stream.opened"
+COMPLETED = "watch.stream.completed"
+"""The changes a stream makes, each recorded in the tenant's event stream
+under its session, naming its step, and hinted on the realtime channel."""
+
+PARTS: TypeAdapter[StreamPart] = TypeAdapter(StreamPart)
+
 
 class StreamOptions(Platform):
-    # The most parts, and the most bytes of text, one stream holds: past
+    # The most parts, and the most bytes of them, one stream holds: past
     # either, its oldest part goes, never its newest.
     max_parts: int = Field(default=1024, gt=0)
     max_bytes: int = Field(default=256 * 1024, gt=0)
@@ -23,100 +39,165 @@ class StreamOptions(Platform):
     max_open: int = Field(default=4096, gt=0)
     # A stream that hears nothing this long is closed: its step is stored.
     idle: timedelta = Field(default=timedelta(minutes=2), gt=timedelta(0))
+    # The most parts and changes waiting in this process to be written: past
+    # it, the oldest goes, never the newest, and the loop never waits.
+    max_queued: int = Field(default=4096, gt=0)
+
+    def bounds(self) -> StreamBounds:
+        return StreamBounds(
+            entries=self.max_parts,
+            bytes=self.max_bytes,
+            streams=self.max_streams,
+            open=self.max_open,
+            idle=self.idle,
+        )
 
 
-@dataclass
-class _Buffer:
+@dataclass(frozen=True)
+class _Change:
+    """A stream opened or completed, under the run's context."""
+
+    kind: str
+    ctx: TenantContext
     session_id: UUID
-    heard_at: datetime
-    parts: deque[StreamPart] = field(default_factory=deque[StreamPart])
-    size: int = 0
-    last: int = -1
+    step_id: UUID
 
 
-def _size(part: StreamPart) -> int:
-    return len(part.text.encode())
-
-
-class StreamServiceMemoryImpl(StreamServiceInterface):
-    """Every open stream in this process, each a bounded buffer. A part
-    sent again, or out of its order, lands nothing. Nothing is awaited, so
-    an emit and a read never interleave."""
+class StreamServiceImpl(StreamServiceInterface):
+    """The parts this process emits, queued in their order and written to
+    the shared cache's streams by one task, so an emit never waits and a
+    stream's parts land in order: a stream per step, in a group per session.
+    A stream's opening and its completion are written in that order too:
+    each is an entry in the tenant's event stream and a hint on the channel,
+    and completing ends the stream, since its step holds it whole. `events`
+    is read when a change is written, so a root can build this before the
+    managers whose loop it is the sink of."""
 
     def __init__(
-        self, options: StreamOptions | None = None, clock: Callable[[], datetime] = utcnow
+        self,
+        streams: StreamsInterface,
+        topics: TopicsInterface,
+        events: Callable[[], EventsManagerInterface],
+        options: StreamOptions | None = None,
     ) -> None:
+        self._streams = streams
+        self._topics = topics
+        self._events = events
         self._options = options or StreamOptions()
-        self._clock = clock
-        # Every open stream by its step, the one that heard nothing longest
-        # first; and each session's, in the same order.
-        self._streams: OrderedDict[UUID, _Buffer] = OrderedDict()
-        self._sessions: dict[UUID, OrderedDict[UUID, None]] = {}
+        self._bounds = self._options.bounds()
+        self._queue: deque[StreamPart | _Change] = deque(maxlen=self._options.max_queued)
+        self._writer: asyncio.Task[None] | None = None
+        self._overflowed = False
 
     def emit(self, part: StreamPart) -> None:
-        now = self._clock()
-        self._expire(now)
-        buffer = self._streams.get(part.step_id)
-        if buffer is None:
-            buffer = self._open(part.session_id, part.step_id, now)
-        elif buffer.session_id != part.session_id:
-            # A step belongs to one session: a part that names another is
-            # not this stream's.
-            return
-        if part.n <= buffer.last:
-            return
-        buffer.parts.append(part)
-        buffer.size += _size(part)
-        buffer.last = part.n
-        buffer.heard_at = now
-        while len(buffer.parts) > 1 and (
-            len(buffer.parts) > self._options.max_parts or buffer.size > self._options.max_bytes
-        ):
-            buffer.size -= _size(buffer.parts.popleft())
-        self._streams.move_to_end(part.step_id)
-        self._sessions[part.session_id].move_to_end(part.step_id)
+        self._put(part)
 
-    def read(self, session_id: UUID, seen: Sequence[Seen]) -> tuple[LiveStream, ...]:
-        self._expire(self._clock())
+    def opened(self, ctx: TenantContext, session_id: UUID, step_id: UUID) -> None:
+        self._put(_Change(OPENED, ctx, session_id, step_id))
+
+    def completed(self, ctx: TenantContext, session_id: UUID, step_id: UUID) -> None:
+        self._put(_Change(COMPLETED, ctx, session_id, step_id))
+
+    async def read(self, session_id: UUID, seen: Sequence[Seen]) -> tuple[LiveStream, ...]:
         after = {mark.step_id: mark.n for mark in seen}
         streams: list[LiveStream] = []
-        for step_id in self._sessions.get(session_id, OrderedDict[UUID, None]()):
-            buffer = self._streams[step_id]
-            if not buffer.parts:
-                continue
-            last = after.get(step_id, -1)
-            first = buffer.parts[0].n
+        for held in await self._streams.read(session_id, after, self._bounds):
+            parts = tuple(
+                part
+                for part in (_part(entry) for _, entry in held.entries)
+                # A part is the stream's only when it names its session and
+                # its step: nothing else in the cache reaches this reader.
+                if part is not None and (part.session_id, part.step_id) == (session_id, held.stream)
+            )
+            last = after.get(held.stream, -1)
             streams.append(
                 LiveStream(
-                    step_id=step_id,
-                    first=first,
-                    parts=tuple(part for part in buffer.parts if part.n > last),
-                    dropped=last + 1 < first,
+                    step_id=held.stream,
+                    first=held.first,
+                    parts=parts,
+                    dropped=last + 1 < held.first,
                 )
             )
         return tuple(streams)
 
-    def _open(self, session_id: UUID, step_id: UUID, now: datetime) -> _Buffer:
-        own = self._sessions.setdefault(session_id, OrderedDict())
-        if len(own) >= self._options.max_streams:
-            self._close(next(iter(own)))
-        if len(self._streams) >= self._options.max_open:
-            self._close(next(iter(self._streams)))
-        buffer = _Buffer(session_id=session_id, heard_at=now)
-        self._streams[step_id] = buffer
-        self._sessions.setdefault(session_id, OrderedDict())[step_id] = None
-        return buffer
+    async def flush(self) -> None:
+        """Waits until what is queued now is written."""
+        while self._writer is not None and not self._writer.done():
+            await asyncio.wait({self._writer})
 
-    def _expire(self, now: datetime) -> None:
-        while self._streams:
-            step_id, buffer = next(iter(self._streams.items()))
-            if buffer.heard_at + self._options.idle > now:
-                return
-            self._close(step_id)
+    async def close(self) -> None:
+        await self.flush()
 
-    def _close(self, step_id: UUID) -> None:
-        buffer = self._streams.pop(step_id)
-        own = self._sessions[buffer.session_id]
-        del own[step_id]
-        if not own:
-            del self._sessions[buffer.session_id]
+    def _put(self, item: StreamPart | _Change) -> None:
+        if len(self._queue) == self._queue.maxlen and not self._overflowed:
+            self._overflowed = True
+            log.warning("the stream service is behind: the oldest queued parts go")
+        self._queue.append(item)
+        if self._writer is None or self._writer.done():
+            self._writer = asyncio.get_running_loop().create_task(self._write())
+
+    async def _write(self) -> None:
+        while self._queue:
+            item = self._queue.popleft()
+            try:
+                if isinstance(item, _Change):
+                    await self._change(item)
+                else:
+                    await self._append(item)
+            except Exception:
+                log.warning(
+                    "the stream service failed a write: the live view lost it", exc_info=True
+                )
+        self._overflowed = False
+
+    async def _append(self, first: StreamPart) -> None:
+        """The part and every part queued right behind it in its stream, in
+        one append."""
+        batch = [first]
+        while self._queue:
+            behind = self._queue[0]
+            if isinstance(behind, _Change) or (behind.session_id, behind.step_id) != (
+                first.session_id,
+                first.step_id,
+            ):
+                break
+            self._queue.popleft()
+            batch.append(behind)
+        await self._streams.append(
+            first.session_id,
+            first.step_id,
+            [(part.n, PARTS.dump_json(part)) for part in batch],
+            self._bounds,
+        )
+
+    async def _change(self, change: _Change) -> None:
+        if change.kind == COMPLETED:
+            await self._streams.end(change.session_id, change.step_id)
+        ctx = change.ctx
+        event = await self._events().append_event(
+            ctx,
+            audit_event(
+                ctx, new_id(), change.kind, change.session_id, {"step_id": str(change.step_id)}
+            ),
+        )
+        await self._topics.publish(
+            Topics.ENTITY_CHANGED,
+            EntityChangedPayload(
+                idempotency_key=event.id,
+                produced_at=event.produced_at,
+                org_id=event.org_id,
+                kind=event.kind,
+                target_id=event.target_id,
+                seq=event.seq,
+                actor_id=event.actor_id,
+            ),
+        )
+
+
+def _part(entry: bytes) -> StreamPart | None:
+    """A part as the cache holds it; an entry that is not one reads as
+    nothing, never an error."""
+    try:
+        return PARTS.validate_json(entry)
+    except ValidationError:
+        return None

@@ -37,8 +37,7 @@ from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.trust.root import build_trust_operator
 from acme.om.watch.impl.manager import WatchOptions
-from acme.om.watch.impl.stream import StreamServiceMemoryImpl
-from acme.om.watch.root import build_watch
+from acme.om.watch.root import build_stream, build_watch
 from acme.om.watch.stream import StreamServiceInterface
 from acme.services.api.gateway.ratelimit import RateLimit, RateLimitOptions, RefusedAddresses
 from acme.services.api.services import ServicesInterface
@@ -244,7 +243,8 @@ class AppContainer:
         # Where a tenant connects a system, and where a person reads and
         # clears what waits on them.
         intake = build_intake(storage, managers, integrations=integrations)
-        stream = StreamServiceMemoryImpl()
+        # The streams the runners write, read from the shared cache.
+        stream = build_stream(infra, lambda: managers.events)
         watch = build_watch(managers, stream, WatchOptions(live_read_key=settings.live_read_key))
         services = build_services(
             managers,
@@ -288,6 +288,7 @@ class AppContainer:
             log.warning("no live-read key: every live read of a session is refused")
 
     async def close(self) -> None:
+        await self.stream.close()
         await self.integrations.close()
         await self.infra.close()
         await self.storage.close()
