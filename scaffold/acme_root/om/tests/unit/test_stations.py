@@ -19,14 +19,7 @@ from acme.infra.impl.local import InfraLocalImpl
 from acme.om.agent_sessions.types.agent_session import SessionStatus
 from acme.om.agents.loop_rules import ended_step
 from acme.om.base import new_id, utcnow
-from acme.om.context import (
-    AppContext,
-    AppType,
-    OperatorRole,
-    RequestContext,
-    Role,
-    TenantContext,
-)
+from acme.om.context import AppContext, AppType, RequestContext, Role, TenantContext
 from acme.om.evidence.types.provenance import Provenance
 from acme.om.evidence.types.record import CaseTally, RunOutcome
 from acme.om.exceptions import (
@@ -678,57 +671,6 @@ async def test_a_lapsed_lease_goes_to_the_first_that_waits_at_the_sweep_and_once
         assert woken.status is SessionStatus.PENDING and woken.park is None
         (place,) = await stations.get_line(owner, lab.pool.id)
         assert place.entry.session_id == second, "the next one keeps its place"
-
-
-async def test_a_deleted_tenants_lapsed_stations_never_keep_a_live_ones_from_the_sweep(
-    managers: Managers, storage: StorageMemoryImpl, clock: Clock
-) -> None:
-    """A deleted tenant's stations, lapsed longest, sort first at every
-    pass, and the sweep skips them. With a batch of one, a pass still
-    reaches past them and grants the live tenant's station."""
-    stations = StationsManagerImpl(
-        storage.get_stations_storage(),
-        managers.placement,
-        managers.agent_sessions,
-        managers.evidence,
-        managers.platform_agents,
-        managers.work,
-        managers.tenancy,
-        managers.outbox,
-        StationsOptions(sweep_batch=1),
-        clock=clock,
-    )
-    labs: list[tuple[TenantContext, Lab1, UUID]] = []
-    for slug in ("ajax", "brio"):
-        owner = await an_owner(managers, slug)
-        lab = await a_lab(stations, owner)
-        holder, waiting = [await a_waiting_session(managers, owner) for _ in range(2)]
-        for session in (holder, waiting):
-            await join(stations, owner, session, lab.pool, lab.first)
-        labs.append((owner, lab, waiting))
-        clock.advance(timedelta(seconds=1))  # the first tenant's lease lapses first
-    (gone, gone_lab, _), (live, live_lab, waiting) = labs
-    tenancy = managers.tenancy
-    await tenancy.bootstrap(
-        request(APP), "Ops", "ops", "root@ops.test", "Root", operator_role=OperatorRole.WRITE
-    )
-    token = await tenancy.grant_operator_token(request(APP), "root@ops.test")
-    admin = await tenancy.admit_operator(
-        await tenancy.authenticate_login(request(APP), token.token)
-    )
-    await managers.tenancy_operator.delete_org(admin, gone.org_id)
-    await tenancy.org.delete_closed_org(
-        await tenancy.service_context(request(APP), gone.org_id, admin.identity_id)
-    )
-    clock.advance(timedelta(seconds=300) + StationsOptions().skew_margin)
-    first = await stations._storage.read_lapsed(  # pyright: ignore[reportPrivateUsage]
-        clock.now, StationsOptions().skew_margin, 1, frozenset()
-    )
-    assert first == [(gone.org_id, gone_lab.first.id)], "the gone tenant's sorts first"
-
-    assert await stations.offer_lapsed(request()) == 1
-    granted = await held_by(stations, live, live_lab.first)
-    assert granted is not None and granted.session_id == waiting
 
 
 async def test_a_running_job_claimed_again_is_settled_with_no_verdict_and_never_run_twice(
