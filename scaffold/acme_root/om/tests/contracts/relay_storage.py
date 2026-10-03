@@ -30,6 +30,7 @@ CROSS_TENANT_CASES: frozenset[str] = frozenset(
         "create_item",
         "read_item",
         "read_items_by_key",
+        "read_running",
         "write_item",
         "add_part",
         "read_parts",
@@ -188,6 +189,27 @@ class RelayStorageContract:
         assert [
             (org, item.id) for org, item in found if item.id in {ended.id, live.id, queued.id}
         ] == [(ours, ended.id)]
+
+    async def test_a_sessions_running_items_are_read_oldest_first_and_no_others(
+        self, storage: RelayStorageInterface
+    ) -> None:
+        org, other, session = new_id(), new_id(), new_id()
+        first, second, queued, elsewhere = (
+            make_item(session),
+            make_item(session),
+            make_item(session),
+            make_item(),
+        )
+        for item in (second, first, queued, elsewhere):
+            await storage.create_item(org, item)
+        for item in (second, first, elsewhere):
+            await storage.write_item(org, running(item, timedelta(minutes=5)), 1)
+        found = await storage.read_running(org, session, 10)
+        assert [item.id for item in found] == [
+            item.id for item in sorted([first, second], key=lambda i: (i.created_at, i.id))
+        ]
+        assert len(await storage.read_running(org, session, 1)) == 1
+        assert await storage.read_running(other, session, 10) == []
 
     async def test_items_of_another_tenant_are_not_read_or_written(
         self, storage: RelayStorageInterface

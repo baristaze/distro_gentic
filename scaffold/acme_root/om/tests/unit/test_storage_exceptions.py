@@ -308,7 +308,8 @@ REQUEST_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
         ("HostsManagerInterface", "heartbeat"),
         ("HostsManagerInterface", "claim"),
         # The relay runs below any principal: the runner's transport sends,
-        # watches, stops, and recovers a session's exec items, and a host
+        # watches, stops, and recovers a session's exec items, the watch
+        # reads and interrupts a session's running ones, and a host
         # reads, streams, settles, and renews the items it holds and reads its
         # control messages. Each mints its tenant's service context from this
         # stage, as the claim does.
@@ -316,6 +317,8 @@ REQUEST_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
         ("RelayManagerInterface", "watch"),
         ("RelayManagerInterface", "stop"),
         ("RelayManagerInterface", "outcome_of"),
+        ("RelayManagerInterface", "running"),
+        ("RelayManagerInterface", "interrupt_running"),
         ("RelayManagerInterface", "detail"),
         ("RelayManagerInterface", "push_part"),
         ("RelayManagerInterface", "push_result"),
@@ -332,6 +335,9 @@ REQUEST_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
         ("StationsManagerInterface", "claim"),
         ("StationsManagerInterface", "renew"),
         ("StationsManagerInterface", "report"),
+        # A live read, by its handle alone: the handle is the authority, as a
+        # presigned URL is, and the read mints no context.
+        ("WatchManagerInterface", "read_live"),
         # The sweep's requeue across tenants: a dead letter it makes is
         # written under its tenant's service context, minted from this stage
         # as the claim mints one.

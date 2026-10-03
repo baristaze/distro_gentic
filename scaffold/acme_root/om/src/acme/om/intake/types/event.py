@@ -27,6 +27,7 @@ class Arrival(StrEnum):
     table, with who wrote it."""
 
     MESSAGE = "message"  # someone addresses the agent, as in chat
+    CHAT = "chat"  # a chat message that does not address the agent
     COMMENT = "comment"  # a comment on the agent's work
     TICKET = "ticket"  # a ticket reopened or reassigned to the agent
     CHECK = "check"  # a check on the agent's work finished
