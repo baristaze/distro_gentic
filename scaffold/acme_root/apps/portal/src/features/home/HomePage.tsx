@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { AppNav } from "../../app/AppNav";
 import { Banner, Card, Muted, Page } from "../../design/kit";
 import { tokens } from "../../design/tokens";
@@ -35,6 +36,9 @@ export function HomePage() {
           </dl>
         </Card>
       )}
+      <Card title="Sessions" id="sessions">
+        <Link to="/sessions">The org&apos;s agent sessions</Link>
+      </Card>
       <Muted style={{ fontSize: tokens.font.size.sm }}>The product&apos;s own screens go here.</Muted>
     </Page>
   );

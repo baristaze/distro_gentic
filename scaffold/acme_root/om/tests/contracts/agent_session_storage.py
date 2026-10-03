@@ -186,7 +186,7 @@ class AgentSessionStorageContract:
         restored = deleted.model_copy(update={"deleted_at": None, "deleted_by": None, "version": 3})
         await storage.write_session(org, restored, 2, ())
         page = await storage.read_sessions(org, None, None, 10)
-        assert page == sorted([kept, restored], key=lambda session: session.id)
+        assert page == sorted([kept, restored], key=lambda session: session.id, reverse=True)
 
     async def test_read_purgeable_answers_sessions_deleted_before_the_cut_with_their_tenant(
         self, storage: AgentSessionStorageInterface
@@ -338,7 +338,7 @@ class AgentSessionStorageContract:
         assert await storage.read_session(org_b, session.id) is None
         assert await storage.read_session(org_a, session.id) == session
 
-    async def test_read_sessions_by_status_and_tenant_in_id_order(
+    async def test_read_sessions_by_status_and_tenant_newest_first(
         self, storage: AgentSessionStorageInterface
     ) -> None:
         org, elsewhere = new_id(), new_id()
@@ -349,17 +349,30 @@ class AgentSessionStorageContract:
         waiting = parked(sessions[1], version=2)
         await storage.write_session(org, waiting, 1, ())
         assert await storage.read_sessions(org, None, None, 10) == [
-            sessions[0],
-            waiting,
             sessions[2],
+            waiting,
+            sessions[0],
         ]
-        assert await storage.read_sessions(org, None, sessions[0].id, 1) == [waiting]
+        assert await storage.read_sessions(org, None, sessions[2].id, 1) == [waiting]
         assert await storage.read_sessions(org, SessionStatus.PARKED, None, 10) == [waiting]
         assert await storage.read_sessions(org, SessionStatus.IDLE, None, 10) == [
-            sessions[0],
             sessions[2],
+            sessions[0],
         ]
         assert await storage.read_sessions(new_id(), None, None, 10) == []
+
+    async def test_read_sessions_pages_from_the_newest_with_no_gap(
+        self, storage: AgentSessionStorageInterface
+    ) -> None:
+        org = new_id()
+        sessions = sorted((make_session() for _ in range(5)), key=lambda s: s.id)
+        for session in sessions:
+            assert await storage.create_session(org, session, ())
+        first = await storage.read_sessions(org, None, None, 2)
+        second = await storage.read_sessions(org, None, first[-1].id, 2)
+        last = await storage.read_sessions(org, None, second[-1].id, 2)
+        assert first == [sessions[4], sessions[3]]
+        assert first + second + last == sessions[::-1]
 
     async def test_write_is_a_compare_and_set_on_the_version(
         self, storage: AgentSessionStorageInterface

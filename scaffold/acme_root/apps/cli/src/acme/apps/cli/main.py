@@ -452,7 +452,7 @@ def list_sessions(
     as_json: Json = False,
     api: Api = None,
 ) -> None:
-    """The org's sessions, one a line, by id, every page read."""
+    """The org's sessions, one a line, newest first, every page read."""
 
     async def go(client: ApiClient) -> None:
         cursor: str | None = None
