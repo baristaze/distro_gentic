@@ -29,10 +29,7 @@ class PlacementHostsImpl(PlacementInterface):
         self._cloud = cloud
 
     async def inside_wall(self, org_id: UUID, session_id: UUID) -> bool:
-        session = await self._sessions.read_session(org_id, session_id)
-        root_id = session_id if session is None else session.root_id
-        placed = await self._storage.read_placement(org_id, root_id)
-        return placed is not None and placed.pool_id is not None
+        return await inside_wall(self._storage, self._sessions, org_id, session_id)
 
     async def executor_of(self, org_id: UUID, session_id: UUID) -> Executor:
         if not await self.inside_wall(org_id, session_id):
@@ -41,3 +38,18 @@ class PlacementHostsImpl(PlacementInterface):
             f"session {session_id} is pinned to its tenant's hosts, and no host holds "
             "its workspace yet; its calls never run on the platform's machines"
         )
+
+
+async def inside_wall(
+    storage: HostsStorageInterface,
+    sessions: AgentSessionStorageInterface,
+    org_id: UUID,
+    session_id: UUID,
+) -> bool:
+    """Whether a session runs inside its tenant's wall: its tree's root is
+    pinned to a pool. A session no agent session is, such as a validation
+    session, is its own root, and no principal pinned it."""
+    session = await sessions.read_session(org_id, session_id)
+    root_id = session_id if session is None else session.root_id
+    placed = await storage.read_placement(org_id, root_id)
+    return placed is not None and placed.pool_id is not None

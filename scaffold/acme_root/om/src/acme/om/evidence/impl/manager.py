@@ -10,7 +10,12 @@ from acme.om.context import Permission, Role, TenantContext
 from acme.om.evidence.collector import collect, digest
 from acme.om.evidence.executor import ExecutorInterface
 from acme.om.evidence.manager import EvidenceManagerInterface
-from acme.om.evidence.rules import execution_request, policy_key, protection_target
+from acme.om.evidence.rules import (
+    compatibility_refusal,
+    execution_request,
+    policy_key,
+    protection_target,
+)
 from acme.om.evidence.storage import EvidenceStorageInterface
 from acme.om.evidence.types.inference import Inference, InferenceKind, InferencePage
 from acme.om.evidence.types.policy import ValidationPolicy
@@ -203,6 +208,47 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
         )
         if isinstance(request, str):
             raise PreconditionFailed(request)
+        return await self._run(ctx, request)
+
+    async def run_check(
+        self,
+        ctx: TenantContext,
+        session_id: UUID,
+        project_id: UUID,
+        check: str,
+        version: str,
+        source: str,
+    ) -> Validation:
+        ctx.require(Permission.WRITE)
+        kept = await self._storage.read_validations(ctx.org_id, session_id, None, 1)
+        if kept:
+            return kept[0]
+        policy = await self._storage.read_policy(ctx.org_id, policy_key(project_id))
+        if policy is None:
+            raise PreconditionFailed(f"the project {project_id} declares no validation policy")
+        declared = next((each for each in policy.checks if each.name == check), None)
+        if declared is None:
+            raise PreconditionFailed(f"the project {project_id} declares no check {check}")
+        refusal = compatibility_refusal(declared, await self._executor.offer(ctx))
+        if refusal is not None:
+            raise PreconditionFailed(refusal)
+        request = ExecutionRequest(
+            session_id=session_id,
+            project=policy.project,
+            purpose=RunPurpose.VALIDATION,
+            version=version,
+            source=source,
+            checks=(declared,),
+            trials=(1,),
+            protected=policy.protected,
+        )
+        return await self._run(ctx, request)
+
+    async def _run(self, ctx: TenantContext, request: ExecutionRequest) -> Validation:
+        """Runs `request` on the executor and keeps what it wrote, every run
+        with its validation or none: results past the bound, that do not hash
+        to what the executor wrote, or that hold anything not asked for are
+        `ValidationFailed`, and nothing is kept."""
         report = await self._executor.run(ctx, request)
         if len(report.results) > self._options.max_results_bytes:
             raise ValidationFailed(
@@ -216,9 +262,9 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
         records = collect(
             report.results,
             executor=report.executor,
-            session_id=session_id,
+            session_id=request.session_id,
             project=request.project,
-            purpose=purpose,
+            purpose=request.purpose,
             validation_id=validation_id,
             now=now,
         )
@@ -226,9 +272,9 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
         validation = Validation(
             id=validation_id,
             created_at=now,
-            session_id=session_id,
+            session_id=request.session_id,
             project=request.project,
-            purpose=purpose,
+            purpose=request.purpose,
             version=request.version,
             source=request.source,
             executor=report.executor,

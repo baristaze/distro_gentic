@@ -26,10 +26,10 @@ def make_validation() -> ValidationSession:
         updated_at=now,
         created_by=actor,
         updated_by=actor,
-        lab_id=new_id(),
+        project_id=new_id(),
         check_name="report.totals",
-        check_version="v1.4.0",
-        parameters={"trials": 30, "pool": "nightly"},
+        head="c" * 40,
+        base="b" * 40,
     )
 
 

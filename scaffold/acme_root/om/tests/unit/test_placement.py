@@ -1,8 +1,8 @@
 """Placement over memory: each kind of a session's work goes to the lane
-where its environment is and is claimed only from it, a host or a daemon
-is claimed for by the control plane by its identity alone, a tenant's
-fair share is held at the claim, and a runner that lost its claim is
-refused while a new claim from the same lane recovers the session."""
+where its environment is and is claimed only from it, a host is claimed
+for by the control plane by its identity alone, a tenant's fair share is
+held at the claim, and a runner that lost its claim is refused while a new
+claim from the same lane recovers the session."""
 
 import asyncio
 from collections.abc import Mapping
@@ -35,7 +35,6 @@ from acme.om.placement.rules import (
     CLAIMED_THROUGH_THE_GATEWAY,
     claims_of,
     host_lane,
-    lab_lane,
     own_lane,
     pool_lane,
     tier_lane,
@@ -137,10 +136,6 @@ def release_on(host: UUID) -> dict[str, object]:
     return {"operation": WorkspaceOperation.RELEASE.value, "host_id": str(host)}
 
 
-def station_in(lab: UUID) -> dict[str, object]:
-    return {"lab_id": str(lab)}
-
-
 def items_of(storage: StorageMemoryImpl) -> list[WorkItem]:
     work = storage.get_work_storage()
     assert isinstance(work, WorkStorageMemoryImpl)
@@ -152,13 +147,13 @@ def items_of(storage: StorageMemoryImpl) -> list[WorkItem]:
 
 async def test_each_kind_goes_to_the_lane_where_its_environment_is(managers: Managers) -> None:
     owner = await an_owner(managers)
-    host, pool, lab = new_id(), new_id(), new_id()
+    host, pool = new_id(), new_id()
     cases = {
         (WorkKind.LOOP, ()): tier_lane("standard"),
         (WorkKind.EXEC, ("host",)): host_lane(host),
         (WorkKind.WORKSPACE, ("prepare",)): pool_lane(pool),
         (WorkKind.WORKSPACE, ("release",)): host_lane(host),
-        (WorkKind.STATION, ("lab",)): lab_lane(lab),
+        (WorkKind.VALIDATION, ()): "default",
         (WorkKind.NOOP, ()): "default",
     }
     payloads: dict[tuple[str, ...], dict[str, object]] = {
@@ -166,7 +161,6 @@ async def test_each_kind_goes_to_the_lane_where_its_environment_is(managers: Man
         ("host",): exec_on(host),
         ("prepare",): prepare_in(pool),
         ("release",): release_on(host),
-        ("lab",): station_in(lab),
     }
     for (kind, which), lane in cases.items():
         queued = await managers.work.enqueue(owner, an_item(owner, kind, payloads[which]))
@@ -208,8 +202,8 @@ async def test_a_relayed_loop_lands_in_its_tenants_lane(
     assert loop.lane == tier_lane("pro") and loop.target_id == session.id
 
 
-# Each kind is claimed only from its own lane, and a host or a daemon by
-# the control plane, for its identity.
+# Each kind is claimed only from its own lane, and a host by the control
+# plane, for its identity.
 
 
 async def test_each_kind_is_claimed_only_from_its_own_lane(
@@ -217,9 +211,8 @@ async def test_each_kind_is_claimed_only_from_its_own_lane(
 ) -> None:
     owner = await an_owner(managers)
     mine, theirs = new_id(), new_id()
-    my_pool, their_pool, lab = new_id(), new_id(), new_id()
+    my_pool, their_pool = new_id(), new_id()
     host = Claimant(kind=ClaimantKind.HOST, id=mine, org_id=owner.org_id, pool_id=my_pool)
-    daemon = Claimant(kind=ClaimantKind.DAEMON, id=new_id(), org_id=owner.org_id, lab_id=lab)
     enqueued: dict[str, WorkItem] = {}
     for name, kind, payload in (
         ("loop", WorkKind.LOOP, {}),
@@ -228,7 +221,6 @@ async def test_each_kind_is_claimed_only_from_its_own_lane(
         ("my prepare", WorkKind.WORKSPACE, prepare_in(my_pool)),
         ("their prepare", WorkKind.WORKSPACE, prepare_in(their_pool)),
         ("my release", WorkKind.WORKSPACE, release_on(mine)),
-        ("station", WorkKind.STATION, station_in(lab)),
     ):
         enqueued[name] = await managers.work.enqueue(owner, an_item(owner, kind, payload))
 
@@ -245,7 +237,7 @@ async def test_each_kind_is_claimed_only_from_its_own_lane(
     )
 
     # The host: its own lane first, then its pool's; nothing of another
-    # host's or another pool's, and no station.
+    # host's or another pool's.
     handed: list[WorkItem] = []
     while (claimed := await managers.placement.claim_for(request(), host, LEASE)) is not None:
         handed.append(claimed[1])
@@ -253,12 +245,6 @@ async def test_each_kind_is_claimed_only_from_its_own_lane(
         enqueued[name].id for name in ("my exec", "my release", "my prepare")
     ]
     assert {i.claimed_by for i in handed} == {f"host:{mine}"}
-
-    # The daemon: its lab's station work, and nothing else.
-    station = await managers.placement.claim_for(request(), daemon, LEASE)
-    assert station is not None and station[1].id == enqueued["station"].id
-    assert station[1].claimed_by == f"daemon:{daemon.id}"
-    assert await managers.placement.claim_for(request(), daemon, LEASE) is None
 
     # What is left waits for the host and the pool it was placed for.
     left = {(i.id, i.lane) for i in items_of(storage) if i.status is WorkStatus.QUEUED}
@@ -269,20 +255,16 @@ async def test_each_kind_is_claimed_only_from_its_own_lane(
 
 
 def test_a_claimants_lanes_and_kinds_are_read_off_its_identity_alone() -> None:
-    host_id, pool, lab, org = new_id(), new_id(), new_id(), new_id()
+    host_id, pool, org = new_id(), new_id(), new_id()
     host = Claimant(kind=ClaimantKind.HOST, id=host_id, org_id=org, pool_id=pool)
-    daemon = Claimant(kind=ClaimantKind.DAEMON, id=new_id(), org_id=org, lab_id=lab)
     assert claims_of(host) == (
         (host_lane(host_id), (WorkKind.EXEC, WorkKind.WORKSPACE)),
         (pool_lane(pool), (WorkKind.WORKSPACE,)),
     )
-    assert claims_of(daemon) == ((lab_lane(lab), (WorkKind.STATION,)),)
-    claimed = {kind for c in (host, daemon) for _, kinds in claims_of(c) for kind in kinds}
+    claimed = {kind for _, kinds in claims_of(host) for kind in kinds}
     assert claimed == CLAIMED_THROUGH_THE_GATEWAY
-    with pytest.raises(ValueError, match="a host names its pool"):
-        Claimant(kind=ClaimantKind.HOST, id=new_id(), lab_id=lab)
-    with pytest.raises(ValueError, match="a daemon sits in a tenant's wall"):
-        Claimant(kind=ClaimantKind.DAEMON, id=new_id(), lab_id=lab)
+    with pytest.raises(ValueError, match="pool_id"):
+        Claimant.model_validate({"kind": ClaimantKind.HOST, "id": new_id()})
 
 
 async def test_work_routed_into_another_tenants_wall_is_never_handed_over(

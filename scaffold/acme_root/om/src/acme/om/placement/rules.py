@@ -7,14 +7,9 @@ from collections.abc import Mapping
 from datetime import timedelta
 from uuid import UUID
 
-from acme.om.placement.types.claimant import Claimant, ClaimantKind
+from acme.om.placement.types.claimant import Claimant
 from acme.om.placement.types.share import FairShare
-from acme.om.placement.types.work import (
-    ExecPayload,
-    StationPayload,
-    WorkspaceOperation,
-    WorkspacePayload,
-)
+from acme.om.placement.types.work import ExecPayload, WorkspaceOperation, WorkspacePayload
 from acme.om.work.types.work_item import WorkKind
 
 DEFAULT_TIER = "standard"
@@ -22,11 +17,9 @@ DEFAULT_TIER = "standard"
 
 LOOP_LANE_PREFIX = "loop:"
 
-CLAIMED_THROUGH_THE_GATEWAY: frozenset[WorkKind] = frozenset(
-    {WorkKind.EXEC, WorkKind.WORKSPACE, WorkKind.STATION}
-)
-"""The kinds a host or a daemon claims through the gateway (`claims_of`),
-which no worker of the platform's own handles."""
+CLAIMED_THROUGH_THE_GATEWAY: frozenset[WorkKind] = frozenset({WorkKind.EXEC, WorkKind.WORKSPACE})
+"""The kinds a host claims through the gateway (`claims_of`), which no
+worker of the platform's own handles."""
 
 
 def tier_lane(plan_tier: str) -> str:
@@ -83,13 +76,8 @@ def pool_lane(pool_id: UUID) -> str:
     return f"pool:{pool_id}"
 
 
-def lab_lane(lab_id: UUID) -> str:
-    """A lab's lane: work on the stations its daemon serves."""
-    return f"lab:{lab_id}"
-
-
 def placed_lane(kind: WorkKind, payload: Mapping[str, object]) -> str | None:
-    """The lane where a kind a host or a daemon runs goes, read off its
+    """The lane where a kind a host runs goes, read off its
     payload; None for every other kind. The payload is the shape
     `WORK_PAYLOADS` fixes for the kind, which the enqueue holds it to."""
     if kind is WorkKind.EXEC:
@@ -101,24 +89,17 @@ def placed_lane(kind: WorkKind, payload: Mapping[str, object]) -> str | None:
             return pool_lane(workspace.pool_id)
         assert workspace.host_id is not None
         return host_lane(workspace.host_id)
-    if kind is WorkKind.STATION:
-        return lab_lane(StationPayload.model_validate(payload).lab_id)
     return None
 
 
 def claims_of(claimant: Claimant) -> tuple[tuple[str, tuple[WorkKind, ...]], ...]:
     """The lanes a claimant takes work from, in the order it takes it, and
     the kinds it takes from each, all read off its identity. A host runs
-    what its workspaces need first, then prepares one for its pool; a daemon
-    serves its lab."""
-    if claimant.kind is ClaimantKind.HOST:
-        assert claimant.pool_id is not None  # the identity's own rule
-        return (
-            (host_lane(claimant.id), (WorkKind.EXEC, WorkKind.WORKSPACE)),
-            (pool_lane(claimant.pool_id), (WorkKind.WORKSPACE,)),
-        )
-    assert claimant.lab_id is not None
-    return ((lab_lane(claimant.lab_id), (WorkKind.STATION,)),)
+    what its workspaces need first, then prepares one for its pool."""
+    return (
+        (host_lane(claimant.id), (WorkKind.EXEC, WorkKind.WORKSPACE)),
+        (pool_lane(claimant.pool_id), (WorkKind.WORKSPACE,)),
+    )
 
 
 def admits(ahead: int, concurrency: int) -> bool:

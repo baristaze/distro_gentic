@@ -1,6 +1,6 @@
 """The placement swimlane: where each kind of a session's work runs, the
-claim the control plane makes for a host or a daemon, and each tenant's
-fair share of the loops, held at the claim."""
+claim the control plane makes for a host, and each tenant's fair share of
+the loops, held at the claim."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from acme.om.placement.types.share import FairShare
 
 if TYPE_CHECKING:
     # The work queue fixes its payloads by kind, and the payloads of the
-    # kinds a host or a daemon runs are this namespace's, so the work item
+    # kinds a host runs are this namespace's, so the work item
     # is named here for the type checker alone.
     from acme.om.placement.types.standing import FleetCounts, HostStanding, SessionStanding
     from acme.om.work.types.work_item import WorkItem
@@ -29,8 +29,8 @@ class PlacementManagerInterface(ABC):
         to its tenant's lane, a lane of its own when its share says so and
         its plan tier's otherwise; a command to the host that holds its
         workspace; a workspace to prepare to its placement's pool, and one
-        to release or purge to its host; station work to its lab. Any other
-        kind keeps the lane it came with, the platform's own."""
+        to release or purge to its host. Any other kind keeps the lane it
+        came with, the platform's own."""
         ...
 
     @abstractmethod
@@ -48,7 +48,7 @@ class PlacementManagerInterface(ABC):
         self, rctx: RequestContext, claimant: Claimant, lease: timedelta
     ) -> tuple[TenantContext, WorkItem] | None:
         """Platform-internal: the claim the control plane makes on behalf of
-        a host or a daemon outside its processes, which holds no database
+        a host outside its processes, which holds no database
         credential. The lanes and the kinds come from the claimant's
         identity, never from its call (`rules.claims_of`), and the claim
         carries its name. An item of another tenant than a claimant inside

@@ -17,13 +17,11 @@ environment is.
   | `LOOP` | `loop:<plan tier>`, or `loop:org:<org id>` for a tenant with a lane of its own | a session runner, from the queue directly |
   | `EXEC` | `host:<host id>`, the host that holds the workspace | that host, through the gateway |
   | `WORKSPACE` | `pool:<pool id>` to prepare; `host:<host id>` to release or purge | a host of the pool, or the holding host, through the gateway |
-  | `STATION` | `lab:<lab id>` | the lab's daemon, through the gateway |
   | the platform's own | `default` | the maintenance worker |
 
-- **A claimant**: a host or a daemon outside the platform's processes,
-  as its credential says it is: its id, the tenant whose wall it sits
-  in (none for a host of the platform's own pool), and its pool or its
-  lab.
+- **A claimant**: a host outside the platform's processes, as its
+  credential says it is: its id, the tenant whose wall it sits in (none
+  for a host of the platform's own pool), and its pool.
 - **A fair share**: each tenant's plan tier, whether its loops run in a
   lane of their own, and how many of them run at once. A tenant with
   none has the default share: the `standard` tier and eight loops.
@@ -32,11 +30,11 @@ environment is.
 
 - **Enqueue.** The work manager asks placement for the lane of every
   item it enqueues, so no producer picks one: a loop goes to its
-  tenant's lane, and a kind a host or a daemon runs to the lane its
+  tenant's lane, and a kind a host runs to the lane its
   payload names.
 - **Claim by a runner.** A session runner serves one loop lane and
   claims from the queue as every worker does.
-- **Claim for a host or a daemon.** The control plane claims on its
+- **Claim for a host.** The control plane claims on its
   behalf, from the lanes its identity names and nothing in its call. A
   claimant inside one tenant's wall is never handed another tenant's
   item: the item fails for good, a dead letter.
@@ -74,7 +72,7 @@ environment is.
 
 ## How another namespace composes it
 
-A kind a host or a daemon runs names where it runs in its payload
-(`types/work.py`): a host, a pool, or a lab. The gateway resolves a
+A kind a host runs names where it runs in its payload
+(`types/work.py`): a host or a pool. The gateway resolves a
 caller's credential to a `Claimant` and calls `claim_for`; it never
 passes a lane or a kind.

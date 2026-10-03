@@ -4,10 +4,10 @@ from uuid import UUID
 
 from acme.om.base import Platform, utcnow
 from acme.om.context import Permission, TenantContext
-from acme.om.exceptions import NotFound, PreconditionFailed
+from acme.om.evidence import EvidenceManagerInterface
+from acme.om.exceptions import NotFound, PreconditionFailed, ValidationFailed
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import OutboxRow, outbox_row, versioned_row
-from acme.om.placement.types.work import StationPayload
 from acme.om.platform_agents.manager import PlatformAgentsManagerInterface
 from acme.om.platform_agents.storage import PlatformAgentsStorageInterface
 from acme.om.platform_agents.types.validation import (
@@ -16,7 +16,7 @@ from acme.om.platform_agents.types.validation import (
     ValidationStatus,
 )
 from acme.om.tenancy import TenancyManagerInterface
-from acme.om.work.types.work_item import WorkKind, work_row_kind
+from acme.om.work.types.work_item import ValidationPayload, WorkKind, work_row_kind
 
 CREATED = "platform_agents.validation_session.created"
 UPDATED = "platform_agents.validation_session.updated"
@@ -32,12 +32,14 @@ class PlatformAgentsManagerImpl(PlatformAgentsManagerInterface):
         storage: PlatformAgentsStorageInterface,
         tenancy: TenancyManagerInterface,
         relay: OutboxRelayInterface,
+        evidence: EvidenceManagerInterface,
         options: PlatformAgentsOptions,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._storage = storage
         self._tenancy = tenancy
         self._relay = relay
+        self._evidence = evidence
         self._options = options
         self._clock = clock
 
@@ -52,21 +54,21 @@ class PlatformAgentsManagerImpl(PlatformAgentsManagerInterface):
             updated_at=now,
             created_by=ctx.user_id,
             updated_by=ctx.user_id,
-            lab_id=start.lab_id,
+            project_id=start.project_id,
             check_name=start.check_name,
-            check_version=start.check_version,
-            parameters=start.parameters,
+            head=start.head,
+            base=start.base,
         )
-        # The station work lands with the session: placement reads the lab
-        # off its payload and puts it on that lab's lane. No loop is asked
+        # Its work lands with the session, on the platform's own lane: the
+        # platform's worker runs it on a fresh executor. No loop is asked
         # for, so no runner claims it and no model is called.
         rows = (
             versioned_row(ctx, CREATED, session.id, session.version),
             outbox_row(
                 ctx,
-                work_row_kind(WorkKind.STATION),
+                work_row_kind(WorkKind.VALIDATION),
                 session.id,
-                StationPayload(lab_id=start.lab_id).model_dump(mode="json"),
+                ValidationPayload().model_dump(mode="json"),
             ),
         )
         if not await self._storage.create_validation(ctx.org_id, session, rows):
@@ -80,6 +82,24 @@ class PlatformAgentsManagerImpl(PlatformAgentsManagerInterface):
         if found is None:
             raise NotFound(f"validation session {session_id} not found")
         return found
+
+    async def run_validation(self, ctx: TenantContext, session_id: UUID) -> ValidationSession:
+        ctx.require(Permission.WRITE)
+        stored = await self.get_validation(ctx, session_id)
+        if stored.status is ValidationStatus.FINISHED:
+            return stored
+        # The evidence keeps the run with the session's id, and answers it
+        # again when asked again: a retry after the run was kept runs
+        # nothing more.
+        validation = await self._evidence.run_check(
+            ctx, stored.id, stored.project_id, stored.check_name, stored.head, stored.base
+        )
+        if len(validation.records) != 1:
+            raise ValidationFailed(
+                f"validation session {session_id} kept {len(validation.records)} runs of its "
+                "one check"
+            )
+        return await self.finish_validation(ctx, session_id, validation.records[0])
 
     async def finish_validation(
         self, ctx: TenantContext, session_id: UUID, run_id: UUID

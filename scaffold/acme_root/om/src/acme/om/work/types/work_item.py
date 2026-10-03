@@ -12,7 +12,7 @@ from pydantic import Field
 from acme.om.base import FrozenMapping, Identifiable, Platform, Trackable
 from acme.om.context import Permission
 from acme.om.orchestrations.types.orchestration import ParkReason
-from acme.om.placement.types.work import ExecPayload, StationPayload, WorkspacePayload
+from acme.om.placement.types.work import ExecPayload, WorkspacePayload
 from acme.om.steps.types.header import Park
 from acme.om.steps.types.header import ParkReason as LoopParkReason
 
@@ -26,11 +26,13 @@ class WorkKind(StrEnum):
     WAKE_SESSION = "WAKE_SESSION"  # a parked session's retry time has come
     WAKE_SESSIONS = "WAKE_SESSIONS"  # the reason an org's sessions parked for is gone
     LOOP = "LOOP"  # a session's loop, for the session runner to run
+    # The platform's own: a validation session's check, run on a fresh
+    # executor by the platform's worker, with no agent and no model call.
+    VALIDATION = "VALIDATION"
     # The platform's: work a session produces where its environment is,
-    # claimed by a host or a daemon through the gateway.
+    # claimed by a host through the gateway.
     EXEC = "EXEC"  # a command or a file operation, for the host that holds the workspace
     WORKSPACE = "WORKSPACE"  # a workspace to prepare, release, or purge
-    STATION = "STATION"  # work on a station, for the daemon of its lab
 
 
 WORK_ROW_PREFIX = "work."
@@ -94,6 +96,11 @@ class WorkItem(Identifiable, Trackable):
 
 class NoopPayload(Platform):
     """The NOOP kind carries nothing."""
+
+
+class ValidationPayload(Platform):
+    """The VALIDATION kind carries nothing: its target is the validation
+    session, which holds what it runs."""
 
 
 class ScheduledPayload(Platform):
@@ -174,9 +181,9 @@ WORK_PAYLOADS: dict[WorkKind, type[Platform]] = {
     WorkKind.WAKE_SESSION: WakeSessionPayload,
     WorkKind.WAKE_SESSIONS: WakeSessionsPayload,
     WorkKind.LOOP: LoopPayload,
+    WorkKind.VALIDATION: ValidationPayload,
     WorkKind.EXEC: ExecPayload,
     WorkKind.WORKSPACE: WorkspacePayload,
-    WorkKind.STATION: StationPayload,
 }
 """The payload shape of every kind; enqueue validates the item's payload against it."""
 
@@ -200,11 +207,14 @@ WORK_ENQUEUE_PERMISSIONS: dict[WorkKind, Permission] = {
     # the run appends steps and projects the status, which WRITE covers, and
     # each tool call asks its principal's own permissions again.
     WorkKind.LOOP: Permission.WRITE,
+    # A validation session's start asks for it, relayed from its own commit;
+    # the run writes the session's validation and finishes the session,
+    # which WRITE covers.
+    WorkKind.VALIDATION: Permission.WRITE,
     # A session's run asks for these, relayed from its own commit; what each
     # runs was asked for by a call its principal's own permissions allowed.
     WorkKind.EXEC: Permission.WRITE,
     WorkKind.WORKSPACE: Permission.WRITE,
-    WorkKind.STATION: Permission.WRITE,
 }
 """The permission that asks for each kind. The person who asks authorizes
 the whole run once, so the permission has to be as wide as the run: every

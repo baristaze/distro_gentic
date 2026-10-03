@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import and_, case, delete, or_, select, update
+from sqlalchemy import and_, delete, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 
@@ -45,20 +45,9 @@ class TrustStoragePostgresImpl(PgStorageBase, TrustStorageInterface):
     async def resolve_declaration(
         self, org_id: UUID, name: str, project_id: UUID | None
     ) -> SecretDeclaration | None:
-        project = SecretDeclarations.owner_kind == SecretOwnerKind.PROJECT.value
-        whose = ~project
-        if project_id is not None:
-            whose = or_(whose, and_(project, SecretDeclarations.owner_id == project_id))
-        # The project's own first; then the tenant's, one on no project.
-        stmt = (
-            select(SecretDeclarations)
-            .where(SecretDeclarations.org_id == org_id, SecretDeclarations.name == name, whose)
-            .order_by(case((project, 0), else_=1), SecretDeclarations.id)
-            .limit(1)
-        )
-        async with self._session_for(stmt, org_id=org_id) as session:
-            row = (await session.execute(stmt)).scalar_one_or_none()
-            return None if row is None else to_model(row, SecretDeclaration)
+        if project_id is None:
+            return None
+        return await self.read_declaration(org_id, SecretOwnerKind.PROJECT, project_id, name)
 
     async def read_declarations(
         self, org_id: UUID, after: tuple[str, UUID] | None, limit: int
