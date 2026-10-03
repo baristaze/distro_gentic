@@ -32,6 +32,12 @@ output "database_master_url_secret_arn" {
   depends_on  = [aws_secretsmanager_secret_version.database_master_url]
 }
 
+output "live_read_key_secret_arn" {
+  description = "Injected into the API as ACME_LIVE_READ_KEY."
+  value       = aws_secretsmanager_secret.live_read_key.arn
+  depends_on  = [aws_secretsmanager_secret_version.live_read_key]
+}
+
 output "totp_encryption_key_secret_arn" {
   description = "Injected into the API as ACME_TOTP_ENCRYPTION_KEY."
   value       = aws_secretsmanager_secret.totp_encryption_key.arn

@@ -20,6 +20,7 @@ from acme.services.api.routers import (
     relay,
     stations,
     tenancy,
+    watch,
 )
 
 HOSTED: dict[str, tuple[APIRouter, ...]] = {
@@ -40,6 +41,9 @@ HOSTED: dict[str, tuple[APIRouter, ...]] = {
     # A tenant's labs, pools, and stations, the line, leases, and jobs, and a
     # lab daemon's own calls: rotate, claim, renew, and report.
     "stations": (stations.router,),
+    # A live read of a session by a scoped handle, and take control, a
+    # command by hand, and give back, each the person's.
+    "watch": (watch.router,),
 }
 """Every namespace this image hosts, and the routers that serve it."""
 
