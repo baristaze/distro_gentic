@@ -53,7 +53,8 @@ async def list_sessions(
     cursor: str | None = None,
     limit: int = LIMIT_DEFAULT,
 ) -> AgentSessionPageView:
-    """The tenant's sessions in a status, or in any, a page at a time by id."""
+    """The tenant's sessions in a status, or in any, newest first, a page at
+    a time."""
     return await sessions.get_sessions(ctx, status, cursor, limit)
 
 

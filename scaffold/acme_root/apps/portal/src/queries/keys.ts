@@ -38,4 +38,21 @@ export const keys = {
     all: ["invitation"] as const,
     list: (limit: number) => ["invitation", "list", limit] as const,
   },
+  // The tenant's projects, which a new session starts in. No push names a
+  // project, so the list is read on its own clock.
+  projects: {
+    all: ["project"] as const,
+    list: (limit: number) => ["project", "list", limit] as const,
+  },
+  // A tenant's agent sessions and every read of one. A push that names a
+  // session (its record, its stream, a hand-over) reaches that session's
+  // reads under `one(id)` and, for its record, the lists (the router).
+  agentSessions: {
+    all: ["agent_session"] as const,
+    lists: ["agent_session", "list"] as const,
+    list: (status: string, limit: number) => ["agent_session", "list", status, limit] as const,
+    one: (id: string) => ["agent_session", id] as const,
+    read: (id: string, part: string) => ["agent_session", id, part] as const,
+    command: (id: string, key: string) => ["agent_session", id, "command", key] as const,
+  },
 };

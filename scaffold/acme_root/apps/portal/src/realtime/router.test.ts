@@ -29,6 +29,9 @@ function pushOf(kind: string, extra: Record<string, unknown> = {}) {
 
 /** Every kind the service pushes on the entity_changed topic. */
 const SERVER_KINDS = [
+  "agent_sessions.agent_session.created",
+  "agent_sessions.agent_session.updated",
+  "agent_sessions.agent_session.deleted",
   "media.file.created",
   "media.file.updated",
   "media.file.deleted",
@@ -43,6 +46,11 @@ const SERVER_KINDS = [
   "tenancy.user.created",
   "tenancy.user.updated",
   "tenancy.user.deleted",
+  "watch.command.sent",
+  "watch.control.given_back",
+  "watch.control.taken",
+  "watch.stream.completed",
+  "watch.stream.opened",
 ];
 
 /** Every key some query reads under, with one sample argument per factory. */
@@ -114,11 +122,60 @@ describe("routeEnvelope", () => {
     }
   });
 
+  it("refreshes the reads of the session a push names, and the lists when its record changes", () => {
+    const { queryClient, seen } = recording();
+    expect(routeEnvelope(queryClient, pushOf("agent_sessions.agent_session.updated", { target_id: "s1" }))).toEqual({
+      invalidated: [keys.agentSessions.one("s1"), keys.agentSessions.lists],
+    });
+    expect(seen.some((key) => isPrefixOf(key, keys.agentSessions.read("s1", "steps")))).toBe(true);
+    expect(seen.some((key) => isPrefixOf(key, keys.agentSessions.list("any", 50)))).toBe(true);
+    for (const kind of ["watch.stream.completed", "watch.control.taken"]) {
+      const { queryClient: client } = recording();
+      expect(routeEnvelope(client, pushOf(kind, { target_id: "s1" }))).toEqual({ invalidated: [keys.agentSessions.one("s1")] });
+    }
+  });
+
+  it("invalidates nothing of an open session when a push names another one", () => {
+    const { queryClient, seen } = recording();
+    queryClient.setQueryData(keys.agentSessions.read("s1", "steps"), []);
+    queryClient.setQueryData(keys.agentSessions.read("s1", "children"), { pages: [{ items: [{ id: "s3" }] }], pageParams: [null] });
+    for (const kind of ["agent_sessions.agent_session.updated", "watch.stream.opened", "watch.control.given_back", "watch.command.sent"]) {
+      routeEnvelope(queryClient, pushOf(kind, { target_id: "s2" }));
+    }
+    expect(seen.filter((key) => isPrefixOf(key, keys.agentSessions.read("s1", "steps")))).toEqual([]);
+    expect(seen.filter((key) => isPrefixOf(key, keys.agentSessions.read("s1", "children")))).toEqual([]);
+  });
+
+  it("refreshes a list of children that holds the session a push names, and every one when the session is new", () => {
+    const { queryClient, seen } = recording();
+    queryClient.setQueryData(keys.agentSessions.read("s1", "children"), { pages: [{ items: [{ id: "s3" }] }], pageParams: [null] });
+    queryClient.setQueryData(keys.agentSessions.read("s4", "children"), { pages: [{ items: [] }], pageParams: [null] });
+    expect(routeEnvelope(queryClient, pushOf("agent_sessions.agent_session.updated", { target_id: "s3" })).invalidated).toEqual([
+      keys.agentSessions.one("s3"),
+      keys.agentSessions.lists,
+      keys.agentSessions.read("s1", "children"),
+    ]);
+    expect(routeEnvelope(queryClient, pushOf("agent_sessions.agent_session.created", { target_id: "s5" })).invalidated).toEqual([
+      keys.agentSessions.one("s5"),
+      keys.agentSessions.lists,
+      keys.agentSessions.read("s1", "children"),
+      keys.agentSessions.read("s4", "children"),
+    ]);
+    expect(seen.filter((key) => isPrefixOf(key, keys.agentSessions.read("s1", "steps")))).toEqual([]);
+  });
+
+  it("leaves a command run by hand to its sender, who reads its progress until it ends", () => {
+    const { queryClient, seen } = recording();
+    expect(routeEnvelope(queryClient, pushOf("watch.command.sent", { target_id: "run-1" }))).toEqual({ invalidated: [] });
+    expect(seen).toEqual([]);
+  });
+
   it("routes every kind the server pushes to a key some query reads under", () => {
     const used = queryKeys(keys);
     for (const kind of SERVER_KINDS) {
       const { queryClient } = recording();
-      for (const routed of routeEnvelope(queryClient, pushOf(kind)).invalidated) {
+      // The push names the record the sample keys are read for.
+      for (const routed of routeEnvelope(queryClient, pushOf(kind, { target_id: "sample" })).invalidated) {
         expect(used.some((key) => isPrefixOf(routed, key)), `${kind} routes to ${JSON.stringify(routed)}`).toBe(true);
       }
     }

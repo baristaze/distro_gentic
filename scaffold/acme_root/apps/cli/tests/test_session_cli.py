@@ -116,7 +116,7 @@ def test_the_orgs_sessions_are_listed_one_a_line_in_a_status(stack: Stack) -> No
 
     assert every.exit_code == 0, every.output
     lines = every.output.splitlines()
-    assert [line.split()[0] for line in lines] == sorted([first, second])
+    assert [line.split()[0] for line in lines] == sorted([first, second], reverse=True)
     assert {tuple(line.split()[1:3]) for line in lines} == {
         ("idle", "assistant"),
         ("pending", "assistant"),
