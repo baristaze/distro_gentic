@@ -40,7 +40,7 @@ port is taken.
 make setup             # Python and TypeScript dependencies
 make infra-up          # Postgres, Valkey, ElasticMQ, and MinIO alone
 make migrate           # the database logins, then every role's migration chain
-make seed              # two orgs, their people, the operators, a first org ready to run
+make seed              # two orgs ready to run a session, their people, the operators
 make check             # lint, format, types, arch-check, agentic-check, distro-check, unit tests
 make migrate-check     # every role's ORM metadata against the migrated schema
 make test-integration  # the storage contracts over Postgres
