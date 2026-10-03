@@ -15,15 +15,25 @@ import subprocess
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from urllib.parse import urlsplit
 
 import truststore
 
 from acme.client.client import ApiClient
 from acme.client.types import AdvertisementBody, IsolationMode
-from acme.infra.workspaces.network import CA_FILE_VARIABLE, PROXY_VARIABLES, proxy_address
 
 PROBE_TIMEOUT_SECONDS = 10.0
 """The longest one probe's command may run."""
+
+PROXY_VARIABLES = (
+    "HTTPS_PROXY",
+    "https_proxy",
+    "HTTP_PROXY",
+    "http_proxy",
+    "ALL_PROXY",
+    "all_proxy",
+)
+PROXY_SCHEMES = frozenset({"http", "https", "socks5", "socks5h"})
 
 
 @dataclass(frozen=True)
@@ -51,7 +61,7 @@ def trust_store() -> Probe:
     exists and loads with it."""
     try:
         context = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-        named = os.environ.get(CA_FILE_VARIABLE)
+        named = os.environ.get("SSL_CERT_FILE")
         if named:
             context.load_verify_locations(cafile=named)
     except (OSError, ssl.SSLError) as error:
@@ -60,12 +70,12 @@ def trust_store() -> Probe:
 
 
 def proxy(environ: Mapping[str, str] | None = None) -> Probe:
-    """Every proxy the environment names is a URL a client can use, as a
-    command under open egress is handed it."""
+    """Every proxy the environment names is a URL a client can use."""
     environ = os.environ if environ is None else environ
     named = [(name, environ[name]) for name in PROXY_VARIABLES if environ.get(name)]
     for name, value in named:
-        if proxy_address(value) is None:
+        parts = urlsplit(value)
+        if parts.scheme not in PROXY_SCHEMES or not parts.hostname:
             return Probe("proxy", False, f"{name} is not a proxy URL")
     return Probe("proxy", True, f"{len(named)} proxy setting(s), each a URL" if named else "none")
 
