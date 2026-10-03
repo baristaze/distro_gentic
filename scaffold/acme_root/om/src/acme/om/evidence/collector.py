@@ -20,7 +20,8 @@ from acme.om.evidence.types.contract import (
     ResultsLine,
     StartLine,
 )
-from acme.om.evidence.types.record import CaseTally, ExecutionRecord, RunPurpose
+from acme.om.evidence.types.record import CaseTally, Environment, ExecutionRecord, RunPurpose
+from acme.om.evidence.types.validation import Prepared
 from acme.om.exceptions import ValidationFailed
 
 LINE: TypeAdapter[StartLine | CaseLine | EndLine] = TypeAdapter(ResultsLine)
@@ -32,8 +33,9 @@ def digest(results: bytes) -> str:
 
 class Collector:
     """Reads one results stream into execution records. Each record names
-    who wrote the stream (`executor`) and why it ran; the rest comes from
-    the stream. `feed` takes one line and answers the case it held, so a
+    who wrote the stream (`executor`) and why it ran, and, for a run the
+    executor made, the host, isolation, and image it `prepared`; the rest
+    comes from the stream. `feed` takes one line and answers the case it held, so a
     viewer sees each case as it finishes."""
 
     def __init__(
@@ -45,8 +47,10 @@ class Collector:
         purpose: RunPurpose,
         validation_id: UUID | None,
         now: datetime,
+        prepared: Prepared | None = None,
         ids: Callable[[], UUID] = new_id,
     ) -> None:
+        self._prepared = prepared
         self._base = {
             "executor": executor,
             "session_id": session_id,
@@ -101,15 +105,22 @@ class Collector:
         start = self._start
         if start is None:
             raise self._refused("a run ends that never started")
+        environment, host, isolation = start.environment, start.host, start.isolation
+        if self._prepared is not None:
+            # What the executor made, never what the delivered code printed.
+            environment = Environment(
+                image=self._prepared.image, toolchain=start.environment.toolchain
+            )
+            host, isolation = self._prepared.host, self._prepared.isolation
         try:
             record = ExecutionRecord(
                 id=self._ids(),
                 **self._base,
                 version=start.version,
                 dirty=start.dirty,
-                environment=start.environment,
-                host=start.host,
-                isolation=start.isolation,
+                environment=environment,
+                host=host,
+                isolation=isolation,
                 check=start.check,
                 check_version=start.check_version,
                 parameters=start.parameters,
@@ -144,6 +155,7 @@ def collect(
     purpose: RunPurpose,
     validation_id: UUID | None,
     now: datetime,
+    prepared: Prepared | None = None,
     ids: Callable[[], UUID] = new_id,
 ) -> tuple[ExecutionRecord, ...]:
     """A whole results stream, read as the collector reads it line by line."""
@@ -154,6 +166,7 @@ def collect(
         purpose=purpose,
         validation_id=validation_id,
         now=now,
+        prepared=prepared,
         ids=ids,
     )
     for line in _lines(results):

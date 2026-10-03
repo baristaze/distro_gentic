@@ -10,6 +10,7 @@ import json
 from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 import pytest
@@ -19,7 +20,7 @@ from contracts.factories import make_org
 
 from acme.infra.exceptions import InfraNotFound
 from acme.infra.impl.local import InfraLocalImpl
-from acme.infra.transports import CommandSpec, TransportInterface
+from acme.infra.transports import CommandResult, CommandSpec, TransportInterface
 from acme.infra.transports.twin import TransportTwinImpl, TwinReply
 from acme.infra.workspaces import (
     EgressMode,
@@ -34,9 +35,11 @@ from acme.om.context import Role, TenantContext
 from acme.om.evidence.collector import collect, digest
 from acme.om.evidence.types.contract import CheckDeclaration
 from acme.om.evidence.types.provenance import Provenance
-from acme.om.evidence.types.record import RunPurpose
-from acme.om.evidence.types.validation import ExecutionRequest
-from acme.om.exceptions import Unavailable, ValidationFailed
+from acme.om.evidence.types.rate import RateRule
+from acme.om.evidence.types.record import ExecutionRecord, RunOutcome, RunPurpose
+from acme.om.evidence.types.validation import ExecutionRequest, ExecutorReport
+from acme.om.exceptions import Unavailable
+from acme.om.workspaces.impl import executor as executor_module
 from acme.om.workspaces.impl.executor import ExecutorOptions, ExecutorWorkspacesImpl
 from acme.om.workspaces.placed import PlacedInstancesInterface
 
@@ -229,22 +232,148 @@ async def test_each_run_gets_an_instance_nobody_used_and_destroys_it(tmp_path: P
     ]
 
 
+async def unpacks_nothing(command: CommandSpec, env: Mapping[str, str]) -> TwinReply:
+    """An instance whose tree does not unpack: the run ends before a check."""
+    return TwinReply(1)
+
+
 async def test_an_instance_goes_whatever_ended_its_run(tmp_path: Path) -> None:
     harness = Executor(tmp_path)
     ctx = context(Role.OWNER, make_org())
 
-    async def silent(command: CommandSpec, env: Mapping[str, str]) -> TwinReply:
-        return TwinReply(stdout=f"{ROOT}\n") if command.argv[0] == "sh" else TwinReply(1)
-
-    harness.transport.handler = silent
-    with pytest.raises(ValidationFailed, match="wrote no results stream"):
+    harness.transport.handler = unpacks_nothing
+    with pytest.raises(Unavailable, match="did not unpack"):
         await harness.executor.run(ctx, a_request())
-    assert harness.provider.live == set()
+    assert harness.provider.made and harness.provider.live == set()
+
+
+# Every trial counts: one that ran to no verdict is an errored run the
+# executor writes, never a refusal that a later run could hide.
+
+
+async def test_a_trial_that_wrote_no_results_or_ran_past_its_time_is_an_errored_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    harness = Executor(tmp_path)
+    ctx = context(Role.OWNER, make_org())
+    request = a_request(trials=3)
+    answer = harness._answer  # pyright: ignore[reportPrivateUsage]
+    trials: list[CommandSpec] = []
+
+    async def crashes_then_hangs_then_passes(
+        command: CommandSpec, env: Mapping[str, str]
+    ) -> TwinReply:
+        if command.argv[0] != "sh":
+            trials.append(command)
+            if len(trials) == 1:
+                return TwinReply(1)  # it crashed before it wrote a line
+        return await answer(command, env)
+
+    run = harness.transport.run
+
+    async def second_runs_past_its_time(
+        workspace: Workspace, command: CommandSpec, **kwargs: Any
+    ) -> CommandResult:
+        result = await run(workspace, command, **kwargs)
+        if command.argv[0] != "sh" and len(trials) == 2:
+            return result.model_copy(update={"exit_code": None, "timed_out": True})
+        return result
+
+    harness.transport.handler = crashes_then_hangs_then_passes
+    monkeypatch.setattr(harness.transport, "run", second_runs_past_its_time)
+    report = await harness.executor.run(ctx, request)
+
+    records = collected(report, request)
+    assert [record.outcome for record in records] == [
+        RunOutcome.ERRORED,
+        RunOutcome.ERRORED,
+        RunOutcome.PASSED,
+    ], "each trial is a run of its own, the two that reached no verdict included"
+    assert {(r.check, r.check_version, r.version) for r in records} == {
+        (CHECK.name, CHECK.version, HEAD)
+    }
+    assert report.sha256 == digest(report.results) and harness.provider.live == set()
 
     bounded = Executor(tmp_path / "bounded", max_bytes=100)
-    with pytest.raises(ValidationFailed, match="past the 100 bytes"):
-        await bounded.executor.run(ctx, a_request())
+    report = await bounded.executor.run(ctx, request)
+    assert [r.outcome for r in collected(report, request)] == [RunOutcome.ERRORED] * 3, (
+        "results past the bound a run reads are no verdict either"
+    )
     assert bounded.provider.live == set()
+
+
+async def test_a_record_names_what_the_executor_made_never_the_runners_start_line(
+    tmp_path: Path,
+) -> None:
+    """The runner writes host `executor-host`, isolation `vm`, and an image
+    digest in its start line; the delivered code can print any of them."""
+    ctx = context(Role.OWNER, make_org())
+    request = a_request()
+
+    cloud = Executor(tmp_path / "cloud")
+    (record,) = collected(await cloud.executor.run(ctx, request), request)
+    assert (record.host, record.isolation, record.environment.image) == (
+        "cloud",
+        IsolationMode.TWIN.value,
+        "python:3.14",
+    )
+    assert record.environment.toolchain == {"python": "3.14"}, "the toolchain is the runner's"
+
+    pooled = Executor(tmp_path / "pool", pinned=True, pool=True)
+    (record,) = collected(await pooled.executor.run(ctx, request), request)
+    assert (record.host, record.isolation, record.environment.image) == (
+        "pool",
+        IsolationMode.TWIN.value,
+        "pool",
+    )
+
+
+async def test_a_trial_fails_unless_its_run_passes_as_its_record_says(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A run that says it passed, with every case skipped, showed nothing:
+    the rate's stopping rule sees a failure."""
+    harness = Executor(tmp_path)
+    seen: list[list[bool]] = []
+
+    def stops(rule: RateRule, failed: list[bool], confidence: float) -> int | None:
+        seen.append(list(failed))
+        return None
+
+    async def skips_every_case(command: CommandSpec, env: Mapping[str, str]) -> TwinReply:
+        workspace = harness.provider.made[-1]
+        if command.argv[0] == "sh":
+            return TwinReply(stdout=f"{ROOT}\n")
+        out = command.argv[-1].removeprefix("--out=")
+        lines = stream(
+            CHECK.name, CHECK.version, HEAD, "passed", Provenance.REAL, utcnow(), ("skipped",)
+        )
+        written = "\n".join(json.dumps(line) for line in lines).encode()
+        await harness.transport.write_file(workspace, out.removeprefix(f"{ROOT}/"), written, 1)
+        return TwinReply()
+
+    harness.transport.handler = skips_every_case
+    monkeypatch.setattr(executor_module, "stops_at", stops)
+    rate = RateRule(max_rate=0.1, confidence=0.9, trials=2)
+    request = a_request(trials=2).model_copy(update={"rates": (rate,)})
+
+    await harness.executor.run(context(Role.OWNER, make_org()), request)
+
+    assert seen == [[], [True]], "the passing trial's record decides, not its last line"
+
+
+def collected(report: ExecutorReport, request: ExecutionRequest) -> tuple[ExecutionRecord, ...]:
+    """The records a report holds, as the evidence reads them."""
+    return collect(
+        report.results,
+        executor=report.executor,
+        session_id=request.session_id,
+        project=request.project,
+        purpose=request.purpose,
+        validation_id=new_id(),
+        now=utcnow(),
+        prepared=report.prepared,
+    )
 
 
 # Check 2: a pinned session's checks run on an instance a host of its pool
@@ -273,11 +402,8 @@ async def test_a_pinned_sessions_checks_run_on_an_instance_of_its_pool(tmp_path:
 async def test_a_pinned_sessions_instance_goes_whatever_ended_its_run(tmp_path: Path) -> None:
     harness = Executor(tmp_path, pinned=True, pool=True)
 
-    async def silent(command: CommandSpec, env: Mapping[str, str]) -> TwinReply:
-        return TwinReply(stdout=f"{ROOT}\n") if command.argv[0] == "sh" else TwinReply(1)
-
-    harness.transport.handler = silent
-    with pytest.raises(ValidationFailed, match="wrote no results stream"):
+    harness.transport.handler = unpacks_nothing
+    with pytest.raises(Unavailable, match="did not unpack"):
         await harness.executor.run(context(Role.OWNER, make_org()), a_request())
 
     assert harness.pool is not None

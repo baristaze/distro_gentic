@@ -66,11 +66,24 @@ class ExecutionRequest(Platform):
         return self
 
 
+class Prepared(Platform):
+    """What a fresh executor made a run's instance as: the host that made
+    it, its isolation, and the image it runs. A record of the executor's
+    names these, never what the runner's start line says, since the
+    delivered code writes that line."""
+
+    host: str = Field(min_length=1, max_length=200)
+    isolation: str = Field(min_length=1, max_length=100)
+    image: str = Field(pattern=VERSION)
+
+
 class ExecutorReport(Platform):
-    """What a fresh executor answers: who it is, the results stream it wrote,
-    and its hash of that stream, taken where it was written."""
+    """What a fresh executor answers: who it is, what it made the run's
+    instance as, the results stream it wrote, and its hash of that stream,
+    taken where it was written."""
 
     executor: str = Field(min_length=1, max_length=200)
+    prepared: Prepared
     results: bytes
     sha256: str = Field(pattern=SHA256)
 

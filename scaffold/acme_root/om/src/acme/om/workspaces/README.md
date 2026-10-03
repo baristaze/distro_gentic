@@ -91,7 +91,9 @@ rebuilt from.
   the delivered commit, with every protected path from the base, and no
   credential and no history. It runs each check's template there, reads
   back and hashes the results within their bound, and destroys the
-  instance whatever ended the run. For a session inside its tenant's
+  instance whatever ended the run. A trial that reaches no verdict (it
+  ran past its time, or wrote no run of its check) is an `errored` run
+  the executor writes, so every trial counts. For a session inside its tenant's
   wall, a host of its pool makes the instance instead, to the isolation
   the session is pinned to, and every step crosses the wall as `exec`
   work; no host of another pool or tenant takes it.

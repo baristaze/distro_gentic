@@ -12,7 +12,12 @@ command template runs with `{version}` and `{out}` filled, in the tree,
 under the environment of the instance's image and its transport, never one
 an agent set. Each trial's results stream is read back within the bound,
 and within what one read of its transport carries, and the executor hashes
-what it read.
+what it read. Every trial counts: one that ran past its time, or wrote no
+stream the collector reads as one run of its check at the version asked,
+is written as an `errored` run by the executor itself, so asking again
+until a run passes hides no failure. A run's record names the host,
+isolation, and image the executor made, never what the delivered code's
+start line says.
 
 For a session of the cloud, the instance is the cloud's, made by the
 provider and reached by the transport the platform's own processes hold. A
@@ -23,6 +28,7 @@ its pool gives it, and reached through the relay
 checks, loudly."""
 
 import json
+import logging
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 from uuid import UUID
@@ -42,13 +48,16 @@ from acme.infra.workspaces import (
 )
 from acme.om.base import Platform, new_id, utcnow
 from acme.om.context import TenantContext
-from acme.om.evidence.collector import digest
+from acme.om.evidence.collector import collect, digest
 from acme.om.evidence.executor import ExecutorInterface
 from acme.om.evidence.rates import stops_at
 from acme.om.evidence.types.contract import SCHEMAS, CheckDeclaration, Offer
-from acme.om.evidence.types.validation import ExecutionRequest, ExecutorReport
+from acme.om.evidence.types.record import VERSION, ExecutionRecord, RunOutcome
+from acme.om.evidence.types.validation import ExecutionRequest, ExecutorReport, Prepared
 from acme.om.exceptions import Unavailable, ValidationFailed
 from acme.om.workspaces.placed import PlacedInstancesInterface
+
+log = logging.getLogger(__name__)
 
 ARCHIVE = "tree.tar"
 """Where the tree's tar is written in the instance, until it is unpacked."""
@@ -75,6 +84,10 @@ SPOKEN = 10_000
 Pinned = Callable[[TenantContext, UUID], Awaitable[IsolationSpec | None]]
 """The isolation a session is pinned to when it runs inside its tenant's
 wall; None for a session of the cloud."""
+PLACED = "pool"
+"""What a record names as the host and the image of an instance a host of
+a pinned session's pool made: the pool's, which the executor does not
+choose."""
 
 
 class ExecutorOptions(Platform):
@@ -90,6 +103,10 @@ class ExecutorOptions(Platform):
     trial_time: timedelta = timedelta(minutes=20)
     # The most of a run's results streams read back, all trials together.
     max_results_bytes: int = Field(default=64 * 1024 * 1024, gt=0)
+    # What a record names of the cloud's instances, never what a runner's
+    # start line says: the host that makes them, and the image they run.
+    host: str = Field(default="cloud", min_length=1, max_length=200)
+    image: str = Field(default="python:3.14", pattern=VERSION)
 
 
 async def _kept_nowhere(data: bytes) -> bytes | None:
@@ -144,7 +161,12 @@ class ExecutorWorkspacesImpl(ExecutorInterface):
             )
             try:
                 workspace = await self._provider.prepare(ctx.org_id, instance, spec)
-                results = await self._checks(self._transport, workspace, request, tree)
+                prepared = Prepared(
+                    host=self._options.host,
+                    isolation=workspace.spec.mode.value,
+                    image=self._options.image,
+                )
+                results = await self._checks(self._transport, workspace, request, tree, prepared)
             finally:
                 await self._provider.purge(ctx.org_id, instance)
                 await self._transport.purge_records(instance)
@@ -158,11 +180,15 @@ class ExecutorWorkspacesImpl(ExecutorInterface):
                     pinned,
                     self._clock() + self._options.setup_time,
                 )
-                results = await self._checks(transport, workspace, request, tree)
+                prepared = Prepared(host=PLACED, isolation=workspace.spec.mode.value, image=PLACED)
+                results = await self._checks(transport, workspace, request, tree, prepared)
             finally:
                 await self._placed.destroy(ctx, instance, pinned)
         return ExecutorReport(
-            executor=f"executor:{instance}", results=results, sha256=digest(results)
+            executor=f"executor:{instance}",
+            prepared=prepared,
+            results=results,
+            sha256=digest(results),
         )
 
     async def _checks(
@@ -171,10 +197,12 @@ class ExecutorWorkspacesImpl(ExecutorInterface):
         workspace: Workspace,
         request: ExecutionRequest,
         tree: bytes,
+        prepared: Prepared,
     ) -> bytes:
         """Every trial the request asks for, each check's stopping where its
         rate's rule stops it, and their results streams, one after another,
-        in `workspace` through `transport`."""
+        in `workspace` through `transport`. A trial failed unless its run
+        passed, as `ExecutionRecord.passing` says."""
         await transport.write_file(workspace, ARCHIVE, tree, EPOCH)
         unpacked = await self._command(
             transport,
@@ -197,11 +225,11 @@ class ExecutorWorkspacesImpl(ExecutorInterface):
                 if rate is not None and stops_at(rate, failed, rate.confidence) is not None:
                     break
                 out = f"{OUT}/{index}-{trial}.jsonl"
-                stream = await self._trial(
-                    transport, workspace, request, check, f"{root}/{out}", out, read
+                stream, record = await self._trial(
+                    transport, workspace, request, check, prepared, f"{root}/{out}", out, read
                 )
                 read += len(stream)
-                failed.append(_ended(stream) != "passed")
+                failed.append(not record.passing)
                 streams.append(stream.rstrip(b"\n"))
         return b"\n".join(streams)
 
@@ -211,32 +239,73 @@ class ExecutorWorkspacesImpl(ExecutorInterface):
         workspace: Workspace,
         request: ExecutionRequest,
         check: CheckDeclaration,
+        prepared: Prepared,
         out: str,
         path: str,
         read: int,
-    ) -> bytes:
+    ) -> tuple[bytes, ExecutionRecord]:
         """One trial of `check`: its template filled, with `out` where the
-        command writes its results stream, and run in the tree; and the
-        stream read back from `path`, the same file from the instance's root,
-        within what is left of the bound. A check that wrote none is refused: a run nobody can read is
-        no evidence. So is a stream longer than one read of the transport
-        carries, such as the relay's into a tenant's wall."""
+        command writes its results stream, and run in the tree; the stream
+        read back from `path`, the same file from the instance's root,
+        within what is left of the bound; and the run it holds. A trial
+        that ran past its time, wrote no stream, one past the bound or
+        longer than one read of the transport carries (such as the relay's
+        into a tenant's wall), or one the collector does not read as one
+        run of `check` at the version asked, ran to no verdict: its stream
+        is an `errored` run the executor writes in its place."""
         argv = tuple(part.format(version=request.version, out=out) for part in check.command)
-        await self._command(transport, workspace, argv, TREE, self._options.trial_time)
+        started = self._clock()
+        ran = await self._command(transport, workspace, argv, TREE, self._options.trial_time)
         left = self._options.max_results_bytes - read
-        try:
-            stream = await transport.read_file(workspace, path, left + 1)
-        except InfraException as failed:
-            if failed.http_status == TOO_LARGE:
-                raise ValidationFailed(f"the results of {check.name}: {failed.message}") from None
-            if failed.http_status != MISSING:
-                raise
-            raise ValidationFailed(f"{check.name} wrote no results stream") from None
-        if len(stream) > left:
-            raise ValidationFailed(
-                f"the results are past the {self._options.max_results_bytes} bytes a run reads"
-            )
-        return stream
+        stream, why = b"", None
+        if ran.timed_out:
+            why = "ran past its time"
+        else:
+            try:
+                stream = await transport.read_file(workspace, path, max(left, 0) + 1)
+            except InfraException as failed:
+                if failed.http_status not in (MISSING, TOO_LARGE):
+                    raise
+                why = f"wrote no results stream it could be read by ({failed.message})"
+            else:
+                if len(stream) > left:
+                    why = f"wrote results past the {self._options.max_results_bytes} bytes a run reads"
+        if why is None:
+            try:
+                records = collect(
+                    stream,
+                    executor="executor",
+                    session_id=request.session_id,
+                    project=request.project,
+                    purpose=request.purpose,
+                    validation_id=new_id(),
+                    now=self._clock(),
+                    prepared=prepared,
+                )
+            except ValidationFailed as refused:
+                why = refused.message
+            else:
+                if len(records) == 1 and _asked(records[0], check, request.version):
+                    return stream, records[0]
+                why = f"wrote {len(records)} runs, not one run of {check.name} at the version asked"
+        log.warning(
+            "a trial of %s for session %s ran to no verdict: %s",
+            check.name,
+            request.session_id,
+            why[:300],
+        )
+        stream = _errored(check, request.version, prepared, started, self._clock())
+        (record,) = collect(
+            stream,
+            executor="executor",
+            session_id=request.session_id,
+            project=request.project,
+            purpose=request.purpose,
+            validation_id=new_id(),
+            now=self._clock(),
+            prepared=prepared,
+        )
+        return stream, record
 
     async def _command(
         self,
@@ -258,15 +327,41 @@ class ExecutorWorkspacesImpl(ExecutorInterface):
         return await transport.run(workspace, command, seal=SEAL)
 
 
-def _ended(stream: bytes) -> str | None:
-    """How a trial's run ended, as its last line says; None when it says
-    nothing readable, which a rate counts as a failure."""
-    lines = stream.strip().splitlines()
-    try:
-        last = json.loads(lines[-1]) if lines else None
-    except ValueError:
-        return None
-    if not isinstance(last, dict) or last.get("kind") != "end":
-        return None
-    outcome = last.get("outcome")
-    return outcome if isinstance(outcome, str) else None
+def _asked(record: ExecutionRecord, check: CheckDeclaration, version: str) -> bool:
+    """Whether a run is of `check`, at its version, and ran at `version`."""
+    return (record.check, record.check_version, record.version) == (
+        check.name,
+        check.version,
+        version,
+    )
+
+
+def _errored(
+    check: CheckDeclaration,
+    version: str,
+    prepared: Prepared,
+    started: datetime,
+    finished: datetime,
+) -> bytes:
+    """The results stream of a trial that ran to no verdict, as the executor
+    writes it: one `errored` run of `check` at `version`, on what it made."""
+    lines = (
+        {
+            "kind": "start",
+            "schema_version": check.schema_version,
+            "check": check.name,
+            "check_version": check.version,
+            "version": version,
+            "dirty": False,
+            "environment": {"image": prepared.image},
+            "host": prepared.host,
+            "isolation": prepared.isolation,
+            "started_at": started.isoformat(),
+        },
+        {
+            "kind": "end",
+            "outcome": RunOutcome.ERRORED.value,
+            "finished_at": max(started, finished).isoformat(),
+        },
+    )
+    return "\n".join(json.dumps(line) for line in lines).encode()

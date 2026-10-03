@@ -158,6 +158,7 @@ class AcceptanceHarnessImpl(AcceptanceHarnessInterface):
                 purpose=RunPurpose.VALIDATION,
                 validation_id=verdict_id,
                 now=self._clock(),
+                prepared=report.prepared,
             )
         except ValidationFailed as refused:
             return (), (Break(link=Link.HIDDEN, reason=refused.message),)

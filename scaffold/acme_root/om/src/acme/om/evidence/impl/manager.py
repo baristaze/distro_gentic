@@ -267,6 +267,7 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
             purpose=request.purpose,
             validation_id=validation_id,
             now=now,
+            prepared=report.prepared,
         )
         _refuse_unasked(request, records)
         validation = Validation(
