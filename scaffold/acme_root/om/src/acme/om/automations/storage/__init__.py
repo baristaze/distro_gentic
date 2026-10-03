@@ -39,9 +39,10 @@ class AutomationStorageInterface(ABC):
     ) -> AutomationRun:
         """A run asking to start at `now`, written as its limits leave it
         (`automations.rules.admitted`), with what its automation's runs hold
-        in the period that ends now read in the same write, which no other
-        admission of the automation shares. A run written already as queued is written
-        over; one written otherwise answers as stored."""
+        in the period that ends now, and how many others wait in its queue,
+        read in the same write, which no other admission of the automation
+        shares. A run written already as queued is written over; one written
+        otherwise answers as stored."""
         ...
 
     @abstractmethod

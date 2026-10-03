@@ -45,12 +45,12 @@ class AutomationStorageMemoryImpl(MemoryStorageBase, AutomationStorageInterface)
             held = self._get(self._runs, org_id, run.id)
             if held is not None and held.status is not RunStatus.QUEUED:
                 return held
-            counted = [
-                r
-                for r in self._rows(self._runs, org_id)
-                if r.automation_id == run.automation_id and holds(r, since)
+            mine = [
+                r for r in self._rows(self._runs, org_id) if r.automation_id == run.automation_id
             ]
-            landed = admitted(run, limits, tally(counted, since), now)
+            counted = [r for r in mine if holds(r, since)]
+            queued = sum(r.status is RunStatus.QUEUED and r.id != run.id for r in mine)
+            landed = admitted(run, limits, tally(counted, since, queued=queued), now)
             self._put(self._runs, org_id, landed)
             return landed
 

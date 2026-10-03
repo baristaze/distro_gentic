@@ -1,6 +1,9 @@
+from collections import Counter
 from collections.abc import Callable, Sequence
 from datetime import datetime
 from uuid import UUID
+
+from pydantic import Field
 
 from acme.om.base import Platform, new_id, utcnow
 from acme.om.context import Permission, Role, TenantContext
@@ -34,6 +37,8 @@ UPDATED = "evidence.validation_policy.updated"
 class EvidenceOptions(Platform):
     max_limit: int = 200  # rows one page holds
     purge_batch: int = 1000  # rows of each table one purge statement deletes at most
+    # The most of a results stream one validation reads; a longer one keeps nothing.
+    max_results_bytes: int = Field(default=64 * 1024 * 1024, gt=0)
 
 
 class EvidenceManagerImpl(EvidenceManagerInterface):
@@ -199,6 +204,11 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
         if isinstance(request, str):
             raise PreconditionFailed(request)
         report = await self._executor.run(ctx, request)
+        if len(report.results) > self._options.max_results_bytes:
+            raise ValidationFailed(
+                f"the results are {len(report.results)} bytes, past the "
+                f"{self._options.max_results_bytes} one validation reads"
+            )
         if digest(report.results) != report.sha256:
             raise ValidationFailed("the results do not hash to what the executor wrote")
         validation_id = new_id()
@@ -264,8 +274,18 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
 
 def _refuse_unasked(request: ExecutionRequest, records: Sequence[ExecutionRecord]) -> None:
     """The executor's results hold the checks it was asked for, at the version
-    it was asked for, and nothing else."""
+    it was asked for, each in no more runs than its trials, and nothing
+    else: a run past them would count toward a rate the trials asked never
+    earned."""
     asked = {check.name: check.version for check in request.checks}
+    trials = {
+        check.name: count for check, count in zip(request.checks, request.trials, strict=True)
+    }
+    for check, runs in Counter(record.check for record in records).items():
+        if check in trials and runs > trials[check]:
+            raise ValidationFailed(
+                f"the results hold {runs} runs of {check}, past the {trials[check]} asked for"
+            )
     for record in records:
         if asked.get(record.check) != record.check_version:
             raise ValidationFailed(
