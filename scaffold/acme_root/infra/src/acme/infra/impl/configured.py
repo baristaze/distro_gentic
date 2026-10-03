@@ -1,6 +1,7 @@
 """The infra root that picks impls from settings and refuses combinations
 that are only safe locally."""
 
+import os
 from datetime import timedelta
 
 import aioboto3
@@ -44,6 +45,7 @@ from acme.infra.transports.twin import TransportNullImpl
 from acme.infra.workspaces import WorkspaceProviderInterface
 from acme.infra.workspaces.container import WorkspaceContainerImpl
 from acme.infra.workspaces.host import WorkspaceHostImpl
+from acme.infra.workspaces.network import HostNetwork
 from acme.infra.workspaces.twin import WorkspaceNullImpl
 
 
@@ -197,26 +199,30 @@ class InfraConfiguredImpl(InfraInterface):
         self, settings: InfraSettings
     ) -> tuple[WorkspaceProviderInterface, TransportInterface]:
         """The provider and the transport that runs in what it prepares, as a
-        pair."""
+        pair. Both take this process's proxy and CA file, which a command
+        sees under open egress alone; a CA file it cannot read stops the
+        process here, as it starts."""
+        if settings.workspace_backend == "none":
+            return WorkspaceNullImpl(), TransportNullImpl()
         records = settings.workspaces_root / ".records"
         broker = self._broker
+        network = HostNetwork.of(os.environ)
         if settings.workspace_backend == "host":
             return (
                 WorkspaceHostImpl(settings.workspaces_root),
-                TransportLocalImpl(records, self._secrets, broker),
+                TransportLocalImpl(records, self._secrets, broker, network=network),
             )
-        if settings.workspace_backend == "container":
-            timeout = timedelta(seconds=settings.docker_timeout_seconds)
-            return (
-                WorkspaceContainerImpl(
-                    settings.workspace_image,
-                    timeout,
-                    settings.workspace_deployment,
-                    timedelta(seconds=settings.docker_pull_timeout_seconds),
-                ),
-                TransportContainerImpl(records, self._secrets, broker, timeout),
-            )
-        return WorkspaceNullImpl(), TransportNullImpl()
+        timeout = timedelta(seconds=settings.docker_timeout_seconds)
+        return (
+            WorkspaceContainerImpl(
+                settings.workspace_image,
+                timeout,
+                settings.workspace_deployment,
+                timedelta(seconds=settings.docker_pull_timeout_seconds),
+                network,
+            ),
+            TransportContainerImpl(records, self._secrets, broker, timeout, network),
+        )
 
     def _build_cache(self, scope: CacheScope) -> CacheInterface:
         """Only the out-of-process impl is wrapped. The memory impl is a dict

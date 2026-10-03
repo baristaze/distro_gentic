@@ -8,6 +8,7 @@ platform is unreachable at startup, 5 a startup probe failed."""
 import asyncio
 import contextlib
 import logging
+import os
 import sys
 from collections.abc import Coroutine
 from datetime import timedelta
@@ -20,15 +21,17 @@ import typer
 from acme.apps.host import ceilings
 from acme.apps.host.agent import HostAgent, NotEnrolled
 from acme.apps.host.config import BadSetting, Settings, settings_from_env
-from acme.apps.host.probe import Misconfigured, real_probes, startup
+from acme.apps.host.probe import Misconfigured, Probe, real_probes, startup
 from acme.apps.host.relay import ExecutorRelayImpl
 from acme.client.client import WIRE_FAILURES, ApiClient, ApiError
+from acme.infra.exceptions import InfraException
 from acme.infra.secrets.local import SecretsLocalImpl
 from acme.infra.transports import TransportInterface
 from acme.infra.transports.broker import BrokerNullImpl
 from acme.infra.transports.container import TransportContainerImpl
 from acme.infra.workspaces import IsolationMode, WorkspaceProviderInterface
 from acme.infra.workspaces.container import WorkspaceContainerImpl
+from acme.infra.workspaces.network import HostNetwork
 
 log = logging.getLogger(__name__)
 
@@ -107,14 +110,29 @@ def run() -> None:
     _guarded(go())
 
 
+def host_network() -> HostNetwork:
+    """This host's proxy and CA file, read as it starts. A CA file it cannot
+    read stops it there, as a failed startup probe does, never at a
+    session's prepare."""
+    try:
+        return HostNetwork.of(os.environ)
+    except InfraException as error:  # its CA file, unreadable
+        raise Misconfigured([Probe("trust_store", False, str(error))]) from error
+
+
 def host_transports(settings: Settings) -> dict[IsolationMode, TransportInterface]:
     """The transports this host runs work through: a container per session,
     on its local Docker. A bare directory runs only as the host's dedicated
     user, which no transport here does yet, so an item at that mode is
-    refused rather than run as the host's own user."""
+    refused rather than run as the host's own user. A command under open
+    egress goes through the host's proxy and trusts its CA file."""
     secrets = SecretsLocalImpl(settings.secrets_path)
     container = TransportContainerImpl(
-        settings.records_path, secrets, BrokerNullImpl(), timedelta(seconds=30)
+        settings.records_path,
+        secrets,
+        BrokerNullImpl(),
+        timedelta(seconds=30),
+        host_network(),
     )
     return {IsolationMode.CONTAINER: container}
 
@@ -122,13 +140,14 @@ def host_transports(settings: Settings) -> dict[IsolationMode, TransportInterfac
 def host_workspaces(settings: Settings) -> dict[IsolationMode, WorkspaceProviderInterface]:
     """What makes a workspace its pool asks this host to prepare, by the
     mode its transport runs: a container per session, of the image its
-    owner names."""
+    owner names, holding a copy of the host's CA file under open egress."""
     return {
         IsolationMode.CONTAINER: WorkspaceContainerImpl(
             settings.workspace_image,
             timedelta(seconds=30),
             f"host-{settings.name}",
             timedelta(seconds=settings.pull_timeout_seconds),
+            host_network(),
         )
     }
 
