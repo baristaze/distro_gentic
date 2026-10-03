@@ -45,15 +45,15 @@ test("a member starts a session and reads its thread, timeline, and evidence; an
   await expect(owner.getByRole("heading", { level: 1, name: title })).toBeVisible();
   const sessionId = new URL(owner.url()).pathname.split("/").pop()!;
 
-  await owner.getByLabel("Message").fill("Tidy the docs, please.");
-  await owner.getByRole("button", { name: "Send" }).click();
+  await owner.getByRole("textbox", { name: "Message", exact: true }).fill("Tidy the docs, please.");
+  await owner.getByRole("button", { name: "Send", exact: true }).click();
   const answer = owner.getByRole("list", { name: "Messages" }).locator("[data-who='agent']");
   await expect(answer).toContainText("one voice", { timeout: 90_000 });
   await expect(answer.locator("strong")).toHaveText("one voice");
 
   recordEvidence(sessionId);
 
-  await owner.getByRole("radio", { name: "Timeline" }).click();
+  await owner.getByRole("radio", { name: "Timeline", exact: true }).click();
   const steps = owner.getByRole("list", { name: "Steps" });
   await expect(steps).toContainText("Message from a person");
   await expect(steps).toContainText("Model answered");
@@ -61,7 +61,7 @@ test("a member starts a session and reads its thread, timeline, and evidence; an
   console.log(`timeline: ${(await steps.locator("[data-title]").allTextContents()).join(" | ")}`);
   await owner.screenshot({ path: `${SHOTS}session-timeline.png`, fullPage: true });
 
-  await owner.getByRole("radio", { name: "Evidence" }).click();
+  await owner.getByRole("radio", { name: "Evidence", exact: true }).click();
   const runs = owner.getByRole("table", { name: "Runs" });
   await expect(runs.locator("tbody tr")).toHaveCount(3);
   await expect(runs).toContainText("twin, never reported as real");
