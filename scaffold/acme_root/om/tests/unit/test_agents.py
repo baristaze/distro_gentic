@@ -364,6 +364,44 @@ async def test_cancelling_a_parent_cancels_every_session_below_it(managers: Mana
     assert await agents.cancel_children(ctx, grandchild.id) == ()
 
 
+async def test_a_deleted_child_is_walked_through_and_every_live_session_is_cancelled(
+    managers: Managers,
+) -> None:
+    """A deleted session answers no write, so the cascade passes it by:
+    its sibling and what runs below it are still cancelled, and a moved
+    deadline still reaches the tree."""
+    ctx = context(Role.MEMBER)
+    agents, steps, sessions = managers.agents, managers.steps, managers.agent_sessions
+    root = await start(managers, ctx)
+    gone = await agents.spawn(ctx, root.id, spawn("delivery"))
+    sibling = await agents.spawn(ctx, root.id, spawn())
+    below = await agents.spawn(ctx, gone.id, spawn())
+    (objective,) = (await steps.get_steps(ctx, gone.id, 0, 1)).items
+    request = make_request(gone.id, objective.id, (objective.id,))
+    response = make_response(gone.id, objective.id, request.id)
+    epoch = await steps.begin_run(ctx, gone.id)
+    await steps.append_steps(ctx, gone.id, epoch, [request, response, ended(gone.id, objective.id)])
+    assert (await sessions.project_status(ctx, gone.id)).status is SessionStatus.IDLE
+    await sessions.delete_session(ctx, gone.id)
+    epoch = await steps.begin_run(ctx, sibling.id)
+    opening = (await steps.get_steps(ctx, sibling.id, 0, 1)).items[0]
+    await steps.append_steps(ctx, sibling.id, epoch, [make_parked(sibling.id, opening.id)])
+    assert (await sessions.project_status(ctx, sibling.id)).status is SessionStatus.PARKED
+    (asked,) = (await steps.get_steps(ctx, below.id, 0, 1)).items
+    epoch = await steps.begin_run(ctx, below.id)
+    await steps.append_steps(ctx, below.id, epoch, [make_request(below.id, asked.id, (asked.id,))])
+    assert (await sessions.project_status(ctx, below.id)).status is SessionStatus.RUNNING
+
+    await agents.set_deadline(ctx, root.id, utcnow() + timedelta(hours=1))
+    reached = await agents.cancel_children(ctx, root.id)
+
+    assert set(reached) == {sibling.id, below.id}
+    for child in (sibling, below):
+        last = (await steps.get_steps(ctx, child.id, 0, 10)).items[-1]
+        assert isinstance(last.header, ControlHeader)
+        assert last.header.command is ControlCommand.CANCEL
+
+
 async def test_a_child_waiting_to_begin_its_next_loop_is_cancelled_too(
     managers: Managers,
 ) -> None:

@@ -13,9 +13,11 @@ from acme.services.api.realtime import control, socket
 from acme.services.api.routers import (
     admin,
     agent_sessions,
+    approvals,
     automations,
     budgets,
     events,
+    evidence,
     fleet,
     hosts,
     intake,
@@ -27,6 +29,7 @@ from acme.services.api.routers import (
     relay,
     tenancy,
     tools,
+    usage,
     watch,
 )
 
@@ -37,8 +40,11 @@ HOSTED: dict[str, tuple[APIRouter, ...]] = {
     # The realtime channel is the events stream pushed; its replay is `/events`.
     "events": (events.router, socket.router),
     "media": (media.router,),
-    # Sessions with an agent; their loops run in the session runner.
-    "agent_sessions": (agent_sessions.router,),
+    # Sessions with an agent; their loops run in the session runner. What
+    # waits on a person across them reads the same sessions.
+    "agent_sessions": (agent_sessions.router, approvals.router),
+    # What a session ran to show its work, and what it delivered.
+    "evidence": (evidence.router,),
     # A tenant's pools and hosts, and a host's own calls: enroll, rotate,
     # beat, and claim.
     "hosts": (hosts.router,),
@@ -48,8 +54,8 @@ HOSTED: dict[str, tuple[APIRouter, ...]] = {
     # A tenant's connections to the systems whose events reach its sessions.
     "intake": (intake.router,),
     # What a tenant may spend: a budget's amount, which a raise of wakes the
-    # sessions waiting on it.
-    "budgets": (budgets.router,),
+    # sessions waiting on it, and what each budget's window spent.
+    "budgets": (budgets.router, usage.router),
     # The tenant's automations, and its automation principal and its grant.
     "automations": (automations.router,),
     # A tenant's projects, each bound to its repository, and the fetch
