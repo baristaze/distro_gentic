@@ -47,7 +47,8 @@ release from the lock into a prefix root owns, and writes its settings
 where only root reads them. Its unit starts it as that user with no
 capability and no way to gain one, the machine read-only around its own
 state, its owner's ceilings bound read-only into its home, and a rootful
-container engine's socket out of reach. Its engine is a rootless one, run
+container engine's socket out of reach: hidden as it starts, and no group
+beyond its own to open one made later. Its engine is a rootless one, run
 as the same user. On macOS it is a launchd agent of the person who
 installs it, and the installer refuses root.
 

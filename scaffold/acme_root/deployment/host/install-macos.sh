@@ -2,13 +2,15 @@
 # Installs or upgrades the workspace host on macOS, as a launchd agent of the
 # person who runs it, never as root:
 #
-#   ACME_ENROLLMENT_TOKEN=hen_... deployment/host/install-macos.sh \
+#   deployment/host/install-macos.sh --token-file <file> \
 #        --api-url https://api.acme.example [--name <host name>] [--no-start]
 #
 # It builds a release of the host from the lock into
 # ~/.local/share/acme-host/releases/ and points current at it, and writes
 # ~/Library/LaunchAgents/com.acme.host.plist (mode 600) with the platform's
-# URL, the host's name, the token, and the proxy and CA file this shell names.
+# URL, the host's name, the token in the file --token-file names (- for
+# standard input), which no command line and no environment carries, and the
+# proxy and CA file this shell names.
 # The host's home is ~/.config/acme-host, where its owner writes
 # ceilings.toml; the agent starts once that file is there. Logs go to
 # ~/Library/Logs/acme-host.log. On macOS the host runs as its owner's own
@@ -20,13 +22,15 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE="$(cd "${HERE}/../.." && pwd)"
 API_URL=""
 NAME="$(scutil --get LocalHostName 2>/dev/null || hostname -s)"
+TOKEN_FILE=""
 START=1
 while [ $# -gt 0 ]; do
   case "$1" in
     --api-url) API_URL="${2:-}"; shift 2 ;;
     --name) NAME="${2:-}"; shift 2 ;;
+    --token-file) TOKEN_FILE="${2:-}"; shift 2 ;;
     --no-start) START=0; shift ;;
-    -h|--help) sed -n '2,17p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -57,6 +61,26 @@ if ! [[ "${NAME}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$ ]]; then
   echo "--name takes letters, digits, '.', '_', and '-': ${NAME}" >&2
   exit 2
 fi
+# The token is read by the shell itself and handed to the plist's writer on a
+# file descriptor, so no process's arguments or environment ever hold it.
+if [ -n "${ACME_ENROLLMENT_TOKEN:-}" ]; then
+  echo "the token is read from --token-file, never the environment" >&2
+  exit 2
+fi
+TOKEN=""
+if [ "${TOKEN_FILE}" = "-" ]; then
+  read -r TOKEN || true
+elif [ -n "${TOKEN_FILE}" ]; then
+  if [ ! -f "${TOKEN_FILE}" ]; then
+    echo "--token-file: no file at ${TOKEN_FILE}" >&2
+    exit 2
+  fi
+  read -r TOKEN < "${TOKEN_FILE}" || true
+fi
+if [ -n "${TOKEN}" ] && ! [[ "${TOKEN}" =~ ^[A-Za-z0-9_-]+$ ]]; then
+  echo "the file --token-file names holds no token" >&2
+  exit 2
+fi
 if [ -z "${API_URL}" ] && [ ! -f "${PLIST}" ]; then
   echo "--api-url is required on the first install" >&2
   exit 2
@@ -83,7 +107,7 @@ echo "==> the agent"
 umask 077
 PLIST="${PLIST}" LABEL="${LABEL}" PROGRAM="${PREFIX}/current/bin/acme-host" \
   HOST_HOME="${HOST_HOME}" LOG="${LOG}" API_URL="${API_URL}" NAME="${NAME}" \
-  "${PREFIX}/current/bin/python" - <<'PY'
+  "${PREFIX}/current/bin/python" - 3<<<"${TOKEN}" <<'PY'
 import os
 import plistlib
 from pathlib import Path
@@ -97,7 +121,11 @@ environment = {
     # Docker Desktop's command line, wherever it was linked.
     "PATH": "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin",
 }
-for name in ("ACME_ENROLLMENT_TOKEN", "HTTPS_PROXY", "NO_PROXY", "SSL_CERT_FILE"):
+# The token, from the installer's shell on descriptor 3, or the last install's.
+token = os.fdopen(3).read().strip() or before.get("ACME_ENROLLMENT_TOKEN")
+if token:
+    environment["ACME_ENROLLMENT_TOKEN"] = token
+for name in ("HTTPS_PROXY", "NO_PROXY", "SSL_CERT_FILE"):
     value = os.environ.get(name) or before.get(name)
     if value:
         environment[name] = value

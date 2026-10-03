@@ -11,12 +11,19 @@ enrollment token its owner issued.
 ## Linux, with systemd
 
 ```bash
-sudo ACME_ENROLLMENT_TOKEN=hen_... deployment/host/install.sh \
+(umask 077; cat > ~/acme-host.token)      # paste the token, then Ctrl-D
+sudo deployment/host/install.sh --token-file ~/acme-host.token \
      --api-url https://api.acme.example --name build-01 --engine rootless
+rm ~/acme-host.token                      # host.env holds it now
 sudoedit /etc/acme-host/ceilings.toml     # the owner's ceilings
 sudo systemctl start acme-host
 journalctl -u acme-host -f
 ```
+
+The token comes from a file only root and its owner read, or from
+standard input with `--token-file -`, and never from a command line or
+an environment: what `sudo` is given there, any user on the machine
+reads with `ps`. The installer refuses a token in its environment.
 
 What it makes:
 
@@ -24,16 +31,19 @@ What it makes:
 |------|-------------|---------------|
 | `/opt/acme-host/releases/<version>-<time>` | root, read-only to others | One release, built from the lock; `current` points at the latest |
 | `/opt/acme-host/python` | root | The interpreter the releases run on |
+| `/opt/acme-host/own-group-only.sh` | root | What the unit starts the host with: it refuses while `acme-host` holds a group beyond its own |
 | `/etc/acme-host/host.env` | root, 600 | The platform's URL, the host's name, the first start's token, the proxy and CA file. Written once; edit it there |
 | `/etc/acme-host/ceilings.toml` | root, 644 | The owner's ceilings, bound read-only into the host's home |
 | `/var/lib/acme-host` | `acme-host`, 700 | The host's home: its credential, its secret store, its records |
 | `/etc/systemd/system/acme-host.service` | root | The unit |
 
-The unit runs the host as `acme-host`, never root. The token is read
-from the environment, never a flag, and is spent once the host holds its
-credential. Running the installer again builds a new release, keeps
-`host.env`, and restarts the host. The host starts only once
-`ceilings.toml` exists: a host with no ceilings does not start.
+The unit runs the host as `acme-host`, never root. The token is spent
+once the host holds its credential. Running the installer again builds
+a new release, keeps `host.env`, and restarts the host. The host starts
+only once `ceilings.toml` exists: a host with no ceilings does not
+start. A host started while the platform is down, or before the
+machine's clock is in step with it, is restarted until it starts; one
+that needs a person stays stopped, and its journal says why.
 
 ### What the unit allows
 
@@ -46,29 +56,43 @@ over a socket, and its own state. Nothing else of the machine:
   `/home` and `/root` absent, and its own `/tmp`;
 - its ceilings, its release, and its settings out of its reach to
   change;
-- a rootful engine's socket (`/run/docker.sock`) out of reach, even when
-  someone adds `acme-host` to the engine's group, since that socket is
-  root by another name.
+- a rootful engine's socket (`/run/docker.sock`) out of reach, since
+  that socket is root by another name. The unit hides it as the host
+  starts, and the host does not start while `acme-host` holds a group
+  beyond its own, such as the engine's: a socket the engine makes again
+  later is then out of reach too, since a process's groups are fixed as
+  it starts. Take `acme-host` out of the group (`gpasswd -d acme-host
+  docker`) and start it again.
 
-`systemd-analyze security acme-host` scores it 1.2, "OK". `make
+`systemd-analyze security acme-host` scores it 1.3, "OK". `make
 host-check` holds that score under 1.5 and the rest of this list, on a
 container with systemd, and CI runs it.
 
 ### Its container engine
 
 A container per session needs an engine the host's user runs:
-[rootless Docker](https://docs.docker.com/engine/security/rootless/),
-set up for `acme-host` with the engine's own tool, run as that user.
-`--engine rootless` points the host at its socket,
-`/run/user/<uid>/docker.sock`, and keeps that user's services running
-while nobody is logged in. With no engine the host still starts, and
-advertises no container mode, so no session is placed on it that needs
-one.
+[rootless Docker](https://docs.docker.com/engine/security/rootless/).
+`--engine rootless` gives `acme-host` the subordinate ids the engine
+maps, keeps its user services running while nobody is logged in, and
+points the host at the engine's socket, `/run/user/<uid>/docker.sock`:
+that directory is the one part of `/run/user` the unit shows the host,
+read-only. Then set the engine up with its own tool, as that user, and
+restart the host so it probes the engine:
+
+```bash
+U="$(id -u acme-host)"
+sudo -u acme-host env HOME=/var/lib/acme-host XDG_RUNTIME_DIR="/run/user/$U" \
+     dockerd-rootless-setuptool.sh install
+sudo systemctl restart acme-host
+```
+
+With no engine the host still starts, and advertises no container mode,
+so no session is placed on it that needs one.
 
 ## macOS
 
 ```bash
-ACME_ENROLLMENT_TOKEN=hen_... deployment/host/install-macos.sh \
+deployment/host/install-macos.sh --token-file ~/acme-host.token \
      --api-url https://api.acme.example --name laptop-01
 ```
 
