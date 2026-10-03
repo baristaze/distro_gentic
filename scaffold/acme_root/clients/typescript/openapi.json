@@ -2302,7 +2302,8 @@
       "LaneLoadView": {
         "properties": {
           "kind": {
-            "$ref": "#/components/schemas/WorkKind"
+            "title": "Kind",
+            "type": "string"
           },
           "lane": {
             "title": "Lane",
@@ -3039,7 +3040,8 @@
             "type": "string"
           },
           "kind": {
-            "$ref": "#/components/schemas/WorkKind"
+            "title": "Kind",
+            "type": "string"
           },
           "last_error": {
             "anyOf": [
@@ -4725,23 +4727,6 @@
           "span"
         ],
         "title": "WindowKind",
-        "type": "string"
-      },
-      "WorkKind": {
-        "enum": [
-          "NOOP",
-          "ORCHESTRATION",
-          "WAKE_PARKED",
-          "DELETE_ACCOUNT",
-          "DELETE_ORG",
-          "WAKE_SESSION",
-          "WAKE_SESSIONS",
-          "LOOP",
-          "VALIDATION",
-          "EXEC",
-          "WORKSPACE"
-        ],
-        "title": "WorkKind",
         "type": "string"
       },
       "WorkStatus": {

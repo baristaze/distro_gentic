@@ -546,6 +546,12 @@ class IssuedTotpSecretView(BaseModel):
     otpauth_uri: Annotated[str | None, Field(title='Otpauth Uri')]
 
 
+class LaneLoadView(BaseModel):
+    kind: Annotated[str, Field(title='Kind')]
+    lane: Annotated[str, Field(title='Lane')]
+    ready: Annotated[int, Field(title='Ready')]
+
+
 class LiveReadView(BaseModel):
     """
     A handle to one session's open streams until `expires_at`. Read it
@@ -1155,20 +1161,6 @@ class WindowKind(StrEnum):
     span = 'span'
 
 
-class WorkKind(StrEnum):
-    NOOP = 'NOOP'
-    ORCHESTRATION = 'ORCHESTRATION'
-    WAKE_PARKED = 'WAKE_PARKED'
-    DELETE_ACCOUNT = 'DELETE_ACCOUNT'
-    DELETE_ORG = 'DELETE_ORG'
-    WAKE_SESSION = 'WAKE_SESSION'
-    WAKE_SESSIONS = 'WAKE_SESSIONS'
-    LOOP = 'LOOP'
-    VALIDATION = 'VALIDATION'
-    EXEC = 'EXEC'
-    WORKSPACE = 'WORKSPACE'
-
-
 class WorkStatus(StrEnum):
     queued = 'queued'
     claimed = 'claimed'
@@ -1366,6 +1358,23 @@ class HeartbeatRequest(BaseModel):
     exec_version: Annotated[int, Field(ge=1, title='Exec Version')]
 
 
+class HostStandingView(BaseModel):
+    """
+    Why a host takes no work: its state, what it advertised, the version
+    of `exec` work it reads against the floor, when it last called, and what
+    is ready on its pool's lane and its own.
+    """
+    advertisement: AdvertisementView
+    exec_floor: Annotated[int, Field(title='Exec Floor')]
+    exec_version: Annotated[int, Field(title='Exec Version')]
+    host_id: Annotated[UUID, Field(title='Host Id')]
+    lanes: Annotated[list[LaneLoadView], Field(title='Lanes')]
+    last_seen_at: Annotated[AwareDatetime, Field(title='Last Seen At')]
+    pool_id: Annotated[UUID, Field(title='Pool Id')]
+    revoked: Annotated[bool, Field(title='Revoked')]
+    state: HostState
+
+
 class HostView(BaseModel):
     """
     A host as its owner reads it: online while it called within the
@@ -1465,12 +1474,6 @@ class IssuedUploadView(BaseModel):
     expires_at: Annotated[AwareDatetime, Field(title='Expires At')]
     fields: Annotated[list[UploadFieldView], Field(title='Fields')]
     url: Annotated[str | None, Field(title='Url')]
-
-
-class LaneLoadView(BaseModel):
-    kind: WorkKind
-    lane: Annotated[str, Field(title='Lane')]
-    ready: Annotated[int, Field(title='Ready')]
 
 
 class LastOwnerDetail(BaseModel):
@@ -1600,7 +1603,7 @@ class OperatorWorkItemView(BaseModel):
     attempts: Annotated[int, Field(title='Attempts')]
     available_at: Annotated[AwareDatetime, Field(title='Available At')]
     id: Annotated[UUID, Field(title='Id')]
-    kind: WorkKind
+    kind: Annotated[str, Field(title='Kind')]
     last_error: Annotated[str | None, Field(title='Last Error')]
     max_attempts: Annotated[int, Field(title='Max Attempts')]
     status: WorkStatus
@@ -1762,23 +1765,6 @@ class ErrorBody(BaseModel):
 
 class ErrorResponse(BaseModel):
     error: ErrorBody
-
-
-class HostStandingView(BaseModel):
-    """
-    Why a host takes no work: its state, what it advertised, the version
-    of `exec` work it reads against the floor, when it last called, and what
-    is ready on its pool's lane and its own.
-    """
-    advertisement: AdvertisementView
-    exec_floor: Annotated[int, Field(title='Exec Floor')]
-    exec_version: Annotated[int, Field(title='Exec Version')]
-    host_id: Annotated[UUID, Field(title='Host Id')]
-    lanes: Annotated[list[LaneLoadView], Field(title='Lanes')]
-    last_seen_at: Annotated[AwareDatetime, Field(title='Last Seen At')]
-    pool_id: Annotated[UUID, Field(title='Pool Id')]
-    revoked: Annotated[bool, Field(title='Revoked')]
-    state: HostState
 
 
 class InvitationPageView(BaseModel):
