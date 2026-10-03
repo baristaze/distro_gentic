@@ -59,10 +59,12 @@ and of its twin `IntegrationTwinImpl` in `events/twin.py`.
 
 | File | Change |
 |------|--------|
-| `integrations/src/<name>/integrations/settings.py` | `<integration>_integration: Literal["<system>", "twin", "none"] \| None = None`, and the system's settings: its base URL, its timeout, and its secrets as `SecretStr \| None` in `_key_off_is_none` |
+| `integrations/src/<name>/integrations/settings.py` | `<integration>_integration: Literal["<system>", "twin", "none"] \| None = None`, and the system's settings: its base URL, its timeout, the platform's own account on it, and its secrets as `SecretStr \| None` in `_key_off_is_none` |
 | `integrations/src/<name>/integrations/impl/configured.py` | in `integrations_for`, `<integration>` served by `<System>Impl` or `<System>TwinImpl` as its setting says, else as `integrations` says; in `refuse_unsafe`, the system's twin refused when deployed |
 | `.env.example` | `ACME_<INTEGRATION>_INTEGRATION` and the system's settings, commented, with `ACME_` read as the tree's prefix; a secret's line names the variable, never a value |
 | `integrations/tests/test_configured.py` | the cases of step 6 for the setting |
+| `deployment/terraform/modules/secrets/main.tf`, `outputs.tf`, `deployment/terraform/modules/environment/main.tf`, `deployment/terraform/modules/README.md` | each secret of the system, shape `workos_api_key`: a secret, `off` until set, injected as `ACME_<SYSTEM>_<KEY>` into the processes that build the integrations; each other setting given its value in the environment's `app_environment` |
+| `services/api/tests/test_settings.py`, `workers/maintenance/tests/test_settings.py` | a setting whose local default serves the cloud, in `LOCAL_DEFAULT_SERVES_THE_CLOUD` with its reason, as `workos_base_url` is |
 | `integrations/README.md` | the client and its twin in the table of The integrations, and their settings |
 
 ## Procedure
@@ -74,7 +76,13 @@ and of its twin `IntegrationTwinImpl` in `events/twin.py`.
    answers `verify_delivery` with a `ProvidedEvent`, and the platform
    does the rest. An arrival is one the router reads, in its terms
    (Feedback Routing); the system's own event names stay inside
-   `<system>_wire.py`.
+   `<system>_wire.py`. `installation` is the tenant's org id, as
+   `event_of` in `om/src/<name>/om/intake/rules.py` reads it. An
+   author is `platform` when the system names the platform's own
+   account, which a setting of the system names: the router reads that
+   kind as the session's own act (`effect_of`), so a comment the agent
+   posted never wakes it. Every other author is `person` or `bot`, as
+   the system says.
 2. `verify_delivery` checks the signature over the body before it reads
    a byte of it, in constant time, with the system's secret, and refuses
    a stale one when the system signs a timestamp. A delivery that fails
@@ -97,7 +105,10 @@ and of its twin `IntegrationTwinImpl` in `events/twin.py`.
    records every message posted through it, in order, as `posted`. The
    configured root refuses it outside `local` and `test`, as it refuses
    every twin.
-5. The real client posts through `httpx` with the timeout its settings
+5. `post(address, text)` reaches a person: `address` is their account
+   on the system, the `external_id` of their account link, as the
+   notifications manager passes it (`om/src/<name>/om/notifications/impl/manager.py`).
+   The real client posts through `httpx` with the timeout its settings
    name, and maps a refused key to `ProviderUnavailable`, never to a
    person's error, as `integrations/README.md` lists under What every
    integration holds to. Every exception it raises is one of
@@ -105,15 +116,19 @@ and of its twin `IntegrationTwinImpl` in `events/twin.py`.
    token or its webhook secret, `integrations_for` serves the absent
    integration, `IntegrationAbsentImpl`, as WorkOS without its key is
    absent. An SDK, when one is needed at all, is pinned exactly in
-   `integrations/pyproject.toml`.
+   `integrations/pyproject.toml`. A deployed process reads every setting
+   from its environment's Terraform, and
+   `test_every_setting_the_cloud_needs_is_wired` fails on one the cloud
+   sets no value for and no reason excuses.
 6. The tests reach no network. The real client's run over the recorded
    fixtures and a fake transport, shape `integrations/tests/test_identity_workos.py`;
    the cases that hold for both run once over the client and once over
    its twin, as one parametrized test:
    - a recorded delivery checks out and reads into the `ProvidedEvent`
-     the fixture names; a second read of it has the same key;
+     the fixture names; a second read of it has the same key; one whose
+     author is the platform's own account reads as `platform`;
    - a delivery with a tampered body, a wrong signature, no signature,
-     or a stale timestamp is refused, shape
+     or, when the system signs one, a stale timestamp is refused, shape
      `test_a_delivery_that_does_not_check_out_is_refused` in
      `integrations/tests/test_integration_twin.py`;
    - a body that claims a provenance is still the integration's, shape

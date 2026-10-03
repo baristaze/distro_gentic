@@ -57,6 +57,7 @@ The shape of a transport is `TransportContainerImpl` in
 | `infra/src/<name>/infra/impl/settings.py` | `<backend>` in `workspace_backend`'s `Literal`, and each `--setting` field |
 | `infra/src/<name>/infra/impl/configured.py` | a branch in `_build_runtime` that answers the provider and its transport as a pair; with a mode below `container`, a row in `UNSAFE_IN_CLOUD` |
 | `.env.example` | `<backend>` in the comment on `ACME_WORKSPACE_BACKEND`, and each setting, commented, with its default |
+| `services/api/tests/test_settings.py`, `workers/maintenance/tests/test_settings.py` | each `--setting` in `LOCAL_DEFAULT_SERVES_THE_CLOUD` with its reason, as `workspace_image` is, since neither process prepares a workspace; `test_every_setting_the_cloud_needs_is_wired` fails on a setting the cloud sets no value for and no reason excuses |
 | `infra/tests/test_workspaces.py` | the cases of step 5 |
 | `infra/tests/test_transports.py` (no `--transport`) | `TestTransport<Backend>(TransportContract)` |
 | `infra/tests/test_configured.py` | the backend in the cases of step 5 |
