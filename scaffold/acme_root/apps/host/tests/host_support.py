@@ -36,7 +36,9 @@ from acme.infra.workspaces.host import WorkspaceHostImpl
 from acme.om.base import new_id, utcnow
 from acme.om.context import TenantContext
 from acme.om.hosts.types.pool import HostPool
+from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
+from acme.om.storage.settings import MigrationSettings
 from acme.services.api.app import create_app
 from acme.services.api.container import AppContainer
 
@@ -232,6 +234,15 @@ async def stack(tmp_path: Path, storage: StorageInterface | None = None) -> Asyn
         )
         transport = Dated(Streamed(app))
         yield Stack(container=container, transport=transport, owner=owner)
+
+
+def postgres() -> StoragePostgresImpl:
+    """A storage root over the database the integration suites read."""
+    settings = MigrationSettings()
+    settings.refuse_remote()
+    return StoragePostgresImpl(
+        settings.role_urls(), settings.role_pools(), system_urls=settings.system_role_urls()
+    )
 
 
 async def directory_host(
