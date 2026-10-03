@@ -163,7 +163,10 @@ def execution_request(
     that touches a protected path, since that change voids it."""
     if purpose is RunPurpose.VALIDATION:
         if delivery.dirty:
-            return "the tree holds uncommitted changes: commit them, then ask again"
+            return (
+                "the tree holds work your branch does not: commit it, open your pull request "
+                "so the head is on your branch, then ask again"
+            )
         touched = protected_paths(policy.protected, delivery.changed)
         if touched:
             return f"the change touches protected paths, which voids validation: {list(touched)}"

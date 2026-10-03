@@ -17,6 +17,7 @@ from acme.om.workspaces.types.source import (
     BranchState,
     Checkout,
     Delivered,
+    Incoming,
     PullRequestFate,
     RepositoryBinding,
     Snapshot,
@@ -70,7 +71,12 @@ class GitTwin(WorkspaceGitInterface):
     cuts: list[str] = field(default_factory=lambda: list[str]())
 
     async def sync(
-        self, ctx: TenantContext, workspace: Workspace, binding: RepositoryBinding, branch: str
+        self,
+        ctx: TenantContext,
+        workspace: Workspace,
+        binding: RepositoryBinding,
+        branch: str,
+        incoming: Incoming,
     ) -> BranchState:
         remote, local = branch in self.remote, branch in self.local
         return BranchState(remote=remote, local=local, diverged=remote and local and self.diverged)
@@ -103,6 +109,16 @@ class GitTwin(WorkspaceGitInterface):
         self.pushed[ref] = commit
         return Snapshot(ref=ref, commit=commit, remote_branch=branch in self.remote)
 
+    async def outgoing(self, ctx: TenantContext, workspace: Workspace, head: str) -> bytes:
+        self.calls.append("outgoing")
+        return f"bundle of {head}".encode()
+
+    async def landed(
+        self, ctx: TenantContext, workspace: Workspace, branch: str, head: str
+    ) -> None:
+        self.calls.append("landed")
+        self.remote.add(branch)
+
 
 @dataclass
 class ReaderTwin(RepositoryReaderInterface):
@@ -113,6 +129,8 @@ class ReaderTwin(RepositoryReaderInterface):
     changed: tuple[str, ...] = ()
     credentials: list[FetchCredential | None] = field(default_factory=lambda: [])
     """The credential each read was handed, in order."""
+    brought: list[FetchCredential | None] = field(default_factory=lambda: [])
+    """The credential each checkout's bundle was read with, in order."""
 
     trees: dict[tuple[str, str], bytes] = field(default_factory=lambda: {})
     """The tar a validation's tree reads, by its version and source."""
@@ -122,6 +140,12 @@ class ReaderTwin(RepositoryReaderInterface):
     ) -> Delivered:
         self.credentials.append(credential)
         return Delivered(base=BASE, head=self.head, changed=self.changed)
+
+    async def incoming(
+        self, binding: RepositoryBinding, branch: str, credential: FetchCredential | None = None
+    ) -> Incoming:
+        self.brought.append(credential)
+        return Incoming(bundle=b"the default branch", default_branch="main")
 
     async def tree(
         self,

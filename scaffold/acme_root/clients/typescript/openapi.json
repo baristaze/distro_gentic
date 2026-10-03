@@ -4737,9 +4737,9 @@
           "WAKE_SESSION",
           "WAKE_SESSIONS",
           "LOOP",
+          "VALIDATION",
           "EXEC",
-          "WORKSPACE",
-          "STATION"
+          "WORKSPACE"
         ],
         "title": "WorkKind",
         "type": "string"

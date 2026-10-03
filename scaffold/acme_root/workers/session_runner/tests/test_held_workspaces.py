@@ -17,7 +17,7 @@ from uuid import UUID
 
 import pytest
 from contracts.agent_session_storage import make_session
-from contracts.workspaces import GitTwin, ProjectsTwin, PullRequestsTwin
+from contracts.workspaces import GitTwin, ProjectsTwin, PullRequestsTwin, ReaderTwin
 
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.transports import TransportInterface
@@ -31,6 +31,7 @@ from acme.infra.workspaces import (
 )
 from acme.infra.workspaces.host import WorkspaceHostImpl
 from acme.infra.workspaces.twin import WorkspaceTwinImpl
+from acme.integrations.events.twin import IntegrationTwinImpl
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.base import new_id, utcnow
@@ -38,10 +39,14 @@ from acme.om.context import AppContext, AppType, OperatorRole, RequestContext, T
 from acme.om.root import Managers, build_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.work.types.work_item import WorkItem, WorkKind
+from acme.om.workspaces.impl.forge import SourceControlForgeImpl
 from acme.om.workspaces.rules import SNAPSHOT_PREFIX, session_branch
 from acme.workers.session_runner.workspaces import HeldOptions, HeldWorkspacesSweep
 
 GIT = shutil.which("git")
+FORGE = SourceControlForgeImpl(lambda name: IntegrationTwinImpl(name, writes=True))
+"""A forge that pushes to the repository on disk, which asks no credential
+of it."""
 APP = AppContext(type=AppType.WORKER, version="session-runner@test")
 GRACE = timedelta(minutes=5)
 DIRECTORY = IsolationSpec(mode=IsolationMode.HOST, egress=EgressPolicy(mode=EgressMode.OPEN))
@@ -190,6 +195,7 @@ async def test_a_killed_runs_instance_is_released_past_the_grace_with_its_work_o
         agent_kinds=(worker(DIRECTORY),),
         workspace_projects=ProjectsTwin(repository=str(remote)),
         pull_requests=PullRequestsTwin(),
+        source_control=FORGE,
     )
     host = Host(managers, infra.get_workspaces())
     await host.start()
@@ -230,6 +236,7 @@ async def test_a_push_that_does_not_land_keeps_the_instance_for_the_next_pass(
         workspace_projects=ProjectsTwin(),
         pull_requests=PullRequestsTwin(),
         workspace_git=source,
+        workspace_reader=ReaderTwin(),
     )
     provider = infra.get_workspaces()
     assert isinstance(provider, WorkspaceTwinImpl)
@@ -273,6 +280,7 @@ async def test_a_deleted_tenants_instance_is_purged_past_the_grace(
         agent_kinds=(worker(DIRECTORY),),
         workspace_projects=ProjectsTwin(repository=str(remote)),
         pull_requests=PullRequestsTwin(),
+        source_control=FORGE,
     )
     host = Host(managers, infra.get_workspaces())
     await host.start()
@@ -304,6 +312,7 @@ async def test_an_instance_this_database_holds_no_record_of_is_left_alone(
         workspace_projects=ProjectsTwin(),
         pull_requests=PullRequestsTwin(),
         workspace_git=GitTwin(),
+        workspace_reader=ReaderTwin(),
     )
     provider = infra.get_workspaces()
     assert isinstance(provider, WorkspaceTwinImpl)

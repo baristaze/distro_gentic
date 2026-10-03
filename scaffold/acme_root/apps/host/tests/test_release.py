@@ -35,9 +35,11 @@ from acme.infra.transports.local import DEFAULT_PATH, TransportLocalImpl
 from acme.infra.workspaces import IsolationMode as ProviderMode
 from acme.infra.workspaces import IsolationRefused, Workspace
 from acme.infra.workspaces.host import WorkspaceHostImpl
+from acme.integrations.events.twin import IntegrationTwinImpl
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
 from acme.integrations.impl.configured import IntegrationsOverImpl
 from acme.integrations.model_providers.registry import scripted_model_providers
+from acme.om import root as platform_root
 from acme.om.agents.loop_rules import changed_step
 from acme.om.agents.types.request import Start
 from acme.om.base import new_id, utcnow
@@ -46,6 +48,7 @@ from acme.om.placement.types.work import WorkspaceOperation, WorkspacePayload
 from acme.om.root import Managers, PlatformPorts
 from acme.om.steps.types.header import ParkReason
 from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
+from acme.om.workspaces.impl.reader import RepositoryReaderGitImpl
 from acme.om.workspaces.rules import SNAPSHOT_PREFIX, session_branch
 from acme.services.api.seed import seed_platform
 from acme.workers.session_runner.container import RunnerContainer
@@ -81,8 +84,15 @@ def git(where: Path, *args: str) -> str:
 
 
 @pytest.fixture
-def remote(tmp_path: Path) -> Path:
-    """The project's repository on disk, its default branch seeded."""
+def remote(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """The project's repository on disk, its default branch seeded, and the
+    reader the runner's root builds allowed to read a path, as a deployed
+    one is not."""
+    monkeypatch.setattr(
+        platform_root,
+        "RepositoryReaderGitImpl",
+        lambda **options: RepositoryReaderGitImpl(**{**options, "on_disk": True}),
+    )
     remote, seed = tmp_path / "remote.git", tmp_path / "seed"
     subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(remote)], check=True)
     subprocess.run(["git", "init", "-q", "-b", "main", str(seed)], check=True)
@@ -195,7 +205,11 @@ async def placed(api: Stack, tmp_path: Path, remote: Path) -> Placed:
         SETTINGS,
         api.container.storage,
         api.container.infra,
-        IntegrationsOverImpl(IdentityProviderAbsentImpl(), scripted_model_providers()),
+        IntegrationsOverImpl(
+            IdentityProviderAbsentImpl(),
+            scripted_model_providers(),
+            {"forge": IntegrationTwinImpl("forge", writes=True)},
+        ),
         agent_kinds=(KIND,),
         ports=PlatformPorts(workspace_projects=projects),
     )

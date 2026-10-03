@@ -1,7 +1,8 @@
 """The checkout, over a directory on this host, the transport that runs its
 commands here, and a repository on disk as the remote: git itself, through
-the engine's one way into a workspace. A release pushes the work a loop
-left to a snapshot ref and leaves the branch, the index, and the files as
+the engine's one way into a workspace, which brings the repository in and
+takes the work out as bundles, for the forge to push. A release pushes the
+work a loop left to a snapshot ref and leaves the branch, the index, and the files as
 they were; a branch the remote lost with no known fate fails loudly and
 nothing is checked out from the default branch; one gone after its pull
 request merged is cut again from it. A pinned session's checkout runs on
@@ -41,10 +42,14 @@ from acme.infra.workspaces import (
     WorkspaceProviderInterface,
 )
 from acme.infra.workspaces.host import WorkspaceHostImpl
+from acme.integrations.events.twin import FORGE, IntegrationTwinImpl
+from acme.integrations.impl.configured import integrations_for
+from acme.integrations.settings import IntegrationsSettings
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext, Role, TenantContext
+from acme.om.exceptions import ValidationFailed
 from acme.om.hosts.impl.placement import PlacementHostsImpl
 from acme.om.hosts.types.host import Advertisement, Enrollment
 from acme.om.hosts.types.host import IsolationMode as Mode
@@ -54,6 +59,7 @@ from acme.om.relay.impl.transport import TransportPlacedImpl
 from acme.om.root import Managers, build_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.trust.types.identities import Executor, ExecutorKind
+from acme.om.workspaces.impl.forge import SourceControlForgeImpl
 from acme.om.workspaces.rules import SNAPSHOT_PREFIX, session_branch
 from acme.om.workspaces.types.source import PullRequestFate
 
@@ -127,6 +133,9 @@ class Checkout:
         git(seed, "push", "-q", str(self.remote), "main")
         self.main = git(self.remote, "rev-parse", "main")
         self.pull_requests = PullRequestsTwin()
+        # The forge pushes to the repository on disk, which asks no
+        # credential of it.
+        self.forge = IntegrationTwinImpl("forge", writes=True)
         self.projects = ProjectsTwin(repository=str(self.remote))
         self.storage = storage or StorageMemoryImpl()
         self.keys: KeyServiceInterface | None = None
@@ -146,6 +155,7 @@ class Checkout:
             agent_kinds=(WORKER,),
             workspace_projects=self.projects,
             pull_requests=self.pull_requests,
+            source_control=SourceControlForgeImpl(lambda name: self.forge),
             transport_layer=self.transport_layer,
         )
 
@@ -673,7 +683,119 @@ async def test_a_pinned_sessions_checkout_and_its_push_run_on_the_host_that_hold
     await managers.tools.release_workspace(owner, workspace)
 
     (ref,) = checkout.snapshots(branch)
-    assert git(checkout.remote, "show", f"{ref}:notes.txt") == "half done", "pushed from its host"
+    assert git(checkout.remote, "show", f"{ref}:notes.txt") == "half done", "bundled on its host"
     assert host.ran and set(host.ran) == {session.id}
     assert infra.outside.ran == [], "nothing ran on the platform's machine"
     assert git(here, "status", "--porcelain") == "?? notes.txt", "its host still holds it"
+
+
+# The repository's tags come in with its branches.
+
+
+async def test_a_tagged_repositorys_checkout_describes_its_commits_by_the_tags(
+    checkout: Checkout, tmp_path: Path
+) -> None:
+    seed = tmp_path / "seed"
+    git(
+        seed,
+        "-c",
+        "user.name=t",
+        "-c",
+        "user.email=t@example.invalid",
+        "tag",
+        "-a",
+        "v1.0.0",
+        "-m",
+        "1",
+    )
+    git(seed, "push", "-q", str(checkout.remote), "v1.0.0")
+    session_id = await checkout.session()
+
+    workspace = await checkout.prepare(session_id)
+    here = Path(workspace.location)
+    assert git(here, "describe", "--tags") == "v1.0.0"
+    await checkout.release(workspace)
+    await checkout.prepare(session_id)
+    assert git(here, "describe", "--tags") == "v1.0.0", "the next loop's sync keeps it"
+
+
+# The session's branch only moves forward.
+
+
+async def open_it(checkout: Checkout, session_id: UUID, head: str) -> None:
+    workspaces = checkout.managers.workspaces
+    token = await workspaces.mint_push_token(checkout.ctx, session_id)
+    await workspaces.open_pull_request(
+        checkout.ctx, session_id, token.token.get_secret_value(), head, "a fix", ""
+    )
+
+
+async def test_an_amended_head_is_refused_as_a_move_back_and_a_commit_on_top_is_taken(
+    checkout: Checkout,
+) -> None:
+    session_id = await checkout.session()
+    branch = session_branch(session_id)
+    workspace = await checkout.prepare(session_id)
+    here = Path(workspace.location)
+    (here / "total.py").write_text("TOTAL = 3\n")
+    first = commit(here, "total")
+    await open_it(checkout, session_id, first)
+    (here / "total.py").write_text("TOTAL = 4\n")
+    git(here, "add", "total.py")
+    git(
+        here,
+        "-c",
+        "user.name=a",
+        "-c",
+        "user.email=a@example.invalid",
+        "commit",
+        "-q",
+        "--amend",
+        "--no-edit",
+    )
+    amended = git(here, "rev-parse", "HEAD")
+
+    with pytest.raises(ValidationFailed, match="only moves forward") as refused:
+        await open_it(checkout, session_id, amended)
+
+    assert "add a commit on top of it" in refused.value.message
+    assert f"git reset --soft {first}" in refused.value.message
+    assert git(checkout.remote, "rev-parse", f"refs/heads/{branch}") == first, "nothing moved"
+
+    # As the refusal says: the change, committed on top of the branch.
+    git(here, "reset", "-q", "--soft", first)
+    on_top = commit(here, "total, corrected")
+    await open_it(checkout, session_id, on_top)
+    assert git(checkout.remote, "rev-parse", f"refs/heads/{branch}") == on_top
+    assert git(checkout.remote, "show", f"{branch}:total.py") == "TOTAL = 4"
+
+
+# The local stack's forge twin holds what is pushed to it.
+
+
+async def test_the_local_stacks_forge_twin_keeps_the_branch_and_the_snapshot_for_the_next_loop(
+    checkout: Checkout,
+) -> None:
+    built = integrations_for(
+        IntegrationsSettings.model_validate({"_env_file": None, "integrations": "twin"})
+    )
+    forge = built[FORGE]
+    assert isinstance(forge, IntegrationTwinImpl)
+    checkout.forge = forge
+    session_id = await checkout.session()
+    branch = session_branch(session_id)
+    workspace = await checkout.prepare(session_id)
+    here = Path(workspace.location)
+    (here / "total.py").write_text("TOTAL = 3\n")
+    head = commit(here, "total")
+    await open_it(checkout, session_id, head)
+    (here / "notes.txt").write_text("half done\n")
+    await checkout.release(workspace)
+
+    assert git(checkout.remote, "rev-parse", f"refs/heads/{branch}") == head
+    (ref,) = checkout.snapshots(branch)
+    assert git(checkout.remote, "show", f"{ref}:notes.txt") == "half done"
+    again = await checkout.prepare(session_id)
+    assert git(here, "rev-parse", f"refs/remotes/origin/{branch}") == head, "read back"
+    assert git(here, "rev-parse", "HEAD") == head
+    assert again.changed is not None and ref in again.changed, "told of the snapshot"
