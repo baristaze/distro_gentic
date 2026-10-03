@@ -109,9 +109,10 @@ app, and `main.py` is the `acme-api` command: `serve`, `migrate`,
   `/v1/projects/{project_id}`, `.../credential`)
 - **Knowledge and playbooks.** The entries in a state, the suggestions
   waiting on a review among them, and one entry; a person writes one in
-  person, edits it on the version `If-Match` names, and keeps or rejects
-  a suggestion. A person publishes a playbook's next version with its
-  gates, and the latest version of a name is read. (`/v1/knowledge`,
+  person, under an Idempotency-Key, edits it on the version `If-Match`
+  names, and keeps or rejects a suggestion. A person publishes a
+  playbook's next version with its gates, under an Idempotency-Key, and
+  the latest version of a name is read. (`/v1/knowledge`,
   `/v1/knowledge/{entry_id}`, `.../review`, `/v1/playbooks`,
   `/v1/playbooks/{name}`)
 - **Automations.** A person makes one in person, under an

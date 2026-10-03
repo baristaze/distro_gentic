@@ -22,9 +22,11 @@ async def test_a_person_publishes_versions_and_the_latest_is_read(
 ) -> None:
     ajax = await tenant(client, container, "ajax")
     member = await person(client, container, ajax.org_id, Role.MEMBER)
-    first = await client.post("/v1/playbooks", headers=member, json=DRAFT)
+    keyed = {**member, "Idempotency-Key": "publish-release-check"}
+    first = await client.post("/v1/playbooks", headers=keyed, json=DRAFT)
     assert first.status_code == 201, first.text
     assert first.json()["version"] == 1
+    assert (await client.post("/v1/playbooks", headers=keyed, json=DRAFT)).json() == first.json()
     assert first.json()["gates"] == [
         {"tool": "git_push", "authorization_class": None, "decision": "approve"}
     ]

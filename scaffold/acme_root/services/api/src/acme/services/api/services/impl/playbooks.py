@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from acme.om.context import TenantContext
 from acme.om.playbooks import PlaybooksManagerInterface
 from acme.om.playbooks.types.playbook import PlaybookDraft
@@ -10,9 +12,12 @@ class PlaybooksServiceImpl(PlaybooksServiceInterface):
     def __init__(self, playbooks: PlaybooksManagerInterface) -> None:
         self._playbooks = playbooks
 
-    async def publish(self, ctx: TenantContext, body: PublishRequest) -> PlaybookView:
+    async def publish(
+        self, ctx: TenantContext, body: PublishRequest, playbook_id: UUID
+    ) -> PlaybookView:
         draft = built(PlaybookDraft, body.model_dump())
-        return PlaybookView.model_validate(await self._playbooks.publish(ctx, draft))
+        published = await self._playbooks.publish(ctx, draft, playbook_id=playbook_id)
+        return PlaybookView.model_validate(published)
 
     async def get_playbook(self, ctx: TenantContext, name: str) -> PlaybookView:
         return PlaybookView.model_validate(await self._playbooks.get_playbook(ctx, name))

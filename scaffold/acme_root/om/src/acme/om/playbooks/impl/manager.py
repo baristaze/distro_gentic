@@ -8,7 +8,13 @@ from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agents import AgentsManagerInterface
 from acme.om.base import Platform, derived_id, new_id, utcnow
 from acme.om.context import Permission, TenantContext
-from acme.om.exceptions import Conflict, NotAuthorized, NotFound, UniqueKeyTaken
+from acme.om.exceptions import (
+    Conflict,
+    NotAuthorized,
+    NotFound,
+    TenantMismatch,
+    UniqueKeyTaken,
+)
 from acme.om.intake.rules import in_person
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import versioned_row
@@ -52,13 +58,15 @@ class PlaybooksManagerImpl(PlaybooksManagerInterface):
         self._options = options
         self._clock = clock
 
-    async def publish(self, ctx: TenantContext, draft: PlaybookDraft) -> Playbook:
+    async def publish(
+        self, ctx: TenantContext, draft: PlaybookDraft, *, playbook_id: UUID | None = None
+    ) -> Playbook:
         ctx.require(Permission.WRITE)
         if not in_person(ctx):
             raise NotAuthorized("a playbook is published by a person, never by an agent's call")
         latest = await self._storage.read_latest(ctx.org_id, draft.name)
         playbook = Playbook(
-            id=new_id(),
+            id=playbook_id or new_id(),
             created_at=self._clock(),
             name=draft.name,
             version=1 if latest is None else latest.version + 1,
@@ -69,9 +77,14 @@ class PlaybooksManagerImpl(PlaybooksManagerInterface):
         )
         rows = (versioned_row(ctx, PUBLISHED, playbook.id, playbook.version),)
         try:
-            await self._storage.create_playbook(ctx.org_id, playbook, rows)
+            landed = await self._storage.create_playbook(ctx.org_id, playbook, rows)
         except UniqueKeyTaken as taken:
             raise Conflict(f"playbook {draft.name} was published meanwhile") from taken
+        if not landed:
+            stored = await self._storage.read_playbook(ctx.org_id, playbook.id)
+            if stored is None:
+                raise TenantMismatch(f"playbook {playbook.id} is not in {ctx.org_id}")
+            return stored
         await self._relay.relay_all(ctx.org_id, rows)
         return playbook
 

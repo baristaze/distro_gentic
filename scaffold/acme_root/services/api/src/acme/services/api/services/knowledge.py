@@ -19,7 +19,9 @@ class KnowledgeServiceInterface(ABC):
     async def get_entry(self, ctx: TenantContext, entry_id: UUID) -> KnowledgeView: ...
 
     @abstractmethod
-    async def write_entry(self, ctx: TenantContext, body: KnowledgeRequest) -> KnowledgeView: ...
+    async def write_entry(
+        self, ctx: TenantContext, body: KnowledgeRequest, entry_id: UUID
+    ) -> KnowledgeView: ...
 
     @abstractmethod
     async def edit_entry(

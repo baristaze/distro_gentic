@@ -8,7 +8,13 @@ from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import Platform, new_id, utcnow
 from acme.om.context import Permission, TenantContext
-from acme.om.exceptions import Conflict, NotAuthorized, NotFound, PreconditionFailed
+from acme.om.exceptions import (
+    Conflict,
+    NotAuthorized,
+    NotFound,
+    PreconditionFailed,
+    TenantMismatch,
+)
 from acme.om.intake.rules import in_person
 from acme.om.knowledge.manager import KnowledgeManagerInterface
 from acme.om.knowledge.rules import recalled_step, triggered
@@ -51,15 +57,25 @@ class KnowledgeManagerImpl(KnowledgeManagerInterface):
     ) -> Knowledge:
         ctx.require(Permission.WRITE)
         await self._sessions.get_session(ctx, session_id)
-        return await self._create(ctx, title, trigger, text, suggested_by=session_id)
+        return await self._create(
+            ctx, title, trigger, text, suggested_by=session_id, entry_id=new_id()
+        )
 
     async def write(
-        self, ctx: TenantContext, title: str, trigger: tuple[str, ...], text: str
+        self,
+        ctx: TenantContext,
+        title: str,
+        trigger: tuple[str, ...],
+        text: str,
+        *,
+        entry_id: UUID | None = None,
     ) -> Knowledge:
         ctx.require(Permission.WRITE)
         if not in_person(ctx):
             raise NotAuthorized("knowledge is written by a person, never by an agent's call")
-        return await self._create(ctx, title, trigger, text, suggested_by=None)
+        return await self._create(
+            ctx, title, trigger, text, suggested_by=None, entry_id=entry_id or new_id()
+        )
 
     async def get_entry(self, ctx: TenantContext, entry_id: UUID) -> Knowledge:
         ctx.require(Permission.READ)
@@ -164,11 +180,12 @@ class KnowledgeManagerImpl(KnowledgeManagerInterface):
         text: str,
         *,
         suggested_by: UUID | None,
+        entry_id: UUID,
     ) -> Knowledge:
         now = self._clock()
         by_person = suggested_by is None
         entry = Knowledge(
-            id=new_id(),
+            id=entry_id,
             created_at=now,
             updated_at=now,
             created_by=ctx.user_id,
@@ -181,7 +198,11 @@ class KnowledgeManagerImpl(KnowledgeManagerInterface):
             reviewed_by=ctx.user_id if by_person else None,
         )
         rows = (versioned_row(ctx, CREATED, entry.id, entry.version),)
-        await self._storage.create_entry(ctx.org_id, entry, rows)
+        if not await self._storage.create_entry(ctx.org_id, entry, rows):
+            stored = await self._storage.read_entry(ctx.org_id, entry.id)
+            if stored is None:
+                raise TenantMismatch(f"knowledge {entry.id} is not in {ctx.org_id}")
+            return stored
         await self._relay_all(ctx, rows)
         return entry
 

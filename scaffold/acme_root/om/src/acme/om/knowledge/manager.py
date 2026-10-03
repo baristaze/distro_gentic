@@ -22,10 +22,18 @@ class KnowledgeManagerInterface(ABC):
 
     @abstractmethod
     async def write(
-        self, ctx: TenantContext, title: str, trigger: tuple[str, ...], text: str
+        self,
+        ctx: TenantContext,
+        title: str,
+        trigger: tuple[str, ...],
+        text: str,
+        *,
+        entry_id: UUID | None = None,
     ) -> Knowledge:
         """An entry a person writes in person, reviewed by them as they write
-        it. An agent's call is `NotAuthorized`."""
+        it. An agent's call is `NotAuthorized`. An id written already
+        answers the entry as stored, so a retry writes none; one another
+        tenant holds is `TenantMismatch`."""
         ...
 
     @abstractmethod

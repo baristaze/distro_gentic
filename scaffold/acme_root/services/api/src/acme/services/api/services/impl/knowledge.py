@@ -21,8 +21,12 @@ class KnowledgeServiceImpl(KnowledgeServiceInterface):
     async def get_entry(self, ctx: TenantContext, entry_id: UUID) -> KnowledgeView:
         return KnowledgeView.model_validate(await self._knowledge.get_entry(ctx, entry_id))
 
-    async def write_entry(self, ctx: TenantContext, body: KnowledgeRequest) -> KnowledgeView:
-        written = await self._knowledge.write(ctx, body.title, tuple(body.trigger), body.text)
+    async def write_entry(
+        self, ctx: TenantContext, body: KnowledgeRequest, entry_id: UUID
+    ) -> KnowledgeView:
+        written = await self._knowledge.write(
+            ctx, body.title, tuple(body.trigger), body.text, entry_id=entry_id
+        )
         return KnowledgeView.model_validate(written)
 
     async def edit_entry(

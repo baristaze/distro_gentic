@@ -1314,8 +1314,7 @@ export interface paths {
         put?: never;
         /**
          * Write Entry
-         * @description An entry a person writes, reviewed as it is written. A retry writes
-         *     another, so it takes no Idempotency-Key.
+         * @description An entry a person writes, reviewed as it is written.
          */
         post: operations["write_entry_v1_knowledge_post"];
         delete?: never;
@@ -1725,8 +1724,7 @@ export interface paths {
         put?: never;
         /**
          * Publish
-         * @description The next version of the name. A retry publishes another, so it takes
-         *     no Idempotency-Key.
+         * @description The next version of the name.
          */
         post: operations["publish_v1_playbooks_post"];
         delete?: never;
@@ -7614,6 +7612,7 @@ export interface operations {
                 authorization?: string | null;
                 "x-app"?: string | null;
                 "x-app-version"?: string | null;
+                "idempotency-key"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -8699,6 +8698,7 @@ export interface operations {
                 authorization?: string | null;
                 "x-app"?: string | null;
                 "x-app-version"?: string | null;
+                "idempotency-key"?: string | null;
             };
             path?: never;
             cookie?: never;

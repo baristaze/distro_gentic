@@ -13629,7 +13629,7 @@
         ]
       },
       "post": {
-        "description": "An entry a person writes, reviewed as it is written. A retry writes\nanother, so it takes no Idempotency-Key.",
+        "description": "An entry a person writes, reviewed as it is written.",
         "operationId": "write_entry_v1_knowledge_post",
         "parameters": [
           {
@@ -13678,6 +13678,24 @@
                 }
               ],
               "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
             }
           }
         ],
@@ -16417,7 +16435,7 @@
     },
     "/v1/playbooks": {
       "post": {
-        "description": "The next version of the name. A retry publishes another, so it takes\nno Idempotency-Key.",
+        "description": "The next version of the name.",
         "operationId": "publish_v1_playbooks_post",
         "parameters": [
           {
@@ -16466,6 +16484,24 @@
                 }
               ],
               "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
             }
           }
         ],

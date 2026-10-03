@@ -43,9 +43,12 @@ async def test_a_person_writes_reads_lists_and_edits_an_entry(
 ) -> None:
     ajax = await tenant(client, container, "ajax")
     member = await person(client, container, ajax.org_id, Role.MEMBER)
-    written = await client.post("/v1/knowledge", headers=member, json=ENTRY)
+    keyed = {**member, "Idempotency-Key": "write-the-staging-entry"}
+    written = await client.post("/v1/knowledge", headers=keyed, json=ENTRY)
     assert written.status_code == 201, written.text
     entry = written.json()
+    retried = await client.post("/v1/knowledge", headers=keyed, json=ENTRY)
+    assert retried.json() == entry
     assert entry["status"] == "reviewed"
     assert entry["version"] == 1
     url = f"/v1/knowledge/{entry['id']}"

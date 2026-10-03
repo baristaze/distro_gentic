@@ -4,10 +4,11 @@ version they read, or reviews. A person's, in person, to write."""
 
 from uuid import UUID
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
 
 from acme.om.knowledge.types.knowledge import KnowledgeStatus
 from acme.services.api.gateway.auth import Ctx
+from acme.services.api.gateway.idempotency import Idem
 from acme.services.api.gateway.precondition import IfMatch
 from acme.services.api.gateway.resolve import KnowledgeService
 from acme.services.api.types.common import LIMIT_DEFAULT
@@ -35,11 +36,10 @@ async def get_entry(ctx: Ctx, knowledge: KnowledgeService, entry_id: UUID) -> Kn
 
 @router.post("", response_model=KnowledgeView, status_code=201)
 async def write_entry(
-    ctx: Ctx, knowledge: KnowledgeService, body: KnowledgeRequest
-) -> KnowledgeView:
-    """An entry a person writes, reviewed as it is written. A retry writes
-    another, so it takes no Idempotency-Key."""
-    return await knowledge.write_entry(ctx, body)
+    ctx: Ctx, knowledge: KnowledgeService, body: KnowledgeRequest, idem: Idem
+) -> Response:
+    """An entry a person writes, reviewed as it is written."""
+    return await idem.run(201, lambda attempt: knowledge.write_entry(ctx, body, attempt.target_id))
 
 
 @router.put("/{entry_id}", response_model=KnowledgeView)
