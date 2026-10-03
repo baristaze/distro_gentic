@@ -122,6 +122,16 @@ class LedgerStorageMemoryImpl(MemoryStorageBase, LedgerStorageInterface):
     ) -> Tally | None:
         return self._tallies.get((org_id, budget_id, window_start))
 
+    async def read_open(
+        self, after: datetime, before: datetime, limit: int
+    ) -> list[tuple[UUID, Hold]]:
+        open_ = [
+            (org_id, hold)
+            for org_id, hold in self._rows_across_tenants(self._holds)
+            if after <= hold.created_at < before and hold.id not in self._settlements
+        ]
+        return sorted(open_, key=lambda found: (found[1].created_at, found[1].id))[:limit]
+
     async def count_tenant(self, org_id: UUID, limit: int) -> int:
         holds = len(self._rows(self._holds, org_id))
         settlements = sum(1 for org, _ in self._settlements.values() if org == org_id)

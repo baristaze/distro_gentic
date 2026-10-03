@@ -7,6 +7,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from acme.om.base import EMPTY_UUID
 from acme.om.budgets.rules import TallyKey, key_of, refusal_of
 from acme.om.budgets.storage import BudgetStorageInterface, LedgerStorageInterface
 from acme.om.budgets.storage.tables.budget_holds import BudgetHolds
@@ -20,7 +21,7 @@ from acme.om.budgets.types.hold import Hold, HoldLine, Settlement, Tally
 from acme.om.exceptions import NotFound, PreconditionFailed, TenantMismatch
 from acme.om.outbox.storage.tables.outbox_rows import OutboxRows
 from acme.om.outbox.types.row import OutboxRow
-from acme.om.storage.impl.pg_base import PgStorageBase, delete_batch, deleted
+from acme.om.storage.impl.pg_base import PLAN_WITH_VALUES, PgStorageBase, delete_batch, deleted
 from acme.om.storage.utils.translation import to_model, to_row, to_values
 
 
@@ -191,6 +192,32 @@ class LedgerStoragePostgresImpl(PgStorageBase, LedgerStorageInterface):
         async with self._session_for(stmt, org_id=org_id) as session:
             row = (await session.execute(stmt)).scalar_one_or_none()
             return None if row is None else to_model(row, Tally)
+
+    async def read_open(
+        self, after: datetime, before: datetime, limit: int
+    ) -> list[tuple[UUID, Hold]]:
+        # The holds of the slice by their time, each kept while no settlement
+        # names it: the slice's index bounds the read, and the settlements'
+        # unique index answers each probe.
+        settled = select(BudgetSettlements.id).where(
+            BudgetSettlements.org_id == BudgetHolds.org_id,
+            BudgetSettlements.hold_id == BudgetHolds.id,
+        )
+        stmt = (
+            select(BudgetHolds)
+            .where(
+                BudgetHolds.created_at >= after,
+                BudgetHolds.created_at < before,
+                ~settled.exists(),
+            )
+            .order_by(BudgetHolds.created_at, BudgetHolds.id)
+            .limit(limit)
+        )
+        async with self._session_for(stmt, org_id=EMPTY_UUID) as session:
+            await session.execute(PLAN_WITH_VALUES)
+            return [
+                (row.org_id, to_model(row, Hold)) for row in (await session.execute(stmt)).scalars()
+            ]
 
     async def count_tenant(self, org_id: UUID, limit: int) -> int:
         # Each count stops at the limit.

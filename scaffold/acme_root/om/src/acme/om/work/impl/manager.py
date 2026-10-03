@@ -234,6 +234,10 @@ class WorkManagerImpl(WorkManagerInterface):
         ctx.require(Permission.READ)
         return await self._storage.count_claimed_ahead(ctx.org_id, item, utcnow())
 
+    async def has_open(self, ctx: TenantContext, kind: WorkKind, target_id: UUID) -> bool:
+        ctx.require(Permission.READ)
+        return await self._storage.has_open_item(ctx.org_id, kind, target_id)
+
     async def fail_for_good(self, ctx: TenantContext, item: WorkItem, error: str) -> WorkItem:
         return await self._fail(ctx, item, error, True)
 

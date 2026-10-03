@@ -8,6 +8,7 @@ steps from where it last stopped and is always rebuildable from them."""
 
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable, Sequence
+from datetime import datetime
 from uuid import UUID
 
 from acme.om.agent_sessions.types.agent_session import (
@@ -174,6 +175,18 @@ class AgentSessionsManagerInterface(ABC):
         within its retention, or never marked, is never taken: no purge
         runs on demand. Returns how many sessions it took up, so a whole
         batch says there may be more."""
+        ...
+
+    @abstractmethod
+    async def pending_across_tenants(
+        self, after: datetime, before: datetime, limit: int
+    ) -> list[tuple[UUID, AgentSession]]:
+        """Platform-internal: the sweep's read, across tenants, for no
+        principal: at most `limit` of the sessions pending, and not marked
+        deleted, whose last write is at or after `after` and before
+        `before`, each with its tenant, oldest write first. A run never
+        writes the row while it drives a loop, so a session found here may
+        be one a run still holds: the caller asks the queue and the history."""
         ...
 
     @abstractmethod

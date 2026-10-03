@@ -25,8 +25,10 @@ from acme.om.work.types.work_item import WorkKind
 from acme.workers.maintenance.accounts import DeleteAccountHandlerImpl, DeleteOrgHandlerImpl
 from acme.workers.maintenance.container import (
     AGENT_SESSION_PURGE_BATCH,
+    HOLD_SWEEP_BATCH,
     MEDIA_PURGE_BATCH,
     RETENTION_SWEEP_BATCH,
+    STALLED_SWEEP_BATCH,
     WorkerContainer,
 )
 from acme.workers.maintenance.deliveries import (
@@ -152,6 +154,12 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             # marked for the purge above. A tightened policy reaches each
             # session first.
             "retention": managers.retention.sweep,
+            # Each hold no settlement closed an hour after it opened: at the
+            # provider's bill, else whole, released only on its proof.
+            "holds": container.holds.settle_open,
+            # Each session pending with no write since a run's time: its run
+            # is asked for again, once a write.
+            "stalled_sessions": container.stalled,
             # Each exec item whose host's lease ran out: an unsafe one ends
             # `interrupted`, a repeatable one waits for its host again.
             "relay": managers.relay.settle_expired,
@@ -162,6 +170,8 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             "media": MEDIA_PURGE_BATCH,
             "agent_sessions": AGENT_SESSION_PURGE_BATCH,
             "retention": RETENTION_SWEEP_BATCH,
+            "holds": HOLD_SWEEP_BATCH,
+            "stalled_sessions": STALLED_SWEEP_BATCH,
         },
         # The platform's size, counted across tenants once an interval and
         # kept as the tally the operator plane reads instead of counting.

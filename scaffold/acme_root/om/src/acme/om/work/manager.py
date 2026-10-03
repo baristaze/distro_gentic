@@ -109,6 +109,13 @@ class WorkManagerInterface(ABC):
         ...
 
     @abstractmethod
+    async def has_open(self, ctx: TenantContext, kind: WorkKind, target_id: UUID) -> bool:
+        """Whether an item of `kind` on `target_id` waits for a worker or
+        runs: one of the tenant's, queued or claimed. An item handed back
+        until later is queued."""
+        ...
+
+    @abstractmethod
     async def requeue_stale(self, rctx: RequestContext, limit: int) -> int:
         """Platform-internal: the sweep, across tenants, like the claim: returns
         up to `limit` items whose lease expired to the queue, or fails them

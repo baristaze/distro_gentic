@@ -18,6 +18,8 @@ from acme.om.attribution.impl.manager import AttributionOptions
 from acme.om.automations.impl.manager import AutomationsOptions
 from acme.om.automations.root import build_automations
 from acme.om.base import new_id
+from acme.om.billing.impl.sweep import HoldSweepImpl, HoldSweepOptions
+from acme.om.billing.sweep import ProviderBillsUnknownImpl
 from acme.om.budgets.impl.manager import BudgetsOptions
 from acme.om.events.impl.manager import EventsOptions
 from acme.om.hosts.impl.manager import HostsOptions
@@ -52,6 +54,7 @@ from acme.om.trust.root import TrustLayer
 from acme.om.trust.types.identities import Executor, ExecutorKind
 from acme.om.work.impl.manager import WorkOptions
 from acme.om.workspaces.impl.manager import WorkspacesOptions
+from acme.workers.maintenance.sessions import StalledOptions, StalledSessionsSweep
 from acme.workers.maintenance.settings import MaintenanceSettings
 
 log = logging.getLogger(__name__)
@@ -69,6 +72,14 @@ RETENTION_SWEEP_BATCH = 100
 """Sessions one retention sweep takes up. A session past its content's life
 costs a call to its tenant's key service, the engine's revocation, and an
 audit entry, so the batch is smaller than the rows'."""
+
+HOLD_SWEEP_BATCH = 100
+"""Holds one read of the hold sweep takes. Each costs a read of its tenant
+and a settlement through the gate, under its lines' locks."""
+
+STALLED_SWEEP_BATCH = 100
+"""Pending sessions one read of the stalled sweep takes. Each costs a read of
+its tenant and an enqueue."""
 
 
 def events_options(settings: MaintenanceSettings) -> EventsOptions:
@@ -174,6 +185,23 @@ class WorkerContainer:
         )
         self.knowledge = build_knowledge(
             storage, managers, options=KnowledgeOptions(purge_batch=batch)
+        )
+        # The platform's duties the sweep carries across tenants: a hold
+        # nobody settled settles through the gate whose ledger holds it, at
+        # the provider's bill, else whole; and a session pending with no
+        # loop has its run asked for again.
+        self.holds = HoldSweepImpl(
+            storage.get_ledger_storage(),
+            managers.budget_gate,
+            managers.tenancy,
+            ProviderBillsUnknownImpl(),
+            HoldSweepOptions(batch=HOLD_SWEEP_BATCH),
+        )
+        self.stalled = StalledSessionsSweep(
+            managers.agent_sessions,
+            managers.work,
+            managers.tenancy,
+            StalledOptions(batch=STALLED_SWEEP_BATCH),
         )
         self.notifications = build_notifications(
             storage,
