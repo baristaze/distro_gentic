@@ -93,7 +93,6 @@ and name the refresh the preamble gives.
    | `status` is `parked`, `park.reason` is `provider` | A provider fails for the credential the session calls it with; `park.unlock` names the provider and the error's kind, and `park.retry_at` is when it tries again by itself | `ops-provider-outage` |
    | `status` is `parked`, `park.reason` is `budget` | The gate refused its spend; `park.unlock` names the funds or the limit | the tenant raises its limit or its funds, on its own screens |
    | `status` is `parked`, `park.reason` is `resource`, `pool_id` set, `hosts_online` is 0 | Its pool has no host online, so its workspace waits | `ops-host-idle` for the pool's hosts |
-   | `status` is `parked`, `park.reason` is `resource`, `park.unlock` names a station | It waits in a station's line | `ops-station-idle` |
    | `status` is `parked`, `park.reason` is `resource` | A workspace or a scarce resource it waits for, which `park.unlock` names | none: it tries again at `park.retry_at` |
    | `status` is `parked`, `park.reason` is `person`, `pause`, or `handover` | A person holds it: an approval, a question, a pause, or the environment | the tenant's people, on their own screens |
    | `status` is `parked`, `park.reason` is `job` or `children` | Its tool job or its sub-agents have not reported | none, unless `changed_at` is days old |

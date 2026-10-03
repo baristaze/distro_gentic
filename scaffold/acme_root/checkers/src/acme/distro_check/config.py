@@ -10,7 +10,7 @@ platform's scaffold names only its package:
     # exclude = ["**/migrations/**"]
 
     [tool.distro-check.options.PLC-10]   # a rule fed the project's own names
-    modules = ["apps.host", "apps.station_daemon"]
+    modules = ["apps.host"]
 
     [[tool.distro-check.disable]]
     rule = "FLT-12"

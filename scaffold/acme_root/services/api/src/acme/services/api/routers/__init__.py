@@ -22,7 +22,6 @@ from acme.services.api.routers import (
     media,
     notifications,
     relay,
-    stations,
     tenancy,
     watch,
 )
@@ -42,9 +41,6 @@ HOSTED: dict[str, tuple[APIRouter, ...]] = {
     # The exec work a host holds and its control stream: a host's own calls,
     # each opened from inside its wall.
     "relay": (relay.router, control.router),
-    # A tenant's labs, pools, and stations, the line, leases, and jobs, and a
-    # lab daemon's own calls: rotate, claim, renew, and report.
-    "stations": (stations.router,),
     # A tenant's connections to the systems whose events reach its sessions.
     "intake": (intake.router,),
     # What a tenant may spend: a budget's amount, which a raise of wakes the

@@ -126,17 +126,13 @@ class TrustStorageContract:
         assert await storage.read_declaration(org, kind, first.owner_id, first.name) == first
         assert await storage.read_declaration(org, kind, other.owner_id, other.name) == other
 
-    async def test_a_name_resolves_to_its_projects_then_the_tenants_and_never_anothers(
+    async def test_a_name_resolves_to_its_projects_and_never_anothers(
         self, storage: TrustStorageInterface
     ) -> None:
         org, ours, theirs = new_id(), new_id(), new_id()
         assert await storage.create_declaration(org, make_declaration(owner=theirs), ())
         assert await storage.resolve_declaration(org, "deploy_token", ours) is None
         assert await storage.resolve_declaration(org, "deploy_token", None) is None
-        tenants = make_declaration(store=SecretStore.HOST, kind=SecretOwnerKind.STATION)
-        assert await storage.create_declaration(org, tenants, ())
-        assert await storage.resolve_declaration(org, "deploy_token", ours) == tenants
-        assert await storage.resolve_declaration(org, "deploy_token", None) == tenants
         own = make_declaration(owner=ours)
         assert await storage.create_declaration(org, own, ())
         assert await storage.resolve_declaration(org, "deploy_token", ours) == own

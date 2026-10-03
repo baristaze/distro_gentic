@@ -137,7 +137,7 @@ async def watched(tmp_path: Path) -> Watched:
             updated_at=now,
             created_by=owner.user_id,
             updated_by=owner.user_id,
-            name="lab",
+            name="build",
             region="eu-west",
         ),
     )

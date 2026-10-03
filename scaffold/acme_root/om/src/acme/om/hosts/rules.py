@@ -1,6 +1,6 @@
 """Pure rules of the hosts namespace: the prefixes of a host's two
-credentials, the versions of the wire types a host or a daemon reads and
-their floors, when a host counts as online, and how a rotation ends the
+credentials, the versions of the wire types a host reads and their
+floors, when a host counts as online, and how a rotation ends the
 credential it replaces. Values in, values out; no clock, no storage, no
 settings."""
 
@@ -23,13 +23,12 @@ class WireType(StrEnum):
     public types, versioned like any other."""
 
     EXEC = "exec"  # what a workspace host runs: commands, file operations, workspaces
-    STATION = "station"  # what a station's daemon runs
 
 
-WIRE_VERSION: dict[WireType, int] = {WireType.EXEC: 1, WireType.STATION: 1}
+WIRE_VERSION: dict[WireType, int] = {WireType.EXEC: 1}
 """The version of each wire type this build writes."""
 
-WIRE_FLOOR: dict[WireType, int] = {WireType.EXEC: 1, WireType.STATION: 1}
+WIRE_FLOOR: dict[WireType, int] = {WireType.EXEC: 1}
 """The oldest version of each wire type this build still hands work to. A
 breaking change to a type ships as its next version and raises its floor
 only once the hosts in the field read it, since a customer upgrades on its
