@@ -30,11 +30,7 @@ for nuance only an agent needs.
   streams, steering, identity, agent kinds, budgets, parking, and
   privacy.
 
-This spec says only what a platform adds. Its examples come from
-`rodeo`, a robot development
-platform, because it is the hardest version of the problem: the physical
-world, scarce machines, safety, customer walls, and evidence that is
-more than pass or fail. A shape that holds there holds for software too.
+This spec says only what a platform adds.
 
 ## The Core
 
@@ -47,9 +43,6 @@ These are the invariants. Each links the section that states it.
 - [Hosts pull; the platform never calls into a customer's
   wall](#workspace-hosts), and a host advertises only what it probed.
 - [Isolation is pinned, probed, and refused](#pinned-probed-refused).
-- Where stations exist, [one live lease per station, fenced by the
-  daemon](#leases), and [the guard nearest the resource is
-  local](#the-guard-nearest-the-resource).
 - [Every execution is a record with its version and
   provenance](#execution-records), and [work completes through one
   gate](#the-result-gate).
@@ -68,7 +61,6 @@ These are the invariants. Each links the section that states it.
 - [Session Runners](#session-runners)
 - [Placement and Workspace Hosts](#placement-and-workspace-hosts)
 - [Workspaces and Isolation](#workspaces-and-isolation)
-- [Stations](#stations)
 - [Watching and Steering](#watching-and-steering)
 - [Work In, Results Out](#work-in-results-out)
 - [Evidence](#evidence)
@@ -86,12 +78,11 @@ These are the invariants. Each links the section that states it.
 
 ## The Running Example
 
-> A robotics team files a ticket: *"The robot sometimes drops the object
-> before reaching the placement location. Investigate and fix it."* An
-> automation turns it into a session pinned to the team's lab, because
-> its builds and devices must stay there. The agent's loop runs in the
-> platform's cloud; its tool calls run on a workspace host in the lab.
-> It waits in line for the station with the real arm. At 2 a.m. a model
+> A team files a ticket: *"The checkout service sometimes drops a
+> request under load. Investigate and fix it."* An automation turns it
+> into a session pinned to the team's host pool, because its builds and
+> data must stay there. The agent's loop runs in the platform's cloud;
+> its tool calls run on a workspace host in that pool. At 2 a.m. a model
 > provider fails; two hundred sessions park within a second and resume
 > when it recovers. By morning the session has a pull request, a report
 > citing every run behind its claims, and a cost to the cent. A
@@ -151,8 +142,6 @@ flowchart LR
     end
     subgraph Wall [Inside a customer's wall]
         WH[Workspace host:<br/>runs tool calls]
-        SD[Station daemon]
-        St[Stations]
     end
     LLM[Model providers]
 
@@ -164,8 +153,6 @@ flowchart LR
     SR -->|claims loops| Q
     SR -->|direct transport| CWS
     WH -->|pulls exec work| CP
-    SD -->|pulls station work| CP
-    SD --> St
     SR --> LLM
     SR --> Rec
     Money -.->|gates every call| SR
@@ -173,10 +160,9 @@ flowchart LR
 
 | Plane | Parts | Where it runs |
 |---|---|---|
-| **Control** | The gateway, sessions, intake and routing, automations, policy, approvals, station lines, realtime; the control workers | The platform's cloud |
+| **Control** | The gateway, sessions, intake and routing, automations, policy, approvals, realtime; the control workers | The platform's cloud |
 | **Brain** | Session runners hosting the engine: model calls, the history, the budget gate | The platform's cloud, always |
 | **Hands** | Workspace hosts and the workspaces they hold | The platform's cloud, or inside a customer's wall |
-| **Stations** | Station daemons and the scarce things they serve | Inside a customer's wall, beside the stations |
 | **Records and money** | Steps, execution records, artifacts; metering, limits, billing, the model matrix | The platform's cloud |
 
 Every connection that crosses a customer's wall is opened from inside
@@ -196,12 +182,11 @@ several kinds of work, and each must run where its environment is:
 | `loop`: run or resume a session's loop | Any session runner | The loop lanes |
 | `exec`: a tool call relayed into a customer's wall, or a person's command in any workspace | The host that holds the workspace | That host's lane |
 | `workspace`: prepare, release, purge | A host in the session's placement | The placement's lane to prepare; the holding host's to release or purge |
-| `station`: deploy, run, operate, restore | The daemon that serves the station | That lab's lane |
 | Platform work: intake, automations | Control workers | Their own lanes |
 
 A lane is the guideline's work-item lane, so every kind is one queue
-with one shape. A runner claims from the queue directly; a host or a
-daemon outside the cloud claims through the gateway, and the control
+with one shape. A runner claims from the queue directly; a host
+outside the cloud claims through the gateway, and the control
 plane claims the row on its behalf. A tool call to a cloud workspace
 needs no item: the runner reaches it by the direct transport.
 
@@ -278,8 +263,8 @@ in.
   enrollment token and receives a short-lived, rotating credential of a
   kind and prefix of its own ([The Gateway][g-gateway]). That is the
   executor identity ([Four Identities](#four-identities)).
-- **Versioned work.** `exec` and `station` work are public wire types,
-  versioned like any other ([Public Types][g-public]). A host states its
+- **Versioned work.** `exec` work is a public wire type, versioned
+  like any other ([Public Types][g-public]). A host states its
   version at every claim, and one below the supported floor is refused,
   since a customer upgrades on its own schedule.
 - **Probing.** At startup a host checks that it reaches what it needs
@@ -361,7 +346,7 @@ nothing restarts silently from the default branch.
 |---|---|---|
 | A microVM or VM per session | Filesystem, processes, network, and kernel, across sessions and tenants | The cloud's level |
 | A container per session | Processes and filesystem; the host kernel is shared, unless a user-space kernel stands between | Validation executors; a customer's laptop |
-| A directory on the host | Only what a dedicated user and the directory separate | Work that needs the host itself: GUI tools, GPU drivers, real-time scheduling |
+| A directory on the host | Only what a dedicated user and the directory separate | Work that needs the host itself: GUI tools, GPU drivers |
 | A twin | Nothing; it plays the lifecycle for tests and says so | `local` only |
 
 ### Pinned, Probed, Refused
@@ -390,92 +375,13 @@ names destinations and methods: source control, through a credential
 scoped to the session's branch; package registries, read-only,
 through a vetting mirror; the platform's endpoints. Open egress is an
 explicit policy choice, recorded. A workspace never reaches the
-platform's internal network, a cloud metadata endpoint, or a station's
-network. No surface renders a URL from agent output as a fetch, such as
-an image in a comment or a mirror.
+platform's internal network or a cloud metadata endpoint. No surface
+renders a URL from agent output as a fetch, such as an image in a
+comment or a mirror.
 
 > **Principle:** A workspace is a cache of durable state. Isolation is
 > pinned, probed, and refused; never weakened. Egress is an allowlist of
 > destinations and methods.
-
-## Stations
-
-`optional`
-
-A **station** is a scarce, located thing that work needs and cannot
-carry: a test bench with a robot on it, a rig with real controller
-electronics, a device farm, a licensed simulator shared like hardware, a
-GPU node. Leases, policies, and approvals hang off it because it is
-scarce and in one place. Stations are adopted when a product's work
-needs one; a platform without them skips this section, and once adopted
-its subsections hold.
-
-### The Line
-
-An agent that cannot get a station never polls for it, burning model
-calls while it waits. Stations of one kind form a **pool**, and a request
-names a station or a pool with the capabilities it needs ("any free arm
-of this kind"). Each pool and each station has a **line**. A session that
-asks joins it, sees its position and an estimate, and parks on the
-resource.
-
-When a station frees up, the control plane grants it to the first
-matching request in line, and the grant wakes the session with an event
-naming the station and its lease. A person who manages the lab may
-reorder a line. A session that finishes or is cancelled leaves every
-line it stood in, and a session that no longer waits is never granted
-anything. Approvals a station job needs are asked before the session
-joins the line, bound to the candidate, the procedure, and the pool, and
-kept while the session holds its place ([`agentic_core`
-Approvals][e-approvals]), so a lease never waits on a
-person.
-
-### Leases
-
-`core`
-
-A grant is a **lease**: a time-limited, renewable right to one station,
-with a **fencing token** that grows with every grant. A station lease is
-not a work lease. During a station job the daemon renews it as the
-executor; while its session is parked, it survives only for a declared
-hold time.
-
-The daemon is the fence. It keeps the highest token it has seen for each
-station, checks it on every command, and before it accepts a higher
-token it stops the station and restores its baseline. The lease store
-grants with a conditional write that fails while a live lease exists,
-and grants again only after an expiry plus a margin for clock skew;
-the daemon times expiry on a monotonic clock. A lab manager may revoke a
-lease; the holding session is told, and the station takes its declared
-controlled stop.
-
-### The Station Daemon
-
-A station is reached through a **station daemon** on its host, inside
-the customer's wall: a least-privilege client of the gateway that pulls
-station work, fences leases, runs the station's adapter, and streams
-what the station sees. It grants itself nothing. Each station declares
-the device access it needs, and that declaration becomes a reviewable
-piece of the host's service configuration, line by line. Code a station
-job runs is isolated from the daemon, and it reaches hardware only
-through the adapter.
-
-### The Guard Nearest the Resource
-
-`core`
-
-A station's limits (a speed, a current, an envelope, the firmware it
-accepts) are the customer's own numbers, kept and enforced on the
-station's host. A refused command is recorded as evidence. Nothing the
-platform sends, a policy, an approval, or a command, can raise a limit.
-Safety stops live at the station, where they keep working when the
-control plane is slow or unreachable. A daemon that loses the control
-plane lets the current job run to its lease's expiry and accepts no new
-station job.
-
-> **Principle:** A scarce resource has a line, and waiting in it parks
-> the session. The daemon fences every lease. The guard nearest the
-> resource is local, and the platform cannot override it.
 
 ## Watching and Steering
 
@@ -569,14 +475,14 @@ evidence ([Execution Records](#execution-records)).
 ### Automations
 
 **Automations** turn events into bounded work. A trigger, an event with
-filters or a schedule, leads to an action: start a session, message a
-standing session (a CI triage session, say), or run a station job. An
-automation runs as its creator or as the tenant's automation principal,
-and has limits of its own: a cost cap, a rate, a concurrency, and whether
-to queue when limited. An automation ignores the events its own sessions
-caused, unless it declares otherwise, and a chain of automations stops at
-a hop limit, so an agent's comment cannot start an endless chain. Every
-firing is a recorded run.
+filters or a schedule, leads to an action: start a session, or message a
+standing session (a CI triage session, say). An automation runs as its
+creator or as the tenant's automation principal, and has limits of its
+own: a cost cap, a rate, a concurrency, and whether to queue when
+limited. An automation ignores the events its own sessions caused,
+unless it declares otherwise, and a chain of automations stops at a hop
+limit, so an agent's comment cannot start an endless chain. Every firing
+is a recorded run.
 
 ### Playbooks and Knowledge
 
@@ -652,9 +558,9 @@ to be zero, only bounded. A claim about a rate reports a one-sided exact
 or Wilson bound at a declared confidence, never a normal approximation,
 which collapses at zero failures. The trial count, or a sequential test
 valid under optional stopping, is declared before the trials. The gate
-counts every trial at that version, and a trial aborted by a safety stop
-is classified by a declared rule, never dropped. Candidate and baseline
-trials interleave on the same station, and a claim across many scenarios
+counts every trial at that version, and an aborted trial is classified
+by a declared rule, never dropped. Candidate and baseline trials
+interleave on the same executor, and a claim across many scenarios
 corrects for the number of comparisons.
 
 <!-- agents-only
@@ -681,7 +587,7 @@ The platform defines the protocol, never the runner. A check is
 declared: a command template, its kind, the capabilities it needs, and
 the version of the results schema it writes. A run writes a strict,
 versioned results file and streams its cases as they finish. A
-compatibility check refuses a run before any station is leased. One
+compatibility check refuses a run before anything runs. One
 collector serves every place a check can run.
 
 ### Acceptance and Benchmarks
@@ -717,7 +623,7 @@ and keeps four apart. Confusing any two is a defect.
 
 | Identity | What it is | Example |
 |---|---|---|
-| **Executor** | A machine's credential | A workspace host's key, a station daemon's key |
+| **Executor** | A machine's credential | A workspace host's key |
 | **Principal** | On whose behalf, and with what authority | The person who asked; an automation's creator; a service principal the tenant granted |
 | **Spender** | Who pays for a model call | The author of the latest principal input the model received |
 | **Actor** | Who acted | The engineer agent in one session; a person; the engine |
@@ -748,8 +654,8 @@ agent in chat or on its work.
 
 `core`
 
-An environment secret is declared by name on a project or a station,
-with the variable a command sees and a scope. The platform stores names
+An environment secret is declared by name on a project, with the
+variable a command sees and a scope. The platform stores names
 only. Where it can, the executor brokers the secret outside the
 workspace; otherwise the machine that executes the call resolves it from
 its own store, short-lived and scoped, injects it into that one process,
@@ -758,8 +664,7 @@ Secrets Never Enter a
 Step][e-secrets]). A cloud secret
 never reaches a customer's host; the per-session push token is minted
 for it ([Workspace Hosts](#workspace-hosts)). A workspace never holds a
-platform credential. A station's secrets and limits never leave its
-host.
+platform credential.
 
 ### The Tenant's Provider Keys
 
@@ -893,21 +798,22 @@ Kinds][e-kinds]). A platform ships a few, each a
 profile with its own powers:
 
 - The **engineer** takes an objective to a validated, reviewable change.
-- **Analysis** agents read what a run produced (telemetry, logs, video,
-  external sensors) and turn it into findings.
+- **Analysis** agents read what a run produced (telemetry, logs, video)
+  and turn it into findings.
 - A **planner** turns findings into tasks and decides whether an
   existing session should continue or a new one should start.
-- A **validation session** runs a check on a station with no agent at
-  all, on the same queue and the same record.
+- A **validation session** runs a delivery's checks with no agent at
+  all, on a fresh executor (a workspace nobody used, never the agent's),
+  on the same queue, and writes the same execution record.
 - The **platform assistant** helps the people who set up and run their
   part of the platform. It explains the product, citing a corpus. It
   diagnoses live state with tools, never with guesses: why a session is
-  queued, why a station takes no work, what a host offers against what
-  the queue needs. It drafts configuration, validates it against the
-  tenant's real records, and shows the difference from what is live; a
-  person applies it. It hands engineering work to an engineer session
-  with a self-contained objective, then steps back. Its authority is
-  delegated, and it has no workspace, repository, shell, or station.
+  queued, what a host offers against what the queue needs. It drafts
+  configuration, validates it against the tenant's real records, and
+  shows the difference from what is live; a person applies it. It hands
+  engineering work to an engineer session with a self-contained
+  objective, then steps back. Its authority is delegated, and it has no
+  workspace, repository, or shell.
 
 The assistant's corpus is what the guideline's knowledge map lists for
 the tenant's users ([The Knowledge Map][g-kmap]), so internal text never
@@ -934,13 +840,12 @@ What is stored where is a decision, never an accident.
   holds each key destruction as the key service reported it, and a
   tenant with its own key service sees the same event in its own logs.
 
-What never crosses into the platform's cloud: a station's limits and
-secrets, the environment secrets scoped to a customer's wall, and
-whatever a tenant's deny-lists keep inside it. What never crosses out to
-a customer's host: the platform's secrets, model keys, integration
-credentials, and the history. Everything that does cross (enrollment,
-claims, stream parts, artifacts, results) is opened from inside the wall
-and verified by hash.
+What never crosses into the platform's cloud: the environment secrets
+scoped to a customer's wall, and whatever a tenant's deny-lists keep
+inside it. What never crosses out to a customer's host: the platform's
+secrets, model keys, integration credentials, and the history.
+Everything that does cross (enrollment, claims, stream parts, artifacts,
+results) is opened from inside the wall and verified by hash.
 
 ## Failure at Fleet Scale
 
@@ -950,22 +855,20 @@ signal's retry time passes, the parked sessions are woken, staggered.
 
 Sessions die with their runners, and the platform notices through the
 guideline's sweep ([Maintenance Without a Scheduler][g-sweep]), which
-every cloud worker runs; hosts and daemons, not worker roles, never run
-it. A runner's beat is a signal, never a trigger. The platform adds its
-duties to the sweep:
+every cloud worker runs; hosts, not worker roles, never run it. A
+runner's beat is a signal, never a trigger. The platform adds its duties
+to the sweep:
 
 - a loop whose lease expired is requeued, and its next run takes a new
   writer epoch;
 - an `exec` item whose lease expired follows [The Relay
   Transport](#the-relay-transport): requeued by effect, or completed
   `interrupted`;
-- a station lease past its expiry and margin is freed;
 - a workspace instance nobody claims is purged;
 - a hold nobody settled settles at usage retrieved from the provider,
   else at its full amount, and is released only when the provider
   provably did not bill;
 - an approval past its expiry is asked again;
-- a line entry for a session that no longer waits is removed;
 - a session with a pending input and no queued loop is woken;
 - expired content's keys are revoked, and expired shape is purged
   ([Data, Retention, and the Wall](#data-retention-and-the-wall)).
@@ -984,18 +887,17 @@ provider calls and credentials:
 |---|---|---|
 | `ops-session-stuck` | supporter | Why one session is not moving: its park, its lease, its host, and its place in line, read from the operator plane's aggregates |
 | `ops-host-idle` | supporter | Why a host takes no work: what it advertises against what its lane needs |
-| `ops-station-idle` | supporter | Why a station takes no work: its daemon, its lease, its line, its readiness |
 | `ops-integration-silent` | investigator | Why an integration's events stopped: deliveries, signatures, dead letters |
 | `ops-provider-outage` | investigator | Which provider and credential fails, its outage signal, and how many sessions park on it |
 | `audit-model-spend` | investigator | Spend by matrix version and plan tier, cache hits and misses, the cost of rebuilt caches |
 
 The operator dashboard, declared as code, adds the platform's signals,
 each with a bounded label: parks by reason and age, loop lanes' depth by
-plan tier, hosts and stations by pool, cache hit rates, and spend by
-matrix version. Views of one tenant or one host are operator-plane
-reads, never labels. The guideline's telemetry round trip follows one
-run's request id across the runner, the host, and the steps it wrote
-([The Telemetry Round Trip][g-roundtrip]).
+plan tier, hosts by pool, cache hit rates, and spend by matrix version.
+Views of one tenant or one host are operator-plane reads, never labels.
+The guideline's telemetry round trip follows one run's request id across
+the runner, the host, and the steps it wrote ([The Telemetry Round
+Trip][g-roundtrip]).
 
 ## Deviations from the Guideline
 
@@ -1007,7 +909,7 @@ records two of its own:
 | Rule | Summary |
 |---|---|
 | NET-20 (Apps, Push-First Apps) | A live view reads stream content through a scoped streaming read beside the realtime channel. The channel still carries every change as a hint and a record; the read is a read, never a push. |
-| DEL-01 (Apps, Apps Are Dumb) | A station daemon, a client of the gateway, holds logic: limits, readiness, the dead-man window. The guard nearest the resource must work when the server is slow or gone. |
+| DEL-01 (Apps, Apps Are Dumb) | A workspace host, a client of the gateway, holds logic: its probes and its owner's ceilings decide what runs. The guard nearest the machine must hold when the platform is wrong or gone. |
 
 ## The Repository
 
@@ -1020,7 +922,6 @@ story; the rest is its planned shape:
   |---|---|---|
   | `placement` | `PLC` | Sessions Are Work; Session Runners; Placement and Workspace Hosts |
   | `workspaces` | `WSP` | Workspaces and Isolation |
-  | `stations` | `STN` | Stations |
   | `watch` | `WAT` | Watching and Steering |
   | `intake` | `INT` | Work In, Results Out |
   | `evidence` | `EVD` | Evidence |
@@ -1032,8 +933,8 @@ story; the rest is its planned shape:
   review per lens group and a full review, `distro-explain`,
   `distro-deviate`, `distro-upgrade-scaffold` for a product built on the
   platform, and scaffolds for a session runner, a workspace host, a
-  workspace provider, a station adapter, an integration with its twin, an
-  agent kind, and an automation trigger.
+  workspace provider, an integration with its twin, an agent kind, and an
+  automation trigger.
 - **A scaffold**, with the operational skills of
   [Operations](#operations) in its `.agents/skills/`.
 
@@ -1046,14 +947,13 @@ merges it ([Upgrade a copy of the scaffold][g-adopting]).
 
 The wire protocols of the relay, the control stream, and the live read;
 the technology of the stream service; default values (grace periods,
-lease lengths, hold times, fairness weights, hop limits, anomaly
-thresholds), which belong to each system; the console's screens; the
-price table; and the threat model each deployment writes.
+lease lengths, fairness weights, hop limits, anomaly thresholds), which
+belong to each system; the console's screens; the price table; and the
+threat model each deployment writes.
 
 ## Next: Rodeo
 
-`rodeo` is the reference product:
-`distro_gentic` plus robots. Its spec says what the physical world adds.
+`rodeo` is the reference product built on `distro_gentic`.
 
 [g]: https://github.com/baristaze/swe_guidelines/blob/v0.48.0/architecture.md
 [g-workq]: https://github.com/baristaze/swe_guidelines/blob/v0.48.0/architecture.md#the-work-queue
