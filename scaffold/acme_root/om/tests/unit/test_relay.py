@@ -30,7 +30,12 @@ from acme.om.hosts.types.host import Advertisement, Enrollment, HostIdentity
 from acme.om.hosts.types.host import IsolationMode as Mode
 from acme.om.hosts.types.pool import HostPool
 from acme.om.placement.rules import host_lane
-from acme.om.placement.types.work import ExecEffect, ExecPayload
+from acme.om.placement.types.work import (
+    ExecEffect,
+    ExecPayload,
+    WorkspaceOperation,
+    WorkspacePayload,
+)
 from acme.om.relay import RelayManagerInterface
 from acme.om.relay.exceptions import ItemNotHeld, NoWorkspaceHost, StaleExec
 from acme.om.relay.impl.manager import RelayOptions
@@ -52,7 +57,7 @@ from acme.om.root import Managers, build_managers
 from acme.om.steps.types.header import ToolFailure
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.trust.types.identities import Executor, ExecutorKind
-from acme.om.work.types.work_item import WorkItem
+from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
 
 APP = AppContext(type=AppType.PORTAL, version="portal@test")
 RUNNER = AppContext(type=AppType.WORKER, version="runner@test")
@@ -599,6 +604,33 @@ async def test_a_pinned_session_runs_through_the_relay_on_the_host_that_holds_it
             _call(wall, command(0)).model_copy(update={"session_id": unheld.id}),
             0,
         )
+
+
+# A release: asked of the host that holds the workspace, answered by it.
+
+
+async def test_a_release_goes_to_the_holding_host_once_and_only_it_answers_it(
+    wall: Wall,
+) -> None:
+    managers, owner, session_id = wall.managers, wall.owner, wall.workspace.id
+    binding = await managers.relay.holder(owner, session_id)
+    assert binding is not None and binding.host_id == wall.holder.host_id
+    assert await managers.relay.ask_release(owner, session_id, CONTAINER)
+    assert not await managers.relay.ask_release(owner, session_id, CONTAINER), "one at a time"
+    assert await Host(managers, wall.other).claim() is None, "no other host of the pool takes it"
+    row = await Host(managers, wall.holder).claim_soon()
+    payload = WorkspacePayload.model_validate(row.payload)
+    assert (payload.operation, payload.session_id) == (WorkspaceOperation.RELEASE, session_id)
+    with pytest.raises(ItemNotHeld):
+        await managers.relay.released(request(), wall.other, row.id)
+    await managers.relay.released(request(), wall.holder, row.id)
+    done = await managers.work.latest_for_target(owner, WorkKind.WORKSPACE, session_id)
+    assert done is not None and done.status is WorkStatus.DONE
+    with pytest.raises(ItemNotHeld):
+        await managers.relay.released(request(), wall.holder, row.id)
+    # A revoked host is reached by nothing, a release included.
+    await managers.hosts.revoke_host(owner, wall.holder.host_id)
+    assert await managers.relay.holder(owner, session_id) is None
 
 
 def _call(wall: Wall, spec: CommandSpec) -> ExecCall:

@@ -120,6 +120,9 @@ class RelayServiceImpl(RelayServiceInterface):
         binding = await self._relay.prepared(rctx, host, item_id, answer)
         return PreparedView(held=binding is not None and binding.host_id == host.host_id)
 
+    async def released(self, rctx: RequestContext, host: HostIdentity, item_id: UUID) -> None:
+        await self._relay.released(rctx, host, item_id)
+
     async def extend(
         self, rctx: RequestContext, host: HostIdentity, item_id: UUID
     ) -> ExecLeaseView:

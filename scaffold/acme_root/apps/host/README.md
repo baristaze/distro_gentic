@@ -45,6 +45,13 @@ uv run acme-host run          # every start after it
   host. One it cannot make is answered as refused, so another host of
   the pool may. When another host holds the workspace already, this
   host's goes.
+- **Lets go of an instance when asked.** The platform asks the host
+  that holds a session's workspace to release it once no run accounts
+  for it past a grace, after it has pushed the checkout's work. The host
+  stops the instance it made and keeps its files, so the session's next
+  call here starts it anew over them. A release runs and reads nothing,
+  so only the tenant fence applies: it lets go only of what this host
+  made for that session and tenant.
 - **Runs a tool call once, and stops it at once.** An `exec` item it
   claims is a command or a file operation in a workspace it holds. It
   runs it through its own transport, a container per session, sends
@@ -74,8 +81,10 @@ What runs an item is the executor (`agent.ExecutorInterface`), the
 relay's in `relay.ExecutorRelayImpl`, over the engine's transports by
 isolation mode (`main.host_transports`). A `WORKSPACE` prepare is made by
 the provider of its spec's mode (`main.host_workspaces`) and answered
-through `ApiClient.answer_prepare`; a release or a purge is logged and left
-to its lease. The fields a host reads
+through `ApiClient.answer_prepare`. A release lets go of the instance the
+provider of its spec's mode holds for the session and the host's tenant,
+and is answered through `ApiClient.answer_release`; a purge is logged and
+left to its lease. The fields a host reads
 of an item are `project_id`, `isolation`, `egress`, `reads`, and
 `by_person` in its payload (`ceilings.ask_of`); a payload without them is
 refused. What the item runs it reads from the gateway while it holds it

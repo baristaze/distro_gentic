@@ -1139,6 +1139,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/hosts/me/workspaces/{item_id}/released": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Released
+         * @description The host's answer to a release it claimed: the instance is gone, and
+         *     its files stay on the host.
+         */
+        post: operations["released_v1_hosts_me_workspaces__item_id__released_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/hosts/{host_id}": {
         parameters: {
             query?: never;
@@ -6369,6 +6390,39 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["PreparedView"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    released_v1_hosts_me_workspaces__item_id__released_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

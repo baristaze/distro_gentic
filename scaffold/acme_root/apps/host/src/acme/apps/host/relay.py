@@ -4,9 +4,10 @@ ceilings hold an item's fields and the host builds from its spec, so an
 item whose spec asks other than its fields say is refused, with nothing
 made or run. A prepare makes the workspace through the host's own provider
 for the session's isolation and answers where it is, which binds the
-session to this host. An `exec` item runs through its own local transport,
-in the workspace it holds, prepared again first, so an instance that
-stopped since starts anew over its files. The output streams back a part
+session to this host; a release lets its instance go and keeps its
+files. An `exec` item runs through its own local transport, in the
+workspace it holds, prepared again first, so an instance that stopped
+since starts anew over its files. The output streams back a part
 at a time and the result is pushed once, each with the hash the host
 declares of the bytes it sends. While the item runs the host renews its
 lease, and a stop from the control stream ends the command at once: the
@@ -272,8 +273,12 @@ class ExecutorRelayImpl(ExecutorInterface):
         as refused, so another host of the pool may. Where the workspace is
         made is the host's to choose, so a prepare reads no path of its own.
         When another host holds the session's workspace already, this one's
-        goes. A release or a purge has no executor here yet."""
+        goes. A release lets an instance go (`_release`); a purge has no
+        executor here yet."""
         payload = item.payload
+        if payload.get("operation") == "release":
+            await self._release(item)
+            return
         if payload.get("operation") != "prepare":
             log.warning(
                 "item %s: a workspace %s has no executor here", item.id, payload.get("operation")
@@ -303,6 +308,36 @@ class ExecutorRelayImpl(ExecutorInterface):
         if held is False:
             log.info("item %s: another host holds the workspace, so this one goes", item.id)
             await provider.purge(org_id, session_id)
+
+    async def _release(self, item: ClaimedWorkView) -> None:
+        """A release: the instance this host's provider made for the session
+        goes, and its files stay, so the session's next call here starts it
+        anew over them. The platform pushed what its checkout held before it
+        asked. An instance is found among what the provider holds, by the
+        session and this host's tenant, so nothing else is let go, and one
+        it no longer holds has nothing to let go. One that fails to go is
+        not answered: its lease runs out, and it is claimed again."""
+        try:
+            spec = IsolationSpec.model_validate(item.payload["spec"])
+            session_id = UUID(str(item.payload["session_id"]))
+        except KeyError, ValueError, ValidationError:
+            log.warning("item %s: the release names no session or spec", item.id)
+            return
+        provider = self._workspaces.get(spec.mode)
+        held = [] if provider is None else await provider.held()
+        for instance in held:
+            if instance.id == session_id and instance.org_id == item.org_id:
+                assert provider is not None
+                workspace = Workspace(
+                    id=session_id, org_id=item.org_id, spec=spec, location=instance.location
+                )
+                await provider.release(workspace)
+                log.info("item %s: the instance of session %s is released", item.id, session_id)
+        try:
+            async with self._client() as client:
+                await client.answer_release(item.id)
+        except (ApiError, *WIRE_FAILURES) as error:
+            log.warning("item %s: its answer was not taken: %s", item.id, error)
 
     async def _answer(
         self, item_id: UUID, *, location: str | None = None, refused: str | None = None
