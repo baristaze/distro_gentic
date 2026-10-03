@@ -14,7 +14,7 @@ engine runs every one of them the same way.
 - The platform assistant answers the people who run their part of the
   platform, on their own permissions: it reads the corpus and live state,
   drafts configuration a person applies, and hands engineering work to an
-  engineer. It has no workspace, repository, shell, or station.
+  engineer. It has no workspace, repository, or shell.
 
 A validation session is not here: it runs a check with no agent at all
 (`types/validation.py`). Nothing routes a message to one kind or another:

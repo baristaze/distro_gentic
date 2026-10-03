@@ -6,6 +6,12 @@ replacement objects honoured. Nothing the agent can write takes part: not
 its checkout's config, its refs, its replacements, nor its hooks. The
 directory goes when the read ends.
 
+The tree a validation runs on is read the same way: the delivered commit
+and the protected source, each fetched alone, composed in an index of the
+platform's own, and handed on as a tar with no history in it. The tar is
+written from the composed tree's blobs as stored, so no `.gitattributes`
+in the tree leaves a file out of it or changes a file's bytes.
+
 A private repository is read with its project's fetch credential. It
 reaches git through the environment of the commands that ask the
 repository, as a header for the repository's URL alone: never on a command
@@ -13,8 +19,12 @@ line, in a file, or in any message, and never in a workspace."""
 
 import asyncio
 import base64
+import io
 import os
+import re
+import tarfile
 import tempfile
+import time
 from collections.abc import Mapping
 from datetime import timedelta
 from pathlib import Path
@@ -22,6 +32,7 @@ from pathlib import Path
 from pydantic import Field
 
 from acme.om.base import Platform
+from acme.om.evidence.rules import protected_paths
 from acme.om.exceptions import Unavailable
 from acme.om.workspaces.git import RepositoryReaderInterface
 from acme.om.workspaces.types.credential import FetchCredential
@@ -29,6 +40,14 @@ from acme.om.workspaces.types.source import Delivered, RepositoryBinding
 
 BASE = "refs/delivery/base"
 HEAD = "refs/delivery/head"
+VERSION = "refs/tree/version"
+SOURCE = "refs/tree/source"
+COMMIT = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
+"""A commit's full id, the one name a tree is read at."""
+EXECUTABLE = "100755"
+SYMLINK = "120000"
+GITLINK = "160000"
+"""A submodule's commit, which a tree holds no file of."""
 
 
 class ReaderOptions(Platform):
@@ -36,6 +55,8 @@ class ReaderOptions(Platform):
     timeout: timedelta = timedelta(minutes=2)
     # The most paths a delivery lists.
     max_paths: int = Field(default=10_000, gt=0)
+    # The most bytes of a validation's tree, as a tar.
+    max_tree: int = Field(default=256 * 1024 * 1024, gt=0)
 
 
 class RepositoryReaderGitImpl(RepositoryReaderInterface):
@@ -79,9 +100,82 @@ class RepositoryReaderGitImpl(RepositoryReaderInterface):
             raise Unavailable(f"branch {branch} changes more than {self._options.max_paths} paths")
         return Delivered(base=base, head=head, changed=tuple(sorted(set(paths))))
 
+    async def tree(
+        self,
+        binding: RepositoryBinding,
+        version: str,
+        source: str,
+        protected: tuple[str, ...],
+        credential: FetchCredential | None = None,
+    ) -> bytes:
+        for commit in (version, source):
+            if not COMMIT.fullmatch(commit):
+                raise Unavailable(f"a tree is read at a commit's full id, never at {commit!r}")
+        with tempfile.TemporaryDirectory(prefix="tree-") as root:
+            repo = Path(root) / "repo"
+            env = _environment(Path(root))
+            url = binding.repository
+            remote = {**env, **_authorized(url, credential)}
+            await self._git(env, None, "init", "-q", "--bare", str(repo))
+            for commit, ref in ((version, VERSION), (source, SOURCE)):
+                await self._git(
+                    remote,
+                    repo,
+                    "fetch",
+                    "-q",
+                    "--depth",
+                    "1",
+                    "--no-tags",
+                    url,
+                    f"+{commit}:{ref}",
+                )
+            at = _entries(await self._run(env, repo, "ls-tree", "-r", "-z", "--full-tree", VERSION))
+            taken = _entries(
+                await self._run(env, repo, "ls-tree", "-r", "-z", "--full-tree", SOURCE)
+            )
+            covered = set(protected_paths(protected, at))
+            overlaid = set(protected_paths(protected, taken))
+            listing = [entry for path, entry in at.items() if path not in covered]
+            listing += [entry for path, entry in taken.items() if path in overlaid]
+            index = {**env, "GIT_INDEX_FILE": str(Path(root) / "index")}
+            await self._run(
+                index, repo, "update-index", "-z", "--index-info", stdin=b"".join(listing)
+            )
+            composed = (await self._run(index, repo, "write-tree")).decode().strip()
+            return await self._archive(env, repo, composed)
+
+    async def _archive(self, env: Mapping[str, str], repo: Path, tree: str) -> bytes:
+        """The tar of `tree`, written from its blobs as stored: no attribute
+        a `.gitattributes` sets takes effect, so nothing is left out,
+        substituted, or converted. Past `max_tree` bytes, `Unavailable`."""
+        limit = self._options.max_tree
+        listed = await self._run(env, repo, "ls-tree", "-r", "-l", "-z", "--full-tree", tree)
+        entries = [_listed(record) for record in listed.split(b"\0") if record]
+        if sum(size for _, _, size, _ in entries) > limit:
+            raise Unavailable(f"the tree of a delivery is past the {limit} bytes it is read to")
+        blobs = sorted({sha for mode, sha, _, _ in entries if mode != GITLINK})
+        stored = await self._run(env, repo, "cat-file", "--batch", stdin=_lines(blobs))
+        tar = _tar(entries, _blobs(stored))
+        if len(tar) > limit:
+            raise Unavailable(f"the tree of a delivery is past the {limit} bytes it is read to")
+        return tar
+
     async def _git(self, env: Mapping[str, str], repo: Path | None, *args: str) -> str:
         """One git command, with no replacement objects, its output's first
         word kept for a sha, and all of it for a listing."""
+        text = (await self._run(env, repo, *args)).decode()
+        return text.split()[0] if args[0] in ("rev-parse", "merge-base") else text
+
+    async def _run(
+        self,
+        env: Mapping[str, str],
+        repo: Path | None,
+        *args: str,
+        stdin: bytes | None = None,
+        limit: int | None = None,
+    ) -> bytes:
+        """One git command, with no replacement objects, and its output; past
+        `limit` bytes of it, `Unavailable`, with the command stopped."""
         argv = ["git", "--no-replace-objects"]
         if repo is not None:
             argv += ["--git-dir", str(repo)]
@@ -89,22 +183,114 @@ class RepositoryReaderGitImpl(RepositoryReaderInterface):
             *argv,
             *args,
             env=dict(env),
-            stdin=asyncio.subprocess.DEVNULL,
+            stdin=asyncio.subprocess.DEVNULL if stdin is None else asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
         )
         try:
-            out, _ = await asyncio.wait_for(
-                process.communicate(), self._options.timeout.total_seconds()
+            out = await asyncio.wait_for(
+                _output(process, stdin, limit), self._options.timeout.total_seconds()
             )
         except TimeoutError:
             process.kill()
             await process.wait()
             raise Unavailable(f"git {args[0]} of a delivery ran past its time") from None
+        if out is None:
+            process.kill()
+            await process.wait()
+            raise Unavailable(f"the tree of a delivery is past the {limit} bytes it is read to")
         if process.returncode != 0:
             raise Unavailable(f"git {args[0]} of a delivery ended with exit {process.returncode}")
-        text = out.decode()
-        return text.split()[0] if args[0] in ("rev-parse", "merge-base") else text
+        return out
+
+
+async def _output(
+    process: asyncio.subprocess.Process, stdin: bytes | None, limit: int | None
+) -> bytes | None:
+    """What the command wrote once it ended, or None the moment it wrote past
+    `limit`."""
+    if limit is None:
+        out, _ = await process.communicate(stdin)
+        return out
+    assert process.stdout is not None
+    read = bytearray()
+    while chunk := await process.stdout.read(1 << 16):
+        read += chunk
+        if len(read) > limit:
+            return None
+    await process.wait()
+    return bytes(read)
+
+
+def _listed(record: bytes) -> tuple[str, str, int, str]:
+    """One entry of a long recursive listing: its mode, its object, its
+    size (none for a submodule's commit), and its path."""
+    meta, path = record.split(b"\t", 1)
+    mode, _, sha, size = meta.decode().split()
+    return mode, sha, 0 if size == "-" else int(size), path.decode(errors="surrogateescape")
+
+
+def _lines(shas: list[str]) -> bytes:
+    return "".join(f"{sha}\n" for sha in shas).encode()
+
+
+def _blobs(stored: bytes) -> dict[str, bytes]:
+    """The contents of each object a batch read wrote, by its id."""
+    blobs: dict[str, bytes] = {}
+    at = 0
+    while at < len(stored):
+        end = stored.index(b"\n", at)
+        sha, _, size = stored[at:end].decode().split()
+        start = end + 1
+        blobs[sha] = stored[start : start + int(size)]
+        at = start + int(size) + 1
+    return blobs
+
+
+def _tar(entries: list[tuple[str, str, int, str]], blobs: Mapping[str, bytes]) -> bytes:
+    """A tar of the entries, each directory before what it holds, as git
+    writes one: a file with its executable bit, a link as a link, and a
+    submodule as an empty directory."""
+    now = int(time.time())
+    out = io.BytesIO()
+    made: set[str] = set()
+    with tarfile.open(fileobj=out, mode="w", format=tarfile.PAX_FORMAT) as tar:
+        for mode, sha, _, path in entries:
+            parts = path.split("/")
+            for depth in range(1, len(parts)):
+                folder = "/".join(parts[:depth])
+                if folder not in made:
+                    made.add(folder)
+                    tar.addfile(_member(folder, tarfile.DIRTYPE, 0o755, now))
+            if mode == GITLINK:
+                made.add(path)
+                tar.addfile(_member(path, tarfile.DIRTYPE, 0o755, now))
+            elif mode == SYMLINK:
+                link = _member(path, tarfile.SYMTYPE, 0o777, now)
+                link.linkname = blobs[sha].decode(errors="surrogateescape")
+                tar.addfile(link)
+            else:
+                member = _member(path, tarfile.REGTYPE, 0o755 if mode == EXECUTABLE else 0o644, now)
+                member.size = len(blobs[sha])
+                tar.addfile(member, io.BytesIO(blobs[sha]))
+    return out.getvalue()
+
+
+def _member(path: str, kind: bytes, mode: int, mtime: int) -> tarfile.TarInfo:
+    member = tarfile.TarInfo(path)
+    member.type, member.mode, member.mtime = kind, mode, mtime
+    member.uname = member.gname = "root"
+    return member
+
+
+def _entries(listed: bytes) -> dict[str, bytes]:
+    """A recursive listing's entries by their path, each kept as the listing
+    wrote it, ending in its NUL, as an index reads it back."""
+    entries: dict[str, bytes] = {}
+    for record in listed.split(b"\0"):
+        if record:
+            entries[record.split(b"\t", 1)[1].decode(errors="surrogateescape")] = record + b"\0"
+    return entries
 
 
 def _environment(home: Path) -> dict[str, str]:

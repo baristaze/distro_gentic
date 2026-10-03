@@ -302,7 +302,7 @@ REQUEST_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
         ("TrustOperatorManagerInterface", "grant_content"),
         ("TrustOperatorManagerInterface", "revoke_content"),
         ("WorkManagerInterface", "claim"),
-        # The claim made on behalf of a host or a daemon, which rebuilds the
+        # The claim made on behalf of a host, which rebuilds the
         # run's context from the item as the claim does.
         ("PlacementManagerInterface", "claim_for"),
         # A host's calls: it is no person, so its enrollment, its credential,
