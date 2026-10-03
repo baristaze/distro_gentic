@@ -6,6 +6,9 @@ of](../../../../README.md).
 
 ## What it holds
 
+- **Installation**: a system's installation of the platform, by the
+  system's own id, connected by one tenant. Every delivery that names it
+  belongs to that tenant.
 - **Account link**: an account in an outside system, mapped to a user
   of the tenant. Only a mapped user speaks to an agent as a principal
   from outside.
@@ -37,10 +40,14 @@ of](../../../../README.md).
   The session's own acts, which come back as the platform's account, are
   audited and never delivered. Every event is audited once, with its
   effect.
+- **Connect** an installation. A person who manages the tenant's members
+  hands over the grant the system gave them when they installed the
+  platform there. The integration checks it and names the installation.
 - **Arrive.** An integration delivers to `/webhooks/integrations/<name>`.
-  The integration checks the signature and reads the event; it is queued
-  under a key over the integration and its id for the delivery, named
-  with what served it, the system or its twin. That is the
+  The integration checks the signature and reads the event. The tenant
+  that connected the installation it names is found, and the event is
+  queued for that tenant under a key over the integration and its id for
+  the delivery, named with what served it, the system or its twin. That is the
   integration's word, never the delivery's, and every record of the
   event names it: the audit entry of its routing, and the first line the
   agent reads.
@@ -53,6 +60,11 @@ of](../../../../README.md).
 
 ## The rules
 
+- **An installation is one tenant's.** It is connected with the system's
+  grant, never an id a person types, and no second tenant connects it. A
+  delivery whose installation no tenant connected reaches no tenant, and
+  nothing a delivery says names one
+  ([ADR 2020](../../../../../docs/adr/2020-an-installation-maps-to-one-tenant.md)).
 - **Only a mapped user who may instruct speaks as a principal.** Any
   other text from outside is an event: the agent reads it quoted, as
   data, labelled with the origin the platform set, never one the event
@@ -86,4 +98,7 @@ context, then an audit entry of that context.
 The delivery consumer hands each event to the router under the tenant's
 service context, then hands what the router answered to
 [automations](../automations/README.md). An agent's tool that opens a
-pull request or pushes a branch binds it to its session.
+pull request or pushes a branch binds it to its session. A tool that acts
+as the platform's account records the act before it acts, under a mark
+the system carries on what it makes, and then under the system's id for
+it: `comment` (`tools.py`) is the one the session runner ships.

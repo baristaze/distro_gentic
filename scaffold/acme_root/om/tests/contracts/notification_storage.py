@@ -12,7 +12,13 @@ from acme.om.notifications.types.notification import PORTAL, Notification
 from acme.om.steps.types.header import ParkReason
 
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
-    {"create_notification", "read_notification", "read_notifications", "purge_tenant"}
+    {
+        "create_notification",
+        "read_notification",
+        "read_notifications",
+        "mark_read",
+        "purge_tenant",
+    }
 )
 """Every method of `NotificationStorageInterface` that takes a tenant has a
 case in this module that presents another tenant's."""
@@ -64,6 +70,28 @@ class NotificationStorageContract:
         assert await storage.read_notifications(other, ann, 10) == []
         assert not await storage.create_notification(other, notification)
         assert await storage.read_notification(other, notification.id) is None
+
+    async def test_a_recipient_marks_their_own_read_once(
+        self, storage: NotificationStorageInterface
+    ) -> None:
+        org, ann = new_id(), new_id()
+        notification = make_notification(ann)
+        await storage.create_notification(org, notification)
+        first, later = utcnow(), utcnow() + timedelta(minutes=1)
+        marked = await storage.mark_read(org, ann, notification.id, first)
+        assert marked == notification.model_copy(update={"read_at": first})
+        assert await storage.mark_read(org, ann, notification.id, later) == marked
+        assert await storage.read_notification(org, notification.id) == marked
+
+    async def test_mark_read_by_another_recipient_or_tenant_changes_nothing(
+        self, storage: NotificationStorageInterface
+    ) -> None:
+        org, other, ann = new_id(), new_id(), new_id()
+        notification = make_notification(ann)
+        await storage.create_notification(org, notification)
+        assert await storage.mark_read(org, new_id(), notification.id, utcnow()) is None
+        assert await storage.mark_read(other, ann, notification.id, utcnow()) is None
+        assert await storage.read_notification(org, notification.id) == notification
 
     async def test_purge_tenant_takes_its_rows_and_no_other_tenants(
         self, storage: NotificationStorageInterface

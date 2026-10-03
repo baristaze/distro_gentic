@@ -27,15 +27,17 @@ of thing [Acme is made of](../../../../README.md).
   each account of theirs an integration holds
   ([intake](../intake/README.md)). A park that clears by itself, at its
   retry time, tells nobody, and so does a price only the operator sets.
-- **Read** your own notifications, newest first.
+- **Read** your own notifications, newest first, and **mark one read**.
+  Nobody reads or marks another person's.
 
 ## The rules
 
 - **Exactly the people who can clear it.** Nobody else hears of a park,
   and nobody who can clear it is left out.
 - **One action, one link.** A notification names the one action that
-  clears its park and links to its route in the API. Raising a budget,
-  topping up, and approving a call have no route yet: their
+  clears its park and links to its route in the API: the call's
+  decision, the session's controls, or the budget's amount. Topping up
+  and approving a call past its norm have no route yet: their
   notifications name the park and carry no link.
 - **Once a park.** A park tells each person once on each channel, however
   often it is asked.

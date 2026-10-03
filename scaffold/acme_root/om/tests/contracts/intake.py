@@ -41,6 +41,7 @@ from acme.om.context import (
 from acme.om.exceptions import NotAuthorized
 from acme.om.intake.manager import IntakeManagerInterface
 from acme.om.intake.root import build_intake
+from acme.om.intake.tools import COMMENT, CommentImpl
 from acme.om.knowledge.manager import KnowledgeManagerInterface
 from acme.om.knowledge.root import KnowledgeLayer
 from acme.om.models.impl.credentials import CallCredentialsPlatformImpl
@@ -59,6 +60,8 @@ from acme.om.tenancy.types.membership import Membership
 from acme.om.tenancy.types.user import User
 from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.tools.tool import ToolInterface
+from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule
+from acme.om.tools.types.tool import ToolClass
 from acme.om.trust.impl.keys import KeyProbeTwinImpl
 from acme.om.trust.root import TrustLayer
 from acme.om.windows.impl.gate import CallGateBudgetImpl
@@ -66,9 +69,24 @@ from contracts.doubles import APP
 from contracts.factories import make_org
 from contracts.loops import Clock, Lookup
 from contracts.tools import INJECTED_TOKEN, Command
-from contracts.trust import STEADY, Placement
+from contracts.trust import ALLOWED, STEADY, Placement
 
 WORKER = AppContext(type=AppType.WORKER, version="worker@test")
+
+ACTING = STEADY.model_copy(
+    update={
+        "name": "acting",
+        "tools": (*STEADY.tools, COMMENT),
+        "policy": PolicyLayer(
+            rules=(
+                *ALLOWED.rules,
+                PolicyRule(authorization_class=ToolClass.INTEGRATION, decision=Decision.ALLOW),
+            )
+        ),
+    }
+)
+"""A steady kind that also comments on the forge as the platform's
+account."""
 
 
 @dataclass
@@ -115,6 +133,7 @@ class Wired:
     knowledge: KnowledgeManagerInterface
     notifications: NotificationsManagerInterface
     chat: IntegrationTwinImpl
+    forge: IntegrationTwinImpl
     storage: StorageInterface
     lookup: Lookup
 
@@ -234,9 +253,14 @@ def wired(
         credential_kind=CredentialKind.INTERNAL,
     )
     lookup = Lookup()
+    chat, forge = IntegrationTwinImpl("chat"), IntegrationTwinImpl("forge")
+    integrations = IntegrationsOverImpl(
+        IdentityProviderAbsentImpl(), providers, {"chat": chat, "forge": forge}
+    )
     catalog: tuple[ToolInterface, ...] = (
         lookup,
         Command("call_api", secrets=(INJECTED_TOKEN,)),
+        CommentImpl(lambda: intake, integrations.get_integration),
     )
     clock = Clock()
     trust = TrustLayer(
@@ -252,17 +276,11 @@ def wired(
     def layers(inner: ToolsManagerInterface) -> ToolsManagerInterface:
         return knowledge.tools(playbooks.tools(trust.tools(inner)))
 
-    chat = IntegrationTwinImpl("chat")
-    integrations = IntegrationsOverImpl(
-        IdentityProviderAbsentImpl(),
-        providers,
-        {"chat": chat, "forge": IntegrationTwinImpl("forge")},
-    )
     managers = build_managers(
         storage,
         infra,
         integrations=integrations,
-        agent_kinds=(STEADY,),
+        agent_kinds=(STEADY, ACTING),
         principal_context=principals,
         tool_catalog=catalog,
         tools_layer=layers,
@@ -277,7 +295,7 @@ def wired(
         managers.steps,
         managers.agent_sessions,
         managers.agents,
-        AgentKindCatalog(kinds=(STEADY,)),
+        AgentKindCatalog(kinds=(STEADY, ACTING)),
         managers.attribution,
         managers.models,
         managers.windows,
@@ -313,6 +331,7 @@ def wired(
         knowledge=knowledge.build(managers),
         notifications=build_notifications(storage, managers, integrations, intake, clock=clock),
         chat=chat,
+        forge=forge,
         storage=storage,
         lookup=lookup,
     )

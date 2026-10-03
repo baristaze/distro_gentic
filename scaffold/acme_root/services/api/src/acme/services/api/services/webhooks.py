@@ -41,7 +41,8 @@ class WebhooksServiceInterface(ABC):
         the body and its timestamp and reads it, then the event is queued for
         the router under a key over the integration and the delivery's id,
         named with what served it, the integration's word and never the
-        body's. A delivery that fails the check, or that names no
-        installation of the platform or no event, is refused before anything
-        is queued; an integration this process has none of is unavailable."""
+        body's, for the tenant that connected the installation it names. A
+        delivery that fails the check, or that names no installation a
+        tenant connected or no event, is refused before anything is queued;
+        an integration this process has none of is unavailable."""
         ...

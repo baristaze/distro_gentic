@@ -10,10 +10,11 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.intake import WORKER, Wired, wired
+from contracts.intake import ACTING, WORKER, Wired, wired
 from contracts.loops import reply, said, use
 from pydantic import ValidationError
 
+from acme.om.agents.types.request import Start
 from acme.om.agents.types.run import RunEnd
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.automations.types.automation import (
@@ -36,6 +37,7 @@ from acme.om.context import RequestContext, Role, TenantContext
 from acme.om.evidence.types.provenance import Provenance
 from acme.om.exceptions import NotAuthorized
 from acme.om.intake.rules import described
+from acme.om.intake.tools import COMMENT
 from acme.om.intake.types.event import (
     Arrival,
     Author,
@@ -45,6 +47,8 @@ from acme.om.intake.types.event import (
     WorkNames,
 )
 from acme.om.intake.types.link import HandleKind
+from acme.om.steps.rules import message_step
+from acme.om.steps.types.content import ToolUseBlock
 from acme.om.steps.types.header import InputHeader, ParkReason
 from acme.om.steps.types.step import Actor, StepType
 from acme.om.tenancy.rules import permissions_of
@@ -420,6 +424,74 @@ async def test_an_act_of_the_platform_account_with_no_recorded_session_fires_not
     unrecorded = act_event("an_unbound_pull_request", "ref-never-recorded")
     (run,) = (await deliver(platform, unrecorded)).values()
     assert (run.status, run.refusal) == (RunStatus.REFUSED, Refusal.UNATTRIBUTED)
+
+
+@pytest.mark.parametrize("named_by", ["its_mark", "the_forges_id"])
+async def test_a_comment_through_a_sessions_tool_carries_its_cause_and_hop_and_fires_once(
+    platform: Wired, creator: TenantContext, named_by: str
+) -> None:
+    """A session comments on another session's pull request through its
+    tool, as the platform's account. The event the forge sends back names
+    the comment by the mark the tool posted it under, as one that arrives
+    before the post answers does, or by the forge's own id for it. Either
+    way its cause is the session that commented, and the automation it
+    feeds fires once, a hop on, however often the event is delivered."""
+    other = await platform.start()
+    await platform.intake.bind_work(platform.owner, other, HandleKind.PULL_REQUEST, OTHER_PR)
+    everything = Trigger(kind=TriggerKind.EVENT)
+    acts = automation().action.model_copy(update={"agent_kind": ACTING.name})
+    ping = await made(platform, creator, name="ping", trigger=everything, action=acts)
+    pong = await made(platform, creator, name="pong", trigger=everything)
+    first = next(r for r in await fired(platform, comment()) if r.automation_id == ping.id)
+    assert first.session_id is not None
+    said_on = ToolUseBlock(
+        id="use_comment", name=COMMENT, input={"on": OTHER_PR, "text": "The gripper waits."}
+    )
+    platform.anthropic.add(reply(said_on), reply(said("Commented.")))
+    # A comment acts outward, so the platform's ceiling on outward calls
+    # holds it for a person.
+    assert (await platform.loops.run(platform.service, first.session_id)).end is RunEnd.PARKED
+    (request,) = [
+        s for s in await platform.history(first.session_id) if s.type is StepType.TOOL_REQUEST
+    ]
+    await platform.managers.tools.decide_call(
+        platform.owner, first.session_id, request.seq, approve=True
+    )
+    assert (await platform.loops.run(platform.service, first.session_id)).end is RunEnd.ENDED
+    (posted,) = platform.forge.posted
+    assert (posted.address, posted.mark is not None) == (OTHER_PR, True)
+    event = act_event("another_sessions_pull_request", posted.mark or posted.id)
+    if named_by == "the_forges_id":
+        event = event.model_copy(update={"refs": (posted.id,)})
+    runs_by = await deliver(platform, event)
+    assert runs_by[ping.id].refusal is Refusal.OWN_EVENT
+    fed = runs_by[pong.id]
+    assert (fed.status, fed.caused_by, fed.hop) == (RunStatus.STARTED, first.session_id, 2)
+    again = await deliver(platform, event)
+    assert again[pong.id] == fed
+    recorded = await platform.automations.get_runs(platform.owner, pong.id, 10)
+    assert [r.id for r in recorded if r.event_id == event.id] == [fed.id]
+
+
+async def test_an_unmarked_sessions_comment_waits_on_the_outward_ceiling(platform: Wired) -> None:
+    """A session a member started, with no data read, is unmarked, so the
+    rule of two never holds its calls, and its kind allows the class. Its
+    comment on a repository other than its own still waits for a person:
+    the comment acts outward, and the platform's ceiling caps it."""
+    started = await platform.managers.agents.start_session(
+        platform.owner, Start(id=new_id(), kind=ACTING.name, title="the gripper")
+    )
+    message = message_step(new_id(), utcnow(), started.id, platform.owner, "Tell them.")
+    await platform.managers.agent_sessions.receive(platform.owner, started.id, [message])
+    said_on = ToolUseBlock(
+        id="use_comment", name=COMMENT, input={"on": OTHER_PR, "text": "The gripper waits."}
+    )
+    platform.anthropic.add(reply(said_on))
+    run = await platform.loops.run(platform.owner, started.id)
+    assert (run.end, platform.forge.posted) == (RunEnd.PARKED, [])
+    session = await platform.managers.agent_sessions.get_session(platform.owner, started.id)
+    assert session.park is not None and session.park.reason is ParkReason.PERSON
+    assert not session.untrusted
 
 
 async def test_a_failing_check_on_a_sessions_branch_follows_that_session_with_no_act_recorded(

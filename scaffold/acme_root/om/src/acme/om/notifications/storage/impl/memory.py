@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import UUID
 
 from acme.om.notifications.storage import NotificationStorageInterface
@@ -22,6 +23,18 @@ class NotificationStorageMemoryImpl(MemoryStorageBase, NotificationStorageInterf
     ) -> list[Notification]:
         rows = [n for n in self._rows(self._notifications, org_id) if n.recipient == recipient]
         return sorted(rows, key=lambda n: (n.created_at, n.id), reverse=True)[:limit]
+
+    async def mark_read(
+        self, org_id: UUID, recipient: UUID, notification_id: UUID, at: datetime
+    ) -> Notification | None:
+        async with self._lock:
+            held = self._get(self._notifications, org_id, notification_id)
+            if held is None or held.recipient != recipient:
+                return None
+            if held.read_at is None:
+                held = held.model_copy(update={"read_at": at})
+                self._notifications[held.id] = (org_id, held)
+            return held
 
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:
         async with self._lock:

@@ -4,16 +4,57 @@ from uuid import UUID
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 
+from acme.om.base import EMPTY_UUID
 from acme.om.intake.storage import IntakeStorageInterface
 from acme.om.intake.storage.tables.account_links import AccountLinks
+from acme.om.intake.storage.tables.installations import Installations
 from acme.om.intake.storage.tables.platform_acts import PlatformActs
 from acme.om.intake.storage.tables.work_bindings import WorkBindings
-from acme.om.intake.types.link import AccountLink, HandleKind, PlatformAct, WorkBinding
+from acme.om.intake.types.link import (
+    AccountLink,
+    HandleKind,
+    Installation,
+    PlatformAct,
+    WorkBinding,
+)
 from acme.om.storage.impl.pg_base import PgStorageBase, delete_batch, deleted
 from acme.om.storage.utils.translation import to_model, to_values
 
 
 class IntakeStoragePostgresImpl(PgStorageBase, IntakeStorageInterface):
+    async def create_installation(
+        self, org_id: UUID, installation: Installation
+    ) -> Installation | None:
+        # One tenant an installation: the unique index spans every tenant, so
+        # a second tenant's write does nothing, and its read finds no row.
+        stmt = (
+            insert(Installations)
+            .values(**to_values(installation, Installations), org_id=org_id)
+            .on_conflict_do_nothing(
+                index_elements=[Installations.integration, Installations.installation]
+            )
+        )
+        async with self._session_for(stmt, org_id=org_id) as session:
+            await session.execute(stmt)
+            await session.commit()
+        read = select(Installations).where(
+            Installations.org_id == org_id,
+            Installations.integration == installation.integration,
+            Installations.installation == installation.installation,
+        )
+        async with self._session_for(read, org_id=org_id) as session:
+            row = (await session.execute(read)).scalar_one_or_none()
+            return None if row is None else to_model(row, Installation)
+
+    async def read_installation_org(self, integration: str, installation: str) -> UUID | None:
+        stmt = select(Installations.org_id).where(
+            Installations.integration == integration,
+            Installations.installation == installation,
+        )
+        # Every tenant's installations, so the system scope, spelled here.
+        async with self._session_for(stmt, org_id=EMPTY_UUID) as session:
+            return (await session.execute(stmt)).scalar_one_or_none()
+
     async def create_link(self, org_id: UUID, link: AccountLink) -> AccountLink:
         # One link an account: the unique index decides, and a second link
         # of the same account answers the first.
@@ -131,7 +172,7 @@ class IntakeStoragePostgresImpl(PgStorageBase, IntakeStorageInterface):
 
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:
         gone = 0
-        for table in (AccountLinks, WorkBindings, PlatformActs):
+        for table in (Installations, AccountLinks, WorkBindings, PlatformActs):
             stmt = delete_batch(table, table.org_id == org_id, limit=limit)
             async with self._session_for(stmt, org_id=org_id) as session:
                 gone += deleted(await session.execute(stmt))

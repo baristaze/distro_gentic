@@ -2,6 +2,7 @@
 waits on them, with the link to the one action that clears the park, when
 a route of the API serves it."""
 
+from datetime import datetime
 from uuid import UUID
 
 from pydantic import Field
@@ -26,6 +27,7 @@ class Ask(Platform):
     action: Stored = Field(min_length=1, max_length=MAX_NAME)
     link: Stored = Field(default="", max_length=MAX_NAME)
     text: Stored = Field(min_length=1, max_length=MAX_TEXT)
+    read_at: datetime | None = None
     recipients: tuple[UUID, ...]
 
 
@@ -34,7 +36,8 @@ class Notification(Identifiable, Created):
     step that wrote it), the action, the recipient, and the channel, so a
     park tells each of them once. `provenance` is what served
     a post on an integration: a twin's post is named a twin's; the portal's
-    is the platform's own, and names none."""
+    is the platform's own, and names none. `read_at` is when its recipient
+    marked it read; the first mark holds."""
 
     recipient: UUID
     session_id: UUID
@@ -47,3 +50,4 @@ class Notification(Identifiable, Created):
     address: Stored = Field(default="", max_length=MAX_NAME)
     provenance: Provenance | None = None
     text: Stored = Field(min_length=1, max_length=MAX_TEXT)
+    read_at: datetime | None = None
