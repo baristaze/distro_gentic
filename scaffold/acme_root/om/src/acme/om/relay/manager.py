@@ -55,6 +55,23 @@ class RelayManagerInterface(ABC):
         ...
 
     @abstractmethod
+    async def holder(self, ctx: TenantContext, session_id: UUID) -> WorkspaceBinding | None:
+        """The binding of the session's workspace while the host that holds
+        it is a live host of the session's pool and online now: the only
+        host a release, or the snapshot before it, can reach. None
+        otherwise."""
+        ...
+
+    @abstractmethod
+    async def ask_release(self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec) -> bool:
+        """Platform-internal: asks the host that holds the session's
+        workspace to let its instance go and keep its files, as `workspace`
+        work on that host's lane. Nothing when no host holds it, or when a
+        release asked of it before still waits or runs. Whether it asked
+        now. The caller has kept the workspace's work first."""
+        ...
+
+    @abstractmethod
     async def prepared(
         self, rctx: RequestContext, host: HostIdentity, item_id: UUID, answer: PrepareAnswer
     ) -> WorkspaceBinding | None:
@@ -65,6 +82,13 @@ class RelayManagerInterface(ABC):
         to the pool's lane after a wait, for a host that can give it, and
         None is answered. `ItemNotHeld` for a prepare the host does not hold
         under a live claim."""
+        ...
+
+    @abstractmethod
+    async def released(self, rctx: RequestContext, host: HostIdentity, item_id: UUID) -> None:
+        """Platform-internal: a host answers a release it claimed, once the
+        instance is gone: its row completes. `ItemNotHeld` for a release the
+        host does not hold under a live claim."""
         ...
 
     # The runner's side: its relay transport, which runs below any context,
@@ -204,6 +228,13 @@ class RelayManagerInterface(ABC):
         never requeued; a repeatable one waits for its row to come back to
         its host's lane. Either way the host that held it is told its lease
         is revoked. Returns how many it settled."""
+        ...
+
+    @abstractmethod
+    async def bindings(self, after: UUID | None) -> list[tuple[UUID, WorkspaceBinding]]:
+        """Platform-internal: across tenants, for the sweep, the bindings in id
+        order after the one `after` names, each with its tenant, at most the
+        options' sweep batch."""
         ...
 
     @abstractmethod

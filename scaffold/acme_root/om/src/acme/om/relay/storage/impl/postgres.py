@@ -195,6 +195,17 @@ class RelayStoragePostgresImpl(PgStorageBase, RelayStorageInterface):
             row = (await session.execute(stmt)).scalar_one_or_none()
             return None if row is None else to_model(row, WorkspaceBinding)
 
+    async def read_bindings(
+        self, after: UUID | None, limit: int
+    ) -> list[tuple[UUID, WorkspaceBinding]]:
+        stmt = select(WorkspaceBindings).order_by(WorkspaceBindings.id).limit(limit)
+        if after is not None:
+            stmt = stmt.where(WorkspaceBindings.id > after)
+        # Every tenant's bindings, so the system scope, spelled here.
+        async with self._session_for(stmt, org_id=EMPTY_UUID) as session:
+            rows = (await session.execute(stmt)).scalars().all()
+            return [(row.org_id, to_model(row, WorkspaceBinding)) for row in rows]
+
     async def purge_session(self, org_id: UUID, session_id: UUID, limit: int) -> int:
         purged = 0
         for table in PURGED_IN_ORDER:

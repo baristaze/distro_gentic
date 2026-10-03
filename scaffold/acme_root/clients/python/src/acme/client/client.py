@@ -892,6 +892,11 @@ class ApiClient:
         answer = await self.request("POST", f"/v1/hosts/me/workspaces/{item_id}", json=body)
         return PreparedView.model_validate(answer)
 
+    async def answer_release(self, item_id: UUID) -> None:
+        """A release this host claimed: the instance is gone, and its files
+        stay."""
+        await self.request("POST", f"/v1/hosts/me/workspaces/{item_id}/released")
+
     async def extend_exec_lease(self, item_id: UUID) -> ExecLeaseView:
         answer = await self.request("POST", f"/v1/hosts/me/exec/{item_id}/lease")
         return ExecLeaseView.model_validate(answer)
