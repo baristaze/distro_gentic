@@ -94,7 +94,7 @@ class Forged:
             workspace_projects=self.projects,
             workspace_git=GitTwin(head=HEAD),
             workspace_reader=self.reader,
-            source_control=SourceControlForgeImpl(lambda name: self.forge),
+            source_control=SourceControlForgeImpl(lambda name: self.forge, self.tenant_of),
             **roots,
         )
         self.intake = build_intake(self.loop.storage, self.loop.managers, principal_context=live)
@@ -118,6 +118,10 @@ class Forged:
 
         self.head = HEAD
         transport.handler = checkout
+
+    async def tenant_of(self, integration: str, installation: str) -> UUID | None:
+        """The engineer's tenant connected the forge's one installation."""
+        return self.loop.owner.org_id
 
     async def engineer(self) -> UUID:
         return await self.loop.start(kinds.ENGINEER)

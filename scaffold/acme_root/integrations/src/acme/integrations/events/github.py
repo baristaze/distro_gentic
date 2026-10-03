@@ -15,12 +15,18 @@ A tenant connects an installation with the grant GitHub hands the person
 who installed the App, the query of the setup redirect: the installation's
 id and a code for that person. The code is traded for the person's token,
 and the installation counts only when GitHub lists it among the ones that
-person may reach. That token is used once and kept nowhere. The id alone
-is never trusted (ADR 2020).
+person may reach, and GitHub's own record of the install, the `installation`
+delivery it signed and sent the App, names that person as the one who
+installed it. Anyone else who may reach the installation is refused, so no
+one connects it before its installer does. That token is used once and
+kept nowhere. The id alone is never trusted (ADR 2020).
 
-Deliveries are read in `github_wire.py`. The client's writes resolve the
-installation of the repository they name, so one App serves every
-installation of it."""
+Deliveries are read in `github_wire.py`. Each write goes through the
+installation its caller names, with that installation's token, which
+reaches no repository another installation holds; `installation_of`
+answers which one holds a repository, so its caller can find whether the
+writing tenant connected it before anything is written. One App serves
+every installation of it."""
 
 import asyncio
 import base64
@@ -63,6 +69,9 @@ TOKEN_MARGIN = timedelta(minutes=15)
 """How long before its expiry a token stops being reused."""
 MAX_INSTALLATION_PAGES = 10
 """The most pages of a person's installations read, a hundred to a page."""
+MAX_DELIVERY_PAGES = 10
+"""The most pages of the App's recent deliveries searched for an install's
+record, a hundred to a page."""
 
 ADDRESS = re.compile(r"^([A-Za-z0-9-]{1,39})/([A-Za-z0-9._-]{1,100})#([0-9]{1,10})$")
 """A pull request or an issue: `<owner>/<repo>#<number>`."""
@@ -151,7 +160,10 @@ class GitHubImpl(IntegrationInterface):
 
     async def installation_token(self, installation: str) -> SecretStr:
         """The token of `installation`: the one held while it has more than
-        `TOKEN_MARGIN` left, else a new one."""
+        `TOKEN_MARGIN` left, else a new one. `ProviderRefused` for an id
+        that is not GitHub's, a number."""
+        if not installation.isdigit():
+            raise ProviderRefused(f"{installation} is not an installation of the forge")
         async with self._minting:
             held = self._tokens.get(installation)
             if held is not None and self._clock() < held.expires_at - TOKEN_MARGIN:
@@ -173,7 +185,9 @@ class GitHubImpl(IntegrationInterface):
             log.info("forge: a token for installation %s, until %s", installation, token.expires_at)
             return token.value
 
-    async def _installation_of(self, owner: str, repo: str) -> str:
+    async def installation_of(self, target: str) -> str:
+        named = ADDRESS.match(target)
+        owner, repo = named.groups()[:2] if named is not None else self._repository(target)
         answer = await self._call(
             "GET",
             f"{self._api}/repos/{owner}/{repo}/installation",
@@ -184,10 +198,6 @@ class GitHubImpl(IntegrationInterface):
             return str(answer["id"])
         except KeyError, TypeError:
             raise ProviderUnavailable("the forge named no installation") from None
-
-    async def _on(self, owner: str, repo: str) -> SecretStr:
-        """The token of the installation that holds `owner/repo`."""
-        return await self.installation_token(await self._installation_of(owner, repo))
 
     # Deliveries and grants.
 
@@ -236,19 +246,73 @@ class GitHubImpl(IntegrationInterface):
             if not isinstance(held, list):
                 raise ProviderUnavailable("the forge listed no installations")
             if any(isinstance(i, dict) and str(i.get("id")) == installation for i in held):
-                return installation
-            if len(held) < 100:
                 break
-        raise DeliveryRefused("the grant's installation is not one its person may reach")
+            if len(held) < 100:
+                raise DeliveryRefused("the grant's installation is not one its person may reach")
+        else:
+            raise DeliveryRefused("the grant's installation is not one its person may reach")
+        me = await self._call(
+            "GET", f"{self._api}/user", bearer=SecretStr(person), doing="the person"
+        )
+        if not isinstance(me, dict) or me.get("id") is None:
+            raise ProviderUnavailable("the forge named no person for the grant")
+        if await self._installer(installation) != str(me["id"]):
+            raise DeliveryRefused("the grant's person did not install its installation")
+        return installation
 
-    # Writes, each through the installation of the repository it names.
+    async def _installer(self, installation: str) -> str:
+        """The id of the person who installed `installation`: the sender of
+        the `installation` delivery GitHub signed and sent the App when it
+        was made, as the App's recent deliveries hold it.
+        `DeliveryRefused` when none of them is its record."""
+        jwt = SecretStr(self.app_jwt())
+        url: str | None = f"{self._api}/app/hook/deliveries"
+        params: dict[str, Any] | None = {"per_page": 100}
+        for _ in range(MAX_DELIVERY_PAGES):
+            if url is None:
+                break
+            response = await self._send(
+                "GET", url, bearer=jwt, params=params, doing="the App's deliveries"
+            )
+            listed = _json(response, "the App's deliveries")
+            if not isinstance(listed, list):
+                raise ProviderUnavailable("the forge listed no deliveries")
+            for delivery in listed:
+                if (
+                    isinstance(delivery, dict)
+                    and isinstance(delivery.get("id"), int)
+                    and (delivery.get("event"), delivery.get("action"))
+                    == ("installation", "created")
+                    and str(delivery.get("installation_id")) == installation
+                ):
+                    held = await self._call(
+                        "GET",
+                        f"{self._api}/app/hook/deliveries/{delivery['id']}",
+                        bearer=jwt,
+                        doing="the record of the install",
+                    )
+                    try:
+                        return str(held["request"]["payload"]["sender"]["id"])
+                    except KeyError, TypeError:
+                        raise ProviderUnavailable("the forge's record names no installer") from None
+            # The next page is GitHub's own link, and only ever on its API.
+            url, params = response.links.get("next", {}).get("url"), None
+            if url is not None and not url.startswith(f"{self._api}/"):
+                break
+        raise DeliveryRefused("the forge holds no record of who installed the grant's installation")
 
-    async def post(self, address: str, text: str, mark: str | None = None) -> PostedMessage:
+    # Writes, each through the installation its caller names.
+
+    async def post(
+        self, address: str, text: str, mark: str | None = None, *, installation: str | None = None
+    ) -> PostedMessage:
         named = ADDRESS.match(address)
         if named is None:
             raise ProviderRefused(f"{address} names no pull request or issue as owner/repo#n")
+        if installation is None:
+            raise ProviderRefused(f"a comment on {address} names no installation")
         owner, repo, number = named.groups()
-        token = await self._on(owner, repo)
+        token = await self.installation_token(installation)
         answer = await self._call(
             "POST",
             f"{self._api}/repos/{owner}/{repo}/issues/{number}/comments",
@@ -268,18 +332,27 @@ class GitHubImpl(IntegrationInterface):
         except KeyError, ValueError, TypeError:
             raise ProviderUnavailable("the forge answered no comment") from None
 
-    async def push(self, repository: str, ref: str, head: str, bundle: bytes) -> None:
-        owner, repo = self._repository(repository)
-        token = await self._on(owner, repo)
+    async def push(
+        self, repository: str, ref: str, head: str, bundle: bytes, *, installation: str
+    ) -> None:
+        self._repository(repository)
+        token = await self.installation_token(installation)
         await push_bundle(
             repository, ref, head, bundle, ("x-access-token", token.get_secret_value())
         )
 
     async def open_pull_request(
-        self, repository: str, head: str, base: str | None, title: str, body: str
+        self,
+        repository: str,
+        head: str,
+        base: str | None,
+        title: str,
+        body: str,
+        *,
+        installation: str,
     ) -> OpenedPullRequest:
         owner, repo = self._repository(repository)
-        token = await self._on(owner, repo)
+        token = await self.installation_token(installation)
         held = await self._open_of(owner, repo, head, token)
         if held is None:
             if base is None:
@@ -352,6 +425,23 @@ class GitHubImpl(IntegrationInterface):
         """One call, its answer's JSON. A refused key, a limit, a server
         error, or no answer is unavailable; any other refusal is refused.
         Neither names a credential."""
+        response = await self._send(
+            method, url, doing=doing, bearer=bearer, accept=accept, **kwargs
+        )
+        return _json(response, doing)
+
+    async def _send(
+        self,
+        method: str,
+        url: str,
+        *,
+        doing: str,
+        bearer: SecretStr | None = None,
+        accept: str = "application/vnd.github+json",
+        **kwargs: Any,
+    ) -> httpx.Response:
+        """One call, its answer once it is no refusal, failing as `_call`
+        does."""
         headers = {"Accept": accept, "X-GitHub-Api-Version": API_VERSION}
         if bearer is not None:
             headers["Authorization"] = f"Bearer {bearer.get_secret_value()}"
@@ -362,10 +452,14 @@ class GitHubImpl(IntegrationInterface):
             raise ProviderUnavailable(f"the forge did not answer {doing}: {kind}") from None
         if response.status_code >= 400:
             _refusal(response, doing)
-        try:
-            return response.json()
-        except ValueError:
-            raise ProviderUnavailable(f"the forge's answer to {doing} is not JSON") from None
+        return response
+
+
+def _json(response: httpx.Response, doing: str) -> Any:
+    try:
+        return response.json()
+    except ValueError:
+        raise ProviderUnavailable(f"the forge's answer to {doing} is not JSON") from None
 
 
 def _refusal(response: httpx.Response, doing: str) -> NoReturn:

@@ -185,4 +185,6 @@ async def test_a_refused_key_is_unavailable_and_a_refused_post_is_refused(
 
 async def test_the_chat_holds_no_repository() -> None:
     with pytest.raises(ProviderRefused):
-        await chat(unreachable).push("https://github.com/o/r.git", "refs/heads/x", "abc", b"")
+        await chat(unreachable).push(
+            "https://github.com/o/r.git", "refs/heads/x", "abc", b"", installation="1"
+        )

@@ -604,11 +604,14 @@ def build_managers(
     # Each session's workspace, pinned as the session is created: a
     # decorator below pins it before the session is written. Its checkout
     # runs in the workspace through the transport the tools take, under the
-    # session's epoch.
+    # session's epoch. Source control writes only through an installation of
+    # the forge the session's tenant connected, read from intake's rows.
     writes = source_control or (
         SourceControlAbsentImpl()
         if integrations is None
-        else SourceControlForgeImpl(integrations.get_integration)
+        else SourceControlForgeImpl(
+            integrations.get_integration, storage.get_intake_storage().read_installation_org
+        )
     )
     # What a session delivered is read from its repository, and what it has
     # not from the workspace this process holds for it.

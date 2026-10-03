@@ -199,7 +199,13 @@ def test_the_checks_fold_into_passed_failed_or_not_yet(
     assert checks_state(outcomes) == state
 
 
-def oauth(installations: str = "user_installations", code_ok: bool = True) -> Handler:
+INSTALLER = 583231
+"""The person the recorded install names as its installer."""
+
+
+def oauth(
+    installations: str = "user_installations", code_ok: bool = True, person: int = INSTALLER
+) -> Handler:
     def handle(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/login/oauth/access_token":
             form = dict(item.split("=") for item in request.content.decode().split("&"))
@@ -210,6 +216,14 @@ def oauth(installations: str = "user_installations", code_ok: bool = True) -> Ha
         if request.url.path == "/user/installations":
             assert request.headers["authorization"] == "Bearer the-persons-token"
             return answer(installations)
+        if request.url.path == "/user":
+            assert request.headers["authorization"] == "Bearer the-persons-token"
+            return httpx.Response(200, json={"login": "a-person", "id": person})
+        if request.url.path == "/app/hook/deliveries":
+            assert request.headers["authorization"] != "Bearer the-persons-token"
+            return answer("hook_deliveries")
+        if request.url.path == "/app/hook/deliveries/41001":
+            return answer("installation_created")
         raise AssertionError(request.url)
 
     return handle
@@ -240,11 +254,38 @@ async def test_a_grant_github_does_not_confirm_is_refused(
         await client.verify_installation(grant, NOW)
 
 
+async def test_a_person_who_reaches_an_installation_they_did_not_install_cannot_connect_it(
+    key: rsa.RSAPrivateKey,
+) -> None:
+    # Another member of the account the App is installed on may reach the
+    # fresh installation and trade a code of their own, but GitHub's record
+    # of the install names someone else: the grant is refused, so no tenant
+    # connects it before its installer's does.
+    client = forge(key, oauth(person=INSTALLER + 1))
+    grant = "installation_id=71001&setup_action=install&code=a1b2c3"
+    with pytest.raises(DeliveryRefused, match="did not install"):
+        await client.verify_installation(grant, NOW)
+
+
+async def test_an_installation_with_no_record_of_its_install_is_refused(
+    key: rsa.RSAPrivateKey,
+) -> None:
+    def handle(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/app/hook/deliveries":
+            return httpx.Response(200, json=json.loads(recorded("hook_deliveries"))[:1])
+        return oauth()(request)
+
+    with pytest.raises(DeliveryRefused, match="no record"):
+        await forge(key, handle).verify_installation("installation_id=71001&code=a1b2c3", NOW)
+
+
+HOLDER = "71001"
+"""The installation that holds the repository the writes name."""
+
+
 def minting(calls: list[httpx.Request]) -> Handler:
     def handle(request: httpx.Request) -> httpx.Response:
         calls.append(request)
-        if request.url.path == "/repos/octo-org/widgets/installation":
-            return httpx.Response(200, json={"id": 71001})
         if request.url.path == "/app/installations/71001/access_tokens":
             return answer("installation_token", 201)
         if request.url.path == "/repos/octo-org/widgets/issues/12/comments":
@@ -265,7 +306,7 @@ async def test_the_installation_token_is_cached_within_its_expiry_and_never_show
     minted = lambda: [c for c in calls if c.url.path.endswith("/access_tokens")]  # noqa: E731
 
     for _ in range(3):
-        await client.post("octo-org/widgets#12", "Fixed it.", MARK)
+        await client.post("octo-org/widgets#12", "Fixed it.", MARK, installation=HOLDER)
     assert len(minted()) == 1, "one token serves every call within its expiry"
     comments = [c for c in calls if c.url.path.endswith("/comments")]
     assert {c.headers["authorization"] for c in comments} == {f"Bearer {token}"}
@@ -281,10 +322,10 @@ async def test_the_installation_token_is_cached_within_its_expiry_and_never_show
 
     # Fifteen minutes before it expires, a token is no longer reused.
     clock.now = datetime(2026, 10, 3, 12, 44, tzinfo=UTC)
-    await client.post("octo-org/widgets#12", "Again.")
+    await client.post("octo-org/widgets#12", "Again.", installation=HOLDER)
     assert len(minted()) == 1
     clock.now = datetime(2026, 10, 3, 12, 46, tzinfo=UTC)
-    await client.post("octo-org/widgets#12", "Again.")
+    await client.post("octo-org/widgets#12", "Again.", installation=HOLDER)
     assert len(minted()) == 2
 
     # Held as a secret: never in a log, in what the client shows, or in
@@ -307,13 +348,15 @@ async def test_a_refused_key_is_unavailable_and_never_named(
 
     client = forge(key, handle)
     with pytest.raises(ProviderUnavailable) as failed:
-        await client.post("octo-org/widgets#12", "Fixed it.")
+        await client.post("octo-org/widgets#12", "Fixed it.", installation=HOLDER)
     assert token not in str(failed.value) and token not in caplog.text
 
 
 async def test_a_comment_carries_its_mark_and_answers_as_real(key: rsa.RSAPrivateKey) -> None:
     calls: list[httpx.Request] = []
-    posted = await forge(key, minting(calls)).post("octo-org/widgets#12", "Fixed it.", MARK)
+    posted = await forge(key, minting(calls)).post(
+        "octo-org/widgets#12", "Fixed it.", MARK, installation=HOLDER
+    )
     assert (posted.id, posted.provenance, posted.mark) == ("1003", "real", MARK)
     (comment,) = [c for c in calls if c.url.path.endswith("/comments")]
     assert f"<!-- platform-act: {MARK} -->" in json.loads(comment.content)["body"]
@@ -324,7 +367,7 @@ async def test_an_address_that_names_no_pull_request_is_refused(
     key: rsa.RSAPrivateKey, address: str
 ) -> None:
     with pytest.raises(ProviderRefused):
-        await forge(key, unreachable).post(address, "text")
+        await forge(key, unreachable).post(address, "text", installation=HOLDER)
 
 
 async def test_a_push_hands_git_the_installations_token_for_the_repository(
@@ -337,14 +380,16 @@ async def test_a_push_hands_git_the_installations_token_for_the_repository(
 
     monkeypatch.setattr(github_module, "push_bundle", push_bundle)
     client = forge(key, minting([]))
-    await client.push(REPOSITORY, "refs/heads/agent/fix-totals", "9a8b7c6", b"bundle")
+    await client.push(
+        REPOSITORY, "refs/heads/agent/fix-totals", "9a8b7c6", b"bundle", installation=HOLDER
+    )
     token = json.loads(recorded("installation_token"))["token"]
     assert pushed == [
         (REPOSITORY, "refs/heads/agent/fix-totals", "9a8b7c6", b"bundle", ("x-access-token", token))
     ]
     for elsewhere in ("https://example.com/octo-org/widgets.git", "git@github.com:o/r.git"):
         with pytest.raises(ProviderRefused, match="is not a repository of"):
-            await client.push(elsewhere, "refs/heads/x", "9a8b7c6", b"")
+            await client.push(elsewhere, "refs/heads/x", "9a8b7c6", b"", installation=HOLDER)
 
 
 async def test_a_pull_request_opens_once_and_a_second_opening_answers_it(
@@ -362,11 +407,52 @@ async def test_a_pull_request_opens_once_and_a_second_opening_answers_it(
         return minting([])(request)
 
     client = forge(key, handle)
-    first = await client.open_pull_request(REPOSITORY, "agent/fix-totals", "main", "T", "B")
-    second = await client.open_pull_request(REPOSITORY, "agent/fix-totals", "main", "T", "B")
+    first = await client.open_pull_request(
+        REPOSITORY, "agent/fix-totals", "main", "T", "B", installation=HOLDER
+    )
+    second = await client.open_pull_request(
+        REPOSITORY, "agent/fix-totals", "main", "T", "B", installation=HOLDER
+    )
     assert first == second and len(opened) == 1
     assert (first.id, first.url, first.provenance) == (
         "octo-org/widgets#13",
         "https://github.com/octo-org/widgets/pull/13",
         "real",
     )
+
+
+async def test_the_installation_of_a_repository_or_an_address_is_githubs_answer(
+    key: rsa.RSAPrivateKey,
+) -> None:
+    asked: list[str] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        asked.append(request.url.path)
+        assert request.url.path == "/repos/octo-org/widgets/installation"
+        return httpx.Response(200, json={"id": 71001})
+
+    client = forge(key, handle)
+    assert await client.installation_of(REPOSITORY) == HOLDER
+    assert await client.installation_of("octo-org/widgets#12") == HOLDER
+    assert len(asked) == 2
+    with pytest.raises(ProviderRefused):
+        await forge(key, unreachable).installation_of("https://example.com/o/r.git")
+
+
+async def test_a_write_goes_through_the_installation_it_names_and_no_other(
+    key: rsa.RSAPrivateKey,
+) -> None:
+    # The caller names the installation its tenant connected: the client
+    # mints that one's token and never asks which installation holds the
+    # repository, so a token of another tenant's installation is never used.
+    calls: list[httpx.Request] = []
+    await forge(key, minting(calls)).post("octo-org/widgets#12", "Fixed.", installation=HOLDER)
+    assert [c.url.path for c in calls] == [
+        "/app/installations/71001/access_tokens",
+        "/repos/octo-org/widgets/issues/12/comments",
+    ]
+    for installation in (None, "../71001", "71001/access_tokens"):
+        with pytest.raises(ProviderRefused):
+            await forge(key, unreachable).post(
+                "octo-org/widgets#12", "Fixed.", installation=installation
+            )

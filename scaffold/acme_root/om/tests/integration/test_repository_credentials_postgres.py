@@ -15,6 +15,7 @@ from collections.abc import AsyncIterator, Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import cast
+from uuid import UUID
 
 import pytest
 from contracts.platform_agents import CORPUS
@@ -32,7 +33,7 @@ from acme.infra.workspaces import (
     WorkspaceProviderInterface,
 )
 from acme.infra.workspaces.host import WorkspaceHostImpl
-from acme.integrations.events.twin import IntegrationTwinImpl
+from acme.integrations.events.twin import TWIN_INSTALLATION, IntegrationTwinImpl
 from acme.integrations.exceptions import ProviderUnavailable
 from acme.integrations.impl.configured import integrations_for
 from acme.integrations.settings import IntegrationsSettings
@@ -326,6 +327,12 @@ async def test_a_session_works_a_private_repository_with_no_credential_in_its_wo
     main, remote = a_delivery(private_git.root)
     projects = ProjectsTwin(repository=private_git.url)
     forge = IntegrationTwinImpl("forge", writes=True, credential=(WRITER, WRITER_PASSWORD))
+    connected: list[UUID] = []
+
+    async def tenant_of(integration: str, installation: str) -> UUID | None:
+        """The tenant connected the forge's one installation."""
+        return connected[0] if connected else None
+
     infra = HostInfra(tmp_path / "host")
     managers: Managers = build_managers(
         storage,
@@ -334,7 +341,7 @@ async def test_a_session_works_a_private_repository_with_no_credential_in_its_wo
         platform_agents=PlatformAgents(corpus=CORPUS),
         workspace_projects=projects,
         workspace_reader=on_loopback(),
-        source_control=SourceControlForgeImpl(lambda name: forge),
+        source_control=SourceControlForgeImpl(lambda name: forge, tenant_of),
     )
     owner, _ = await managers.tenancy.bootstrap(
         RequestContext(request_id=new_id(), app=APP),
@@ -343,6 +350,7 @@ async def test_a_session_works_a_private_repository_with_no_credential_in_its_wo
         f"ann-{new_id().hex[-8:]}@example.test",
         "Ann",
     )
+    connected.append(owner.org_id)
     credential = FetchCredential(username=USER, password=SecretStr(PASSWORD))
     await managers.workspaces.put_fetch_credential(owner, projects.project_id, credential)
     session = await managers.agents.start_session(
@@ -429,11 +437,19 @@ async def test_the_local_stacks_forge_twin_pushes_to_a_private_repository_with_i
     forge = built["forge"]
 
     if given:
-        await forge.push(private_git.url, "refs/heads/sessions/one", head, bundle)
+        await forge.push(
+            private_git.url, "refs/heads/sessions/one", head, bundle, installation=TWIN_INSTALLATION
+        )
         assert git(Path(remote), "rev-parse", "refs/heads/sessions/one") == head
     else:
         with pytest.raises(ProviderUnavailable):
-            await forge.push(private_git.url, "refs/heads/sessions/one", head, bundle)
+            await forge.push(
+                private_git.url,
+                "refs/heads/sessions/one",
+                head,
+                bundle,
+                installation=TWIN_INSTALLATION,
+            )
         held = git(Path(remote), "for-each-ref", "--format=%(refname) %(objectname)")
         assert held == f"refs/heads/main {main}", "nothing was written"
         assert private_git.refused > 0 and private_git.authorized == 0

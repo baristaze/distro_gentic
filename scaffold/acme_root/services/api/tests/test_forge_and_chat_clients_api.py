@@ -32,14 +32,25 @@ SECRET = "the-apps-webhook-secret"
 
 
 def github_answers(request: httpx.Request) -> httpx.Response:
-    """GitHub's side of a grant: the person's code, and the installations
-    that person may reach (71001 and 71009)."""
+    """GitHub's side of a grant: the person's code, the installations that
+    person may reach (71001 and 71009), the person, and GitHub's record of
+    their install of 71001."""
     if request.url.path == "/login/oauth/access_token":
         return httpx.Response(200, json={"access_token": "the-persons-token"})
-    if request.url.path == "/user/installations":
-        return httpx.Response(
-            200, content=(FIXTURES / "github/user_installations.json").read_bytes()
-        )
+    recorded = {
+        "/user/installations": "user_installations",
+        "/app/hook/deliveries": "hook_deliveries",
+        "/app/hook/deliveries/41001": "installation_created",
+    }.get(request.url.path)
+    if recorded is not None:
+        return httpx.Response(200, content=(FIXTURES / f"github/{recorded}.json").read_bytes())
+    if request.url.path == "/app/hook/deliveries/41000":
+        # The same person's install of 71009, on their own account.
+        record = json.loads((FIXTURES / "github/installation_created.json").read_bytes())
+        record["installation_id"] = record["request"]["payload"]["installation"]["id"] = 71009
+        return httpx.Response(200, json=record)
+    if request.url.path == "/user":
+        return httpx.Response(200, json={"login": "octocat", "id": 583231})
     raise AssertionError(request.url)
 
 

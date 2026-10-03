@@ -17,7 +17,9 @@ over `<timestamp>.installation:<installation>`, and carried as
 `<installation>;t=<timestamp>, v1=<signature>`.
 
 The forge's twin holds the refs the platform points and the pull requests
-it opens, by name and head. Made to write (`writes`), it also pushes each
+it opens, by name and head. Its system has one installation, which holds
+every repository; a forge write goes through it, and a write through any
+other installation, or through none, is refused, as a real forge's is. Made to write (`writes`), it also pushes each
 ref's commits to the repository for real, from the platform's bundle, as a
 forge does (`git.py`), with a repository's `credential` where it is given
 one: the local stack's forge twin writes, so the next loop finds what was
@@ -52,6 +54,8 @@ TWIN_SECRET = "twin-integration-secret"
 
 TWIN = "twin"
 FORGE = "forge"
+TWIN_INSTALLATION = "twin_installation"
+"""The one installation of a twin's system: it holds every repository."""
 
 
 def sign(payload: bytes, secret: str, at: datetime) -> str:
@@ -107,8 +111,10 @@ class IntegrationTwinImpl(IntegrationInterface):
         secret: str = TWIN_SECRET,
         writes: bool = False,
         credential: tuple[str, str] | None = None,
+        installation: str = TWIN_INSTALLATION,
     ) -> None:
         self._name = name
+        self._installation = installation
         self._secret = secret
         self._writes = writes
         self._credential = credential
@@ -180,7 +186,15 @@ class IntegrationTwinImpl(IntegrationInterface):
         except ValidationError:
             raise DeliveryRefused("the body is not an event") from None
 
-    async def post(self, address: str, text: str, mark: str | None = None) -> PostedMessage:
+    async def installation_of(self, target: str) -> str:
+        self._holds_repositories()
+        return self._installation
+
+    async def post(
+        self, address: str, text: str, mark: str | None = None, *, installation: str | None = None
+    ) -> PostedMessage:
+        if self._name == FORGE or installation is not None:
+            self._through(installation)
         message = PostedMessage(
             id=self._id("message"),
             address=address,
@@ -192,16 +206,27 @@ class IntegrationTwinImpl(IntegrationInterface):
         self.posted.append(message)
         return message
 
-    async def push(self, repository: str, ref: str, head: str, bundle: bytes) -> None:
+    async def push(
+        self, repository: str, ref: str, head: str, bundle: bytes, *, installation: str
+    ) -> None:
         self._holds_repositories()
+        self._through(installation)
         if self._writes:
             await push_bundle(repository, ref, head, bundle, self._credential)
         self.refs[(repository, ref)] = head
 
     async def open_pull_request(
-        self, repository: str, head: str, base: str | None, title: str, body: str
+        self,
+        repository: str,
+        head: str,
+        base: str | None,
+        title: str,
+        body: str,
+        *,
+        installation: str,
     ) -> OpenedPullRequest:
         self._holds_repositories()
+        self._through(installation)
         if (repository, f"refs/heads/{head}") not in self.refs:
             raise ProviderRefused(f"{repository} has no branch {head}")
         for opened in self.pull_requests:
@@ -224,6 +249,10 @@ class IntegrationTwinImpl(IntegrationInterface):
     def _holds_repositories(self) -> None:
         if self._name != FORGE:
             raise ProviderRefused(f"the {self._name} twin holds no repository")
+
+    def _through(self, installation: str | None) -> None:
+        if installation != self._installation:
+            raise ProviderRefused(f"installation {installation} reaches nothing of the twin's")
 
     def describe(self) -> str:
         return f"{self._name}=twin"

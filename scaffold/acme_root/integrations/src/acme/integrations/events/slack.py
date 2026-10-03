@@ -111,7 +111,12 @@ class SlackImpl(IntegrationInterface):
             raise DeliveryRefused("the chat named no workspace for the grant")
         return workspace
 
-    async def post(self, address: str, text: str, mark: str | None = None) -> PostedMessage:
+    async def installation_of(self, target: str) -> str:
+        raise ProviderRefused("the chat holds no repository")
+
+    async def post(
+        self, address: str, text: str, mark: str | None = None, *, installation: str | None = None
+    ) -> PostedMessage:
         message: dict[str, Any] = {"channel": address, "text": text}
         if mark is not None:
             message["metadata"] = {"event_type": MARK_EVENT, "event_payload": {"mark": mark}}
@@ -129,11 +134,20 @@ class SlackImpl(IntegrationInterface):
         except KeyError, ValueError, TypeError:
             raise ProviderUnavailable("the chat answered no message") from None
 
-    async def push(self, repository: str, ref: str, head: str, bundle: bytes) -> None:
+    async def push(
+        self, repository: str, ref: str, head: str, bundle: bytes, *, installation: str
+    ) -> None:
         raise ProviderRefused("the chat holds no repository")
 
     async def open_pull_request(
-        self, repository: str, head: str, base: str | None, title: str, body: str
+        self,
+        repository: str,
+        head: str,
+        base: str | None,
+        title: str,
+        body: str,
+        *,
+        installation: str,
     ) -> OpenedPullRequest:
         raise ProviderRefused("the chat holds no repository")
 

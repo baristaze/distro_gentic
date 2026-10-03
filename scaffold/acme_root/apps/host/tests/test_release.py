@@ -35,7 +35,7 @@ from acme.infra.transports.local import DEFAULT_PATH, TransportLocalImpl
 from acme.infra.workspaces import IsolationMode as ProviderMode
 from acme.infra.workspaces import IsolationRefused, Workspace
 from acme.infra.workspaces.host import WorkspaceHostImpl
-from acme.integrations.events.twin import IntegrationTwinImpl
+from acme.integrations.events.twin import TWIN_INSTALLATION, IntegrationTwinImpl
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
 from acme.integrations.impl.configured import IntegrationsOverImpl
 from acme.integrations.model_providers.registry import scripted_model_providers
@@ -44,6 +44,7 @@ from acme.om.agents.loop_rules import changed_step
 from acme.om.agents.types.request import Start
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
+from acme.om.intake.types.link import Installation
 from acme.om.placement.types.work import WorkspaceOperation, WorkspacePayload
 from acme.om.root import Managers, PlatformPorts
 from acme.om.steps.types.header import ParkReason
@@ -201,6 +202,7 @@ class Placed:
 async def placed(api: Stack, tmp_path: Path, remote: Path) -> Placed:
     assert GIT is not None
     projects = ProjectsTwin(repository=str(remote))
+    forge = IntegrationTwinImpl("forge", writes=True)
     runner = RunnerContainer.over(
         SETTINGS,
         api.container.storage,
@@ -208,13 +210,25 @@ async def placed(api: Stack, tmp_path: Path, remote: Path) -> Placed:
         IntegrationsOverImpl(
             IdentityProviderAbsentImpl(),
             scripted_model_providers(),
-            {"forge": IntegrationTwinImpl("forge", writes=True)},
+            {"forge": forge},
         ),
         agent_kinds=(KIND,),
         ports=PlatformPorts(workspace_projects=projects),
     )
     managers, owner = runner.managers, api.owner
     await seed_platform(runner.storage, managers, owner, (KIND,))
+    # The tenant connected the forge's one installation, so its snapshots
+    # go through it.
+    await runner.storage.get_intake_storage().create_installation(
+        owner.org_id,
+        Installation(
+            id=new_id(),
+            created_at=utcnow(),
+            integration="forge",
+            installation=TWIN_INSTALLATION,
+            created_by=owner.user_id,
+        ),
+    )
     pool = await api.pool("pool-a")
     root = tmp_path / "host" / "workspaces"
     provider = WorkspaceHostImpl(root)

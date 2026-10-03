@@ -144,18 +144,35 @@ class IntegrationInterface(ABC):
         ...
 
     @abstractmethod
-    async def post(self, address: str, text: str, mark: str | None = None) -> PostedMessage:
+    async def installation_of(self, target: str) -> str:
+        """The installation of the platform that holds `target`, a repository
+        as it is cloned or an address on one (`owner/repo#12`), as the system
+        answers it. A forge write goes through an installation its caller
+        names, once the caller finds the writing tenant connected it.
+        `ProviderRefused` when none holds it, or from an integration that
+        holds no repository; `ProviderUnavailable` when it cannot."""
+        ...
+
+    @abstractmethod
+    async def post(
+        self, address: str, text: str, mark: str | None = None, *, installation: str | None = None
+    ) -> PostedMessage:
         """Posts `text` to an address of the integration, such as a person's
         chat account or a pull request; `ProviderUnavailable` when it cannot.
         `mark` is the platform's name for the act: the system carries it on
         what it makes, so every delivery of or after it names it among its
-        refs."""
+        refs. `installation` is the one the post goes through: a forge
+        refuses a post that names none, or one it does not reach through
+        it."""
         ...
 
     @abstractmethod
-    async def push(self, repository: str, ref: str, head: str, bundle: bytes) -> None:
+    async def push(
+        self, repository: str, ref: str, head: str, bundle: bytes, *, installation: str
+    ) -> None:
         """Points `ref` of `repository` (a full name, `refs/heads/...` for a
-        branch) at the commit `head`, with the integration's own credential.
+        branch) at the commit `head`, with the integration's own credential
+        for `installation`, which reaches no repository another holds.
         `bundle` is a git bundle of the commits `head` needs beyond what the
         repository holds, empty when it holds them all; nothing else in it
         is written. A ref only moves forward, so no commit on it is lost.
@@ -166,12 +183,19 @@ class IntegrationInterface(ABC):
 
     @abstractmethod
     async def open_pull_request(
-        self, repository: str, head: str, base: str | None, title: str, body: str
+        self,
+        repository: str,
+        head: str,
+        base: str | None,
+        title: str,
+        body: str,
+        *,
+        installation: str,
     ) -> OpenedPullRequest:
         """Opens the pull request of branch `head` onto `base`, the
         repository's default branch when None, or answers the one of `head`
-        open already, so a repeated call opens no second. Refused and
-        unavailable as `push` is."""
+        open already, so a repeated call opens no second; through
+        `installation`, as `push` is. Refused and unavailable as `push` is."""
         ...
 
     @abstractmethod
@@ -215,14 +239,28 @@ class IntegrationAbsentImpl(IntegrationInterface):
     async def verify_installation(self, grant: str, now: datetime) -> str:
         raise self._unavailable()
 
-    async def post(self, address: str, text: str, mark: str | None = None) -> PostedMessage:
+    async def installation_of(self, target: str) -> str:
         raise self._unavailable()
 
-    async def push(self, repository: str, ref: str, head: str, bundle: bytes) -> None:
+    async def post(
+        self, address: str, text: str, mark: str | None = None, *, installation: str | None = None
+    ) -> PostedMessage:
+        raise self._unavailable()
+
+    async def push(
+        self, repository: str, ref: str, head: str, bundle: bytes, *, installation: str
+    ) -> None:
         raise self._unavailable()
 
     async def open_pull_request(
-        self, repository: str, head: str, base: str | None, title: str, body: str
+        self,
+        repository: str,
+        head: str,
+        base: str | None,
+        title: str,
+        body: str,
+        *,
+        installation: str,
     ) -> OpenedPullRequest:
         raise self._unavailable()
 
