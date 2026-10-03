@@ -104,7 +104,7 @@ async def test_a_waking_message_lands_with_the_one_run_that_takes_it_up(engine: 
     ctx = context(Role.MEMBER)
     session = await engine.session(ctx)
 
-    woken = await engine.say(ctx, session.id, "Why does it drop the object?")
+    woken = await engine.say(ctx, session.id, "Why does the export time out?")
     again = await engine.say(ctx, session.id, "Leave the gains alone.")
 
     assert woken.status is SessionStatus.PENDING and again.status is SessionStatus.PENDING
@@ -135,7 +135,7 @@ async def test_a_message_to_a_running_loop_asks_for_no_run_until_the_loop_ends(
     ctx = context(Role.MEMBER)
     session, epoch, loop_id = await running(engine, ctx)
 
-    later = await engine.say(ctx, session.id, "And check the gripper.")
+    later = await engine.say(ctx, session.id, "And check the cache.")
     assert session.status is SessionStatus.RUNNING and later.status is SessionStatus.RUNNING
     assert len(engine.runs(session.id)) == 1, "the run that holds the loop delivers it"
 

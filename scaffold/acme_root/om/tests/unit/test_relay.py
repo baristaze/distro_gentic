@@ -713,7 +713,7 @@ async def test_an_instance_is_made_by_its_sessions_pool_alone_and_purged_by_its_
 ) -> None:
     managers, owner, session_id = wall.managers, wall.owner, wall.workspace.id
     project_id = await in_project(wall.storage.get_project_storage(), owner.org_id, session_id)
-    elsewhere = await enrolled(managers, owner, await pool_of(managers, owner, "lab"), "host-3")
+    elsewhere = await enrolled(managers, owner, await pool_of(managers, owner, "nightly"), "host-3")
     stranger, _ = await managers.tenancy.bootstrap(
         request(), "Bolt", "bolt", "bob@bolt.test", "Bob"
     )

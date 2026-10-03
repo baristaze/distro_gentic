@@ -58,7 +58,7 @@ def a_loop_ran(stack: Stack, session_id: str, outcome: LoopOutcome | None) -> No
 def test_a_session_is_started_spoken_to_steered_and_read(stack: Stack) -> None:
     session_id = started(stack)
 
-    said = stack.acme("session", "say", session_id, "Why does it drop the object?")
+    said = stack.acme("session", "say", session_id, "Why does the export time out?")
     paused = stack.acme("session", "control", session_id, "pause")
     read = stack.acme("session", "steps", session_id)
 

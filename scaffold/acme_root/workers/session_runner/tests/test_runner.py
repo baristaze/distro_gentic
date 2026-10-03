@@ -167,7 +167,7 @@ async def test_a_session_whose_kind_this_runner_lacks_fails_its_item(tmp_path: P
     session itself; a session that is there fails it, to be retried."""
     container, ctx = await signed_in(tmp_path)
     session = await container.managers.agents.start_session(
-        ctx, Start(id=new_id(), kind="assistant", title="the dropped object")
+        ctx, Start(id=new_id(), kind="assistant", title="the slow export")
     )
 
     with pytest.raises(UnknownAgentKind):
@@ -197,9 +197,9 @@ async def test_a_runner_that_lacks_the_kind_leaves_the_loop_to_a_retry(tmp_path:
         RequestContext(request_id=new_id(), app=APP), "Ajax", "ajax", "ann@example.test", "Ann"
     )
     session = await api.managers.agents.start_session(
-        owner, Start(id=new_id(), kind="assistant", title="the dropped object")
+        owner, Start(id=new_id(), kind="assistant", title="the slow export")
     )
-    said = message_step(new_id(), utcnow(), session.id, owner, "Why does it drop the object?")
+    said = message_step(new_id(), utcnow(), session.id, owner, "Why does the export time out?")
     await api.managers.agent_sessions.receive(owner, session.id, [said])
     work = storage.get_work_storage()
     assert isinstance(work, WorkStorageMemoryImpl)
@@ -325,12 +325,12 @@ async def test_the_runner_claims_a_woken_sessions_loop_and_runs_it_to_its_end(
 ) -> None:
     container, owner = await signed_in(tmp_path)
     twin = container.integrations.get_model_providers().get(ProviderName.ANTHROPIC)
-    twin.add(answers("It drops it when the grip is released early."))  # pyright: ignore[reportAttributeAccessIssue]
+    twin.add(answers("It times out when the cache flushes early."))  # pyright: ignore[reportAttributeAccessIssue]
     managers = container.managers
     session = await managers.agents.start_session(
-        owner, Start(id=new_id(), kind="assistant", title="the dropped object")
+        owner, Start(id=new_id(), kind="assistant", title="the slow export")
     )
-    said = message_step(new_id(), utcnow(), session.id, owner, "Why does it drop the object?")
+    said = message_step(new_id(), utcnow(), session.id, owner, "Why does the export time out?")
     await managers.agent_sessions.receive(owner, session.id, [said])
     runner = build_runner(container)
     running = asyncio.create_task(runner.run())
@@ -365,7 +365,7 @@ async def test_a_call_the_runner_settles_counts_its_tokens_and_its_spend(tmp_pat
     assert published is not None
     labels = {"matrix_version": str(published.number), "plan_tier": DEFAULT_TIER}
     twin = container.integrations.get_model_providers().get(ProviderName.ANTHROPIC)
-    twin.add(answers("It drops it when the grip is released early."))  # pyright: ignore[reportAttributeAccessIssue]
+    twin.add(answers("It times out when the cache flushes early."))  # pyright: ignore[reportAttributeAccessIssue]
     before = (
         counted("acme_model_tokens_total", **labels, kind="input"),
         counted("acme_model_tokens_total", **labels, kind="output"),
@@ -373,9 +373,9 @@ async def test_a_call_the_runner_settles_counts_its_tokens_and_its_spend(tmp_pat
         counted("acme_model_spend_micros_total", matrix_version="none", plan_tier="none"),
     )
     session = await container.managers.agents.start_session(
-        owner, Start(id=new_id(), kind="assistant", title="the dropped object")
+        owner, Start(id=new_id(), kind="assistant", title="the slow export")
     )
-    said = message_step(new_id(), utcnow(), session.id, owner, "Why does it drop the object?")
+    said = message_step(new_id(), utcnow(), session.id, owner, "Why does the export time out?")
     await container.managers.agent_sessions.receive(owner, session.id, [said])
     runner = build_runner(container)
     running = asyncio.create_task(runner.run())

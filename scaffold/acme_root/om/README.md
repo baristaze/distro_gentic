@@ -213,9 +213,9 @@ workspace, no repository, and no shell.
 Nothing chooses an agent for a message: a person chooses by choosing
 the session they type in.
 
-A **validation session** runs one check on a station, with no agent and
-no model. Its work waits in its lab's lane like any station work, and
-its run is recorded like any other run.
+A **validation session** runs one check with no agent and no model. It
+is platform work on the queue, run by the fresh executor in an instance
+nobody used, and its run is recorded like any other run.
 
 ## Where tools work
 
@@ -306,8 +306,8 @@ arrive twice, so the second copy gets the first one's answer.
 - An exec item, its output, its control messages, and a session's
   workspace binding name their org. A host reads and answers only the
   items it holds.
-- A validation session names its org, and its station work is a work
-  item that names the session.
+- A validation session names its org, and its work is a queue item
+  that names the session.
 - A session's workspace names its org and its session, one each, and an
   egress allowlist its org and its project, one each.
 - The matrix and what its operators record of a model are the
