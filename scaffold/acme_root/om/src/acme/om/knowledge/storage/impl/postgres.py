@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import ColumnElement, or_, select, update
 
 from acme.om.exceptions import PreconditionFailed
 from acme.om.knowledge.storage import KnowledgeStorageInterface
@@ -39,6 +39,39 @@ class KnowledgeStoragePostgresImpl(PgStorageBase, KnowledgeStorageInterface):
             rows = (await session.execute(stmt)).scalars().all()
             return [to_model(row, Knowledge) for row in rows]
 
+    async def read_reachable(
+        self, org_id: UUID, project_id: UUID | None, after: UUID | None, limit: int
+    ) -> list[Knowledge]:
+        stmt = select(KnowledgeEntries).where(
+            KnowledgeEntries.org_id == org_id,
+            KnowledgeEntries.status == KnowledgeStatus.REVIEWED.value,
+            _reached_by(project_id),
+        )
+        if after is not None:
+            stmt = stmt.where(KnowledgeEntries.id > after)
+        stmt = stmt.order_by(KnowledgeEntries.id).limit(limit)
+        async with self._session_for(stmt, org_id=org_id) as session:
+            rows = (await session.execute(stmt)).scalars().all()
+            return [to_model(row, Knowledge) for row in rows]
+
+    async def read_by_slug(
+        self, org_id: UUID, project_id: UUID | None, slug: str
+    ) -> Knowledge | None:
+        stmt = (
+            select(KnowledgeEntries)
+            .where(
+                KnowledgeEntries.org_id == org_id,
+                KnowledgeEntries.slug == slug,
+                KnowledgeEntries.status == KnowledgeStatus.REVIEWED.value,
+                _reached_by(project_id),
+            )
+            .order_by(KnowledgeEntries.id)
+            .limit(1)
+        )
+        async with self._session_for(stmt, org_id=org_id) as session:
+            row = (await session.execute(stmt)).scalar_one_or_none()
+            return None if row is None else to_model(row, Knowledge)
+
     async def update_entry(
         self, org_id: UUID, entry: Knowledge, outbox_rows: tuple[OutboxRow, ...]
     ) -> None:
@@ -69,3 +102,11 @@ class KnowledgeStoragePostgresImpl(PgStorageBase, KnowledgeStorageInterface):
             gone = deleted(await session.execute(stmt))
             await session.commit()
             return gone
+
+
+def _reached_by(project_id: UUID | None) -> ColumnElement[bool]:
+    """The entries a session of `project_id` reaches: those of no project,
+    and its project's own when it has one."""
+    if project_id is None:
+        return KnowledgeEntries.project_id.is_(None)
+    return or_(KnowledgeEntries.project_id.is_(None), KnowledgeEntries.project_id == project_id)
