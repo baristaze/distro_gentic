@@ -16,14 +16,14 @@ from pydantic import ValidationError
 
 from acme.om.agents.types.run import RunEnd
 from acme.om.base import new_id, utcnow
+from acme.om.budgets.types.budget import BudgetScopeKind
 from acme.om.context import Role
 from acme.om.exceptions import NotAuthorized
-from acme.om.budgets.types.budget import BudgetScopeKind
 from acme.om.playbooks.root import PlaybooksLayer
-from acme.om.projects.impl.policies import SessionProjectsBoundImpl
-from acme.om.root import Managers
 from acme.om.playbooks.rules import GATES_KEY, narrowed, skill_md
 from acme.om.playbooks.types.playbook import Playbook, PlaybookDraft, PlaybookGate
+from acme.om.projects.impl.policies import SessionProjectsBoundImpl
+from acme.om.root import Managers
 from acme.om.steps.types.header import ParkReason, ToolFailure, ToolResponseHeader
 from acme.om.steps.types.step import StepType
 from acme.om.storage.impl.memory import StorageMemoryImpl
@@ -172,7 +172,6 @@ async def test_an_invocation_is_once_a_version(platform: Wired) -> None:
     )
     other = await platform.start()
     assert await platform.playbooks.gates_of(platform.owner, other) == ()
-
 
 
 async def test_a_deny_gate_invoked_while_a_job_is_held_refuses_it_and_releases_its_hold(
