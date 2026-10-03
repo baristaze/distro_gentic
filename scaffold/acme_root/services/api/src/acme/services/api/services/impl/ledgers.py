@@ -14,7 +14,7 @@ from acme.om.billing.types.ledger import (
 from acme.om.budgets.types.hold import Settlement
 from acme.om.context import OperatorContext
 from acme.services.api.services.ledgers import LedgersServiceInterface
-from acme.services.api.types.ledgers import LedgerEntryView
+from acme.services.api.types.ledgers import LedgerEntryView, LedgerPageView
 
 
 def entry_view(entry: Entry) -> LedgerEntryView:
@@ -90,7 +90,18 @@ class LedgersServiceImpl(LedgersServiceInterface):
         self._billing = billing
 
     async def get_entries(
-        self, admin: OperatorContext, org_id: UUID, kind: EntryKind | None, limit: int
-    ) -> list[LedgerEntryView]:
-        entries = await self._billing.get_entries(admin, org_id, kind, limit)
-        return [entry_view(entry) for entry in entries]
+        self,
+        admin: OperatorContext,
+        org_id: UUID,
+        *,
+        kind: EntryKind | None,
+        hold_id: UUID | None,
+        session_id: UUID | None,
+        limit: int,
+    ) -> LedgerPageView:
+        page = await self._billing.get_entries(
+            admin, org_id, kind=kind, hold_id=hold_id, session_id=session_id, limit=limit
+        )
+        return LedgerPageView(
+            items=[entry_view(entry) for entry in page.items], has_more=page.has_more
+        )

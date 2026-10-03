@@ -215,8 +215,9 @@ async def test_a_hold_a_settlement_and_a_charge_post_to_the_one_ledger(tmp_path:
 async def test_an_operator_reads_the_ledger_of_the_tenant_it_names_under_its_read(
     tmp_path: Path,
 ) -> None:
-    """The operators' read of a tenant's ledger: its entries, of one kind when
-    named; another tenant named reads none of them, and an operator who holds
+    """The operators' read of a tenant's ledger: its entries, of one kind, one
+    hold, or one session when named, and whether the read was cut at its
+    limit; another tenant named reads none of them, and an operator who holds
     no read reads nothing."""
     money = money_over(tmp_path)
     await money.open(plan="team")
@@ -227,18 +228,32 @@ async def test_an_operator_reads_the_ledger_of_the_tenant_it_names_under_its_rea
     org = money.loop.owner.org_id
     reader = operator(OperatorRole.READ)
 
-    entries = await money.billing.get_entries(reader, org, None, 50)
-    assert sorted(type(entry).__name__ for entry in entries) == [
+    page = await money.billing.get_entries(reader, org, limit=50)
+    assert not page.has_more
+    assert sorted(type(entry).__name__ for entry in page.items) == [
         "Charge",
         "FundedHold",
         "Settlement",
     ]
-    (charge,) = await money.billing.get_entries(reader, org, EntryKind.CHARGE, 50)
+    (charge,) = (
+        await money.billing.get_entries(reader, org, kind=EntryKind.CHARGE, limit=50)
+    ).items
     assert isinstance(charge, Charge)
-    assert await money.billing.get_entries(reader, new_id(), None, 50) == ()
+    (hold,) = (await money.billing.get_entries(reader, org, session_id=session_id, limit=50)).items
+    assert isinstance(hold, FundedHold)
+    of_hold = await money.billing.get_entries(reader, org, hold_id=hold.id, limit=50)
+    assert sorted(type(entry).__name__ for entry in of_hold.items) == [
+        "Charge",
+        "FundedHold",
+        "Settlement",
+    ]
+    cut = await money.billing.get_entries(reader, org, limit=2)
+    assert len(cut.items) == 2 and cut.has_more
+    elsewhere = await money.billing.get_entries(reader, new_id(), limit=50)
+    assert elsewhere.items == () and not elsewhere.has_more
     minting = reader.model_copy(update={"permissions": frozenset({OperatorPermission.MINT})})
     with pytest.raises(NotAuthorized):
-        await money.billing.get_entries(minting, org, None, 50)
+        await money.billing.get_entries(minting, org, limit=50)
 
 
 async def test_the_buckets_are_drawn_in_their_fixed_order_and_prepaid_differs_only_in_which_pays(

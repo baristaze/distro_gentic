@@ -1,5 +1,6 @@
 """Wire types of a tenant's ledger, as an operator reads it: one entry of
-whichever kind, its common fields first and each kind's own beside them."""
+whichever kind, its common fields first and each kind's own beside them,
+and one read of them."""
 
 from datetime import datetime
 from uuid import UUID
@@ -35,3 +36,12 @@ class LedgerEntryView(View):
     reference: str | None = None
     reason: str | None = None
     by: UUID | None = None
+
+
+class LedgerPageView(View):
+    """One read of a tenant's ledger, the newest first. `has_more` says the
+    read was cut at its limit and older entries match it too: narrow it by
+    kind, hold, or session to reach them."""
+
+    items: list[LedgerEntryView]
+    has_more: bool

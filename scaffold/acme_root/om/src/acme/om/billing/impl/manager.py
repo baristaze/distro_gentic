@@ -28,8 +28,8 @@ from acme.om.billing.types.ledger import (
     Approval,
     Count,
     Credit,
-    Entry,
     EntryKind,
+    EntryPage,
     Grant,
     WindowRaise,
 )
@@ -177,13 +177,23 @@ class BillingManagerImpl(BillingManagerInterface):
         return await self._ledger.post_grant(org_id, grant)
 
     async def get_entries(
-        self, ctx: OperatorContext, org_id: UUID, kind: EntryKind | None, limit: int
-    ) -> tuple[Entry, ...]:
+        self,
+        ctx: OperatorContext,
+        org_id: UUID,
+        *,
+        kind: EntryKind | None = None,
+        hold_id: UUID | None = None,
+        session_id: UUID | None = None,
+        limit: int,
+    ) -> EntryPage:
         ctx.require(OperatorPermission.READ)
         bounded = max(1, min(limit, MAX_ENTRIES))
-        entries = await self._ledger.read_entries(org_id, kind=kind, limit=bounded)
+        # One more than the page: it says whether the read was cut, and stays out.
+        entries = await self._ledger.read_entries(
+            org_id, kind=kind, hold_id=hold_id, session_id=session_id, limit=bounded + 1
+        )
         log.info("operator %s read the ledger of org %s", ctx.identity_id, org_id)
-        return tuple(entries)
+        return EntryPage(items=tuple(entries[:bounded]), has_more=len(entries) > bounded)
 
     async def raise_once(self, ctx: TenantContext, budget_id: UUID, amount: Amount) -> WindowRaise:
         ctx.require(SETS_BILLING)

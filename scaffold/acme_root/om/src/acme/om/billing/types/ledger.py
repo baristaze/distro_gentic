@@ -156,6 +156,16 @@ Entry = FundedHold | Settlement | Charge | Credit | Grant | WindowRaise | Approv
 """One entry of the ledger, of whichever kind."""
 
 
+class EntryPage(Platform):
+    """One read of a tenant's ledger, the newest first. `has_more` says the
+    read was cut at its limit: older entries match it too. The manager asks
+    storage for one entry more than the limit and keeps it out, so it is a
+    fact about the entries and not a guess about the count."""
+
+    items: tuple[Entry, ...]
+    has_more: bool
+
+
 class EntryKind(StrEnum):
     HOLD = "hold"
     SETTLEMENT = "settlement"

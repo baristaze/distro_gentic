@@ -15,8 +15,8 @@ from acme.om.billing.types.ledger import (
     Approval,
     Count,
     Credit,
-    Entry,
     EntryKind,
+    EntryPage,
     Grant,
     WindowRaise,
 )
@@ -68,12 +68,21 @@ class BillingManagerInterface(ABC):
 
     @abstractmethod
     async def get_entries(
-        self, ctx: OperatorContext, org_id: UUID, kind: EntryKind | None, limit: int
-    ) -> tuple[Entry, ...]:
+        self,
+        ctx: OperatorContext,
+        org_id: UUID,
+        *,
+        kind: EntryKind | None = None,
+        hold_id: UUID | None = None,
+        session_id: UUID | None = None,
+        limit: int,
+    ) -> EntryPage:
         """The tenant's ledger, as an operator reads it naming the tenant:
-        its entries, the newest first, of one kind when `kind` names it, and
-        at most `limit`, which is clamped. Needs the operators' read, and
-        logs the operator and the tenant."""
+        its entries, the newest first, narrowed to those of one kind, of one
+        hold (its hold, settlement, and charge), or of one session (its
+        holds and approvals) when named, and at most `limit`, which is
+        clamped. The page says when the read was cut at its limit. Needs the
+        operators' read, and logs the operator and the tenant."""
         ...
 
     @abstractmethod
