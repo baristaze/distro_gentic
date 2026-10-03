@@ -26,8 +26,9 @@ rebuilt from.
   workspace reaches and the methods each takes, or open egress, chosen
   on purpose and recorded with its reason and who chose it.
 - **A validation's instance**: one for each run of a delivery's checks,
-  under an id nobody used, made by the platform's executor and destroyed
-  when the run ends ([ADR 2024](../../../../../docs/adr/2024-a-validation-session-is-platform-work-on-the-fresh-executor.md)).
+  under an id nobody used, made by the platform's executor, or by a host
+  of the pool a session inside its tenant's wall is pinned to, and
+  destroyed when the run ends ([ADR 2024](../../../../../docs/adr/2024-a-validation-session-is-platform-work-on-the-fresh-executor.md)).
 - **The levels**, as the engine names them: a VM per session, a
   container per session, a directory on a host, and the twin, which
   plays the lifecycle for tests in `local` alone.
@@ -84,8 +85,10 @@ rebuilt from.
   the delivered commit, with every protected path from the base, and no
   credential and no history. It runs each check's template there, reads
   back and hashes the results within their bound, and destroys the
-  instance whatever ended the run. A session inside its tenant's wall is
-  refused.
+  instance whatever ended the run. For a session inside its tenant's
+  wall, a host of its pool makes the instance instead, to the isolation
+  the session is pinned to, and every step crosses the wall as `exec`
+  work; no host of another pool or tenant takes it.
 - **Purge.** A tenant deleted past its retention loses its workspaces,
   its allowlists, and its fetch credentials, each value out of the store
   before its record.
@@ -132,8 +135,10 @@ rebuilt from.
   comes from `PullRequestsInterface`, whose null knows none, so a branch
   gone for any reason ends the loop.
 - Outside `local`, the evidence's executor is this namespace's: the root
-  builds it over infra's provider and transport, never the relay's, and
-  reads its tree through `checks_tree`.
+  builds it over infra's provider and transport for a session of the
+  cloud, and over the relay's instances (`PlacedInstancesInterface`, in
+  `placed.py`) for one inside its tenant's wall, and reads its tree
+  through `checks_tree`.
 - What a host offers beyond its provider is a `HostOffer`, its owner's
   and its probe's. The default offers nothing more: a host of the
   platform's cloud.

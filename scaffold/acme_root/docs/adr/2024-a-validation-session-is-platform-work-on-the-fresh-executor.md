@@ -39,10 +39,22 @@ its command records are destroyed when the run ends, whatever ended it.
 Outside `local`, every root wires this executor in place of the loud
 null. `local` keeps the loud null unless its process hands one in.
 
-**A session pinned inside its tenant's wall is refused.** Its checks
-never run on the platform's machines, and its pool's host binds one
-workspace to a session, so it has no instance to give a run. The refusal
-is loud (`Unavailable`), never a run elsewhere.
+**A session pinned inside its tenant's wall runs its checks on a host of
+its pool.** They never run on the platform's machines, nor in the
+session's own workspace. The run asks the session's pool for a new
+instance under its own id, as a prepare is asked, and the instance
+carries the session: its pool routes it, and its project is what the
+host's owner holds its work to. Its binding names the session. It is made
+to the isolation the session is pinned to, its level, its egress, and its
+limits: its pool gives that, where a cloud executor's container with no
+egress may be beyond a pool of bare directories, and a pinned project's
+checks may need what its pool is pinned for. The tree is written in, the
+checks run, and
+the results stream is read back, each as `exec` work, and the executor
+hashes what it read. When the run ends, whatever ended it, the holding
+host is asked to purge the instance, or the prepare that waits is ended,
+and the relay's rows of the instance go at once. A root that reaches no
+pool refuses the run, loudly (`Unavailable`), never a run elsewhere.
 
 **A validation session is platform work.** It names its project, a check
 its project's policy declares, the delivered commit it runs at, and the
@@ -69,5 +81,12 @@ again.
   An instance that could not be made, or a repository that could not be
   read, is tried again.
 - Each validation costs an instance: made, written in, run, and
-  destroyed. A pinned session's validation waits on its pool's host
-  making an instance per run.
+  destroyed. A pinned session's validation waits, within the run's setup
+  bound, on a host of its pool making one; a pool that makes none in
+  time fails the run as `Unavailable`.
+- An instance's commands and their output are sealed under a key of the
+  instance's own, as a session's are under its key, and go with the
+  relay's rows when the run ends.
+- A host still making the instance when its run gives up binds it after
+  the run, and no run purges it: an empty instance, with no tree written
+  in, stays on that host until its owner removes it.

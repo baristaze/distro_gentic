@@ -55,6 +55,27 @@ class RelayManagerInterface(ABC):
         ...
 
     @abstractmethod
+    async def ask_instance(
+        self, ctx: TenantContext, session_id: UUID, instance_id: UUID, spec: IsolationSpec
+    ) -> None:
+        """Platform-internal: asks a host of the session's pool to make a new
+        instance under `instance_id` to `spec`, for one run, as `workspace`
+        work on the pool's lane, which any host of the pool may claim. The
+        instance carries the session: its pool routes it, and its project is
+        what the host's owner holds its work to. The host's answer binds the
+        instance, as a prepare's binds a session. `ValidationFailed` for a
+        session of the cloud."""
+        ...
+
+    @abstractmethod
+    async def ask_purge(self, ctx: TenantContext, instance_id: UUID, spec: IsolationSpec) -> bool:
+        """Platform-internal: asks the host that holds the instance to destroy
+        it and its files, as `workspace` work on that host's lane; when no
+        host holds it yet, the prepare that waits for one is ended, so none
+        makes it. Whether a host was asked."""
+        ...
+
+    @abstractmethod
     async def holder(self, ctx: TenantContext, session_id: UUID) -> WorkspaceBinding | None:
         """The binding of the session's workspace while the host that holds
         it is a live host of the session's pool and online now: the only
@@ -86,9 +107,9 @@ class RelayManagerInterface(ABC):
 
     @abstractmethod
     async def released(self, rctx: RequestContext, host: HostIdentity, item_id: UUID) -> None:
-        """Platform-internal: a host answers a release it claimed, once the
-        instance is gone: its row completes. `ItemNotHeld` for a release the
-        host does not hold under a live claim."""
+        """Platform-internal: a host answers a release or a purge it claimed,
+        once the instance is gone: its row completes. `ItemNotHeld` for one
+        the host does not hold under a live claim."""
         ...
 
     # The runner's side: its relay transport, which runs below any context,

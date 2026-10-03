@@ -16,6 +16,7 @@ from uuid import UUID
 
 import pytest
 from contracts.agent_session_storage import make_session
+from contracts.project_storage import in_project
 
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.transports import CommandResult, CommandSpec, RecordSeal, StaleCommand
@@ -49,6 +50,7 @@ from acme.om.relay.types.exec import (
     ExecProgress,
     ExecResult,
     ExecState,
+    PrepareAnswer,
     RunRequest,
     StopKind,
 )
@@ -631,6 +633,104 @@ async def test_a_release_goes_to_the_holding_host_once_and_only_it_answers_it(
     # A revoked host is reached by nothing, a release included.
     await managers.hosts.revoke_host(owner, wall.holder.host_id)
     assert await managers.relay.holder(owner, session_id) is None
+
+
+# An instance a run makes for a session: made by a host of the session's
+# pool alone, held to the session's project, and purged by the host that
+# holds it.
+
+
+async def pool_of(managers: Managers, owner: TenantContext, name: str) -> HostPool:
+    now = utcnow()
+    return await managers.hosts.create_pool(
+        owner,
+        HostPool(
+            id=new_id(),
+            created_at=now,
+            updated_at=now,
+            created_by=owner.user_id,
+            updated_by=owner.user_id,
+            name=name,
+            region="eu-west",
+        ),
+    )
+
+
+async def test_an_instance_is_made_by_its_sessions_pool_alone_and_purged_by_its_host(
+    wall: Wall,
+) -> None:
+    managers, owner, session_id = wall.managers, wall.owner, wall.workspace.id
+    project_id = await in_project(wall.storage.get_project_storage(), owner.org_id, session_id)
+    elsewhere = await enrolled(managers, owner, await pool_of(managers, owner, "lab"), "host-3")
+    stranger, _ = await managers.tenancy.bootstrap(
+        request(), "Bolt", "bolt", "bob@bolt.test", "Bob"
+    )
+    foreign = await enrolled(managers, stranger, await pool_of(managers, stranger, "build"), "h")
+    instance = new_id()
+
+    await managers.relay.ask_instance(owner, session_id, instance, CONTAINER)
+
+    for outside in (elsewhere, foreign):
+        assert await Host(managers, outside).claim() is None, "no host outside the pool"
+    row = await Host(managers, wall.other).claim_soon()
+    payload = WorkspacePayload.model_validate(row.payload)
+    assert (payload.operation, payload.session_id, payload.instance_of) == (
+        WorkspaceOperation.PREPARE,
+        instance,
+        session_id,
+    )
+    assert payload.project_id == project_id, "held to the session's project"
+    binding = await managers.relay.prepared(
+        request(), wall.other, row.id, PrepareAnswer(location="/srv/work/instance")
+    )
+    assert binding is not None
+    assert (binding.session_id, binding.host_id, binding.instance_of) == (
+        instance,
+        wall.other.host_id,
+        session_id,
+    )
+    own = await managers.relay.binding_of(owner, session_id)
+    assert own is not None and own.host_id == wall.holder.host_id, "the session's own stays"
+
+    # Its command goes to the host that made it, held to the session's
+    # project, and to no other.
+    workspace = Workspace(id=instance, org_id=owner.org_id, spec=CONTAINER, location="")
+    sent = asyncio.ensure_future(transport(managers).run(workspace, command(1), seal=NO_SEAL))
+    for outside in (wall.holder, elsewhere, foreign):
+        assert await Host(managers, outside).claim() is None
+    ran = await Host(managers, wall.other).claim_soon()
+    exec_payload = ExecPayload.model_validate(ran.payload)
+    assert (exec_payload.session_id, exec_payload.project_id) == (instance, project_id)
+    await Host(managers, wall.other).finish(ran, stdout="ok")
+    assert (await sent).stdout == "ok"
+
+    # Its run ends: the host that holds it is asked to purge it, and only it
+    # answers; the relay's rows of it go at once.
+    assert await managers.relay.ask_purge(owner, instance, CONTAINER)
+    await managers.relay.purge_session(owner.org_id, instance)
+    assert await managers.relay.binding_of(owner, instance) is None
+    for outside in (wall.holder, elsewhere, foreign):
+        assert await Host(managers, outside).claim() is None
+    purge = await Host(managers, wall.other).claim_soon()
+    purged = WorkspacePayload.model_validate(purge.payload)
+    assert (purged.operation, purged.session_id) == (WorkspaceOperation.PURGE, instance)
+    with pytest.raises(ItemNotHeld):
+        await managers.relay.released(request(), wall.holder, purge.id)
+    await managers.relay.released(request(), wall.other, purge.id)
+    done = await managers.work.latest_for_target(owner, WorkKind.WORKSPACE, instance)
+    assert done is not None and done.status is WorkStatus.DONE
+
+
+async def test_an_instance_no_host_made_before_its_run_ended_is_never_made(wall: Wall) -> None:
+    managers, owner = wall.managers, wall.owner
+    instance = new_id()
+    await managers.relay.ask_instance(owner, wall.workspace.id, instance, CONTAINER)
+
+    assert not await managers.relay.ask_purge(owner, instance, CONTAINER), "no host to ask"
+
+    assert await Host(managers, wall.other).claim() is None, "the prepare that waited is ended"
+    ended = await managers.work.latest_for_target(owner, WorkKind.WORKSPACE, instance)
+    assert ended is not None and ended.status is WorkStatus.DONE
 
 
 def _call(wall: Wall, spec: CommandSpec) -> ExecCall:

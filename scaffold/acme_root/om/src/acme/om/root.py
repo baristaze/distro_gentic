@@ -10,6 +10,7 @@ from acme.infra.base import QuietNull
 from acme.infra.cache import CacheInterface, CacheScope
 from acme.infra.root import InfraInterface
 from acme.infra.transports import TransportInterface
+from acme.infra.workspaces import IsolationSpec
 from acme.integrations.identity import IdentityProviderInterface
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
 from acme.integrations.model_providers.registry import absent_model_providers
@@ -40,6 +41,7 @@ from acme.om.budgets.impl.gate import BudgetGateImpl, BudgetGateOptions
 from acme.om.budgets.impl.manager import BudgetsManagerImpl, BudgetsOptions
 from acme.om.budgets.impl.pricing import PricingTableImpl
 from acme.om.budgets.pricing import PricingInterface
+from acme.om.context import TenantContext
 from acme.om.events import EventsManagerInterface
 from acme.om.events.impl.manager import EventsManagerImpl, EventsOptions
 from acme.om.evidence import (
@@ -97,6 +99,7 @@ from acme.om.projects.impl.retention import SessionProjectBoundImpl
 from acme.om.projects.impl.sessions import AgentSessionsInProjectImpl
 from acme.om.projects.policies import SessionProjectsInterface
 from acme.om.relay import RelayManagerInterface
+from acme.om.relay.impl.instances import PlacedInstancesRelayedImpl
 from acme.om.relay.impl.manager import RelayManagerImpl, RelayOptions
 from acme.om.relay.impl.placement import PlacementClaimsRelayedImpl
 from acme.om.relay.impl.workspaces import PlacedWorkspacesRelayedImpl
@@ -806,19 +809,26 @@ def build_managers(
     )
     # What makes a result: the runs, the policies, and validation on the
     # executor, apart from every agent's workspace. Outside `local`, it is
-    # the platform's own: an instance of the cloud's made for each run, on
-    # the provider and the transport infra chose, never the relay's.
+    # the platform's own: an instance made for each run. For a session of
+    # the cloud, it is the cloud's, on the provider and the transport infra
+    # chose. For a session inside its tenant's wall, a host of its pool
+    # makes it to the session's pinned isolation, and the relay reaches it;
+    # the relay is built below, so the edge is bound at call time.
     if executor is None and environment != LOCAL:
+        hosts_storage = storage.get_hosts_storage()
+        sessions_storage = storage.get_agent_session_storage()
+
+        async def pinned(ctx: TenantContext, session_id: UUID) -> IsolationSpec | None:
+            if not await inside_wall(hosts_storage, sessions_storage, ctx.org_id, session_id):
+                return None
+            return (await workspaces.get_workspace(ctx, session_id)).spec()
+
         executor = ExecutorWorkspacesImpl(
             infra.get_workspaces(),
             transport,
             workspaces.checks_tree,
-            lambda org_id, session_id: inside_wall(
-                storage.get_hosts_storage(),
-                storage.get_agent_session_storage(),
-                org_id,
-                session_id,
-            ),
+            pinned,
+            PlacedInstancesRelayedImpl(lambda: managers.relay),
         )
     evidence = EvidenceManagerImpl(
         storage.get_evidence_storage(),

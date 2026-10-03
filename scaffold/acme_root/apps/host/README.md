@@ -52,6 +52,11 @@ uv run acme-host run          # every start after it
   call here starts it anew over them. A release runs and reads nothing,
   so only the tenant fence applies: it lets go only of what this host
   made for that session and tenant.
+- **Destroys an instance when asked.** A run that validates a pinned
+  session's delivery has a host of the pool make an instance of its own,
+  and asks the host that made it to purge it when the run ends. The
+  host removes the instance, its files, and its transport's records of
+  it, so nothing of that run is left for another.
 - **Runs a tool call once, and stops it at once.** An `exec` item it
   claims is a command or a file operation in a workspace it holds. It
   runs it through its own transport, a container per session, sends
@@ -83,8 +88,9 @@ isolation mode (`main.host_transports`). A `WORKSPACE` prepare is made by
 the provider of its spec's mode (`main.host_workspaces`) and answered
 through `ApiClient.answer_prepare`. A release lets go of the instance the
 provider of its spec's mode holds for the session and the host's tenant,
-and is answered through `ApiClient.answer_release`; a purge is logged and
-left to its lease. The fields a host reads
+and is answered through `ApiClient.answer_release`; a purge removes it,
+with its files and its transport's records, and is answered the same
+way. The fields a host reads
 of an item are `project_id`, `isolation`, `egress`, `reads`, and
 `by_person` in its payload (`ceilings.ask_of`); a payload without them is
 refused. What the item runs it reads from the gateway while it holds it

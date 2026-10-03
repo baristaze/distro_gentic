@@ -213,12 +213,17 @@ class ExecControl(Identifiable, Trackable):
 class WorkspaceBinding(Identifiable, Trackable):
     """The host that holds a session's workspace, and where on it. A
     workspace lives where it was prepared, so every item of the session goes
-    to that host."""
+    to that host. An instance a run made for a session under an id of its
+    own is bound the same way, and `instance_of` names that session: its
+    placement routes the instance, and its project is what the host's
+    owner holds the instance's work to. None for a session's own
+    workspace."""
 
     session_id: UUID
     host_id: UUID
     host_name: str = Field(min_length=1, max_length=64)
     location: str = Field(min_length=1, max_length=1024)
+    instance_of: UUID | None = None
     version: int = Field(default=1, ge=1)
 
 
