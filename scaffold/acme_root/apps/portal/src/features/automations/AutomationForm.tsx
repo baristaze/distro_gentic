@@ -1,7 +1,7 @@
 import type { FormEvent } from "react";
 import { Button, ErrorText, SegmentedControl, Select, TextArea, TextField } from "../../design/kit";
 import { tokens } from "../../design/tokens";
-import { PERIODS, type AutomationDraft } from "./automationsModel";
+import { AS_SAVED, asSavedLine, periodOptions, type AutomationDraft } from "./automationsModel";
 
 const grid = { display: "grid", gap: tokens.space.md } as const;
 const row = { display: "grid", gap: tokens.space.md, gridTemplateColumns: "repeat(auto-fit, minmax(10rem, 1fr))" } as const;
@@ -47,7 +47,7 @@ export function AutomationForm({
       />
       {draft.triggerKind === "schedule" ? (
         <div style={row}>
-          <TextField label="Every" value={draft.every} onChange={set("every")} />
+          {draft.everyUnit === AS_SAVED ? null : <TextField label="Every" value={draft.every} onChange={set("every")} />}
           <Select
             label="Unit"
             value={draft.everyUnit}
@@ -55,6 +55,7 @@ export function AutomationForm({
               { value: "minutes", label: "minutes" },
               { value: "hours", label: "hours" },
               { value: "days", label: "days" },
+              ...(draft.savedEvery === null ? [] : [{ value: AS_SAVED, label: `every ${asSavedLine(draft.savedEvery)}` }]),
             ]}
             onChange={(value) => set("everyUnit")(value as AutomationDraft["everyUnit"])}
           />
@@ -88,7 +89,7 @@ export function AutomationForm({
       <div style={row}>
         <TextField label="Cost cap a period" placeholder="e.g. 5.00" value={draft.costCap} onChange={set("costCap")} />
         <TextField label="Cost cap a run" placeholder="e.g. 1.00" value={draft.runCap} onChange={set("runCap")} />
-        <Select label="Period" value={draft.period} options={PERIODS.map((each) => ({ ...each }))} onChange={set("period")} />
+        <Select label="Period" value={draft.period} options={periodOptions(draft.savedPeriod)} onChange={set("period")} />
         <TextField label="Firings a period" value={draft.rate} onChange={set("rate")} />
         <TextField label="Runs at once" value={draft.concurrency} onChange={set("concurrency")} />
         <Select

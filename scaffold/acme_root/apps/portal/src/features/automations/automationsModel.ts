@@ -108,6 +108,8 @@ export function automationRow(automation: AutomationView, projects: readonly Pic
 
 export type SpanUnit = "minutes" | "hours" | "days";
 const UNIT_SECONDS: Record<SpanUnit, number> = { minutes: 60, hours: 3_600, days: 86_400 };
+/** The unit of a saved schedule no unit holds whole: it goes back as saved. */
+export const AS_SAVED = "as_saved";
 
 export const PERIODS = [
   { value: "PT1H", label: "an hour" },
@@ -115,11 +117,27 @@ export const PERIODS = [
   { value: "P7D", label: "a week" },
 ] as const;
 
+/** A saved span the form's choices do not hold, in words, as saved: "30
+ * days, as saved". */
+export function asSavedLine(duration: string): string {
+  const seconds = secondsOf(duration);
+  return `${seconds === null ? duration : spanLine(seconds)}, as saved`;
+}
+
+/** The periods the form offers: the three it knows, and the saved one when
+ * it is none of them, so an edit never replaces it unasked. */
+export function periodOptions(savedPeriod: string | null): { value: string; label: string }[] {
+  const options: { value: string; label: string }[] = PERIODS.map((each) => ({ ...each }));
+  return savedPeriod === null ? options : [...options, { value: savedPeriod, label: asSavedLine(savedPeriod) }];
+}
+
 export interface AutomationDraft {
   name: string;
   triggerKind: "schedule" | "event";
   every: string;
-  everyUnit: SpanUnit;
+  everyUnit: SpanUnit | typeof AS_SAVED;
+  /** The saved schedule when no unit holds it whole; null otherwise. */
+  savedEvery: string | null;
   integrations: string;
   arrivals: string;
   effects: string;
@@ -132,6 +150,8 @@ export interface AutomationDraft {
   costCap: string;
   runCap: string;
   period: string;
+  /** The saved period when it is none of `PERIODS`; null otherwise. */
+  savedPeriod: string | null;
   rate: string;
   concurrency: string;
   queue: "no" | "yes";
@@ -144,6 +164,7 @@ export const EMPTY_DRAFT: AutomationDraft = {
   triggerKind: "schedule",
   every: "1",
   everyUnit: "days",
+  savedEvery: null,
   integrations: "",
   arrivals: "",
   effects: "",
@@ -156,6 +177,7 @@ export const EMPTY_DRAFT: AutomationDraft = {
   costCap: "",
   runCap: "",
   period: "P1D",
+  savedPeriod: null,
   rate: "10",
   concurrency: "1",
   queue: "no",
@@ -163,19 +185,28 @@ export const EMPTY_DRAFT: AutomationDraft = {
   enabled: "yes",
 };
 
-/** The span a schedule fires at, from its seconds: the largest unit that
- * holds it whole. */
-function everyOf(seconds: number): Pick<AutomationDraft, "every" | "everyUnit"> {
+/** The span a saved schedule fires at: the largest unit that holds it
+ * whole; else the schedule as saved, which goes back unchanged. */
+function everyOf(every: string): Pick<AutomationDraft, "every" | "everyUnit" | "savedEvery"> {
+  const seconds = secondsOf(every);
   for (const unit of ["days", "hours", "minutes"] as const) {
-    if (seconds % UNIT_SECONDS[unit] === 0) return { every: String(seconds / UNIT_SECONDS[unit]), everyUnit: unit };
+    if (seconds !== null && seconds > 0 && seconds % UNIT_SECONDS[unit] === 0) return { every: String(seconds / UNIT_SECONDS[unit]), everyUnit: unit, savedEvery: null };
   }
-  return { every: String(Math.max(1, Math.round(seconds / 60))), everyUnit: "minutes" };
+  return { every: String(Math.max(1, Math.round((seconds ?? 60) / 60))), everyUnit: AS_SAVED, savedEvery: every };
+}
+
+/** A saved period as the form holds it: one of `PERIODS` when it is that
+ * span, else the period as saved, which goes back unchanged. */
+function periodOf(period: string): Pick<AutomationDraft, "period" | "savedPeriod"> {
+  const seconds = secondsOf(period);
+  const known = PERIODS.find((each) => secondsOf(each.value) === seconds);
+  return known ? { period: known.value, savedPeriod: null } : { period, savedPeriod: period };
 }
 
 /** The form as the saved automation stands, to edit. */
 export function draftOf(automation: AutomationView): AutomationDraft {
   const { trigger, action, limits } = automation;
-  const every = trigger.every ? everyOf(secondsOf(trigger.every) ?? 86_400) : { every: EMPTY_DRAFT.every, everyUnit: EMPTY_DRAFT.everyUnit };
+  const every = trigger.every ? everyOf(trigger.every) : { every: EMPTY_DRAFT.every, everyUnit: EMPTY_DRAFT.everyUnit, savedEvery: null };
   return {
     name: automation.name,
     triggerKind: trigger.kind,
@@ -191,7 +222,7 @@ export function draftOf(automation: AutomationView): AutomationDraft {
     brief: action.brief,
     costCap: String(limits.cost_cap_micros / 1_000_000),
     runCap: String(limits.run_cap_micros / 1_000_000),
-    period: secondsOf(limits.period) === 3_600 ? "PT1H" : secondsOf(limits.period) === 604_800 ? "P7D" : "P1D",
+    ...periodOf(limits.period),
     rate: String(limits.rate),
     concurrency: String(limits.concurrency),
     queue: limits.queue ? "yes" : "no",
@@ -231,9 +262,11 @@ export function automationRequest(
   if (!name) return { problem: "Give the automation a name." };
   if (name.length > NAME_MAX) return { problem: `A name is at most ${NAME_MAX} characters.` };
   let trigger: AutomationRequest["trigger"];
-  if (draft.triggerKind === "schedule") {
+  if (draft.triggerKind === "schedule" && draft.everyUnit === AS_SAVED && draft.savedEvery !== null) {
+    trigger = { kind: "schedule", every: draft.savedEvery, integrations: [], arrivals: [], effects: [] };
+  } else if (draft.triggerKind === "schedule") {
     const every = wholeOf(draft.every);
-    if (every === null) return { problem: "Say how often the schedule fires, as a whole number." };
+    if (every === null || draft.everyUnit === AS_SAVED) return { problem: "Say how often the schedule fires, as a whole number." };
     trigger = { kind: "schedule", every: `PT${every * UNIT_SECONDS[draft.everyUnit]}S`, integrations: [], arrivals: [], effects: [] };
   } else {
     const integrations = wordsOf(draft.integrations);

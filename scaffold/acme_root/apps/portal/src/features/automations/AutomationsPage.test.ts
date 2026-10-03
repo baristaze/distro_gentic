@@ -5,7 +5,7 @@
 // form; one who does not manage the org is offered no grant.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AutomationView } from "@acme/client";
-import { buttons, container, enter, mount, newNet, notFound, PEOPLE, press, unmount, writes, type Call } from "../screenTesting";
+import { buttons, container, enter, field, mount, newNet, notFound, PEOPLE, press, unmount, writes, type Call } from "../screenTesting";
 import { AutomationPage } from "./AutomationPage";
 import { AutomationsPage } from "./AutomationsPage";
 
@@ -49,7 +49,10 @@ const routes = [
   { path: "/automations/:automationId", Component: AutomationPage },
 ];
 
-beforeEach(() => Object.assign(net, newNet(), { answer }));
+beforeEach(() => {
+  Object.assign(net, newNet(), { answer });
+  Object.assign(HELD, { a: automation("a", "Ajax nightly"), b: automation("b", "Beta nightly") });
+});
 afterEach(unmount);
 
 describe("the automations list", () => {
@@ -129,6 +132,24 @@ describe("an automation's page", () => {
         body: expect.objectContaining({ name: "Ajax nightly, renamed", own_events: false, limits: expect.objectContaining({ queue_depth: 50, hop_limit: 3 }) }),
       },
     ]);
+  });
+
+  it("sends back a period and a schedule the form cannot show as they were saved", async () => {
+    HELD.a = {
+      ...automation("a", "Ajax monthly"),
+      trigger: { kind: "schedule", every: "PT90S", integrations: [], arrivals: [], effects: [] },
+      limits: { ...automation("a", "").limits, period: "P30D" },
+    };
+    await mount(routes, "/automations/aua");
+    expect(container.querySelector("[data-automation]")!.textContent).toContain("every 30 days");
+    await press("Edit the automation");
+    const period = field("Period") as HTMLSelectElement;
+    expect(period.selectedOptions[0]!.textContent).toBe("30 days, as saved");
+    expect((field("Unit") as HTMLSelectElement).selectedOptions[0]!.textContent).toBe("every 1 minute 30 seconds, as saved");
+    await enter("State", "no");
+    await press("Save");
+    const [saved] = writes(net);
+    expect(saved!.body).toMatchObject({ enabled: false, trigger: { kind: "schedule", every: "PT90S" }, limits: { period: "P30D" } });
   });
 
   it("offers a viewer no edit", async () => {
