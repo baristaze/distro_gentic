@@ -161,7 +161,8 @@ async def test_a_trigger_word_recall_reads_nothing_in_is_refused(
         body = {**ENTRY, "trigger": ["staging", word]}
         write = await client.post("/v1/knowledge", headers=keyed(ajax.owner, word), json=body)
         refused(write, 422, "validation_failed")
-        refused(await client.put(url, headers=at(ajax.owner, 1), json=body), 422, "validation_failed")
+        edit = await client.put(url, headers=at(ajax.owner, 1), json=body)
+        refused(edit, 422, "validation_failed")
     kept = await client.put(url, headers=at(ajax.owner, 1), json={**ENTRY, "trigger": ["staging"]})
     assert kept.status_code == 200, kept.text
     assert kept.json()["trigger"] == ["staging"]
