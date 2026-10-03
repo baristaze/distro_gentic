@@ -1,5 +1,5 @@
-"""Pure rules of evidence: which paths a policy protects, the target a
-tool's call reports for them, the checks a change asks for, what a
+"""Pure rules of evidence: the key a project's policy is kept under, which
+paths a policy protects, the target a tool's call reports for them, the checks a change asks for, what a
 validation is asked to run, and the result gate's judgment. Values in,
 values out; no clock, no storage."""
 
@@ -22,6 +22,16 @@ from acme.om.evidence.types.validation import Delivery, ExecutionRequest, Valida
 from acme.om.steps.types.header import LoopOutcome
 from acme.om.tools.rules import DEFAULT_CEILINGS
 from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule, Target
+
+# The policy's key.
+
+
+def policy_key(project_id: UUID) -> str:
+    """The key a project's validation policy is kept under: the project's
+    id, as the projects answer a session's project, never a name the work
+    product reports."""
+    return str(project_id)
+
 
 # Protected paths.
 
@@ -239,7 +249,7 @@ def judge(claim: Claim, reading: Reading) -> Verdict:
         )
     policy = reading.policy
     if policy is None:
-        return refused(f"the project {delivery.project} declares no validation policy")
+        return refused("the session's project declares no validation policy")
     touched = protected_paths(policy.protected, delivery.changed)
     if touched:
         return refused(

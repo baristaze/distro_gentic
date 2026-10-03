@@ -18,6 +18,7 @@ from acme.om.billing.types.account import AccountRequest, FundingMode
 from acme.om.billing.types.plan import PLANS, UNITS, PlanCatalog
 from acme.om.context import TenantContext
 from acme.om.models.layer import ModelsLayer
+from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.root import Managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
@@ -94,6 +95,7 @@ def money_over(
             gate,
             book,
             managers.agent_sessions,
+            SessionProjectsBoundImpl(storage.get_project_storage()),
             version=None if models_layer is None else models_layer.version,
         )
         built.append((gate, calls))

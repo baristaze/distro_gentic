@@ -13,6 +13,7 @@ import pytest
 from contracts.doubles import context
 from contracts.factories import make_org
 from contracts.loops import reply, said, use
+from contracts.project_storage import make_project
 from contracts.tools import INJECTED_TOKEN, echoing
 from contracts.trust import Trusted, trusted
 
@@ -20,7 +21,7 @@ from acme.infra.transports.redaction import forms, marker
 from acme.integrations.model_providers.absent import ModelProviderAbsentImpl
 from acme.integrations.model_providers.types import ProviderName
 from acme.om.agents.loop_rules import PRINCIPAL_UNLOCK
-from acme.om.agents.types.request import Spawn
+from acme.om.agents.types.request import Spawn, Start
 from acme.om.agents.types.run import RunEnd
 from acme.om.attribution.types.principal import AgentRef, Principal, PrincipalKind
 from acme.om.base import new_id, utcnow
@@ -68,9 +69,10 @@ async def audits(platform: Trusted) -> list[CallAudit]:
 
 
 def declared(
-    name: str = INJECTED_TOKEN.name, store: SecretStore = SecretStore.CLOUD
+    name: str = INJECTED_TOKEN.name, store: SecretStore = SecretStore.CLOUD, *, project: UUID
 ) -> SecretDeclaration:
-    """A declaration as a caller sends it: the manager stamps who and when."""
+    """A declaration on `project` as a caller sends it: the manager stamps
+    who and when."""
     now = utcnow()
     return SecretDeclaration(
         id=new_id(),
@@ -81,7 +83,7 @@ def declared(
         name=name,
         variable=INJECTED_TOKEN.env or "",
         owner_kind=SecretOwnerKind.PROJECT,
-        owner_id=new_id(),
+        owner_id=project,
         scope="call:records-api",
         store=store,
     )
@@ -240,10 +242,11 @@ async def test_a_secrets_value_reaches_no_step_no_log_no_stream_part_and_no_mode
 ) -> None:
     caplog.set_level(logging.DEBUG)
     platform = trusted(tmp_path)
-    await platform.trust.trust.declare_secret(platform.owner, declared())
+    project = await platform.owners_project()
+    await platform.trust.trust.declare_secret(platform.owner, declared(project=project))
     await platform.trust.trust.put_secret(platform.owner, INJECTED_TOKEN.name, SECRET)
     platform.transport.handler = echoing("API_TOKEN")
-    session_id = await platform.start()
+    session_id = await platform.start(project=True)
     await platform.say(session_id, "Call the records API.")
     platform.anthropic.add(reply(said("Calling."), call("call_api")), reply(said("Done.")))
 
@@ -280,10 +283,11 @@ async def test_a_cloud_secret_is_refused_for_a_session_inside_a_customers_wall(
     tmp_path: Path,
 ) -> None:
     platform = trusted(tmp_path)
-    await platform.trust.trust.declare_secret(platform.owner, declared())
+    project = await platform.owners_project()
+    await platform.trust.trust.declare_secret(platform.owner, declared(project=project))
     await platform.trust.trust.put_secret(platform.owner, INJECTED_TOKEN.name, SECRET)
     platform.transport.handler = echoing("API_TOKEN")
-    session_id = await platform.start()
+    session_id = await platform.start(project=True)
     platform.placement.walled.add(session_id)
     await platform.say(session_id, "Call the records API.")
     platform.anthropic.add(reply(said("Calling."), call("call_api")), reply(said("Refused.")))
@@ -303,14 +307,17 @@ async def test_a_secret_crosses_no_wall_either_way_and_takes_no_value_from_the_c
     tmp_path: Path,
 ) -> None:
     platform = trusted(tmp_path)
+    project = await platform.owners_project()
     trust = platform.trust.trust
-    walled, cloud = await platform.start(), await platform.start()
+    walled, cloud = await platform.start(project=True), await platform.start(project=True)
     platform.placement.walled.add(walled)
     # Never declared: resolved from the platform's store, so a cloud secret.
     with pytest.raises(SecretCrossesWall):
         await trust.refuse_crossing(platform.owner, walled, (INJECTED_TOKEN,))
     await trust.refuse_crossing(platform.owner, cloud, (INJECTED_TOKEN,))
-    held_inside = await trust.declare_secret(platform.owner, declared(store=SecretStore.HOST))
+    held_inside = await trust.declare_secret(
+        platform.owner, declared(store=SecretStore.HOST, project=project)
+    )
     await trust.refuse_crossing(platform.owner, walled, (INJECTED_TOKEN,))
     with pytest.raises(SecretCrossesWall):
         await trust.refuse_crossing(platform.owner, cloud, (INJECTED_TOKEN,))
@@ -322,10 +329,49 @@ async def test_a_secret_crosses_no_wall_either_way_and_takes_no_value_from_the_c
         await trust.refuse_crossing(platform.owner, walled, (aimed_elsewhere,))
     with pytest.raises(ValueError):
         SecretDeclaration.model_validate(
-            {**declared().model_dump(), "owner_kind": SecretOwnerKind.STATION}
+            {
+                **declared(project=project).model_dump(),
+                "owner_kind": SecretOwnerKind.STATION,
+            }
         )
     with pytest.raises(NotAuthorized):
-        await trust.declare_secret(platform.member(), declared(name="another"))
+        await trust.declare_secret(platform.member(), declared(name="another", project=project))
+
+
+async def test_a_projects_secret_reaches_its_own_projects_sessions_alone(
+    tmp_path: Path,
+) -> None:
+    platform = trusted(tmp_path)
+    project = await platform.owners_project()
+    trust = platform.trust.trust
+    await trust.declare_secret(platform.owner, declared(project=project))
+    ours = await platform.start(project=True)
+    await trust.refuse_crossing(platform.owner, ours, (INJECTED_TOKEN,))
+    # A session of another project of the tenant, and one of no project.
+    loose = await platform.start()
+    other = make_project("octo/ledger")
+    await platform.storage.get_project_storage().create_project(platform.owner.org_id, other, ())
+    start = Start(id=new_id(), kind="steady", title="the ledger")
+    theirs = (await platform.managers.projects.start_session(platform.owner, other.id, start)).id
+    for session_id in (theirs, loose):
+        with pytest.raises(SecretCrossesWall, match="declared on another project"):
+            await trust.refuse_crossing(platform.owner, session_id, (INJECTED_TOKEN,))
+
+
+async def test_a_declaration_on_a_project_the_tenant_does_not_hold_is_refused(
+    tmp_path: Path,
+) -> None:
+    platform = trusted(tmp_path)
+    trust = platform.trust.trust
+    stranger = make_project("ajax/reports")
+    projects = platform.storage.get_project_storage()
+    assert await projects.create_project(make_org().id, stranger, ())
+    for project_id in (stranger.id, new_id()):
+        with pytest.raises(NotFound):
+            await trust.declare_secret(platform.owner, declared(project=project_id))
+    assert await trust.get_secrets(platform.owner, None, 10) == (), "nothing was written"
+    ours = await platform.owners_project()
+    assert (await trust.declare_secret(platform.owner, declared(project=ours))).owner_id == ours
 
 
 # A rotated tenant key is never served from a client cached by its
@@ -408,12 +454,15 @@ async def test_a_purged_tenants_values_leave_the_store_with_their_records(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     platform = trusted(tmp_path)
+    project = await platform.owners_project()
     trust, owner = platform.trust.trust, platform.owner
     secrets = platform.infra.get_secrets()
     key = await trust.save_provider_key(owner, ProviderName.ANTHROPIC, "sk-first")
-    await trust.declare_secret(owner, declared())
+    await trust.declare_secret(owner, declared(project=project))
     await trust.put_secret(owner, INJECTED_TOKEN.name, SECRET)
-    await trust.declare_secret(owner, declared("held_inside", store=SecretStore.HOST))
+    await trust.declare_secret(
+        owner, declared("held_inside", store=SecretStore.HOST, project=project)
+    )
     assert await trust.purge_tenant(owner) == 0, "a living tenant keeps everything"
 
     async def expired(ctx: object) -> bool:

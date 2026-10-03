@@ -5,11 +5,12 @@ from acme.om.agents.gate import ResultGateInterface
 from acme.om.agents.types.result import Claim, Result, Verdict
 from acme.om.base import Platform
 from acme.om.context import Permission, TenantContext
-from acme.om.evidence.rules import Reading, judge, refused
+from acme.om.evidence.rules import Reading, judge, policy_key, refused
 from acme.om.evidence.storage import EvidenceStorageInterface
 from acme.om.evidence.types.record import RunPurpose
 from acme.om.evidence.work_product import WorkProductInterface
 from acme.om.exceptions import PlatformException
+from acme.om.projects.policies import SessionProjectsInterface
 
 
 class ResultGateOptions(Platform):
@@ -21,18 +22,21 @@ class ResultGateOptions(Platform):
 class ResultGateEvidenceImpl(ResultGateInterface):
     """The gate that knows what evidence is. It reads the runs a result
     cites, the session's work product from the system that keeps it, the
-    project's policy, and every validation at the delivered head with every
-    run it lists, and judges them (`rules.judge`). What it cannot read in
-    full it does not judge: it refuses."""
+    policy of the project `projects` answers for the session, never one the
+    work product names, and every validation at the delivered head with
+    every run it lists, and judges them (`rules.judge`). What it cannot read
+    in full it does not judge: it refuses."""
 
     def __init__(
         self,
         storage: EvidenceStorageInterface,
         work_product: WorkProductInterface,
+        projects: SessionProjectsInterface,
         options: ResultGateOptions | None = None,
     ) -> None:
         self._storage = storage
         self._work_product = work_product
+        self._projects = projects
         self._options = options or ResultGateOptions()
 
     async def check(self, ctx: TenantContext, session_id: UUID, result: Result) -> Verdict:
@@ -60,7 +64,9 @@ class ResultGateEvidenceImpl(ResultGateInterface):
             return Reading(cited=reading.cited, unread=error.message)
         if delivery is None or not delivery.changes_work_product:
             return Reading(cited=reading.cited, delivery=delivery)
-        policy = await self._storage.read_policy(ctx.org_id, delivery.project)
+        project_id = await self._projects.project_of(ctx, session_id)
+        key = None if project_id is None else policy_key(project_id)
+        policy = None if key is None else await self._storage.read_policy(ctx.org_id, key)
         bound = self._options.max_validations
         found = await self._storage.read_validations(
             ctx.org_id, session_id, delivery.head, bound + 1
@@ -73,8 +79,7 @@ class ResultGateEvidenceImpl(ResultGateInterface):
         validations = tuple(
             validation
             for validation in found
-            if validation.purpose is RunPurpose.VALIDATION
-            and validation.project == delivery.project
+            if validation.purpose is RunPurpose.VALIDATION and validation.project == key
         )
         records = await self._storage.read_validation_records(
             ctx.org_id,

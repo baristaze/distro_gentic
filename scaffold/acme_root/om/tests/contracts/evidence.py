@@ -7,6 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any
+from uuid import UUID
 
 from acme.infra.topics.memory import TopicsMemoryImpl
 from acme.om.base import utcnow
@@ -18,6 +19,7 @@ from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
 from acme.om.evidence.impl.manager import EvidenceManagerImpl, EvidenceOptions
 from acme.om.evidence.impl.ports import WorkProductMemoryImpl
 from acme.om.evidence.rates import stops_at
+from acme.om.evidence.rules import policy_key
 from acme.om.evidence.storage.impl.memory import EvidenceStorageMemoryImpl
 from acme.om.evidence.types.contract import CheckDeclaration, Offer
 from acme.om.evidence.types.policy import Requirement, ValidationPolicy
@@ -25,8 +27,15 @@ from acme.om.evidence.types.provenance import Provenance
 from acme.om.evidence.types.validation import Delivery, ExecutionRequest, ExecutorReport
 from acme.om.outbox.impl.relay import OutboxRelayImpl
 from acme.om.outbox.storage.impl.memory import OutboxStorageMemoryImpl
-from contracts.doubles import Members
+from contracts.doubles import Members, SessionProjectsMemory
 from contracts.evidence_storage import make_policy
+
+ARM = UUID("0192f3a0-0000-7000-8000-00000000a12a")
+"""The `arm` project's id: every session of a suite's evidence belongs to
+it unless the suite names another."""
+ARM_KEY = policy_key(ARM)
+"""The key the `arm` project's policy, and each of its validations, is kept
+under."""
 
 Outcome = Callable[[str, int], str]
 """The outcome of a check's trial, by the check's name and the trial's
@@ -135,6 +144,7 @@ class Evidence:
     work: WorkProductMemoryImpl
     executor: ScriptedExecutor
     members: Members
+    projects: SessionProjectsMemory
 
 
 def evidence_over(executor: ScriptedExecutor | None = None) -> Evidence:
@@ -144,19 +154,21 @@ def evidence_over(executor: ScriptedExecutor | None = None) -> Evidence:
     relay = OutboxRelayImpl(outbox, EventStorageMemoryImpl(), TopicsMemoryImpl())
     work = WorkProductMemoryImpl()
     executor = executor or ScriptedExecutor()
-    manager = EvidenceManagerImpl(storage, members, relay, executor, work, EvidenceOptions())
-    return Evidence(
-        manager, ResultGateEvidenceImpl(storage, work), storage, work, executor, members
+    projects = SessionProjectsMemory(default=ARM)
+    manager = EvidenceManagerImpl(
+        storage, members, relay, executor, work, projects, EvidenceOptions()
     )
+    gate = ResultGateEvidenceImpl(storage, work, projects)
+    return Evidence(manager, gate, storage, work, executor, members, projects)
 
 
 def arm_policy(
-    *requirements: Requirement, protected: tuple[str, ...] = ("tests/**",)
+    *requirements: Requirement, protected: tuple[str, ...] = ("tests/**",), project: UUID = ARM
 ) -> ValidationPolicy:
-    """The `arm` project's policy: the `unit` check and the `trials` check,
-    which needs the arm, declared; `unit` required for a change under
-    `src/` unless the case names its own requirements."""
-    policy = make_policy()
+    """The `arm` project's policy, kept under `project`: the `unit` check
+    and the `trials` check, which needs the arm, declared; `unit` required
+    for a change under `src/` unless the case names its own requirements."""
+    policy = make_policy(policy_key(project))
     checks = (
         *policy.checks,
         CheckDeclaration(

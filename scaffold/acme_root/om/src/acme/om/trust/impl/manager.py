@@ -19,6 +19,7 @@ from acme.om.events.manager import audit_event
 from acme.om.exceptions import Conflict, NotFound, UniqueKeyTaken, ValidationFailed
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import OutboxRow, versioned_row
+from acme.om.projects.policies import SessionProjectsInterface
 from acme.om.steps import StepsManagerInterface
 from acme.om.steps.types.header import ParkReason, ToolRequestHeader
 from acme.om.steps.types.step import Step
@@ -31,7 +32,7 @@ from acme.om.trust.rules import call_audit, first_crossing
 from acme.om.trust.storage import TrustStorageInterface
 from acme.om.trust.types.identities import CallAudit
 from acme.om.trust.types.provider_key import KeyStatus, ProviderKey, key_secret_name
-from acme.om.trust.types.secret import SecretDeclaration, SecretStore
+from acme.om.trust.types.secret import SecretDeclaration, SecretOwnerKind, SecretStore
 
 CALL_AUDITED = "trust.call.audited"
 DECLARED = "trust.secret_declaration.created"
@@ -67,6 +68,7 @@ class TrustManagerImpl(TrustManagerInterface):
         relay: OutboxRelayInterface,
         secrets: SecretsInterface,
         placement: PlacementInterface,
+        projects: SessionProjectsInterface,
         probe: KeyProbeInterface,
         options: TrustOptions,
         clock: Callable[[], datetime] = utcnow,
@@ -80,6 +82,7 @@ class TrustManagerImpl(TrustManagerInterface):
         self._relay = relay
         self._secrets = secrets
         self._placement = placement
+        self._projects = projects
         self._probe = probe
         self._options = options
         self._clock = clock
@@ -128,6 +131,10 @@ class TrustManagerImpl(TrustManagerInterface):
         self, ctx: TenantContext, declaration: SecretDeclaration
     ) -> SecretDeclaration:
         ctx.require(Permission.MANAGE_MEMBERS)
+        if declaration.owner_kind is SecretOwnerKind.PROJECT and not await self._projects.holds(
+            ctx, declaration.owner_id
+        ):
+            raise NotFound(f"no project {declaration.owner_id} of this tenant")
         now = self._clock()
         made = SecretDeclaration.model_validate(
             {
@@ -178,12 +185,13 @@ class TrustManagerImpl(TrustManagerInterface):
         if not uses:
             return
         inside = await self._placement.inside_wall(ctx.org_id, session_id)
+        project_id = await self._projects.project_of(ctx, session_id)
         declared: dict[str, SecretDeclaration] = {}
         for use in uses:
             found = await self._storage.read_declaration(ctx.org_id, use.name)
             if found is not None:
                 declared[use.name] = found
-        refusal = first_crossing(uses, declared, inside_wall=inside)
+        refusal = first_crossing(uses, declared, inside_wall=inside, project_id=project_id)
         if refusal is not None:
             raise SecretCrossesWall(refusal)
 

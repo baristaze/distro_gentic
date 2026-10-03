@@ -34,6 +34,7 @@ from acme.om.context import CredentialKind, RequestContext, Role, TenantContext,
 from acme.om.evidence import ExecutorInterface, WorkProductInterface
 from acme.om.models.impl.credentials import CallCredentialsPlatformImpl
 from acme.om.models.layer import ModelsLayer
+from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.root import Managers, build_managers
 from acme.om.steps.types.content import TextBlock, ToolUseBlock
 from acme.om.steps.types.header import LoopOutcome, ParkReason
@@ -313,6 +314,7 @@ def loop_over(
                 managers.budget_gate,
                 managers.pricing,
                 managers.agent_sessions,
+                SessionProjectsBoundImpl(storage.get_project_storage()),
                 version=None if models_layer is None else models_layer.version,
             )
             if call_gate is None

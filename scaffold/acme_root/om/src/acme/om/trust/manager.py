@@ -55,9 +55,10 @@ class TrustManagerInterface(ABC):
     ) -> SecretDeclaration:
         """Declares a secret by name, as one who writes the tenant's own
         configuration may (`manage_members`, ADR 2010): its variable, its scope, what it is declared on, and the store
-        that holds it. The same declaration made again is answered as
-        stored; another under a name taken is `Conflict`. No value is taken
-        here."""
+        that holds it. A project it is declared on is one of the tenant's;
+        another tenant's, or none, is `NotFound`, and nothing is written.
+        The same declaration made again is answered as stored; another under
+        a name taken is `Conflict`. No value is taken here."""
         ...
 
     @abstractmethod
@@ -82,10 +83,12 @@ class TrustManagerInterface(ABC):
         self, ctx: TenantContext, session_id: UUID, uses: Sequence[SecretUse]
     ) -> None:
         """Refuses (`SecretCrossesWall`) secrets that would be resolved on the
-        far side of the session's wall: a cloud secret, or one never declared,
-        for a session inside a customer's wall; a secret held inside the wall
-        for a session in the cloud; an injected one aimed at a variable its
-        declaration does not name. Returns when every one may be used."""
+        far side of the session's wall: a project's secret for a session of
+        another project, or of none, as the projects answer the session's
+        project; a cloud secret, or one never declared, for a session inside
+        a customer's wall; a secret held inside the wall for a session in the
+        cloud; an injected one aimed at a variable its declaration does not
+        name. Returns when every one may be used."""
         ...
 
     # The tenant's provider keys.

@@ -87,7 +87,7 @@ def with_shipped(
     own: tuple[ToolInterface, ...] = (
         ListFilesImpl(),
         ReadFileImpl(),
-        WriteFileImpl(),
+        WriteFileImpl(evidence),
         RunCommandImpl(),
         ValidateImpl(evidence),
         SubmitResultImpl(),
