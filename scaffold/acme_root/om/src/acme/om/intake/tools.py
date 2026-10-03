@@ -78,7 +78,11 @@ class CommentImpl(ToolInterface):
         return self.SPEC
 
     async def target(self, ctx: TenantContext, call_input: ToolInput) -> Target:
-        return Target()
+        # A comment lands on the forge, past the session's own work, and the
+        # target names no session to tell its own pull request from another's:
+        # every comment acts outward, so the platform's ceiling holds it for a
+        # person however a kind's policy allows the class.
+        return Target(attributes={"outward": True})
 
     async def preflight(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime

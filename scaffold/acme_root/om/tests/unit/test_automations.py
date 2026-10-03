@@ -14,6 +14,7 @@ from contracts.intake import ACTING, WORKER, Wired, wired
 from contracts.loops import reply, said, use
 from pydantic import ValidationError
 
+from acme.om.agents.types.request import Start
 from acme.om.agents.types.run import RunEnd
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.automations.types.automation import (
@@ -46,6 +47,7 @@ from acme.om.intake.types.event import (
     WorkNames,
 )
 from acme.om.intake.types.link import HandleKind
+from acme.om.steps.rules import message_step
 from acme.om.steps.types.content import ToolUseBlock
 from acme.om.steps.types.header import InputHeader, ParkReason
 from acme.om.steps.types.step import Actor, StepType
@@ -446,7 +448,8 @@ async def test_a_comment_through_a_sessions_tool_carries_its_cause_and_hop_and_f
         id="use_comment", name=COMMENT, input={"on": OTHER_PR, "text": "The gripper waits."}
     )
     platform.anthropic.add(reply(said_on), reply(said("Commented.")))
-    # A comment acts outward, so it waits for a person.
+    # A comment acts outward, so the platform's ceiling on outward calls
+    # holds it for a person.
     assert (await platform.loops.run(platform.service, first.session_id)).end is RunEnd.PARKED
     (request,) = [
         s for s in await platform.history(first.session_id) if s.type is StepType.TOOL_REQUEST
@@ -468,6 +471,27 @@ async def test_a_comment_through_a_sessions_tool_carries_its_cause_and_hop_and_f
     assert again[pong.id] == fed
     recorded = await platform.automations.get_runs(platform.owner, pong.id, 10)
     assert [r.id for r in recorded if r.event_id == event.id] == [fed.id]
+
+
+async def test_an_unmarked_sessions_comment_waits_on_the_outward_ceiling(platform: Wired) -> None:
+    """A session a member started, with no data read, is unmarked, so the
+    rule of two never holds its calls, and its kind allows the class. Its
+    comment on a repository other than its own still waits for a person:
+    the comment acts outward, and the platform's ceiling caps it."""
+    started = await platform.managers.agents.start_session(
+        platform.owner, Start(id=new_id(), kind=ACTING.name, title="the gripper")
+    )
+    message = message_step(new_id(), utcnow(), started.id, platform.owner, "Tell them.")
+    await platform.managers.agent_sessions.receive(platform.owner, started.id, [message])
+    said_on = ToolUseBlock(
+        id="use_comment", name=COMMENT, input={"on": OTHER_PR, "text": "The gripper waits."}
+    )
+    platform.anthropic.add(reply(said_on))
+    run = await platform.loops.run(platform.owner, started.id)
+    assert (run.end, platform.forge.posted) == (RunEnd.PARKED, [])
+    session = await platform.managers.agent_sessions.get_session(platform.owner, started.id)
+    assert session.park is not None and session.park.reason is ParkReason.PERSON
+    assert not session.untrusted
 
 
 async def test_a_failing_check_on_a_sessions_branch_follows_that_session_with_no_act_recorded(
