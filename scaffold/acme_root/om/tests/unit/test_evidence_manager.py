@@ -6,7 +6,7 @@ from collections.abc import Callable
 
 import pytest
 from contracts.doubles import context
-from contracts.evidence import ARM, ScriptedExecutor, arm_policy, delivered, evidence_over
+from contracts.evidence import CHECKOUT, ScriptedExecutor, checkout_policy, delivered, evidence_over
 from contracts.evidence_storage import make_finding, make_hypothesis, make_record
 from contracts.factories import make_org
 from pydantic import ValidationError
@@ -34,8 +34,8 @@ async def test_a_person_who_manages_the_tenant_declares_the_policy() -> None:
     evidence = evidence_over()
     owner = context(Role.OWNER, org)
     with pytest.raises(NotFound):
-        await evidence.manager.get_policy(owner, policy_key(ARM))
-    created = await evidence.manager.write_policy(owner, arm_policy())
+        await evidence.manager.get_policy(owner, policy_key(CHECKOUT))
+    created = await evidence.manager.write_policy(owner, checkout_policy())
     assert created.version == 1 and created.created_by == owner.user_id
     for role in (Role.SERVICE, Role.MEMBER, Role.VIEWER):
         with pytest.raises(NotAuthorized):
@@ -46,7 +46,9 @@ async def test_a_person_who_manages_the_tenant_declares_the_policy() -> None:
     assert moved.version == 2 and moved.protected == ("**",) and moved.id == created.id
     with pytest.raises(PreconditionFailed):
         await evidence.manager.write_policy(owner, created)
-    assert await evidence.manager.get_policy(context(Role.VIEWER, org), policy_key(ARM)) == moved
+    assert (
+        await evidence.manager.get_policy(context(Role.VIEWER, org), policy_key(CHECKOUT)) == moved
+    )
 
 
 @pytest.mark.parametrize(
@@ -68,12 +70,12 @@ async def test_a_command_template_a_runner_cannot_fill_is_refused_when_written(
     org = make_org()
     evidence = evidence_over()
     owner = context(Role.OWNER, org)
-    declared = arm_policy().model_dump()
+    declared = checkout_policy().model_dump()
     declared["checks"][-1]["command"] = list(command)
     with pytest.raises(ValidationError, match="command"):
         await evidence.manager.write_policy(owner, ValidationPolicy.model_validate(declared))
     with pytest.raises(NotFound):
-        await evidence.manager.get_policy(owner, policy_key(ARM))
+        await evidence.manager.get_policy(owner, policy_key(CHECKOUT))
     declared["checks"][-1]["command"] = ["run-trials", "--at={version}", "{out}", "{{literal}}"]
     assert await evidence.manager.write_policy(owner, ValidationPolicy.model_validate(declared))
 
@@ -123,7 +125,7 @@ async def test_validation_keeps_what_the_executor_wrote_at_the_head() -> None:
     evidence = evidence_over()
     ctx = context(Role.MEMBER, org)
     session = new_id()
-    await evidence.manager.write_policy(context(Role.OWNER, org), arm_policy())
+    await evidence.manager.write_policy(context(Role.OWNER, org), checkout_policy())
     evidence.work.deliver(org.id, session, delivered())
     validation = await evidence.manager.validate(ctx, session, RunPurpose.VALIDATION)
     assert (validation.version, validation.source, validation.executor) == (
@@ -142,9 +144,9 @@ async def test_a_baseline_runs_every_required_check_at_the_base() -> None:
     evidence = evidence_over()
     ctx = context(Role.MEMBER, org)
     session = new_id()
-    policy = arm_policy(
+    policy = checkout_policy(
         Requirement(check="unit", paths=("src/**",)),
-        Requirement(check="trials", paths=("firmware/**",)),
+        Requirement(check="trials", paths=("migrations/**",)),
     )
     await evidence.manager.write_policy(context(Role.OWNER, org), policy)
     evidence.work.deliver(org.id, session, delivered(head="base0", changed=()))
@@ -166,7 +168,7 @@ async def test_results_that_do_not_hash_to_what_the_executor_wrote_keep_nothing(
     evidence = evidence_over(executor)
     ctx = context(Role.MEMBER, org)
     session = new_id()
-    await evidence.manager.write_policy(context(Role.OWNER, org), arm_policy())
+    await evidence.manager.write_policy(context(Role.OWNER, org), checkout_policy())
     evidence.work.deliver(org.id, session, delivered())
     with pytest.raises(ValidationFailed, match="do not hash"):
         await evidence.manager.validate(ctx, session, RunPurpose.VALIDATION)
@@ -199,7 +201,7 @@ async def test_results_of_a_check_or_a_version_not_asked_for_keep_nothing(
     ctx = context(Role.MEMBER, org)
     session = new_id()
     evidence = evidence_over(executor)
-    await evidence.manager.write_policy(context(Role.OWNER, org), arm_policy())
+    await evidence.manager.write_policy(context(Role.OWNER, org), checkout_policy())
     evidence.work.deliver(org.id, session, delivered())
     with pytest.raises(ValidationFailed, match=why):
         await evidence.manager.validate(ctx, session, RunPurpose.VALIDATION)
@@ -228,7 +230,7 @@ async def test_results_past_their_bytes_or_the_trials_asked_keep_nothing(
     ctx = context(Role.MEMBER, org)
     session = new_id()
     evidence = evidence_over(executor, options)
-    await evidence.manager.write_policy(context(Role.OWNER, org), arm_policy())
+    await evidence.manager.write_policy(context(Role.OWNER, org), checkout_policy())
     evidence.work.deliver(org.id, session, delivered())
     with pytest.raises(ValidationFailed, match=why):
         await evidence.manager.validate(ctx, session, RunPurpose.VALIDATION)
@@ -246,10 +248,10 @@ async def test_validation_is_refused_before_anything_runs() -> None:
     evidence.work.deliver(org.id, session, delivered())
     with pytest.raises(PreconditionFailed, match="declares no validation policy"):
         await evidence.manager.validate(ctx, session, RunPurpose.VALIDATION)
-    needs_arm = arm_policy(Requirement(check="trials", paths=("src/**",)))
-    await evidence.manager.write_policy(context(Role.OWNER, org), needs_arm)
+    needs_browser = checkout_policy(Requirement(check="trials", paths=("src/**",)))
+    await evidence.manager.write_policy(context(Role.OWNER, org), needs_browser)
     evidence.executor.capabilities = frozenset()
-    with pytest.raises(PreconditionFailed, match="needs arm"):
+    with pytest.raises(PreconditionFailed, match="needs browser"):
         await evidence.manager.validate(ctx, session, RunPurpose.VALIDATION)
     assert evidence.executor.requests == [], "nothing was asked of the executor"
 
@@ -269,7 +271,7 @@ async def test_the_absent_ports_refuse_loudly() -> None:
     ctx = context(Role.MEMBER, org)
     with pytest.raises(Unavailable, match="reads no work product"):
         await manager.validate(ctx, new_id(), RunPurpose.VALIDATION)
-    await manager.write_policy(context(Role.OWNER, org), arm_policy())
+    await manager.write_policy(context(Role.OWNER, org), checkout_policy())
     with pytest.raises(Unavailable, match="no executor"):
         await ExecutorAbsentImpl().offer(ctx)
 
@@ -279,7 +281,7 @@ async def test_the_purges_take_a_sessions_runs_and_an_expired_tenants_rows() -> 
     evidence = evidence_over()
     ctx = context(Role.MEMBER, org)
     gone, kept = new_id(), new_id()
-    await evidence.manager.write_policy(context(Role.OWNER, org), arm_policy())
+    await evidence.manager.write_policy(context(Role.OWNER, org), checkout_policy())
     for session in (gone, kept):
         await evidence.manager.record_run(ctx, make_record(session))
     assert await evidence.manager.purge_session(org.id, gone) == 1

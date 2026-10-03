@@ -70,7 +70,7 @@ of](../../../../README.md).
   that validated nothing is inconclusive.
 - **A rate is bounded, never zero.** An exact or Wilson bound at a
   declared confidence, over each validation's trials at the count the
-  policy declared; a trial a safety stop ended is classified by the
+  policy declared; a trial an abort ended is classified by the
   declared rule, never dropped; rates judged together correct their
   confidence.
 - **A sequential test stops where its rule says.** It stops at the first

@@ -8,7 +8,7 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.evidence import ScriptedExecutor, arm_policy, delivered
+from contracts.evidence import ScriptedExecutor, checkout_policy, delivered
 from contracts.evidence_storage import make_record
 from contracts.loops import loop_over, reply, said
 from contracts.project_storage import in_project
@@ -92,14 +92,14 @@ async def test_a_loop_ends_succeeded_only_once_its_head_is_validated(
     evidence = loop.managers.evidence
     session_id = await loop.start("delivery")
     project = await in_project(storage.get_project_storage(), owner.org_id, session_id)
-    await evidence.write_policy(owner, arm_policy(project=project))
+    await evidence.write_policy(owner, checkout_policy(project=project))
     run = make_record(session_id, step_id=new_id())
     await evidence.record_run(owner, run)
     work.deliver(owner.org_id, session_id, delivered())
 
     # No validation at the head: the success goes back refused, and the
     # model concludes it cannot show it.
-    await loop.say(session_id, "Fix the grip.")
+    await loop.say(session_id, "Fix the cart.")
     loop.anthropic.add(
         reply(said("Fixed."), submit("succeeded", run.id)),
         reply(said("I cannot show it yet."), submit("failed", run.id)),

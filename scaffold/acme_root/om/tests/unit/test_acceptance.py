@@ -20,7 +20,7 @@ from contracts.acceptance import (
     whole,
 )
 from contracts.doubles import context
-from contracts.evidence import arm_policy, evidence_over
+from contracts.evidence import checkout_policy, evidence_over
 from contracts.factories import make_org
 
 from acme.om.agents.types.result import Claim, Result
@@ -40,7 +40,9 @@ async def scripted(
 ) -> ScriptedRun:
     org = make_org()
     evidence = evidence_over(executor or DefectExecutor())
-    await evidence.manager.write_policy(context(Role.OWNER, org), arm_policy(protected=protected))
+    await evidence.manager.write_policy(
+        context(Role.OWNER, org), checkout_policy(protected=protected)
+    )
     return ScriptedRun(EvidenceParts.of(evidence), context(Role.MEMBER, org))
 
 

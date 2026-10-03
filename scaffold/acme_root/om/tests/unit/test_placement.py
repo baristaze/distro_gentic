@@ -202,7 +202,7 @@ async def test_a_relayed_loop_lands_in_its_tenants_lane(
         operator(), owner.org_id, plan_tier="pro", own_lane=False, concurrency=4
     )
     session = await managers.agent_sessions.create_session(owner, make_session())
-    said_now = message_step(new_id(), utcnow(), session.id, owner, "Why does it drop the object?")
+    said_now = message_step(new_id(), utcnow(), session.id, owner, "Why does checkout time out?")
     await managers.agent_sessions.receive(owner, session.id, [said_now])
     (loop,) = [i for i in items_of(storage) if i.kind is WorkKind.LOOP]
     assert loop.lane == tier_lane("pro") and loop.target_id == session.id
