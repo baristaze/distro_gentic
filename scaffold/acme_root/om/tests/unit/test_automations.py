@@ -209,7 +209,10 @@ async def test_a_full_queue_refuses_a_firing_and_keeps_the_runs_that_wait(
     platform: Wired, creator: TenantContext
 ) -> None:
     queues = await made(platform, creator, limits=limits(rate=1, queue=True, queue_depth=2))
-    runs = [run for _ in range(4) for run in await fired(platform, comment())]
+    runs: list[AutomationRun] = []
+    for _ in range(4):
+        runs.extend(await fired(platform, comment()))
+        platform.clock.now += timedelta(seconds=1)  # so the oldest is first
     assert [(r.status, r.refusal) for r in runs] == [
         (RunStatus.STARTED, None),
         (RunStatus.QUEUED, Refusal.RATE),
