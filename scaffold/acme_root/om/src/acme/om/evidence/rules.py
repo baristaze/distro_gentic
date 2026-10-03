@@ -153,7 +153,6 @@ def execution_request(
     policy: ValidationPolicy,
     delivery: Delivery,
     purpose: RunPurpose,
-    offer: Offer,
 ) -> ExecutionRequest | str:
     """What a fresh executor is asked to run, or why nothing is run. A
     validation runs the checks the change asks for at the committed head; a
@@ -180,10 +179,6 @@ def execution_request(
     counts = trials_of(needed)
     rules = stopping_rules(needed)
     checks = tuple(policy.declared(name) for name in sorted(counts))
-    for check in checks:
-        refusal = compatibility_refusal(check, offer)
-        if refusal is not None:
-            return refusal
     return ExecutionRequest(
         session_id=session_id,
         project=policy.project,

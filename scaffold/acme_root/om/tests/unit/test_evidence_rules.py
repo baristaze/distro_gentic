@@ -100,11 +100,10 @@ def test_a_change_asks_for_the_checks_whose_paths_it_touches() -> None:
 
 def test_a_validation_takes_its_checks_from_the_base_and_runs_at_the_head() -> None:
     policy = checkout_policy()
-    offer = Offer(capabilities=frozenset({"browser"}), schemas=frozenset({1}))
-    request = execution_request(new_id(), policy, delivered(), RunPurpose.VALIDATION, offer)
+    request = execution_request(new_id(), policy, delivered(), RunPurpose.VALIDATION)
     assert isinstance(request, ExecutionRequest)
     assert (request.version, request.source) == ("c0ffee", "base0")
-    baseline = execution_request(new_id(), policy, delivered(), RunPurpose.BASELINE, offer)
+    baseline = execution_request(new_id(), policy, delivered(), RunPurpose.BASELINE)
     assert isinstance(baseline, ExecutionRequest)
     assert (baseline.version, baseline.source) == ("base0", "base0")
 
@@ -128,15 +127,6 @@ def test_a_check_the_executor_cannot_run_is_refused_before_anything_runs() -> No
         )
         is None
     )
-    policy = checkout_policy(Requirement(check="trials", paths=("src/**",)))
-    refusal = execution_request(
-        new_id(),
-        policy,
-        delivered(),
-        RunPurpose.VALIDATION,
-        Offer(schemas=frozenset({1})),
-    )
-    assert isinstance(refusal, str) and "needs browser" in refusal
 
 
 def test_a_policy_is_well_formed() -> None:

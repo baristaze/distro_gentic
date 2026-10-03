@@ -13,6 +13,7 @@ from pydantic import ValidationError
 
 from acme.om.base import new_id
 from acme.om.context import Role, TenantContext
+from acme.om.evidence.executor import Executors
 from acme.om.evidence.impl.manager import EvidenceManagerImpl, EvidenceOptions
 from acme.om.evidence.impl.ports import ExecutorAbsentImpl, WorkProductAbsentImpl
 from acme.om.evidence.rules import policy_key
@@ -263,7 +264,7 @@ async def test_the_absent_ports_refuse_loudly() -> None:
         evidence.storage,
         evidence.members,
         evidence.manager._relay,  # pyright: ignore[reportPrivateUsage]
-        ExecutorAbsentImpl(),
+        Executors(ExecutorAbsentImpl()),
         WorkProductAbsentImpl(),
         evidence.projects,
         EvidenceOptions(),
