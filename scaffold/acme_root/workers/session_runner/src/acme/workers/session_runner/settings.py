@@ -47,3 +47,6 @@ class SessionRunnerSettings(
     runner_heartbeat_seconds: int = Field(default=10, gt=0)
     runner_sweep_seconds: int = Field(default=30, gt=0)
     runner_poll_seconds: int = Field(default=5, gt=0)
+    # How long a workspace instance on this host that no run accounts for
+    # stays before the sweep lets it go, its work pushed first.
+    runner_workspace_grace_seconds: int = Field(default=300, gt=0)
