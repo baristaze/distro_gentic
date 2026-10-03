@@ -6,7 +6,7 @@ a vanished branch failing loudly; its egress its project's allowlist; and
 its own branch and pull request its work product."""
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from ipaddress import ip_address
 from pathlib import Path
 from typing import Any
@@ -490,7 +490,7 @@ class SlowPushGit(GitTwin):
     as late as a test orders it."""
 
     cue: asyncio.Event | None = None
-    waiting: bool = False
+    waiting: asyncio.Event = field(default_factory=asyncio.Event)
 
     async def snapshot(
         self,
@@ -501,7 +501,7 @@ class SlowPushGit(GitTwin):
         ref: str,
     ) -> Snapshot:
         if self.cue is not None:
-            self.waiting = True
+            self.waiting.set()
             await self.cue.wait()
         return await super().snapshot(ctx, workspace, binding, branch, ref)
 
@@ -525,9 +525,7 @@ async def test_a_run_that_resumes_before_the_last_release_lands_keeps_its_worksp
     # The run parks, and its release pushes its work slowly.
     git.cue, git.dirty = asyncio.Event(), True
     releasing = asyncio.create_task(tools.release_workspace(loop.owner, parked))
-    while not git.waiting and not releasing.done():
-        await asyncio.sleep(0)
-    assert not releasing.done(), "the release waits on its push"
+    await asyncio.wait_for(git.waiting.wait(), timeout=5)
 
     # The session resumes first: the next run takes its epoch and the
     # workspace, then the release lands.
