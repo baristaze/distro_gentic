@@ -17,6 +17,7 @@ from acme.om.agents.types.request import MAX_TITLE
 from acme.om.attribution.types.principal import MAX_KIND
 from acme.om.steps.types.header import ControlCommand, LoopOutcome, ParkReason, ToolFailure
 from acme.om.steps.types.step import Actor, Origin, StepType
+from acme.om.tools.types.call import Verdict
 from acme.services.api.types.common import RequestBody, View
 
 MAX_MESSAGE = 100_000
@@ -94,6 +95,131 @@ class StepPageView(View):
 
     items: list[StepView]
     has_more: bool
+
+
+class QuestionView(View):
+    """What a session asks of a person now: a park on a person that is no
+    call's decision, such as a step guard to lift, a deadline to move, or a
+    principal to name. `unlock` is what clears it, sent as a control; `seq`
+    is the step that parked it."""
+
+    session_id: UUID
+    seq: int
+    asked_at: datetime
+    unlock: str
+
+
+class ApprovalView(View):
+    """A tool call held for a person's decision: its session, the seq it is
+    decided at, its tool and the class of power it exercises, and the
+    principal it runs under. Its input stays in the history; the request
+    names only its hash."""
+
+    session_id: UUID
+    seq: int
+    requested_at: datetime
+    tool: str
+    authorization_class: str
+    principal_id: UUID
+
+
+class ApprovalPageView(View):
+    """The calls held across one page of the tenant's parked sessions, by
+    session id. `next_cursor` reads the next page of sessions and is null
+    on the last one; a page may hold no call and still have a next."""
+
+    items: list[ApprovalView]
+    next_cursor: str | None
+
+
+class LoopLimitsView(View):
+    """The bounds of one loop of the session's kind: the model calls before
+    the step guard parks it for a person, the tool errors or identical
+    calls in a row that end it, the nudges it gives, and how long one run
+    drives it before handing it on."""
+
+    step_guard: int
+    error_streak: int
+    nudges: int
+    run_time_seconds: float
+
+
+class TreeBoundsView(View):
+    """What the session's tree shares: how deep and how many sub-agents it
+    may have, how many run at once, the one deadline, and how many were
+    spawned so far."""
+
+    root_id: UUID
+    height: int
+    count: int
+    concurrency: int | None
+    deadline: datetime | None
+    size: int
+
+
+class BoundsView(View):
+    """The bounds a session runs under: its kind's loop limits, the deadline
+    its kind gives a tree it roots, and its tree's record."""
+
+    kind: str
+    kind_version: int
+    loop: LoopLimitsView
+    kind_deadline_seconds: float | None
+    tree: TreeBoundsView
+
+
+class ToolCallView(View):
+    """One tool call of a session: its request, a person's decision on it
+    when one was asked, and its response once it answered. A call with no
+    response is open: held for a decision, or running."""
+
+    seq: int
+    loop_id: UUID
+    requested_at: datetime
+    tool: str
+    authorization_class: str
+    principal_id: UUID
+    decision: Verdict | None
+    decided_by: UUID | None
+    response_seq: int | None
+    responded_at: datetime | None
+    failure: ToolFailure | None
+
+
+class ToolCallPageView(View):
+    """One page of a session's tool calls, in order, after the seq the
+    request named. With `has_more`, the next page starts after the last
+    call's seq."""
+
+    items: list[ToolCallView]
+    has_more: bool
+
+
+class FillUsageView(View):
+    """What one model, at its provider, used in the session's calls: the
+    calls that answered, and their tokens by class, no token counted
+    twice."""
+
+    fill: str
+    calls: int
+    input: int
+    cache_read: int
+    cache_write: int
+    output: int
+    thinking: int
+
+
+class SessionUsageView(View):
+    """What a session's model calls used, as each provider reported it, per
+    model and in total."""
+
+    calls: int
+    input: int
+    cache_read: int
+    cache_write: int
+    output: int
+    thinking: int
+    fills: list[FillUsageView]
 
 
 class StartSessionRequest(RequestBody):

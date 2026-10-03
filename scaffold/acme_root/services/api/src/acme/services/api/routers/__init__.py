@@ -13,6 +13,7 @@ from acme.services.api.realtime import control, socket
 from acme.services.api.routers import (
     admin,
     agent_sessions,
+    approvals,
     automations,
     budgets,
     events,
@@ -33,8 +34,9 @@ HOSTED: dict[str, tuple[APIRouter, ...]] = {
     # The realtime channel is the events stream pushed; its replay is `/events`.
     "events": (events.router, socket.router),
     "media": (media.router,),
-    # Sessions with an agent; their loops run in the session runner.
-    "agent_sessions": (agent_sessions.router,),
+    # Sessions with an agent; their loops run in the session runner. What
+    # waits on a person across them reads the same sessions.
+    "agent_sessions": (agent_sessions.router, approvals.router),
     # A tenant's pools and hosts, and a host's own calls: enroll, rotate,
     # beat, and claim.
     "hosts": (hosts.router,),

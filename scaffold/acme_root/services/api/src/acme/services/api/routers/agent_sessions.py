@@ -1,7 +1,9 @@
 """Agent session routes: start a session on a kind, list the tenant's and a
 session's children a page at a time, read one, archive, delete, and
 restore it, send it a message or a control, decide a tool call it waits
-on, and read its history a page at a time. Each function is one call into the agent
+on, and read its history a page at a time. A session's derived reads
+follow: what it asks of a person, the calls it holds for a decision, its
+bounds, its tool calls, and what its model calls used. Each function is one call into the agent
 sessions service; every create runs under the idempotency record, so a
 retried send is one step. The loop runs in the session runner: a route
 writes what a person said and answers once it is durable."""
@@ -18,12 +20,17 @@ from acme.services.api.gateway.resolve import AgentSessionsService
 from acme.services.api.types.agent_sessions import (
     AgentSessionPageView,
     AgentSessionView,
+    ApprovalView,
+    BoundsView,
     ControlRequest,
     DecisionRequest,
     MessageRequest,
+    QuestionView,
+    SessionUsageView,
     StartSessionRequest,
     StepPageView,
     StepView,
+    ToolCallPageView,
 )
 from acme.services.api.types.common import LIMIT_DEFAULT
 
@@ -148,3 +155,44 @@ async def get_steps(
 ) -> StepPageView:
     """The history in order, strictly after `after_seq`."""
     return await sessions.get_steps(ctx, session_id, after_seq, limit)
+
+
+@router.get("/{session_id}/questions", response_model=list[QuestionView])
+async def get_questions(
+    ctx: Ctx, sessions: AgentSessionsService, session_id: UUID
+) -> list[QuestionView]:
+    """What the session waits on a person for, other than a call's decision."""
+    return await sessions.get_questions(ctx, session_id)
+
+
+@router.get("/{session_id}/approvals", response_model=list[ApprovalView])
+async def get_approvals(
+    ctx: Ctx, sessions: AgentSessionsService, session_id: UUID
+) -> list[ApprovalView]:
+    """The calls the session holds for a person's decision."""
+    return await sessions.get_approvals(ctx, session_id)
+
+
+@router.get("/{session_id}/bounds", response_model=BoundsView)
+async def get_bounds(ctx: Ctx, sessions: AgentSessionsService, session_id: UUID) -> BoundsView:
+    """The loop limits of the session's kind, and its tree's bounds."""
+    return await sessions.get_bounds(ctx, session_id)
+
+
+@router.get("/{session_id}/tool-calls", response_model=ToolCallPageView)
+async def get_tool_calls(
+    ctx: Ctx,
+    sessions: AgentSessionsService,
+    session_id: UUID,
+    after_seq: Annotated[int, Query(ge=0)] = 0,
+    limit: int = LIMIT_DEFAULT,
+) -> ToolCallPageView:
+    """Each tool call with its decision and its answer, strictly after
+    `after_seq`."""
+    return await sessions.get_tool_calls(ctx, session_id, after_seq, limit)
+
+
+@router.get("/{session_id}/usage", response_model=SessionUsageView)
+async def get_usage(ctx: Ctx, sessions: AgentSessionsService, session_id: UUID) -> SessionUsageView:
+    """The tokens the session's model calls used, per model and in total."""
+    return await sessions.get_usage(ctx, session_id)

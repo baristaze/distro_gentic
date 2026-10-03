@@ -131,6 +131,11 @@ class AgentsManagerImpl(AgentsManagerInterface):
         session = await self._sessions.get_session(ctx, session_id)
         return await self._tree(ctx, session.root_id)
 
+    async def kind_of(self, ctx: TenantContext, session_id: UUID) -> AgentKind:
+        ctx.require(Permission.READ)
+        session = await self._sessions.get_session(ctx, session_id)
+        return self._kinds.get(session.kind, session.kind_version)
+
     async def set_deadline(
         self, ctx: TenantContext, session_id: UUID, deadline: datetime | None
     ) -> AgentTree:

@@ -10,12 +10,18 @@ from acme.om.context import TenantContext
 from acme.services.api.types.agent_sessions import (
     AgentSessionPageView,
     AgentSessionView,
+    ApprovalPageView,
+    ApprovalView,
+    BoundsView,
     ControlRequest,
     DecisionRequest,
     MessageRequest,
+    QuestionView,
+    SessionUsageView,
     StartSessionRequest,
     StepPageView,
     StepView,
+    ToolCallPageView,
 )
 
 
@@ -95,3 +101,35 @@ class AgentSessionsServiceInterface(ABC):
     async def get_steps(
         self, ctx: TenantContext, session_id: UUID, after_seq: int, limit: int
     ) -> StepPageView: ...
+
+    @abstractmethod
+    async def get_questions(self, ctx: TenantContext, session_id: UUID) -> list[QuestionView]:
+        """What the session asks of a person now, other than a call's
+        decision; empty when it waits on nobody."""
+        ...
+
+    @abstractmethod
+    async def get_approvals(self, ctx: TenantContext, session_id: UUID) -> list[ApprovalView]:
+        """The calls the session holds for a person's decision."""
+        ...
+
+    @abstractmethod
+    async def get_org_approvals(
+        self, ctx: TenantContext, cursor: str | None, limit: int
+    ) -> ApprovalPageView:
+        """The calls held for a decision across one page of the tenant's
+        parked sessions, by session id."""
+        ...
+
+    @abstractmethod
+    async def get_bounds(self, ctx: TenantContext, session_id: UUID) -> BoundsView: ...
+
+    @abstractmethod
+    async def get_tool_calls(
+        self, ctx: TenantContext, session_id: UUID, after_seq: int, limit: int
+    ) -> ToolCallPageView:
+        """The session's tool calls in order, strictly after `after_seq`."""
+        ...
+
+    @abstractmethod
+    async def get_usage(self, ctx: TenantContext, session_id: UUID) -> SessionUsageView: ...

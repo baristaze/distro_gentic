@@ -1,8 +1,11 @@
 """A session's reads over the live app, in memory: the tenant's sessions
 listed in a status a page at a time, a session's children, archive, delete
-and restore, each by the role that may; and every route that names a
-session, called by another tenant with one that exists, answered as an
-unknown id is."""
+and restore, each by the role that may; what a session asks of a person
+and the calls it holds, per session and across the tenant; its bounds, its
+tool calls, and its usage; and every route that names a session, called
+by another tenant with one that exists, answered as an unknown id is. No
+runner works behind the API here, so a case writes a loop's steps itself,
+the way a run writes them."""
 
 from pathlib import Path
 from typing import Any
@@ -12,10 +15,19 @@ import httpx
 import pytest
 from api_support import PROJECT_ID, add_member, build_container, seed_request, sign_in_as
 from contracts.agent_session_storage import make_session
+from contracts.step_storage import (
+    make_request,
+    make_response,
+    make_tool_request,
+    make_tool_response,
+)
 
+from acme.integrations.model_providers.types import Usage
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.context import Role, TenantContext
+from acme.om.steps.types.header import ModelResponseHeader, Park, ParkReason
+from acme.om.steps.types.step import Step
 from acme.services.api.container import AppContainer
 
 ASSISTANT = AgentKind(
@@ -59,6 +71,53 @@ async def spawn(container: AppContainer, headers: dict[str, str], parent_id: str
     parent = await sessions.get_session(ctx, UUID(parent_id))
     child = await sessions.create_session(ctx, make_session(parent=parent))
     return str(child.id)
+
+
+def used(response: Step, usage: Usage) -> Step:
+    header = response.header
+    assert isinstance(header, ModelResponseHeader)
+    return response.model_copy(update={"header": header.model_copy(update={"usage": usage})})
+
+
+async def a_loop(
+    client: httpx.AsyncClient,
+    container: AppContainer,
+    headers: dict[str, str],
+    *,
+    calls: int,
+    answered: int = 0,
+    park: Park | None = None,
+) -> dict[str, Any]:
+    """A session a person spoke to, whose loop made one model call that
+    asked for `calls` tool calls, the first `answered` of them answered,
+    and then parked on `park`, when one is named."""
+    session = await start(client, headers, "the dropped object")
+    said = await client.post(
+        f"/v1/agent-sessions/{session['id']}/messages",
+        headers=created(headers),
+        json={"text": "go"},
+    )
+    assert said.status_code == 201, said.text
+    ctx = await context_of(container, headers)
+    managers = container.managers
+    sid, loop_id = UUID(session["id"]), UUID(said.json()["loop_id"])
+    request = make_request(sid, loop_id, (UUID(said.json()["id"]),))
+    response = used(make_response(sid, loop_id, request.id), Usage(input=100, output=20))
+    steps: list[Step] = [request, response]
+    for index in range(calls):
+        call = make_tool_request(sid, loop_id, response.id)
+        steps.append(call)
+        if index < answered:
+            steps.append(make_tool_response(sid, loop_id, call.id))
+    epoch = await managers.steps.begin_run(ctx, sid)
+    await managers.steps.append_steps(ctx, sid, epoch, steps)
+    if park is not None:
+        await managers.agent_sessions.park(ctx, sid, epoch, loop_id, park)
+    return session
+
+
+APPROVAL = Park(reason=ParkReason.PERSON, unlock="approval")
+STEP_GUARD = Park(reason=ParkReason.PERSON, unlock="step_guard")
 
 
 async def viewer_of(
@@ -175,3 +234,85 @@ async def test_a_session_with_a_loop_open_is_neither_archived_nor_deleted(
     deleted = await client.delete(path, headers=owner)
 
     assert (archived.status_code, deleted.status_code) == (422, 422)
+
+
+async def test_what_a_session_waits_on_a_person_for_is_read_per_session_and_across_the_tenant(
+    client: httpx.AsyncClient, owner: dict[str, str], container: AppContainer
+) -> None:
+    holding = await a_loop(client, container, owner, calls=2, park=APPROVAL)
+    asking = await a_loop(client, container, owner, calls=0, park=STEP_GUARD)
+    held_at = f"/v1/agent-sessions/{holding['id']}"
+    asked_at = f"/v1/agent-sessions/{asking['id']}"
+
+    approvals = await client.get(f"{held_at}/approvals", headers=owner)
+    none_asked = await client.get(f"{held_at}/questions", headers=owner)
+    questions = await client.get(f"{asked_at}/questions", headers=owner)
+    none_held = await client.get(f"{asked_at}/approvals", headers=owner)
+    first = await client.get("/v1/approvals", headers=owner, params={"limit": 1})
+    rest = await client.get(
+        "/v1/approvals", headers=owner, params={"cursor": first.json()["next_cursor"]}
+    )
+
+    assert approvals.status_code == 200, approvals.text
+    assert [(a["seq"], a["tool"], a["authorization_class"]) for a in approvals.json()] == [
+        (4, "read_log", "read"),
+        (5, "read_log", "read"),
+    ]
+    assert none_asked.json() == [] and none_held.json() == []
+    assert questions.status_code == 200, questions.text
+    assert [(q["seq"], q["unlock"]) for q in questions.json()] == [(4, "step_guard")]
+    assert first.status_code == 200, first.text
+    across = first.json()["items"] + rest.json()["items"]
+    assert sorted((a["session_id"], a["seq"]) for a in across) == [
+        (holding["id"], 4),
+        (holding["id"], 5),
+    ]
+    assert rest.json()["next_cursor"] is None
+
+
+async def test_a_sessions_tool_calls_carry_their_decision_and_answer_and_its_usage_sums(
+    client: httpx.AsyncClient, owner: dict[str, str], container: AppContainer
+) -> None:
+    session = await a_loop(client, container, owner, calls=2, answered=1, park=APPROVAL)
+    path = f"/v1/agent-sessions/{session['id']}"
+    decided = await client.post(
+        f"{path}/calls/6/decision", headers=created(owner), json={"approve": True}
+    )
+    assert decided.status_code == 201, decided.text
+    me = await client.get("/v1/me", headers=owner)
+
+    calls = await client.get(f"{path}/tool-calls", headers=owner)
+    after = await client.get(f"{path}/tool-calls", headers=owner, params={"after_seq": 4})
+    usage = await client.get(f"{path}/usage", headers=owner)
+
+    assert calls.status_code == 200, calls.text
+    items = calls.json()["items"]
+    assert [(c["seq"], c["response_seq"], c["decision"]) for c in items] == [
+        (4, 5, None),
+        (6, None, "approved"),
+    ]
+    assert items[1]["decided_by"] == me.json()["user"]["id"]
+    assert [c["seq"] for c in after.json()["items"]] == [6]
+    assert usage.status_code == 200, usage.text
+    assert (usage.json()["calls"], usage.json()["input"], usage.json()["output"]) == (1, 100, 20)
+    assert [f["fill"] for f in usage.json()["fills"]] == ["anthropic/claude-sonnet-5-5"]
+
+
+async def test_a_sessions_bounds_are_its_kinds_loop_limits_and_its_trees(
+    client: httpx.AsyncClient, owner: dict[str, str]
+) -> None:
+    session = await start(client, owner, "the dropped object")
+
+    bounds = await client.get(f"/v1/agent-sessions/{session['id']}/bounds", headers=owner)
+
+    assert bounds.status_code == 200, bounds.text
+    body = bounds.json()
+    assert (body["kind"], body["kind_version"]) == ("assistant", 1)
+    assert body["loop"]["step_guard"] == 50 and body["loop"]["run_time_seconds"] == 900
+    tree = body["tree"]
+    assert (tree["root_id"], tree["height"], tree["count"], tree["size"]) == (
+        session["id"],
+        2,
+        4,
+        0,
+    )

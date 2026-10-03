@@ -28,19 +28,33 @@ from acme.om.steps.types.header import (
 from acme.om.steps.types.step import Step, StepType
 from acme.om.tools import ToolsManagerInterface
 from acme.services.api.services.agent_sessions import AgentSessionsServiceInterface
+from acme.services.api.services.impl.session_reads import (
+    approvals_of,
+    bounds_of,
+    questions_of,
+    tool_calls_of,
+    usage_of,
+    waits_on_approval,
+)
 from acme.services.api.services.impl.tenancy import decode_cursor, encode_cursor
 from acme.services.api.types.agent_sessions import (
     AgentSessionPageView,
     AgentSessionView,
+    ApprovalPageView,
+    ApprovalView,
+    BoundsView,
     ControlRequest,
     DecisionRequest,
     MessageRequest,
     ParkView,
+    QuestionView,
+    SessionUsageView,
     StartSessionRequest,
     StepPageView,
     StepView,
+    ToolCallPageView,
 )
-from acme.services.api.types.common import clamp_limit
+from acme.services.api.types.common import LIMIT_MAX, clamp_limit
 
 
 def park_view(park: Park | None) -> ParkView | None:
@@ -66,7 +80,11 @@ def session_view(session: AgentSession) -> AgentSessionView:
 
 SESSIONS = "agent_sessions"
 CHILDREN = "agent_session_children"
-"""The lists a session cursor belongs to; one is refused by the other."""
+APPROVALS = "approvals"
+"""The lists a session cursor belongs to; each refuses the others'."""
+
+HISTORY_PAGE = LIMIT_MAX
+"""How many steps one read of a history takes, when a read folds it whole."""
 
 
 def session_page(page: AgentSessionPage, listed: str) -> AgentSessionPageView:
@@ -218,3 +236,62 @@ class AgentSessionsServiceImpl(AgentSessionsServiceInterface):
         await self._sessions.get_session(ctx, session_id)
         page = await self._steps.get_steps(ctx, session_id, after_seq, clamp_limit(limit))
         return StepPageView(items=[step_view(step) for step in page.items], has_more=page.has_more)
+
+    async def get_questions(self, ctx: TenantContext, session_id: UUID) -> list[QuestionView]:
+        session = await self._sessions.get_session(ctx, session_id)
+        if session.park is None:
+            return []
+        return questions_of(session, await self._history(ctx, session_id))
+
+    async def get_approvals(self, ctx: TenantContext, session_id: UUID) -> list[ApprovalView]:
+        session = await self._sessions.get_session(ctx, session_id)
+        if not waits_on_approval(session.park):
+            return []
+        return approvals_of(session, await self._history(ctx, session_id))
+
+    async def get_org_approvals(
+        self, ctx: TenantContext, cursor: str | None, limit: int
+    ) -> ApprovalPageView:
+        after = decode_cursor(APPROVALS, cursor) if cursor else None
+        page = await self._sessions.get_sessions(
+            ctx, SessionStatus.PARKED, after, clamp_limit(limit)
+        )
+        held: list[ApprovalView] = []
+        for session in page.items:
+            if waits_on_approval(session.park):
+                held += approvals_of(session, await self._history(ctx, session.id))
+        last = page.items[-1].id if page.items and page.has_more else None
+        return ApprovalPageView(
+            items=held, next_cursor=None if last is None else encode_cursor(APPROVALS, last)
+        )
+
+    async def get_bounds(self, ctx: TenantContext, session_id: UUID) -> BoundsView:
+        kind = await self._agents.kind_of(ctx, session_id)
+        return bounds_of(kind, await self._agents.tree_of(ctx, session_id))
+
+    async def get_tool_calls(
+        self, ctx: TenantContext, session_id: UUID, after_seq: int, limit: int
+    ) -> ToolCallPageView:
+        await self._sessions.get_session(ctx, session_id)
+        calls = [
+            call
+            for call in tool_calls_of(await self._history(ctx, session_id), utcnow())
+            if call.seq > after_seq
+        ]
+        bounded = clamp_limit(limit)
+        return ToolCallPageView(items=calls[:bounded], has_more=len(calls) > bounded)
+
+    async def get_usage(self, ctx: TenantContext, session_id: UUID) -> SessionUsageView:
+        await self._sessions.get_session(ctx, session_id)
+        return usage_of(await self._history(ctx, session_id))
+
+    async def _history(self, ctx: TenantContext, session_id: UUID) -> list[Step]:
+        """The session's whole history, in order, a page at a time. Read
+        after the session itself, so another tenant's is never reached."""
+        steps: list[Step] = []
+        while True:
+            after = steps[-1].seq if steps else 0
+            page = await self._steps.get_steps(ctx, session_id, after, HISTORY_PAGE)
+            steps.extend(page.items)
+            if not page.has_more or not page.items:
+                return steps
