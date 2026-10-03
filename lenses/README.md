@@ -18,7 +18,6 @@ names that rule without restating it.
 |--------------|--------|-----------------|--------|
 | `placement`  | `PLC`  | `placement.md`  | Sessions Are Work; Session Runners; Placement and Workspace Hosts |
 | `workspaces` | `WSP`  | `workspaces.md` | Workspaces and Isolation |
-| `stations`   | `STN`  | `stations.md`   | Stations |
 | `watch`      | `WAT`  | `watch.md`      | Watching and Steering |
 | `intake`     | `INT`  | `intake.md`     | Work In, Results Out |
 | `evidence`   | `EVD`  | `evidence.md`   | Evidence |
@@ -26,9 +25,7 @@ names that rule without restating it.
 | `money`      | `MNY`  | `money.md`      | Money; Models Are a Fleet Decision |
 | `fleet`      | `FLT`  | `fleet.md`      | The Agents a Platform Ships; Failure at Fleet Scale; Operations |
 
-The groups are the ones the spec plans in The Repository. Stations are
-optional: a platform without them skips `stations`, and once it adopts
-them every lens there holds.
+The groups are the ones the spec plans in The Repository.
 
 A rule belongs to one group, and to one lens in it. The `Covers` column
 names each group's home sections. Where two groups touch one section,
@@ -63,8 +60,8 @@ The format is the guideline's, with the spec in place of
 **Check.** review
 ```
 
-Ids are the group prefix and two digits: `PLC`, `WSP`, `STN`, `WAT`,
-`INT`, `EVD`, `WAL`, `MNY`, `FLT`.
+Ids are the group prefix and two digits: `PLC`, `WSP`, `WAT`, `INT`,
+`EVD`, `WAL`, `MNY`, `FLT`.
 
 - **Principle** is at most 120 words. A rule that needs more is two
   lenses.
@@ -87,8 +84,6 @@ Ids are the group prefix and two digits: `PLC`, `WSP`, `STN`, `WAT`,
   - a call into a customer's wall, or a host that advertises what it did
     not probe;
   - an overclaimed or weakened isolation;
-  - a second live lease, an unfenced station command, or a station guard
-    that is not local or that the platform can raise;
   - an execution without its version and provenance;
   - identities confused;
   - a secret resolved anywhere but where it is used, or a cloud secret
