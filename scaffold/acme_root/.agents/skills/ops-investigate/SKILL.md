@@ -49,7 +49,7 @@ the token has expired: stop, and name the refresh the preamble gives.
 
 ## Procedure
 
-The processes are `api` and `maintenance`, as
+The processes are `api`, `maintenance`, and `session-runner`, as
 `deployment/README.md` lists them. Each is an ECS service of that
 name in the cluster `acme-<env>`, with the log group
 `/acme/<env>/<process>`. The queue is `acme-<env>-webhooks` (the
@@ -265,7 +265,7 @@ and their handling is in `/acme/<env>/maintenance`.
 
    ```bash
    aws ecs describe-services --cluster acme-<env> \
-     --services api maintenance \
+     --services api maintenance session-runner \
      --profile acme-<env>-investigate
    ```
 
@@ -318,7 +318,7 @@ and their handling is in `/acme/<env>/maintenance`.
 
    ```bash
    aws logs start-query --profile acme-<env>-investigate \
-     --log-group-names /acme/<env>/api /acme/<env>/maintenance \
+     --log-group-names /acme/<env>/api /acme/<env>/maintenance /acme/<env>/session-runner \
      --start-time <start> --end-time <end> \
      --query-string 'fields @timestamp, level, request_id, @message | filter level = "ERROR" | sort @timestamp desc | limit 100'
    aws logs get-query-results --query-id <id> --profile acme-<env>-investigate
@@ -357,7 +357,7 @@ and their handling is in `/acme/<env>/maintenance`.
 
    ```bash
    aws logs start-query --profile acme-<env>-investigate \
-     --log-group-names /acme/<env>/api /acme/<env>/maintenance \
+     --log-group-names /acme/<env>/api /acme/<env>/maintenance /acme/<env>/session-runner \
      --start-time <start> --end-time <end> \
      --query-string 'fields @timestamp, @log, @message | filter @message like /identity provider|WorkOS application|WorkOS credential check|ACME_WORKOS_WEBHOOK_SECRET|webhooks\/identity (400|503)|identity delivery/ | sort @timestamp desc | limit 50'
    ```
@@ -485,7 +485,7 @@ and their handling is in `/acme/<env>/maintenance`.
 - Workers: <outcomes per kind>, oldest ready item <age>, failed in the last fifteen minutes <n>, oldest pending outbox row <age>
 - Failed work items: <item id, kind, org id, reason; or none>
 - Orchestrations: <kind> <started, parked, succeeded, failed> per kind, defects <record and org ids, or none>
-- Queue: webhooks <n> (dead <n>), deliveries <outcomes>; services api, maintenance <running>/<desired>
+- Queue: webhooks <n> (dead <n>), deliveries <outcomes>; services api, maintenance, session-runner <running>/<desired>
 - Identity provider: sign-in <configured | off: acme/<env>/workos_api_key | not in the window>, webhook <configured | off: acme/<env>/workos_webhook_secret | signature refused: acme/<env>/workos_webhook_secret | not in the window>
 - Pool and cache: <checkouts, timeouts, hits, misses>
 - Errors: <count>, top issue <title> (<request id, or none>), or "not
