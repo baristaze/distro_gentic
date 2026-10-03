@@ -198,12 +198,16 @@ image_in_state() {
     [.. | objects | select(.type? == "aws_ecs_task_definition")
      | .values.container_definitions | fromjson | .[] | select(.name == $name) | .image] | first // empty'
 }
+# The session runner is in the state only when the deployed commit runs
+# one, and only then does that commit's root declare its image.
 if $dry_run; then
   api_image="<api image in state>"
   maintenance_image="<maintenance image in state>"
+  session_runner_image="<session-runner image in state>"
 else
   api_image="$(image_in_state api)"
   maintenance_image="$(image_in_state maintenance)"
+  session_runner_image="$(image_in_state session-runner)"
   [ -n "$api_image" ] && [ -n "$maintenance_image" ] || refuse "the state holds no task definitions; nothing to destroy, or the backend is wrong"
 fi
 
@@ -236,6 +240,9 @@ root_vars=(
   -var "alarm_email=$alarm_email"
   -var "destroyable=true"
 )
+if [ -n "$session_runner_image" ]; then
+  root_vars+=(-var "session_runner_image=$session_runner_image")
+fi
 
 say "== 3. Lift the protections: buckets empty on destroy, the database skips its snapshot"
 check_account

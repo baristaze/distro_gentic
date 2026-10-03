@@ -61,7 +61,7 @@ defaults, and a busier platform moves them.
 | `-sweep-duration` | a sweep pass took longer than 30 seconds |
 | `-work-backlog`, `-work-dead-letter` | a ready work item waited ten minutes; an item failed for good |
 | `-outbox-lag`, `-outbox-dead-letter` | the oldest pending outbox row is five minutes old; a row failed for good |
-| `-api-tasks-below-desired`, `-maintenance-tasks-below-desired` | a service runs fewer tasks than it wants |
+| `-api-tasks-below-desired`, `-maintenance-tasks-below-desired`, `-session-runner-tasks-below-desired` | a service runs fewer tasks than it wants |
 
 The work and outbox numbers come from the worker's own log line each
 sweep pass, turned into metrics by filters, since both live in
@@ -85,7 +85,7 @@ Then read behind the alarm by request id:
 ```bash
 uv run acme-ops signals check --env staging --request-id <request id>
 aws logs tail /acme/staging/api --since 15m --format short
-aws ecs describe-services --cluster acme-staging --services api maintenance \
+aws ecs describe-services --cluster acme-staging --services api maintenance session-runner \
   --query 'services[].{name:serviceName,desired:desiredCount,running:runningCount}' --output table
 ```
 

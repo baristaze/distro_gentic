@@ -62,11 +62,12 @@ mock_provider "aws" {
 # support its ephemeral passwords.
 
 variables {
-  api_image         = "123456789012.dkr.ecr.us-west-2.amazonaws.com/acme-api@sha256:0000000000000000000000000000000000000000000000000000000000000000"
-  maintenance_image = "123456789012.dkr.ecr.us-west-2.amazonaws.com/acme-maintenance@sha256:0000000000000000000000000000000000000000000000000000000000000000"
-  api_domain_name   = "api.staging.example.test"
-  app_domain_name   = "app.staging.example.test"
-  alarm_email       = "alarms@example.test"
+  api_image            = "123456789012.dkr.ecr.us-west-2.amazonaws.com/acme-api@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  maintenance_image    = "123456789012.dkr.ecr.us-west-2.amazonaws.com/acme-maintenance@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  session_runner_image = "123456789012.dkr.ecr.us-west-2.amazonaws.com/acme-session-runner@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  api_domain_name      = "api.staging.example.test"
+  app_domain_name      = "app.staging.example.test"
+  alarm_email          = "alarms@example.test"
 }
 
 run "no_site_name_plans_everything_else" {
