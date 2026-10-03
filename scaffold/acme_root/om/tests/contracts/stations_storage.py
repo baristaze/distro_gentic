@@ -468,6 +468,27 @@ class StationsStorageContract:
         assert not await storage.grant(org, make_lease(station, entry, utcnow()), MARGIN, ())
         assert await storage.read_station(org, station.id) == station
 
+    async def test_a_grant_lands_the_job_its_entry_carries_or_nothing(
+        self, storage: StationsStorageInterface
+    ) -> None:
+        org = new_id()
+        station, first = await self.held(storage, org)
+        carried = make_entry(station.pool_id, 2.0).model_copy(
+            update={"commands": (StationCommand(operation="apply"),)}
+        )
+        assert await storage.create_entry(org, carried, ())
+        assert await storage.read_entry(org, carried.id) == carried
+        # While the station is held, neither the lease nor the job lands.
+        lease = make_lease(station, carried, utcnow())
+        job = make_job(lease).model_copy(update={"id": carried.id})
+        assert not await storage.grant(org, lease, MARGIN, (), job)
+        assert await storage.read_job(org, carried.id) is None
+        lease = make_lease(station, carried, first.expires_at + MARGIN)
+        job = make_job(lease).model_copy(update={"id": carried.id})
+        assert await storage.grant(org, lease, MARGIN, (), job)
+        assert await storage.read_job(org, carried.id) == job
+        assert await storage.read_lease(org, lease.id) == lease
+
     async def test_a_grant_that_settles_no_entry_holds_the_station_alone(
         self, storage: StationsStorageInterface
     ) -> None:

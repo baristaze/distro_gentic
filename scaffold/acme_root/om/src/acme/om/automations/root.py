@@ -74,6 +74,7 @@ def build_automations(
         managers.outbox,
         managers.events,
         managers.projects,
+        managers.stations,
         automation_principals(held, principal_context or members_context(managers.tenancy)),
         options or AutomationsOptions(),
         clock,

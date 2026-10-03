@@ -13,6 +13,9 @@ from acme.om.agents.types.request import MAX_TITLE
 from acme.om.attribution.types.principal import MAX_KIND
 from acme.om.base import Created, Identifiable, Platform, Trackable
 from acme.om.context import Role
+from acme.om.evidence.types.record import NAME, PROJECT, VERSION
+from acme.om.stations.types.job import MAX_COMMANDS, StationCommand
+from acme.om.stations.types.station import Capability
 from acme.om.steps.types.content import MAX_NAME, Stored
 
 MAX_BRIEF = 20_000
@@ -52,30 +55,55 @@ class Trigger(Platform):
 class ActionKind(StrEnum):
     START_SESSION = "start_session"
     MESSAGE_SESSION = "message_session"  # a standing session, such as a CI triage one
+    RUN_STATION_JOB = "run_station_job"  # a job on a station of a pool, in the pool's line
+
+
+class StationWork(Platform):
+    """A station job an automation runs: the tenant's pool whose line it
+    joins, the capabilities it needs of a station, what its ask binds (the
+    project, the candidate under test, and the procedure), and the job's
+    operations, data and never code."""
+
+    pool_id: UUID
+    capabilities: tuple[Capability, ...] = Field(default=(), max_length=32)
+    project: str = Field(pattern=PROJECT)
+    candidate: str = Field(pattern=VERSION)
+    procedure: str = Field(pattern=NAME)
+    procedure_version: str = Field(pattern=VERSION)
+    commands: tuple[StationCommand, ...] = Field(min_length=1, max_length=MAX_COMMANDS)
 
 
 class Action(Platform):
     """What a firing does: start a session of `agent_kind` with the brief, in
-    the tenant's project `project_id`, or send the brief to a standing
-    session, which keeps the project it has. The brief is the creator's
-    word; the event that fired it reaches the session beside it, as data."""
+    the tenant's project `project_id`; send the brief to a standing
+    session, which keeps the project it has; or run `station`, a job on a
+    station of the tenant's pool, which waits its turn in the pool's line
+    and runs under the lease its grant gives. The brief is the creator's
+    word; the event that fired it reaches the session beside it, as data. A
+    station job reaches no session, so it carries no brief."""
 
     kind: ActionKind
-    brief: Stored = Field(min_length=1, max_length=MAX_BRIEF)
+    brief: Stored | None = Field(default=None, min_length=1, max_length=MAX_BRIEF)
     agent_kind: Stored | None = Field(default=None, min_length=1, max_length=MAX_KIND)
     title: Stored | None = Field(default=None, min_length=1, max_length=MAX_TITLE)
     project_id: UUID | None = None
     session_id: UUID | None = None
+    station: StationWork | None = None
 
     @model_validator(mode="after")
     def _names_what_it_acts_on(self) -> Self:
         starts = self.kind is ActionKind.START_SESSION
+        runs_job = self.kind is ActionKind.RUN_STATION_JOB
         if starts != (self.agent_kind is not None and self.title is not None):
-            raise ValueError("a start names its agent kind and title, and a message does not")
-        if starts == (self.session_id is not None):
-            raise ValueError("a message names its standing session, and a start does not")
+            raise ValueError("a start names its agent kind and title, and nothing else does")
+        if (self.kind is ActionKind.MESSAGE_SESSION) != (self.session_id is not None):
+            raise ValueError("a message names its standing session, and nothing else does")
+        if runs_job != (self.station is not None):
+            raise ValueError("a station job names its pool and its job, and nothing else does")
+        if runs_job == (self.brief is not None):
+            raise ValueError("a session's action carries a brief, and a station job does not")
         if not starts and self.project_id is not None:
-            raise ValueError("a message names no project: its session keeps its own")
+            raise ValueError("only a start names a project: a message's session keeps its own")
         return self
 
 
@@ -163,10 +191,13 @@ class AutomationRun(Identifiable, Created):
     chain: one for a firing on a person's event or a schedule, one more
     than the run whose session caused the event otherwise. `session_id` is
     the session it started or messaged; `budget_id` holds a started tree
-    to `reserved_micros`, its share of the cost cap. A run counts against
-    its limits from `started_at`. `event_text` is the event as the session
-    will read it, kept only until the run starts or is refused: the
-    session's own history keeps it from then on."""
+    to `reserved_micros`, its share of the cost cap. `job_id` is the
+    station job it runs: its place in the pool's line has that id until
+    the grant, and the job has it from the grant on, its run recorded under
+    this run's id. A run counts against its limits from `started_at`.
+    `event_text` is the event as the session will read it, kept only until
+    the run starts or is refused: the session's own history keeps it from
+    then on."""
 
     automation_id: UUID
     event_id: UUID | None = None
@@ -178,6 +209,7 @@ class AutomationRun(Identifiable, Created):
     opened: bool = False  # it started `session_id`, rather than messaged it
     budget_id: UUID | None = None
     reserved_micros: int = Field(default=0, ge=0)
+    job_id: UUID | None = None
     event_text: Stored = Field(default="", max_length=MAX_BRIEF)
     started_at: datetime | None = None
     closed_at: datetime | None = None

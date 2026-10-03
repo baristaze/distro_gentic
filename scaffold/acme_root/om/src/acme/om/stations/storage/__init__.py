@@ -148,6 +148,7 @@ class StationsStorageInterface(ABC):
         lease: StationLease,
         margin: timedelta,
         outbox_rows: tuple[OutboxRow, ...],
+        job: StationJob | None = None,
     ) -> bool:
         """The grant, in one commit, or nothing. The station's row takes the
         lease and its token by a conditional write that fails while a live
@@ -156,8 +157,9 @@ class StationsStorageInterface(ABC):
         and `lease.token` must say so. The entry the lease settles, when it
         names one, goes from waiting to granted by a write conditional on its
         waiting, the lease the station held before ends as expired, and
-        `lease` lands. False, with nothing landed, when the station is held,
-        its token moved, or the entry no longer waits."""
+        `lease` lands, with `job`, the job its entry carries, when it carries
+        one. False, with nothing landed, when the station is held, its token
+        moved, or the entry no longer waits."""
         ...
 
     @abstractmethod

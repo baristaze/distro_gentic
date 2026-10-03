@@ -81,6 +81,38 @@ class StationsManagerInterface(ABC):
         ...
 
     @abstractmethod
+    async def join_with_job(
+        self,
+        ctx: TenantContext,
+        entry_id: UUID,
+        ask: StationAsk,
+        commands: Sequence[StationCommand],
+    ) -> LinePlace:
+        """An ask that carries its job joins the line, for work no session
+        runs, such as an automation's: `ask.session_id` names what holds the
+        place, and the job's run is recorded under it. No loop parks for it,
+        so it waits from the moment it joins. Its grant sends the job under
+        the lease, in the grant's own write and under `entry_id`, so the job
+        never stands without its lease; it runs alone under that lease, and
+        its report ends the lease. Requires the write permission. NotFound
+        when the tenant holds no such pool or station; ValidationFailed when
+        the station is of another pool. A retry under the same id answers
+        the entry's place."""
+        ...
+
+    @abstractmethod
+    async def get_entry(self, ctx: TenantContext, entry_id: UUID) -> LinePlace:
+        """An entry, whatever its state, with its place while it waits.
+        NotFound when the tenant holds no such entry."""
+        ...
+
+    @abstractmethod
+    async def get_job(self, ctx: TenantContext, job_id: UUID) -> StationJob:
+        """A job, whatever its state. NotFound when the tenant holds no such
+        job."""
+        ...
+
+    @abstractmethod
     async def get_line(self, ctx: TenantContext, pool_id: UUID) -> tuple[LinePlace, ...]:
         """The pool's line, its stations' lines in it, each waiting entry with
         its place, in the order it is served."""

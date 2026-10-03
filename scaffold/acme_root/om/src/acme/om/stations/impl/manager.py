@@ -25,7 +25,7 @@ from acme.om.exceptions import (
 from acme.om.hosts.exceptions import VersionBelowFloor
 from acme.om.hosts.rules import WIRE_FLOOR, WireType, at_or_above_floor
 from acme.om.outbox import OutboxRelayInterface
-from acme.om.outbox.types.row import outbox_row
+from acme.om.outbox.types.row import OutboxRow, outbox_row
 from acme.om.placement import PlacementManagerInterface
 from acme.om.placement.types.claimant import Claimant, ClaimantKind
 from acme.om.placement.types.work import StationPayload
@@ -220,6 +220,38 @@ class StationsManagerImpl(StationsManagerInterface):
     async def join(self, ctx: TenantContext, entry_id: UUID, ask: StationAsk) -> LinePlace:
         ctx.require(Permission.WRITE)
         await self._sessions.get_session(ctx, ask.session_id)
+        return await self._join(ctx, entry_id, ask, ())
+
+    async def join_with_job(
+        self,
+        ctx: TenantContext,
+        entry_id: UUID,
+        ask: StationAsk,
+        commands: Sequence[StationCommand],
+    ) -> LinePlace:
+        ctx.require(Permission.WRITE)
+        if not commands:
+            raise ValidationFailed("an ask that carries its job carries at least one command")
+        return await self._join(ctx, entry_id, ask, tuple(commands))
+
+    async def get_entry(self, ctx: TenantContext, entry_id: UUID) -> LinePlace:
+        ctx.require(Permission.READ)
+        return await self._place(ctx, entry_id)
+
+    async def get_job(self, ctx: TenantContext, job_id: UUID) -> StationJob:
+        ctx.require(Permission.READ)
+        job = await self._storage.read_job(ctx.org_id, job_id)
+        if job is None:
+            raise NotFound(f"station job {job_id} not found")
+        return job
+
+    async def _join(
+        self,
+        ctx: TenantContext,
+        entry_id: UUID,
+        ask: StationAsk,
+        commands: tuple[StationCommand, ...],
+    ) -> LinePlace:
         pool = await self._pool(ctx, ask.pool_id)
         named = None
         if ask.station_id is not None:
@@ -236,6 +268,7 @@ class StationsManagerImpl(StationsManagerInterface):
             **ask.model_dump(),
             principal=principal_of(ctx),
             rank=now.timestamp(),
+            commands=commands,
         )
         rows = (
             outbox_row(
@@ -335,9 +368,10 @@ class StationsManagerImpl(StationsManagerInterface):
             if ended.entry_id is None
             else await self._storage.read_entry(ctx.org_id, ended.entry_id)
         )
-        if entry is not None:
+        if entry is not None and not entry.commands:
             # The holding session reads it at its next request; an idle one
-            # is not woken for it.
+            # is not woken for it. An entry that carries its job has no
+            # session to tell: its job's run records the stop.
             await self._tell(ctx, entry, revoke_text(ended), waking=False)
         return ended
 
@@ -365,6 +399,8 @@ class StationsManagerImpl(StationsManagerInterface):
         entry = await self._storage.read_entry(ctx.org_id, lease.entry_id)
         if entry is None:
             raise NotFound(f"the ask of lease {lease_id} not found")
+        if entry.commands:
+            raise ValidationFailed(f"lease {lease_id} carries its own job, and runs it alone")
         job = StationJob(
             id=job_id,
             created_at=now,
@@ -382,18 +418,7 @@ class StationsManagerImpl(StationsManagerInterface):
             procedure_version=entry.procedure_version,
             commands=tuple(commands),
         )
-        # The station work lands with the job: placement reads the lab off
-        # its payload and puts it on the lab's lane, which only the lab's
-        # daemon claims.
-        rows = (
-            outbox_row(ctx, JOB_CREATED, job.id, {"lease_id": str(lease.id)}),
-            outbox_row(
-                ctx,
-                work_row_kind(WorkKind.STATION),
-                job.id,
-                StationPayload(lab_id=lease.lab_id).model_dump(mode="json"),
-            ),
-        )
+        rows = self._job_rows(ctx, job)
         if not await self._storage.create_job(ctx.org_id, job, rows):
             found = await self._storage.read_job(ctx.org_id, job_id)
             if found is None:
@@ -600,6 +625,17 @@ class StationsManagerImpl(StationsManagerInterface):
             with contextlib.suppress(LeaseEnded):
                 await self._end(ctx, lease.id, LeaseEnd.RELEASED)
             return finished
+        entry = (
+            None
+            if lease is None or lease.entry_id is None
+            else await self._storage.read_entry(ctx.org_id, lease.entry_id)
+        )
+        if lease is not None and entry is not None and entry.commands:
+            # A job its entry carried ran alone under its lease: the station
+            # goes back to the line at once.
+            with contextlib.suppress(LeaseEnded):
+                await self._end(ctx, lease.id, LeaseEnd.RELEASED)
+            return finished
         # Its session is parked again until its next job: the lease lasts
         # the station's hold time from here.
         station = await self._storage.read_station(ctx.org_id, job.station_id)
@@ -633,8 +669,10 @@ class StationsManagerImpl(StationsManagerInterface):
         """Grants a free station to the first entry in line that waits, and
         wakes its session. An entry whose session no longer waits is passed,
         and that session leaves every line it stood in; one whose session
-        has not parked yet keeps its place and is passed over. A grant lost
-        to another writer reads the station again and goes on from it."""
+        has not parked yet keeps its place and is passed over. An entry that
+        carries its job always waits, and its job lands with its grant. A
+        grant lost to another writer reads the station again and goes on
+        from it."""
         margin = self._options.skew_margin
         for _ in range(self._options.grant_attempts):
             station = await self._storage.read_station(ctx.org_id, station_id)
@@ -648,15 +686,16 @@ class StationsManagerImpl(StationsManagerInterface):
             for entry in line:
                 if not serves(station, entry):
                     continue
-                try:
-                    session = await self._sessions.project_status(ctx, entry.session_id)
-                except NotFound:
-                    session = None
-                if session is None or no_longer_waits(session):
-                    await self._leave_every_line(ctx, entry.session_id)
-                    continue
-                if not waits(session):
-                    continue
+                if not entry.commands:
+                    try:
+                        session = await self._sessions.project_status(ctx, entry.session_id)
+                    except NotFound:
+                        session = None
+                    if session is None or no_longer_waits(session):
+                        await self._leave_every_line(ctx, entry.session_id)
+                        continue
+                    if not waits(session):
+                        continue
                 lease = StationLease(
                     id=new_id(),
                     created_at=now,
@@ -671,6 +710,9 @@ class StationsManagerImpl(StationsManagerInterface):
                     token=station.token + 1,
                     expires_at=now + timedelta(seconds=station.hold_seconds),
                 )
+                # A carried job lands in the grant's own write: it never
+                # stands without its lease, and its lease never waits on it.
+                job = self._carried(entry, lease) if entry.commands else None
                 rows = (
                     outbox_row(
                         ctx,
@@ -678,13 +720,18 @@ class StationsManagerImpl(StationsManagerInterface):
                         lease.id,
                         {"station_id": str(station.id), "token": lease.token},
                     ),
+                    *(() if job is None else self._job_rows(ctx, job)),
                 )
-                if await self._storage.grant(ctx.org_id, lease, margin, rows):
+                if await self._storage.grant(ctx.org_id, lease, margin, rows, job):
                     await self._relay.relay_all(ctx.org_id, rows)
                     OUTCOMES.labels(subsystem="stations", outcome="granted").inc()
-                    await self._tell(
-                        ctx, entry, grant_text(station, lease, station.hold_seconds), waking=True
-                    )
+                    if job is None:
+                        await self._tell(
+                            ctx,
+                            entry,
+                            grant_text(station, lease, station.hold_seconds),
+                            waking=True,
+                        )
                     return lease
                 lost = True
                 break
@@ -886,6 +933,44 @@ class StationsManagerImpl(StationsManagerInterface):
         if job.state is not JobState.RUNNING:
             raise JobSettled(f"station job {job_id} is {job.state.value}")
         return job
+
+    @staticmethod
+    def _job_rows(ctx: TenantContext, job: StationJob) -> tuple[OutboxRow, ...]:
+        """The rows a job lands with. Its station work is one of them:
+        placement reads the lab off its payload and puts it on the lab's
+        lane, which only the lab's daemon claims."""
+        return (
+            outbox_row(ctx, JOB_CREATED, job.id, {"lease_id": str(job.lease_id)}),
+            outbox_row(
+                ctx,
+                work_row_kind(WorkKind.STATION),
+                job.id,
+                StationPayload(lab_id=job.lab_id).model_dump(mode="json"),
+            ),
+        )
+
+    @staticmethod
+    def _carried(entry: LineEntry, lease: StationLease) -> StationJob:
+        """The job an entry carries, sent under the lease its grant gives:
+        on the word of who asked, under the entry's id, bound to what the
+        ask binds, at the lease's token."""
+        return StationJob(
+            id=entry.id,
+            created_at=lease.created_at,
+            updated_at=lease.created_at,
+            created_by=entry.created_by,
+            updated_by=entry.created_by,
+            lease_id=lease.id,
+            station_id=lease.station_id,
+            lab_id=lease.lab_id,
+            session_id=entry.session_id,
+            token=lease.token,
+            project=entry.project,
+            candidate=entry.candidate,
+            procedure=entry.procedure,
+            procedure_version=entry.procedure_version,
+            commands=entry.commands,
+        )
 
     @staticmethod
     def _claimed(job: StationJob) -> WorkItem:

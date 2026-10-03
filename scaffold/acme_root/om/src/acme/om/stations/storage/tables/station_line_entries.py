@@ -3,7 +3,8 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import Index, text
-from sqlalchemy.orm import Mapped
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column
 
 from acme.om.storage.tables.base import Base, IdentifiableMixin, TrackableMixin
 
@@ -40,6 +41,7 @@ class StationLineEntries(IdentifiableMixin, TrackableMixin, Base):
     procedure_version: Mapped[str]
     principal: Mapped[dict[str, Any]]
     rank: Mapped[float]
+    commands: Mapped[list[dict[str, Any]]] = mapped_column(JSONB())
     state: Mapped[str]
     lease_id: Mapped[UUID | None]
     settled_at: Mapped[datetime | None]

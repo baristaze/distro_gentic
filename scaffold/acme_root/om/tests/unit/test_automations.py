@@ -2,7 +2,9 @@
 its own sessions caused, a chain of automations stops at its hop limit,
 and its cost cap, its rate, and its concurrency each stop a firing. The
 cost cap holds the spending itself: each session a run starts draws on a
-budget of its run's share. Every firing is a recorded run."""
+budget of its run's share. A station job waits its turn in its pool's
+line, and runs under the lease its grant gives. Every firing is a
+recorded run."""
 
 import itertools
 from datetime import timedelta
@@ -12,6 +14,7 @@ from uuid import UUID
 import pytest
 from contracts.budget_storage import make_budget
 from contracts.evidence_storage import make_policy
+from contracts.factories import make_org
 from contracts.intake import ACTING, WORKER, Wired, wired
 from contracts.loops import ASSISTANT, reply, said, use
 from contracts.project_storage import in_project, make_project
@@ -32,14 +35,16 @@ from acme.om.automations.types.automation import (
     Refusal,
     RunsAs,
     RunStatus,
+    StationWork,
     Trigger,
     TriggerKind,
 )
 from acme.om.base import Platform, derived_id, new_id, utcnow
 from acme.om.budgets.types.budget import BudgetScope, BudgetScopeKind, WindowKind
-from acme.om.context import RequestContext, Role, TenantContext
+from acme.om.context import AppContext, AppType, RequestContext, Role, TenantContext
 from acme.om.evidence.rules import policy_key
 from acme.om.evidence.types.provenance import Provenance
+from acme.om.evidence.types.record import RunOutcome
 from acme.om.exceptions import BudgetRefused, NotAuthorized, NotFound, ValidationFailed
 from acme.om.intake.rules import described
 from acme.om.intake.tools import COMMENT
@@ -54,6 +59,9 @@ from acme.om.intake.types.event import (
 from acme.om.intake.types.link import HandleKind
 from acme.om.models.types.fill import MAIN, Eligibility
 from acme.om.projects.impl.policies import SessionProjectsBoundImpl
+from acme.om.stations.types.job import JobReport, StationCommand
+from acme.om.stations.types.line import EntryState
+from acme.om.stations.types.station import Lab, Station, StationPool
 from acme.om.steps.rules import message_step
 from acme.om.steps.types.content import ToolUseBlock
 from acme.om.steps.types.header import InputHeader, ParkReason
@@ -805,3 +813,128 @@ async def test_an_automation_run_as_the_principal_is_made_only_once_one_is_grant
             creator, scheduled(creator, runs_as=RunsAs.AUTOMATION_PRINCIPAL)
         )
     assert await platform.automations.tick(platform.service) == ()
+
+
+# A station job.
+
+PORTAL = AppContext(type=AppType.PORTAL, version="portal@test")
+DAEMON = AppContext(type=AppType.API, version="station-daemon@test")
+
+
+def daemon_call() -> RequestContext:
+    return RequestContext(request_id=new_id(), app=DAEMON)
+
+
+async def a_pool(platform: Wired, owner: TenantContext) -> tuple[Lab, StationPool, Station]:
+    """A lab with one station, in a pool of its own, as its tenant made them."""
+    stations, now = platform.managers.stations, utcnow()
+    by = {"created_at": now, "updated_at": now, "created_by": owner.user_id}
+    by["updated_by"] = owner.user_id
+    lab = await stations.create_lab(owner, Lab(id=new_id(), **by, name="lab-1"))
+    pool = await stations.create_pool(owner, StationPool(id=new_id(), **by, name="arms"))
+    station = Station(
+        id=new_id(), **by, lab_id=lab.id, pool_id=pool.id, name="arm-1", capabilities=("arm",)
+    )
+    return lab, pool, await stations.add_station(owner, station)
+
+
+def station_job(pool_id: UUID) -> Action:
+    return Action(
+        kind=ActionKind.RUN_STATION_JOB,
+        station=StationWork(
+            pool_id=pool_id,
+            capabilities=("arm",),
+            project="acme/firmware",
+            candidate="4f0405f",
+            procedure="smoke",
+            procedure_version="v1",
+            commands=(StationCommand(operation="apply", parameters={"speed": 0.5}),),
+        ),
+    )
+
+
+def passed() -> JobReport:
+    now = utcnow()
+    return JobReport(
+        run_id=new_id(),
+        outcome=RunOutcome.PASSED,
+        started_at=now,
+        finished_at=now,
+        commands_run=1,
+        adapter="twin:arm-1",
+        provenance=Provenance.TWIN,
+        daemon_version="station-daemon@test",
+    )
+
+
+async def test_a_station_job_waits_in_its_pools_line_and_runs_under_its_lease_and_token(
+    platform: Wired, creator: TenantContext
+) -> None:
+    stations = platform.managers.stations
+    # The tenant's row, which the daemon's calls read for its tenant.
+    org = make_org().model_copy(update={"id": creator.org_id})
+    await platform.storage.get_tenancy_storage().write_org(org.id, org)
+    lab, pool, station = await a_pool(platform, creator)
+    issued = await stations.issue_daemon_credential(creator, lab.id)
+    daemon = await stations.authenticate(daemon_call(), issued.credential)
+    await made(platform, creator)
+    (triage,) = await fired(platform, comment())
+    smoke = await made(platform, creator, name="smoke", action=station_job(pool.id))
+    # Two comments that follow the triage session: each fires a station job,
+    # a hop on, and the second waits behind the first for the one station.
+    first, second = [
+        run
+        for _ in range(2)
+        for run in await fired(platform, comment(caused_by=triage.session_id))
+        if run.automation_id == smoke.id
+    ]
+    for run in (first, second):
+        assert (run.status, run.caused_by, run.hop) == (RunStatus.STARTED, triage.session_id, 2)
+        assert run.job_id is not None and (run.session_id, run.reserved_micros) == (None, 0)
+    assert first.job_id is not None and second.job_id is not None
+    waiting = await stations.get_entry(creator, second.job_id)
+    assert (waiting.entry.state, waiting.position) == (EntryState.WAITING, 0)
+    with pytest.raises(NotFound):
+        await stations.get_job(creator, second.job_id)  # no job stands without its lease
+    granted = (await stations.get_entry(creator, first.job_id)).entry
+    assert granted.state is EntryState.GRANTED and granted.lease_id is not None
+    claimed = await stations.claim(daemon_call(), daemon, 1)
+    assert claimed is not None and claimed.job is not None and claimed.lease_seconds > 0
+    job = claimed.job
+    assert (job.id, job.lease_id, job.token, job.station_id) == (
+        first.job_id,
+        granted.lease_id,
+        1,
+        station.id,
+    )
+    with pytest.raises(ValidationFailed):
+        await stations.submit_job(creator, new_id(), granted.lease_id, job.commands)
+    assert await stations.claim(daemon_call(), daemon, 1) is None
+    report = passed()
+    await stations.report(daemon_call(), daemon, job.id, report)
+    # Its run is recorded under the automation's run, and its report gives
+    # the station back to the line: the second is granted it, a token on.
+    (record,) = (await platform.managers.evidence.get_runs(creator, first.id, None, 10)).items
+    assert (record.id, record.parameters["token"]) == (report.run_id, 1)
+    after = await stations.claim(daemon_call(), daemon, 1)
+    assert after is not None and after.job is not None
+    assert (after.job.id, after.job.token) == (second.job_id, 2)
+    # The concurrency counts the second alone: the first's job ran.
+    await fired(platform, comment())
+    runs = {run.id: run for run in await platform.automations.get_runs(creator, smoke.id, 10)}
+    assert runs[first.id].closed_at is not None and runs[second.id].closed_at is None
+
+
+async def test_a_station_job_on_a_pool_the_tenant_does_not_hold_is_refused_when_saved(
+    platform: Wired, creator: TenantContext
+) -> None:
+    rctx = RequestContext(request_id=new_id(), app=PORTAL)
+    other, _ = await platform.managers.tenancy.bootstrap(
+        rctx, "Beta", "beta", "bea@beta.test", "Bea"
+    )
+    _, theirs, _ = await a_pool(platform, other)
+    for pool_id in (theirs.id, new_id()):
+        with pytest.raises(NotFound):
+            await made(platform, creator, action=station_job(pool_id))
+    assert await fired(platform, comment()) == []
+    assert await platform.managers.stations.get_line(other, theirs.id) == ()

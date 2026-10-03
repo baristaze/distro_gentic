@@ -35,6 +35,9 @@ from acme.om.intake.rules import in_person
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import versioned_row
 from acme.om.projects import ProjectsManagerInterface
+from acme.om.stations import StationsManagerInterface
+from acme.om.stations.types.job import JobState
+from acme.om.stations.types.line import EntryState, StationAsk
 from acme.om.steps.rules import message_step
 from acme.om.steps.types.content import Content, TextBlock
 from acme.om.steps.types.header import InputHeader
@@ -69,6 +72,7 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         relay: OutboxRelayInterface,
         events: EventsManagerInterface,
         projects: ProjectsManagerInterface,
+        stations: StationsManagerInterface,
         principal_context: PrincipalContext,
         options: AutomationsOptions,
         clock: Callable[[], datetime] = utcnow,
@@ -81,6 +85,7 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         self._storage = storage
         self._agents = agents
         self._projects = projects
+        self._stations = stations
         self._project_required = project_required
         self._sessions = sessions
         self._budgets = budgets
@@ -103,7 +108,7 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
                 raise NotAuthorized(
                     f"a {ctx.role.value} makes no automation that runs as a {granted.role.value}"
                 )
-        await self._check_project(ctx, automation)
+        await self._check_action(ctx, automation)
         now = self._clock()
         made = Automation.model_validate(
             {
@@ -252,7 +257,9 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
             return await self._refuse(ctx, run, Refusal.PRINCIPAL)
         await self._close_finished(ctx, automation)
         landed = await self._storage.admit(ctx.org_id, run, automation.limits, self._clock())
-        if landed.status is not RunStatus.STARTED or landed.session_id is not None:
+        if landed.status is not RunStatus.STARTED or (
+            landed.session_id is not None or landed.job_id is not None
+        ):
             return landed
         try:
             return await self._act(ctx, creator, automation, landed)
@@ -281,8 +288,11 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         """The action of a started run, as its creator. A started session is
         held to the run's reservation by a budget on its tree before anything
         wakes it; the event reaches it as data, and the brief as the
-        creator's message."""
+        creator's message. A station job joins its pool's line instead."""
         action = automation.action
+        if action.kind is ActionKind.RUN_STATION_JOB:
+            return await self._join_line(ctx, creator, automation, run)
+        assert action.brief is not None  # a session's action carries one
         opened = action.kind is ActionKind.START_SESSION
         if opened:
             assert action.agent_kind is not None and action.title is not None
@@ -340,6 +350,37 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         await self._storage.write_run(ctx.org_id, acted)
         return acted
 
+    async def _join_line(
+        self,
+        ctx: TenantContext,
+        creator: TenantContext,
+        automation: Automation,
+        run: AutomationRun,
+    ) -> AutomationRun:
+        """A station job takes its place in its pool's line as its creator,
+        carrying its job, under an id the run derives, so a run acted on
+        again joins once. The run holds the place, as a session would: the
+        grant sends the job under its lease and fencing token, and the job's
+        run is recorded under the run's id. The job calls no model, so the
+        run's share of the cost cap goes back; its rate and its concurrency
+        hold it, and it is at work until its job's run is recorded."""
+        work = automation.action.station
+        assert work is not None  # a station job names its pool and its job
+        entry_id = derived_id(run.id, run.created_at, "station_job")
+        ask = StationAsk(
+            session_id=run.id,
+            pool_id=work.pool_id,
+            capabilities=work.capabilities,
+            project=work.project,
+            candidate=work.candidate,
+            procedure=work.procedure,
+            procedure_version=work.procedure_version,
+        )
+        await self._stations.join_with_job(creator, entry_id, ask, work.commands)
+        acted = run.model_copy(update={"job_id": entry_id, "reserved_micros": 0, "event_text": ""})
+        await self._storage.write_run(ctx.org_id, acted)
+        return acted
+
     def _event_step(self, ctx: TenantContext, run: AutomationRun, session_id: UUID) -> Step:
         """The event that fired a run, as data: it never waits to wake the
         session, since the brief that follows it does."""
@@ -370,13 +411,16 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         return moved
 
     async def _close_finished(self, ctx: TenantContext, automation: Automation) -> None:
-        """Closes the runs whose sessions are no longer at work, so the
-        concurrency counts the ones that are."""
+        """Closes the runs whose sessions are no longer at work, and whose
+        station jobs left the line or ran, so the concurrency counts the ones
+        that are."""
         now = self._clock()
         for run in await self._storage.read_open_runs(
             ctx.org_id, automation.id, self._options.page
         ):
-            if run.session_id is None:
+            if run.job_id is not None:
+                done = await self._job_done(ctx, run.job_id)
+            elif run.session_id is None:
                 done = now - run.created_at >= self._options.lost_after
             else:
                 try:
@@ -387,6 +431,19 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
             if done:
                 closed = run.model_copy(update={"closed_at": now, "event_text": ""})
                 await self._storage.write_run(ctx.org_id, closed)
+
+    async def _job_done(self, ctx: TenantContext, job_id: UUID) -> bool:
+        """Whether a run's station job is no longer at work: its place left
+        the line, or its job's run is recorded."""
+        try:
+            place = await self._stations.get_entry(ctx, job_id)
+            if place.entry.state is EntryState.WAITING:
+                return False
+            if place.entry.state is EntryState.LEFT:
+                return True
+            return (await self._stations.get_job(ctx, job_id)).state is JobState.FINISHED
+        except NotFound:
+            return True
 
     async def _refuse(
         self, ctx: TenantContext, run: AutomationRun, refusal: Refusal
@@ -401,10 +458,14 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
             return refused
         return await self._storage.create_run(ctx.org_id, refused)
 
-    async def _check_project(self, ctx: TenantContext, automation: Automation) -> None:
-        """A start's project is one of the caller's tenant: another tenant's
-        is `NotFound`, as one that never existed is. One that names none is
-        `ValidationFailed` where a session starts in a project."""
+    async def _check_action(self, ctx: TenantContext, automation: Automation) -> None:
+        """A start's project, and a station job's pool, are the caller's
+        tenant's: another tenant's is `NotFound`, as one that never existed
+        is. A start that names no project is `ValidationFailed` where a
+        session starts in one."""
+        station = automation.action.station
+        if station is not None:
+            await self._stations.get_stations(ctx, station.pool_id)
         project_id = automation.action.project_id
         if project_id is not None:
             await self._projects.get_project(ctx, project_id)

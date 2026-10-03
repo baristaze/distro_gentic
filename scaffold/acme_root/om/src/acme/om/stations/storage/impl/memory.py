@@ -197,6 +197,7 @@ class StationsStorageMemoryImpl(MemoryStorageBase, StationsStorageInterface):
         lease: StationLease,
         margin: timedelta,
         outbox_rows: tuple[OutboxRow, ...],
+        job: StationJob | None = None,
     ) -> bool:
         async with self._lock:
             now = lease.created_at
@@ -205,6 +206,8 @@ class StationsStorageMemoryImpl(MemoryStorageBase, StationsStorageInterface):
                 None if lease.entry_id is None else self._get(self._entries, org_id, lease.entry_id)
             )
             if station is None or lease.id in self._leases:
+                return False
+            if job is not None and job.id in self._jobs:
                 return False
             if not free(station, now, margin) or station.token != lease.token - 1:
                 return False
@@ -245,6 +248,8 @@ class StationsStorageMemoryImpl(MemoryStorageBase, StationsStorageInterface):
                     ),
                 )
             self._insert(self._leases, org_id, lease, outbox_rows)
+            if job is not None:
+                self._insert(self._jobs, org_id, job)
             return True
 
     async def read_lease(self, org_id: UUID, lease_id: UUID) -> StationLease | None:

@@ -279,6 +279,7 @@ class StationsStoragePostgresImpl(PgStorageBase, StationsStorageInterface):
         lease: StationLease,
         margin: timedelta,
         outbox_rows: tuple[OutboxRow, ...],
+        job: StationJob | None = None,
     ) -> bool:
         now = lease.created_at
         # The condition is the write's own: a station a live lease holds, or
@@ -337,6 +338,8 @@ class StationsStoragePostgresImpl(PgStorageBase, StationsStorageInterface):
                 return False
             await session.execute(expire)
             session.add(to_row(lease, StationLeases, org_id=org_id))
+            if job is not None:
+                session.add(to_row(job, StationJobs, org_id=org_id))
             for outbox_row in outbox_rows:
                 session.add(to_row(outbox_row, OutboxRows, org_id=org_id))
             try:

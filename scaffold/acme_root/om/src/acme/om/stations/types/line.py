@@ -2,7 +2,9 @@
 and what it is bound to. A session asks for one station, or for any
 station of a pool with the capabilities it needs; each pool and each
 station has a line, and a station's own line and its pool's are served
-together, in rank order."""
+together, in rank order. An ask may carry its job, for work no session
+runs, such as an automation's: it waits from the moment it joins, and its
+grant sends the job."""
 
 from datetime import datetime
 from enum import StrEnum
@@ -14,6 +16,7 @@ from pydantic import Field
 from acme.om.attribution.types.principal import Principal
 from acme.om.base import Identifiable, Platform, Trackable
 from acme.om.evidence.types.record import NAME, PROJECT, VERSION
+from acme.om.stations.types.job import MAX_COMMANDS, StationCommand
 from acme.om.stations.types.station import Capability
 
 
@@ -44,7 +47,10 @@ class LineEntry(Identifiable, Trackable):
     """One ask in line. `principal` is who asked, whose authority the
     grant's event arrives on. `rank` orders a pool's line, the station
     lines in it included: lower goes first, and a person who manages the
-    stations may move an entry."""
+    stations may move an entry. `commands` is the job an ask carries, empty
+    for a session's: such an ask stands for no session, and `session_id`
+    names what holds its place, an automation's run, under which its job's
+    run is recorded."""
 
     MANAGER_OWNED_FIELDS: ClassVar[tuple[str, ...]] = ("rank", "state", "lease_id", "settled_at")
 
@@ -58,6 +64,7 @@ class LineEntry(Identifiable, Trackable):
     procedure_version: str = Field(pattern=VERSION)
     principal: Principal
     rank: float
+    commands: tuple[StationCommand, ...] = Field(default=(), max_length=MAX_COMMANDS)
     state: EntryState = EntryState.WAITING
     lease_id: UUID | None = None
     settled_at: datetime | None = None  # when it was granted, or left
