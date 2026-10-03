@@ -59,6 +59,21 @@ class AmountRequest(BaseModel):
     tokens: Annotated[Tokens | None, Field(title='Tokens')] = None
 
 
+class ApprovalView(BaseModel):
+    """
+    A tool call held for a person's decision: its session, the seq it is
+    decided at, its tool and the class of power it exercises, and the
+    principal it runs under. Its input stays in the history; the request
+    names only its hash.
+    """
+    authorization_class: Annotated[str, Field(title='Authorization Class')]
+    principal_id: Annotated[UUID, Field(title='Principal Id')]
+    requested_at: Annotated[AwareDatetime, Field(title='Requested At')]
+    seq: Annotated[int, Field(title='Seq')]
+    session_id: Annotated[UUID, Field(title='Session Id')]
+    tool: Annotated[str, Field(title='Tool')]
+
+
 class BudgetScopeKind(StrEnum):
     session = 'session'
     tree = 'tree'
@@ -66,6 +81,12 @@ class BudgetScopeKind(StrEnum):
     project = 'project'
     team = 'team'
     tenant = 'tenant'
+
+
+class CasesView(BaseModel):
+    failed: Annotated[int, Field(title='Failed')]
+    passed: Annotated[int, Field(title='Passed')]
+    skipped: Annotated[int, Field(title='Skipped')]
 
 
 class ClaimRequest(BaseModel):
@@ -436,6 +457,21 @@ class FileView(BaseModel):
     subject_id: Annotated[UUID | None, Field(title='Subject Id')]
 
 
+class FillUsageView(BaseModel):
+    """
+    What one model, at its provider, used in the session's calls: the
+    calls that answered, and their tokens by class, no token counted
+    twice.
+    """
+    cache_read: Annotated[int, Field(title='Cache Read')]
+    cache_write: Annotated[int, Field(title='Cache Write')]
+    calls: Annotated[int, Field(title='Calls')]
+    fill: Annotated[str, Field(title='Fill')]
+    input: Annotated[int, Field(title='Input')]
+    output: Annotated[int, Field(title='Output')]
+    thinking: Annotated[int, Field(title='Thinking')]
+
+
 class GiveBackRequest(BaseModel):
     """
     What the person did, as the agent reads it on resume.
@@ -458,6 +494,11 @@ class HandRunView(BaseModel):
     session_id: Annotated[UUID, Field(title='Session Id')]
     state: ExecState
     user_id: Annotated[UUID, Field(title='User Id')]
+
+
+class HandleKind(StrEnum):
+    pull_request = 'pull_request'
+    branch = 'branch'
 
 
 class HostState(StrEnum):
@@ -566,6 +607,19 @@ class LogoutRequest(BaseModel):
         extra='forbid',
     )
     return_to: Annotated[ReturnTo | None, Field(title='Return To')] = None
+
+
+class LoopLimitsView(BaseModel):
+    """
+    The bounds of one loop of the session's kind: the model calls before
+    the step guard parks it for a person, the tool errors or identical
+    calls in a row that end it, the nudges it gives, and how long one run
+    drives it before handing it on.
+    """
+    error_streak: Annotated[int, Field(title='Error Streak')]
+    nudges: Annotated[int, Field(title='Nudges')]
+    run_time_seconds: Annotated[float, Field(title='Run Time Seconds')]
+    step_guard: Annotated[int, Field(title='Step Guard')]
 
 
 class LoopOutcome(StrEnum):
@@ -811,12 +865,54 @@ class PurposeUsageView(BaseModel):
     size_bytes: Annotated[int, Field(title='Size Bytes')]
 
 
+class QuestionView(BaseModel):
+    """
+    What a session asks of a person now: a park on a person that is no
+    call's decision, such as a step guard to lift, a deadline to move, or a
+    principal to name. `unlock` is what clears it, sent as a control; `seq`
+    is the step that parked it.
+    """
+    asked_at: Annotated[AwareDatetime, Field(title='Asked At')]
+    seq: Annotated[int, Field(title='Seq')]
+    session_id: Annotated[UUID, Field(title='Session Id')]
+    unlock: Annotated[str, Field(title='Unlock')]
+
+
+class ReportView(BaseModel):
+    """
+    The result the session submitted and the gate accepted: the outcome
+    its loop ended with, whether a gate that knows the evidence judged it,
+    and the step that answered it.
+    """
+    accepted_at: Annotated[AwareDatetime, Field(title='Accepted At')]
+    outcome: LoopOutcome
+    seq: Annotated[int, Field(title='Seq')]
+    verified: Annotated[bool, Field(title='Verified')]
+
+
 class Role(StrEnum):
     owner = 'owner'
     admin = 'admin'
     member = 'member'
     viewer = 'viewer'
     service = 'service'
+
+
+class RunOutcome(StrEnum):
+    passed = 'passed'
+    failed = 'failed'
+    errored = 'errored'
+    aborted = 'aborted'
+
+
+class RunPurpose(StrEnum):
+    """
+    Why a run ran. Only the executor writes a `baseline` or a
+    `validation` run; the agent's own runs are `work`.
+    """
+    work = 'work'
+    baseline = 'baseline'
+    validation = 'validation'
 
 
 class SecondFactorRequest(BaseModel):
@@ -850,6 +946,20 @@ class SessionStatus(StrEnum):
     running = 'running'
     parked = 'parked'
     idle = 'idle'
+
+
+class SessionUsageView(BaseModel):
+    """
+    What a session's model calls used, as each provider reported it, per
+    model and in total.
+    """
+    cache_read: Annotated[int, Field(title='Cache Read')]
+    cache_write: Annotated[int, Field(title='Cache Write')]
+    calls: Annotated[int, Field(title='Calls')]
+    fills: Annotated[list[FillUsageView], Field(title='Fills')]
+    input: Annotated[int, Field(title='Input')]
+    output: Annotated[int, Field(title='Output')]
+    thinking: Annotated[int, Field(title='Thinking')]
 
 
 class SessionView(BaseModel):
@@ -1099,6 +1209,20 @@ class TotpConfirmedView(BaseModel):
     identity_id: Annotated[UUID, Field(title='Identity Id')]
 
 
+class TreeBoundsView(BaseModel):
+    """
+    What the session's tree shares: how deep and how many sub-agents it
+    may have, how many run at once, the one deadline, and how many were
+    spawned so far.
+    """
+    concurrency: Annotated[int | None, Field(title='Concurrency')]
+    count: Annotated[int, Field(title='Count')]
+    deadline: Annotated[AwareDatetime | None, Field(title='Deadline')]
+    height: Annotated[int, Field(title='Height')]
+    root_id: Annotated[UUID, Field(title='Root Id')]
+    size: Annotated[int, Field(title='Size')]
+
+
 class UpdateIdentityRequest(BaseModel):
     """
     Where the person is, as an IANA name ("Europe/Istanbul"): the portal
@@ -1146,6 +1270,33 @@ class ValidationError(BaseModel):
     type: Annotated[str, Field(title='Error Type')]
 
 
+class ValidationView(BaseModel):
+    """
+    One pass of the policy's checks on a fresh executor: the version it
+    ran at and the version its checks came from, who ran it, the hash of
+    the results it wrote, and its runs.
+    """
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    executor: Annotated[str, Field(title='Executor')]
+    id: Annotated[UUID, Field(title='Id')]
+    project: Annotated[str, Field(title='Project')]
+    purpose: RunPurpose
+    records: Annotated[list[UUID], Field(title='Records')]
+    results_sha256: Annotated[str, Field(title='Results Sha256')]
+    source: Annotated[str, Field(title='Source')]
+    version: Annotated[str, Field(title='Version')]
+
+
+class Verdict(StrEnum):
+    """
+    A person's decision on one exact call, as the history holds it.
+    """
+    approved = 'approved'
+    denied = 'denied'
+    expired = 'expired'
+    pending = 'pending'
+
+
 class WindowKind(StrEnum):
     life = 'life'
     hour = 'hour'
@@ -1153,6 +1304,16 @@ class WindowKind(StrEnum):
     week = 'week'
     month = 'month'
     span = 'span'
+
+
+class WorkHandleView(BaseModel):
+    """
+    A pull request or a branch the session opened as its work, by the
+    name source control gives it.
+    """
+    bound_at: Annotated[AwareDatetime, Field(title='Bound At')]
+    handle: Annotated[str, Field(title='Handle')]
+    kind: HandleKind
 
 
 class WorkKind(StrEnum):
@@ -1252,6 +1413,16 @@ class ApiKeyView(BaseModel):
     user_id: Annotated[UUID, Field(title='User Id')]
 
 
+class ApprovalPageView(BaseModel):
+    """
+    The calls held across one page of the tenant's parked sessions, by
+    session id. `next_cursor` reads the next page of sessions and is null
+    on the last one; a page may hold no call and still have a next.
+    """
+    items: Annotated[list[ApprovalView], Field(title='Items')]
+    next_cursor: Annotated[str | None, Field(title='Next Cursor')]
+
+
 class AutomationPrincipalView(BaseModel):
     """
     The tenant's automation principal: its id, the role it holds, and who
@@ -1261,6 +1432,18 @@ class AutomationPrincipalView(BaseModel):
     granted_by: Annotated[UUID, Field(title='Granted By')]
     id: Annotated[UUID, Field(title='Id')]
     role: Role
+
+
+class BoundsView(BaseModel):
+    """
+    The bounds a session runs under: its kind's loop limits, the deadline
+    its kind gives a tree it roots, and its tree's record.
+    """
+    kind: Annotated[str, Field(title='Kind')]
+    kind_deadline_seconds: Annotated[float | None, Field(title='Kind Deadline Seconds')]
+    kind_version: Annotated[int, Field(title='Kind Version')]
+    loop: LoopLimitsView
+    tree: TreeBoundsView
 
 
 class BudgetView(BaseModel):
@@ -1327,6 +1510,20 @@ class CrossingBody(BaseModel):
     size: Annotated[int, Field(ge=0, title='Size')]
 
 
+class DeliveryView(BaseModel):
+    """
+    What a session delivered: its project, its branch and whether the
+    remote has held it, the pull requests and branches bound to it, and its
+    latest accepted result. A session that never had a workspace has no
+    branch.
+    """
+    branch: Annotated[str | None, Field(title='Branch')]
+    branch_seen: Annotated[bool, Field(title='Branch Seen')]
+    project_id: Annotated[UUID | None, Field(title='Project Id')]
+    report: ReportView | None
+    work: Annotated[list[WorkHandleView], Field(title='Work')]
+
+
 class EnrollRequest(BaseModel):
     """
     A host's name and its report, beside its enrollment token. The pool
@@ -1338,6 +1535,35 @@ class EnrollRequest(BaseModel):
     advertisement: AdvertisementBody
     exec_version: Annotated[int, Field(ge=1, title='Exec Version')]
     name: Annotated[str, Field(max_length=64, min_length=1, title='Name')]
+
+
+class ExecutionView(BaseModel):
+    """
+    One run of one check: why it ran, the version and whether the tree
+    was dirty, the image, host, and isolation it ran on, who wrote its
+    results, its timing, its outcome and its cases, and the weakest
+    provenance of what served it. A `work` run names the agent's tool call;
+    a baseline or a validation run names its validation.
+    """
+    abort: Annotated[str | None, Field(title='Abort')]
+    cases: CasesView
+    check: Annotated[str, Field(title='Check')]
+    check_version: Annotated[str, Field(title='Check Version')]
+    dirty: Annotated[bool, Field(title='Dirty')]
+    executor: Annotated[str, Field(title='Executor')]
+    finished_at: Annotated[AwareDatetime, Field(title='Finished At')]
+    host: Annotated[str, Field(title='Host')]
+    id: Annotated[UUID, Field(title='Id')]
+    image: Annotated[str, Field(title='Image')]
+    isolation: Annotated[str, Field(title='Isolation')]
+    outcome: RunOutcome
+    project: Annotated[str, Field(title='Project')]
+    provenance: Provenance
+    purpose: RunPurpose
+    started_at: Annotated[AwareDatetime, Field(title='Started At')]
+    step_id: Annotated[UUID | None, Field(title='Step Id')]
+    validation_id: Annotated[UUID | None, Field(title='Validation Id')]
+    version: Annotated[str, Field(title='Version')]
 
 
 class FilePageView(BaseModel):
@@ -1738,6 +1964,25 @@ class StepView(BaseModel):
     type: StepType
 
 
+class ToolCallView(BaseModel):
+    """
+    One tool call of a session: its request, a person's decision on it
+    when one was asked, and its response once it answered. A call with no
+    response is open: held for a decision, or running.
+    """
+    authorization_class: Annotated[str, Field(title='Authorization Class')]
+    decided_by: Annotated[UUID | None, Field(title='Decided By')]
+    decision: Verdict | None
+    failure: ToolFailure | None
+    loop_id: Annotated[UUID, Field(title='Loop Id')]
+    principal_id: Annotated[UUID, Field(title='Principal Id')]
+    requested_at: Annotated[AwareDatetime, Field(title='Requested At')]
+    responded_at: Annotated[AwareDatetime | None, Field(title='Responded At')]
+    response_seq: Annotated[int | None, Field(title='Response Seq')]
+    seq: Annotated[int, Field(title='Seq')]
+    tool: Annotated[str, Field(title='Tool')]
+
+
 class UserPageView(BaseModel):
     """
     One page of the tenant's members. `next_cursor` fetches the next page
@@ -1766,6 +2011,20 @@ class ApiKeyPageView(BaseModel):
     next_cursor: Annotated[str | None, Field(title='Next Cursor')]
 
 
+class BudgetUsageView(BaseModel):
+    """
+    A budget and its current window: what open holds reserve and what
+    settled calls spent, in reference cost (millionths) and native tokens,
+    against the budget's amount.
+    """
+    budget: BudgetView
+    held_cost_micros: Annotated[int, Field(title='Held Cost Micros')]
+    held_tokens: Annotated[int, Field(title='Held Tokens')]
+    spent_cost_micros: Annotated[int, Field(title='Spent Cost Micros')]
+    spent_tokens: Annotated[int, Field(title='Spent Tokens')]
+    window_start: Annotated[AwareDatetime, Field(title='Window Start')]
+
+
 class ErrorBody(BaseModel):
     code: Annotated[str, Field(title='Code')]
     last_owner: LastOwnerDetail | None = None
@@ -1776,6 +2035,15 @@ class ErrorBody(BaseModel):
 
 class ErrorResponse(BaseModel):
     error: ErrorBody
+
+
+class ExecutionPageView(BaseModel):
+    """
+    One page of a session's runs, oldest first. `next_cursor` fetches the
+    next page and is null on the last one.
+    """
+    items: Annotated[list[ExecutionView], Field(title='Items')]
+    next_cursor: Annotated[str | None, Field(title='Next Cursor')]
 
 
 class HostStandingView(BaseModel):
@@ -1853,3 +2121,22 @@ class StepPageView(BaseModel):
     """
     has_more: Annotated[bool, Field(title='Has More')]
     items: Annotated[list[StepView], Field(title='Items')]
+
+
+class ToolCallPageView(BaseModel):
+    """
+    One page of a session's tool calls, in order, after the seq the
+    request named. With `has_more`, the next page starts after the last
+    call's seq.
+    """
+    has_more: Annotated[bool, Field(title='Has More')]
+    items: Annotated[list[ToolCallView], Field(title='Items')]
+
+
+class UsagePageView(BaseModel):
+    """
+    One page of the tenant's budgets with their usage, by budget id.
+    `next_cursor` fetches the next page and is null on the last one.
+    """
+    items: Annotated[list[BudgetUsageView], Field(title='Items')]
+    next_cursor: Annotated[str | None, Field(title='Next Cursor')]
