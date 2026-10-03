@@ -19,7 +19,7 @@ from acme.om.base import Created, Identifiable, Platform
 from acme.om.billing.types.account import FundingMode
 from acme.om.billing.types.plan import MAX_NAME, PlanRef
 from acme.om.budgets.types.breach import Refusal
-from acme.om.budgets.types.hold import Hold
+from acme.om.budgets.types.hold import Hold, Settlement
 
 
 class Bucket(StrEnum):
@@ -150,6 +150,10 @@ class Approval(Identifiable, Created):
     session_id: UUID
     up_to_micros: int = Field(gt=0)
     approved_by: UUID
+
+
+Entry = FundedHold | Settlement | Charge | Credit | Grant | WindowRaise | Approval
+"""One entry of the ledger, of whichever kind."""
 
 
 class EntryKind(StrEnum):

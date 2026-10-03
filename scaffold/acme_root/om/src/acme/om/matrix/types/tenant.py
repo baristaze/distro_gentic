@@ -1,11 +1,12 @@
 """What the matrix keeps of one tenant: the version each of its sessions
-resolved at, and the fill a tenant on its own keys chose for a model role."""
+resolved at, and the fill a tenant on its own keys chose for a model role;
+and what it may choose from."""
 
 from uuid import UUID
 
 from pydantic import Field
 
-from acme.om.base import Created, Identifiable, Trackable
+from acme.om.base import Created, Identifiable, Platform, Trackable
 from acme.om.models.types.fill import Fill, ModelRole
 
 
@@ -27,3 +28,13 @@ class FillOverride(Identifiable, Trackable):
 
     role: ModelRole
     fill: Fill
+
+
+class FillOptions(Platform):
+    """What a tenant on its own keys may choose for one model role of the
+    published matrix: the fills it qualified for the role, from a provider
+    the tenant holds a live key for. Never stored: read from the version and
+    the tenant's keys."""
+
+    role: ModelRole
+    fills: tuple[Fill, ...]

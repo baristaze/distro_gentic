@@ -11,7 +11,15 @@ from abc import ABC, abstractmethod
 from uuid import UUID
 
 from acme.om.billing.types.account import Account, AccountRequest
-from acme.om.billing.types.ledger import Approval, Count, Credit, Grant, WindowRaise
+from acme.om.billing.types.ledger import (
+    Approval,
+    Count,
+    Credit,
+    Entry,
+    EntryKind,
+    Grant,
+    WindowRaise,
+)
 from acme.om.budgets.types.amount import Amount
 from acme.om.budgets.types.hold import Tally
 from acme.om.context import OperatorContext, TenantContext
@@ -56,6 +64,16 @@ class BillingManagerInterface(ABC):
         self, ctx: OperatorContext, org_id: UUID, units: int, reason: str
     ) -> Grant:
         """Units the platform grants the tenant, for its life."""
+        ...
+
+    @abstractmethod
+    async def get_entries(
+        self, ctx: OperatorContext, org_id: UUID, kind: EntryKind | None, limit: int
+    ) -> tuple[Entry, ...]:
+        """The tenant's ledger, as an operator reads it naming the tenant:
+        its entries, the newest first, of one kind when `kind` names it, and
+        at most `limit`, which is clamped. Needs the operators' read, and
+        logs the operator and the tenant."""
         ...
 
     @abstractmethod
