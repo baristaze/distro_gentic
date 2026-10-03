@@ -17,7 +17,9 @@ does; a chat message counts as a person's only as
 - **Stream kinds**: one registry (`kinds.py`) of the kinds of live
   stream, each with the bounds every stream of it is held to. The step's
   parts are the platform's kind; a product registers its own, which it
-  writes and reads in groups of their own.
+  writes and reads in groups of their own. A product's kind may name its
+  claimant kind, which writes it for the item it holds, in a group per
+  item.
 - **The stream service's buffers**: the parts of each open stream, a
   bounded buffer per stream on the shared cache. A stream is the parts of
   one step. Nothing else: the step each adds up to is the record. The
@@ -32,6 +34,14 @@ the record that it is theirs is an entry in the tenant's event stream.
 
 - **Open a live read.** A viewer who may read the session gets a handle
   that lasts minutes.
+- **A claimant appends.** A product's claimant appends to a stream of
+  a kind its own kind writes, for the item it holds under a live lease
+  and its claim token, at most a bounded batch at a time, each entry
+  with the hash it crossed the wall with. Any other item or kind is not
+  found, an entry that does not match its hash is refused, and nothing
+  lands.
+- **Open an item's read.** A viewer who may read the item's tenant gets
+  a handle to the item's streams of one kind, as a session's.
 - **Read live.** The handle reads the session's open streams, each from
   the part after the last one the reader saw. A late viewer reads the
   buffered tail; a slow one loses the oldest parts, never the newest,
@@ -58,6 +68,8 @@ the record that it is theirs is an entry in the tenant's event stream.
   The read is a read, never a push.
 - **A handle reads one session, and not for long.** A handle that does
   not verify, or has expired, reads nothing.
+- **A handle reads what it was signed for.** A session's handle never
+  reads an item's streams, nor an item's a session's.
 - **A live part is a cache.** Each buffer is bounded, and losing it
   loses nothing the history does not hold. A kind nobody registered has
   no bound, so nothing streams it.
@@ -103,13 +115,20 @@ engine's `take_over` and `give_back`, audited as `watch.control.taken`
 and `watch.control.given_back`. Take control then calls
 `relay.interrupt_running` below the new epoch; give back reads
 `relay.running` and raises `CommandRunning` for an item under the
-current epoch, unless `stop`. ADR 2007 records the scoped read.
+current epoch, unless `stop`. ADR 2007 records the scoped read. An
+item's handle is `rules.signed`/`rules.verified_item` over an
+`ItemGrant`, under its own purpose prefix. `append_as` checks the kind's
+writer (`StreamKind.claimant`), the bounds `MAX_APPEND_ENTRIES` and
+`MAX_APPEND_BYTES`, each entry's `stream_part` crossing
+(`crossing.verified`), then `hosts.held_as` and the lease, and appends
+through `KindStreamsInterface` in the item's group. ADR 2030.
 -->
 
 ## How another namespace composes it
 
-A root builds it with `build_watch(managers, stream)`, over the stream
-service `build_stream(infra, events)` builds. The session runner hands
+A root builds it with `build_watch(managers, stream, kind_streams=...)`,
+over the stream service `build_stream(infra, events)` builds and a
+product's kinds' streams `build_kind_streams(infra, kinds)` builds. The session runner hands
 the same kind of service to the loop as its sink, so the API's reads
 find what the runners stream. The API issues the handle, serves
 the read by the handle alone, and serves take control, a command, and

@@ -328,6 +328,9 @@ REQUEST_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
         ("HostsManagerInterface", "held_as"),
         ("HostsManagerInterface", "extend_as"),
         ("HostsManagerInterface", "report_as"),
+        # And its append to its kind's stream for the item it holds, which
+        # the watch holds to that item through the same calls.
+        ("WatchManagerInterface", "append_as"),
         # A system's delivery names no tenant until its installation is
         # found: the ingress reads the tenant that connected it from the
         # request stage, and queues the event under that tenant.
@@ -359,6 +362,7 @@ REQUEST_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
         # A live read, by its handle alone: the handle is the authority, as a
         # presigned URL is, and the read mints no context.
         ("WatchManagerInterface", "read_live"),
+        ("WatchManagerInterface", "read_item_live"),
         # The sweep's requeue across tenants: a dead letter it makes is
         # written under its tenant's service context, minted from this stage
         # as the claim mints one.

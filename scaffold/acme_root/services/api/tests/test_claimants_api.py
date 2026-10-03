@@ -4,28 +4,38 @@ gets a rotating credential under its kind's prefix, and claims, reads,
 renews, and reports its kind's items through the gateway, with that
 credential alone. It is handed nothing of another pool or another tenant,
 its credential opens no other kind's path, and a revoked one is refused.
-The example is a `render` job on a `batch` pool."""
+While it holds an item it appends to its kind's stream for it, which a
+member of the item's tenant reads by a handle, and nobody else reads.
+The example is a `render` job on a `batch` pool, and its log."""
 
+import base64
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from api_support import build_container, seed_request
+from api_support import SMALL_BUDGET, build_container, client_over, seed_request, sign_in
 from tenant_support import person, tenant
 
 from acme.om.base import Platform, new_id, utcnow
 from acme.om.context import Permission, Role, TenantContext
 from acme.om.placement.kinds import ClaimantKindSpec
 from acme.om.placement.types.claimant import Claimant
+from acme.om.retention.crossing import Crossing, CrossingKind, declared
 from acme.om.root import PlatformPorts, ProductKinds
+from acme.om.watch.kinds import MAX_APPEND_BYTES, MAX_APPEND_ENTRIES, StreamKind
+from acme.om.watch.types.live import MAX_ENTRY
 from acme.om.work.kinds import WorkKindSpec
 from acme.om.work.types.work_item import WorkItem, WorkStatus
 from acme.services.api.container import AppContainer
 
 RENDER = "RENDER"
 BATCH = "batch"
+PROBE = "probe"
+LOG = "render_log"
+KEY = "k" * 32
 CLAIMANT_APP = {"X-App": "api", "X-App-Version": "node@test"}
 PROBED = {"os": "Linux 6.8", "shell": "/bin/bash", "capabilities": [], "isolation_modes": []}
 
@@ -49,13 +59,22 @@ def _batch_claims(node: Claimant) -> tuple[tuple[str, tuple[str, ...]], ...]:
 
 PRODUCT = ProductKinds(
     work=(WorkKindSpec(RENDER, RenderPayload, Permission.WRITE, _render_lane, claimant=BATCH),),
-    claimants=(ClaimantKindSpec(BATCH, _batch_claims, prefix="bat_"),),
+    claimants=(
+        ClaimantKindSpec(BATCH, _batch_claims, prefix="bat_"),
+        ClaimantKindSpec(PROBE, lambda _: (), prefix="prb_"),
+    ),
+    streams=(
+        # A render's log, which its batch node writes: four entries a stream.
+        StreamKind(LOG, entries=4, bytes=64 * 1024, streams=2, claimant=BATCH),
+        StreamKind("probe_log", entries=4, bytes=4096, streams=2, claimant=PROBE),
+        StreamKind("render_index", entries=4, bytes=4096, streams=2),
+    ),
 )
 
 
 @pytest.fixture
 def container(tmp_path: Path) -> AppContainer:
-    return build_container(tmp_path, ports=PlatformPorts(kinds=PRODUCT))
+    return build_container(tmp_path, ports=PlatformPorts(kinds=PRODUCT), live_read_key=KEY)
 
 
 def bearer(token: str) -> dict[str, str]:
@@ -275,3 +294,280 @@ async def test_an_owner_lists_a_pools_claimants_and_revokes_one_by_the_id_the_li
     shown = {found["id"]: found for found in after.json()}
     assert shown[ours["id"]]["revoked_at"] is not None
     assert shown[kinds["host"]["id"]]["revoked_at"] is None
+
+
+def entries(*texts: str, start: int = 0) -> list[dict[str, Any]]:
+    return [an_entry(start + n, text.encode()) for n, text in enumerate(texts)]
+
+
+def an_entry(n: int, data: bytes, crossing: Crossing | None = None) -> dict[str, Any]:
+    """One entry as a claimant sends it: its bytes in base64, and the
+    crossing it declares of them, its bytes' own unless another is named."""
+    crossing = crossing or declared(CrossingKind.STREAM_PART, data)
+    return {
+        "n": n,
+        "data": base64.b64encode(data).decode(),
+        "crossing": crossing.model_dump(mode="json"),
+    }
+
+
+async def held_render(
+    client: httpx.AsyncClient, container: AppContainer, owner: dict[str, str], node: dict[str, Any]
+) -> tuple[WorkItem, str]:
+    """A render of the node's pool, claimed by the node: the item, and its
+    claim token."""
+    ctx = await tenant_of(container, owner)
+    render = await a_render(container, ctx, node["pool_id"])
+    claimed = await client.post("/v1/claimants/me/claims", headers=bearer(node["token"]))
+    assert claimed.status_code == 200 and claimed.json()["item"]["id"] == str(render.id)
+    return render, claimed.json()["item"]["claim_token"]
+
+
+async def append(
+    client: httpx.AsyncClient,
+    node: dict[str, Any],
+    item_id: UUID,
+    claim_token: str,
+    stream: UUID,
+    sent: list[dict[str, Any]],
+    kind: str = LOG,
+) -> httpx.Response:
+    return await client.post(
+        f"/v1/claimants/me/items/{item_id}/streams/{kind}",
+        headers=bearer(node["token"]),
+        json={"claim_token": claim_token, "stream": str(stream), "entries": sent},
+    )
+
+
+async def read(
+    client: httpx.AsyncClient,
+    viewer: dict[str, str],
+    item_id: UUID,
+    after: tuple[str, ...] = (),
+) -> dict[str, list[tuple[int, str]]]:
+    """What a viewer reads of the item's log by a handle: each open stream's
+    entries, decoded."""
+    opened = await client.post(f"/v1/work-items/{item_id}/streams/{LOG}/live", headers=viewer)
+    assert opened.status_code == 200, opened.text
+    page = await client.get(
+        "/v1/live/items", params={"handle": opened.json()["handle"], "after": list(after)}
+    )
+    assert page.status_code == 200, page.text
+    assert (page.json()["item_id"], page.json()["kind"]) == (str(item_id), LOG)
+    return {
+        found["stream"]: [
+            (entry["n"], base64.b64decode(entry["data"]).decode()) for entry in found["entries"]
+        ]
+        for found in page.json()["streams"]
+    }
+
+
+async def test_a_claimant_appends_to_its_kinds_stream_for_the_item_it_holds_and_a_member_reads_it(
+    client: httpx.AsyncClient, owner: dict[str, str], container: AppContainer
+) -> None:
+    pool_id = await a_pool(client, owner)
+    node = await a_node(client, await a_token(client, owner, pool_id))
+    render, claim_token = await held_render(client, container, owner, node)
+    stream = uuid4()
+
+    appended = await append(client, node, render.id, claim_token, stream, entries("f0", "f1"))
+    assert appended.status_code == 204, appended.text
+    # An entry sent again lands nothing.
+    again = await append(client, node, render.id, claim_token, stream, entries("again", start=1))
+    assert again.status_code == 204, again.text
+
+    member = await person(
+        client, container, (await tenant_of(container, owner)).org_id, Role.MEMBER
+    )
+    assert await read(client, member, render.id) == {str(stream): [(0, "f0"), (1, "f1")]}
+    assert await read(client, member, render.id, (f"{stream}:0",)) == {str(stream): [(1, "f1")]}
+
+    # Past the kind's four entries the oldest goes, never the newest.
+    more = await append(
+        client, node, render.id, claim_token, stream, entries("f2", "f3", "f4", start=2)
+    )
+    assert more.status_code == 204, more.text
+    held = await read(client, member, render.id)
+    assert held == {str(stream): [(1, "f1"), (2, "f2"), (3, "f3"), (4, "f4")]}
+
+
+async def test_a_claimant_appends_only_for_an_item_it_holds_to_a_kind_its_own_kind_writes(
+    client: httpx.AsyncClient, owner: dict[str, str], container: AppContainer
+) -> None:
+    pool_id = await a_pool(client, owner)
+    token = await a_token(client, owner, pool_id)
+    ours, theirs = await a_node(client, token, "node-1"), await a_node(client, token, "node-2")
+    mine, mine_token = await held_render(client, container, owner, ours)
+    other, other_token = await held_render(client, container, owner, theirs)
+    beta, _ = await container.managers.tenancy.bootstrap(
+        seed_request(), "Beta", "beta", "bea@beta.test", "Bea"
+    )
+    elsewhere = await a_render(container, beta, pool_id)
+    stream = uuid4()
+
+    # Another claimant's item, under its token or its own, and another
+    # tenant's are not found.
+    for item_id, claim_token in (
+        (other.id, other_token),
+        (other.id, mine_token),
+        (elsewhere.id, mine_token),
+    ):
+        refused = await append(client, ours, item_id, claim_token, stream, entries("x"))
+        assert refused.status_code == 404, refused.text
+    # Another claimant kind's stream, one no claimant writes, the step's,
+    # and one nobody registered are not found; a name no kind could carry
+    # is refused at the door.
+    for kind, status in (
+        ("probe_log", 404),
+        ("render_index", 404),
+        ("step", 404),
+        ("nothing", 404),
+        ("Render-Log", 422),
+    ):
+        refused = await append(client, ours, mine.id, mine_token, stream, entries("x"), kind)
+        assert refused.status_code == status, f"{kind}: {refused.text}"
+
+    # Its lease lapsed, it holds the item no longer until it renews it.
+    ctx = await tenant_of(container, owner)
+    claimed = await container.managers.work.get_item(ctx, mine.id)
+    await container.managers.work.extend_lease(ctx, claimed, timedelta(seconds=-1))
+    lapsed = await append(client, ours, mine.id, mine_token, stream, entries("late"))
+    assert lapsed.status_code == 409, lapsed.text
+    renewed = await client.post(
+        f"/v1/claimants/me/items/{mine.id}/lease",
+        headers=bearer(ours["token"]),
+        json={"claim_token": mine_token},
+    )
+    assert renewed.status_code == 200, renewed.text
+    landed = await append(client, ours, mine.id, mine_token, stream, entries("held"))
+    assert landed.status_code == 204, landed.text
+
+    # Handed back, it is not found.
+    reported = await client.post(
+        f"/v1/claimants/me/items/{mine.id}/report",
+        headers=bearer(ours["token"]),
+        json={"claim_token": mine_token, "outcome": "done"},
+    )
+    assert reported.status_code == 200, reported.text
+    released = await append(client, ours, mine.id, mine_token, stream, entries("after", start=1))
+    assert released.status_code == 404, released.text
+
+    # Under a revoked credential, the item it held is written no more.
+    revoked = await client.delete(f"/v1/claimants/{theirs['claimant_id']}", headers=owner)
+    assert revoked.status_code == 200, revoked.text
+    gone = await append(client, theirs, other.id, other_token, stream, entries("x"))
+    assert gone.status_code == 401, gone.text
+
+    # Of every refused append, nothing landed.
+    assert await read(client, owner, mine.id) == {str(stream): [(0, "held")]}
+    assert await read(client, owner, other.id) == {}
+
+
+async def test_a_member_of_another_tenant_reads_nothing_of_an_items_stream(
+    client: httpx.AsyncClient, owner: dict[str, str], container: AppContainer
+) -> None:
+    pool_id = await a_pool(client, owner)
+    node = await a_node(client, await a_token(client, owner, pool_id))
+    render, claim_token = await held_render(client, container, owner, node)
+    landed = await append(client, node, render.id, claim_token, uuid4(), entries("ours"))
+    assert landed.status_code == 204, landed.text
+
+    beta = await tenant(client, container, "beta")
+    for outsider in (beta.owner, await person(client, container, beta.org_id, Role.MEMBER)):
+        crossed = await client.post(
+            f"/v1/work-items/{render.id}/streams/{LOG}/live", headers=outsider
+        )
+        assert crossed.status_code == 404, crossed.text
+    # Nor does a handle a byte off, or none at all.
+    opened = await client.post(f"/v1/work-items/{render.id}/streams/{LOG}/live", headers=owner)
+    handle = opened.json()["handle"]
+    forged = ("B" if handle.startswith("A") else "A") + handle[1:]
+    for bad in (forged, "not-a-handle"):
+        refused = await client.get("/v1/live/items", params={"handle": bad})
+        assert refused.status_code == 401, refused.text
+    # A kind no claimant writes opens no handle.
+    for kind in ("render_index", "step"):
+        closed = await client.post(f"/v1/work-items/{render.id}/streams/{kind}/live", headers=owner)
+        assert closed.status_code == 404, closed.text
+
+
+async def test_an_append_is_held_to_its_size_before_anything_lands(
+    client: httpx.AsyncClient, owner: dict[str, str], container: AppContainer
+) -> None:
+    pool_id = await a_pool(client, owner)
+    node = await a_node(client, await a_token(client, owner, pool_id))
+    render, claim_token = await held_render(client, container, owner, node)
+    half = "x" * (MAX_APPEND_BYTES // 2 + 1)
+    for sent in (
+        entries(*(["e"] * (MAX_APPEND_ENTRIES + 1))),
+        entries("x" * (MAX_APPEND_BYTES + 1)),
+        entries(half, half),
+        [{**an_entry(0, b"x"), "data": "not base64!"}],
+        [{**an_entry(0, b"x"), "data": "\u00e9"}],
+        [an_entry(MAX_ENTRY + 1, b"x")],
+        [],
+    ):
+        refused = await append(client, node, render.id, claim_token, uuid4(), sent)
+        assert refused.status_code == 422, refused.text
+    assert await read(client, owner, render.id) == {}
+    opened = await client.post(f"/v1/work-items/{render.id}/streams/{LOG}/live", headers=owner)
+    past = await client.get(
+        "/v1/live/items",
+        params={"handle": opened.json()["handle"], "after": [f"{uuid4()}:{MAX_ENTRY + 1}"]},
+    )
+    assert past.status_code == 422, past.text
+    whole = await append(
+        client, node, render.id, claim_token, uuid4(), entries("x" * MAX_APPEND_BYTES)
+    )
+    assert whole.status_code == 204, whole.text
+
+
+async def test_an_append_whose_bytes_do_not_match_their_crossing_lands_nothing(
+    client: httpx.AsyncClient, owner: dict[str, str], container: AppContainer
+) -> None:
+    pool_id = await a_pool(client, owner)
+    node = await a_node(client, await a_token(client, owner, pool_id))
+    render, claim_token = await held_render(client, container, owner, node)
+    stream = uuid4()
+    real = declared(CrossingKind.STREAM_PART, b"f1")
+    # Another's hash, its own hash at another size, and its own bytes
+    # declared as another kind: each refuses the whole append.
+    for crossing in (
+        declared(CrossingKind.STREAM_PART, b"f2"),
+        Crossing(kind=CrossingKind.STREAM_PART, sha256=real.sha256, size=real.size + 1),
+        declared(CrossingKind.RESULT, b"f1"),
+    ):
+        sent = [an_entry(0, b"f0"), an_entry(1, b"f1", crossing)]
+        refused = await append(client, node, render.id, claim_token, stream, sent)
+        assert refused.status_code == 422, refused.text
+        assert refused.json()["error"]["code"] == "crossing_refused"
+    assert await read(client, owner, render.id) == {}
+    landed = await append(client, node, render.id, claim_token, stream, entries("f0", "f1"))
+    assert landed.status_code == 204, landed.text
+    assert await read(client, owner, render.id) == {str(stream): [(0, "f0"), (1, "f1")]}
+
+
+async def test_an_append_spends_the_claimants_budget_of_writes(tmp_path: Path) -> None:
+    container = build_container(
+        tmp_path,
+        ports=PlatformPorts(kinds=PRODUCT),
+        live_read_key=KEY,
+        credential_rate_limit_writes=SMALL_BUDGET,
+    )
+    async with client_over(container) as client:
+        owner = await sign_in(client, container)
+        pool_id = await a_pool(client, owner)
+        node = await a_node(client, await a_token(client, owner, pool_id))
+        render, claim_token = await held_render(client, container, owner, node)
+        stream = uuid4()
+        # The claim spent one write of the budget.
+        for n in range(SMALL_BUDGET - 1):
+            landed = await append(
+                client, node, render.id, claim_token, stream, entries("e", start=n)
+            )
+            assert landed.status_code == 204, landed.text
+        refused = await append(client, node, render.id, claim_token, stream, entries("e", start=9))
+        assert refused.status_code == 429, refused.text
+        assert "Retry-After" in refused.headers
+        held = await read(client, owner, render.id)
+    assert [n for n, _ in held[str(stream)]] == list(range(SMALL_BUDGET - 1))

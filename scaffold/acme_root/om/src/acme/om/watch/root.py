@@ -1,11 +1,13 @@
 """The watch swimlane over the engine's managers, as a root builds it.
 
     stream = build_stream(infra, lambda: managers.events)
-    watch = build_watch(managers, stream, WatchOptions(live_read_key=key))
+    kinds = build_kind_streams(infra, product_kinds)
+    watch = build_watch(managers, stream, WatchOptions(live_read_key=key), kind_streams=kinds)
 
 A product's stream kinds are registered beside the step's, passed to
 `build_stream` as `product_kinds`, and `build_kind_streams` writes
-and reads them.
+and reads them. The watch reads and writes, through it, the kinds a
+product's claimant writes for the item it holds.
 
 `stream` is the stream service over infra's streams, the shared cache's:
 the session runner hands it to the loop as its `stream_sink`, building it
@@ -55,8 +57,11 @@ def build_watch(
     stream: StreamServiceInterface,
     options: WatchOptions | None = None,
     *,
+    kind_streams: KindStreamsInterface | None = None,
     clock: Callable[[], datetime] = utcnow,
 ) -> WatchManagerInterface:
+    """`kind_streams` are a product's, which its claimants write for the
+    items they hold; with none, every such stream is not found."""
     return WatchManagerImpl(
         managers.agent_sessions,
         managers.agents,
@@ -68,4 +73,7 @@ def build_watch(
         stream,
         options or WatchOptions(),
         clock,
+        hosts=managers.hosts,
+        work=managers.work,
+        kind_streams=kind_streams,
     )

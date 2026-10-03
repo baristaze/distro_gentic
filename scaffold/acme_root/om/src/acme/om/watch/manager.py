@@ -5,7 +5,9 @@ never a push, while the realtime channel carries every change. A person
 takes control: the agent stands down, its loop parked on a hand-over,
 and the person's commands run as `exec` work on the host that holds the
 workspace, each recorded as a run attributed to them. Giving it back
-turns their summary into a message the agent reads on resume."""
+turns their summary into a message the agent reads on resume. A product's
+claimant appends to its kind's stream for the item it holds, and a viewer
+reads it by a handle to that item's streams, as a session's are read."""
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
@@ -13,9 +15,18 @@ from uuid import UUID
 
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.context import RequestContext, TenantContext
+from acme.om.hosts.types.host import ClaimantIdentity
 from acme.om.relay.types.exec import ExecProgress
 from acme.om.watch.types.control import HandCommand, HandRun
-from acme.om.watch.types.live import LivePage, LiveRead, Seen
+from acme.om.watch.types.live import (
+    Appended,
+    ItemPage,
+    ItemRead,
+    ItemSeen,
+    LivePage,
+    LiveRead,
+    Seen,
+)
 
 
 class WatchManagerInterface(ABC):
@@ -36,6 +47,48 @@ class WatchManagerInterface(ABC):
         handle is the authority, as a presigned URL is, so this runs below
         any principal. A handle that does not verify, or has expired, is
         `LiveReadRefused`, and reads nothing."""
+        ...
+
+    # A product's streams, by the item a claimant holds.
+
+    @abstractmethod
+    async def append_as(
+        self,
+        rctx: RequestContext,
+        claimant: ClaimantIdentity,
+        item_id: UUID,
+        kind: str,
+        appended: Appended,
+    ) -> None:
+        """Platform-internal: the claimant appends to a stream of `kind` for
+        the item it holds, in that item's group, under the kind's bounds. A
+        kind its own kind does not write, the step's, and one nobody
+        registered are `NotFound`, as is an item it does not hold: another
+        claimant's, another tenant's, one handed back, or one its revoked
+        identity held (`hosts.held_as`). Its own item under a lapsed lease,
+        or a token the claim no longer carries, is `LeaseLost`. More than
+        `MAX_APPEND_ENTRIES` entries, or `MAX_APPEND_BYTES` of them, is
+        `ValidationFailed`, and an entry whose bytes do not match the
+        `stream_part` crossing it declared is `CrossingRefused`; either
+        lands nothing."""
+        ...
+
+    @abstractmethod
+    async def open_item_live(self, ctx: TenantContext, item_id: UUID, kind: str) -> ItemRead:
+        """A handle to the item's streams of a kind a claimant writes, for a
+        viewer who may read the item's tenant, that lasts the options'
+        lifetime. An item of another tenant, and a kind no claimant writes,
+        are `NotFound`; a platform with no signing key is `Unavailable`."""
+        ...
+
+    @abstractmethod
+    async def read_item_live(
+        self, rctx: RequestContext, handle: str, seen: Sequence[ItemSeen]
+    ) -> ItemPage:
+        """Platform-internal: the open streams the handle names, each from
+        the entry after the last `seen` names for it. The handle is the
+        authority, as a session's is; one that does not verify as an item's,
+        or has expired, is `LiveReadRefused`, and reads nothing."""
         ...
 
     # Take control, give back.

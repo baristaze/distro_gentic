@@ -459,6 +459,25 @@ async def test_a_products_stream_kind_is_held_to_its_bounds(tmp_path: Path) -> N
         build_kind_streams(infra, loosened)
 
 
+def test_a_stream_kind_a_claimant_writes_names_a_claimant_kind_of_the_products_own(
+    tmp_path: Path,
+) -> None:
+    log = StreamKind("render_log", entries=2, bytes=1024, streams=1, claimant=BATCH)
+    streams = build_kind_streams(
+        InfraLocalImpl(tmp_path), ProductKinds(claimants=(BATCH_CLAIMANT,), streams=(log,))
+    )
+    assert streams.writer("render_log") == BATCH
+    assert streams.writer(STEP) is None and streams.writer("unregistered") is None
+    # The host holds no item a stream is bound to, and a kind nobody
+    # registered holds none either: each is refused at boot.
+    for writer in ("host", "nobody"):
+        with pytest.raises(ValueError, match="no claimant kind of the product's"):
+            ProductKinds(
+                claimants=(BATCH_CLAIMANT,),
+                streams=(StreamKind("render_log", 2, 1024, 1, claimant=writer),),
+            )
+
+
 # An executor for a validation's environment, held at the gate as the
 # platform's is.
 

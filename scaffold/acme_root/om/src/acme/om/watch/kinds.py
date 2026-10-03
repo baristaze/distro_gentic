@@ -4,7 +4,9 @@ one group. The open streams of every group at once and the idle time bound
 the shared cache, every kind's streams together, so they are the step's
 alone, never a kind's own. The platform's own kind, the parts of a step,
 registers here as a product's kind does at its roots
-(`root.PlatformPorts.kinds`), so no stream is written without a bound."""
+(`root.PlatformPorts.kinds`), so no stream is written without a bound. A
+product's kind may name the claimant kind that writes it through the
+gateway, for the item one of its claimants holds."""
 
 import re
 from abc import ABC, abstractmethod
@@ -18,6 +20,12 @@ from acme.infra.streams import StreamBounds, StreamSlice
 
 STREAM_KIND = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
 
+MAX_APPEND_ENTRIES = 64
+"""The most entries one append through the gateway carries."""
+
+MAX_APPEND_BYTES = 64 * 1024
+"""The most bytes of entries one append through the gateway carries."""
+
 STEP = "step"
 """The platform's stream kind: the parts of one step of a session, in a
 group per session, which the stream service writes (`StreamServiceImpl`)."""
@@ -27,12 +35,16 @@ group per session, which the stream service writes (`StreamServiceImpl`)."""
 class StreamKind:
     """A kind of live stream and what each stream of it may hold: past its
     entries or its bytes the oldest goes, never the newest, and past its
-    open streams of one group the one that heard nothing longest goes."""
+    open streams of one group the one that heard nothing longest goes.
+    `claimant` is the product's claimant kind that writes its streams
+    through the gateway, one group per item a claimant of that kind holds;
+    None for a kind only the product's own code writes."""
 
     name: str
     entries: int
     bytes: int
     streams: int
+    claimant: str | None = None
 
     def __post_init__(self) -> None:
         if not STREAM_KIND.match(self.name):
@@ -71,6 +83,12 @@ class StreamKinds:
             idle=self._idle,
         )
 
+    def writer(self, name: str) -> str | None:
+        """The claimant kind that writes the kind's streams through the
+        gateway; None for a kind none writes, or one nobody registered."""
+        kind = self._kinds.get(name)
+        return None if kind is None else kind.claimant
+
 
 class KindStreamsInterface(ABC):
     """The live streams of a product's kinds: numbered entries in a group,
@@ -98,4 +116,11 @@ class KindStreamsInterface(ABC):
     @abstractmethod
     async def end(self, kind: str, group: UUID, stream: UUID) -> None:
         """Closes the stream: what it held goes at once."""
+        ...
+
+    @abstractmethod
+    def writer(self, kind: str) -> str | None:
+        """The claimant kind that writes a product's kind through the
+        gateway; None for the step's, a kind none writes, and one nobody
+        registered."""
         ...

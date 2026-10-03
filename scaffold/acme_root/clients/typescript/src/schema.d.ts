@@ -1445,6 +1445,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/claimants/me/items/{item_id}/streams/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Append
+         * @description Appends to a stream of a kind the claimant's own kind writes, for
+         *     the item it holds under the body's claim token. Any other item, and
+         *     any other kind, is not found; each call spends the credential's
+         *     budget of writes.
+         */
+        post: operations["append_v1_claimants_me_items__item_id__streams__kind__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/claimants/{claimant_id}": {
         parameters: {
             query?: never;
@@ -1986,6 +2009,28 @@ export interface paths {
          *     reads nothing.
          */
         get: operations["read_live_v1_live_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/live/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Item Live
+         * @description The open streams the handle names, each after the last entry read
+         *     (`after=<stream>:<last>`, once a stream). The handle is the authority:
+         *     one that does not verify as an item's, or has expired, reads nothing.
+         */
+        get: operations["read_item_live_v1_live_items_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2640,6 +2685,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/work-items/{item_id}/streams/{kind}/live": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Open Item Live
+         * @description A handle to the item's open streams of a kind a product's claimant
+         *     writes, for a viewer who may read its tenant, that lasts minutes.
+         */
+        post: operations["open_item_live_v1_work_items__item_id__streams__kind__live_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/webhooks/identity": {
         parameters: {
             query?: never;
@@ -3272,6 +3338,27 @@ export interface components {
             item: components["schemas"]["ClaimedWorkView"] | null;
         };
         /**
+         * ClaimantAppendRequest
+         * @description What a claimant appends to one stream of its kind for the item it
+         *     holds, under its claim token: the stream it names, and its entries in
+         *     their order, an entry numbered at or below the stream's last landing
+         *     nothing. It is held to its bounds before anything reads it.
+         */
+        ClaimantAppendRequest: {
+            /**
+             * Claim Token
+             * Format: uuid
+             */
+            claim_token: string;
+            /** Entries */
+            entries: components["schemas"]["EntryBody"][];
+            /**
+             * Stream
+             * Format: uuid
+             */
+            stream: string;
+        };
+        /**
          * ClaimantClaimView
          * @description What a claim answers: the item, or none when nothing is ready.
          */
@@ -3805,10 +3892,32 @@ export interface components {
             revoked_at: string | null;
         };
         /**
+         * EntryBody
+         * @description One numbered entry of a stream: its bytes as they crossed the wall,
+         *     in base64, and the hash its sender declared of them, a `stream_part`.
+         */
+        EntryBody: {
+            crossing: components["schemas"]["CrossingBody"];
+            /** Data */
+            data: string;
+            /** N */
+            n: number;
+        };
+        /**
          * EntryKind
          * @enum {string}
          */
         EntryKind: "hold" | "settlement" | "charge" | "credit" | "grant" | "raise" | "approval";
+        /**
+         * EntryView
+         * @description One numbered entry of a stream: its bytes in base64.
+         */
+        EntryView: {
+            /** Data */
+            data: string;
+            /** N */
+            n: number;
+        };
         /** ErrorBody */
         ErrorBody: {
             /** Code */
@@ -4678,6 +4787,59 @@ export interface components {
             fields: components["schemas"]["UploadFieldView"][];
             /** Url */
             url: string | null;
+        };
+        /** ItemPageView */
+        ItemPageView: {
+            /**
+             * Item Id
+             * Format: uuid
+             */
+            item_id: string;
+            /** Kind */
+            kind: string;
+            /** Streams */
+            streams: components["schemas"]["ItemStreamView"][];
+        };
+        /**
+         * ItemReadView
+         * @description A handle to one item's streams of one kind until `expires_at`. Read
+         *     it at `GET /v1/live/items?handle=`; a viewer asks for a new one when it
+         *     ends.
+         */
+        ItemReadView: {
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Handle */
+            handle: string;
+            /**
+             * Item Id
+             * Format: uuid
+             */
+            item_id: string;
+            /** Kind */
+            kind: string;
+        };
+        /**
+         * ItemStreamView
+         * @description One open stream of the item: the oldest entry still held, the
+         *     entries after the last one read, and whether entries never read were
+         *     let go.
+         */
+        ItemStreamView: {
+            /** Dropped */
+            dropped: boolean;
+            /** Entries */
+            entries: components["schemas"]["EntryView"][];
+            /** First */
+            first: number;
+            /**
+             * Stream
+             * Format: uuid
+             */
+            stream: string;
         };
         /**
          * KeyStatus
@@ -9681,6 +9843,44 @@ export interface operations {
             };
         };
     };
+    append_v1_claimants_me_items__item_id__streams__kind__post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                item_id: string;
+                kind: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClaimantAppendRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     revoke_claimant_v1_claimants__claimant_id__delete: {
         parameters: {
             query?: never;
@@ -10803,6 +11003,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LivePageView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_item_live_v1_live_items_get: {
+        parameters: {
+            query: {
+                handle: string;
+                after?: string[] | null;
+            };
+            header?: {
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemPageView"];
                 };
             };
             /** @description Validation Error */
@@ -12455,6 +12690,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserPageView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    open_item_live_v1_work_items__item_id__streams__kind__live_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                item_id: string;
+                kind: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemReadView"];
                 };
             };
             /** @description Validation Error */
