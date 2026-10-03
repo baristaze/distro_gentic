@@ -377,7 +377,7 @@ class GitHubImpl(IntegrationInterface):
                     raise
         try:
             return OpenedPullRequest(
-                id=f"{owner}/{repo}#{int(held['number'])}",
+                id=f"{owner}/{repo}#{int(held['number'])}".lower(),
                 url=str(held["html_url"]),
                 repository=repository,
                 head=head,

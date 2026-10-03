@@ -141,10 +141,12 @@ def _obj(body: Mapping[str, Any], key: str) -> dict[str, Any]:
 
 
 def _repository(body: Mapping[str, Any]) -> str:
+    """The repository a delivery names, in lower case, as the platform keeps
+    it: GitHub compares names without case and sends them as typed."""
     name = _obj(body, "repository")["full_name"]
     if not isinstance(name, str) or not name:
         raise ValueError("no repository")
-    return name
+    return name.lower()
 
 
 def _author(user: Mapping[str, Any], account: str) -> dict[str, str]:

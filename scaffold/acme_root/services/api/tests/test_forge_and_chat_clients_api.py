@@ -13,6 +13,7 @@ from uuid import UUID
 import httpx
 import pytest
 from api_support import build_container, client_over, seed_request, sign_in_as
+from contracts.agent_session_storage import make_session
 from cryptography.hazmat.primitives.asymmetric import rsa
 from pydantic import SecretStr
 
@@ -23,8 +24,11 @@ from acme.integrations.events.slack import SlackImpl
 from acme.integrations.identity.twin import IdentityProviderTwinImpl
 from acme.integrations.impl.configured import IntegrationsOverImpl
 from acme.integrations.model_providers.registry import absent_model_providers
-from acme.om.base import utcnow
+from acme.om.base import EMPTY_UUID, utcnow
+from acme.om.intake.root import build_intake
 from acme.om.intake.types.event import FeedbackEvent
+from acme.om.intake.types.link import HandleKind
+from acme.om.projects.types.project import Repository
 from acme.services.api.container import AppContainer
 
 FIXTURES = Path(__file__).parents[3] / "integrations" / "tests" / "fixtures"
@@ -108,9 +112,14 @@ async def connected(
     return org.id
 
 
-def a_comment(secret: str = SECRET) -> tuple[bytes, dict[str, str]]:
-    """GitHub's recorded comment on a pull request of installation 71001."""
+def a_comment(secret: str = SECRET, repository: str | None = None) -> tuple[bytes, dict[str, str]]:
+    """GitHub's recorded comment on a pull request of installation 71001,
+    with the repository's name as GitHub spells it, when one is given."""
     payload = (FIXTURES / "github/issue_comment.json").read_bytes()
+    if repository is not None:
+        body = json.loads(payload)
+        body["repository"]["full_name"] = repository
+        payload = json.dumps(body).encode()
     return payload, {
         github_wire.EVENT_HEADER: "issue_comment",
         github_wire.SIGNATURE_HEADER: github_wire.sign(payload, secret),
@@ -134,6 +143,32 @@ async def test_a_signed_delivery_is_queued_for_the_tenant_that_connected_its_ins
     event = FeedbackEvent.model_validate(delivery["event"])
     assert (event.integration, event.provenance.value) == ("forge", "real")
     assert (event.author.external_id, event.names.pull_request) == ("583231", "octo-org/widgets#12")
+
+
+async def test_a_delivery_naming_its_repository_in_capitals_routes_to_the_session_on_it(
+    container: AppContainer,
+) -> None:
+    payload, headers = a_comment(repository="Octo-Org/Widgets")
+    async with client_over(container) as client:
+        ajax = await connected(container, client, "ajax", "71001")
+        answered = await client.post(
+            "/webhooks/integrations/forge", content=payload, headers=headers
+        )
+    assert answered.status_code == 200, answered.text
+    # The session's pull request, bound under the repository as the
+    # platform keeps it, and the event routed as the worker routes it.
+    intake = build_intake(
+        container.storage, container.managers, integrations=container.integrations
+    )
+    ctx = await container.managers.tenancy.service_context(seed_request(), ajax, EMPTY_UUID)
+    session = await container.managers.agent_sessions.create_session(ctx, make_session())
+    kept = Repository(host="github.com", path="Octo-Org/Widgets").path
+    await intake.bind_work(ctx, session.id, HandleKind.PULL_REQUEST, f"{kept}#12")
+    (only,) = await queued(container)
+    delivery = only["delivery"]
+    assert isinstance(delivery, dict)
+    routed = await intake.route(ctx, FeedbackEvent.model_validate(delivery["event"]))
+    assert routed.session_id == session.id
 
 
 async def test_a_delivery_signed_with_the_wrong_secret_is_refused_and_queues_nothing(
