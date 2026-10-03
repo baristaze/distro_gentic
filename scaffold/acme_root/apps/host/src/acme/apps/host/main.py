@@ -24,13 +24,14 @@ from acme.apps.host.config import BadSetting, Settings, settings_from_env
 from acme.apps.host.probe import Misconfigured, Probe, real_probes, startup
 from acme.apps.host.relay import ExecutorRelayImpl
 from acme.client.client import WIRE_FAILURES, ApiClient, ApiError
+from acme.infra.exceptions import InfraException
 from acme.infra.secrets.local import SecretsLocalImpl
 from acme.infra.transports import TransportInterface
 from acme.infra.transports.broker import BrokerNullImpl
 from acme.infra.transports.container import TransportContainerImpl
 from acme.infra.workspaces import IsolationMode, WorkspaceProviderInterface
 from acme.infra.workspaces.container import WorkspaceContainerImpl
-from acme.infra.workspaces.network import CAFileUnreadable, HostNetwork
+from acme.infra.workspaces.network import HostNetwork
 
 log = logging.getLogger(__name__)
 
@@ -115,7 +116,7 @@ def host_network() -> HostNetwork:
     session's prepare."""
     try:
         return HostNetwork.of(os.environ)
-    except CAFileUnreadable as error:
+    except InfraException as error:  # its CA file, unreadable
         raise Misconfigured([Probe("trust_store", False, str(error))]) from error
 
 
