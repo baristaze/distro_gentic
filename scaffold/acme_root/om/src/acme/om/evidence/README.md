@@ -12,7 +12,9 @@ of](../../../../README.md).
   (an image and a toolchain), the host and its isolation, who ran it and
   wrote its results, the check and its version, its parameters, metrics,
   timing, and outcome, and its artifacts, each with a hash. A run is
-  written once and never changed.
+  written once and never changed. A run the executor made names the
+  host, isolation, and image the executor made it on, never what the
+  run's own stream says of them.
 - **Provenance**: what served a run. Each thing a run relied on is
   `real`, a `twin`, a `double` (a test double), or `unavailable`. A run
   reports its weakest: one twin makes it a twin's run.

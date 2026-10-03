@@ -24,7 +24,12 @@ from acme.om.evidence.storage.impl.memory import EvidenceStorageMemoryImpl
 from acme.om.evidence.types.contract import CheckDeclaration, Offer
 from acme.om.evidence.types.policy import Requirement, ValidationPolicy
 from acme.om.evidence.types.provenance import Provenance
-from acme.om.evidence.types.validation import Delivery, ExecutionRequest, ExecutorReport
+from acme.om.evidence.types.validation import (
+    Delivery,
+    ExecutionRequest,
+    ExecutorReport,
+    Prepared,
+)
 from acme.om.outbox.impl.relay import OutboxRelayImpl
 from acme.om.outbox.storage.impl.memory import OutboxStorageMemoryImpl
 from contracts.doubles import Members, SessionProjectsMemory
@@ -46,6 +51,10 @@ def all_pass(check: str, trial: int) -> str:
     return "passed"
 
 
+PREPARED = Prepared(host="executor-host", isolation="vm", image="sha256:" + "2" * 64)
+"""What a scripted executor made its instances as, as `stream` names it."""
+
+
 @dataclass
 class ScriptedExecutor(ExecutorInterface):
     """Runs nothing: writes the results stream a fresh executor would for the
@@ -60,6 +69,8 @@ class ScriptedExecutor(ExecutorInterface):
     capabilities: frozenset[str] = frozenset({"browser"})
     tamper: Callable[[bytes], bytes] | None = None
     cases: tuple[str, ...] | None = None
+    # What it made each run's instance as: what its runner's start line says.
+    prepared: Prepared = PREPARED
     requests: list[ExecutionRequest] = field(default_factory=list)
 
     async def offer(self, ctx: TenantContext) -> Offer:
@@ -92,7 +103,9 @@ class ScriptedExecutor(ExecutorInterface):
         signed = digest(results)
         if self.tamper is not None:
             results = self.tamper(results)
-        return ExecutorReport(executor=self.name, results=results, sha256=signed)
+        return ExecutorReport(
+            executor=self.name, prepared=self.prepared, results=results, sha256=signed
+        )
 
 
 def stream(

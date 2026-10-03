@@ -33,7 +33,9 @@ glob (`.` for `all`), the commit `HEAD` is at, and the count of files
 the `git ls-files` call gave, never as a list: each reviewer lists them
 itself with the same call, and reads the working tree, never that
 commit, which only records where `HEAD` stood. The layers beneath get
-the arguments as given, and resolve them by the same rules. An empty
+the arguments as given, and each resolves them by its own Input: the
+guideline's layer hands its reviewers the list of files, as its own
+skill reads it, even for `all` or a path. An empty
 scope is reported as "nothing to review" and the skill stops. `all`
 costs eight full reads of the repository for this layer, and the layers
 beneath add their own; a path or a range is the cheaper question
@@ -54,18 +56,28 @@ whenever the change is narrower than the tree.
    (`/agentic-core:agentic-review-full` in Claude Code) and the
    guideline's `arch-review-full` (`/swe-guidelines:arch-review-full`).
    Follow each one's procedure as it is written, up to the launch of its
-   reviewers, with one exception: each finds its own folder from the
-   base directory the host names when it loads that skill, never by
-   `realpath`. The guideline's checker run is that skill's own step,
-   and the host may ask the person first. A layer whose skill the host
-   does not list is not run:
-   the report says so, and names the plugin that holds it. This skill
-   never judges a lens of that layer in its place.
+   reviewers, with these exceptions:
+   - Each finds its own folder from the base directory the host names
+     when it loads that skill, never by `realpath`.
+   - The guideline's checker run is that skill's own step, and the host
+     may ask the person first. The root it names is the absolute path of
+     the folder that holds the scope and whose `om/src/` holds one
+     package: `scaffold/acme_root` in this repository.
+   - For a scope that reaches above that folder, the checker does not
+     apply: it is not run, the report says so, and every reviewer of
+     that layer judges every lens of its group.
+
+   A layer whose skill the host does not list is not run: the report
+   says so, and names the plugin that holds it. This skill never judges
+   a lens of that layer in its place.
 4. Where the agent can start subagents, launch every reviewer of the
    three layers at once: those each skill beneath launches, as it says,
-   and this layer's eight, one per group. Each of the eight gets the
-   scope line, the group name, the absolute path of its lens file
-   (`<catalog>/<group>.md`), and the absolute path of the spec. Use the
+   and this layer's eight, one per group. Every reviewer's message, of
+   every layer, names two absolute paths: the repository root, which the
+   scope's paths are relative to, and `scaffold/acme_root`, which the
+   checker's `to_judge` places are relative to. Each of the eight also
+   gets the scope line, the group name, the absolute path of its lens
+   file (`<catalog>/<group>.md`), and the absolute path of the spec. Use the
    `distro-reviewer` agent that `../../agents/distro-reviewer.md`
    defines for Claude Code (`distro-gentic:distro-reviewer` when
    installed as the plugin). When no such agent is installed, give a

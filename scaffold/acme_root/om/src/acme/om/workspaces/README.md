@@ -46,18 +46,21 @@ rebuilt from.
   cannot give before its provider is reached, and the provider refuses
   what it cannot meet: either way the loop parks on `resource` and asks
   again after a wait, and no weaker workspace is made ([ADR
-  2005](../../../../../docs/adr/2005-a-workspace-no-host-can-give-parks-the-loop-and-a-lost-one-ends-it.md)).
+  2005](../../../../../docs/adr/2005-a-workspace-no-host-can-give-parks-the-loop-and-a-lost-one-waits-for-a-person.md)).
   Then the checkout is brought up to the session's branch on the
   repository its project binds, from a bundle the platform reads on its
   own host with the project's fetch credential; the checkout fetches
   nothing itself ([ADR 2023](../../../../../docs/adr/2023-a-workspaces-repository-comes-in-and-its-work-goes-out-as-bundles-the-platform-makes.md)).
 - **The branch.** One the remote holds is tracked, fast-forwarded to
-  what the remote holds, and one never pushed is kept, or cut from the
-  default branch on the session's first loop. One the remote held and
+  what the remote holds, and one never pushed is kept. Where nothing
+  holds it, it is cut from its last snapshot, or from the default branch
+  on the session's first loop. One the remote held and
   lost is rebuilt from the default branch only when its pull request was
-  merged or closed, and the loop is told. One that moved on both sides,
-  or vanished for no known reason, ends the loop, loudly; nothing
-  restarts silently from the default branch. Before any cut, what the
+  merged or closed, and the loop is told; a later cut starts there too,
+  never from a snapshot of the old work. One that moved on both sides,
+  or vanished for no known reason, parks the loop, loudly, for a person
+  to say what comes next; nothing restarts silently from the default
+  branch. Before any cut, what the
   checkout holds is pushed to a snapshot ref, or nothing is cut.
 - **Release.** Before an instance goes, what its checkout holds that the
   remote lacks is committed to a snapshot ref beside the session's
@@ -91,12 +94,15 @@ rebuilt from.
   the delivered commit, with every protected path from the base, and no
   credential and no history. It runs each check's template there, reads
   back and hashes the results within their bound, and destroys the
-  instance whatever ended the run. For a session inside its tenant's
+  instance whatever ended the run. A trial that reaches no verdict (it
+  ran past its time, or wrote no run of its check) is an `errored` run
+  the executor writes, so every trial counts. For a session inside its tenant's
   wall, a host of its pool makes the instance instead, to the isolation
   the session is pinned to, and every step crosses the wall as `exec`
   work; no host of another pool or tenant takes it.
-- **Purge.** A tenant deleted past its retention loses its workspaces,
-  its allowlists, and its fetch credentials, each value out of the store
+- **Purge.** A session the sweep purges loses its workspace row with its
+  files. A tenant deleted past its retention loses its workspaces, its
+  allowlists, and its fetch credentials, each value out of the store
   before its record.
 
 ## The rules
@@ -130,7 +136,8 @@ rebuilt from.
   pinned as it is created, and the engine's tools manager, so every
   workspace is held to its pin. The loop sees the engine's interfaces.
 - The checkout runs in the workspace through the transport the tools
-  take, under the epoch of the run that holds the session: for a session
+  take, each command under the epoch its run held when it began, so a run
+  that lost its claim moves nothing: for a session
   pinned to its tenant's hosts, the relay to the host that holds it.
   Nothing it runs reaches the repository: a bundle comes in through the
   transport's files, and one goes out the same way.
@@ -147,7 +154,7 @@ rebuilt from.
   redirect is followed. The root walls off what the options name; in
   `local`, a repository on disk is read too. A gone branch's fate
   comes from `PullRequestsInterface`, whose null knows none, so a branch
-  gone for any reason ends the loop.
+  gone for any reason parks the loop for a person.
 - Outside `local`, the evidence's executor is this namespace's: the root
   builds it over infra's provider and transport for a session of the
   cloud, and over the relay's instances (`PlacedInstancesInterface`, in
@@ -167,8 +174,9 @@ rebuilt from.
   project's fetch credential, handed to that git alone.
 - The engineer's pull request goes through
   `WorkspacesManagerInterface.open_pull_request`, which checks the push
-  token, bundles the committed head out of the workspace this host
-  holds, and writes through `SourceControlInterface` (`projects.py`): the
+  token, refuses a body with an image or a URL off the repository's host,
+  since the forge renders it, bundles the committed head out of the
+  workspace this host holds, and writes through `SourceControlInterface` (`projects.py`): the
   one head, to the session's branch alone, forward only. The root wires
   the forge's (`impl/forge.py`), and with none every write is
   unavailable.

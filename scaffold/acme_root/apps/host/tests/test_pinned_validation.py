@@ -49,7 +49,6 @@ from acme.om.evidence.types.contract import CheckDeclaration
 from acme.om.evidence.types.policy import ValidationPolicy
 from acme.om.evidence.types.record import RunOutcome, RunPurpose
 from acme.om.evidence.types.validation import Delivery
-from acme.om.exceptions import ValidationFailed
 from acme.om.placement.types.work import WorkspaceOperation, WorkspacePayload
 from acme.om.relay.rules import READ_BYTES
 from acme.om.root import PlatformPorts
@@ -370,18 +369,20 @@ async def test_the_instance_goes_when_its_check_ends_the_run(
     host = await pool_host(api, pool.id, tmp_path / "host-a")
     session_id, _ = await delivered(over_memory, api, pool.id, SILENT)
 
-    with pytest.raises(ValidationFailed, match="wrote no results stream"):
-        await pumped(
-            managers.evidence.validate(owner, session_id, RunPurpose.VALIDATION),
-            {host.agent: host.claimed},
-        )
+    validation = await pumped(
+        managers.evidence.validate(owner, session_id, RunPurpose.VALIDATION),
+        {host.agent: host.claimed},
+    )
 
+    (record,) = (await managers.evidence.get_runs(owner, session_id, None, 10)).items
+    assert validation.records == (record.id,)
+    assert record.outcome is RunOutcome.ERRORED, "a check that wrote no results counts, failed"
     assert host.claimed, "the run's instance was made on the pool's host"
     assert await host.provider.held() == [], "and it went when the check ended the run"
     assert gone(host.root / owner.org_id.hex)
 
 
-async def test_a_results_stream_longer_than_one_relayed_read_is_refused_at_once(
+async def test_a_results_stream_longer_than_one_relayed_read_is_an_errored_run_read_once(
     api: Stack, over_memory: Runner, tmp_path: Path
 ) -> None:
     owner, managers = api.owner, over_memory.container.managers
@@ -389,15 +390,16 @@ async def test_a_results_stream_longer_than_one_relayed_read_is_refused_at_once(
     host = await pool_host(api, pool.id, tmp_path / "host-a")
     session_id, _ = await delivered(over_memory, api, pool.id, LONG)
 
-    with pytest.raises(ValidationFailed, match=f"past the {READ_BYTES} bytes one read"):
-        await asyncio.wait_for(
-            pumped(
-                managers.evidence.validate(owner, session_id, RunPurpose.VALIDATION),
-                {host.agent: host.claimed},
-            ),
-            timeout=60,
-        )
+    validation = await asyncio.wait_for(
+        pumped(
+            managers.evidence.validate(owner, session_id, RunPurpose.VALIDATION),
+            {host.agent: host.claimed},
+        ),
+        timeout=60,
+    )
 
+    (record,) = (await managers.evidence.get_runs(owner, session_id, None, 10)).items
+    assert validation.records == (record.id,) and record.outcome is RunOutcome.ERRORED
     ((_, read),) = host.transport.read
     assert len(read) == READ_BYTES + 1, "one read, of what crosses, and no more"
     assert await host.provider.held() == [], "and the instance went"

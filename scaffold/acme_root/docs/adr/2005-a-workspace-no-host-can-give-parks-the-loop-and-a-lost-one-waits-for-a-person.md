@@ -1,4 +1,4 @@
-# ADR 2005: A workspace no host can give parks the loop, and a lost one ends it
+# ADR 2005: A workspace no host can give parks the loop, and a lost one waits for a person
 
 **Status**: accepted (2026-10-03)
 
@@ -17,7 +17,9 @@ throws away a session that would run once a host can give it.
 A workspace is also a cache. Its branch and its commits live on the
 remote, so a prepare rebuilds the checkout from there. Sometimes what it
 is rebuilt from is gone, and nothing says why. Rebuilding from the
-default branch then would restart the work silently.
+default branch then would restart the work silently, and ending the loop
+would throw away what it reached when a person could say what comes
+next.
 
 ## Decision
 
@@ -26,11 +28,13 @@ with the unlock `workspace` and a retry time its options set, before any
 model call. At the retry time the next run asks again. No weaker
 workspace is made, and nothing is spent while it waits.
 
-**A lost workspace ends the loop `errored`.** A layer that prepares a
-workspace raises `WorkspaceLost` when its durable state is gone and
+**A lost workspace parks the loop for a person.** A layer that prepares
+a workspace raises `WorkspaceLost` when its durable state is gone and
 nothing says why, such as a branch the remote held and lost with no
-merged or closed pull request behind it. The loop ends, loudly, before
-any call.
+merged or closed pull request behind it, or one that moved on both
+sides. The loop parks on `person` with the unlock `workspace`, loudly,
+before any call, and keeps everything it reached. A person restores the
+branch, or settles its pull request, and resumes it.
 
 **What changed is told before the first call.** A prepared workspace
 carries what changed under the model since its last loop
@@ -68,6 +72,6 @@ alone.
   process holds tells only what was not delivered. A session whose
   workspace this process does not hold, or whose project binds no
   repository, is still read as nothing, and counts no success.
-- The engine's loop gains the park, the lost end, and the told change,
-  and its workspace interface gains `changed` and `WorkspaceLost`. The
-  next move of the base merges over all four.
+- The engine's loop gains the two parks and the told change, and its
+  workspace interface gains `changed` and `WorkspaceLost`. The next move
+  of the base merges over all four.

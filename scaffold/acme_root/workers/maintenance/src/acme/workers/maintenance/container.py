@@ -53,6 +53,7 @@ from acme.om.trust.impl.placement import PlacementCloudImpl
 from acme.om.trust.root import TrustLayer
 from acme.om.trust.types.identities import Executor, ExecutorKind
 from acme.om.work.impl.manager import WorkOptions
+from acme.om.workspaces.impl.executor import ExecutorOptions
 from acme.om.workspaces.impl.manager import WorkspacesOptions
 from acme.workers.maintenance.sessions import StalledOptions, StalledSessionsSweep
 from acme.workers.maintenance.settings import MaintenanceSettings
@@ -152,6 +153,7 @@ def worker_managers(
         budget_gate=ports.budget_gate or build_money_gate(storage),
         result_gate=ports.result_gate,
         executor=ports.executor,
+        executor_options=ExecutorOptions(image=settings.workspace_image),
         work_product=ports.work_product,
         session_projects=ports.session_projects,
         workspace_projects=ports.workspace_projects,

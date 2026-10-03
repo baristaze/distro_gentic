@@ -95,6 +95,12 @@ class WorkspaceStorageInterface(ABC):
         ...
 
     @abstractmethod
+    async def purge_workspace(self, org_id: UUID, session_id: UUID) -> bool:
+        """The workspace row of a session its purge has claimed. False when
+        none was left."""
+        ...
+
+    @abstractmethod
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:
         """At most `limit` workspaces and `limit` allowlists of a deleted
         tenant past its retention; returns how many went."""

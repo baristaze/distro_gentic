@@ -109,7 +109,12 @@ class RepositoryReaderGitImpl(RepositoryReaderInterface):
         self._resolve = resolve or _resolved
 
     async def delivered(
-        self, binding: RepositoryBinding, branch: str, credential: FetchCredential | None = None
+        self,
+        binding: RepositoryBinding,
+        branch: str,
+        credential: FetchCredential | None = None,
+        *,
+        cut: str | None = None,
     ) -> Delivered:
         with tempfile.TemporaryDirectory(prefix="delivery-") as root:
             repo = Path(root) / "repo"
@@ -123,7 +128,13 @@ class RepositoryReaderGitImpl(RepositoryReaderInterface):
             held = await self._git(remote, repo, "ls-remote", url, f"refs/heads/{branch}")
             tip = await self._git(env, repo, "rev-parse", f"{BASE}^{{commit}}")
             if not held.strip():
-                return Delivered(base=tip, head=tip)
+                # Nothing delivered, from where the branch was cut: the
+                # checkout's word for it, held to the default's history.
+                base = tip
+                if cut is not None and rules.COMMIT.fullmatch(cut):
+                    if await self._holds(env, repo, cut, tip):
+                        base = cut
+                return Delivered(base=base, head=base)
             await self._git(
                 remote, repo, "fetch", "-q", "--no-tags", url, f"+refs/heads/{branch}:{HEAD}"
             )
@@ -146,7 +157,12 @@ class RepositoryReaderGitImpl(RepositoryReaderInterface):
         return Delivered(base=base, head=head, changed=tuple(sorted(set(paths))))
 
     async def incoming(
-        self, binding: RepositoryBinding, branch: str, credential: FetchCredential | None = None
+        self,
+        binding: RepositoryBinding,
+        branch: str,
+        credential: FetchCredential | None = None,
+        *,
+        snapshot: str | None = None,
     ) -> Incoming:
         with tempfile.TemporaryDirectory(prefix="incoming-") as root:
             repo = Path(root) / "repo"
@@ -160,13 +176,18 @@ class RepositoryReaderGitImpl(RepositoryReaderInterface):
             wanted = [f"+refs/heads/{default}:refs/heads/{default}"]
             if (await self._git(remote, repo, "ls-remote", url, f"refs/heads/{branch}")).strip():
                 wanted.append(f"+refs/heads/{branch}:refs/heads/{branch}")
+            kept: list[str] = []
+            if snapshot is not None and snapshot.startswith(f"{rules.SNAPSHOT_PREFIX}/{branch}/"):
+                if (await self._git(remote, repo, "ls-remote", url, snapshot)).strip():
+                    wanted.append(f"+{snapshot}:{snapshot}")
+                    kept.append(snapshot)
             # The tags in the branches' history come along, as git follows
             # them, so the checkout describes its commits as the repository
             # does.
             await self._git(remote, repo, "fetch", "-q", url, *wanted)
             bundle = Path(root) / "incoming.bundle"
             await self._git(
-                env, repo, "bundle", "create", "-q", str(bundle), "--branches", "--tags"
+                env, repo, "bundle", "create", "-q", str(bundle), "--branches", "--tags", *kept
             )
             if bundle.stat().st_size > self._options.max_bundle:
                 raise Unavailable(
@@ -290,6 +311,14 @@ class RepositoryReaderGitImpl(RepositoryReaderInterface):
         if len(tar) > limit:
             raise Unavailable(f"the tree of a delivery is past the {limit} bytes it is read to")
         return tar
+
+    async def _holds(self, env: Mapping[str, str], repo: Path, commit: str, tip: str) -> bool:
+        """Whether `tip`'s history, as fetched, holds `commit`."""
+        try:
+            await self._run(env, repo, "merge-base", "--is-ancestor", commit, tip)
+        except Unavailable:
+            return False
+        return True
 
     async def _git(self, env: Mapping[str, str], repo: Path | None, *args: str) -> str:
         """One git command, with no replacement objects, its output's first

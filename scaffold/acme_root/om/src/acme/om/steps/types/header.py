@@ -85,6 +85,10 @@ class Park(Platform):
     """What clears the park, named as a kind or an id (`approval`, a job's
     id), never as content."""
     retry_at: datetime | None = None
+    unsettled: bool = False
+    """Written before its run settled the calls a lost run left open, so a
+    call open at it may have started: the run that resumes it settles each
+    by its effect."""
 
     @model_validator(mode="after")
     def _a_person_sets_no_clock(self) -> Self:

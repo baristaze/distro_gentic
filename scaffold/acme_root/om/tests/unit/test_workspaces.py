@@ -36,11 +36,11 @@ from acme.om.agents import ResultGateInterface
 from acme.om.agents.types.kind import AgentKind
 from acme.om.agents.types.request import Start
 from acme.om.agents.types.run import RunEnd
-from acme.om.base import new_id
+from acme.om.base import Identifiable, Trackable, new_id
 from acme.om.context import Role, TenantContext
 from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
 from acme.om.evidence.impl.ports import WorkProductAbsentImpl
-from acme.om.exceptions import NotAuthorized, NotFound, Unavailable
+from acme.om.exceptions import NotAuthorized, NotFound, PreconditionFailed, Unavailable
 from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.steps.types.header import LoopOutcome, ParkReason
 from acme.om.steps.types.step import Step, StepType
@@ -63,6 +63,7 @@ from acme.om.workspaces.types.source import (
     Snapshot,
     WriteKind,
 )
+from acme.om.workspaces.types.workspace import SessionWorkspace
 
 
 def kind(name: str, mode: IsolationMode, egress: EgressMode = EgressMode.OPEN) -> AgentKind:
@@ -271,7 +272,7 @@ async def test_a_dirty_checkout_is_kept_before_it_is_cut_or_nothing_is_cut(
     assert ref in told.as_text() and commit in told.as_text() and "merged" in told.as_text()
 
 
-async def test_a_branch_that_moved_here_and_on_its_repository_ends_the_loop_loudly(
+async def test_a_branch_that_moved_here_and_on_its_repository_parks_the_loop_for_a_person(
     tmp_path: Path,
 ) -> None:
     git = GitTwin()
@@ -284,11 +285,12 @@ async def test_a_branch_that_moved_here_and_on_its_repository_ends_the_loop_loud
 
     run = await one_loop(loop, session_id)
 
-    assert run.outcome is LoopOutcome.ERRORED and loop.anthropic.calls == []
+    assert run.end is RunEnd.PARKED and run.park is not None and loop.anthropic.calls == []
+    assert (run.park.reason, run.park.unlock) == (ParkReason.PERSON, "workspace")
     assert git.cuts == [], "nothing merged or cut"
 
 
-async def test_a_vanished_branch_with_no_known_reason_ends_the_loop_loudly(
+async def test_a_vanished_branch_with_no_known_reason_parks_the_loop_for_a_person(
     tmp_path: Path,
 ) -> None:
     git = GitTwin()
@@ -304,7 +306,8 @@ async def test_a_vanished_branch_with_no_known_reason_ends_the_loop_loudly(
 
     lost = await one_loop(loop, session_id, "Go on.")
 
-    assert lost.outcome is LoopOutcome.ERRORED
+    assert lost.end is RunEnd.PARKED and lost.park is not None
+    assert (lost.park.reason, lost.park.unlock) == (ParkReason.PERSON, "workspace")
     assert len(loop.anthropic.calls) == calls, "it failed before the first model call"
     assert git.cuts == [], "nothing restarted from the default branch"
     assert provider(loop).live == set()
@@ -387,6 +390,38 @@ async def test_a_sessions_egress_is_its_projects_allowlist_as_pinned(tmp_path: P
     assert not await allowed(ask("metadata.google.internal", "93.184.215.17", None), later)
     assert not await allowed(ask("any.example.org", "169.254.169.254", None), later)
     assert not await allowed(ask("any.example.org", "192.168.1.20", None), later)
+
+
+async def test_an_allowlist_write_retried_after_it_landed_returns_the_row_as_stored(
+    tmp_path: Path,
+) -> None:
+    loop = loop_of(tmp_path)
+    workspaces = loop.managers.workspaces
+    listed = EgressAllowlist(
+        id=new_id(),
+        created_at=loop.clock(),
+        updated_at=loop.clock(),
+        created_by=loop.owner.user_id,
+        updated_by=loop.owner.user_id,
+        project_id=new_id(),
+        rules=(SOURCE,),
+    )
+
+    # A create whose answer was lost, asked again: the row as stored, once.
+    created = await workspaces.write_allowlist(loop.owner, listed)
+    assert await workspaces.write_allowlist(loop.owner, listed) == created
+    assert created.version == 1
+
+    # An update whose answer was lost, asked again at the version it read.
+    widened = created.model_copy(update={"rules": (SOURCE, MIRROR)})
+    updated = await workspaces.write_allowlist(loop.owner, widened)
+    assert await workspaces.write_allowlist(loop.owner, widened) == updated
+    stored = await workspaces.get_allowlist(loop.owner, listed.project_id)
+    assert stored == updated and updated.version == 2
+
+    # Another write at a stale version is still refused.
+    with pytest.raises(PreconditionFailed):
+        await workspaces.write_allowlist(loop.owner, created.model_copy(update={"rules": ()}))
 
 
 async def test_only_one_who_manages_the_tenant_writes_an_allowlist(tmp_path: Path) -> None:
@@ -500,11 +535,13 @@ class SlowPushGit(GitTwin):
         binding: RepositoryBinding,
         branch: str,
         ref: str,
+        *,
+        epoch: int,
     ) -> Snapshot:
         if self.cue is not None:
             self.waiting.set()
             await self.cue.wait()
-        return await super().snapshot(ctx, workspace, binding, branch, ref)
+        return await super().snapshot(ctx, workspace, binding, branch, ref, epoch=epoch)
 
 
 async def test_a_run_that_resumes_before_the_last_release_lands_keeps_its_workspace(
@@ -620,3 +657,24 @@ async def test_a_session_started_in_a_project_works_on_the_projects_repository(
     workspaces = loop.managers.workspaces
     assert not await workspaces.outward(loop.owner, session.id, own), "the project's repository"
     assert await workspaces.outward(loop.owner, session.id, elsewhere)
+
+
+async def test_a_sessions_purge_takes_its_workspace_row(tmp_path: Path) -> None:
+    loop = loop_of(tmp_path)
+    session_id = await loop.start("twinned")
+    other = await loop.start("twinned")
+    workspaces = loop.managers.workspaces
+    assert (await workspaces.get_workspace(loop.owner, session_id)).id == session_id
+
+    await loop.managers.tools.purge_workspace(loop.owner.org_id, session_id)
+
+    with pytest.raises(NotFound):
+        await workspaces.get_workspace(loop.owner, session_id)
+    assert (await workspaces.get_workspace(loop.owner, other)).id == other
+
+
+def test_every_field_of_a_sessions_workspace_is_its_managers() -> None:
+    # No caller writes one: the pin sets its isolation, and the loops the rest.
+    mixins = set(Identifiable.model_fields) | set(Trackable.model_fields)
+    own = set(SessionWorkspace.model_fields) - mixins
+    assert own == set(SessionWorkspace.MANAGER_OWNED_FIELDS)

@@ -123,7 +123,7 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
             if hosted is not None:
                 # Its host made it to the pin and holds it; the checkout is
                 # brought up to the session's branch there.
-                attached = await self._workspaces.attach(ctx, hosted)
+                attached = await self._workspaces.attach(ctx, hosted, epoch)
                 self._hosted.add(session_id)
                 self._held.hold(attached, epoch)
                 return attached
@@ -141,7 +141,7 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
             self._directories.pop(session_id, None)
             raise
         try:
-            attached = await self._workspaces.attach(ctx, workspace)
+            attached = await self._workspaces.attach(ctx, workspace, epoch)
         except BaseException:
             # Its instance goes, and its files stay as they were: nothing of
             # the loop ran in it.
@@ -160,8 +160,13 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         epoch = self._held.epoch_of(workspace.id)
         if workspace.spec.mode is not IsolationMode.NONE:
             # Kept first: a push that does not land raises, and the instance
-            # and its work stay.
-            await self._workspaces.detach(ctx, workspace)
+            # and its work stay. Its commands carry the epoch of the run that
+            # holds it, or, for one this process never held, the epoch read
+            # now: a run that claims the session after that is not reached.
+            fence = epoch
+            if fence is None:
+                fence = (await self._steps.get_cursor(ctx, workspace.id)).epoch
+            await self._workspaces.detach(ctx, workspace, fence)
         if epoch is not None and self._taken_here(workspace.id, epoch):
             # The session resumed here while its work was kept: the instance
             # is the later run's, to let go when it ends.
@@ -187,6 +192,7 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
 
     async def purge_workspace(self, org_id: UUID, session_id: UUID) -> None:
         await self._inner.purge_workspace(org_id, session_id)
+        await self._workspaces.purge_session(org_id, session_id)
         self._held.let_go(session_id)
         self._directories.pop(session_id, None)
         self._hosted.discard(session_id)

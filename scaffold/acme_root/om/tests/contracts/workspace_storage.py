@@ -24,6 +24,7 @@ CROSS_TENANT_CASES: frozenset[str] = frozenset(
         "create_workspace",
         "purge_credentials",
         "purge_tenant",
+        "purge_workspace",
         "read_allowlist",
         "read_credential",
         "read_credentials",
@@ -227,6 +228,27 @@ class WorkspaceStorageContract:
         assert await storage.read_allowlist(org_a, allowlist.project_id) == allowlist
 
     # The sweep.
+
+    async def test_purge_workspace_takes_the_sessions_row_alone(
+        self, storage: WorkspaceStorageInterface
+    ) -> None:
+        org = new_id()
+        purged, stays = make_workspace(), make_workspace()
+        assert await storage.create_workspace(org, purged)
+        assert await storage.create_workspace(org, stays)
+        assert await storage.purge_workspace(org, purged.id)
+        assert not await storage.purge_workspace(org, purged.id)
+        assert await storage.read_workspace(org, purged.id) is None
+        assert await storage.read_workspace(org, stays.id) == stays
+
+    async def test_purge_workspace_of_another_tenant_takes_nothing(
+        self, storage: WorkspaceStorageInterface
+    ) -> None:
+        org = new_id()
+        workspace = make_workspace()
+        assert await storage.create_workspace(org, workspace)
+        assert not await storage.purge_workspace(new_id(), workspace.id)
+        assert await storage.read_workspace(org, workspace.id) == workspace
 
     async def test_purge_tenant_takes_the_tenants_rows_and_no_other(
         self, storage: WorkspaceStorageInterface, rows: tuple[OutboxRow, ...]

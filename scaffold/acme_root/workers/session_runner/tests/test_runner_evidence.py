@@ -17,10 +17,12 @@ from acme.integrations.model_providers.registry import scripted_model_providers
 from acme.om.agents.impl.manager import AgentsManagerImpl
 from acme.om.evidence import WorkProductInterface
 from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
+from acme.om.evidence.impl.manager import EvidenceManagerImpl
 from acme.om.evidence.impl.ports import WorkProductMemoryImpl
 from acme.om.exceptions import UnsafeConfiguration
 from acme.om.root import PlatformPorts
 from acme.om.storage.impl.memory import StorageMemoryImpl
+from acme.om.workspaces.impl.executor import ExecutorWorkspacesImpl
 from acme.om.workspaces.impl.work_product import WorkProductWorkspacesImpl
 from acme.workers.session_runner.container import RunnerContainer
 from acme.workers.session_runner.settings import SessionRunnerSettings
@@ -32,9 +34,11 @@ def runner(
     *,
     storage: StorageMemoryImpl | None = None,
     ports: PlatformPorts | None = None,
+    image: str | None = None,
 ) -> RunnerContainer:
+    named = {} if image is None else {"workspace_image": image}
     settings = SessionRunnerSettings.model_validate(
-        {"_env_file": None, "environment": "staging", "runner_id": "runner-test"}
+        {"_env_file": None, "environment": "staging", "runner_id": "runner-test", **named}
     )
     return RunnerContainer.over(
         settings,
@@ -66,3 +70,13 @@ def test_the_runners_container_builds_the_evidence_gate(tmp_path: Path) -> None:
         gate = agents._gate  # pyright: ignore[reportPrivateUsage]
         assert isinstance(gate, ResultGateEvidenceImpl)
         assert isinstance(gate._work_product, reads)  # pyright: ignore[reportPrivateUsage]
+
+
+def test_the_runners_executor_records_the_image_its_workspaces_run(tmp_path: Path) -> None:
+    container = runner(tmp_path, image="registry.example/checks:2")
+
+    evidence = container.managers.evidence
+    assert isinstance(evidence, EvidenceManagerImpl)
+    executor = evidence._executor  # pyright: ignore[reportPrivateUsage]
+    assert isinstance(executor, ExecutorWorkspacesImpl)
+    assert executor._options.image == "registry.example/checks:2"  # pyright: ignore[reportPrivateUsage]
