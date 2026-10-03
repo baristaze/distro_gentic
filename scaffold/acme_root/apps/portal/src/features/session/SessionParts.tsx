@@ -153,7 +153,7 @@ export function ThreadPart({ vm }: { vm: SessionVm }) {
           {vm.thread?.map((entry) => (
             <li key={entry.seq} data-who={entry.who} style={{ display: "grid", gap: tokens.space.xs }}>
               <Muted style={small}>
-                {entry.who === "agent" ? "The agent" : "A person"} · {shortTime(entry.at)}
+                {entry.label} · {shortTime(entry.at)}
               </Muted>
               <Markdown text={entry.text} />
             </li>

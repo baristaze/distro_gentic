@@ -101,6 +101,26 @@ describe("the history", () => {
     ]);
   });
 
+  it("labels each message by its actor and its origin", () => {
+    const said = thread([
+      step(1, { type: "message", actor: "agent", origin: "parent", text: "Find the failing test." }),
+      step(2, { type: "message", actor: "engine", origin: "engine", text: "You have not called a tool in a while." }),
+      step(3, { type: "message", actor: "program", origin: "api", text: "Build 42 failed." }),
+      step(4, { type: "message", actor: "person", origin: "portal", text: "Go on." }),
+      step(5, { type: "message", actor: "agent", origin: "engine", text: "My notes." }),
+      step(6, { type: "message", actor: "external", origin: "integration", text: "A comment on the issue." }),
+    ]);
+    expect(said.map((entry) => [entry.who, entry.label])).toEqual([
+      ["parent", "The parent agent"],
+      ["engine", "The engine"],
+      ["program", "A program"],
+      ["person", "A person"],
+      ["agent", "The agent"],
+      ["outside", "Something outside"],
+    ]);
+    expect(timeline([step(1, { type: "message", actor: "agent", origin: "parent", text: "Go." })])[0]!.title).toBe("Message from the parent agent");
+  });
+
   it("reads every step as a timeline entry with the body kind its text needs", () => {
     const entries = timeline(HISTORY);
     expect(entries.map((entry) => [entry.seq, entry.title, entry.bodyKind])).toEqual([

@@ -112,20 +112,56 @@ export function asks(approvals: readonly ApprovalView[], questions: readonly Que
   ].sort((a, b) => a.seq - b.seq);
 }
 
+/** Who said a thing in a session's thread. */
+export type Speaker = "person" | "program" | "engine" | "agent" | "parent" | "outside";
+
+export const SPEAKERS: Record<Speaker, string> = {
+  person: "A person",
+  program: "A program",
+  engine: "The engine",
+  agent: "The agent",
+  parent: "The parent agent",
+  outside: "Something outside",
+};
+
+/** Who a step speaks for, from its actor and its origin: an agent's message
+ * that came from its parent is the parent's (its objective), a program is
+ * an API key's caller, and the engine's own notice (a nudge) is the
+ * engine's. */
+export function speakerOf(step: Pick<StepView, "actor" | "origin">): Speaker {
+  if (step.actor === "agent" && step.origin === "parent") return "parent";
+  switch (step.actor) {
+    case "person":
+      return "person";
+    case "program":
+      return "program";
+    case "engine":
+      return "engine";
+    case "external":
+      return "outside";
+    case "agent":
+    case "model":
+      return "agent";
+  }
+}
+
 export interface ThreadEntry {
   seq: number;
-  who: "person" | "agent";
+  who: Speaker;
+  /** Who said it, in words. */
+  label: string;
   text: string;
   at: string;
 }
 
-/** The conversation: what a person said and what the agent answered, in
+/** The conversation: what each sender said and what the agent answered, in
  * order. A model answer that only called tools says nothing here. */
 export function thread(steps: readonly StepView[]): ThreadEntry[] {
   const entries: ThreadEntry[] = [];
+  const said = (step: StepView, who: Speaker) => entries.push({ seq: step.seq, who, label: SPEAKERS[who], text: step.text, at: step.created_at });
   for (const step of steps) {
-    if (step.type === "message") entries.push({ seq: step.seq, who: step.actor === "agent" ? "agent" : "person", text: step.text, at: step.created_at });
-    else if (step.type === "model_response" && step.text.trim()) entries.push({ seq: step.seq, who: "agent", text: step.text, at: step.created_at });
+    if (step.type === "message") said(step, speakerOf(step));
+    else if (step.type === "model_response" && step.text.trim()) said(step, "agent");
   }
   return entries;
 }
@@ -157,7 +193,7 @@ const words = (value: string) => value.replace(/_/g, " ");
 function titleOf(step: StepView): { title: string; detail: string | null; tone: Tone } {
   switch (step.type) {
     case "message":
-      return { title: `Message from ${step.actor === "person" ? "a person" : words(step.actor)}`, detail: `by ${words(step.origin)}`, tone: "plain" };
+      return { title: `Message from ${SPEAKERS[speakerOf(step)].toLowerCase()}`, detail: `by ${words(step.origin)}`, tone: "plain" };
     case "model_request":
       return { title: "Model called", detail: null, tone: "plain" };
     case "model_response":
