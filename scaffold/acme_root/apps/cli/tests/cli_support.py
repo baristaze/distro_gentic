@@ -7,10 +7,11 @@ import asyncio
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 import httpx
 import pytest
-from api_support import OWNER, add_member, build_container, run, seed_request
+from api_support import OWNER, PROJECT_ID, add_member, build_container, run, seed_request
 from starlette.testclient import TestClient
 from typer.testing import CliRunner
 
@@ -24,6 +25,7 @@ from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.context import Role
 from acme.services.api.app import create_app
 from acme.services.api.container import AppContainer
+from acme.services.api.seed import first_project
 
 BOB = {"email": "bob@example.test"}
 ASSISTANT = AgentKind(
@@ -132,11 +134,14 @@ def stack(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Stack]:
         integrations=IntegrationsOverImpl(twin, absent_model_providers()),
         agent_kinds=(ASSISTANT,),
     )
-    _, org = run(
+    owner, org = run(
         container.managers.tenancy.bootstrap(
             seed_request(), "Ajax", "ajax", OWNER["email"], OWNER["name"]
         )
     )
+    # Its first project, which a session the CLI starts names.
+    project = first_project(owner).model_copy(update={"id": UUID(PROJECT_ID)})
+    run(container.storage.get_project_storage().create_project(org.id, project, ()))
     # Two people: the owner, and Bob as a member.
     run(add_member(container, org.id, BOB["email"], Role.MEMBER))
     monkeypatch.setenv("ACME_HOME", str(tmp_path / "home"))

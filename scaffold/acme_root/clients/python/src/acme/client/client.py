@@ -706,14 +706,23 @@ class ApiClient:
     # loop runs in the session runner; a send answers once it is durable.
 
     async def start_agent_session(
-        self, kind: str, title: str, *, idempotency_key: str | None = None
+        self,
+        kind: str,
+        title: str,
+        *,
+        project_id: UUID | None = None,
+        idempotency_key: str | None = None,
     ) -> AgentSessionView:
         """A session on the latest version of `kind`, idle until a message
-        wakes it. Always under an idempotency key."""
+        wakes it, in `project_id`: a stack outside a local one refuses a
+        session in none. Always under an idempotency key."""
+        body: dict[str, object] = {"kind": kind, "title": title}
+        if project_id is not None:
+            body["project_id"] = str(project_id)
         started = await self.request(
             "POST",
             "/v1/agent-sessions",
-            json={"kind": kind, "title": title},
+            json=body,
             idempotency_key=idempotency_key or str(uuid4()),
         )
         return AgentSessionView.model_validate(started)

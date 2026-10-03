@@ -422,13 +422,17 @@ FOLLOW_SECONDS = 1.0
 def start_session(
     kind: Annotated[str, typer.Argument(help="The agent kind the session runs.")],
     title: Annotated[str, typer.Argument(help="What the session is about.")],
+    project: Annotated[
+        UUID | None,
+        typer.Option(help="The project it works in; a stack outside local refuses none."),
+    ] = None,
     as_json: Json = False,
     api: Api = None,
 ) -> None:
-    """Start a session on a kind. It is idle until a message wakes it."""
+    """Start a session on a kind, in a project. It is idle until a message wakes it."""
 
     async def go(client: ApiClient) -> None:
-        started = await client.start_agent_session(kind, title)
+        started = await client.start_agent_session(kind, title, project_id=project)
         if as_json:
             typer.echo(started.model_dump_json(indent=2))
         else:
