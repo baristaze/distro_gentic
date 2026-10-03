@@ -52,6 +52,7 @@ from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.trust.owners import ProjectOwnerImpl, SecretOwnerInterface, SecretOwners
 from acme.om.trust.rules import crossing
 from acme.om.trust.types.secret import PROJECT, SecretDeclaration, SecretStore, kept_as
+from acme.om.watch.impl.stream import StreamOptions, step_kinds
 from acme.om.watch.kinds import STEP, StreamKind
 from acme.om.watch.root import build_kind_streams, build_stream
 from acme.om.work.kinds import WorkKindSpec
@@ -362,10 +363,16 @@ def test_a_product_never_takes_over_the_projects_secrets() -> None:
 
 async def test_a_products_stream_kind_is_held_to_its_bounds(tmp_path: Path) -> None:
     infra = InfraLocalImpl(tmp_path)
-    frames = StreamKind(
-        "frames", StreamBounds(entries=2, bytes=1024, streams=1, open=8, idle=timedelta(minutes=1))
-    )
+    frames = StreamKind("frames", entries=2, bytes=1024, streams=1)
     product = ProductKinds(streams=(frames,))
+    # The open streams of every group and the idle time bound the shared
+    # cache, so a product's kind is held to the step's: it never closes the
+    # step's streams sooner than the step's own bounds do.
+    cache = StreamOptions()
+    bounds = step_kinds(cache, frames).bounds("frames")
+    assert bounds == StreamBounds(
+        entries=2, bytes=1024, streams=1, open=cache.max_open, idle=cache.idle
+    )
     streams = build_kind_streams(infra, product)
     job, first, second = new_id(), new_id(), new_id()
 
@@ -383,8 +390,8 @@ async def test_a_products_stream_kind_is_held_to_its_bounds(tmp_path: Path) -> N
         with pytest.raises(NotFound):
             await streams.read(unbounded, job, {})
     with pytest.raises(ValueError, match="positive"):
-        StreamKind("frames", StreamBounds(entries=0))
-    loosened = ProductKinds(streams=(StreamKind(STEP, StreamBounds(entries=1_000_000)),))
+        StreamKind("frames", entries=0, bytes=1024, streams=1)
+    loosened = ProductKinds(streams=(StreamKind(STEP, entries=1_000_000, bytes=1, streams=1),))
     with pytest.raises(ValueError, match="registered twice"):
         build_kind_streams(infra, loosened)
 

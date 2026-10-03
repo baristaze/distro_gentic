@@ -90,31 +90,50 @@ class WorkKinds:
         return WorkKinds((*self, *specs))
 
 
+WORK_PAYLOADS: dict[str, type[Platform]] = {
+    WorkKind.NOOP: NoopPayload,
+    WorkKind.ORCHESTRATION: OrchestrationPayload,
+    WorkKind.WAKE_PARKED: WakeParkedPayload,
+    WorkKind.DELETE_ACCOUNT: DeleteAccountPayload,
+    WorkKind.DELETE_ORG: DeleteOrgPayload,
+    WorkKind.WAKE_SESSION: WakeSessionPayload,
+    WorkKind.WAKE_SESSIONS: WakeSessionsPayload,
+    WorkKind.LOOP: LoopPayload,
+    WorkKind.VALIDATION: ValidationPayload,
+}
+"""The payload shape of each of the work namespace's own kinds, which its
+spec in `WORK_KINDS` carries."""
+
+
+def _own(kind: WorkKind, permission: Permission) -> WorkKindSpec:
+    return WorkKindSpec(kind, WORK_PAYLOADS[kind], permission)
+
+
 WORK_KINDS: tuple[WorkKindSpec, ...] = (
-    WorkKindSpec(WorkKind.NOOP, NoopPayload, Permission.WRITE),
-    WorkKindSpec(WorkKind.ORCHESTRATION, OrchestrationPayload, Permission.WRITE),
-    WorkKindSpec(WorkKind.WAKE_PARKED, WakeParkedPayload, Permission.WRITE),
+    _own(WorkKind.NOOP, Permission.WRITE),
+    _own(WorkKind.ORCHESTRATION, Permission.WRITE),
+    _own(WorkKind.WAKE_PARKED, Permission.WRITE),
     # Only an account's deletion asks for this one, relayed from its own
     # commit: leaving is every person's right whatever their role, so no
     # route enqueues it, and the permission is the width of the handler.
-    WorkKindSpec(WorkKind.DELETE_ACCOUNT, DeleteAccountPayload, Permission.MANAGE_MEMBERS),
+    _own(WorkKind.DELETE_ACCOUNT, Permission.MANAGE_MEMBERS),
     # Only the deletion of a team org, an owner's or an operator's, asks for
     # this one, relayed from its own commit; no route enqueues it.
-    WorkKindSpec(WorkKind.DELETE_ORG, DeleteOrgPayload, Permission.MANAGE_MEMBERS),
+    _own(WorkKind.DELETE_ORG, Permission.MANAGE_MEMBERS),
     # A park asks for the first and a raised budget for the second, each
     # relayed from its own commit; the handlers append a control and project
     # the status, which WRITE covers.
-    WorkKindSpec(WorkKind.WAKE_SESSION, WakeSessionPayload, Permission.WRITE),
-    WorkKindSpec(WorkKind.WAKE_SESSIONS, WakeSessionsPayload, Permission.WRITE),
+    _own(WorkKind.WAKE_SESSION, Permission.WRITE),
+    _own(WorkKind.WAKE_SESSIONS, Permission.WRITE),
     # A write that wakes a session asks for it, relayed from its own commit;
     # the run appends steps and projects the status, which WRITE covers, and
     # each tool call asks its principal's own permissions again. Its lane is
     # its tenant's fair share, which placement answers.
-    WorkKindSpec(WorkKind.LOOP, LoopPayload, Permission.WRITE),
+    _own(WorkKind.LOOP, Permission.WRITE),
     # A validation session's start asks for it, relayed from its own commit;
     # the run writes the session's validation and finishes the session,
     # which WRITE covers.
-    WorkKindSpec(WorkKind.VALIDATION, ValidationPayload, Permission.WRITE),
+    _own(WorkKind.VALIDATION, Permission.WRITE),
 )
 """The work namespace's own kinds, each run by a worker of the platform's.
 The kinds a host claims are placement's (`placement.kinds.PLACED_KINDS`)."""

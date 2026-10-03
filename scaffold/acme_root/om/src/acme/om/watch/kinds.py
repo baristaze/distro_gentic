@@ -1,14 +1,16 @@
-"""The kinds of live stream, as a registry. A stream kind is a name and the
-bounds every stream of it is held to: its entries, its bytes, the open
-streams of one group and of every group at once, and its idle time. The
-platform's own, the parts of a step, registers here as a product's kind
-does at its roots (`root.PlatformPorts.kinds`), so no stream is written
-without a bound."""
+"""The kinds of live stream, as a registry. A stream kind is a name and what
+each stream of it may hold: its entries, its bytes, and the open streams of
+one group. The open streams of every group at once and the idle time bound
+the shared cache, every kind's streams together, so they are the step's
+alone, never a kind's own. The platform's own kind, the parts of a step,
+registers here as a product's kind does at its roots
+(`root.PlatformPorts.kinds`), so no stream is written without a bound."""
 
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import timedelta
 from types import MappingProxyType
 from uuid import UUID
 
@@ -23,34 +25,51 @@ group per session, which the stream service writes (`StreamServiceImpl`)."""
 
 @dataclass(frozen=True)
 class StreamKind:
-    """A kind of live stream and the bounds every stream of it is held to,
-    which `StreamBounds` holds positive."""
+    """A kind of live stream and what each stream of it may hold: past its
+    entries or its bytes the oldest goes, never the newest, and past its
+    open streams of one group the one that heard nothing longest goes."""
 
     name: str
-    bounds: StreamBounds
+    entries: int
+    bytes: int
+    streams: int
 
     def __post_init__(self) -> None:
         if not STREAM_KIND.match(self.name):
             raise ValueError(f"a stream kind is named in lower case, never {self.name!r}")
+        if min(self.entries, self.bytes, self.streams) <= 0:
+            raise ValueError("every bound of a stream is positive")
 
 
 class StreamKinds:
-    """The stream kinds a process knows, each once: a kind registered twice
-    is refused, so a product never loosens the step's bounds."""
+    """The stream kinds a process knows, each once, under the shared
+    cache's bounds: the open streams of every group at once, and the idle
+    time. A kind registered twice is refused, so a product never loosens the
+    step's bounds."""
 
-    def __init__(self, kinds: Iterable[StreamKind]) -> None:
+    def __init__(self, kinds: Iterable[StreamKind], *, open: int, idle: timedelta) -> None:
         found: dict[str, StreamKind] = {}
         for kind in kinds:
             if kind.name in found:
                 raise ValueError(f"stream kind {kind.name} is registered twice")
             found[kind.name] = kind
         self._kinds: Mapping[str, StreamKind] = MappingProxyType(found)
+        self._open = open
+        self._idle = idle
 
-    def __iter__(self) -> Iterator[StreamKind]:
-        return iter(self._kinds.values())
-
-    def get(self, name: str) -> StreamKind | None:
-        return self._kinds.get(name)
+    def bounds(self, name: str) -> StreamBounds | None:
+        """Every bound a stream of the kind is held to; None for a kind
+        nobody registered."""
+        kind = self._kinds.get(name)
+        if kind is None:
+            return None
+        return StreamBounds(
+            entries=kind.entries,
+            bytes=kind.bytes,
+            streams=kind.streams,
+            open=self._open,
+            idle=self._idle,
+        )
 
 
 class KindStreamsInterface(ABC):

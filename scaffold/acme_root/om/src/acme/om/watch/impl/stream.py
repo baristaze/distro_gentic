@@ -63,8 +63,10 @@ class StreamOptions(Platform):
 
 def step_kinds(options: StreamOptions, *kinds: StreamKind) -> StreamKinds:
     """The step kind under the bounds `options` set, the platform's own, and
-    a product's `kinds` beside it."""
-    return StreamKinds((StreamKind(STEP, options.bounds()), *kinds))
+    a product's `kinds` beside it, all under the cache's bounds `options`
+    sets: the open streams of every group, and the idle time."""
+    step = StreamKind(STEP, options.max_parts, options.max_bytes, options.max_streams)
+    return StreamKinds((step, *kinds), open=options.max_open, idle=options.idle)
 
 
 @dataclass(frozen=True)
@@ -112,10 +114,10 @@ class StreamServiceImpl(StreamServiceInterface):
         self._topics = topics
         self._events = events
         self._options = options or StreamOptions()
-        step = (kinds or step_kinds(self._options)).get(STEP)
+        step = (kinds or step_kinds(self._options)).bounds(STEP)
         if step is None:
             raise ValueError("the stream service writes the step kind, which is not registered")
-        self._bounds = step.bounds
+        self._bounds = step
         self._queue: deque[StreamPart | _Change] = deque(maxlen=self._options.max_queued)
         self._writer: asyncio.Task[None] | None = None
         self._overflowed = False

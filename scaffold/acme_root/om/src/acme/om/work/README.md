@@ -69,8 +69,9 @@ kinds of thing [Acme is made of](../../../../README.md).
 A write that starts work lands a `work.<kind>` outbox row beside its
 own, and the relay enqueues the item under the row's id; a namespace
 never enqueues across a role itself. A kind of the platform's adds its
-name to `WorkKind`, its `WorkKindSpec` to `WORK_KINDS` (or placement's
-`PLACED_KINDS`, when a host claims it), and its handler to the worker. A
-product's kind is a `WorkKindSpec` it hands its roots in `ProductKinds`;
-an enqueue of a kind the registry does not hold is refused. A handler
-raises `WorkParked` to wait and `WorkRefused` to fail for good.
+name to `WorkKind`, its payload to `WORK_PAYLOADS` and its spec to
+`WORK_KINDS` (or its spec to placement's `PLACED_KINDS`, when a host
+claims it), and its handler to the worker. A product's kind is a
+`WorkKindSpec` it hands its roots in `PlatformPorts.kinds`; an enqueue
+of a kind the registry does not hold is refused. A handler raises
+`WorkParked` to wait and `WorkRefused` to fail for good.
