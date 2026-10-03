@@ -98,13 +98,16 @@ When a root already passes ports of the product's, `kinds=` joins them.
    is taken only when the kind names it back.
 5. With `--stream`: a `StreamKind` with its entries, its bytes, and its
    open streams of one group, each the most one stream of the kind may
-   hold. The open streams of every group and the idle time are the
-   step's; a kind never sets them. This skill registers the kind and
-   adds no stream route: `build_kind_streams` in
-   `om/src/<name>/om/watch/root.py` builds the writer and the reader of
-   its streams, and the code that writes them, the route a viewer reads
-   them through, and that viewer's authorization are the product's. Name
-   them in the output as what the product still needs.
+   hold, and `claimant=` the `--claimant` kind, which writes it for the
+   item it holds. The open streams of every group and the idle time are
+   the step's; a kind never sets them. This skill registers the kind and
+   adds no stream route: the claimant appends at
+   `/v1/claimants/me/items/{item_id}/streams/{kind}`, and a member of the
+   item's tenant opens a handle at
+   `/v1/work-items/{item_id}/streams/{kind}/live` and reads at
+   `/v1/live/items` (ADR 2030). The program on the claimant that appends
+   is the product's: name it in the output as what the product still
+   needs.
 6. The tests, each the shape of its namesake in
    `om/tests/unit/test_product_kinds.py`, over the managers built with
    `product_kinds=PRODUCT_KINDS`:
@@ -121,8 +124,10 @@ When a root already passes ports of the product's, `kinds=` joins them.
    - a write that asks for the kind lands it on its lane, and a payload
      off its shape is refused:
      `test_a_write_that_asks_for_a_products_kind_lands_it_on_its_lane`;
-   - with `--stream`, the kind is held to its bounds and the cache's:
-     `test_a_products_stream_kind_is_held_to_its_bounds`.
+   - with `--stream`, the kind is held to its bounds and the cache's,
+     and its writer is a claimant kind of the product's own:
+     `test_a_products_stream_kind_is_held_to_its_bounds`,
+     `test_a_stream_kind_a_claimant_writes_names_a_claimant_kind_of_the_products_own`.
 7. A claimant reaches the gateway as a host does: an owner issues a
    token of its kind for a pool (`/v1/host-pools/{pool_id}/enrollment-tokens`
    with the kind), the claimant enrolls with it at
