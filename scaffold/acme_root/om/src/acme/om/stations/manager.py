@@ -104,16 +104,6 @@ class StationsManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def offer_lapsed(self, rctx: RequestContext) -> int:
-        """Platform-internal, for the sweep: across tenants, each station no
-        live lease holds, its lease lapsed or ended, that a waiting entry
-        asks for is offered, a bounded batch a call, so it goes to the first
-        in its line who waits. The grant ends the lapsed lease `expired`,
-        and a station granted meanwhile is offered nothing, so a second call
-        grants nothing more. Returns how many it granted."""
-        ...
-
-    @abstractmethod
     async def leave(self, ctx: TenantContext, session_id: UUID) -> int:
         """The session leaves every line it stands in, as it does when it
         finishes or is cancelled. Returns how many places it left. Requires

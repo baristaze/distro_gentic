@@ -167,9 +167,6 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             # Each exec item whose host's lease ran out: an unsafe one ends
             # `interrupted`, a repeatable one waits for its host again.
             "relay": managers.relay.settle_expired,
-            # Each station no live lease holds that a session waits for: it
-            # goes to the first in its line who waits.
-            "stations": managers.stations.offer_lapsed,
         },
         # The media and session purges' batches are their own: a whole one
         # says there may be more.

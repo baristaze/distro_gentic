@@ -4,7 +4,7 @@ from uuid import UUID
 from acme.om.exceptions import UniqueKeyTaken
 from acme.om.outbox.storage import OutboxLandingInterface
 from acme.om.outbox.types.row import OutboxRow
-from acme.om.stations.rules import free, in_line_order, serves
+from acme.om.stations.rules import free, in_line_order
 from acme.om.stations.storage import StationsStorageInterface
 from acme.om.stations.types.daemon import DaemonCredential, Rotation
 from acme.om.stations.types.job import JobState, StationJob
@@ -246,23 +246,6 @@ class StationsStorageMemoryImpl(MemoryStorageBase, StationsStorageInterface):
                 )
             self._insert(self._leases, org_id, lease, outbox_rows)
             return True
-
-    async def read_lapsed(
-        self, now: datetime, margin: timedelta, limit: int
-    ) -> list[tuple[UUID, UUID]]:
-        waiting = [
-            (org_id, entry)
-            for org_id, entry in self._rows_across_tenants(self._entries)
-            if entry.state is EntryState.WAITING
-        ]
-        found = [
-            (org_id, station)
-            for org_id, station in self._rows_across_tenants(self._stations)
-            if free(station, now, margin)
-            and any(org == org_id and serves(station, entry) for org, entry in waiting)
-        ]
-        found.sort(key=lambda pair: (pair[1].held_until is not None, pair[1].held_until or now))
-        return [(org_id, station.id) for org_id, station in found[:limit]]
 
     async def read_lease(self, org_id: UUID, lease_id: UUID) -> StationLease | None:
         return self._get(self._leases, org_id, lease_id)

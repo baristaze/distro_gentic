@@ -510,40 +510,6 @@ class StationsStorageContract:
         assert not await storage.grant(other, make_lease(station, entry, utcnow()), MARGIN, ())
         assert await storage.read_station(org, station.id) == station
 
-    async def test_read_lapsed_finds_each_free_station_a_waiting_entry_asks_for(
-        self, storage: StationsStorageInterface
-    ) -> None:
-        """Across tenants: a station whose lease lapsed past the margin, and
-        one no lease holds, each with an entry it serves, the one free
-        longest first. A live lease, an entry asking for what the station
-        cannot do, and a line nobody stands in keep a station out."""
-        org, other = new_id(), new_id()
-        lapsed, lease = await self.held(storage, org)
-        await self.waiting(storage, org, make_pool_of(lapsed))
-        later = lease.expires_at + MARGIN
-        pool, never_held = await self.a_station(storage, other)
-        named = make_entry(pool.id, 1.0, station_id=never_held.id)
-        assert await storage.create_entry(other, named, ())
-        pool, live = await self.a_station(storage, org)
-        entry = await self.waiting(storage, org, pool)
-        assert await storage.grant(org, make_lease(live, entry, later), MARGIN, ())
-        await self.waiting(storage, org, pool, rank=2.0)
-        pool, bare = await self.a_station(storage, org)
-        needy = make_entry(pool.id, 1.0).model_copy(update={"capabilities": ("arm",)})
-        assert await storage.create_entry(org, needy, ())
-        await self.a_station(storage, org)
-
-        found = await storage.read_lapsed(later, MARGIN, 10_000)
-        ours = [pair for pair in found if pair[0] in (org, other)]
-        assert ours == [(other, never_held.id), (org, lapsed.id)]
-        assert (org, bare.id) not in found and (org, live.id) not in found
-        assert len(await storage.read_lapsed(later, MARGIN, 1)) == 1
-        assert [
-            pair
-            for pair in await storage.read_lapsed(later - MARGIN, MARGIN, 10_000)
-            if pair[0] == org
-        ] == [], "a lease not past its margin still holds its station"
-
     async def test_a_renewal_holds_a_live_lease_alone(
         self, storage: StationsStorageInterface
     ) -> None:

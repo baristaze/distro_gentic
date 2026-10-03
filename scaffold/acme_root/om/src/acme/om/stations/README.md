@@ -67,11 +67,6 @@ the kinds of thing [Acme is made of](../../../../README.md).
   manages the stations ends it. A revoked lease's session is told, and
   the daemon refuses the lease's next renewal and stops the station.
   Either way the station goes to the next in line.
-- **Sweep a lapsed lease.** A lease its session never let go runs out at
-  its hold time. The maintenance sweep offers, across tenants, each
-  station no live lease holds that a waiting entry asks for, so it goes
-  to the first in line who waits. The grant ends the lapsed lease, so a
-  second pass grants nothing.
 - **Purge.** A tenant deleted past its retention loses all of it.
 
 ## The rules
