@@ -21,9 +21,11 @@ from acme.om.agents.types.kind import AgentKind
 from acme.om.automations.root import build_automations
 from acme.om.billing.root import build_money_gate, refuse_open_money
 from acme.om.intake.root import build_intake
+from acme.om.knowledge.root import build_knowledge
 from acme.om.notifications.root import build_notifications
 from acme.om.platform_agents.catalog import PlatformAgents
 from acme.om.platform_agents.settings import shipped_agents
+from acme.om.playbooks.root import PlaybooksLayer
 from acme.om.root import (
     LOCAL,
     Managers,
@@ -263,6 +265,10 @@ class AppContainer:
                 storage, managers, project_required=settings.environment != LOCAL
             ),
             notifications=build_notifications(storage, managers, integrations, intake),
+            # A person writes and reviews what sessions recall, and publishes
+            # the playbooks they follow; the runner recalls and invokes them.
+            knowledge=build_knowledge(storage, managers),
+            playbooks=PlaybooksLayer(storage).build(managers),
         )
         return cls(
             settings,

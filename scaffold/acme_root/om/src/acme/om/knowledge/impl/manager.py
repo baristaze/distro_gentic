@@ -8,7 +8,13 @@ from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import Platform, new_id, utcnow
 from acme.om.context import Permission, TenantContext
-from acme.om.exceptions import Conflict, NotAuthorized, NotFound
+from acme.om.exceptions import (
+    Conflict,
+    NotAuthorized,
+    NotFound,
+    PreconditionFailed,
+    TenantMismatch,
+)
 from acme.om.intake.rules import in_person
 from acme.om.knowledge.manager import KnowledgeManagerInterface
 from acme.om.knowledge.rules import recalled_step, triggered
@@ -19,7 +25,7 @@ from acme.om.outbox.types.row import OutboxRow, versioned_row
 from acme.om.tenancy import TenancyManagerInterface
 
 CREATED = "knowledge.entry.created"
-REVIEWED = "knowledge.entry.updated"
+REVIEWED = "knowledge.entry.updated"  # a review or an edit
 
 
 class KnowledgeOptions(Platform):
@@ -51,23 +57,77 @@ class KnowledgeManagerImpl(KnowledgeManagerInterface):
     ) -> Knowledge:
         ctx.require(Permission.WRITE)
         await self._sessions.get_session(ctx, session_id)
-        return await self._create(ctx, title, trigger, text, suggested_by=session_id)
+        return await self._create(
+            ctx, title, trigger, text, suggested_by=session_id, entry_id=new_id()
+        )
 
     async def write(
-        self, ctx: TenantContext, title: str, trigger: tuple[str, ...], text: str
+        self,
+        ctx: TenantContext,
+        title: str,
+        trigger: tuple[str, ...],
+        text: str,
+        *,
+        entry_id: UUID | None = None,
     ) -> Knowledge:
         ctx.require(Permission.WRITE)
         if not in_person(ctx):
             raise NotAuthorized("knowledge is written by a person, never by an agent's call")
-        return await self._create(ctx, title, trigger, text, suggested_by=None)
+        return await self._create(
+            ctx, title, trigger, text, suggested_by=None, entry_id=entry_id or new_id()
+        )
+
+    async def get_entry(self, ctx: TenantContext, entry_id: UUID) -> Knowledge:
+        ctx.require(Permission.READ)
+        return await self._entry(ctx, entry_id)
+
+    async def list_entries(
+        self, ctx: TenantContext, status: KnowledgeStatus, after: UUID | None, limit: int
+    ) -> tuple[Knowledge, ...]:
+        ctx.require(Permission.READ)
+        limit = max(1, min(limit, self._options.page))
+        return tuple(await self._storage.read_entries(ctx.org_id, status, after, limit))
+
+    async def edit(
+        self,
+        ctx: TenantContext,
+        entry_id: UUID,
+        title: str,
+        trigger: tuple[str, ...],
+        text: str,
+        version: int,
+    ) -> Knowledge:
+        ctx.require(Permission.WRITE)
+        if not in_person(ctx):
+            raise NotAuthorized("knowledge is edited by a person, never by an agent's call")
+        entry = await self._entry(ctx, entry_id)
+        if entry.status is KnowledgeStatus.REJECTED:
+            raise Conflict(f"knowledge {entry_id} is rejected; write it again instead")
+        if entry.version != version:
+            raise PreconditionFailed(f"knowledge {entry_id} is at version {entry.version}")
+        reviewed = entry.status is KnowledgeStatus.REVIEWED
+        edited = Knowledge.model_validate(
+            {
+                **entry.model_dump(),
+                "title": title,
+                "trigger": trigger,
+                "text": text,
+                "reviewed_by": ctx.user_id if reviewed else entry.reviewed_by,
+                "updated_at": self._clock(),
+                "updated_by": ctx.user_id,
+                "version": entry.version + 1,
+            }
+        )
+        rows = (versioned_row(ctx, REVIEWED, edited.id, edited.version),)
+        await self._storage.update_entry(ctx.org_id, edited, rows)
+        await self._relay_all(ctx, rows)
+        return edited
 
     async def review(self, ctx: TenantContext, entry_id: UUID, *, keep: bool) -> Knowledge:
         ctx.require(Permission.WRITE)
         if not in_person(ctx):
             raise NotAuthorized("knowledge is reviewed by a person, never by an agent's call")
-        entry = await self._storage.read_entry(ctx.org_id, entry_id)
-        if entry is None:
-            raise NotFound(f"knowledge {entry_id} not found")
+        entry = await self._entry(ctx, entry_id)
         if entry.status is not KnowledgeStatus.SUGGESTED:
             raise Conflict(f"knowledge {entry_id} is {entry.status.value} already")
         decided = entry.model_copy(
@@ -120,11 +180,12 @@ class KnowledgeManagerImpl(KnowledgeManagerInterface):
         text: str,
         *,
         suggested_by: UUID | None,
+        entry_id: UUID,
     ) -> Knowledge:
         now = self._clock()
         by_person = suggested_by is None
         entry = Knowledge(
-            id=new_id(),
+            id=entry_id,
             created_at=now,
             updated_at=now,
             created_by=ctx.user_id,
@@ -137,8 +198,18 @@ class KnowledgeManagerImpl(KnowledgeManagerInterface):
             reviewed_by=ctx.user_id if by_person else None,
         )
         rows = (versioned_row(ctx, CREATED, entry.id, entry.version),)
-        await self._storage.create_entry(ctx.org_id, entry, rows)
+        if not await self._storage.create_entry(ctx.org_id, entry, rows):
+            stored = await self._storage.read_entry(ctx.org_id, entry.id)
+            if stored is None:
+                raise TenantMismatch(f"knowledge {entry.id} is not in {ctx.org_id}")
+            return stored
         await self._relay_all(ctx, rows)
+        return entry
+
+    async def _entry(self, ctx: TenantContext, entry_id: UUID) -> Knowledge:
+        entry = await self._storage.read_entry(ctx.org_id, entry_id)
+        if entry is None:
+            raise NotFound(f"knowledge {entry_id} not found")
         return entry
 
     async def _relay_all(self, ctx: TenantContext, rows: tuple[OutboxRow, ...]) -> None:
