@@ -158,6 +158,7 @@ jobs:
     outputs:
       api_image: ${{ steps.images.outputs.api_image }}
       maintenance_image: ${{ steps.images.outputs.maintenance_image }}
+      session_runner_image: ${{ steps.images.outputs.session_runner_image }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -186,12 +187,12 @@ jobs:
         env:
           SHA: ${{ needs.cloud.outputs.sha }}
         run: |
-          for name in api maintenance; do
+          for name in api maintenance session-runner; do
             digest="$(aws ecr describe-images --repository-name "acme-$name" \
               --image-ids "imageTag=$SHA" \
               --query 'imageDetails[0].imageDigest' --output text 2>/dev/null || true)"
             if [ "$digest" = "None" ]; then digest=""; fi
-            echo "$name=$digest" >> "$GITHUB_OUTPUT"
+            echo "${name//-/_}=$digest" >> "$GITHUB_OUTPUT"
             if [ -n "$digest" ]; then
               echo "\`acme-$name\` is already tagged \`$SHA\`; it is not built again." >> "$GITHUB_STEP_SUMMARY"
             fi
@@ -218,15 +219,30 @@ jobs:
           tags: ${{ steps.ecr.outputs.registry }}/acme-maintenance:${{ needs.cloud.outputs.sha }}
           cache-from: type=gha,scope=maintenance
           cache-to: type=gha,scope=maintenance,mode=max
+      - name: build and push the session runner image
+        id: session_runner
+        if: steps.existing.outputs.session_runner == ''
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deployment/docker/session-runner.Dockerfile
+          outputs: type=image,push=true,oci-mediatypes=true,compression=zstd,compression-level=3,force-compression=true
+          tags: ${{ steps.ecr.outputs.registry }}/acme-session-runner:${{ needs.cloud.outputs.sha }}
+          cache-from: type=gha,scope=session-runner
+          cache-to: type=gha,scope=session-runner,mode=max
       - name: name the images by digest
         id: images
         env:
           REGISTRY: ${{ steps.ecr.outputs.registry }}
           API_DIGEST: ${{ steps.api.outputs.digest || steps.existing.outputs.api }}
           MAINTENANCE_DIGEST: ${{ steps.maintenance.outputs.digest || steps.existing.outputs.maintenance }}
+          SESSION_RUNNER_DIGEST: ${{ steps.session_runner.outputs.digest || steps.existing.outputs.session_runner }}
         run: |
-          echo "api_image=$REGISTRY/acme-api@$API_DIGEST" >> "$GITHUB_OUTPUT"
-          echo "maintenance_image=$REGISTRY/acme-maintenance@$MAINTENANCE_DIGEST" >> "$GITHUB_OUTPUT"
+          {
+            echo "api_image=$REGISTRY/acme-api@$API_DIGEST"
+            echo "maintenance_image=$REGISTRY/acme-maintenance@$MAINTENANCE_DIGEST"
+            echo "session_runner_image=$REGISTRY/acme-session-runner@$SESSION_RUNNER_DIGEST"
+          } >> "$GITHUB_OUTPUT"
 
   portal:
     name: build the portal once
@@ -364,6 +380,7 @@ jobs:
           PORTAL_SENTRY_DSN: ${{ vars.PORTAL_SENTRY_DSN }}
           API_IMAGE: ${{ needs.images.outputs.api_image }}
           MAINTENANCE_IMAGE: ${{ needs.images.outputs.maintenance_image }}
+          SESSION_RUNNER_IMAGE: ${{ needs.images.outputs.session_runner_image }}
         run: |
           terraform -chdir=deployment/terraform/environments/staging init -input=false \
             -backend-config="bucket=$TF_STATE_BUCKET" \
@@ -373,6 +390,7 @@ jobs:
           terraform -chdir=deployment/terraform/environments/staging plan -input=false -out=tfplan \
             -var "api_image=$API_IMAGE" \
             -var "maintenance_image=$MAINTENANCE_IMAGE" \
+            -var "session_runner_image=$SESSION_RUNNER_IMAGE" \
             -var "alarm_email=$ALARM_EMAIL" \
             -var "api_domain_name=$API_DOMAIN_NAME" \
             -var "app_domain_name=$APP_DOMAIN_NAME" \
@@ -499,6 +517,7 @@ jobs:
           SHA: ${{ needs.cloud.outputs.sha }}
           API_IMAGE: ${{ needs.images.outputs.api_image }}
           MAINTENANCE_IMAGE: ${{ needs.images.outputs.maintenance_image }}
+          SESSION_RUNNER_IMAGE: ${{ needs.images.outputs.session_runner_image }}
           PORTAL_DIGEST: ${{ needs.portal.outputs.digest }}
           SITE_DIGEST: ${{ needs.site.outputs.digest }}
           SITE: ${{ needs.staging.outputs.site }}
@@ -510,6 +529,7 @@ jobs:
           }
           record acme-api "${API_IMAGE##*@}"
           record acme-maintenance "${MAINTENANCE_IMAGE##*@}"
+          record acme-session-runner "${SESSION_RUNNER_IMAGE##*@}"
           record portal "$PORTAL_DIGEST"
           # Only a site staging published is one a release may publish.
           if [ "$SITE" = "true" ]; then record site "$SITE_DIGEST"; fi

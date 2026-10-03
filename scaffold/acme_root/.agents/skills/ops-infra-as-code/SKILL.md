@@ -87,6 +87,7 @@ is read; this skill touches no application credential.
      -backend-config="use_lockfile=true"
    AWS_PROFILE=acme-<env>-investigate terraform plan -lock=false -out=/dev/null \
      -var "api_image=<in state>" -var "maintenance_image=<in state>" \
+     -var "session_runner_image=<in state>" \
      -var "alarm_email=$ALARM_EMAIL" \
      -var "api_domain_name=<api host>" -var "app_domain_name=<app host>" \
      -var "site_domain_name=<site host>"

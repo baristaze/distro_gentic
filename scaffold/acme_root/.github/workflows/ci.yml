@@ -123,7 +123,7 @@ jobs:
     timeout-minutes: 30
     strategy:
       matrix:
-        image: [api, maintenance, portal]
+        image: [api, maintenance, session-runner, portal]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -158,6 +158,10 @@ jobs:
       # The environment plans whole with the company site left out, and with it.
       - if: matrix.root == 'environments/staging'
         run: terraform -chdir=deployment/terraform/environments/staging test
+      - if: matrix.root == 'environments/staging'
+        run: terraform -chdir=deployment/terraform/modules/secrets init -backend=false -input=false
+      - if: matrix.root == 'environments/staging'
+        run: terraform -chdir=deployment/terraform/modules/secrets test
       - if: matrix.root == 'environments/staging'
         run: terraform -chdir=deployment/terraform/modules/service init -backend=false -input=false
       - if: matrix.root == 'environments/staging'
