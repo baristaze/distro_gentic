@@ -109,6 +109,15 @@ def _copy(item: ExecItem, now: datetime, **update: Any) -> ExecItem:
     )
 
 
+def _operation(row: WorkItem) -> WorkspaceOperation | None:
+    """What a `workspace` row asks; None for a payload this build cannot
+    read."""
+    try:
+        return WorkspacePayload.model_validate(row.payload).operation
+    except ValidationError:
+        return None
+
+
 class RelayManagerImpl(RelayManagerInterface):
     def __init__(
         self,
@@ -225,6 +234,64 @@ class RelayManagerImpl(RelayManagerInterface):
         OUTCOMES.labels(subsystem="relay", outcome="prepare_asked").inc()
         return True
 
+    async def holder(self, ctx: TenantContext, session_id: UUID) -> WorkspaceBinding | None:
+        ctx.require(Permission.READ)
+        binding = await self._storage.read_binding(ctx.org_id, session_id)
+        if binding is None:
+            return None
+        placed = await self._hosts.placement_of(ctx, session_id)
+        if placed.pool is None:
+            return None
+        statuses = await self._hosts.get_hosts(ctx, placed.pool.id)
+        live = any(
+            s.host.id == binding.host_id and s.host.revoked_at is None and s.online
+            for s in statuses
+        )
+        return binding if live else None
+
+    async def ask_release(self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec) -> bool:
+        ctx.require(Permission.WRITE)
+        binding = await self._storage.read_binding(ctx.org_id, session_id)
+        if binding is None:
+            return False
+        latest = await self._work.latest_for_target(ctx, WorkKind.WORKSPACE, session_id)
+        if (
+            latest is not None
+            and latest.status in (WorkStatus.QUEUED, WorkStatus.CLAIMED)
+            and _operation(latest) is WorkspaceOperation.RELEASE
+        ):
+            return False
+        # Letting go runs and reads nothing, so it asks nothing of the host's
+        # ceilings: only the spec, which names the provider that made it.
+        payload = WorkspacePayload(
+            operation=WorkspaceOperation.RELEASE,
+            host_id=binding.host_id,
+            session_id=session_id,
+            spec=spec,
+        )
+        now = self._clock()
+        row = new_id()
+        await self._work.enqueue(
+            ctx,
+            WorkItem(
+                id=row,
+                created_at=now,
+                updated_at=now,
+                created_by=ctx.user_id,
+                updated_by=ctx.user_id,
+                kind=WorkKind.WORKSPACE,
+                target_id=session_id,
+                idempotency_key=row,
+                request_id=ctx.request_id,
+                traceparent=ctx.traceparent,
+                payload=payload.model_dump(mode="json"),
+                status=WorkStatus.QUEUED,
+                available_at=now,
+            ),
+        )
+        OUTCOMES.labels(subsystem="relay", outcome="release_asked").inc()
+        return True
+
     async def prepared(
         self, rctx: RequestContext, host: HostIdentity, item_id: UUID, answer: PrepareAnswer
     ) -> WorkspaceBinding | None:
@@ -251,6 +318,15 @@ class RelayManagerImpl(RelayManagerInterface):
             log.info("workspace item %s: its row was no longer held when it was answered", row.id)
         OUTCOMES.labels(subsystem="relay", outcome="prepared").inc()
         return binding
+
+    async def released(self, rctx: RequestContext, host: HostIdentity, item_id: UUID) -> None:
+        ctx = await self._service(rctx, host.org_id)
+        row = await self._workspace_held(ctx, host, item_id, WorkspaceOperation.RELEASE)
+        try:
+            await self._work.complete(ctx, row)
+        except LeaseLost, NotFound:
+            log.info("workspace item %s: its row was no longer held when it was answered", row.id)
+        OUTCOMES.labels(subsystem="relay", outcome="released").inc()
 
     # The runner's side.
 
@@ -576,6 +652,9 @@ class RelayManagerImpl(RelayManagerInterface):
             settled += 1
         return settled
 
+    async def bindings(self, after: UUID | None) -> list[tuple[UUID, WorkspaceBinding]]:
+        return await self._storage.read_bindings(after, self._options.sweep_batch)
+
     async def purge_session(self, org_id: UUID, session_id: UUID) -> None:
         while await self._storage.purge_session(org_id, session_id, self._options.purge_batch):
             pass
@@ -611,7 +690,9 @@ class RelayManagerImpl(RelayManagerInterface):
         that waits on another pool's, as the session moved since, is ended,
         so no host of a pool it left makes it. One a host of that pool holds
         already is left to end: its host is no host of the session's pool,
-        so the session never runs there."""
+        so the session never runs there. A release that waits is ended too:
+        a prepare is asked only when no live host holds the workspace, so
+        none is left for it to let go."""
         latest = await self._work.latest_for_target(ctx, WorkKind.WORKSPACE, session_id)
         if latest is None or latest.status not in (WorkStatus.QUEUED, WorkStatus.CLAIMED):
             return False
@@ -629,27 +710,38 @@ class RelayManagerImpl(RelayManagerInterface):
         self, ctx: TenantContext, host: HostIdentity, item_id: UUID
     ) -> tuple[WorkItem, UUID]:
         """The prepare the host holds under a live claim, and its session."""
+        row = await self._workspace_held(ctx, host, item_id, WorkspaceOperation.PREPARE)
+        payload = WorkspacePayload.model_validate(row.payload)
+        if payload.pool_id != host.pool_id or payload.session_id is None:
+            raise ItemNotHeld(f"workspace item {item_id} is not held by this host")
+        return row, payload.session_id
+
+    async def _workspace_held(
+        self,
+        ctx: TenantContext,
+        host: HostIdentity,
+        item_id: UUID,
+        operation: WorkspaceOperation,
+    ) -> WorkItem:
+        """The workspace item of `operation` the host holds under a live
+        claim. A release is the host's own, named in its payload."""
         try:
             row: WorkItem | None = await self._work.get_item(ctx, item_id)
         except NotFound:
             row = None
-        payload = None
-        if row is not None and row.kind is WorkKind.WORKSPACE:
-            try:
-                payload = WorkspacePayload.model_validate(row.payload)
-            except ValidationError:
-                payload = None
-        if (
-            row is None
-            or payload is None
-            or payload.operation is not WorkspaceOperation.PREPARE
-            or payload.pool_id != host.pool_id
-            or payload.session_id is None
-            or row.status is not WorkStatus.CLAIMED
-            or row.claimed_by != worker_of(host)
-        ):
+        held = (
+            row is not None
+            and row.kind is WorkKind.WORKSPACE
+            and _operation(row) is operation
+            and row.status is WorkStatus.CLAIMED
+            and row.claimed_by == worker_of(host)
+        )
+        if held and operation is not WorkspaceOperation.PREPARE:
+            assert row is not None
+            held = WorkspacePayload.model_validate(row.payload).host_id == host.host_id
+        if not held or row is None:
             raise ItemNotHeld(f"workspace item {item_id} is not held by this host")
-        return row, payload.session_id
+        return row
 
     async def _holds(self, ctx: TenantContext, session_id: UUID, host_id: UUID) -> bool:
         """Whether the host is a live host of the session's pool: one that was

@@ -40,6 +40,9 @@ class RelayServiceInterface(ABC):
     ) -> PreparedView: ...
 
     @abstractmethod
+    async def released(self, rctx: RequestContext, host: HostIdentity, item_id: UUID) -> None: ...
+
+    @abstractmethod
     async def extend(
         self, rctx: RequestContext, host: HostIdentity, item_id: UUID
     ) -> ExecLeaseView: ...

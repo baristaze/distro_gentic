@@ -129,6 +129,12 @@ class RelayStorageMemoryImpl(MemoryStorageBase, RelayStorageInterface):
                 return binding
         return None
 
+    async def read_bindings(
+        self, after: UUID | None, limit: int
+    ) -> list[tuple[UUID, WorkspaceBinding]]:
+        found = sorted(self._rows_across_tenants(self._bindings), key=lambda row: row[1].id)
+        return [(org_id, b) for org_id, b in found if after is None or b.id > after][:limit]
+
     async def purge_session(self, org_id: UUID, session_id: UUID, limit: int) -> int:
         async with self._lock:
             purged = 0
