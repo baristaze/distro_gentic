@@ -409,10 +409,19 @@ async def test_a_host_that_rotates_while_its_stream_is_open_keeps_its_stream_on_
     statuses = await api.container.managers.hosts.get_hosts(api.owner, host_pool(host))
     assert [status.host.revoked_at for status in statuses] == [None]
     await host.beat()
-    # A stop still reaches the host over the stream it opened again.
+    # A stop still reaches the host over the stream it opened again, once
+    # the command runs there: a stop that lands before it starts finds
+    # nothing to end.
     spec = command(relayed.epoch, "sh", "-c", "echo started; sleep 30")
-    waiting = asyncio.ensure_future(relayed.runner.run(relayed.workspace, spec, seal=NO_SEAL))
+    started = asyncio.Event()
+
+    async def sink(stream: str, text: str) -> None:
+        if "started" in text:
+            started.set()
+
+    waiting = asyncio.ensure_future(relayed.runner.run(relayed.workspace, spec, sink, seal=NO_SEAL))
     running = asyncio.ensure_future(claims(host, waiting))
+    await asyncio.wait_for(started.wait(), 10)
     (item,) = await _items(relayed, spec)
     await api.container.managers.relay.stop(
         _request(), api.owner.org_id, item, StopKind.CANCEL, relayed.epoch
