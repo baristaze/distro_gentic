@@ -4,6 +4,7 @@ import { AppNav } from "../../app/AppNav";
 import { errorMessage } from "../../app/errorMessage";
 import { Banner, Button, Card, DataTable, Page, ErrorText, Muted, Pill, SegmentedControl, Select, TextField, type Column } from "../../design/kit";
 import { tokens } from "../../design/tokens";
+import { ProviderNotice } from "../providers/ProviderNotice";
 import { shortTime, STATUS_FILTERS, type SessionRow } from "./sessionsModel";
 import { useSessionsVm } from "./useSessionsVm";
 
@@ -41,7 +42,7 @@ export function SessionsPage() {
     vm.submit();
   };
   return (
-    <Page title="Sessions" nav={<AppNav />}>
+    <Page title="Sessions" nav={<AppNav />} notice={<ProviderNotice />}>
       {vm.error ? <Banner>{errorMessage(vm.error, "The sessions could not be read.")}</Banner> : null}
       {vm.mayWrite ? (
         <Card title="New session" id="new">
