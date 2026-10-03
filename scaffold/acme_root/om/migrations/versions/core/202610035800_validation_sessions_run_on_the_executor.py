@@ -2,14 +2,14 @@
 commit its checks come from; its lab leaves the mapping.
 
 Revision ID: 202610035800
-Revises: 202610035500
+Revises: 202610035700
 """
 
 from acme.om.storage.migrate import run_sql
 from acme.om.storage.roles import DatabaseRole
 
 revision = "202610035800"
-down_revision = "202610035500"
+down_revision = "202610035700"
 branch_labels = None
 depends_on = None
 
