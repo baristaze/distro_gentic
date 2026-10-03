@@ -30,6 +30,7 @@ INFRA_INTERFACE_MODULES = frozenset(
         "acme.infra.secrets",
         "acme.infra.keys",
         "acme.infra.outages",
+        "acme.infra.streams",
         "acme.infra.workspaces",
         "acme.infra.transports",
     }

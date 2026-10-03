@@ -6,6 +6,7 @@ person runs is `exec` work on the host that holds the workspace, recorded
 as a run attributed to them."""
 
 import asyncio
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
@@ -13,13 +14,18 @@ from uuid import UUID
 
 import pytest
 from contracts.agent_session_storage import make_session
-from contracts.loops import Clock, loop_over, reply, said
+from contracts.loops import ASSISTANT, Clock, loop_over, reply, said, use
 from pydantic import SecretStr
 
 from acme.infra.impl.local import InfraLocalImpl
+from acme.infra.streams import StreamBounds
+from acme.infra.streams.memory import StreamsMemoryImpl
+from acme.infra.topics.memory import TopicsMemoryImpl
 from acme.infra.transports import CommandSpec, RecordSeal, StaleCommand
+from acme.infra.transports.twin import TransportTwinImpl, TwinReply
 from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec, Workspace
 from acme.om.agent_sessions.types.agent_session import SessionStatus
+from acme.om.agents.impl.sink import StreamSinkMemoryImpl
 from acme.om.agents.types.run import RunEnd
 from acme.om.base import new_id, utcnow
 from acme.om.context import (
@@ -31,6 +37,7 @@ from acme.om.context import (
     TenantContext,
     build_context,
 )
+from acme.om.events import EventsManagerInterface
 from acme.om.exceptions import NotAuthorized, NotFound, StaleWriter
 from acme.om.hosts.impl.manager import HostsOptions
 from acme.om.hosts.types.host import Advertisement, Enrollment, HostIdentity
@@ -54,12 +61,18 @@ from acme.om.root import Managers, build_managers
 from acme.om.steps.rules import message_step
 from acme.om.steps.types.header import InputHeader, ParkReason
 from acme.om.steps.types.step import StepType
-from acme.om.steps.types.stream import TextPart
+from acme.om.steps.types.stream import StreamPart, TextPart
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import permissions_of
 from acme.om.watch.exceptions import CommandRunning, LiveReadRefused, NotHandedOver
 from acme.om.watch.impl.manager import SENT, TAKEN, WatchOptions
-from acme.om.watch.impl.stream import StreamOptions, StreamServiceMemoryImpl
+from acme.om.watch.impl.stream import (
+    COMPLETED,
+    OPENED,
+    PARTS,
+    StreamOptions,
+    StreamServiceImpl,
+)
 from acme.om.watch.manager import WatchManagerInterface
 from acme.om.watch.root import build_watch
 from acme.om.watch.rules import signed, verified
@@ -101,7 +114,7 @@ class Watched:
     host: HostIdentity
     session_id: UUID
     epoch: int
-    stream: StreamServiceMemoryImpl
+    stream: StreamServiceImpl
     watch: WatchManagerInterface
     clock: Clock
 
@@ -139,7 +152,10 @@ async def watched(tmp_path: Path) -> Watched:
     await managers.workspaces.pinned(owner, session.id, CONTAINER)
     epoch = await managers.steps.begin_run(owner, session.id)
     clock = Clock()
-    stream = StreamServiceMemoryImpl(clock=clock)
+    infra = InfraLocalImpl(tmp_path / "streams")
+    stream = StreamServiceImpl(
+        StreamsMemoryImpl(clock), infra.get_topics(), lambda: managers.events, EACH_PART
+    )
     watch = build_watch(managers, stream, WatchOptions(live_read_key=KEY), clock=clock)
     return Watched(managers, owner, in_person(owner), host, session.id, epoch, stream, watch, clock)
 
@@ -155,6 +171,21 @@ def text(session_id: UUID, step_id: UUID, n: int, words: str = "word ") -> TextP
     return TextPart(session_id=session_id, step_id=step_id, n=n, index=0, text=words)
 
 
+EACH_PART = StreamOptions(window=timedelta(0))
+"""A service that writes each part as it comes, for a suite of what a
+stream holds part by part."""
+
+
+def no_events() -> EventsManagerInterface:
+    raise AssertionError("only parts are written: no event is")
+
+
+def service(options: StreamOptions | None = None, clock: Clock | None = None) -> StreamServiceImpl:
+    """A stream service over the memory streams, as a local root builds it."""
+    streams = StreamsMemoryImpl() if clock is None else StreamsMemoryImpl(clock)
+    return StreamServiceImpl(streams, TopicsMemoryImpl(), no_events, options or EACH_PART)
+
+
 # Check 1: a live-read handle reads only its own session's stream, expires,
 # and a reader resumes from the part it last saw.
 
@@ -167,6 +198,10 @@ async def test_a_live_read_reads_its_own_session_and_resumes_after_the_last_part
     for n in range(3):
         watched.stream.emit(text(watched.session_id, mine, n))
         watched.stream.emit(text(other.id, theirs, n))
+    # A part that names this session's stream from another session is not
+    # its own, and no read of this session finds it.
+    watched.stream.emit(text(other.id, mine, 3))
+    await watched.stream.flush()
     live = await watched.watch.open_live(watched.person, watched.session_id)
 
     page = await watched.watch.read_live(request(), live.handle, ())
@@ -176,6 +211,7 @@ async def test_a_live_read_reads_its_own_session_and_resumes_after_the_last_part
 
     watched.stream.emit(text(watched.session_id, mine, 3))
     watched.stream.emit(text(watched.session_id, mine, 4))
+    await watched.stream.flush()
     page = await watched.watch.read_live(request(), live.handle, (Seen(step_id=mine, n=2),))
     assert [part.n for part in page.streams[0].parts] == [3, 4]
 
@@ -207,6 +243,7 @@ async def test_a_live_read_handle_is_issued_only_for_a_session_the_viewer_sees(
 async def test_a_live_read_handle_expires(watched: Watched) -> None:
     step = new_id()
     watched.stream.emit(text(watched.session_id, step, 0))
+    await watched.stream.flush()
     live = await watched.watch.open_live(watched.person, watched.session_id)
     assert live.expires_at == watched.clock.now + LIFE
     assert (await watched.watch.read_live(request(), live.handle, ())).streams
@@ -219,60 +256,247 @@ async def test_a_live_read_handle_expires(watched: Watched) -> None:
 # it loses no record.
 
 
-def test_each_open_stream_is_bounded_and_a_slow_reader_loses_the_oldest() -> None:
+async def test_each_open_stream_is_bounded_and_a_slow_reader_loses_the_oldest() -> None:
     clock = Clock()
-    options = StreamOptions(max_parts=4, max_bytes=250, max_streams=2, max_open=3)
-    stream = StreamServiceMemoryImpl(options, clock)
-    session, step = new_id(), new_id()
+    session, step, big = new_id(), new_id(), new_id()
+    size = len(PARTS.dump_json(text(session, big, 0, "x" * 100), exclude_none=True))
+    options = StreamOptions(
+        max_parts=4, max_bytes=size * 5 // 2, max_streams=2, max_open=3, window=timedelta(0)
+    )
+    stream = service(options, clock)
     for n in range(10):
         stream.emit(text(session, step, n))
-    (live,) = stream.read(session, (Seen(step_id=step, n=3),))
+    await stream.flush()
+    (live,) = await stream.read(session, (Seen(step_id=step, n=3),))
     assert [part.n for part in live.parts] == [6, 7, 8, 9] and live.first == 6 and live.dropped
 
     # By bytes: the newest part always stays.
-    big = new_id()
     for n in range(4):
         stream.emit(text(session, big, n, "x" * 100))
-    held = {s.step_id: s for s in stream.read(session, ())}
+    await stream.flush()
+    held = {s.step_id: s for s in await stream.read(session, ())}
     assert [part.n for part in held[big].parts] == [2, 3]
 
     # By streams: a session's third, and the platform's fourth, closes the
     # stream that heard nothing longest.
     stream.emit(text(session, new_id(), 0))
-    assert step not in {s.step_id for s in stream.read(session, ())}
+    await stream.flush()
+    assert step not in {s.step_id for s in await stream.read(session, ())}
     elsewhere = new_id()
     stream.emit(text(elsewhere, new_id(), 0))
     stream.emit(text(elsewhere, new_id(), 0))
-    assert len(stream.read(session, ())) + len(stream.read(elsewhere, ())) == 3
+    await stream.flush()
+    assert len(await stream.read(session, ())) + len(await stream.read(elsewhere, ())) == 3
 
     # A part sent again lands once; a stream that hears nothing closes.
     last = new_id()
     stream.emit(text(elsewhere, last, 0))
     stream.emit(text(elsewhere, last, 0))
-    assert [len(s.parts) for s in stream.read(elsewhere, ()) if s.step_id == last] == [1]
+    await stream.flush()
+    assert [len(s.parts) for s in await stream.read(elsewhere, ()) if s.step_id == last] == [1]
     clock.now += StreamOptions().idle
-    assert stream.read(session, ()) == () and stream.read(elsewhere, ()) == ()
+    assert await stream.read(session, ()) == () and await stream.read(elsewhere, ()) == ()
 
 
-async def test_losing_the_buffer_loses_no_record(tmp_path: Path) -> None:
-    loop = loop_over(tmp_path)
+class Counted(StreamsMemoryImpl):
+    """The memory streams, keeping when each stream was appended to."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.appends: dict[UUID, list[float]] = {}
+
+    async def append(
+        self, group: UUID, stream: UUID, entries: Sequence[tuple[int, bytes]], bounds: StreamBounds
+    ) -> None:
+        self.appends.setdefault(stream, []).append(asyncio.get_running_loop().time())
+        await super().append(group, stream, entries, bounds)
+
+
+async def test_a_part_at_a_time_is_written_at_most_once_a_window_and_joins_back_whole() -> None:
+    """Two streams written a part at a time, a block each half: the cache
+    sees at most one write a window a stream, and a reader that keeps up,
+    resuming after each part's `last`, reads every block's text exactly and
+    is never told of a loss."""
+    window = timedelta(milliseconds=40)
+    streams = Counted()
+    stream = StreamServiceImpl(streams, TopicsMemoryImpl(), no_events, StreamOptions(window=window))
+    session, steps = new_id(), (new_id(), new_id())
+    words = [f"w{n} " for n in range(120)]
+    marks: dict[UUID, int] = {}
+    read: dict[tuple[UUID, int], str] = {}
+
+    async def keep_up() -> None:
+        seen = tuple(Seen(step_id=step, n=n) for step, n in marks.items())
+        for live in await stream.read(session, seen):
+            assert not live.dropped, "a reader that keeps up loses nothing"
+            for part in live.parts:
+                assert isinstance(part, TextPart)
+                read[live.step_id, part.index] = (
+                    read.get((live.step_id, part.index), "") + part.text
+                )
+                marks[live.step_id] = part.end
+
+    loop = asyncio.get_running_loop()
+    began = loop.time()
+    for n, word in enumerate(words):
+        for step in steps:
+            stream.emit(TextPart(session_id=session, step_id=step, n=n, index=n // 60, text=word))
+        await asyncio.sleep(0.002)
+        await keep_up()
+    took = loop.time() - began
+    await stream.flush()
+    await keep_up()
+
+    for step in steps:
+        assert (read[step, 0], read[step, 1]) == ("".join(words[:60]), "".join(words[60:]))
+        # A window's write, the new block's, and the one `flush` makes.
+        assert len(streams.appends[step]) <= took / window.total_seconds() + 3
+        assert len(streams.appends[step]) < len(words) / 4
+    await stream.close()
+
+
+async def test_a_reader_resumes_after_a_joined_parts_last_and_hears_of_real_loss() -> None:
+    """A stream that holds one entry: a joined part goes whole once the next
+    lands, and a reader that read it resumes with no loss, while one that
+    read less is told."""
+    stream = service(StreamOptions(max_parts=1, window=timedelta(minutes=1)))
+    session, step = new_id(), new_id()
+    for n in range(5):
+        stream.emit(text(session, step, n, f"w{n} "))
+    await stream.flush()
+    (live,) = await stream.read(session, (Seen(step_id=step, n=0),))
+    (joined,) = live.parts
+    assert (joined.n, joined.last, joined.text) == (1, 4, "w1 w2 w3 w4 ")
+
+    for n in range(5, 8):
+        stream.emit(text(session, step, n, f"w{n} "))
+    await stream.flush()
+    (live,) = await stream.read(session, (Seen(step_id=step, n=joined.end),))
+    assert [(part.n, part.end) for part in live.parts] == [(5, 7)] and not live.dropped
+    (behind,) = await stream.read(session, (Seen(step_id=step, n=0),))
+    assert behind.first == 5 and behind.dropped, "the reader that never read 1 to 4 is told"
+    await stream.close()
+
+
+class Told(StreamSinkMemoryImpl):
+    """A memory sink that also keeps when each stream opened and completed,
+    in order with the parts, and hands each on to `then` when it is set."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.told: list[tuple[str, UUID]] = []
+        self.then: StreamServiceImpl | None = None
+
+    def emit(self, part: StreamPart) -> None:
+        super().emit(part)
+        self.told.append(("part", part.step_id))
+        if self.then is not None:
+            self.then.emit(part)
+
+    def opened(self, ctx: TenantContext, session_id: UUID, step_id: UUID) -> None:
+        self.told.append((OPENED, step_id))
+        if self.then is not None:
+            self.then.opened(ctx, session_id, step_id)
+
+    def completed(self, ctx: TenantContext, session_id: UUID, step_id: UUID) -> None:
+        self.told.append((COMPLETED, step_id))
+        if self.then is not None:
+            self.then.completed(ctx, session_id, step_id)
+
+
+async def test_a_stream_holds_its_cap_and_once_it_is_gone_its_step_is_whole(
+    tmp_path: Path,
+) -> None:
+    told = Told()
+    loop = loop_over(tmp_path, sink=told)
     session_id = await loop.start()
     await loop.say(session_id, "What is the total?")
     answer = "The total is twelve, as the records of the last quarter show it."
     loop.anthropic.add(reply(said(answer)))
     await loop.loops.run(loop.owner, session_id)
-
-    stream = StreamServiceMemoryImpl(StreamOptions(max_parts=2))
-    for part in loop.sink.parts:
-        stream.emit(part)
-    (live,) = stream.read(session_id, ())
-    assert len(live.parts) == 2 and live.dropped, "the buffer let go of the oldest parts"
-
-    lost = StreamServiceMemoryImpl()  # the service restarted: every buffer gone
-    assert lost.read(session_id, ()) == ()
     steps = await loop.history(session_id)
     (response,) = [step for step in steps if step.type is StepType.MODEL_RESPONSE]
+    # The loop opens the response's stream before its first part, and
+    # completes it after its last.
+    assert told.told[0] == (OPENED, response.id) and told.told[-1] == (COMPLETED, response.id)
+    assert {kind for kind, _ in told.told[1:-1]} == {"part"} and len(told.parts) > 2
+
+    stream = StreamServiceImpl(
+        StreamsMemoryImpl(),
+        loop.infra.get_topics(),
+        lambda: loop.managers.events,
+        StreamOptions(max_parts=2, window=timedelta(0)),
+    )
+    stream.opened(loop.owner, session_id, response.id)
+    for part in told.parts:
+        stream.emit(part)
+    await stream.flush()
+    (live,) = await stream.read(session_id, ())
+    assert len(live.parts) == 2 and live.dropped, "the stream let go of the oldest parts"
+
+    stream.completed(loop.owner, session_id, response.id)
+    await stream.flush()
+    assert await stream.read(session_id, ()) == (), "a completed stream is gone"
     assert response.id == live.step_id and response.as_text() == answer
+    events = await loop.managers.events.get_events(loop.owner, 0, 200)
+    changes = [
+        (e.kind, e.target_id, e.payload["step_id"])
+        for e in events
+        if e.kind.startswith("watch.stream.")
+    ]
+    assert changes == [
+        (OPENED, session_id, str(response.id)),
+        (COMPLETED, session_id, str(response.id)),
+    ]
+
+
+async def test_a_tools_output_stream_opens_completes_and_is_gone_once_its_step_is_stored(
+    tmp_path: Path,
+) -> None:
+    told = Told()
+    worked = ASSISTANT.model_copy(
+        update={
+            "name": "worked",
+            "isolation": IsolationSpec(
+                mode=IsolationMode.TWIN, egress=EgressPolicy(mode=EgressMode.NONE)
+            ),
+        }
+    )
+    loop = loop_over(tmp_path, sink=told, kinds=(worked,))
+    told.then = stream = StreamServiceImpl(
+        StreamsMemoryImpl(), loop.infra.get_topics(), lambda: loop.managers.events
+    )
+    transport = loop.infra.get_transport()
+    assert isinstance(transport, TransportTwinImpl)
+
+    async def printing(command: CommandSpec, env: Mapping[str, str]) -> TwinReply:
+        return TwinReply(stdout="counted twelve\n")
+
+    transport.handler = printing
+    loop.tools["lookup"].argv = ("count",)
+    session_id = await loop.start("worked")
+    await loop.say(session_id, "How many are there?")
+    loop.anthropic.add(reply(use("lookup")))
+    loop.anthropic.add(reply(said("Twelve.")))
+    await loop.loops.run(loop.owner, session_id)
+    (answer,) = [s for s in await loop.history(session_id) if s.type is StepType.TOOL_RESPONSE]
+
+    # The call's output streams under its response: opened before it runs,
+    # completed after the response is stored.
+    assert [kind for kind, step_id in told.told if step_id == answer.id] == [
+        OPENED,
+        "part",
+        COMPLETED,
+    ]
+    await stream.flush()
+    assert await stream.read(session_id, ()) == (), "every stream of the run is gone"
+    events = await loop.managers.events.get_events(loop.owner, 0, 200)
+    hints = [
+        (e.kind, e.target_id)
+        for e in events
+        if e.kind.startswith("watch.stream.") and e.payload["step_id"] == str(answer.id)
+    ]
+    assert hints == [(OPENED, session_id), (COMPLETED, session_id)]
 
 
 # Check 4: under take control the agent writes nothing, and every command the
