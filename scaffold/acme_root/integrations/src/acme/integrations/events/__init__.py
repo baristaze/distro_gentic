@@ -81,6 +81,16 @@ class PostedMessage(BaseModel):
     mark: str | None = None
 
 
+class Acknowledged(BaseModel):
+    """A delivery that checks out and carries no event: the system's check of
+    the address it delivers to. The ingress answers it with what the system
+    asks back, `challenge` when the system sends one, and queues nothing."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    challenge: str | None = None
+
+
 class OpenedPullRequest(BaseModel):
     """A pull request the platform opened through the integration, as the
     integration recorded it, with what served it."""
@@ -114,11 +124,12 @@ class IntegrationInterface(ABC):
     @abstractmethod
     def verify_delivery(
         self, payload: bytes, headers: Mapping[str, str], now: datetime
-    ) -> ProvidedEvent:
+    ) -> ProvidedEvent | Acknowledged:
         """The event a delivery carries, once its signature over the body and
         its timestamp checks out at `now`; `DeliveryRefused` otherwise, naming
-        what failed and never the secret. `headers` are the delivery's, their
-        names in lower case."""
+        what failed and never the secret. A delivery that checks out and is
+        the system's check of the address it delivers to is `Acknowledged`.
+        `headers` are the delivery's, their names in lower case."""
         ...
 
     @abstractmethod
@@ -177,10 +188,12 @@ class IntegrationInterface(ABC):
 
 class IntegrationAbsentImpl(IntegrationInterface):
     """An integration this process has none of: every delivery and every post
-    is refused as unavailable."""
+    is refused as unavailable. `why`, when given, says which setting is
+    missing, in the boot log and in every refusal."""
 
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, why: str | None = None) -> None:
         self._name = name
+        self._why = why
 
     @property
     def name(self) -> str:
@@ -190,27 +203,32 @@ class IntegrationAbsentImpl(IntegrationInterface):
     def provenance(self) -> Provenance:
         return "real"
 
+    def _unavailable(self) -> ProviderUnavailable:
+        why = "" if self._why is None else f": {self._why}"
+        return ProviderUnavailable(f"no {self._name} integration is configured{why}")
+
     def verify_delivery(
         self, payload: bytes, headers: Mapping[str, str], now: datetime
     ) -> ProvidedEvent:
-        raise ProviderUnavailable(f"no {self._name} integration is configured")
+        raise self._unavailable()
 
     async def verify_installation(self, grant: str, now: datetime) -> str:
-        raise ProviderUnavailable(f"no {self._name} integration is configured")
+        raise self._unavailable()
 
     async def post(self, address: str, text: str, mark: str | None = None) -> PostedMessage:
-        raise ProviderUnavailable(f"no {self._name} integration is configured")
+        raise self._unavailable()
 
     async def push(self, repository: str, ref: str, head: str, bundle: bytes) -> None:
-        raise ProviderUnavailable(f"no {self._name} integration is configured")
+        raise self._unavailable()
 
     async def open_pull_request(
         self, repository: str, head: str, base: str | None, title: str, body: str
     ) -> OpenedPullRequest:
-        raise ProviderUnavailable(f"no {self._name} integration is configured")
+        raise self._unavailable()
 
     def describe(self) -> str:
-        return f"{self._name}=none"
+        why = "" if self._why is None else f" ({self._why})"
+        return f"{self._name}=none{why}"
 
     async def start(self) -> None:
         return None

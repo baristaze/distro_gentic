@@ -8,6 +8,8 @@ dependencies = [
     "pydantic>=2.13",
     "pydantic-settings>=2.15",
     "httpx>=0.28.1",
+    # Signs the forge's GitHub App JWT (RS256).
+    "cryptography>=50.0",
     # Pinned exactly: the identity provider's wire shapes are what the twin
     # mirrors and the fixtures record, so an upgrade is a change of its own.
     "workos==10.4.0",
