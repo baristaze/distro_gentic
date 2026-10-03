@@ -102,6 +102,7 @@ from acme.om.relay import RelayManagerInterface
 from acme.om.relay.impl.instances import PlacedInstancesRelayedImpl
 from acme.om.relay.impl.manager import RelayManagerImpl, RelayOptions
 from acme.om.relay.impl.placement import PlacementClaimsRelayedImpl
+from acme.om.relay.impl.transport import TransportRelayImpl
 from acme.om.relay.impl.workspaces import PlacedWorkspacesRelayedImpl
 from acme.om.retention import RetentionManagerInterface
 from acme.om.retention.impl.keys import (
@@ -829,7 +830,10 @@ def build_managers(
             transport,
             workspaces.checks_tree,
             pinned,
-            PlacedInstancesRelayedImpl(lambda: managers.relay),
+            PlacedInstancesRelayedImpl(
+                lambda: managers.relay,
+                lambda stage: TransportRelayImpl(lambda: managers.relay, stage),
+            ),
         )
     evidence = EvidenceManagerImpl(
         storage.get_evidence_storage(),

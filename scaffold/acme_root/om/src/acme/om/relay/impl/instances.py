@@ -11,22 +11,28 @@ from uuid import UUID
 
 from acme.infra.transports import TransportInterface
 from acme.infra.workspaces import IsolationSpec, Workspace
-from acme.om.base import new_id, utcnow
+from acme.om.base import utcnow
 from acme.om.context import RequestContext, TenantContext
 from acme.om.exceptions import Unavailable
-from acme.om.relay.impl.transport import TransportRelayImpl
 from acme.om.relay.manager import RelayManagerInterface
 from acme.om.workspaces.placed import PlacedInstancesInterface
+
+Relayed = Callable[[Callable[[], RequestContext]], TransportInterface]
+"""The relay's transport, each operation of which runs under the stage it
+is given: the root wires it over the relay."""
 
 
 class PlacedInstancesRelayedImpl(PlacedInstancesInterface):
     """`relay` answers at call time, as the root builds the relay after the
     evidence. While no host of the pool has made the instance, its binding
-    is read again, at a wait that doubles from `first_poll` to `last_poll`."""
+    is read again, at a wait that doubles from `first_poll` to `last_poll`.
+    The instance is reached through `transport`, under the run's own
+    stage."""
 
     def __init__(
         self,
         relay: Callable[[], RelayManagerInterface],
+        transport: Relayed,
         *,
         first_poll: timedelta = timedelta(milliseconds=50),
         last_poll: timedelta = timedelta(seconds=1),
@@ -34,6 +40,7 @@ class PlacedInstancesRelayedImpl(PlacedInstancesInterface):
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._relay = relay
+        self._transport = transport
         self._first_poll = first_poll
         self._last_poll = last_poll
         self._sleep = sleep
@@ -61,20 +68,7 @@ class PlacedInstancesRelayedImpl(PlacedInstancesInterface):
         workspace = Workspace(
             id=instance_id, org_id=ctx.org_id, spec=spec, location=binding.location
         )
-
-        def stage() -> RequestContext:
-            """Each operation's own request, caused by the run's."""
-            return RequestContext(
-                request_id=new_id(),
-                app=ctx.app,
-                trace_id=ctx.trace_id,
-                traceparent=ctx.traceparent,
-                caused_by_request_id=ctx.request_id,
-            )
-
-        return workspace, TransportRelayImpl(
-            self._relay, stage, sleep=self._sleep, clock=self._clock
-        )
+        return workspace, self._transport(lambda: ctx)
 
     async def destroy(self, ctx: TenantContext, instance_id: UUID, spec: IsolationSpec) -> None:
         relay = self._relay()

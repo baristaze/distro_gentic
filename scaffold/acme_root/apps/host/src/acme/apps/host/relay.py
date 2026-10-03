@@ -5,9 +5,10 @@ item whose spec asks other than its fields say is refused, with nothing
 made or run. A prepare makes the workspace through the host's own provider
 for the session's isolation and answers where it is, which binds the
 session to this host; a release lets its instance go and keeps its
-files, and a purge destroys an instance and its files. An `exec` item runs through its own local transport, in the
-workspace it holds, prepared again first, so an instance that stopped
-since starts anew over its files. The output streams back a part
+files, and a purge destroys an instance and its files. An `exec` item
+runs through its own local transport, in the workspace it holds,
+prepared again first, so an instance that stopped since starts anew over
+its files. The output streams back a part
 at a time and the result is pushed once, each with the hash the host
 declares of the bytes it sends. While the item runs the host renews its
 lease, and a stop from the control stream ends the command at once: the
