@@ -2,7 +2,7 @@
 bounds every stream of it is held to: its entries, its bytes, the open
 streams of one group and of every group at once, and its idle time. The
 platform's own, the parts of a step, registers here as a product's kind
-does at its root (`build_stream(product_kinds=...)`), so no stream is written
+does at its roots (`root.PlatformPorts.kinds`), so no stream is written
 without a bound."""
 
 import re

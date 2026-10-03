@@ -209,13 +209,40 @@ class Managers:
 
 
 @dataclass(frozen=True)
+class ProductKinds:
+    """What a product adds to the platform's kinds: its work kinds, each with
+    its payload, its permission, its lane, and the claimant kind that takes
+    it through the gateway; its claimant kinds; its secret owner kinds
+    (`TrustLayer`); its stream kinds, each with its bounds
+    (`watch.root.build_stream`); and its executors, by the validation
+    environment each runs. Each registers beside the platform's own, which
+    go through the same registries, and a name the platform holds is
+    refused, so a product adds kinds and never changes one of the
+    platform's. A product's work kind names its claimant kind, since no
+    worker of the platform's runs it."""
+
+    work: tuple[WorkKindSpec, ...] = ()
+    claimants: tuple[ClaimantKindSpec, ...] = ()
+    secret_owners: tuple[SecretOwnerInterface, ...] = ()
+    streams: tuple[StreamKind, ...] = ()
+    executors: Mapping[str, ExecutorInterface] = field(default_factory=lambda: {})
+
+    def __post_init__(self) -> None:
+        for spec in self.work:
+            if spec.claimant is None:
+                raise ValueError(f"{spec.name} names no claimant kind, so nothing would claim it")
+
+
+@dataclass(frozen=True)
 class PlatformPorts:
     """The platform's ports a product hands each of its roots, each None for
     the platform's own: billing's money gate as the budget gate, the
     evidence's result gate over the work product, the platform's executor
-    (the loud null in `local`), the workspaces' work product, and the projects' rows for a session's
-    project, which its workspace binds and its retention narrows by.
-    Outside `local`, a root refuses a quiet null for any of them."""
+    (the loud null in `local`), the workspaces' work product, and the
+    projects' rows for a session's project, which its workspace binds and
+    its retention narrows by. Outside `local`, a root refuses a quiet null
+    for any of them. `kinds` is what the product adds to the platform's
+    kinds, so every root reads the one registry: none adds nothing."""
 
     budget_gate: BudgetGateInterface | None = None
     result_gate: ResultGateInterface | None = None
@@ -223,25 +250,7 @@ class PlatformPorts:
     work_product: WorkProductInterface | None = None
     session_projects: SessionProjectInterface | None = None
     workspace_projects: WorkspaceProjectsInterface | None = None
-
-
-@dataclass(frozen=True)
-class ProductKinds:
-    """What a product adds to the platform's kinds, handed to each of its
-    roots: its work kinds, each with its payload, its permission, its lane,
-    and its claimant kind; its claimant kinds; its secret owner kinds
-    (`TrustLayer`); its stream kinds, each with its bounds
-    (`watch.root.build_stream`); and its executors, by the validation
-    environment each runs. Each registers beside the platform's own, which
-    go through the same registries, and a name the platform holds is
-    refused, so a product adds kinds and never changes one of the
-    platform's."""
-
-    work: tuple[WorkKindSpec, ...] = ()
-    claimants: tuple[ClaimantKindSpec, ...] = ()
-    secret_owners: tuple[SecretOwnerInterface, ...] = ()
-    streams: tuple[StreamKind, ...] = ()
-    executors: Mapping[str, ExecutorInterface] = field(default_factory=lambda: {})
+    kinds: ProductKinds = field(default_factory=ProductKinds)
 
 
 LOCAL = "local"
@@ -481,11 +490,11 @@ def build_managers(
     it: a layer above the engine holds its own rules around every call, and
     sees each call the engine runs. None takes the tools manager as it is.
 
-    `product_kinds` is what a product adds to the platform's kinds: its work kinds
-    and claimant kinds, which the work queue and placement read beside the
-    platform's, and its executors, which run a check that names their
-    environment. A name the platform holds is refused at boot. None adds
-    nothing.
+    `product_kinds` is what a product adds to the platform's kinds
+    (`PlatformPorts.kinds`): its work kinds and claimant kinds, which the
+    work queue and placement read beside the platform's, and its executors,
+    which run a check that names their environment. A name the platform
+    holds is refused at boot. None adds nothing.
 
     `placement_options` is the fair share of a tenant no operator gave one,
     and the delay a loop over its share waits; None keeps the defaults.

@@ -5,6 +5,7 @@ for a validation's environment. Each registers beside the platform's own,
 which go through the same registries, and each is held as the platform's
 is. The example is a `render` job on a `batch` pool."""
 
+from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -36,6 +37,7 @@ from acme.om.evidence.types.policy import ValidationPolicy
 from acme.om.evidence.types.provenance import Provenance
 from acme.om.evidence.types.record import RunPurpose
 from acme.om.exceptions import NotAuthorized, NotFound, PreconditionFailed, ValidationFailed
+from acme.om.outbox.types.row import outbox_row
 from acme.om.placement.impl.manager import PlacementManagerImpl
 from acme.om.placement.kinds import (
     HOST,
@@ -53,7 +55,7 @@ from acme.om.trust.types.secret import PROJECT, SecretDeclaration, SecretStore, 
 from acme.om.watch.kinds import STEP, StreamKind
 from acme.om.watch.root import build_kind_streams, build_stream
 from acme.om.work.kinds import WorkKindSpec
-from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
+from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus, work_row_kind
 
 LEASE = timedelta(seconds=30)
 APP = AppContext(type=AppType.PORTAL, version="portal@test")
@@ -147,6 +149,19 @@ async def test_a_products_kind_goes_to_its_lane_and_only_its_claimant_kind_takes
     assert item.claimed_by is not None and item.claimed_by.startswith(f"{BATCH}:")
 
 
+async def test_a_write_that_asks_for_a_products_kind_lands_it_on_its_lane(
+    managers: Managers,
+) -> None:
+    ajax = await an_owner(managers, "ajax")
+    pool = new_id()
+    row = outbox_row(ajax, work_row_kind(RENDER), new_id(), {"pool_id": str(pool), "frames": 2})
+    relayed = await managers.work.enqueue_relayed(ajax.org_id, row)
+    assert (relayed.kind, relayed.lane) == (RENDER, batch_lane(pool))
+    off_shape = outbox_row(ajax, work_row_kind(RENDER), new_id(), {"frames": 2})
+    with pytest.raises(ValidationFailed, match="payload of RENDER"):
+        await managers.work.enqueue_relayed(ajax.org_id, off_shape)
+
+
 async def test_a_claimant_in_a_tenants_wall_is_never_handed_another_tenants_render(
     managers: Managers,
 ) -> None:
@@ -238,13 +253,16 @@ async def test_an_unregistered_kind_or_a_payload_off_its_shape_is_refused(
     # A product never takes over a kind of the platform's, nor leaves its
     # work to a claimant kind nobody registered.
     takeovers = (
-        ProductKinds(work=(WorkKindSpec(WorkKind.EXEC, RenderPayload, Permission.READ),)),
+        ProductKinds(work=(replace(RENDER_KIND, name=WorkKind.EXEC),), claimants=(BATCH_CLAIMANT,)),
         ProductKinds(claimants=(ClaimantKindSpec(HOST, lambda _: ()),)),
         ProductKinds(work=(RENDER_KIND,)),
     )
     for product in takeovers:
         with pytest.raises(ValueError):
             build_managers(StorageMemoryImpl(), InfraLocalImpl(tmp_path), product_kinds=product)
+    # No worker of the platform's runs a product's kind, so it names who claims it.
+    with pytest.raises(ValueError, match="names no claimant kind"):
+        ProductKinds(work=(WorkKindSpec("UNCLAIMED", RenderPayload, Permission.WRITE),))
 
 
 def test_the_platforms_kinds_go_through_the_same_registries(managers: Managers) -> None:

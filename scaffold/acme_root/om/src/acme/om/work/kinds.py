@@ -1,10 +1,10 @@
 """The kinds of work, as a registry. A kind is a name, the payload its items
 carry, the permission that asks for it, where its items go, and the
 claimant kind that takes them through the gateway. The platform's own kinds
-register here, as a product's do at its root, so no kind is a list a
-product edits: a root builds the one registry its process holds
-(`root.build_managers(product_kinds=...)`), and the work manager and placement read
-every kind through it."""
+register here, as a product's do at its roots, so no kind is a list a
+product edits: each root builds the one registry its process holds from
+what the product hands it (`root.PlatformPorts.kinds`), and the work
+manager and placement read every kind through it."""
 
 import re
 from collections.abc import Callable, Iterable, Iterator, Mapping

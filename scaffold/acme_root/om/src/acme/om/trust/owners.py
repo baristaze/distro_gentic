@@ -2,8 +2,9 @@
 the owners of that kind (a project, or a product's own), whether one is the
 tenant's, and which one a session is placed on: the one placement whose
 sessions reach a secret declared on it. The platform's project registers
-here as a product's owner kind does at its root (`TrustLayer(product_kinds=...)`),
-and a secret is resolved through every kind alike."""
+here as a product's owner kind does at its roots
+(`root.PlatformPorts.kinds`), and a secret is resolved through every kind
+alike."""
 
 import re
 from abc import ABC, abstractmethod

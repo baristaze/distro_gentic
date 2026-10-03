@@ -2,7 +2,7 @@
 takes. A claimant kind names who claims through the gateway and, read off
 its identity alone, the lanes it takes work from and the kinds it takes
 from each. The platform's host registers here as a product's claimant does
-at its root (`root.build_managers(product_kinds=...)`)."""
+at its roots (`root.PlatformPorts.kinds`)."""
 
 import re
 from collections.abc import Callable, Iterable, Iterator, Mapping
