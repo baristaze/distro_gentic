@@ -12,11 +12,15 @@ from acme.services.api.services.events import EventsServiceInterface
 from acme.services.api.services.fleet import FleetServiceInterface
 from acme.services.api.services.hosts import HostsServiceInterface
 from acme.services.api.services.intake import IntakeServiceInterface
+from acme.services.api.services.knowledge import KnowledgeServiceInterface
 from acme.services.api.services.media import MediaServiceInterface
 from acme.services.api.services.notifications import NotificationsServiceInterface
+from acme.services.api.services.playbooks import PlaybooksServiceInterface
+from acme.services.api.services.projects import ProjectsServiceInterface
 from acme.services.api.services.realtime import RealtimeServiceInterface
 from acme.services.api.services.relay import RelayServiceInterface
 from acme.services.api.services.tenancy import TenancyServiceInterface
+from acme.services.api.services.tools import ToolsServiceInterface
 from acme.services.api.services.watch import WatchServiceInterface
 from acme.services.api.services.webhooks import WebhooksServiceInterface
 
@@ -29,12 +33,16 @@ __all__ = [
     "FleetServiceInterface",
     "HostsServiceInterface",
     "IntakeServiceInterface",
+    "KnowledgeServiceInterface",
     "MediaServiceInterface",
     "NotificationsServiceInterface",
+    "PlaybooksServiceInterface",
+    "ProjectsServiceInterface",
     "RealtimeServiceInterface",
     "RelayServiceInterface",
     "ServicesInterface",
     "TenancyServiceInterface",
+    "ToolsServiceInterface",
     "WatchServiceInterface",
     "WebhooksServiceInterface",
 ]
@@ -85,3 +93,15 @@ class ServicesInterface(ABC):
 
     @abstractmethod
     def get_watch_service(self) -> WatchServiceInterface: ...
+
+    @abstractmethod
+    def get_projects_service(self) -> ProjectsServiceInterface: ...
+
+    @abstractmethod
+    def get_knowledge_service(self) -> KnowledgeServiceInterface: ...
+
+    @abstractmethod
+    def get_playbooks_service(self) -> PlaybooksServiceInterface: ...
+
+    @abstractmethod
+    def get_tools_service(self) -> ToolsServiceInterface: ...

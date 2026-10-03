@@ -7,7 +7,9 @@ from acme.infra.root import InfraInterface
 from acme.integrations.root import IntegrationsInterface
 from acme.om.automations import AutomationsManagerInterface
 from acme.om.intake import IntakeManagerInterface
+from acme.om.knowledge import KnowledgeManagerInterface
 from acme.om.notifications import NotificationsManagerInterface
+from acme.om.playbooks import PlaybooksManagerInterface
 from acme.om.root import Managers
 from acme.om.trust import TrustOperatorManagerInterface
 from acme.om.watch import WatchManagerInterface
@@ -35,15 +37,23 @@ from acme.services.api.services.impl.events import EventsServiceImpl
 from acme.services.api.services.impl.fleet import FleetServiceImpl
 from acme.services.api.services.impl.hosts import HostsServiceImpl
 from acme.services.api.services.impl.intake import IntakeServiceImpl
+from acme.services.api.services.impl.knowledge import KnowledgeServiceImpl
 from acme.services.api.services.impl.media import MediaServiceImpl
 from acme.services.api.services.impl.notifications import NotificationsServiceImpl
+from acme.services.api.services.impl.playbooks import PlaybooksServiceImpl
+from acme.services.api.services.impl.projects import ProjectsServiceImpl
 from acme.services.api.services.impl.realtime import RealtimeServiceImpl
 from acme.services.api.services.impl.relay import RelayServiceImpl
 from acme.services.api.services.impl.tenancy import TenancyServiceImpl
+from acme.services.api.services.impl.tools import ToolsServiceImpl
 from acme.services.api.services.impl.watch import WatchServiceImpl
 from acme.services.api.services.impl.webhooks import WebhooksServiceImpl
 from acme.services.api.services.intake import IntakeServiceInterface
+from acme.services.api.services.knowledge import KnowledgeServiceInterface
 from acme.services.api.services.notifications import NotificationsServiceInterface
+from acme.services.api.services.playbooks import PlaybooksServiceInterface
+from acme.services.api.services.projects import ProjectsServiceInterface
+from acme.services.api.services.tools import ToolsServiceInterface
 
 
 class ServicesImpl(ServicesInterface):
@@ -64,6 +74,10 @@ class ServicesImpl(ServicesInterface):
         automations: AutomationsServiceInterface,
         notifications: NotificationsServiceInterface,
         watch: WatchServiceInterface,
+        projects: ProjectsServiceInterface,
+        knowledge: KnowledgeServiceInterface,
+        playbooks: PlaybooksServiceInterface,
+        tools: ToolsServiceInterface,
     ) -> None:
         self._tenancy = tenancy
         self._admin = admin
@@ -80,6 +94,10 @@ class ServicesImpl(ServicesInterface):
         self._automations = automations
         self._notifications = notifications
         self._watch = watch
+        self._projects = projects
+        self._knowledge = knowledge
+        self._playbooks = playbooks
+        self._tools = tools
 
     def get_tenancy_service(self) -> TenancyServiceInterface:
         return self._tenancy
@@ -126,6 +144,18 @@ class ServicesImpl(ServicesInterface):
     def get_watch_service(self) -> WatchServiceInterface:
         return self._watch
 
+    def get_projects_service(self) -> ProjectsServiceInterface:
+        return self._projects
+
+    def get_knowledge_service(self) -> KnowledgeServiceInterface:
+        return self._knowledge
+
+    def get_playbooks_service(self) -> PlaybooksServiceInterface:
+        return self._playbooks
+
+    def get_tools_service(self) -> ToolsServiceInterface:
+        return self._tools
+
 
 def build_services(
     managers: Managers,
@@ -139,6 +169,8 @@ def build_services(
     intake: IntakeManagerInterface,
     automations: AutomationsManagerInterface,
     notifications: NotificationsManagerInterface,
+    knowledge: KnowledgeManagerInterface,
+    playbooks: PlaybooksManagerInterface,
 ) -> ServicesInterface:
     """In-process impls only: a Python caller outside the process reaches the
     same services through the typed client under `clients/python`."""
@@ -172,4 +204,8 @@ def build_services(
         automations=AutomationsServiceImpl(automations),
         notifications=NotificationsServiceImpl(notifications),
         watch=WatchServiceImpl(watch),
+        projects=ProjectsServiceImpl(managers.projects, managers.workspaces),
+        knowledge=KnowledgeServiceImpl(knowledge),
+        playbooks=PlaybooksServiceImpl(playbooks),
+        tools=ToolsServiceImpl(managers.tools),
     )

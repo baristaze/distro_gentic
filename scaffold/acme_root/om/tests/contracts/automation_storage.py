@@ -29,6 +29,7 @@ CROSS_TENANT_CASES: frozenset[str] = frozenset(
         "create_automation",
         "read_automation",
         "read_automations",
+        "write_automation",
         "admit",
         "create_run",
         "write_run",
@@ -206,6 +207,28 @@ class AutomationStorageContract:
         assert await storage.read_open_runs(org, automation.id, 10) == [with_session]
         assert await storage.read_session_run(org, session_id) == with_session
         assert await storage.read_session_run(org, new_id()) is None
+
+    async def test_an_automation_is_written_in_place_and_never_brought_back(
+        self, storage: AutomationStorageInterface
+    ) -> None:
+        org = new_id()
+        automation = make_automation()
+        await storage.create_automation(org, automation, ())
+        edited = automation.model_copy(update={"name": "edited", "enabled": False})
+        assert await storage.write_automation(org, edited, ())
+        assert await storage.read_automation(org, automation.id) == edited
+        assert not await storage.write_automation(org, make_automation(), ())
+
+    async def test_write_automation_of_another_tenant_changes_nothing(
+        self, storage: AutomationStorageInterface
+    ) -> None:
+        org_a, org_b = new_id(), new_id()
+        automation = make_automation()
+        await storage.create_automation(org_a, automation, ())
+        taken = automation.model_copy(update={"name": "taken"})
+        assert not await storage.write_automation(org_b, taken, ())
+        assert await storage.read_automation(org_a, automation.id) == automation
+        assert await storage.read_automation(org_b, automation.id) is None
 
     async def test_create_automation_in_another_tenant_is_not_read_here(
         self, storage: AutomationStorageInterface

@@ -33,7 +33,7 @@ from acme.om.events.manager import audit_event
 from acme.om.exceptions import NotAuthorized, NotFound, PlatformException, ValidationFailed
 from acme.om.intake.rules import in_person
 from acme.om.outbox import OutboxRelayInterface
-from acme.om.outbox.types.row import versioned_row
+from acme.om.outbox.types.row import outbox_row, versioned_row
 from acme.om.projects import ProjectsManagerInterface
 from acme.om.steps.rules import message_step
 from acme.om.steps.types.content import Content, TextBlock
@@ -45,6 +45,7 @@ from acme.om.tenancy.rules import role_at_most
 log = logging.getLogger(__name__)
 
 CREATED = "automations.automation.created"
+UPDATED = "automations.automation.updated"
 GRANTED = "automations.principal.granted"
 
 
@@ -95,14 +96,7 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         ctx.require(Permission.WRITE)
         if not in_person(ctx):
             raise NotAuthorized("an automation is made by a person, never by an agent's call")
-        if automation.runs_as is RunsAs.AUTOMATION_PRINCIPAL:
-            granted = await self._storage.read_principal(ctx.org_id)
-            if granted is None:
-                raise NotAuthorized("an automation runs as no principal before one is granted")
-            if not role_at_most(granted.role, ctx.role):
-                raise NotAuthorized(
-                    f"a {ctx.role.value} makes no automation that runs as a {granted.role.value}"
-                )
+        await self._check_principal(ctx, automation)
         await self._check_project(ctx, automation)
         now = self._clock()
         made = Automation.model_validate(
@@ -118,6 +112,46 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         if await self._storage.create_automation(ctx.org_id, made, rows):
             await self._relay.relay_all(ctx.org_id, rows)
         return await self.get_automation(ctx, made.id)
+
+    async def update_automation(
+        self, ctx: TenantContext, automation_id: UUID, automation: Automation
+    ) -> Automation:
+        ctx.require(Permission.WRITE)
+        if not in_person(ctx):
+            raise NotAuthorized("an automation is edited by a person, never by an agent's call")
+        stored = await self.get_automation(ctx, automation_id)
+        if automation.runs_as is RunsAs.CREATOR and stored.created_by != ctx.user_id:
+            raise NotAuthorized(
+                "an automation that runs as its creator is edited by its creator alone"
+            )
+        await self._check_principal(ctx, automation)
+        await self._check_project(ctx, automation)
+        # The editor is its creator from here on: one that runs as its
+        # creator is its creator's to edit, and one that runs as the
+        # principal fires on its creator's role, which is the editor's that
+        # `_check_principal` held to the grant.
+        edited = Automation.model_validate(
+            {
+                **automation.model_dump(),
+                "id": stored.id,
+                "created_at": stored.created_at,
+                "created_by": ctx.user_id,
+                "updated_at": self._clock(),
+                "updated_by": ctx.user_id,
+            }
+        )
+        rows = (outbox_row(ctx, UPDATED, edited.id, {}),)
+        if not await self._storage.write_automation(ctx.org_id, edited, rows):
+            raise NotFound(f"automation {automation_id} not found")
+        await self._relay.relay_all(ctx.org_id, rows)
+        return edited
+
+    async def list_automations(
+        self, ctx: TenantContext, after: UUID | None, limit: int
+    ) -> tuple[Automation, ...]:
+        ctx.require(Permission.READ)
+        limit = max(1, min(limit, self._options.max_page))
+        return tuple(await self._storage.read_automations(ctx.org_id, after, limit))
 
     async def grant_principal(self, ctx: TenantContext, role: Role) -> AutomationPrincipal:
         ctx.require(Permission.MANAGE_MEMBERS)
@@ -400,6 +434,20 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
             await self._storage.write_run(ctx.org_id, refused)
             return refused
         return await self._storage.create_run(ctx.org_id, refused)
+
+    async def _check_principal(self, ctx: TenantContext, automation: Automation) -> None:
+        """One that runs as the automation principal is made or edited only
+        once a principal is granted, by a caller whose role is at least the
+        grant."""
+        if automation.runs_as is not RunsAs.AUTOMATION_PRINCIPAL:
+            return
+        granted = await self._storage.read_principal(ctx.org_id)
+        if granted is None:
+            raise NotAuthorized("an automation runs as no principal before one is granted")
+        if not role_at_most(granted.role, ctx.role):
+            raise NotAuthorized(
+                f"a {ctx.role.value} makes no automation that runs as a {granted.role.value}"
+            )
 
     async def _check_project(self, ctx: TenantContext, automation: Automation) -> None:
         """A start's project is one of the caller's tenant: another tenant's

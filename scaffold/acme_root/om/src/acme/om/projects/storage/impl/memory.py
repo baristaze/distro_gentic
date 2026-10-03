@@ -24,6 +24,31 @@ class ProjectStorageMemoryImpl(MemoryStorageBase, ProjectStorageInterface):
     async def read_project(self, org_id: UUID, project_id: UUID) -> Project | None:
         return self._get(self._projects, org_id, project_id)
 
+    async def read_projects(self, org_id: UUID, after: UUID | None, limit: int) -> list[Project]:
+        rows = self._rows(self._projects, org_id)
+        return [p for p in rows if after is None or p.id > after][:limit]
+
+    async def write_project(
+        self, org_id: UUID, project: Project, outbox_rows: tuple[OutboxRow, ...]
+    ) -> bool:
+        async with self._lock:
+            if self._get(self._projects, org_id, project.id) is None:
+                return False
+            self._put(self._projects, org_id, project, outbox_rows)
+            return True
+
+    async def delete_project(
+        self, org_id: UUID, project_id: UUID, outbox_rows: tuple[OutboxRow, ...]
+    ) -> bool:
+        async with self._lock:
+            if self._get(self._projects, org_id, project_id) is None:
+                return False
+            if any(b.project_id == project_id for b in self._rows(self._bindings, org_id)):
+                return False
+            self._land(org_id, outbox_rows)
+            del self._projects[project_id]
+            return True
+
     async def bind_session(self, org_id: UUID, binding: SessionProject) -> SessionProject:
         async with self._lock:
             if self._insert(self._bindings, org_id, binding):
