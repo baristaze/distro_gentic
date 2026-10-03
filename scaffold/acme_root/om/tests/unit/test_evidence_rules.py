@@ -113,7 +113,7 @@ def test_a_check_the_executor_cannot_run_is_refused_before_anything_runs() -> No
     check = CheckDeclaration(
         name="trials",
         version="1",
-        command=("x",),
+        command=("x", "{out}"),
         kind="scenario",
         capabilities=("arm",),
         schema_version=1,
@@ -228,7 +228,7 @@ MARKERS = ("hidden_grip_suite", "tests/hidden/test_drop.py", "test_drop_at_place
 
 def clean() -> dict[Surface, dict[str, str]]:
     return {
-        Surface.PROMPT: {"system": "Investigate why the robot drops the object."},
+        Surface.PROMPT: {"system": "Investigate why the export drops the record."},
         Surface.KNOWLEDGE: {"lab": "The arm's gripper needs calibration weekly."},
         Surface.TOOL_SOURCE: {"run_tests": "def run(): subprocess.run(['pytest', 'tests'])"},
         Surface.EVIDENCE: {"run-1": "unit passed 41 of 41 cases"},
