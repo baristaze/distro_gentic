@@ -13,21 +13,29 @@ from acme.services.api.realtime import control, socket
 from acme.services.api.routers import (
     admin,
     agent_sessions,
+    approvals,
     automations,
+    benchmarks,
     budgets,
     claimants,
     events,
+    evidence,
     fleet,
     hosts,
     intake,
     knowledge,
+    ledgers,
+    matrix,
+    matrix_operator,
     media,
     notifications,
     playbooks,
     projects,
+    provider_keys,
     relay,
     tenancy,
     tools,
+    usage,
     watch,
 )
 
@@ -38,8 +46,11 @@ HOSTED: dict[str, tuple[APIRouter, ...]] = {
     # The realtime channel is the events stream pushed; its replay is `/events`.
     "events": (events.router, socket.router),
     "media": (media.router,),
-    # Sessions with an agent; their loops run in the session runner.
-    "agent_sessions": (agent_sessions.router,),
+    # Sessions with an agent; their loops run in the session runner. What
+    # waits on a person across them reads the same sessions.
+    "agent_sessions": (agent_sessions.router, approvals.router),
+    # What a session ran to show its work, and what it delivered.
+    "evidence": (evidence.router,),
     # A tenant's pools and hosts, and a host's own calls: enroll, rotate,
     # beat, and claim; and a product's claimant's, through the same path.
     "hosts": (hosts.router, claimants.router),
@@ -49,8 +60,8 @@ HOSTED: dict[str, tuple[APIRouter, ...]] = {
     # A tenant's connections to the systems whose events reach its sessions.
     "intake": (intake.router,),
     # What a tenant may spend: a budget's amount, which a raise of wakes the
-    # sessions waiting on it.
-    "budgets": (budgets.router,),
+    # sessions waiting on it, and what each budget's window spent.
+    "budgets": (budgets.router, usage.router),
     # The tenant's automations, and its automation principal and its grant.
     "automations": (automations.router,),
     # A tenant's projects, each bound to its repository, and the fetch
@@ -66,6 +77,15 @@ HOSTED: dict[str, tuple[APIRouter, ...]] = {
     # A live read of a session by a scoped handle, and take control, a
     # command by hand, and give back, each the person's.
     "watch": (watch.router,),
+    # What a tenant on its own keys may choose of the model matrix, and its
+    # choices; and the operators' stage, publish, and read of a version.
+    "matrix": (matrix.router, matrix_operator.router),
+    # A tenant's own keys to its model providers, written and never read back.
+    "trust": (provider_keys.router,),
+    # The operators' read of the platform's benchmarks and their trend.
+    "benchmarks": (benchmarks.router,),
+    # The operators' read of a tenant's ledger.
+    "billing": (ledgers.router,),
 }
 """Every namespace this image hosts, and the routers that serve it."""
 

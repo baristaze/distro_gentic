@@ -19,7 +19,7 @@ from acme.om.base import Created, Identifiable, Platform
 from acme.om.billing.types.account import FundingMode
 from acme.om.billing.types.plan import MAX_NAME, PlanRef
 from acme.om.budgets.types.breach import Refusal
-from acme.om.budgets.types.hold import Hold
+from acme.om.budgets.types.hold import Hold, Settlement
 
 
 class Bucket(StrEnum):
@@ -150,6 +150,20 @@ class Approval(Identifiable, Created):
     session_id: UUID
     up_to_micros: int = Field(gt=0)
     approved_by: UUID
+
+
+Entry = FundedHold | Settlement | Charge | Credit | Grant | WindowRaise | Approval
+"""One entry of the ledger, of whichever kind."""
+
+
+class EntryPage(Platform):
+    """One read of a tenant's ledger, the newest first. `has_more` says the
+    read was cut at its limit: older entries match it too. The manager asks
+    storage for one entry more than the limit and keeps it out, so it is a
+    fact about the entries and not a guess about the count."""
+
+    items: tuple[Entry, ...]
+    has_more: bool
 
 
 class EntryKind(StrEnum):

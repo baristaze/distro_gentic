@@ -82,6 +82,37 @@ class AmountRequest(BaseModel):
     tokens: Annotated[Tokens | None, Field(title='Tokens')] = None
 
 
+class ApprovalView(BaseModel):
+    """
+    A tool call held for a person's decision: its session, the seq it is
+    decided at, its tool and the class of power it exercises, and the
+    principal it runs under. Its input stays in the history; the request
+    names only its hash.
+    """
+    authorization_class: Annotated[str, Field(title='Authorization Class')]
+    principal_id: Annotated[UUID, Field(title='Principal Id')]
+    requested_at: Annotated[AwareDatetime, Field(title='Requested At')]
+    seq: Annotated[int, Field(title='Seq')]
+    session_id: Annotated[UUID, Field(title='Session Id')]
+    tool: Annotated[str, Field(title='Tool')]
+
+
+class Arm(StrEnum):
+    candidate = 'candidate'
+    baseline = 'baseline'
+
+
+class ArmResultView(BaseModel):
+    """
+    One arm's result: its trials, how many passed, the mean of their
+    scores, and the sum of their costs.
+    """
+    cost_micros: Annotated[int, Field(title='Cost Micros')]
+    passed: Annotated[int, Field(title='Passed')]
+    score: Annotated[float, Field(title='Score')]
+    trials: Annotated[int, Field(title='Trials')]
+
+
 class BudgetScopeKind(StrEnum):
     session = 'session'
     tree = 'tree'
@@ -89,6 +120,12 @@ class BudgetScopeKind(StrEnum):
     project = 'project'
     team = 'team'
     tenant = 'tenant'
+
+
+class CasesView(BaseModel):
+    failed: Annotated[int, Field(title='Failed')]
+    passed: Annotated[int, Field(title='Passed')]
+    skipped: Annotated[int, Field(title='Skipped')]
 
 
 class ClaimRequest(BaseModel):
@@ -411,6 +448,39 @@ class Effect(StrEnum):
     unsafe = 'unsafe'
 
 
+class Effort(StrEnum):
+    """
+    How hard a model works on a call. A provider that has no such level
+    for a model leaves it out and names what it dropped.
+    """
+    none = 'none'
+    low = 'low'
+    medium = 'medium'
+    high = 'high'
+    xhigh = 'xhigh'
+    max = 'max'
+
+
+class Region(RootModel[str]):
+    root: Annotated[str, Field(max_length=64, min_length=1, title='Region')]
+
+
+class EligibilityBody(BaseModel):
+    """
+    What a fill offers: zero data retention, a region.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    region: Annotated[Region | None, Field(title='Region')] = None
+    zero_retention: Annotated[bool | None, Field(title='Zero Retention')] = False
+
+
+class EligibilityView(BaseModel):
+    region: Annotated[str | None, Field(title='Region')]
+    zero_retention: Annotated[bool, Field(title='Zero Retention')]
+
+
 class EnrollmentTokenView(BaseModel):
     created_at: Annotated[AwareDatetime, Field(title='Created At')]
     created_by: Annotated[UUID, Field(title='Created By')]
@@ -430,6 +500,16 @@ class EntryBody(BaseModel):
     )
     data: Annotated[str, Field(max_length=87384, title='Data')]
     n: Annotated[int, Field(ge=0, title='N')]
+
+
+class EntryKind(StrEnum):
+    hold = 'hold'
+    settlement = 'settlement'
+    charge = 'charge'
+    credit = 'credit'
+    grant = 'grant'
+    raise_ = 'raise'
+    approval = 'approval'
 
 
 class EntryView(BaseModel):
@@ -559,6 +639,29 @@ class FileView(BaseModel):
     subject_id: Annotated[UUID | None, Field(title='Subject Id')]
 
 
+class SchemaName(RootModel[str]):
+    root: Annotated[str, Field(max_length=200, min_length=1, title='Schema Name')]
+
+
+class ThinkingBudget(RootModel[int]):
+    root: Annotated[int, Field(gt=0, title='Thinking Budget')]
+
+
+class FillUsageView(BaseModel):
+    """
+    What one model, at its provider, used in the session's calls: the
+    calls that answered, and their tokens by class, no token counted
+    twice.
+    """
+    cache_read: Annotated[int, Field(title='Cache Read')]
+    cache_write: Annotated[int, Field(title='Cache Write')]
+    calls: Annotated[int, Field(title='Calls')]
+    fill: Annotated[str, Field(title='Fill')]
+    input: Annotated[int, Field(title='Input')]
+    output: Annotated[int, Field(title='Output')]
+    thinking: Annotated[int, Field(title='Thinking')]
+
+
 class AuthorizationClass(RootModel[str]):
     root: Annotated[str, Field(pattern='^[a-z][a-z0-9_]{0,63}$', title='Authorization Class')]
 
@@ -608,6 +711,11 @@ class HandRunView(BaseModel):
     session_id: Annotated[UUID, Field(title='Session Id')]
     state: ExecState
     user_id: Annotated[UUID, Field(title='User Id')]
+
+
+class HandleKind(StrEnum):
+    pull_request = 'pull_request'
+    branch = 'branch'
 
 
 class HostState(StrEnum):
@@ -745,6 +853,12 @@ class ItemStreamView(BaseModel):
     stream: Annotated[UUID, Field(title='Stream')]
 
 
+class KeyStatus(StrEnum):
+    live = 'live'
+    rotated = 'rotated'
+    refused = 'refused'
+
+
 class KnowledgeRequest(BaseModel):
     """
     An entry: its title, the words that trigger it, all of which must
@@ -787,6 +901,46 @@ class LaneLoadView(BaseModel):
     kind: Annotated[str, Field(title='Kind')]
     lane: Annotated[str, Field(title='Lane')]
     ready: Annotated[int, Field(title='Ready')]
+
+
+class LedgerEntryView(BaseModel):
+    """
+    One entry, written once. A field a kind does not carry is null:
+
+    - `hold`: `session_id`, `units` (the worst case, null when no price
+      applies), and `cost_micros` (the exposure).
+    - `settlement`: `hold_id`, `cost_micros` and `tokens` (what it spent).
+    - `charge`: `hold_id`, `units`, and `amount_micros` (what the money
+      buckets paid).
+    - `credit`: `amount_micros` and `reference` (the payment's).
+    - `grant`: `units`, `reason`, and `by` (the operator).
+    - `raise`: `budget_id`, `cost_micros`, `tokens`, and `by`.
+    - `approval`: `session_id`, `amount_micros` (the cost it allows), and
+      `by`.
+    """
+    amount_micros: Annotated[int | None, Field(title='Amount Micros')] = None
+    budget_id: Annotated[UUID | None, Field(title='Budget Id')] = None
+    by: Annotated[UUID | None, Field(title='By')] = None
+    cost_micros: Annotated[int | None, Field(title='Cost Micros')] = None
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    hold_id: Annotated[UUID | None, Field(title='Hold Id')] = None
+    id: Annotated[UUID, Field(title='Id')]
+    kind: EntryKind
+    reason: Annotated[str | None, Field(title='Reason')] = None
+    reference: Annotated[str | None, Field(title='Reference')] = None
+    session_id: Annotated[UUID | None, Field(title='Session Id')] = None
+    tokens: Annotated[int | None, Field(title='Tokens')] = None
+    units: Annotated[int | None, Field(title='Units')] = None
+
+
+class LedgerPageView(BaseModel):
+    """
+    One read of a tenant's ledger, the newest first. `has_more` says the
+    read was cut at its limit and older entries match it too: narrow it by
+    kind, hold, or session to reach them.
+    """
+    has_more: Annotated[bool, Field(title='Has More')]
+    items: Annotated[list[LedgerEntryView], Field(title='Items')]
 
 
 class LimitsBody(BaseModel):
@@ -842,6 +996,19 @@ class LogoutRequest(BaseModel):
     return_to: Annotated[ReturnTo | None, Field(title='Return To')] = None
 
 
+class LoopLimitsView(BaseModel):
+    """
+    The bounds of one loop of the session's kind: the model calls before
+    the step guard parks it for a person, the tool errors or identical
+    calls in a row that end it, the nudges it gives, and how long one run
+    drives it before handing it on.
+    """
+    error_streak: Annotated[int, Field(title='Error Streak')]
+    nudges: Annotated[int, Field(title='Nudges')]
+    run_time_seconds: Annotated[float, Field(title='Run Time Seconds')]
+    step_guard: Annotated[int, Field(title='Step Guard')]
+
+
 class LoopOutcome(StrEnum):
     """
     The five ways a loop ends. A park is none of them.
@@ -851,6 +1018,55 @@ class LoopOutcome(StrEnum):
     inconclusive = 'inconclusive'
     cancelled = 'cancelled'
     errored = 'errored'
+
+
+class Environment(RootModel[str]):
+    root: Annotated[str, Field(pattern='^[a-z][a-z0-9-]{0,31}$', title='Environment')]
+
+
+class Kind(RootModel[str]):
+    root: Annotated[str, Field(max_length=200, min_length=1, title='Kind')]
+
+
+class PlanTier(RootModel[str]):
+    root: Annotated[str, Field(pattern='^[a-z][a-z0-9-]{0,31}$', title='Plan Tier')]
+
+
+class Role1(RootModel[str]):
+    root: Annotated[str, Field(pattern='^[a-z][a-z0-9_]{0,63}$', title='Role')]
+
+
+class Workload(RootModel[str]):
+    root: Annotated[str, Field(pattern='^[a-z][a-z0-9-]{0,31}$', title='Workload')]
+
+
+class MatrixKeyBody(BaseModel):
+    """
+    What a row answers: each key it names must equal the question's, and a
+    key left out matches every value. The row that names none matches every
+    question.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    environment: Annotated[Environment | None, Field(title='Environment')] = None
+    kind: Annotated[Kind | None, Field(title='Kind')] = None
+    plan_tier: Annotated[PlanTier | None, Field(title='Plan Tier')] = None
+    role: Annotated[Role1 | None, Field(title='Role')] = None
+    workload: Annotated[Workload | None, Field(title='Workload')] = None
+
+
+class MatrixKeyView(BaseModel):
+    environment: Annotated[str | None, Field(title='Environment')]
+    kind: Annotated[str | None, Field(title='Kind')]
+    plan_tier: Annotated[str | None, Field(title='Plan Tier')]
+    role: Annotated[str | None, Field(title='Role')]
+    workload: Annotated[str | None, Field(title='Workload')]
+
+
+class MatrixStatus(StrEnum):
+    pending = 'pending'
+    published = 'published'
 
 
 class MessageRequest(BaseModel):
@@ -950,6 +1166,11 @@ class Origin(StrEnum):
     automation = 'automation'
     parent = 'parent'
     engine = 'engine'
+
+
+class OutputShape(StrEnum):
+    text = 'text'
+    schema = 'schema'
 
 
 class OutputStream(StrEnum):
@@ -1117,6 +1338,11 @@ class Provenance(StrEnum):
     unavailable = 'unavailable'
 
 
+class ProviderName(StrEnum):
+    anthropic = 'anthropic'
+    openai = 'openai'
+
+
 class PublishRequest(BaseModel):
     """
     The next version of a playbook's name: its description, its body, and
@@ -1139,6 +1365,19 @@ class PurposeUsageView(BaseModel):
     size_bytes: Annotated[int, Field(title='Size Bytes')]
 
 
+class QuestionView(BaseModel):
+    """
+    What a session asks of a person now: a park on a person that is no
+    call's decision, such as a step guard to lift, a deadline to move, or a
+    principal to name. `unlock` is what clears it, sent as a control; `seq`
+    is the step that parked it.
+    """
+    asked_at: Annotated[AwareDatetime, Field(title='Asked At')]
+    seq: Annotated[int, Field(title='Seq')]
+    session_id: Annotated[UUID, Field(title='Session Id')]
+    unlock: Annotated[str, Field(title='Unlock')]
+
+
 class RenameProjectRequest(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -1149,6 +1388,18 @@ class RenameProjectRequest(BaseModel):
 class ReportOutcome(StrEnum):
     done = 'done'
     failed = 'failed'
+
+
+class ReportView(BaseModel):
+    """
+    The result the session submitted and the gate accepted: the outcome
+    its loop ended with, whether a gate that knows the evidence judged it,
+    and the step that answered it.
+    """
+    accepted_at: Annotated[AwareDatetime, Field(title='Accepted At')]
+    outcome: LoopOutcome
+    seq: Annotated[int, Field(title='Seq')]
+    verified: Annotated[bool, Field(title='Verified')]
 
 
 class RepositoryBody(BaseModel):
@@ -1166,6 +1417,29 @@ class RepositoryBody(BaseModel):
 class RepositoryView(BaseModel):
     host: Annotated[str, Field(title='Host')]
     path: Annotated[str, Field(title='Path')]
+
+
+class RetireRequest(BaseModel):
+    """
+    A model its provider retired, by name, as a fill names it.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    model: Annotated[str, Field(max_length=200, min_length=1, title='Model')]
+    provider: ProviderName
+
+
+class RetirementView(BaseModel):
+    """
+    A retired model: no session resolves to it again, and a version that
+    names it is not published. Recorded once a model.
+    """
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    id: Annotated[UUID, Field(title='Id')]
+    model: Annotated[str, Field(title='Model')]
+    provider: ProviderName
+    recorded_by: Annotated[UUID, Field(title='Recorded By')]
 
 
 class ReviewRequest(BaseModel):
@@ -1186,12 +1460,40 @@ class Role(StrEnum):
     service = 'service'
 
 
+class RunOutcome(StrEnum):
+    passed = 'passed'
+    failed = 'failed'
+    errored = 'errored'
+    aborted = 'aborted'
+
+
+class RunPurpose(StrEnum):
+    """
+    Why a run ran. Only the executor writes a `baseline` or a
+    `validation` run; the agent's own runs are `work`.
+    """
+    work = 'work'
+    baseline = 'baseline'
+    validation = 'validation'
+
+
 class RunsAs(StrEnum):
     """
     Whose authority an automation's action runs on.
     """
     creator = 'creator'
     automation_principal = 'automation_principal'
+
+
+class SaveKeyRequest(BaseModel):
+    """
+    A key's value. It is written once, under a new reference, and no
+    response, log, or error ever carries it.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    value: Annotated[SecretStr, Field(max_length=4096, min_length=1, title='Value')]
 
 
 class SecondFactorRequest(BaseModel):
@@ -1225,6 +1527,20 @@ class SessionStatus(StrEnum):
     running = 'running'
     parked = 'parked'
     idle = 'idle'
+
+
+class SessionUsageView(BaseModel):
+    """
+    What a session's model calls used, as each provider reported it, per
+    model and in total.
+    """
+    cache_read: Annotated[int, Field(title='Cache Read')]
+    cache_write: Annotated[int, Field(title='Cache Write')]
+    calls: Annotated[int, Field(title='Calls')]
+    fills: Annotated[list[FillUsageView], Field(title='Fills')]
+    input: Annotated[int, Field(title='Input')]
+    output: Annotated[int, Field(title='Output')]
+    thinking: Annotated[int, Field(title='Thinking')]
 
 
 class SessionView(BaseModel):
@@ -1357,6 +1673,10 @@ class SsoLinkView(BaseModel):
     url: Annotated[str, Field(title='Url')]
 
 
+class Role2(RootModel[str]):
+    root: Annotated[str, Field(pattern='^[a-z][a-z0-9_]{0,63}$')]
+
+
 class StartSessionRequest(BaseModel):
     """
     A session to start on the latest version of a kind the product runs,
@@ -1474,6 +1794,36 @@ class TotpConfirmedView(BaseModel):
     identity_id: Annotated[UUID, Field(title='Identity Id')]
 
 
+class TreeBoundsView(BaseModel):
+    """
+    What the session's tree shares: how deep and how many sub-agents it
+    may have, how many run at once, the one deadline, and how many were
+    spawned so far.
+    """
+    concurrency: Annotated[int | None, Field(title='Concurrency')]
+    count: Annotated[int, Field(title='Count')]
+    deadline: Annotated[AwareDatetime | None, Field(title='Deadline')]
+    height: Annotated[int, Field(title='Height')]
+    root_id: Annotated[UUID, Field(title='Root Id')]
+    size: Annotated[int, Field(title='Size')]
+
+
+class TrialView(BaseModel):
+    """
+    One trial: its arm, its session, where and when it ran, its cost, and
+    what its acceptance verdict found.
+    """
+    arm: Arm
+    broken: Annotated[list[str], Field(title='Broken')]
+    cost_micros: Annotated[int, Field(title='Cost Micros')]
+    executor: Annotated[str, Field(title='Executor')]
+    passed: Annotated[bool, Field(title='Passed')]
+    score: Annotated[float, Field(title='Score')]
+    session_id: Annotated[UUID, Field(title='Session Id')]
+    started_at: Annotated[AwareDatetime, Field(title='Started At')]
+    verdict_id: Annotated[UUID, Field(title='Verdict Id')]
+
+
 class TriggerKind(StrEnum):
     event = 'event'
     schedule = 'schedule'
@@ -1534,6 +1884,33 @@ class ValidationError(BaseModel):
     type: Annotated[str, Field(title='Error Type')]
 
 
+class ValidationView(BaseModel):
+    """
+    One pass of the policy's checks on a fresh executor: the version it
+    ran at and the version its checks came from, who ran it, the hash of
+    the results it wrote, and its runs.
+    """
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    executor: Annotated[str, Field(title='Executor')]
+    id: Annotated[UUID, Field(title='Id')]
+    project: Annotated[str, Field(title='Project')]
+    purpose: RunPurpose
+    records: Annotated[list[UUID], Field(title='Records')]
+    results_sha256: Annotated[str, Field(title='Results Sha256')]
+    source: Annotated[str, Field(title='Source')]
+    version: Annotated[str, Field(title='Version')]
+
+
+class Verdict(StrEnum):
+    """
+    A person's decision on one exact call, as the history holds it.
+    """
+    approved = 'approved'
+    denied = 'denied'
+    expired = 'expired'
+    pending = 'pending'
+
+
 class WindowKind(StrEnum):
     life = 'life'
     hour = 'hour'
@@ -1541,6 +1918,16 @@ class WindowKind(StrEnum):
     week = 'week'
     month = 'month'
     span = 'span'
+
+
+class WorkHandleView(BaseModel):
+    """
+    A pull request or a branch the session opened as its work, by the
+    name source control gives it.
+    """
+    bound_at: Annotated[AwareDatetime, Field(title='Bound At')]
+    handle: Annotated[str, Field(title='Handle')]
+    kind: HandleKind
 
 
 class WorkStatus(StrEnum):
@@ -1615,15 +2002,20 @@ class AgentSessionView(BaseModel):
     A session: its kind, its title, and its status, which follows its
     steps. `pending` while an input waits for a run, `running` while a run
     holds its loop, `parked` while the loop waits, `idle` when no loop is
-    open.
+    open. A sub-agent names the session that spawned it, and every session
+    the root of its tree. `deleted_at` is set only on the answer to a
+    delete: a deleted session is on no read until it is restored.
     """
     archived_at: Annotated[AwareDatetime | None, Field(title='Archived At')]
     created_at: Annotated[AwareDatetime, Field(title='Created At')]
     created_by: Annotated[UUID, Field(title='Created By')]
+    deleted_at: Annotated[AwareDatetime | None, Field(title='Deleted At')]
     id: Annotated[UUID, Field(title='Id')]
     kind: Annotated[str, Field(title='Kind')]
     kind_version: Annotated[int, Field(title='Kind Version')]
+    parent_id: Annotated[UUID | None, Field(title='Parent Id')]
     park: ParkView | None
+    root_id: Annotated[UUID, Field(title='Root Id')]
     status: SessionStatus
     title: Annotated[str, Field(title='Title')]
 
@@ -1636,6 +2028,16 @@ class ApiKeyView(BaseModel):
     name: Annotated[str, Field(title='Name')]
     role: Role
     user_id: Annotated[UUID, Field(title='User Id')]
+
+
+class ApprovalPageView(BaseModel):
+    """
+    The calls held across one page of the tenant's parked sessions, by
+    session id. `next_cursor` reads the next page of sessions and is null
+    on the last one; a page may hold no call and still have a next.
+    """
+    items: Annotated[list[ApprovalView], Field(title='Items')]
+    next_cursor: Annotated[str | None, Field(title='Next Cursor')]
 
 
 class ApproverRuleBody(BaseModel):
@@ -1681,6 +2083,52 @@ class AutomationView(BaseModel):
     trigger: TriggerView
     updated_at: Annotated[AwareDatetime, Field(title='Updated At')]
     updated_by: Annotated[UUID, Field(title='Updated By')]
+
+
+class BenchmarkResultRequest(BaseModel):
+    """
+    What a benchmark run showed of a model for a model role: whether it
+    passed, and where its evidence is (`run`, such as the run's id or its
+    report's address). The latest result for the model and the role decides
+    whether a version that serves the role with the model may be
+    published.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    benchmark: Annotated[str, Field(pattern='^[a-z][a-z0-9_.-]{0,99}$', title='Benchmark')]
+    model: Annotated[str, Field(max_length=200, min_length=1, title='Model')]
+    passed: Annotated[bool, Field(title='Passed')]
+    provider: ProviderName
+    role: Annotated[str, Field(pattern='^[a-z][a-z0-9_]{0,63}$', title='Role')]
+    run: Annotated[str, Field(max_length=500, min_length=1, title='Run')]
+
+
+class BenchmarkResultView(BaseModel):
+    """
+    A recorded result, written once.
+    """
+    benchmark: Annotated[str, Field(title='Benchmark')]
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    id: Annotated[UUID, Field(title='Id')]
+    model: Annotated[str, Field(title='Model')]
+    passed: Annotated[bool, Field(title='Passed')]
+    provider: ProviderName
+    recorded_by: Annotated[UUID, Field(title='Recorded By')]
+    role: Annotated[str, Field(title='Role')]
+    run: Annotated[str, Field(title='Run')]
+
+
+class BoundsView(BaseModel):
+    """
+    The bounds a session runs under: its kind's loop limits, the deadline
+    its kind gives a tree it roots, and its tree's record.
+    """
+    kind: Annotated[str, Field(title='Kind')]
+    kind_deadline_seconds: Annotated[float | None, Field(title='Kind Deadline Seconds')]
+    kind_version: Annotated[int, Field(title='Kind Version')]
+    loop: LoopLimitsView
+    tree: TreeBoundsView
 
 
 class BudgetView(BaseModel):
@@ -1807,6 +2255,20 @@ class CrossingBody(BaseModel):
     size: Annotated[int, Field(ge=0, title='Size')]
 
 
+class DeliveryView(BaseModel):
+    """
+    What a session delivered: its project, its branch and whether the
+    remote has held it, the pull requests and branches bound to it, and its
+    latest accepted result. A session that never had a workspace has no
+    branch.
+    """
+    branch: Annotated[str | None, Field(title='Branch')]
+    branch_seen: Annotated[bool, Field(title='Branch Seen')]
+    project_id: Annotated[UUID | None, Field(title='Project Id')]
+    report: ReportView | None
+    work: Annotated[list[WorkHandleView], Field(title='Work')]
+
+
 class EnrollRequest(BaseModel):
     """
     A host's name and its report, beside its enrollment token. The pool
@@ -1820,6 +2282,35 @@ class EnrollRequest(BaseModel):
     name: Annotated[str, Field(max_length=64, min_length=1, title='Name')]
 
 
+class ExecutionView(BaseModel):
+    """
+    One run of one check: why it ran, the version and whether the tree
+    was dirty, the image, host, and isolation it ran on, who wrote its
+    results, its timing, its outcome and its cases, and the weakest
+    provenance of what served it. A `work` run names the agent's tool call;
+    a baseline or a validation run names its validation.
+    """
+    abort: Annotated[str | None, Field(title='Abort')]
+    cases: CasesView
+    check: Annotated[str, Field(title='Check')]
+    check_version: Annotated[str, Field(title='Check Version')]
+    dirty: Annotated[bool, Field(title='Dirty')]
+    executor: Annotated[str, Field(title='Executor')]
+    finished_at: Annotated[AwareDatetime, Field(title='Finished At')]
+    host: Annotated[str, Field(title='Host')]
+    id: Annotated[UUID, Field(title='Id')]
+    image: Annotated[str, Field(title='Image')]
+    isolation: Annotated[str, Field(title='Isolation')]
+    outcome: RunOutcome
+    project: Annotated[str, Field(title='Project')]
+    provenance: Provenance
+    purpose: RunPurpose
+    started_at: Annotated[AwareDatetime, Field(title='Started At')]
+    step_id: Annotated[UUID | None, Field(title='Step Id')]
+    validation_id: Annotated[UUID | None, Field(title='Validation Id')]
+    version: Annotated[str, Field(title='Version')]
+
+
 class FilePageView(BaseModel):
     """
     One page of the org's stored files, oldest first. `next_cursor` fetches
@@ -1827,6 +2318,40 @@ class FilePageView(BaseModel):
     """
     items: Annotated[list[FileView], Field(title='Items')]
     next_cursor: Annotated[str | None, Field(title='Next Cursor')]
+
+
+class FillBody(BaseModel):
+    """
+    A fill: a provider's model, how hard it works, its output bound and
+    shape, its context window, and what it offers. The output bound fits
+    inside the window, and a schema is named exactly when the output is one.
+    An output left out is text, and an eligibility left out offers
+    nothing.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    context_window: Annotated[int, Field(gt=0, title='Context Window')]
+    effort: Effort | None = None
+    eligibility: EligibilityBody | None = None
+    max_output_tokens: Annotated[int, Field(gt=0, title='Max Output Tokens')]
+    model: Annotated[str, Field(max_length=200, min_length=1, title='Model')]
+    output: OutputShape | None = None
+    provider: ProviderName
+    schema_name: Annotated[SchemaName | None, Field(title='Schema Name')] = None
+    thinking_budget: Annotated[ThinkingBudget | None, Field(title='Thinking Budget')] = None
+
+
+class FillView(BaseModel):
+    context_window: Annotated[int, Field(title='Context Window')]
+    effort: Effort | None
+    eligibility: EligibilityView
+    max_output_tokens: Annotated[int, Field(title='Max Output Tokens')]
+    model: Annotated[str, Field(title='Model')]
+    output: OutputShape
+    provider: ProviderName
+    schema_name: Annotated[str | None, Field(title='Schema Name')]
+    thinking_budget: Annotated[int | None, Field(title='Thinking Budget')]
 
 
 class GrantRequest(BaseModel):
@@ -2032,6 +2557,43 @@ class LoopStandingView(BaseModel):
     status: WorkStatus
 
 
+class MatrixRowBody(BaseModel):
+    """
+    A row: the questions it matches, and its fills, the first the fill and
+    the rest the fallbacks, each named once. A row that names no match
+    matches every question.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    fills: Annotated[list[FillBody], Field(max_length=8, min_length=1, title='Fills')]
+    matches: MatrixKeyBody | None = None
+
+
+class MatrixRowView(BaseModel):
+    """
+    A row: the questions it matches, the row's key, and its fills.
+    """
+    fills: Annotated[list[FillView], Field(title='Fills')]
+    matches: MatrixKeyView
+
+
+class MatrixVersionView(BaseModel):
+    """
+    A version: pending until an operator publishes it, and the matrix from
+    then until the next is published. Its rows never change.
+    """
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    created_by: Annotated[UUID, Field(title='Created By')]
+    id: Annotated[UUID, Field(title='Id')]
+    number: Annotated[int, Field(title='Number')]
+    published_at: Annotated[AwareDatetime | None, Field(title='Published At')]
+    published_by: Annotated[UUID | None, Field(title='Published By')]
+    roles: Annotated[list[str], Field(title='Roles')]
+    rows: Annotated[list[MatrixRowView], Field(title='Rows')]
+    status: MatrixStatus
+
+
 class MeView(BaseModel):
     app: Annotated[str, Field(title='App')]
     org: OrgView
@@ -2165,6 +2727,19 @@ class ProjectView(BaseModel):
     updated_by: Annotated[UUID, Field(title='Updated By')]
 
 
+class ProviderKeyView(BaseModel):
+    """
+    What the tenant sees of a key: its reference, who added it and when,
+    its state, and when it was last used. Never its value.
+    """
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    created_by: Annotated[UUID, Field(title='Created By')]
+    id: Annotated[UUID, Field(title='Id')]
+    last_used_at: Annotated[AwareDatetime | None, Field(title='Last Used At')]
+    provider: ProviderName
+    status: KeyStatus
+
+
 class ResultRequest(BaseModel):
     """
     How an item ended: the JSON of an exec result, in base64.
@@ -2174,6 +2749,12 @@ class ResultRequest(BaseModel):
     )
     crossing: CrossingBody
     data: Annotated[str, Field(max_length=16000000, title='Data')]
+
+
+class RoleFillView(BaseModel):
+    fallbacks: Annotated[list[FillView], Field(title='Fallbacks')]
+    fill: FillView
+    role: Annotated[str, Field(title='Role')]
 
 
 class SessionStandingView(BaseModel):
@@ -2194,6 +2775,18 @@ class SessionStandingView(BaseModel):
     session_id: Annotated[UUID, Field(title='Session Id')]
     share_set: Annotated[bool, Field(title='Share Set')]
     status: SessionStatus
+
+
+class StageRequest(BaseModel):
+    """
+    A new version of the matrix: the model roles it serves and its rows,
+    one a key. It is checked whole when it is published.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    roles: Annotated[list[Role2], Field(max_length=64, min_length=1, title='Roles')]
+    rows: Annotated[list[MatrixRowBody], Field(max_length=500, min_length=1, title='Rows')]
 
 
 class StepShapeView(BaseModel):
@@ -2245,6 +2838,25 @@ class StepView(BaseModel):
     type: StepType
 
 
+class ToolCallView(BaseModel):
+    """
+    One tool call of a session: its request, a person's decision on it
+    when one was asked, and its response once it answered. A call with no
+    response is open: held for a decision, or running.
+    """
+    authorization_class: Annotated[str, Field(title='Authorization Class')]
+    decided_by: Annotated[UUID | None, Field(title='Decided By')]
+    decision: Verdict | None
+    failure: ToolFailure | None
+    loop_id: Annotated[UUID, Field(title='Loop Id')]
+    principal_id: Annotated[UUID, Field(title='Principal Id')]
+    requested_at: Annotated[AwareDatetime, Field(title='Requested At')]
+    responded_at: Annotated[AwareDatetime | None, Field(title='Responded At')]
+    response_seq: Annotated[int | None, Field(title='Response Seq')]
+    seq: Annotated[int, Field(title='Seq')]
+    tool: Annotated[str, Field(title='Tool')]
+
+
 class ToolPolicyRequest(BaseModel):
     """
     The tenant's whole layer, written over the version `If-Match` names.
@@ -2292,6 +2904,15 @@ class UserPageView(BaseModel):
     next_cursor: Annotated[str | None, Field(title='Next Cursor')]
 
 
+class AgentSessionPageView(BaseModel):
+    """
+    One page of sessions, by id. `next_cursor` fetches the next page and
+    is null on the last one.
+    """
+    items: Annotated[list[AgentSessionView], Field(title='Items')]
+    next_cursor: Annotated[str | None, Field(title='Next Cursor')]
+
+
 class ApiKeyPageView(BaseModel):
     """
     One page of the api key list, newest first; `next_cursor` as on
@@ -2317,11 +2938,46 @@ class AutomationRequest(BaseModel):
     trigger: TriggerBody
 
 
+class BudgetUsageView(BaseModel):
+    """
+    A budget and its current window: what open holds reserve and what
+    settled calls spent, in reference cost (millionths) and native tokens,
+    against the budget's amount.
+    """
+    budget: BudgetView
+    held_cost_micros: Annotated[int, Field(title='Held Cost Micros')]
+    held_tokens: Annotated[int, Field(title='Held Tokens')]
+    spent_cost_micros: Annotated[int, Field(title='Spent Cost Micros')]
+    spent_tokens: Annotated[int, Field(title='Spent Tokens')]
+    window_start: Annotated[AwareDatetime, Field(title='Window Start')]
+
+
+class ChooseRequest(BaseModel):
+    """
+    The fill a tenant chooses for a model role: one of that role's
+    options.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    fill: FillBody
+
+
 class ClaimantClaimView(BaseModel):
     """
     What a claim answers: the item, or none when nothing is ready.
     """
     item: ClaimantWorkView | None
+
+
+class ContenderView(BaseModel):
+    """
+    What an arm's sessions ran: the agent kind, its version, and each model
+    role's fill.
+    """
+    fills: Annotated[list[RoleFillView], Field(title='Fills')]
+    kind: Annotated[str, Field(title='Kind')]
+    kind_version: Annotated[int, Field(title='Kind Version')]
 
 
 class ErrorBody(BaseModel):
@@ -2334,6 +2990,37 @@ class ErrorBody(BaseModel):
 
 class ErrorResponse(BaseModel):
     error: ErrorBody
+
+
+class ExecutionPageView(BaseModel):
+    """
+    One page of a session's runs, oldest first. `next_cursor` fetches the
+    next page and is null on the last one.
+    """
+    items: Annotated[list[ExecutionView], Field(title='Items')]
+    next_cursor: Annotated[str | None, Field(title='Next Cursor')]
+
+
+class FillChoiceView(BaseModel):
+    """
+    The tenant's choice for one model role, from its next session on.
+    """
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    fill: FillView
+    id: Annotated[UUID, Field(title='Id')]
+    role: Annotated[str, Field(title='Role')]
+    updated_at: Annotated[AwareDatetime, Field(title='Updated At')]
+    updated_by: Annotated[UUID, Field(title='Updated By')]
+
+
+class FillOptionsView(BaseModel):
+    """
+    What a tenant on its own keys may choose for one model role: the fills
+    the published matrix qualified for it, from a provider it holds a live
+    key for.
+    """
+    fills: Annotated[list[FillView], Field(title='Fills')]
+    role: Annotated[str, Field(title='Role')]
 
 
 class InvitationPageView(BaseModel):
@@ -2394,3 +3081,54 @@ class StepPageView(BaseModel):
     """
     has_more: Annotated[bool, Field(title='Has More')]
     items: Annotated[list[StepView], Field(title='Items')]
+
+
+class ToolCallPageView(BaseModel):
+    """
+    One page of a session's tool calls, in order, after the seq the
+    request named. With `has_more`, the next page starts after the last
+    call's seq.
+    """
+    has_more: Annotated[bool, Field(title='Has More')]
+    items: Annotated[list[ToolCallView], Field(title='Items')]
+
+
+class UsagePageView(BaseModel):
+    """
+    One page of the tenant's budgets with their usage, by budget id.
+    `next_cursor` fetches the next page and is null on the last one.
+    """
+    items: Annotated[list[BudgetUsageView], Field(title='Items')]
+    next_cursor: Annotated[str | None, Field(title='Next Cursor')]
+
+
+class BenchmarkSummaryView(BaseModel):
+    """
+    One run of a scenario, without its trials: a point of the scenario's
+    trend.
+    """
+    baseline: ContenderView
+    baseline_result: ArmResultView
+    candidate: ContenderView
+    candidate_result: ArmResultView
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    id: Annotated[UUID, Field(title='Id')]
+    recorded_by: Annotated[UUID, Field(title='Recorded By')]
+    regressed: Annotated[bool, Field(title='Regressed')]
+    scenario: Annotated[str, Field(title='Scenario')]
+
+
+class BenchmarkView(BaseModel):
+    """
+    One run of a scenario, with every trial of both arms.
+    """
+    baseline: ContenderView
+    baseline_result: ArmResultView
+    candidate: ContenderView
+    candidate_result: ArmResultView
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    id: Annotated[UUID, Field(title='Id')]
+    recorded_by: Annotated[UUID, Field(title='Recorded By')]
+    regressed: Annotated[bool, Field(title='Regressed')]
+    scenario: Annotated[str, Field(title='Scenario')]
+    trials: Annotated[list[TrialView], Field(title='Trials')]

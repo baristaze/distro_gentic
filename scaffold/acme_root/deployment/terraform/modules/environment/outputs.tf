@@ -111,3 +111,14 @@ output "migration_files" {
     error_message = "the migration inputs were not found from the environment module; the repository root is four levels above it"
   }
 }
+
+# What the session runner holds, as its service declares it, read by the
+# staging root's test: the policies its task role attaches, and the names
+# its execution role injects.
+output "session_runner_access" {
+  description = "The session runner's task role policies, by ARN, and the variables its execution role injects from the secret store."
+  value = {
+    policy_arns  = module.session_runner.task_policy_arns
+    secret_names = module.session_runner.injected_secret_names
+  }
+}

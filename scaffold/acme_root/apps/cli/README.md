@@ -10,6 +10,7 @@ uv run acme whoami
 uv run acme orgs                    # * marks the session's org
 uv run acme switch fabrikam         # the old session ends
 uv run acme upload spec.pdf         # --type, --json
+uv run acme session list --status parked   # the org's sessions, one a line
 uv run acme session start assistant "the dropped object" --project <id>   # local: optional
 uv run acme session say <id> "Why does the export time out?"
 uv run acme session control <id> pause     # resume, cancel, compact, unlock

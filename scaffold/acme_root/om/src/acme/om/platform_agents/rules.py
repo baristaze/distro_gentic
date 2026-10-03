@@ -1,11 +1,13 @@
 """Pure rules of the agents a platform ships: the platform assistant's
-reach, the corpus the knowledge map lists for one audience, a search of
+reach, an edit of one place in a file, the matches a search of the code
+answers, the corpus the knowledge map lists for one audience, a search of
 it, and a draft of the tenant's tool policy against what is live. Values
 in, values out."""
 
 import re
 from collections.abc import Collection, Iterable, Mapping
 from pathlib import PurePosixPath
+from typing import NamedTuple
 
 from acme.infra.workspaces import IsolationMode
 from acme.om.agents.types.kind import AgentKind
@@ -43,6 +45,96 @@ def reach_refusal(kind: AgentKind, classes: Mapping[str, str]) -> str | None:
                 f"only reads and hands work on"
             )
     return None
+
+
+# An edit of one place in a file.
+
+MOST_COUNTED = 100
+"""The most places a refused match counts before it says "at least"."""
+
+
+class Edit(NamedTuple):
+    """A text with one place replaced: the new text, the line the place
+    starts on, and how many lines the new text holds there."""
+
+    text: str
+    line: int
+    lines: int
+
+
+def lines_of(text: str) -> list[str]:
+    """The lines of a text, each with its own end, counted as a search counts
+    them: a line ends at a newline."""
+    parts = text.split("\n")
+    lines = [part + "\n" for part in parts[:-1]]
+    if parts[-1]:
+        lines.append(parts[-1])
+    return lines
+
+
+def edited(
+    text: str,
+    new_text: str,
+    *,
+    old_text: str | None = None,
+    start_line: int | None = None,
+    end_line: int | None = None,
+) -> Edit | str:
+    """The text with one place replaced by `new_text`. The place is
+    `old_text` where it matches exactly one place, overlapping matches
+    counted, or the lines `start_line` to `end_line`, counted from 1, both
+    included; a new text that drops the range's last line end keeps it.
+    Why it cannot land, in words the model reads, for a match of no place
+    or of more than one, and for a range past the text's end."""
+    if old_text is not None:
+        start = text.find(old_text)
+        if start < 0:
+            return "old_text matches no place in the file: read it again, and copy it"
+        found, at = 1, text.find(old_text, start + 1)
+        while at >= 0 and found < MOST_COUNTED:
+            found, at = found + 1, text.find(old_text, at + 1)
+        if found > 1:
+            places = f"{found}" if at < 0 else f"at least {found}"
+            return (
+                f"old_text matches {places} places in the file, and an edit changes one: "
+                "give more of the text around it, so it matches one place"
+            )
+        end, replacement = start + len(old_text), new_text
+    else:
+        assert start_line is not None and end_line is not None
+        lines = lines_of(text)
+        if end_line > len(lines):
+            return f"the file has {len(lines)} lines, and the range ends at {end_line}"
+        start = sum(len(line) for line in lines[: start_line - 1])
+        end = start + sum(len(line) for line in lines[start_line - 1 : end_line])
+        last = lines[end_line - 1]
+        replacement = new_text
+        if new_text and not new_text.endswith("\n") and last.endswith("\n"):
+            replacement += "\r\n" if last.endswith("\r\n") else "\n"
+    line = text.count("\n", 0, start) + 1
+    return Edit(text[:start] + replacement + text[end:], line, len(lines_of(replacement)))
+
+
+# The matches of a search of the code.
+
+
+def matches_of(output: str, limit: int, width: int) -> tuple[list[tuple[str, int, str]], bool]:
+    """The matches in what a recursive search printed, one a line as
+    `path NUL line:text`: each as its path inside the workspace, its line,
+    and its text cut at `width` characters, at most `limit` of them; and
+    whether more were printed. A line of another shape, such as the mark
+    where a bounded output was cut, is no match."""
+    found: list[tuple[str, int, str]] = []
+    for row in output.split("\n"):
+        path, nul, rest = row.partition("\0")
+        number, colon, matched = rest.partition(":")
+        if not (nul and colon and path and number.isdigit()):
+            continue
+        if len(found) == limit:
+            return found, True
+        path = path.removeprefix("./")
+        found.append((path, int(number), matched.rstrip("\r")[:width]))
+    return found, False
 
 
 # The knowledge map.

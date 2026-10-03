@@ -82,9 +82,10 @@ tracker is reported as "not read", never as "no errors".
 
 ## Procedure
 
-A batch makes at most 20 tool calls. Its main path is six: the wait,
-the credential check, one log read per process (two, `api` and
-`maintenance`), the alarms, and one `get-metric-data` call with a
+A batch makes at most 20 tool calls. Its main path is five: the wait,
+the credential check, the log reads of the three processes (`api`,
+`maintenance`, and `session-runner`) in one command, the alarms, and
+one `get-metric-data` call with a
 query per signal. The bound sits well above that, so a retry of each
 read and the reads of step 6 fit in it; only a batch that loops
 reaches it. A tree with more than two processes reads all their logs
@@ -136,8 +137,9 @@ in it; the first batch still makes its own check after its wait.
    sleep <interval in seconds>
    ```
 
-   The read, cloud, one query per process (`api` and `maintenance`,
-   the log groups `/acme/<env>/api` and `/acme/<env>/maintenance`),
+   The read, cloud, one query per process (`api`, `maintenance`, and
+   `session-runner`, the log groups `/acme/<env>/api`,
+   `/acme/<env>/maintenance`, and `/acme/<env>/session-runner`),
    bounded by the batch's start and end in epoch milliseconds, never
    `--follow`:
 

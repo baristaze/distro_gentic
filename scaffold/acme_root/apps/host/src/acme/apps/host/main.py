@@ -3,7 +3,9 @@ host would advertise. `run` starts the host: it probes, enrolls once or
 picks up its credential, then beats, rotates, and claims until stopped,
 waiting out a failure it outlasts. Exit codes: 0 done, 1 the platform
 refused, 2 a setting or a file on the host is wrong, 3 not enrolled, 4 the
-platform is unreachable at startup, 5 a startup probe failed."""
+platform is unreachable or failing at startup, or the clock is not yet in
+step with it, which passes with time, 5 a startup probe failed that a person
+must fix."""
 
 import asyncio
 import contextlib
@@ -208,10 +210,16 @@ def _guarded(coroutine: Coroutine[Any, Any, None]) -> None:
     except BadSetting as error:
         _fail(str(error), EXIT_USAGE)
     except Misconfigured as error:
+        if error.passes_with_time:
+            _fail(f"not ready: {error}", EXIT_UNREACHABLE)
         _fail(f"misconfigured: {error}", EXIT_MISCONFIGURED)
     except NotEnrolled as error:
         _fail(f"not enrolled: {error}", EXIT_NOT_ENROLLED)
     except ApiError as error:
+        # An answer the platform could not serve, or a 429, passes with time,
+        # as it does once the host runs (`HostAgent.turn`).
+        if error.status >= 500 or error.status == 429:
+            _fail(f"the platform failed: {error.status} {error}", EXIT_UNREACHABLE)
         _fail(f"refused: {error}", EXIT_REFUSED)
     except httpx.TransportError as error:
         _fail(f"cannot reach the platform: {error}", EXIT_UNREACHABLE)

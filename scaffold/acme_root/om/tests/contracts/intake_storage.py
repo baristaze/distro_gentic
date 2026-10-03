@@ -25,6 +25,7 @@ CROSS_TENANT_CASES: frozenset[str] = frozenset(
         "delete_link",
         "create_binding",
         "read_binding",
+        "read_session_bindings",
         "record_act",
         "read_act",
         "purge_tenant",
@@ -130,6 +131,23 @@ class IntakeStorageContract:
         assert found == first
         assert await storage.read_binding(org, HandleKind.BRANCH, first.handle) is None
 
+    async def test_a_sessions_bindings_are_its_own_oldest_first(
+        self, storage: IntakeStorageInterface
+    ) -> None:
+        org, session_id = new_id(), new_id()
+        branch = make_binding("routes-for-sessions", session_id).model_copy(
+            update={"kind": HandleKind.BRANCH}
+        )
+        pull = make_binding("acme/checkout#12", session_id).model_copy(
+            update={"created_at": branch.created_at + timedelta(seconds=1)}
+        )
+        await storage.create_binding(org, pull)
+        await storage.create_binding(org, branch)
+        await storage.create_binding(org, make_binding("acme/checkout#13"))
+        assert await storage.read_session_bindings(org, session_id, 10) == [branch, pull]
+        assert await storage.read_session_bindings(org, session_id, 1) == [branch]
+        assert await storage.read_session_bindings(org, new_id(), 10) == []
+
     async def test_create_link_in_another_tenant_is_its_own(
         self, storage: IntakeStorageInterface
     ) -> None:
@@ -182,6 +200,13 @@ class IntakeStorageContract:
         binding = make_binding()
         await storage.create_binding(new_id(), binding)
         assert await storage.read_binding(new_id(), HandleKind.PULL_REQUEST, binding.handle) is None
+
+    async def test_read_session_bindings_of_another_tenant_finds_nothing(
+        self, storage: IntakeStorageInterface
+    ) -> None:
+        binding = make_binding()
+        await storage.create_binding(new_id(), binding)
+        assert await storage.read_session_bindings(new_id(), binding.session_id, 10) == []
 
     async def test_create_installation_another_tenant_holds_connects_nothing(
         self, storage: IntakeStorageInterface
