@@ -14,8 +14,20 @@ import {
   type ReactNode,
 } from "react";
 import { tokens } from "../tokens";
+import { keepTabInside, useReturnFocus } from "./focus";
 
 export * from "./icons";
+export * from "./DataTable";
+export * from "./DiffView";
+export * from "./JsonView";
+export * from "./Lightbox";
+export * from "./LogView";
+export * from "./Markdown";
+export * from "./CommandPalette";
+export { looksLikeDiff, parseUnifiedDiff } from "./diffModel";
+export { parseJsonText } from "./jsonModel";
+export type { LogChunk } from "./logModel";
+export type { Sort, SortValue } from "./tableModel";
 
 /** The product's mark: a check in the accent square, and the name. */
 export function BrandMark({ size = 28, withName = true }: { size?: number; withName?: boolean }) {
@@ -611,14 +623,6 @@ export function FoldingCard({
   );
 }
 
-/** The focusable things inside an element, in order: what Tab moves through. */
-function focusables(root: HTMLElement | null): HTMLElement[] {
-  if (!root) return [];
-  return [
-    ...root.querySelectorAll<HTMLElement>("button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])"),
-  ].filter((element) => !(element as HTMLButtonElement).disabled);
-}
-
 /** A question over the page before a change of many things: the title asks
  * it, the body says what follows, and two buttons answer. The keyboard lands
  * on `Cancel`, Tab stays inside, Escape and a click on the backdrop cancel,
@@ -652,17 +656,7 @@ export function ConfirmDialog({
       onCancel();
       return;
     }
-    if (event.key !== "Tab") return;
-    const items = focusables(dialog.current);
-    const first = items[0];
-    const last = items[items.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last?.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first?.focus();
-    }
+    keepTabInside(event, dialog.current);
   };
   return (
     <div className="acme-dialog-backdrop" onClick={onCancel}>
@@ -690,15 +684,6 @@ export function ConfirmDialog({
       </div>
     </div>
   );
-}
-
-/** Puts the keyboard back on what held it when the component mounted, once
- * the component goes. */
-function useReturnFocus(): void {
-  useEffect(() => {
-    const before = document.activeElement as HTMLElement | null;
-    return () => before?.focus?.();
-  }, []);
 }
 
 /** A bar at the foot of the window for what is selected: what is selected,

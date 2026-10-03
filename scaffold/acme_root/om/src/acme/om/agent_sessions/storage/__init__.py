@@ -38,9 +38,9 @@ class AgentSessionStorageInterface(ABC):
     async def read_sessions(
         self, org_id: UUID, status: SessionStatus | None, after: UUID | None, limit: int
     ) -> list[AgentSession]:
-        """The tenant's sessions in a status, or in any, by id, strictly
-        after `after`, at most `limit` of them; a session marked deleted is
-        none of them."""
+        """The tenant's sessions in a status, or in any, newest first: by id
+        descending, strictly before `after`, at most `limit` of them; a
+        session marked deleted is none of them."""
         ...
 
     @abstractmethod

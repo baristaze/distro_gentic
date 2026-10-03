@@ -39,10 +39,10 @@ class AgentSessionStorageMemoryImpl(MemoryStorageBase, AgentSessionStorageInterf
     ) -> list[AgentSession]:
         return [
             s
-            for s in self._rows(self._sessions, org_id)
+            for s in reversed(self._rows(self._sessions, org_id))
             if s.deleted_at is None
             and (status is None or s.status is status)
-            and (after is None or s.id > after)
+            and (after is None or s.id < after)
         ][:limit]
 
     async def write_session(
