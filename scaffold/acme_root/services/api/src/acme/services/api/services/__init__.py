@@ -18,6 +18,7 @@ from acme.services.api.services.realtime import RealtimeServiceInterface
 from acme.services.api.services.relay import RelayServiceInterface
 from acme.services.api.services.stations import StationsServiceInterface
 from acme.services.api.services.tenancy import TenancyServiceInterface
+from acme.services.api.services.watch import WatchServiceInterface
 from acme.services.api.services.webhooks import WebhooksServiceInterface
 
 __all__ = [
@@ -36,6 +37,7 @@ __all__ = [
     "ServicesInterface",
     "StationsServiceInterface",
     "TenancyServiceInterface",
+    "WatchServiceInterface",
     "WebhooksServiceInterface",
 ]
 
@@ -85,3 +87,6 @@ class ServicesInterface(ABC):
 
     @abstractmethod
     def get_notifications_service(self) -> NotificationsServiceInterface: ...
+
+    @abstractmethod
+    def get_watch_service(self) -> WatchServiceInterface: ...

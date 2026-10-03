@@ -149,6 +149,15 @@ path = "apps/site/package.json"
 adr = "docs/adr/0002-technology-choices.md"
 reason = "a static page with no script and no state; the portal and every app that calls the platform stay React on Vite"
 
+# The watch keeps no table: a live part is a cache in the stream service,
+# and a command by hand is the relay's item and an entry in the tenant's
+# event stream (ADR 2007).
+[[tool.arch-check.exception]]
+rule = "OM-14"
+path = "om/src/acme/om/watch/__init__.py"
+adr = "docs/adr/2007-a-live-view-reads-a-session-by-a-scoped-handle.md"
+reason = "the watch keeps no rows: its buffers are a cache, and its records are the relay's items and the event stream"
+
 # The storage methods that take no tenant, the same list
 # om/tests/unit/test_storage_exceptions.py holds.
 [tool.arch-check.options.CTX-12]

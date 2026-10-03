@@ -40,6 +40,14 @@ class RelayStorageMemoryImpl(MemoryStorageBase, RelayStorageInterface):
         ]
         return sorted(found, key=lambda item: (item.created_at, item.id))[:limit]
 
+    async def read_running(self, org_id: UUID, session_id: UUID, limit: int) -> list[ExecItem]:
+        found = [
+            item
+            for item in self._rows(self._items, org_id)
+            if item.session_id == session_id and item.state is ExecState.RUNNING
+        ]
+        return sorted(found, key=lambda item: (item.created_at, item.id))[:limit]
+
     async def write_item(
         self, org_id: UUID, item: ExecItem, expected_version: int
     ) -> ExecItem | None:

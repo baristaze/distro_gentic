@@ -29,6 +29,12 @@ class RelayStorageInterface(ABC):
         ...
 
     @abstractmethod
+    async def read_running(self, org_id: UUID, session_id: UUID, limit: int) -> list[ExecItem]:
+        """The session's items a host runs now, oldest first, at most
+        `limit`."""
+        ...
+
+    @abstractmethod
     async def write_item(
         self, org_id: UUID, item: ExecItem, expected_version: int
     ) -> ExecItem | None:

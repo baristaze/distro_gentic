@@ -400,6 +400,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/agent-sessions/{session_id}/control": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Take Control
+         * @description The person takes the session's environment: the agent stands down,
+         *     its loop parked on a hand-over.
+         */
+        post: operations["take_control_v1_agent_sessions__session_id__control_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-sessions/{session_id}/control/commands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Command
+         * @description A command by hand, recorded as the person's run and sent to the host
+         *     that holds the workspace. A retried send is the same run.
+         */
+        post: operations["run_command_v1_agent_sessions__session_id__control_commands_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-sessions/{session_id}/control/commands/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Command
+         * @description How the command stands: its output after `after_seq`, and how it
+         *     ended once it has.
+         */
+        get: operations["command_v1_agent_sessions__session_id__control_commands__key__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-sessions/{session_id}/control/give-back": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Give Back
+         * @description The person gives the environment back: their summary is the message
+         *     the agent reads on resume. A command of theirs still running refuses it,
+         *     unless `stop` asks it stopped first.
+         */
+        post: operations["give_back_v1_agent_sessions__session_id__control_give_back_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/agent-sessions/{session_id}/controls": {
         parameters: {
             query?: never;
@@ -435,6 +520,27 @@ export interface paths {
          * @description The session leaves every line it stands in.
          */
         delete: operations["leave_v1_agent_sessions__session_id__line_entries_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-sessions/{session_id}/live": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Open Live
+         * @description A handle to the session's open streams, for a viewer who may read it,
+         *     that lasts minutes.
+         */
+        post: operations["open_live_v1_agent_sessions__session_id__live_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1183,6 +1289,28 @@ export interface paths {
          * @description A person who manages the stations moves an entry in its line.
          */
         put: operations["reorder_v1_line_entries__entry_id__place_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/live": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Live
+         * @description The open streams of the handle's session, each after the last part
+         *     read (`after=<step_id>:<n>`, once a stream). The handle is the
+         *     authority: one that does not verify, or has expired, reads nothing.
+         */
+        get: operations["read_live_v1_live_get"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -2163,6 +2291,64 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /** CommandPartView */
+        CommandPartView: {
+            /** Seq */
+            seq: number;
+            /** Stream */
+            stream: string;
+            /** Text */
+            text: string;
+        };
+        /**
+         * CommandProgressView
+         * @description How a command stands: its state, its output after the last part read,
+         *     and how it ended once it has. `refused` names why its host or the relay
+         *     refused it, such as a command a later run fenced.
+         */
+        CommandProgressView: {
+            /** Exit Code */
+            exit_code?: number | null;
+            /** Parts */
+            parts: components["schemas"]["CommandPartView"][];
+            /** Refused */
+            refused?: string | null;
+            state: components["schemas"]["ExecState"];
+            /** Stderr */
+            stderr?: string | null;
+            /** Stdout */
+            stdout?: string | null;
+            stopped?: components["schemas"]["StopKind"] | null;
+            /**
+             * Timed Out
+             * @default false
+             */
+            timed_out: boolean;
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
+        };
+        /**
+         * CommandRequest
+         * @description A command by hand: what it runs, where in the workspace, and how long
+         *     it may take. Its key is the request's idempotency key.
+         */
+        CommandRequest: {
+            /** Argv */
+            argv: string[];
+            /**
+             * Cwd
+             * @default .
+             */
+            cwd: string;
+            /**
+             * Timeout Seconds
+             * @default 300
+             */
+            timeout_seconds: number;
+        };
         /** CommandView */
         CommandView: {
             /** Operation */
@@ -2582,6 +2768,11 @@ export interface components {
             lease_expires_at: string;
         };
         /**
+         * ExecState
+         * @enum {string}
+         */
+        ExecState: "queued" | "running" | "done" | "interrupted";
+        /**
          * FilePageView
          * @description One page of the org's stored files, oldest first. `next_cursor` fetches
          *     the next page and is null on the last one.
@@ -2643,6 +2834,19 @@ export interface components {
             subject_id: string | null;
         };
         /**
+         * GiveBackRequest
+         * @description What the person did, as the agent reads it on resume.
+         */
+        GiveBackRequest: {
+            /**
+             * Stop
+             * @default false
+             */
+            stop: boolean;
+            /** Summary */
+            summary: string;
+        };
+        /**
          * GrantRequest
          * @description The role the automation principal holds: never above the granter's.
          */
@@ -2653,6 +2857,36 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * HandRunView
+         * @description A command by hand as recorded: the item that holds what ran, the
+         *     person it is attributed to, and the writer epoch it runs under.
+         */
+        HandRunView: {
+            /**
+             * Command Key
+             * Format: uuid
+             */
+            command_key: string;
+            /** Epoch */
+            epoch: number;
+            /**
+             * Item Id
+             * Format: uuid
+             */
+            item_id: string;
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+            state: components["schemas"]["ExecState"];
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
         };
         /** HeartbeatRequest */
         HeartbeatRequest: {
@@ -3238,6 +3472,75 @@ export interface components {
             /** Position */
             position: number;
         };
+        /** LivePageView */
+        LivePageView: {
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+            /** Streams */
+            streams: components["schemas"]["LiveStreamView"][];
+        };
+        /**
+         * LivePartView
+         * @description One part of a stream: its kind, its place, and its text. `index` is
+         *     the block of a model response it belongs to; a tool call's input names
+         *     the call, and a tool's output its channel.
+         */
+        LivePartView: {
+            /** Channel */
+            channel?: string | null;
+            /** Index */
+            index?: number | null;
+            kind: components["schemas"]["PartKind"];
+            /** N */
+            n: number;
+            /** Text */
+            text: string;
+            /** Tool */
+            tool?: string | null;
+            /** Tool Use Id */
+            tool_use_id?: string | null;
+        };
+        /**
+         * LiveReadView
+         * @description A handle to one session's open streams until `expires_at`. Read it
+         *     at `GET /v1/live?handle=`; a viewer asks for a new one when it ends.
+         */
+        LiveReadView: {
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Handle */
+            handle: string;
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+        };
+        /**
+         * LiveStreamView
+         * @description One open stream: the step it adds up to, the oldest part the service
+         *     still holds, the parts after the last one read, and whether parts never
+         *     read were let go. The step holds them once it is stored.
+         */
+        LiveStreamView: {
+            /** Dropped */
+            dropped: boolean;
+            /** First */
+            first: number;
+            /** Parts */
+            parts: components["schemas"]["LivePartView"][];
+            /**
+             * Step Id
+             * Format: uuid
+             */
+            step_id: string;
+        };
         /**
          * LogoutRequest
          * @description Where the identity provider sends the browser once it has ended its own
@@ -3632,6 +3935,11 @@ export interface components {
             /** Unlock */
             unlock: string;
         };
+        /**
+         * PartKind
+         * @enum {string}
+         */
+        PartKind: "text" | "thinking" | "tool_input" | "tool_output";
         /**
          * PartRequest
          * @description One part of an item's output, in the order the host read it.
@@ -4309,6 +4617,13 @@ export interface components {
             tools: string[];
             type: components["schemas"]["StepType"];
         };
+        /**
+         * StopKind
+         * @description What the control stream tells a host about one item it holds. Each
+         *     ends the command at once.
+         * @enum {string}
+         */
+        StopKind: "cancel" | "interrupt" | "deadline" | "revoke";
         /**
          * StopReason
          * @description Why a response stopped. A model's refusal is a response its agent kind
@@ -5310,6 +5625,158 @@ export interface operations {
             };
         };
     };
+    take_control_v1_agent_sessions__session_id__control_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSessionView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_command_v1_agent_sessions__session_id__control_commands_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                "idempotency-key"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommandRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HandRunView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    command_v1_agent_sessions__session_id__control_commands__key__get: {
+        parameters: {
+            query?: {
+                after_seq?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                session_id: string;
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommandProgressView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    give_back_v1_agent_sessions__session_id__control_give_back_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GiveBackRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSessionView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     send_control_v1_agent_sessions__session_id__controls_post: {
         parameters: {
             query?: never;
@@ -5372,6 +5839,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LeftLinesView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    open_live_v1_agent_sessions__session_id__live_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveReadView"];
                 };
             };
             /** @description Validation Error */
@@ -7013,6 +7515,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LinePlaceView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_live_v1_live_get: {
+        parameters: {
+            query: {
+                handle: string;
+                after?: string[] | null;
+            };
+            header?: {
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LivePageView"];
                 };
             };
             /** @description Validation Error */

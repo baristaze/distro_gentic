@@ -10,6 +10,7 @@ from acme.om.intake import IntakeManagerInterface
 from acme.om.notifications import NotificationsManagerInterface
 from acme.om.root import Managers
 from acme.om.trust import TrustOperatorManagerInterface
+from acme.om.watch import WatchManagerInterface
 from acme.services.api.services import (
     AdminServiceInterface,
     AgentSessionsServiceInterface,
@@ -22,6 +23,7 @@ from acme.services.api.services import (
     ServicesInterface,
     StationsServiceInterface,
     TenancyServiceInterface,
+    WatchServiceInterface,
     WebhooksServiceInterface,
 )
 from acme.services.api.services.automations import AutomationsServiceInterface
@@ -40,6 +42,7 @@ from acme.services.api.services.impl.realtime import RealtimeServiceImpl
 from acme.services.api.services.impl.relay import RelayServiceImpl
 from acme.services.api.services.impl.stations import StationsServiceImpl
 from acme.services.api.services.impl.tenancy import TenancyServiceImpl
+from acme.services.api.services.impl.watch import WatchServiceImpl
 from acme.services.api.services.impl.webhooks import WebhooksServiceImpl
 from acme.services.api.services.intake import IntakeServiceInterface
 from acme.services.api.services.notifications import NotificationsServiceInterface
@@ -63,6 +66,7 @@ class ServicesImpl(ServicesInterface):
         budgets: BudgetsServiceInterface,
         automations: AutomationsServiceInterface,
         notifications: NotificationsServiceInterface,
+        watch: WatchServiceInterface,
     ) -> None:
         self._tenancy = tenancy
         self._admin = admin
@@ -79,6 +83,7 @@ class ServicesImpl(ServicesInterface):
         self._budgets = budgets
         self._automations = automations
         self._notifications = notifications
+        self._watch = watch
 
     def get_tenancy_service(self) -> TenancyServiceInterface:
         return self._tenancy
@@ -125,12 +130,16 @@ class ServicesImpl(ServicesInterface):
     def get_notifications_service(self) -> NotificationsServiceInterface:
         return self._notifications
 
+    def get_watch_service(self) -> WatchServiceInterface:
+        return self._watch
+
 
 def build_services(
     managers: Managers,
     infra: InfraInterface,
     integrations: IntegrationsInterface,
     head_max_age: timedelta,
+    watch: WatchManagerInterface,
     trust_operator: TrustOperatorManagerInterface,
     *,
     intake: IntakeManagerInterface,
@@ -164,4 +173,5 @@ def build_services(
         budgets=BudgetsServiceImpl(managers.budgets),
         automations=AutomationsServiceImpl(automations),
         notifications=NotificationsServiceImpl(notifications),
+        watch=WatchServiceImpl(watch),
     )
