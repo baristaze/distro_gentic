@@ -17,11 +17,12 @@ from acme.om.exceptions import (
 )
 from acme.om.intake.rules import in_person
 from acme.om.knowledge.manager import KnowledgeManagerInterface
-from acme.om.knowledge.rules import recalled_step, triggered
+from acme.om.knowledge.rules import ranked, reaches, recalled_step, slug_of, triggered
 from acme.om.knowledge.storage import KnowledgeStorageInterface
 from acme.om.knowledge.types.knowledge import Knowledge, KnowledgeStatus
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import OutboxRow, versioned_row
+from acme.om.projects.policies import SessionProjectsInterface
 from acme.om.tenancy import TenancyManagerInterface
 
 CREATED = "knowledge.entry.created"
@@ -32,6 +33,8 @@ class KnowledgeOptions(Platform):
     page: int = Field(default=200, gt=0)
     # The most entries one recall brings into a session.
     most: int = Field(default=10, gt=0)
+    # The most entries one search answers.
+    most_found: int = Field(default=10, gt=0)
     purge_batch: int = Field(default=1000, gt=0)
 
 
@@ -40,6 +43,7 @@ class KnowledgeManagerImpl(KnowledgeManagerInterface):
         self,
         storage: KnowledgeStorageInterface,
         sessions: AgentSessionsManagerInterface,
+        projects: SessionProjectsInterface,
         tenancy: TenancyManagerInterface,
         relay: OutboxRelayInterface,
         options: KnowledgeOptions,
@@ -47,6 +51,7 @@ class KnowledgeManagerImpl(KnowledgeManagerInterface):
     ) -> None:
         self._storage = storage
         self._sessions = sessions
+        self._projects = projects
         self._tenancy = tenancy
         self._relay = relay
         self._options = options
@@ -57,8 +62,15 @@ class KnowledgeManagerImpl(KnowledgeManagerInterface):
     ) -> Knowledge:
         ctx.require(Permission.WRITE)
         await self._sessions.get_session(ctx, session_id)
+        project_id = await self._projects.project_of(ctx, session_id)
         return await self._create(
-            ctx, title, trigger, text, suggested_by=session_id, entry_id=new_id()
+            ctx,
+            title,
+            trigger,
+            text,
+            suggested_by=session_id,
+            project_id=project_id,
+            entry_id=new_id(),
         )
 
     async def write(
@@ -74,7 +86,13 @@ class KnowledgeManagerImpl(KnowledgeManagerInterface):
         if not in_person(ctx):
             raise NotAuthorized("knowledge is written by a person, never by an agent's call")
         return await self._create(
-            ctx, title, trigger, text, suggested_by=None, entry_id=entry_id or new_id()
+            ctx,
+            title,
+            trigger,
+            text,
+            suggested_by=None,
+            project_id=None,
+            entry_id=entry_id or new_id(),
         )
 
     async def get_entry(self, ctx: TenantContext, entry_id: UUID) -> Knowledge:
@@ -148,13 +166,14 @@ class KnowledgeManagerImpl(KnowledgeManagerInterface):
         self, ctx: TenantContext, session_id: UUID, about: str
     ) -> tuple[Knowledge, ...]:
         ctx.require(Permission.WRITE)
+        project_id = await self._projects.project_of(ctx, session_id)
         found: list[Knowledge] = []
         after: UUID | None = None
         while len(found) < self._options.most:
-            page = await self._storage.read_entries(
-                ctx.org_id, KnowledgeStatus.REVIEWED, after, self._options.page
+            page = await self._storage.read_reachable(
+                ctx.org_id, project_id, after, self._options.page
             )
-            found.extend(triggered(page, about))
+            found.extend(triggered((e for e in page if reaches(e, project_id)), about))
             if len(page) < self._options.page:
                 break
             after = page[-1].id
@@ -165,6 +184,36 @@ class KnowledgeManagerImpl(KnowledgeManagerInterface):
             steps = [recalled_step(entry, session_id, principal, now) for entry in found]
             await self._sessions.receive(ctx, session_id, steps)
         return tuple(found)
+
+    async def search(
+        self, ctx: TenantContext, session_id: UUID, query: str, limit: int
+    ) -> tuple[Knowledge, ...]:
+        ctx.require(Permission.READ)
+        await self._sessions.get_session(ctx, session_id)
+        project_id = await self._projects.project_of(ctx, session_id)
+        # Every entry the session reaches is read, a page at a time: a
+        # tenant's reviewed knowledge is what its people kept by hand.
+        reached: list[Knowledge] = []
+        after: UUID | None = None
+        while True:
+            page = await self._storage.read_reachable(
+                ctx.org_id, project_id, after, self._options.page
+            )
+            reached.extend(e for e in page if reaches(e, project_id))
+            if len(page) < self._options.page:
+                break
+            after = page[-1].id
+        most = max(1, min(limit, self._options.most_found))
+        return tuple(ranked(reached, query, most))
+
+    async def read(self, ctx: TenantContext, session_id: UUID, slug: str) -> Knowledge:
+        ctx.require(Permission.READ)
+        await self._sessions.get_session(ctx, session_id)
+        project_id = await self._projects.project_of(ctx, session_id)
+        entry = await self._storage.read_by_slug(ctx.org_id, project_id, slug)
+        if entry is None or not reaches(entry, project_id):
+            raise NotFound(f"no knowledge {slug!r} this session reaches")
+        return entry
 
     async def purge_tenant(self, ctx: TenantContext) -> int:
         ctx.require(Permission.WRITE)
@@ -180,6 +229,7 @@ class KnowledgeManagerImpl(KnowledgeManagerInterface):
         text: str,
         *,
         suggested_by: UUID | None,
+        project_id: UUID | None,
         entry_id: UUID,
     ) -> Knowledge:
         now = self._clock()
@@ -196,6 +246,8 @@ class KnowledgeManagerImpl(KnowledgeManagerInterface):
             status=KnowledgeStatus.REVIEWED if by_person else KnowledgeStatus.SUGGESTED,
             suggested_by=suggested_by,
             reviewed_by=ctx.user_id if by_person else None,
+            project_id=project_id,
+            slug=slug_of(title, entry_id),
         )
         rows = (versioned_row(ctx, CREATED, entry.id, entry.version),)
         if not await self._storage.create_entry(ctx.org_id, entry, rows):

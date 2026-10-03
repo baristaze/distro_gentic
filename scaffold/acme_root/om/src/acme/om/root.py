@@ -60,6 +60,7 @@ from acme.om.hosts.impl.placement import inside_wall
 from acme.om.idempotency import IdempotencyManagerInterface
 from acme.om.idempotency.impl.manager import IdempotencyManagerImpl, IdempotencyOptions
 from acme.om.intake import IntakeManagerInterface
+from acme.om.knowledge import KnowledgeManagerInterface
 from acme.om.media import MediaManagerInterface
 from acme.om.media.impl.manager import MediaManagerImpl, MediaOptions
 from acme.om.models.impl.credentials import CallCredentialsPlatformImpl
@@ -247,6 +248,13 @@ def intake_absent() -> IntakeManagerInterface:
     raise Unavailable("no intake binds a session's work in this process")
 
 
+def knowledge_absent() -> KnowledgeManagerInterface:
+    """No knowledge in this process: a loud null, so a tool that searches,
+    reads, or suggests knowledge refuses rather than answer that none is
+    kept."""
+    raise Unavailable("no knowledge is kept in this process")
+
+
 async def purge_held(
     managers: Managers, org_id: UUID, session_id: UUID, tree_id: UUID | None
 ) -> None:
@@ -379,6 +387,7 @@ def build_managers(
     platform_agents_options: PlatformAgentsOptions | None = None,
     platform_agents: PlatformAgents | None = None,
     intake: Callable[[], IntakeManagerInterface] | None = None,
+    knowledge: Callable[[], KnowledgeManagerInterface] | None = None,
     environment: str = LOCAL,
     tenant_keys: TenantKeysInterface | None = None,
     session_projects: SessionProjectInterface | None = None,
@@ -480,7 +489,9 @@ def build_managers(
     work on, is refused at boot (`UnsafeConfiguration`). None ships none.
     `intake` answers the intake the process builds over these managers,
     where the engineer's pull request is bound to its session; None binds
-    nothing, so that tool opens none.
+    nothing, so that tool opens none. `knowledge` answers the knowledge the
+    process builds over them, which the agents search, read, and suggest
+    to; None keeps none, so those tools refuse.
 
     The platform's retention takes three. `tenant_keys` says whose key
     service holds each tenant's keys; None is infra's for every tenant, and
@@ -530,6 +541,7 @@ def build_managers(
             evidence=lambda: managers.evidence,
             workspaces=lambda: managers.workspaces,
             intake=intake or intake_absent,
+            knowledge=knowledge or knowledge_absent,
         )
         refuse_reach(agent_kinds, tool_catalog)
     # The relay every core-role manager hands its outbox rows to. It reaches
