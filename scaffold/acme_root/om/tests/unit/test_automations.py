@@ -10,11 +10,14 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.intake import Wired, wired
-from contracts.loops import reply, said
+from contracts.intake import WORKER, Wired, wired
+from contracts.loops import reply, said, use
+from pydantic import ValidationError
 
 from acme.om.agents.types.run import RunEnd
+from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.automations.types.automation import (
+    MIN_EVERY,
     Action,
     ActionKind,
     Automation,
@@ -22,13 +25,15 @@ from acme.om.automations.types.automation import (
     Firing,
     Limits,
     Refusal,
+    RunsAs,
     RunStatus,
     Trigger,
     TriggerKind,
 )
-from acme.om.base import new_id, utcnow
+from acme.om.base import Platform, new_id, utcnow
 from acme.om.budgets.types.budget import BudgetScopeKind, WindowKind
-from acme.om.context import Role, TenantContext
+from acme.om.context import RequestContext, Role, TenantContext
+from acme.om.evidence.types.provenance import Provenance
 from acme.om.exceptions import NotAuthorized
 from acme.om.intake.rules import described
 from acme.om.intake.types.event import (
@@ -42,6 +47,9 @@ from acme.om.intake.types.event import (
 from acme.om.intake.types.link import HandleKind
 from acme.om.steps.types.header import InputHeader, ParkReason
 from acme.om.steps.types.step import Actor, StepType
+from acme.om.tenancy.rules import permissions_of
+from acme.om.tools.tool import ToolRuntime
+from acme.om.tools.types.tool import ToolInput
 
 DOLLAR = 1_000_000  # micros
 
@@ -353,6 +361,7 @@ def act_event(path: str, ref: str) -> FeedbackEvent:
     return FeedbackEvent(
         id=new_id(),
         integration="forge",
+        provenance=Provenance.TWIN,
         arrival=arrival,
         author=author,
         names=names,
@@ -427,6 +436,7 @@ async def test_a_failing_check_on_a_sessions_branch_follows_that_session_with_no
     check = FeedbackEvent(
         id=new_id(),
         integration="forge",
+        provenance=Provenance.TWIN,
         arrival=Arrival.CHECK,
         author=Author(kind=AuthorKind.BOT, external_id="ci", name="ci"),
         names=WorkNames(branch=branch),
@@ -436,3 +446,188 @@ async def test_a_failing_check_on_a_sessions_branch_follows_that_session_with_no
     runs_by = await deliver(platform, check)
     assert runs_by[starter.id].refusal is Refusal.OWN_EVENT
     assert (runs_by[other.id].status, runs_by[other.id].hop) == (RunStatus.STARTED, 2)
+
+
+# Schedules, and the automation principal.
+
+
+def scheduled(creator: TenantContext, **changes: object) -> Automation:
+    return automation(
+        created_by=creator.user_id,
+        trigger=Trigger(kind=TriggerKind.SCHEDULE, every=timedelta(hours=1)),
+        **changes,
+    )
+
+
+async def test_a_schedule_fires_once_a_slot_however_often_it_is_ticked(
+    platform: Wired, creator: TenantContext
+) -> None:
+    mine = await platform.automations.create_automation(creator, scheduled(creator))
+    (first,) = await platform.automations.tick(platform.service)
+    assert first.status is RunStatus.STARTED and first.session_id is not None
+    platform.clock.now += timedelta(minutes=59)
+    assert await platform.automations.tick(platform.service) == ()
+    platform.clock.now += timedelta(minutes=1)
+    (second,) = await platform.automations.tick(platform.service)
+    assert second.id != first.id
+    # A slot no tick reached is not fired late: three hours on, one run.
+    platform.clock.now += timedelta(hours=3)
+    assert len(await platform.automations.tick(platform.service)) == 1
+    assert len(await platform.automations.get_runs(platform.owner, mine.id, 10)) == 3
+
+
+def test_a_schedule_fires_at_most_once_a_minute() -> None:
+    for every in (timedelta(0), timedelta(seconds=59), -timedelta(hours=1)):
+        with pytest.raises(ValidationError):
+            Trigger(kind=TriggerKind.SCHEDULE, every=every)
+    assert Trigger(kind=TriggerKind.SCHEDULE, every=timedelta(minutes=1)).every == MIN_EVERY
+
+
+async def test_a_failing_automation_leaves_the_next_ones_schedule_firing(
+    platform: Wired, creator: TenantContext
+) -> None:
+    """A schedule whose period its row holds at zero fails at every tick;
+    the automation after it still fires each slot."""
+    zero = Trigger.model_construct(
+        kind=TriggerKind.SCHEDULE, integrations=(), arrivals=(), effects=(), every=timedelta(0)
+    )
+    broken = scheduled(creator).model_copy(update={"trigger": zero})
+    await platform.storage.get_automation_storage().create_automation(
+        platform.owner.org_id, broken, ()
+    )
+    mine = await platform.automations.create_automation(creator, scheduled(creator))
+    assert broken.id < mine.id
+    (first,) = await platform.automations.tick(platform.service)
+    platform.clock.now += timedelta(hours=1)
+    (second,) = await platform.automations.tick(platform.service)
+    assert {first.automation_id, second.automation_id} == {mine.id}
+    assert first.status is second.status is RunStatus.STARTED
+    assert await platform.automations.get_runs(platform.owner, broken.id, 10) == ()
+
+
+async def test_the_automation_principal_is_granted_in_person_up_to_the_granters_role(
+    platform: Wired,
+) -> None:
+    admin = platform.person(Role.ADMIN)
+    with pytest.raises(NotAuthorized):
+        await platform.automations.grant_principal(platform.person(Role.MEMBER), Role.VIEWER)
+    with pytest.raises(NotAuthorized):
+        await platform.automations.grant_principal(await platform.agents_call(admin), Role.VIEWER)
+    for above in (Role.OWNER, Role.SERVICE):
+        with pytest.raises(NotAuthorized):
+            await platform.automations.grant_principal(admin, above)
+    granted = await platform.automations.grant_principal(admin, Role.MEMBER)
+    again = await platform.automations.grant_principal(admin, Role.VIEWER)
+    assert (again.id, again.role, again.granted_by) == (granted.id, Role.VIEWER, admin.user_id)
+    assert await platform.automations.get_principal(platform.owner) == again
+
+
+async def test_an_automation_run_as_the_principal_holds_its_role_alone(
+    platform: Wired, creator: TenantContext
+) -> None:
+    """Its session is the principal's, its calls run as the principal, and
+    the transition answers for it with the granted role, never the
+    creator's and never the service role's. A role that cannot start the
+    work starts none, though its creator could."""
+    granted = await platform.automations.grant_principal(platform.owner, Role.MEMBER)
+    await platform.automations.create_automation(
+        creator, scheduled(creator, runs_as=RunsAs.AUTOMATION_PRINCIPAL)
+    )
+    (run,) = await platform.automations.tick(platform.service)
+    assert run.status is RunStatus.STARTED and run.session_id is not None
+    session = await platform.managers.agent_sessions.get_session(platform.owner, run.session_id)
+    assert session.created_by == granted.id != creator.user_id
+    platform.anthropic.add(reply(use("lookup")), reply(said("Looked it up.")))
+    assert (await platform.loops.run(platform.service, run.session_id)).end is RunEnd.ENDED
+    assert platform.lookup.ran_as == [granted.id]
+    live = await platform.principals(
+        RequestContext(request_id=new_id(), app=WORKER),
+        platform.owner.org_id,
+        Principal(kind=PrincipalKind.PERSON, id=granted.id),
+    )
+    assert (live.role, live.security.permissions) == (Role.MEMBER, permissions_of(Role.MEMBER))
+    await platform.automations.grant_principal(platform.owner, Role.VIEWER)
+    platform.clock.now += timedelta(hours=1)
+    (refused,) = await platform.automations.tick(platform.service)
+    assert (refused.status, refused.refusal, refused.session_id) == (
+        RunStatus.REFUSED,
+        Refusal.ACTION,
+        None,
+    )
+
+
+async def test_an_automation_run_as_the_principal_holds_no_more_than_its_creator(
+    platform: Wired, creator: TenantContext
+) -> None:
+    """A member makes no automation that runs as a principal granted above
+    them. An admin's fires while the grant is at most what the admin holds
+    at the firing, and fires nothing once the admin is moved below the
+    grant or has left."""
+    await platform.automations.grant_principal(platform.owner, Role.ADMIN)
+    member = platform.person(Role.MEMBER)
+    with pytest.raises(NotAuthorized):
+        await platform.automations.create_automation(
+            member, scheduled(member, runs_as=RunsAs.AUTOMATION_PRINCIPAL)
+        )
+    await platform.automations.create_automation(
+        creator, scheduled(creator, runs_as=RunsAs.AUTOMATION_PRINCIPAL)
+    )
+    (run,) = await platform.automations.tick(platform.service)
+    assert run.status is RunStatus.STARTED and run.session_id is not None
+    platform.members.roles[creator.user_id] = Role.MEMBER
+    platform.clock.now += timedelta(hours=1)
+    (lowered,) = await platform.automations.tick(platform.service)
+    assert (lowered.status, lowered.refusal, lowered.session_id) == (
+        RunStatus.REFUSED,
+        Refusal.PRINCIPAL,
+        None,
+    )
+    del platform.members.roles[creator.user_id]
+    platform.clock.now += timedelta(hours=1)
+    (gone,) = await platform.automations.tick(platform.service)
+    assert (gone.status, gone.refusal) == (RunStatus.REFUSED, Refusal.PRINCIPAL)
+
+
+async def test_a_grant_raised_above_an_automations_creator_fires_no_session(
+    platform: Wired, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A member's automation made at a member grant makes its calls as a
+    member. Once the grant is raised to owner, it fires no session, so no
+    call of it runs above its creator."""
+    member = platform.person(Role.MEMBER)
+    await platform.automations.grant_principal(platform.owner, Role.MEMBER)
+    await platform.automations.create_automation(
+        member, scheduled(member, runs_as=RunsAs.AUTOMATION_PRINCIPAL)
+    )
+    roles: list[Role] = []
+    run_lookup = platform.lookup.run
+
+    async def running(ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime) -> Platform:
+        roles.append(ctx.role)
+        return await run_lookup(ctx, call_input, runtime)
+
+    monkeypatch.setattr(platform.lookup, "run", running)
+    (run,) = await platform.automations.tick(platform.service)
+    assert run.status is RunStatus.STARTED and run.session_id is not None
+    platform.anthropic.add(reply(use("lookup")), reply(said("Looked it up.")))
+    assert (await platform.loops.run(platform.service, run.session_id)).end is RunEnd.ENDED
+    assert roles == [Role.MEMBER]
+    await platform.automations.grant_principal(platform.owner, Role.OWNER)
+    platform.clock.now += timedelta(hours=1)
+    (raised,) = await platform.automations.tick(platform.service)
+    assert (raised.status, raised.refusal, raised.session_id) == (
+        RunStatus.REFUSED,
+        Refusal.PRINCIPAL,
+        None,
+    )
+    assert roles == [Role.MEMBER], "no call ran at the raised grant"
+
+
+async def test_an_automation_run_as_the_principal_is_made_only_once_one_is_granted(
+    platform: Wired, creator: TenantContext
+) -> None:
+    with pytest.raises(NotAuthorized):
+        await platform.automations.create_automation(
+            creator, scheduled(creator, runs_as=RunsAs.AUTOMATION_PRINCIPAL)
+        )
+    assert await platform.automations.tick(platform.service) == ()

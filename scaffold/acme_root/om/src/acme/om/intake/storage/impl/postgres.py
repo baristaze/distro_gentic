@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 
 from acme.om.intake.storage import IntakeStorageInterface
@@ -47,6 +47,28 @@ class IntakeStoragePostgresImpl(PgStorageBase, IntakeStorageInterface):
         async with self._session_for(stmt, org_id=org_id) as session:
             row = (await session.execute(stmt)).scalar_one_or_none()
             return None if row is None else to_model(row, AccountLink)
+
+    async def read_user_links(self, org_id: UUID, user_id: UUID, limit: int) -> list[AccountLink]:
+        stmt = (
+            select(AccountLinks)
+            .where(AccountLinks.org_id == org_id, AccountLinks.user_id == user_id)
+            .order_by(AccountLinks.integration, AccountLinks.external_id)
+            .limit(limit)
+        )
+        async with self._session_for(stmt, org_id=org_id) as session:
+            rows = (await session.execute(stmt)).scalars().all()
+            return [to_model(row, AccountLink) for row in rows]
+
+    async def delete_link(self, org_id: UUID, integration: str, external_id: str) -> bool:
+        stmt = delete(AccountLinks).where(
+            AccountLinks.org_id == org_id,
+            AccountLinks.integration == integration,
+            AccountLinks.external_id == external_id,
+        )
+        async with self._session_for(stmt, org_id=org_id) as session:
+            gone = deleted(await session.execute(stmt))
+            await session.commit()
+            return gone > 0
 
     async def create_binding(self, org_id: UUID, binding: WorkBinding) -> WorkBinding:
         stmt = (

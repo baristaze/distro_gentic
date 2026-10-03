@@ -18,6 +18,7 @@ from acme.om.knowledge.storage import KnowledgeStorageInterface
 from acme.om.matrix.storage import MatrixStorageInterface, MatrixTenantStorageInterface
 from acme.om.media.storage import MediaStorageInterface
 from acme.om.models.storage import FillSetStorageInterface
+from acme.om.notifications.storage import NotificationStorageInterface
 from acme.om.orchestrations.storage import OrchestrationsStorageInterface
 from acme.om.outbox.storage import OutboxStorageInterface
 from acme.om.placement.storage import PlacementStorageInterface
@@ -115,6 +116,9 @@ class StorageInterface(ABC):
 
     @abstractmethod
     def get_intake_storage(self) -> IntakeStorageInterface: ...
+
+    @abstractmethod
+    def get_notification_storage(self) -> NotificationStorageInterface: ...
 
     @abstractmethod
     def get_automation_storage(self) -> AutomationStorageInterface: ...
