@@ -81,7 +81,9 @@ rebuilt from.
   its own pull request, on the one repository its project binds, are its
   work product. Every other write acts outward, for the rule of two.
 - **Give a fetch credential.** A person who manages the tenant's members
-  gives a project's repository one, and a later one replaces it.
+  gives a project's repository one, and a later one replaces it. It is
+  never read back. When its project is removed, its value leaves the
+  tenant's store before its record goes.
 - **Mint a push token, and write with it.** A token is minted for the
   session's branch on its project's repository. It writes that branch,
   its snapshots, and its pull request, and nothing else, through source

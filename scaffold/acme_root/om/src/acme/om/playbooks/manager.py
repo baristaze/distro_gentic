@@ -19,10 +19,14 @@ from acme.om.playbooks.types.playbook import (
 
 class PlaybooksManagerInterface(ABC):
     @abstractmethod
-    async def publish(self, ctx: TenantContext, draft: PlaybookDraft) -> Playbook:
+    async def publish(
+        self, ctx: TenantContext, draft: PlaybookDraft, *, playbook_id: UUID | None = None
+    ) -> Playbook:
         """The next version of the draft's name, announced, by a person in
         person: a context an agent's call runs under is `NotAuthorized`, so
-        no agent writes the brief the next session follows."""
+        no agent writes the brief the next session follows. An id written
+        already answers that version as stored, so a retry publishes none;
+        one another tenant holds is `TenantMismatch`."""
         ...
 
     @abstractmethod

@@ -36,6 +36,7 @@ from acme.client.client import ApiClient, ApiError
 from acme.client.realtime import ChannelRefused
 from acme.client.types import (
     AgentSessionView,
+    AutomationRequest,
     IssuedLoginView,
     IssuedSessionView,
     SessionControl,
@@ -529,6 +530,139 @@ def steps(
 
     if not run(go, api):
         raise typer.Exit(EXIT_UNSUCCESSFUL)
+
+
+# A tenant's configuration
+
+project_app = typer.Typer(
+    help="A project: the repository a session works on, and its fetch credential.",
+    no_args_is_help=True,
+)
+app.add_typer(project_app, name="project")
+
+ProjectId = Annotated[
+    UUID, typer.Argument(help="The project's id, as `project create` printed it.")
+]
+
+
+def repository_of(spelled: str) -> tuple[str, str]:
+    """`github.com/octo/reports` as its host and its path; anything else is usage."""
+    host, _, path = spelled.partition("/")
+    if not host or "/" not in path:
+        raise typer.BadParameter("a repository is its host and its path: github.com/octo/reports")
+    return host, path
+
+
+@project_app.command("create")
+def create_project(
+    name: Annotated[str, typer.Argument(help="What the project is called.")],
+    repository: Annotated[
+        str, typer.Argument(help="The repository it binds, never moved: github.com/octo/reports.")
+    ],
+    as_json: Json = False,
+    api: Api = None,
+) -> None:
+    """Create a project bound to its repository. An owner's or an admin's."""
+    host, path = repository_of(repository)
+
+    async def go(client: ApiClient) -> None:
+        made = await client.create_project(name, host, path)
+        if as_json:
+            typer.echo(made.model_dump_json(indent=2))
+        else:
+            typer.echo(f"created {made.id} on {made.repository.host}/{made.repository.path}")
+
+    run(go, api)
+
+
+@project_app.command("list")
+def list_projects(as_json: Json = False, api: Api = None) -> None:
+    """The org's projects, one a line."""
+
+    async def go(client: ApiClient) -> None:
+        found = await client.projects()
+        if as_json:
+            typer.echo(json.dumps([p.model_dump(mode="json") for p in found], indent=2))
+            return
+        for each in found:
+            typer.echo(f"{each.id}  {each.repository.host}/{each.repository.path}  {each.name}")
+
+    run(go, api)
+
+
+@project_app.command("credential")
+def put_fetch_credential(
+    project_id: ProjectId,
+    username: Annotated[str, typer.Option(help="The user name the repository's host takes.")],
+    password: Annotated[
+        str,
+        typer.Option(
+            prompt=True,
+            hide_input=True,
+            envvar="ACME_FETCH_PASSWORD",
+            help="A read-only token; asked for when not given, never echoed.",
+        ),
+    ],
+    api: Api = None,
+) -> None:
+    """Give the project's repository a read-only fetch credential. It is
+    written and never read back."""
+
+    async def go(client: ApiClient) -> None:
+        given = await client.put_fetch_credential(project_id, username, password)
+        typer.echo(f"fetch credential {given.version} of {given.project_id} is set")
+
+    run(go, api)
+
+
+automation_app = typer.Typer(
+    help="An automation: a trigger, an action, and its limits.", no_args_is_help=True
+)
+app.add_typer(automation_app, name="automation")
+
+
+@automation_app.command("create")
+def create_automation(
+    path: Annotated[
+        Path,
+        typer.Argument(
+            help="The automation as JSON, as the API takes it.", exists=True, dir_okay=False
+        ),
+    ],
+    as_json: Json = False,
+    api: Api = None,
+) -> None:
+    """Create an automation from a file, in person. It runs as you unless it
+    says otherwise."""
+    try:
+        automation = AutomationRequest.model_validate_json(path.read_bytes())
+    except ValueError as error:
+        raise typer.BadParameter(f"{path} is no automation: {error}") from None
+
+    async def go(client: ApiClient) -> None:
+        made = await client.create_automation(automation)
+        if as_json:
+            typer.echo(made.model_dump_json(indent=2))
+        else:
+            typer.echo(f"created {made.id} ({made.name}), runs as {made.runs_as.value}")
+
+    run(go, api)
+
+
+@automation_app.command("list")
+def list_automations(as_json: Json = False, api: Api = None) -> None:
+    """The org's automations, one a line."""
+
+    async def go(client: ApiClient) -> None:
+        found = await client.automations()
+        if as_json:
+            typer.echo(json.dumps([a.model_dump(mode="json") for a in found], indent=2))
+            return
+        for each in found:
+            state = "enabled" if each.enabled else "disabled"
+            typer.echo(f"{each.id}  {state}  {each.trigger.kind.value}  {each.name}")
+
+    run(go, api)
 
 
 # Realtime

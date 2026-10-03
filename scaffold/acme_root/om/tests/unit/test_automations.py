@@ -799,6 +799,25 @@ async def test_an_automation_run_as_the_principal_holds_no_more_than_its_creator
     assert (gone.status, gone.refusal) == (RunStatus.REFUSED, Refusal.PRINCIPAL)
 
 
+async def test_an_owner_who_runs_a_departed_members_automation_as_the_principal_fires_it(
+    platform: Wired,
+) -> None:
+    """An edit that runs it as the principal makes its editor its creator,
+    whose role the grant was held to, so it fires as the principal though
+    the member who made it has left."""
+    granted = await platform.automations.grant_principal(platform.owner, Role.MEMBER)
+    member = platform.person(Role.MEMBER)
+    mine = await platform.automations.create_automation(member, scheduled(member))
+    del platform.members.roles[member.user_id]
+    switched = mine.model_copy(update={"runs_as": RunsAs.AUTOMATION_PRINCIPAL})
+    edited = await platform.automations.update_automation(platform.owner, mine.id, switched)
+    assert edited.created_by == platform.owner.user_id
+    (run,) = await platform.automations.tick(platform.service)
+    assert run.status is RunStatus.STARTED and run.session_id is not None
+    session = await platform.managers.agent_sessions.get_session(platform.owner, run.session_id)
+    assert session.created_by == granted.id
+
+
 async def test_a_grant_raised_above_an_automations_creator_fires_no_session(
     platform: Wired, monkeypatch: pytest.MonkeyPatch
 ) -> None:
