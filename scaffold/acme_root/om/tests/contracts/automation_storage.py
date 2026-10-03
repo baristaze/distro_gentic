@@ -4,6 +4,7 @@ run. The cases named in `CROSS_TENANT_CASES` are the tenant fence's
 evidence: each one presents another tenant's identifier and asserts that
 nothing is found and nothing changes."""
 
+from collections import Counter
 from uuid import UUID
 
 from acme.om.automations.storage import AutomationStorageInterface
@@ -142,6 +143,48 @@ class AutomationStorageContract:
         again = await storage.admit(org, queued, limits, now)
         assert again.id == queued.id and again.status is RunStatus.STARTED
         assert await storage.read_queued_runs(org, automation.id, 10) == []
+
+    async def test_a_full_queue_refuses_a_firing_and_keeps_the_runs_that_wait(
+        self, storage: AutomationStorageInterface
+    ) -> None:
+        org = new_id()
+        limits = LIMITS.model_copy(update={"rate": 1, "queue": True, "queue_depth": 2})
+        automation = make_automation(limits)
+        await storage.create_automation(org, automation, ())
+        now = utcnow()
+        landed = [await storage.admit(org, make_run(automation.id), limits, now) for _ in range(4)]
+        assert [(r.status, r.refusal) for r in landed] == [
+            (RunStatus.STARTED, None),
+            (RunStatus.QUEUED, Refusal.RATE),
+            (RunStatus.QUEUED, Refusal.RATE),
+            (RunStatus.REFUSED, Refusal.QUEUE_FULL),
+        ]
+        again = await storage.admit(org, landed[1], limits, now)
+        assert (again.status, again.refusal) == (RunStatus.QUEUED, Refusal.RATE)
+        waiting = await storage.read_queued_runs(org, automation.id, 10)
+        assert {r.id for r in waiting} == {landed[1].id, landed[2].id}
+
+    async def test_firings_at_once_never_queue_past_the_depth(
+        self, storage: AutomationStorageInterface
+    ) -> None:
+        org = new_id()
+        limits = LIMITS.model_copy(update={"rate": 1, "queue": True, "queue_depth": 2})
+        automation = make_automation(limits)
+        await storage.create_automation(org, automation, ())
+        now = utcnow()
+        run = await race(
+            *(storage.admit(org, make_run(automation.id), limits, now) for _ in range(6))
+        )
+        # The depth is read in the admission's own write: overlapped
+        # (Postgres), the automation's row orders them; not (memory), each
+        # is asked against what the one before left.
+        landed = Counter((r.status, r.refusal) for r in run.outcomes)
+        assert landed == {
+            (RunStatus.STARTED, None): 1,
+            (RunStatus.QUEUED, Refusal.RATE): 2,
+            (RunStatus.REFUSED, Refusal.QUEUE_FULL): 3,
+        }, run.summary()
+        assert len(await storage.read_queued_runs(org, automation.id, 10)) == 2
 
     async def test_runs_read_newest_first_open_ones_and_a_sessions(
         self, storage: AutomationStorageInterface

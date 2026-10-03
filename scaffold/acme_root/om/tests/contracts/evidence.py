@@ -147,7 +147,9 @@ class Evidence:
     projects: SessionProjectsMemory
 
 
-def evidence_over(executor: ScriptedExecutor | None = None) -> Evidence:
+def evidence_over(
+    executor: ScriptedExecutor | None = None, options: EvidenceOptions | None = None
+) -> Evidence:
     outbox = OutboxStorageMemoryImpl()
     storage = EvidenceStorageMemoryImpl(outbox)
     members = Members()  # pyright: ignore[reportAbstractUsage] (a partial double)
@@ -156,7 +158,7 @@ def evidence_over(executor: ScriptedExecutor | None = None) -> Evidence:
     executor = executor or ScriptedExecutor()
     projects = SessionProjectsMemory(default=ARM)
     manager = EvidenceManagerImpl(
-        storage, members, relay, executor, work, projects, EvidenceOptions()
+        storage, members, relay, executor, work, projects, options or EvidenceOptions()
     )
     gate = ResultGateEvidenceImpl(storage, work, projects)
     return Evidence(manager, gate, storage, work, executor, members, projects)

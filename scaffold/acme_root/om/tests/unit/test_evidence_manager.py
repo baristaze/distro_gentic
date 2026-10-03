@@ -9,6 +9,7 @@ from contracts.doubles import context
 from contracts.evidence import ARM, ScriptedExecutor, arm_policy, delivered, evidence_over
 from contracts.evidence_storage import make_finding, make_hypothesis, make_record
 from contracts.factories import make_org
+from pydantic import ValidationError
 
 from acme.om.base import new_id
 from acme.om.context import Role, TenantContext
@@ -16,7 +17,7 @@ from acme.om.evidence.impl.manager import EvidenceManagerImpl, EvidenceOptions
 from acme.om.evidence.impl.ports import ExecutorAbsentImpl, WorkProductAbsentImpl
 from acme.om.evidence.rules import policy_key
 from acme.om.evidence.types.inference import Inference
-from acme.om.evidence.types.policy import Requirement
+from acme.om.evidence.types.policy import Requirement, ValidationPolicy
 from acme.om.evidence.types.record import RunPurpose
 from acme.om.evidence.types.validation import ExecutionRequest, ExecutorReport
 from acme.om.exceptions import (
@@ -46,6 +47,35 @@ async def test_a_person_who_manages_the_tenant_declares_the_policy() -> None:
     with pytest.raises(PreconditionFailed):
         await evidence.manager.write_policy(owner, created)
     assert await evidence.manager.get_policy(context(Role.VIEWER, org), policy_key(ARM)) == moved
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        ("run-trials", "{version", "{out}"),  # does not parse
+        ("run-trials", "}", "{out}"),
+        ("run-trials", "{ref}", "{out}"),  # a field other than the two
+        ("run-trials", "{}", "{out}"),
+        ("run-trials", "{out.parent}"),
+        ("run-trials", "{out!r}"),  # a field, but not bare
+        ("run-trials", "{out:>40}"),
+        ("run-trials", "{version}"),  # no `out`
+    ],
+)
+async def test_a_command_template_a_runner_cannot_fill_is_refused_when_written(
+    command: tuple[str, ...],
+) -> None:
+    org = make_org()
+    evidence = evidence_over()
+    owner = context(Role.OWNER, org)
+    declared = arm_policy().model_dump()
+    declared["checks"][-1]["command"] = list(command)
+    with pytest.raises(ValidationError, match="command"):
+        await evidence.manager.write_policy(owner, ValidationPolicy.model_validate(declared))
+    with pytest.raises(NotFound):
+        await evidence.manager.get_policy(owner, policy_key(ARM))
+    declared["checks"][-1]["command"] = ["run-trials", "--at={version}", "{out}", "{{literal}}"]
+    assert await evidence.manager.write_policy(owner, ValidationPolicy.model_validate(declared))
 
 
 async def test_the_agents_run_is_kept_and_an_executors_is_refused_here() -> None:
@@ -174,6 +204,36 @@ async def test_results_of_a_check_or_a_version_not_asked_for_keep_nothing(
     with pytest.raises(ValidationFailed, match=why):
         await evidence.manager.validate(ctx, session, RunPurpose.VALIDATION)
     assert (await evidence.manager.get_runs(ctx, session, None, 10)).items == ()
+
+
+class Overrun(ScriptedExecutor):
+    """Runs each check one trial past the count it was asked for."""
+
+    async def run(self, ctx: TenantContext, request: ExecutionRequest) -> ExecutorReport:
+        trials = tuple(count + 1 for count in request.trials)
+        return await super().run(ctx, request.model_copy(update={"trials": trials}))
+
+
+@pytest.mark.parametrize(
+    ("executor", "options", "why"),
+    [
+        (ScriptedExecutor(), EvidenceOptions(max_results_bytes=200), "past the 200 one"),
+        (Overrun(), EvidenceOptions(), "2 runs of unit, past the 1 asked for"),
+    ],
+)
+async def test_results_past_their_bytes_or_the_trials_asked_keep_nothing(
+    executor: ScriptedExecutor, options: EvidenceOptions, why: str
+) -> None:
+    org = make_org()
+    ctx = context(Role.MEMBER, org)
+    session = new_id()
+    evidence = evidence_over(executor, options)
+    await evidence.manager.write_policy(context(Role.OWNER, org), arm_policy())
+    evidence.work.deliver(org.id, session, delivered())
+    with pytest.raises(ValidationFailed, match=why):
+        await evidence.manager.validate(ctx, session, RunPurpose.VALIDATION)
+    assert (await evidence.manager.get_runs(ctx, session, None, 10)).items == ()
+    assert await evidence.manager.get_validations(ctx, session, 10) == ()
 
 
 async def test_validation_is_refused_before_anything_runs() -> None:

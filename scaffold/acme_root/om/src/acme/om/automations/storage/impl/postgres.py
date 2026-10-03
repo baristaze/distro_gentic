@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 
 from acme.om.automations.rules import admitted, period_start, tally
@@ -82,7 +82,14 @@ class AutomationStoragePostgresImpl(PgStorageBase, AutomationStorageInterface):
             counted = [
                 to_model(row, AutomationRun) for row in (await db.execute(counting)).scalars()
             ]
-            landed = admitted(run, limits, tally(counted, since), now)
+            waiting = select(func.count()).where(
+                AutomationRuns.org_id == org_id,
+                AutomationRuns.automation_id == run.automation_id,
+                AutomationRuns.status == RunStatus.QUEUED.value,
+                AutomationRuns.id != run.id,
+            )
+            queued = (await db.execute(waiting)).scalar_one()
+            landed = admitted(run, limits, tally(counted, since, queued=queued), now)
             values = to_values(landed, AutomationRuns)
             write = (
                 insert(AutomationRuns)

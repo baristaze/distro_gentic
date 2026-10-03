@@ -85,7 +85,8 @@ class Limits(Platform):
     `run_cap_micros` of it by a budget on the run's tree. `rate` is the most
     firings in one `period`, `concurrency` the most runs at work at once,
     and `hop_limit` the longest chain of automations a firing may extend.
-    A firing a rate or a concurrency stops is queued when `queue` says so."""
+    A firing a limit stops is queued when `queue` says so, while fewer than
+    `queue_depth` of its runs wait; past that it is refused."""
 
     cost_cap_micros: int = Field(gt=0)
     run_cap_micros: int = Field(gt=0)
@@ -93,6 +94,7 @@ class Limits(Platform):
     rate: int = Field(gt=0)
     concurrency: int = Field(gt=0)
     queue: bool = False
+    queue_depth: int = Field(default=50, ge=1)
     hop_limit: int = Field(default=3, ge=1)
 
     @model_validator(mode="after")
@@ -152,6 +154,7 @@ class Refusal(StrEnum):
     COST_CAP = "cost_cap"
     RATE = "rate"
     CONCURRENCY = "concurrency"
+    QUEUE_FULL = "queue_full"  # a limit stopped it, and `queue_depth` runs wait already
     PRINCIPAL = "principal"  # its creator left, or the principal is ungranted or above its creator
     ACTION = "action"  # its action was refused: an unknown kind, a session gone
     PROJECT = "project"  # its start names no project, where a session starts in one
@@ -217,8 +220,10 @@ class Firing(Platform):
 class Tally(Platform):
     """What an automation's runs hold when a firing asks to run: how many
     started in the period, what the runs of the period and the runs still
-    at work reserve of the cap, and how many are at work."""
+    at work reserve of the cap, how many are at work, and how many others
+    wait in its queue."""
 
     started: int = Field(ge=0)
     reserved_micros: int = Field(ge=0)
     at_work: int = Field(ge=0)
+    queued: int = Field(default=0, ge=0)
