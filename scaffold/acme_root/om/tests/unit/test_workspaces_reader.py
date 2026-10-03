@@ -134,6 +134,34 @@ async def test_a_host_that_resolves_into_a_walled_network_is_refused_with_nothin
     assert served.requests == 0, "nothing was fetched"
 
 
+@pytest.mark.parametrize(
+    "host",
+    ["%67it.example.test", "git_corp.example.test", "gït.example.test", "[fe80::1%25lo0]"],
+    ids=["percent-encoded", "underscore", "non-ascii", "zoned-address"],
+)
+async def test_a_host_named_by_more_than_plain_letters_is_refused_with_nothing_fetched(
+    served: Served, host: str
+) -> None:
+    # Curl decodes `%67` to `g` before it looks the name up, so the name
+    # checked would not be the name reached.
+    asked: list[str] = []
+
+    async def resolve(name: str, port: int) -> Sequence[str]:
+        asked.append(name)
+        return ("127.0.0.1",)
+
+    reader = RepositoryReaderGitImpl(walled=WALLS, resolve=resolve)
+    binding = bound(f"http://{host}:{served.port}/ajax/app.git")
+
+    with pytest.raises(Unavailable, match="named by more than letters, digits"):
+        await reader.incoming(binding, BRANCH)
+    with pytest.raises(Unavailable, match="named by more than letters, digits"):
+        await reader.delivered(binding, BRANCH)
+
+    assert asked == [], "nothing was resolved"
+    assert served.requests == 0, "nothing was fetched"
+
+
 async def test_the_default_walls_refuse_a_private_range(served: Served) -> None:
     reader = RepositoryReaderGitImpl(resolve=resolving({"git.corp.test": ("172.16.0.9",)}))
     with pytest.raises(Unavailable, match=r"172\.16\.0\.9"):

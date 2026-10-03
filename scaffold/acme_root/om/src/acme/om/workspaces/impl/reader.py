@@ -14,8 +14,9 @@ and holds no credential.
 The platform reads only where a workspace may reach. The repository is
 read over http or https, at a host whose every address lies outside the
 networks the platform walls off: a metadata endpoint, its own host, its
-internal network. Git is held to the addresses checked, and follows no
-redirect. In `local`, the developer's own machine, a
+internal network. The host is named by plain ASCII letters, digits, `-` and
+`.`, or by its address, so the name checked is the name git looks up. Git
+is held to the addresses checked, and follows no redirect. In `local`, the developer's own machine, a
 repository on disk is read too.
 
 A private repository is read with its project's fetch credential. It
@@ -26,6 +27,7 @@ line, in a file, or in any message, and never in a workspace."""
 import asyncio
 import base64
 import os
+import re
 import socket
 import tempfile
 from collections.abc import Awaitable, Callable, Mapping, Sequence
@@ -48,6 +50,8 @@ HEAD = "refs/delivery/head"
 WALLED: tuple[rules.Network, ...] = rules.NEVER_REACHED + rules.networks(rules.PLATFORM_NETWORKS)
 """What the platform reads no repository at unless its root says otherwise:
 what no workspace reaches, and every private range."""
+PLAIN_HOST = re.compile(r"[A-Za-z0-9.-]+")
+"""A host's name as curl looks it up, with nothing it decodes first."""
 PROTOCOLS = "http:https"
 """The protocols git reads a repository by; `file` too where one on disk is
 read."""
@@ -181,6 +185,13 @@ class RepositoryReaderGitImpl(RepositoryReaderInterface):
             host, port = None, 0
         if not host:
             raise Unavailable("the repository's URL names no host")
+        if not _plain(host):
+            # Curl decodes a percent-encoded name before it looks it up, so
+            # a name spelled otherwise would be checked as one host and
+            # reached as another.
+            raise Unavailable(
+                "the repository's host is named by more than letters, digits, '-' and '.'"
+            )
         try:
             addresses = tuple(await self._resolve(host, port))
         except OSError:
@@ -237,6 +248,12 @@ def _is_address(host: str) -> bool:
     except ValueError:
         return False
     return True
+
+
+def _plain(host: str) -> bool:
+    """A name of plain ASCII letters, digits, `-` and `.`, or an address with
+    no zone."""
+    return PLAIN_HOST.fullmatch(host) is not None or ("%" not in host and _is_address(host))
 
 
 def _default_of(listed: str) -> str:
