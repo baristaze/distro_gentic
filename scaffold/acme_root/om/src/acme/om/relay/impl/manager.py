@@ -261,6 +261,26 @@ class RelayManagerImpl(RelayManagerInterface):
             await self._control(ctx, item, kind)
         return item
 
+    async def running(self, rctx: RequestContext, org_id: UUID, session_id: UUID) -> list[ExecItem]:
+        await self._service(rctx, org_id)
+        return await self._storage.read_running(org_id, session_id, self._options.call_items)
+
+    async def interrupt_running(
+        self, rctx: RequestContext, org_id: UUID, session_id: UUID, below: int | None
+    ) -> list[ExecItem]:
+        ctx = await self._service(rctx, org_id)
+        running = await self._storage.read_running(org_id, session_id, self._options.call_items)
+        answered: list[ExecItem] = []
+        for item in running:
+            if below is not None and not stale(item.epoch, below):
+                continue
+            outcome = ExecOutcome(stopped=StopKind.INTERRUPT)
+            ended = await self._settle(ctx, item, outcome, revoke=True)
+            if ended is not None:
+                answered.append(ended)
+                OUTCOMES.labels(subsystem="relay", outcome="interrupted").inc()
+        return answered
+
     async def outcome_of(
         self, rctx: RequestContext, org_id: UUID, session_id: UUID, key: UUID, epoch: int
     ) -> ExecItem | None:

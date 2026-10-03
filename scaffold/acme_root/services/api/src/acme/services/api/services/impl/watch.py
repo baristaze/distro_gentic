@@ -126,4 +126,4 @@ class WatchServiceImpl(WatchServiceInterface):
     async def give_back(
         self, ctx: TenantContext, session_id: UUID, body: GiveBackRequest
     ) -> AgentSessionView:
-        return session_view(await self._watch.give_back(ctx, session_id, body.summary))
+        return session_view(await self._watch.give_back(ctx, session_id, body.summary, body.stop))

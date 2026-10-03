@@ -465,6 +465,7 @@ class GiveBackRequest(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
+    stop: Annotated[bool | None, Field(title='Stop')] = False
     summary: Annotated[str, Field(max_length=100000, min_length=1, title='Summary')]
 
 

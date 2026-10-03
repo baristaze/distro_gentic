@@ -44,9 +44,10 @@ class WatchManagerInterface(ABC):
     async def take_control(self, ctx: TenantContext, session_id: UUID) -> AgentSession:
         """A person, in person, who may instruct the session takes its
         environment: a new writer epoch fences the run that held the loop,
-        which parks on a hand-over; the session, its workspace, and its
-        evidence stay as they are. Parked on a hand-over already, it stays.
-        Audited as that person."""
+        which parks on a hand-over, and what that run's items still run on the
+        host is stopped over its control stream and answered `interrupted`;
+        the session, its workspace, and its evidence stay as they are.
+        Parked on a hand-over already, it stays. Audited as that person."""
         ...
 
     @abstractmethod
@@ -54,9 +55,10 @@ class WatchManagerInterface(ABC):
         self, ctx: TenantContext, session_id: UUID, command: HandCommand
     ) -> HandRun:
         """A command the person runs while the agent stands down: audited as
-        theirs before it is sent, then sent as unsafe `exec` work to the
-        host that holds the workspace, in the workspace's pinned isolation,
-        under the session's writer epoch, so it runs once and a run that
+        theirs before it is sent, then sent as unsafe `exec` work marked as
+        a person's, which the host's owner may refuse, to the host that
+        holds the workspace, in the workspace's pinned isolation, under the
+        session's writer epoch, so it runs once and a run that
         takes the session after it fences it. The same key sent again meets
         the same run. `NotHandedOver` unless the session is parked on a
         hand-over; `NoWorkspaceHost` when no host holds its workspace."""
@@ -73,11 +75,15 @@ class WatchManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def give_back(self, ctx: TenantContext, session_id: UUID, summary: str) -> AgentSession:
+    async def give_back(
+        self, ctx: TenantContext, session_id: UUID, summary: str, stop: bool = False
+    ) -> AgentSession:
         """The person gives the environment back: their summary arrives as
         their message, an `environment_changed` step says a person acted
         there, and the hand-over is cleared, so the next run continues the
         loop under a new epoch that fences any command of theirs no host
-        took yet. Audited as that person. `ValidationFailed` for a session
-        not handed over."""
+        took yet. A command of theirs a host still runs refuses it,
+        `CommandRunning`, unless `stop` asks it stopped first, answered
+        `interrupted`. Audited as that person. `ValidationFailed` for a
+        session not handed over."""
         ...

@@ -85,5 +85,6 @@ async def give_back(
     ctx: Ctx, watch: WatchService, session_id: UUID, body: GiveBackRequest
 ) -> AgentSessionView:
     """The person gives the environment back: their summary is the message
-    the agent reads on resume."""
+    the agent reads on resume. A command of theirs still running refuses it,
+    unless `stop` asks it stopped first."""
     return await watch.give_back(ctx, session_id, body)

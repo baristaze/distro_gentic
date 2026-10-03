@@ -368,7 +368,8 @@ export interface paths {
         /**
          * Give Back
          * @description The person gives the environment back: their summary is the message
-         *     the agent reads on resume.
+         *     the agent reads on resume. A command of theirs still running refuses it,
+         *     unless `stop` asks it stopped first.
          */
         post: operations["give_back_v1_agent_sessions__session_id__control_give_back_post"];
         delete?: never;
@@ -2535,6 +2536,11 @@ export interface components {
          * @description What the person did, as the agent reads it on resume.
          */
         GiveBackRequest: {
+            /**
+             * Stop
+             * @default false
+             */
+            stop: boolean;
             /** Summary */
             summary: string;
         };

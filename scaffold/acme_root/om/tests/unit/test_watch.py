@@ -41,11 +41,13 @@ from acme.om.relay.exceptions import StaleExec
 from acme.om.relay.impl.manager import RelayOptions
 from acme.om.relay.impl.transport import TransportRelayImpl
 from acme.om.relay.types.exec import (
+    ExecCall,
     ExecOutcome,
     ExecOutput,
     ExecResult,
     ExecState,
     RunRequest,
+    StopKind,
 )
 from acme.om.retention.crossing import CrossingKind, declared
 from acme.om.root import Managers, build_managers
@@ -55,7 +57,7 @@ from acme.om.steps.types.step import StepType
 from acme.om.steps.types.stream import TextPart
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import permissions_of
-from acme.om.watch.exceptions import LiveReadRefused, NotHandedOver
+from acme.om.watch.exceptions import CommandRunning, LiveReadRefused, NotHandedOver
 from acme.om.watch.impl.manager import SENT, TAKEN, WatchOptions
 from acme.om.watch.impl.stream import StreamOptions, StreamServiceMemoryImpl
 from acme.om.watch.manager import WatchManagerInterface
@@ -348,6 +350,7 @@ async def test_every_command_by_hand_is_a_recorded_run_attributed_to_the_person(
 
     payload = await claim(watched)
     assert payload is not None and payload.item_id == run.item_id
+    assert payload.by_person, "the host's owner reads it as a person's command"
     detail = await watched.managers.relay.detail(request(), watched.host, run.item_id)
     assert detail.request == RunRequest(argv=("make", "test"))
     assert (detail.epoch, detail.spec) == (run.epoch, CONTAINER)
@@ -391,6 +394,62 @@ async def test_giving_back_hands_over_the_summary_and_fences_a_command_no_host_t
         await watched.watch.run_command(
             watched.person, watched.session_id, HandCommand(key=new_id(), argv=("ls",))
         )
+
+
+async def test_take_control_stops_what_the_agent_still_runs_on_the_host(
+    watched: Watched,
+) -> None:
+    call = ExecCall(
+        session_id=watched.session_id,
+        key=new_id(),
+        request=RunRequest(argv=("make", "deploy")),
+        effect="unsafe",
+        deadline=utcnow() + timedelta(seconds=30),
+        epoch=watched.epoch,
+        spec=CONTAINER,
+    )
+    agents = await watched.managers.relay.send(request(), watched.owner.org_id, call, 0)
+    payload = await claim(watched)
+    assert payload is not None and payload.item_id == agents.id and not payload.by_person
+    (running,) = await watched.managers.relay.running(
+        request(), watched.owner.org_id, watched.session_id
+    )
+    assert running.id == agents.id
+
+    await watched.watch.take_control(watched.person, watched.session_id)
+    progress = await watched.managers.relay.watch(request(), watched.owner.org_id, agents.id, -1)
+    assert progress.state is ExecState.INTERRUPTED and progress.outcome is not None
+    assert progress.outcome.stopped is StopKind.INTERRUPT
+    controls = await watched.managers.relay.controls(request(), watched.host, None)
+    assert [(c.item_id, c.kind) for c in controls] == [(agents.id, StopKind.REVOKE)], (
+        "its host is told to end it and push nothing"
+    )
+    with pytest.raises(Exception, match="not held"):
+        await finish(watched, payload, "deployed\n")
+
+
+async def test_giving_back_while_a_command_by_hand_runs_is_refused_unless_it_is_stopped(
+    watched: Watched,
+) -> None:
+    await watched.watch.take_control(watched.person, watched.session_id)
+    command = HandCommand(key=new_id(), argv=("make", "flash"))
+    run = await watched.watch.run_command(watched.person, watched.session_id, command)
+    assert await claim(watched) is not None
+
+    with pytest.raises(CommandRunning):
+        await watched.watch.give_back(watched.person, watched.session_id, "Flashed it.")
+    session = await watched.managers.agent_sessions.get_session(watched.owner, watched.session_id)
+    assert session.park is not None and session.park.reason is ParkReason.HANDOVER
+
+    back = await watched.watch.give_back(
+        watched.person, watched.session_id, "Flashed it.", stop=True
+    )
+    assert back.park is None
+    ended = await watched.watch.command(watched.person, watched.session_id, command.key, -1)
+    assert ended.state is ExecState.INTERRUPTED and ended.outcome is not None
+    assert ended.outcome.stopped is StopKind.INTERRUPT
+    controls = await watched.managers.relay.controls(request(), watched.host, None)
+    assert [(c.item_id, c.kind) for c in controls] == [(run.item_id, StopKind.REVOKE)]
 
 
 async def test_control_is_taken_by_a_person_in_person_who_may_instruct(

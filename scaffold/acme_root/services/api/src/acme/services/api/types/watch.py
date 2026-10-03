@@ -110,3 +110,6 @@ class GiveBackRequest(RequestBody):
     """What the person did, as the agent reads it on resume."""
 
     summary: str = Field(min_length=1, max_length=MAX_MESSAGE)
+    # A command of the person's still running refuses the giving back,
+    # unless this asks it stopped first.
+    stop: bool = False

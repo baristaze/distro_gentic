@@ -30,14 +30,17 @@ the record that it is theirs is an entry in the tenant's event stream.
   buffered tail; a slow one loses the oldest parts, never the newest,
   and is told so.
 - **Take control.** The agent stands down: a new writer epoch fences
-  the run that held the loop, which parks on a hand-over. The session,
-  its workspace, and its evidence stay as they are.
+  the run that held the loop, which parks on a hand-over, and what that
+  run still runs on the host is stopped. The session, its workspace,
+  and its evidence stay as they are.
 - **Run a command.** While the agent stands down, the person's command
   runs as `exec` work on the host that holds the workspace, through the
-  [relay](../relay/README.md), in the workspace's own isolation.
+  [relay](../relay/README.md), in the workspace's own isolation. The
+  host reads it as a person's, which its owner may refuse.
 - **Give back.** The person's summary becomes their message, and the
   next run continues the loop under an epoch that fences any command of
-  theirs no host took yet.
+  theirs no host took yet. A command of theirs still running refuses
+  it, unless the person asks it stopped.
 
 ## The rules
 
@@ -48,7 +51,9 @@ the record that it is theirs is an entry in the tenant's event stream.
 - **A live part is a cache.** Each buffer is bounded, and losing it
   loses nothing the history does not hold.
 - **The agent never fights a person.** While it is handed over, the
-  agent appends nothing and sends nothing into the workspace.
+  agent appends nothing, sends nothing into the workspace, and nothing
+  of its own still runs there; nothing of the person's runs once it is
+  given back.
 - **Every command by hand is recorded as the person's,** before it is
   sent, and runs once.
 - **Control is a person's, in person,** and only one who may instruct
@@ -63,10 +68,14 @@ prefix and the `Grant`), keyed by `WatchOptions.live_read_key`; none
 refuses every live read (`Unavailable`). A command's id is
 `relay.rules.exec_id(key, request, 0)`, audited as `watch.command.sent`
 under an id derived from it before `RelayManagerInterface.send`, with
-the session's cursor epoch read before its park. Take control and give
-back are the engine's `take_over` and `give_back`, audited as
-`watch.control.taken` and `watch.control.given_back`. ADR 2007 records
-the scoped read.
+the session's cursor epoch read before its park, and sent with
+`ExecCall.by_person`, which lands in `ExecPayload.by_person` for the
+host's `people_commands` ceiling. Take control and give back are the
+engine's `take_over` and `give_back`, audited as `watch.control.taken`
+and `watch.control.given_back`. Take control then calls
+`relay.interrupt_running` below the new epoch; give back reads
+`relay.running` and raises `CommandRunning` for an item under the
+current epoch, unless `stop`. ADR 2007 records the scoped read.
 -->
 
 ## How another namespace composes it

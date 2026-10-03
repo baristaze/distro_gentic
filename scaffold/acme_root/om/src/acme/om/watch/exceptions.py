@@ -18,3 +18,11 @@ class NotHandedOver(WatchException, PreconditionFailed):
     person takes control first, so the two never act there at once."""
 
     code = "not_handed_over"
+
+
+class CommandRunning(WatchException, PreconditionFailed):
+    """A giving back while a command of the person's still runs, which would
+    run beside the agent's next ones. The person waits for it to end, or
+    gives back with `stop`."""
+
+    code = "command_running"

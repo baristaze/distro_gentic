@@ -16,11 +16,11 @@ from acme.om.exceptions import NotAuthorized, NotFound, Unavailable
 from acme.om.intake.rules import in_person
 from acme.om.relay import RelayManagerInterface
 from acme.om.relay.exceptions import NoWorkspaceHost
-from acme.om.relay.rules import exec_id, key_time
+from acme.om.relay.rules import exec_id, key_time, stale
 from acme.om.relay.types.exec import REQUESTS, ExecCall, ExecProgress, RunRequest
 from acme.om.steps import StepsManagerInterface
 from acme.om.steps.types.header import ParkReason
-from acme.om.watch.exceptions import LiveReadRefused, NotHandedOver
+from acme.om.watch.exceptions import CommandRunning, LiveReadRefused, NotHandedOver
 from acme.om.watch.manager import WatchManagerInterface
 from acme.om.watch.rules import signed, verified
 from acme.om.watch.stream import StreamServiceInterface
@@ -93,6 +93,9 @@ class WatchManagerImpl(WatchManagerInterface):
         if session.park is None or session.park.reason is not ParkReason.HANDOVER:
             session = await self._loop.take_over(ctx, session_id)
         cursor = await self._steps.get_cursor(ctx, session_id)
+        # What the agent's run still runs on the host stops now, so nothing of
+        # its runs beside the person's commands; theirs run under this epoch.
+        await self._relay.interrupt_running(ctx, ctx.org_id, session_id, cursor.epoch)
         await self._audit(ctx, new_id(), TAKEN, session_id, {"epoch": cursor.epoch})
         return session
 
@@ -154,8 +157,25 @@ class WatchManagerImpl(WatchManagerInterface):
             raise NotFound(f"session {session_id} sent no command under {key}")
         return await self._relay.watch(ctx, ctx.org_id, item.id, after_seq)
 
-    async def give_back(self, ctx: TenantContext, session_id: UUID, summary: str) -> AgentSession:
+    async def give_back(
+        self, ctx: TenantContext, session_id: UUID, summary: str, stop: bool = False
+    ) -> AgentSession:
         await self._person(ctx, session_id)
+        session = await self._sessions.get_session(ctx, session_id)
+        if session.park is not None and session.park.reason is ParkReason.HANDOVER:
+            cursor = await self._steps.get_cursor(ctx, session_id)
+            running = [
+                item
+                for item in await self._relay.running(ctx, ctx.org_id, session_id)
+                if not stale(item.epoch, cursor.epoch)
+            ]
+            if running and not stop:
+                raise CommandRunning(
+                    f"a command of the person's still runs in session {session_id}: "
+                    "wait for it to end, or give back with stop"
+                )
+            if running:
+                await self._relay.interrupt_running(ctx, ctx.org_id, session_id, None)
         session = await self._loop.give_back(ctx, session_id, summary)
         cursor = await self._steps.get_cursor(ctx, session_id)
         await self._audit(ctx, new_id(), GIVEN_BACK, session_id, {"epoch": cursor.epoch})

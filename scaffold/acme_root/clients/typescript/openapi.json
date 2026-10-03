@@ -1595,6 +1595,11 @@
         "additionalProperties": false,
         "description": "What the person did, as the agent reads it on resume.",
         "properties": {
+          "stop": {
+            "default": false,
+            "title": "Stop",
+            "type": "boolean"
+          },
           "summary": {
             "maxLength": 100000,
             "minLength": 1,
@@ -7067,7 +7072,7 @@
     },
     "/v1/agent-sessions/{session_id}/control/give-back": {
       "post": {
-        "description": "The person gives the environment back: their summary is the message\nthe agent reads on resume.",
+        "description": "The person gives the environment back: their summary is the message\nthe agent reads on resume. A command of theirs still running refuses it,\nunless `stop` asks it stopped first.",
         "operationId": "give_back_v1_agent_sessions__session_id__control_give_back_post",
         "parameters": [
           {
