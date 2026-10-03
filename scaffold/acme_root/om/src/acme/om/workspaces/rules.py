@@ -278,8 +278,10 @@ def _repository(name: str) -> str:
 
 def project_key(binding: RepositoryBinding) -> str:
     """The name a project's work product goes by in its evidence: its
-    repository's, as `host/owner/name`."""
-    return _repository(binding.repository).lstrip("/")
+    repository's, as `host/owner/name`. The host goes without its port, so a
+    forge served on one has a name too."""
+    host, slash, path = _repository(binding.repository).lstrip("/").partition("/")
+    return host.split(":", 1)[0] + slash + path
 
 
 def is_work_product(write: RepositoryWrite, binding: RepositoryBinding | None, branch: str) -> bool:
