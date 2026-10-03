@@ -30,13 +30,7 @@ from uuid import UUID
 from pydantic import Field
 
 from acme.infra.exceptions import InfraException
-from acme.infra.transports import (
-    CommandResult,
-    CommandSpec,
-    FileTooLarge,
-    RecordSeal,
-    TransportInterface,
-)
+from acme.infra.transports import CommandResult, CommandSpec, RecordSeal, TransportInterface
 from acme.infra.workspaces import (
     EgressMode,
     EgressPolicy,
@@ -72,6 +66,9 @@ commit, the protected source, and the protected patterns: the workspaces'
 (`WorkspacesManagerInterface.checks_tree`)."""
 MISSING = 404
 """The status a transport answers for a file the instance does not hold."""
+TOO_LARGE = 413
+"""The status a transport answers for a file longer than one read of it
+carries, with that bound in its message."""
 SPOKEN = 10_000
 """The most of a command's own output kept: a check writes its results to
 `{out}`, never to its output."""
@@ -229,12 +226,9 @@ class ExecutorWorkspacesImpl(ExecutorInterface):
         left = self._options.max_results_bytes - read
         try:
             stream = await transport.read_file(workspace, path, left + 1)
-        except FileTooLarge as failed:
-            raise ValidationFailed(
-                f"the results of {check.name} are past the {failed.limit} bytes "
-                "one read of its instance carries"
-            ) from None
         except InfraException as failed:
+            if failed.http_status == TOO_LARGE:
+                raise ValidationFailed(f"the results of {check.name}: {failed.message}") from None
             if failed.http_status != MISSING:
                 raise
             raise ValidationFailed(f"{check.name} wrote no results stream") from None

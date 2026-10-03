@@ -81,15 +81,14 @@ class StaleCommand(InfraException):
 
 class FileTooLarge(InfraException):
     """A file longer than one read through the transport carries, asked for
-    more than that: refused whole, never cut short. `limit` is the bound it
-    passed."""
+    more than that: refused whole, never cut short, with the bound it passed
+    in its message."""
 
     http_status = 413
     code = "file_too_large"
 
     def __init__(self, limit: int) -> None:
         super().__init__(f"the file is past the {limit} bytes one read carries")
-        self.limit = limit
 
 
 class PathOutsideWorkspace(InfraValidationFailed):
