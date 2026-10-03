@@ -55,6 +55,7 @@ export type SessionStatus = Schemas["SessionStatus"];
 export type ParkView = Schemas["ParkView"];
 export type ParkReason = Schemas["ParkReason"];
 export type StartSessionRequest = Schemas["StartSessionRequest"];
+export type ProjectView = Schemas["ProjectView"];
 export type StepView = Schemas["StepView"];
 export type StepPageView = Schemas["StepPageView"];
 export type StepType = Schemas["StepType"];

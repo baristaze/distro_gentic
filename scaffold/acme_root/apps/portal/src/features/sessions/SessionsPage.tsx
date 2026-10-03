@@ -2,7 +2,7 @@ import type { FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { AppNav } from "../../app/AppNav";
 import { errorMessage } from "../../app/errorMessage";
-import { Banner, Button, Card, DataTable, Page, ErrorText, Muted, Pill, SegmentedControl, TextField, type Column } from "../../design/kit";
+import { Banner, Button, Card, DataTable, Page, ErrorText, Muted, Pill, SegmentedControl, Select, TextField, type Column } from "../../design/kit";
 import { tokens } from "../../design/tokens";
 import { shortTime, STATUS_FILTERS, type SessionRow } from "./sessionsModel";
 import { useSessionsVm } from "./useSessionsVm";
@@ -53,6 +53,14 @@ export function SessionsPage() {
               placeholder="The kind of work the product runs"
               onChange={(kind) => vm.setDraft({ ...vm.draft, kind })}
             />
+            {vm.projectOptions.length > 0 ? (
+              <Select
+                label="Project"
+                value={vm.draft.projectId}
+                options={vm.projectOptions}
+                onChange={(projectId) => vm.setDraft({ ...vm.draft, projectId })}
+              />
+            ) : null}
             {vm.problem ? <ErrorText>{vm.problem}</ErrorText> : null}
             <div>
               <Button type="submit" disabled={vm.starting}>

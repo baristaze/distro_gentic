@@ -12,9 +12,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError, type AgentSessionView, type ExecutionView, type MeView, type StepView } from "@acme/client";
 import { SessionsPage } from "../sessions/SessionsPage";
 import { keys } from "../../queries/keys";
+import { NO_PROJECT } from "../sessions/sessionsModel";
 import { SessionPage } from "./SessionPage";
 
-const net = vi.hoisted(() => ({ org: "a" as "a" | "b", calls: [] as string[], history: null as unknown[] | null }));
+const net = vi.hoisted(() => ({
+  org: "a" as "a" | "b",
+  calls: [] as string[],
+  history: null as unknown[] | null,
+  environment: "local",
+  projects: [] as { id: string; name: string }[],
+  posts: [] as { path: string; body: unknown }[],
+}));
 
 const at = "2026-10-03T10:00:00Z";
 const sessionOf = (id: string, title: string): AgentSessionView => ({
@@ -80,6 +88,7 @@ function answer(path: string): unknown {
   const held = HELD[net.org];
   if (path === "/v1/me") return { app: "portal", role: "owner", permissions: ["read", "write"], user: { id: "u1" }, org: { id: net.org } } as unknown as MeView;
   if (path.startsWith("/v1/agent-sessions?")) return { items: [held], next_cursor: null };
+  if (path.startsWith("/v1/projects?")) return net.projects;
   const [, , , id, part] = path.split("?")[0]!.split("/");
   if (id !== held.id) throw new ApiError(404, "not_found", "session not found", "req-1");
   if (!part) return held;
@@ -116,9 +125,13 @@ vi.mock("../../app/api", () => ({
         return Promise.reject(caught);
       }
     },
-    post: (path: string) => Promise.reject(new Error(`no answer for ${path}`)),
+    post: (path: string, body?: unknown) => {
+      net.posts.push({ path, body });
+      return path === "/v1/agent-sessions" ? Promise.resolve(HELD[net.org]) : Promise.reject(new Error(`no answer for ${path}`));
+    },
   },
 }));
+vi.mock("../../app/config", () => ({ runtimeConfig: () => ({ environment: net.environment }) }));
 vi.mock("../../app/AppNav", () => ({ AppNav: () => null }));
 vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 
@@ -152,6 +165,53 @@ async function settle() {
 afterEach(async () => {
   await act(async () => root?.unmount());
   root = null;
+  Object.assign(net, { environment: "local", projects: [], posts: [] });
+});
+
+/** The form's field whose label says `label`. */
+function field(label: string): HTMLInputElement | HTMLSelectElement | undefined {
+  const found = [...container.querySelectorAll("label")].find((each) => each.querySelector("span")?.textContent === label);
+  return found?.querySelector("input, select") ?? undefined;
+}
+
+/** Types into a field as a person does, so React hears the change. */
+async function enter(label: string, value: string) {
+  const input = field(label)!;
+  const prototype = input instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+  Object.getOwnPropertyDescriptor(prototype, "value")!.set!.call(input, value);
+  await act(async () => input.dispatchEvent(new Event(input instanceof HTMLSelectElement ? "change" : "input", { bubbles: true })));
+}
+
+async function pressStart() {
+  const start = [...container.querySelectorAll("form[aria-label='New session'] button")].find((each) => each.textContent === "Start")!;
+  await act(async () => (start as HTMLButtonElement).click());
+  await settle();
+}
+
+describe("a new session", () => {
+  it("sends the project chosen from the org's projects", async () => {
+    net.environment = "staging";
+    net.projects = [{ id: "p1", name: "Docs" }];
+    await open("a", "/sessions");
+    await enter("Title", "Tidy the docs");
+    await enter("Kind", "assistant");
+    await enter("Project", "p1");
+    await pressStart();
+    expect(net.posts).toEqual([{ path: "/v1/agent-sessions", body: { title: "Tidy the docs", kind: "assistant", project_id: "p1" } }]);
+  });
+
+  it("with no project to choose where one is required, says why it cannot start and sends nothing", async () => {
+    net.environment = "staging";
+    await open("a", "/sessions");
+    const form = container.querySelector("form[aria-label='New session']")!;
+    expect(field("Project")).toBeUndefined();
+    expect(form.textContent).toContain(NO_PROJECT);
+    await enter("Title", "Tidy the docs");
+    await enter("Kind", "assistant");
+    await pressStart();
+    expect(net.posts).toEqual([]);
+    expect(form.textContent).toContain(NO_PROJECT);
+  });
 });
 
 describe("a second org's session", () => {
