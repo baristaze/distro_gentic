@@ -800,11 +800,12 @@ def build_managers(
         attribution=attribution,
     )
     # Each workspace is held to its session's pin, refused by this host where
-    # it cannot give it, brought up to the session's branch, and kept before
-    # it goes.
+    # it cannot give it, brought up to the session's branch, kept before it
+    # goes, and let go by the run that holds it alone.
     tools: ToolsManagerInterface = ToolsManagerWorkspacesImpl(
         engine_tools,
         workspaces,
+        steps,
         workspace_host or HostOffer(),
         local=environment == LOCAL,
         held=held,

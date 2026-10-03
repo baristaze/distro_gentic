@@ -63,7 +63,10 @@ rebuilt from.
   branch, never on it, and pushed: the platform bundles it, and source
   control pushes it with its own credential. The branch, the index, and
   the files stay as they were. A push that does not land lets nothing
-  go: the instance and its work stay. The next loop is told where the work is.
+  go: the instance and its work stay. The next loop is told where the work is. A
+  release lets go only of what its own run holds, by the run's epoch: a
+  session that resumes while it is still being released keeps the
+  workspace its new run took.
 - **Egress.** The egress proxy asks for each connection. A metadata
   endpoint, the host itself, and the platform's internal network are
   never reached, under any egress, by name or by the address a name
