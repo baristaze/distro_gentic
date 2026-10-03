@@ -72,9 +72,10 @@ class AgentSessionsManagerInterface(ABC):
         after: UUID | None,
         limit: int,
     ) -> AgentSessionPage:
-        """One page of the tenant's sessions in a status, or in any, by id,
-        strictly after `after`; `limit` is clamped. A session marked deleted
-        is on no page."""
+        """One page of the tenant's sessions in a status, or in any, newest
+        first: by id descending, strictly before `after`, the last id of the
+        page before; `limit` is clamped. A session marked deleted is on no
+        page."""
         ...
 
     @abstractmethod

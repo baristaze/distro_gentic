@@ -538,7 +538,8 @@ export interface paths {
         };
         /**
          * List Sessions
-         * @description The tenant's sessions in a status, or in any, a page at a time by id.
+         * @description The tenant's sessions in a status, or in any, newest first, a page at
+         *     a time.
          */
         get: operations["list_sessions_v1_agent_sessions_get"];
         put?: never;
