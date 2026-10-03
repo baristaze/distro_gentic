@@ -12,6 +12,7 @@ from acme.om.context import TenantContext
 from acme.om.exceptions import Unavailable
 from acme.om.workspaces.git import RepositoryReaderInterface, WorkspaceGitInterface
 from acme.om.workspaces.projects import PullRequestsInterface, WorkspaceProjectsInterface
+from acme.om.workspaces.types.credential import FetchCredential
 from acme.om.workspaces.types.source import (
     BranchState,
     Checkout,
@@ -110,6 +111,11 @@ class ReaderTwin(RepositoryReaderInterface):
 
     head: str = BASE
     changed: tuple[str, ...] = ()
+    credentials: list[FetchCredential | None] = field(default_factory=lambda: [])
+    """The credential each read was handed, in order."""
 
-    async def delivered(self, binding: RepositoryBinding, branch: str) -> Delivered:
+    async def delivered(
+        self, binding: RepositoryBinding, branch: str, credential: FetchCredential | None = None
+    ) -> Delivered:
+        self.credentials.append(credential)
         return Delivered(base=BASE, head=self.head, changed=self.changed)
