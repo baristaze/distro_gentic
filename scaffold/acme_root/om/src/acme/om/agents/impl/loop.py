@@ -440,6 +440,7 @@ class LoopManagerImpl(LoopManagerInterface):
             case GateParked():
                 return await self._park(run, refused.park)
             case NoSpender() | SpenderUnknown():
+                log.info("session %s: %s", run.session_id, refused.message)
                 park = Park(reason=ParkReason.PERSON, unlock=rules.SPENDER_UNLOCK)
                 return await self._park(run, park)
             case NoCredential():

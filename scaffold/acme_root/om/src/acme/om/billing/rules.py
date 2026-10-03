@@ -158,7 +158,10 @@ def credential_of(account: Account | None) -> str:
     the tenant's own key's reference. An account that cannot say is
     `SpenderUnknown`; nothing falls back to the platform's key."""
     if account is None:
-        raise SpenderUnknown("the tenant has no billing account; nothing is spent")
+        raise SpenderUnknown(
+            "the tenant has no billing account; nothing is spent until one is "
+            "opened, which `make seed` does locally"
+        )
     match account.funding:
         case FundingMode.PLATFORM:
             return PLATFORM_KEY

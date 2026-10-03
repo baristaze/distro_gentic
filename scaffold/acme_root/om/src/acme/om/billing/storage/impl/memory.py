@@ -68,6 +68,13 @@ class AccountStorageMemoryImpl(MemoryStorageBase, AccountStorageInterface):
                 )
             self._put(self._accounts, org_id, account, outbox_rows)
 
+    async def purge_tenant(self, org_id: UUID) -> int:
+        async with self._lock:
+            if self._get(self._accounts, org_id, org_id) is None:
+                return 0
+            del self._accounts[org_id]
+            return 1
+
 
 class _Row:
     """One entry as the ledger table keeps it."""
@@ -238,6 +245,11 @@ class MoneyLedgerStorageMemoryImpl(MemoryStorageBase, MoneyLedgerStorageInterfac
     ) -> dict[tuple[str, datetime], Count]:
         found = {key: self._counts.get((org_id, *key)) for key in keys}
         return {key: count for key, count in found.items() if count is not None}
+
+    async def count_tenant(self, org_id: UUID, limit: int) -> int:
+        entries = sum(1 for row in self._entries if row.org_id == org_id)
+        counts = sum(1 for org, _, _ in self._counts if org == org_id)
+        return min(entries + counts, limit)
 
     def _row_by_id(self, entry_id: UUID) -> _Row | None:
         for row in self._entries:

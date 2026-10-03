@@ -38,6 +38,7 @@ from contracts.racing import race
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
         "close_hold",
+        "count_tenant",
         "open_hold",
         "post_approval",
         "post_credit",
@@ -365,3 +366,14 @@ class MoneyLedgerStorageContract:
         await storage.post_approval(org, approval)
         with pytest.raises(TenantMismatch):
             await storage.post_approval(other, approval)
+
+    async def test_count_tenant_counts_the_tenants_entries_and_counts_up_to_its_limit(
+        self, storage: MoneyLedgerStorageInterface
+    ) -> None:
+        org, other = new_id(), new_id()
+        assert await storage.count_tenant(org, 10) == 0
+        await storage.post_credit(org, a_credit(5_000, reference="pay_c"))
+        # The credit is one entry, and it moves one count.
+        assert await storage.count_tenant(org, 10) == 2
+        assert await storage.count_tenant(org, 1) == 1
+        assert await storage.count_tenant(other, 10) == 0
