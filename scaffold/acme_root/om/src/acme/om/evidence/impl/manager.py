@@ -7,7 +7,7 @@ from acme.om.context import Permission, Role, TenantContext
 from acme.om.evidence.collector import collect, digest
 from acme.om.evidence.executor import ExecutorInterface
 from acme.om.evidence.manager import EvidenceManagerInterface
-from acme.om.evidence.rules import execution_request, protection_target
+from acme.om.evidence.rules import execution_request, policy_key, protection_target
 from acme.om.evidence.storage import EvidenceStorageInterface
 from acme.om.evidence.types.inference import Inference, InferenceKind, InferencePage
 from acme.om.evidence.types.policy import ValidationPolicy
@@ -23,6 +23,7 @@ from acme.om.exceptions import (
 )
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import OutboxRow, versioned_row
+from acme.om.projects.policies import SessionProjectsInterface
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tools.types.policy import Target
 
@@ -43,6 +44,7 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
         relay: OutboxRelayInterface,
         executor: ExecutorInterface,
         work_product: WorkProductInterface,
+        projects: SessionProjectsInterface,
         options: EvidenceOptions,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
@@ -51,6 +53,7 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
         self._relay = relay
         self._executor = executor
         self._work_product = work_product
+        self._projects = projects
         self._options = options
         self._clock = clock
 
@@ -112,9 +115,17 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
         await self._relay_all(ctx, rows)
         return updated
 
-    async def protection(self, ctx: TenantContext, project: str, paths: Sequence[str]) -> Target:
+    async def protection(
+        self, ctx: TenantContext, session_id: UUID, paths: Sequence[str]
+    ) -> Target:
         ctx.require(Permission.READ)
-        return protection_target(await self._storage.read_policy(ctx.org_id, project), paths)
+        project_id = await self._projects.project_of(ctx, session_id)
+        policy = (
+            None
+            if project_id is None
+            else await self._storage.read_policy(ctx.org_id, policy_key(project_id))
+        )
+        return protection_target(policy, paths)
 
     # The runs.
 
@@ -174,11 +185,14 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
         delivery = await self._work_product.delivered(ctx, session_id)
         if delivery is None:
             raise PreconditionFailed(f"session {session_id} holds no work product to validate")
-        policy = await self._storage.read_policy(ctx.org_id, delivery.project)
-        if policy is None:
+        project_id = await self._projects.project_of(ctx, session_id)
+        if project_id is None:
             raise PreconditionFailed(
-                f"the project {delivery.project} declares no validation policy"
+                f"session {session_id} belongs to no project, so no validation policy applies"
             )
+        policy = await self._storage.read_policy(ctx.org_id, policy_key(project_id))
+        if policy is None:
+            raise PreconditionFailed(f"the project {project_id} declares no validation policy")
         request = execution_request(
             session_id, policy, delivery, purpose, await self._executor.offer(ctx)
         )

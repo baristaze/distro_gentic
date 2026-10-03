@@ -16,6 +16,7 @@ import pytest
 from contracts.budget_storage import make_budget
 from contracts.loops import ASSISTANT, reply, said
 from contracts.money import Money, money_over
+from contracts.project_storage import in_project
 
 from acme.integrations.exceptions import DeliveryRefused
 from acme.integrations.model_providers.calls import ModelCall
@@ -51,9 +52,12 @@ from acme.om.budgets.types.breach import Refusal
 from acme.om.budgets.types.budget import BudgetScope, BudgetScopeKind, WindowKind
 from acme.om.budgets.types.hold import Billed, HoldRequest, Settlement
 from acme.om.context import TenantContext
-from acme.om.exceptions import GateParked, SpenderUnknown
+from acme.om.exceptions import BudgetRefused, GateParked, SpenderUnknown
 from acme.om.models.types.fill import MAIN, Eligibility
+from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.steps.types.header import ParkReason
+from acme.om.windows.gate import CallGateInterface
+from acme.om.windows.impl.gate import CallGateBudgetImpl
 from acme.om.windows.rules import call_shape
 
 PREPAID = PlanCatalog(
@@ -162,7 +166,12 @@ async def test_a_cap_and_a_bill_read_the_same_row_of_one_versioned_table(tmp_pat
     later = a_later_reading(fill.model)
     book = PriceBookTableImpl((LIST_PRICES, later))
     assert book.version == later.version
-    next_process = MoneyCallGateImpl(money.gate, book, money.loop.managers.agent_sessions)
+    next_process = MoneyCallGateImpl(
+        money.gate,
+        book,
+        money.loop.managers.agent_sessions,
+        SessionProjectsBoundImpl(money.loop.storage.get_project_storage()),
+    )
     usage = Usage(input=120_000, output=3_000)
     await next_process.settle(owner, hold_id, usage, billed=True)
 
@@ -253,6 +262,51 @@ async def test_a_call_short_only_of_what_open_holds_reserve_tries_again_soon(
     await money.gate.settle(owner, first.id, Billed(usage=Spend(cost_micros=3_000, tokens=0)))
     second = await money.gate.authorize_priced(owner, tenant_request(owner, 5_000), None)
     assert isinstance(second, FundedHold) and second.draw.included == 5
+
+
+# A project's budget binds its sessions.
+
+
+@pytest.mark.parametrize("gate", ["money", "engine"])
+async def test_a_projects_budget_refuses_a_call_its_tenants_has_room_for(
+    gate: str, tmp_path: Path
+) -> None:
+    """The call is charged to the project its session belongs to, as the
+    projects answer it: past the project's budget it is refused, with the
+    project's line its one breach, while the tenant's budget has room. A
+    session of no project is charged to none, and the same call is held."""
+    money = money_over(tmp_path)
+    await money.open(plan="team")
+    loop, owner = money.loop, money.loop.owner
+    calls: CallGateInterface = money.calls
+    if gate == "engine":
+        calls = CallGateBudgetImpl(
+            loop.managers.budget_gate,
+            loop.managers.pricing,
+            loop.managers.agent_sessions,
+            SessionProjectsBoundImpl(loop.storage.get_project_storage()),
+        )
+    ours, loose = await loop.start(), await loop.start()
+    project = await in_project(loop.storage.get_project_storage(), owner.org_id, ours)
+    for kind, key, cap in (
+        (BudgetScopeKind.TENANT, str(owner.org_id), 1_000_000_000),
+        (BudgetScopeKind.PROJECT, str(project), 1),
+    ):
+        await loop.managers.budgets.create_budget(owner, make_budget(kind, key, cost_micros=cap))
+    fills = await loop.managers.models.resolve_fill_set(owner, ours, ASSISTANT.roles, Eligibility())
+    fill = fills.fill_for(MAIN)
+    assert fill is not None
+    call = ModelCall(model=fill.model, messages=(), max_output_tokens=4_000)
+
+    with pytest.raises(BudgetRefused) as refused:
+        await calls.authorize(owner, ours, spender(owner), MAIN, fill, call, credential="platform")
+    (breach,) = refused.value.refusal.breaches
+    assert breach.scope == BudgetScope(kind=BudgetScopeKind.PROJECT, key=str(project))
+
+    held = await calls.authorize(
+        owner, loose, spender(owner), MAIN, fill, call, credential="platform"
+    )
+    await calls.settle(owner, held, None, billed=False)
 
 
 # Time zones.

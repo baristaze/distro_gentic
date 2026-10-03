@@ -21,6 +21,7 @@ from acme.om.media.impl.manager import MediaManagerImpl, MediaOptions
 from acme.om.media.storage.impl.memory import MediaStorageMemoryImpl
 from acme.om.outbox.impl.relay import OutboxRelayImpl
 from acme.om.outbox.storage.impl.memory import OutboxStorageMemoryImpl
+from acme.om.projects.policies import SessionProjectsInterface
 from acme.om.root import Managers
 from acme.om.steps.types.step import Step, StepType
 from acme.om.tenancy import TenancyManagerInterface
@@ -111,3 +112,18 @@ async def model_request(
     )
     (stored,) = await managers.steps.append_steps(ctx, session_id, epoch, [request])
     return stored
+
+
+class SessionProjectsMemory(SessionProjectsInterface):
+    """Each session's project as a suite names it: one it never named
+    belongs to `default`, and a tenant holds the projects named here."""
+
+    def __init__(self, default: UUID | None = None) -> None:
+        self.default = default
+        self.sessions: dict[UUID, UUID | None] = {}
+
+    async def project_of(self, ctx: TenantContext, session_id: UUID) -> UUID | None:
+        return self.sessions.get(session_id, self.default)
+
+    async def holds(self, ctx: TenantContext, project_id: UUID) -> bool:
+        return project_id in {self.default, *self.sessions.values()}
