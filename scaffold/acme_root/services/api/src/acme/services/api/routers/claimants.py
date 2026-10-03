@@ -1,18 +1,22 @@
 """Routes of a product's claimant, the way a host's are. A tenant's: list a
 pool's, and revoke one. A claimant's own: enroll once with an enrollment token of its kind,
 then rotate its credential, claim, and read, renew, and report the item
-it holds, with that credential alone. Each function is one call into the
-hosts service."""
+it holds, and append to its kind's stream for it, with that credential
+alone. Each function is one call into the hosts service, or the watch
+service for a stream."""
 
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Path
 
+from acme.om.watch.kinds import STREAM_KIND
 from acme.services.api.gateway.auth import Ctx, Rctx
 from acme.services.api.gateway.hosts import Claimant, ClaimToken, EnrollmentBearer
 from acme.services.api.gateway.ratelimit import rate_limited
-from acme.services.api.gateway.resolve import HostsService
+from acme.services.api.gateway.resolve import HostsService, WatchService
 from acme.services.api.types.claimants import (
+    ClaimantAppendRequest,
     ClaimantClaimView,
     ClaimantEnrollRequest,
     ClaimantReportRequest,
@@ -104,3 +108,19 @@ async def report(
     """The claimant's answer for the item it holds: done, or failed with
     why. A failure is retried until its attempts are spent."""
     return await hosts.report_as(rctx, claimant, item_id, body)
+
+
+@router.post("/claimants/me/items/{item_id}/streams/{kind}", status_code=204)
+async def append(
+    rctx: Rctx,
+    watch: WatchService,
+    claimant: Claimant,
+    item_id: UUID,
+    kind: Annotated[str, Path(pattern=STREAM_KIND.pattern)],
+    body: ClaimantAppendRequest,
+) -> None:
+    """Appends to a stream of a kind the claimant's own kind writes, for
+    the item it holds under the body's claim token. Any other item, and
+    any other kind, is not found; each call spends the credential's
+    budget of writes."""
+    await watch.append_as(rctx, claimant, item_id, kind, body)

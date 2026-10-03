@@ -1,13 +1,15 @@
-"""The watch's routes: a live read of a session's open streams, and take
-control, a command by hand, and give back. The read is served by its
-handle alone, the way a presigned URL is, and it reads; nothing is pushed.
-Each function is one call into the watch service."""
+"""The watch's routes: a live read of a session's open streams, and of an
+item's streams of a product's kind, and take control, a command by hand,
+and give back. A read is served by its handle alone, the way a presigned
+URL is, and it reads; nothing is pushed. Each function is one call into
+the watch service."""
 
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Query, Response
+from fastapi import APIRouter, Path, Query, Response
 
+from acme.om.watch.kinds import STREAM_KIND
 from acme.om.watch.rules import MAX_HANDLE
 from acme.services.api.gateway.auth import Ctx, Rctx
 from acme.services.api.gateway.idempotency import Idem
@@ -18,6 +20,8 @@ from acme.services.api.types.watch import (
     CommandRequest,
     GiveBackRequest,
     HandRunView,
+    ItemPageView,
+    ItemReadView,
     LivePageView,
     LiveReadView,
 )
@@ -44,6 +48,31 @@ async def read_live(
     The handle is the authority: one that does not verify, or has expired,
     reads nothing."""
     return await watch.read_live(rctx, handle, after or [])
+
+
+@router.post("/work-items/{item_id}/streams/{kind}/live", response_model=ItemReadView)
+async def open_item_live(
+    ctx: Ctx,
+    watch: WatchService,
+    item_id: UUID,
+    kind: Annotated[str, Path(pattern=STREAM_KIND.pattern)],
+) -> ItemReadView:
+    """A handle to the item's open streams of a kind a product's claimant
+    writes, for a viewer who may read its tenant, that lasts minutes."""
+    return await watch.open_item_live(ctx, item_id, kind)
+
+
+@router.get("/live/items", response_model=ItemPageView)
+async def read_item_live(
+    rctx: Rctx,
+    watch: WatchService,
+    handle: Annotated[str, Query(min_length=1, max_length=MAX_HANDLE)],
+    after: Annotated[list[str] | None, Query()] = None,
+) -> ItemPageView:
+    """The open streams the handle names, each after the last entry read
+    (`after=<stream>:<last>`, once a stream). The handle is the authority:
+    one that does not verify as an item's, or has expired, reads nothing."""
+    return await watch.read_item_live(rctx, handle, after or [])
 
 
 @router.post("/agent-sessions/{session_id}/control", response_model=AgentSessionView)

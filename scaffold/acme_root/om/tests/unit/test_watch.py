@@ -75,9 +75,9 @@ from acme.om.watch.impl.stream import (
 )
 from acme.om.watch.manager import WatchManagerInterface
 from acme.om.watch.root import build_watch
-from acme.om.watch.rules import signed, verified
+from acme.om.watch.rules import signed, verified, verified_item
 from acme.om.watch.types.control import HandCommand
-from acme.om.watch.types.live import Seen
+from acme.om.watch.types.live import ItemGrant, Seen
 
 APP = AppContext(type=AppType.PORTAL, version="portal@test")
 RUNNER = AppContext(type=AppType.WORKER, version="runner@test")
@@ -228,6 +228,27 @@ async def test_a_live_read_reads_its_own_session_and_resumes_after_the_last_part
     ):
         with pytest.raises(LiveReadRefused):
             await watched.watch.read_live(request(), handle, ())
+
+
+async def test_a_sessions_handle_and_an_items_are_signed_for_purposes_of_their_own(
+    watched: Watched,
+) -> None:
+    key = KEY.get_secret_value().encode()
+    live = await watched.watch.open_live(watched.person, watched.session_id)
+    item = signed(
+        key,
+        ItemGrant(
+            item_id=watched.session_id,
+            kind="frames",
+            viewer_id=watched.person.user_id,
+            expires_at=live.expires_at,
+        ),
+    )
+    assert verified_item(key, live.handle) is None and verified(key, item) is None
+    with pytest.raises(LiveReadRefused):
+        await watched.watch.read_item_live(request(), live.handle, ())
+    with pytest.raises(LiveReadRefused):
+        await watched.watch.read_live(request(), item, ())
 
 
 async def test_a_live_read_handle_is_issued_only_for_a_session_the_viewer_sees(
