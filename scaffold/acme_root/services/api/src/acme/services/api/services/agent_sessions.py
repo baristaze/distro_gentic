@@ -5,8 +5,10 @@ the session runner, never here."""
 from abc import ABC, abstractmethod
 from uuid import UUID
 
+from acme.om.agent_sessions.types.agent_session import SessionStatus
 from acme.om.context import TenantContext
 from acme.services.api.types.agent_sessions import (
+    AgentSessionPageView,
     AgentSessionView,
     ControlRequest,
     DecisionRequest,
@@ -29,6 +31,40 @@ class AgentSessionsServiceInterface(ABC):
 
     @abstractmethod
     async def get_session(self, ctx: TenantContext, session_id: UUID) -> AgentSessionView: ...
+
+    @abstractmethod
+    async def get_sessions(
+        self, ctx: TenantContext, status: SessionStatus | None, cursor: str | None, limit: int
+    ) -> AgentSessionPageView:
+        """One page of the tenant's sessions in a status, or in any, by id;
+        a deleted session is on no page."""
+        ...
+
+    @abstractmethod
+    async def get_children(
+        self, ctx: TenantContext, session_id: UUID, cursor: str | None, limit: int
+    ) -> AgentSessionPageView:
+        """One page of the sessions `session_id` spawned, by id; the parent
+        is read first, so another tenant's names nothing."""
+        ...
+
+    @abstractmethod
+    async def archive_session(self, ctx: TenantContext, session_id: UUID) -> AgentSessionView:
+        """The archive flag set on an idle session; a person's message
+        clears it. One with a loop open is refused."""
+        ...
+
+    @abstractmethod
+    async def delete_session(self, ctx: TenantContext, session_id: UUID) -> AgentSessionView:
+        """The session marked deleted: hidden from every read until it is
+        restored or its retention ends. One with a loop open is refused."""
+        ...
+
+    @abstractmethod
+    async def restore_session(self, ctx: TenantContext, session_id: UUID) -> AgentSessionView:
+        """A deleted session back as it was, with its history; one past its
+        retention is `NotFound`."""
+        ...
 
     @abstractmethod
     async def send_message(

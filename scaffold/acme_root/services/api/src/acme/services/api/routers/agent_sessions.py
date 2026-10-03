@@ -1,6 +1,7 @@
-"""Agent session routes: start a session on a kind, read it, send it a
-message or a control, decide a tool call it waits on, and read its
-history a page at a time. Each function is one call into the agent
+"""Agent session routes: start a session on a kind, list the tenant's and a
+session's children a page at a time, read one, archive, delete, and
+restore it, send it a message or a control, decide a tool call it waits
+on, and read its history a page at a time. Each function is one call into the agent
 sessions service; every create runs under the idempotency record, so a
 retried send is one step. The loop runs in the session runner: a route
 writes what a person said and answers once it is durable."""
@@ -10,10 +11,12 @@ from uuid import UUID
 
 from fastapi import APIRouter, Query, Response
 
+from acme.om.agent_sessions.types.agent_session import SessionStatus
 from acme.services.api.gateway.auth import Ctx
 from acme.services.api.gateway.idempotency import Idem
 from acme.services.api.gateway.resolve import AgentSessionsService
 from acme.services.api.types.agent_sessions import (
+    AgentSessionPageView,
     AgentSessionView,
     ControlRequest,
     DecisionRequest,
@@ -35,11 +38,61 @@ async def start_session(
     return await idem.run(201, lambda attempt: sessions.start_session(ctx, body, attempt.target_id))
 
 
+@router.get("", response_model=AgentSessionPageView)
+async def list_sessions(
+    ctx: Ctx,
+    sessions: AgentSessionsService,
+    status: SessionStatus | None = None,
+    cursor: str | None = None,
+    limit: int = LIMIT_DEFAULT,
+) -> AgentSessionPageView:
+    """The tenant's sessions in a status, or in any, a page at a time by id."""
+    return await sessions.get_sessions(ctx, status, cursor, limit)
+
+
 @router.get("/{session_id}", response_model=AgentSessionView)
 async def get_session(
     ctx: Ctx, sessions: AgentSessionsService, session_id: UUID
 ) -> AgentSessionView:
     return await sessions.get_session(ctx, session_id)
+
+
+@router.delete("/{session_id}", response_model=AgentSessionView)
+async def delete_session(
+    ctx: Ctx, sessions: AgentSessionsService, session_id: UUID
+) -> AgentSessionView:
+    """An idle session marked deleted: it answers as one that never existed
+    until it is restored, and its retention ends the chance."""
+    return await sessions.delete_session(ctx, session_id)
+
+
+@router.post("/{session_id}/restore", response_model=AgentSessionView)
+async def restore_session(
+    ctx: Ctx, sessions: AgentSessionsService, session_id: UUID
+) -> AgentSessionView:
+    """A deleted session back as it was, with its history."""
+    return await sessions.restore_session(ctx, session_id)
+
+
+@router.post("/{session_id}/archive", response_model=AgentSessionView)
+async def archive_session(
+    ctx: Ctx, sessions: AgentSessionsService, session_id: UUID
+) -> AgentSessionView:
+    """An idle session archived: it keeps what arrives and wakes for nothing
+    until a person's message brings it back."""
+    return await sessions.archive_session(ctx, session_id)
+
+
+@router.get("/{session_id}/children", response_model=AgentSessionPageView)
+async def list_children(
+    ctx: Ctx,
+    sessions: AgentSessionsService,
+    session_id: UUID,
+    cursor: str | None = None,
+    limit: int = LIMIT_DEFAULT,
+) -> AgentSessionPageView:
+    """The sessions this one spawned, a page at a time by id."""
+    return await sessions.get_children(ctx, session_id, cursor, limit)
 
 
 @router.post("/{session_id}/messages", response_model=StepView, status_code=201)

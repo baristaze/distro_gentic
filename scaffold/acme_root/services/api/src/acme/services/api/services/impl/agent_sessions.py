@@ -1,7 +1,11 @@
 from uuid import UUID
 
 from acme.om.agent_sessions import AgentSessionsManagerInterface
-from acme.om.agent_sessions.types.agent_session import AgentSession
+from acme.om.agent_sessions.types.agent_session import (
+    AgentSession,
+    AgentSessionPage,
+    SessionStatus,
+)
 from acme.om.agents import AgentsManagerInterface
 from acme.om.agents.types.request import Start
 from acme.om.base import utcnow
@@ -24,7 +28,9 @@ from acme.om.steps.types.header import (
 from acme.om.steps.types.step import Step, StepType
 from acme.om.tools import ToolsManagerInterface
 from acme.services.api.services.agent_sessions import AgentSessionsServiceInterface
+from acme.services.api.services.impl.tenancy import decode_cursor, encode_cursor
 from acme.services.api.types.agent_sessions import (
+    AgentSessionPageView,
     AgentSessionView,
     ControlRequest,
     DecisionRequest,
@@ -49,9 +55,25 @@ def session_view(session: AgentSession) -> AgentSessionView:
         kind_version=session.kind_version,
         status=session.status,
         park=park_view(session.park),
+        parent_id=session.parent_id,
+        root_id=session.root_id,
         created_at=session.created_at,
         created_by=session.created_by,
         archived_at=session.archived_at,
+        deleted_at=session.deleted_at,
+    )
+
+
+SESSIONS = "agent_sessions"
+CHILDREN = "agent_session_children"
+"""The lists a session cursor belongs to; one is refused by the other."""
+
+
+def session_page(page: AgentSessionPage, listed: str) -> AgentSessionPageView:
+    last = page.items[-1].id if page.items and page.has_more else None
+    return AgentSessionPageView(
+        items=[session_view(session) for session in page.items],
+        next_cursor=None if last is None else encode_cursor(listed, last),
     )
 
 
@@ -124,6 +146,30 @@ class AgentSessionsServiceImpl(AgentSessionsServiceInterface):
 
     async def get_session(self, ctx: TenantContext, session_id: UUID) -> AgentSessionView:
         return session_view(await self._sessions.get_session(ctx, session_id))
+
+    async def get_sessions(
+        self, ctx: TenantContext, status: SessionStatus | None, cursor: str | None, limit: int
+    ) -> AgentSessionPageView:
+        after = decode_cursor(SESSIONS, cursor) if cursor else None
+        page = await self._sessions.get_sessions(ctx, status, after, clamp_limit(limit))
+        return session_page(page, SESSIONS)
+
+    async def get_children(
+        self, ctx: TenantContext, session_id: UUID, cursor: str | None, limit: int
+    ) -> AgentSessionPageView:
+        after = decode_cursor(CHILDREN, cursor) if cursor else None
+        await self._sessions.get_session(ctx, session_id)
+        page = await self._sessions.get_children(ctx, session_id, after, clamp_limit(limit))
+        return session_page(page, CHILDREN)
+
+    async def archive_session(self, ctx: TenantContext, session_id: UUID) -> AgentSessionView:
+        return session_view(await self._sessions.archive_session(ctx, session_id))
+
+    async def delete_session(self, ctx: TenantContext, session_id: UUID) -> AgentSessionView:
+        return session_view(await self._sessions.delete_session(ctx, session_id))
+
+    async def restore_session(self, ctx: TenantContext, session_id: UUID) -> AgentSessionView:
+        return session_view(await self._sessions.restore_session(ctx, session_id))
 
     async def send_message(
         self, ctx: TenantContext, session_id: UUID, body: MessageRequest, step_id: UUID

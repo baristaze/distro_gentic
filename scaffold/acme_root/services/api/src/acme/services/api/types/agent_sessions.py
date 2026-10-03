@@ -36,7 +36,9 @@ class AgentSessionView(View):
     """A session: its kind, its title, and its status, which follows its
     steps. `pending` while an input waits for a run, `running` while a run
     holds its loop, `parked` while the loop waits, `idle` when no loop is
-    open."""
+    open. A sub-agent names the session that spawned it, and every session
+    the root of its tree. `deleted_at` is set only on the answer to a
+    delete: a deleted session is on no read until it is restored."""
 
     id: UUID
     title: str
@@ -44,9 +46,20 @@ class AgentSessionView(View):
     kind_version: int
     status: SessionStatus
     park: ParkView | None
+    parent_id: UUID | None
+    root_id: UUID
     created_at: datetime
     created_by: UUID
     archived_at: datetime | None
+    deleted_at: datetime | None
+
+
+class AgentSessionPageView(View):
+    """One page of sessions, by id. `next_cursor` fetches the next page and
+    is null on the last one."""
+
+    items: list[AgentSessionView]
+    next_cursor: str | None
 
 
 class StepView(View):
