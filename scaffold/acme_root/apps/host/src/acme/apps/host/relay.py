@@ -5,11 +5,12 @@ item whose spec asks other than its fields say is refused, with nothing
 made or run. A prepare makes the workspace through the host's own provider
 for the session's isolation and answers where it is, which binds the
 session to this host. An `exec` item runs through its own local transport,
-in the workspace it holds. The output streams back a part at a time and the
-result is pushed once, each with the hash the host declares of the bytes it
-sends. While the item runs
-the host renews its lease, and a stop from the control stream ends the
-command at once: the transport ends its whole process tree.
+in the workspace it holds, prepared again first, so an instance that
+stopped since starts anew over its files. The output streams back a part
+at a time and the result is pushed once, each with the hash the host
+declares of the bytes it sends. While the item runs the host renews its
+lease, and a stop from the control stream ends the command at once: the
+transport ends its whole process tree.
 
 The host holds no key of the platform's. Its transport's record keeps how a
 command ended without its output, and the platform keeps the output sealed
@@ -38,6 +39,7 @@ from acme.infra.transports import CommandSpec, RecordSeal, TransportInterface
 from acme.infra.workspaces import (
     EgressMode,
     IsolationMode,
+    IsolationRefused,
     IsolationSpec,
     Workspace,
     WorkspaceProviderInterface,
@@ -214,9 +216,12 @@ class ExecutorRelayImpl(ExecutorInterface):
             refused = _result(refused=("capability_missing", 501), detail=why)
             await self._push(item_id, refused, running.held_until)
             return
-        workspace = Workspace(
-            id=detail.session_id, org_id=detail.org_id, spec=spec, location=detail.location
-        )
+        try:
+            workspace = await self._held(detail, spec)
+        except InfraException as error:
+            refused = _result(refused=(error.code, error.http_status), detail=error.message)
+            await self._push(item_id, refused, running.held_until)
+            return
         parts = _Parts(self._client, item_id, running, self._flush_seconds, self._part_bytes)
         renewal = asyncio.ensure_future(self._renew(item_id, running))
         result: dict[str, Any] | None = None
@@ -240,6 +245,25 @@ class ExecutorRelayImpl(ExecutorInterface):
                 stderr="".join(running.printed["stderr"]),
             )
         await self._push(item_id, result, running.held_until)
+
+    async def _held(self, detail: ExecDetailView, spec: IsolationSpec) -> Workspace:
+        """The workspace an item runs in, as this host holds it. One its own
+        provider makes is prepared again first: a look while its instance
+        runs, and a new instance over its files when it stopped, as after a
+        reboot or a Docker restart, as a cloud loop's prepare does. One this
+        host would make elsewhere than the platform says it is is refused."""
+        provider = self._workspaces.get(spec.mode)
+        if provider is None:
+            return Workspace(
+                id=detail.session_id, org_id=detail.org_id, spec=spec, location=detail.location
+            )
+        workspace = await provider.prepare(detail.org_id, detail.session_id, spec)
+        if workspace.location != detail.location:
+            raise IsolationRefused(
+                f"this host holds session {detail.session_id}'s workspace at "
+                f"{workspace.location}, not at {detail.location}"
+            )
+        return workspace
 
     async def _workspace(self, item: ClaimedWorkView, ask: Ask) -> None:
         """A prepare: the workspace made to the session's spec by this host's

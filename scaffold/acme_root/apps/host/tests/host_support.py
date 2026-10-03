@@ -6,7 +6,8 @@ server in front of it does."""
 import asyncio
 import json
 import re
-from collections.abc import AsyncIterator
+import subprocess
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, replace
 from email.utils import format_datetime
@@ -20,14 +21,17 @@ from fastapi import FastAPI
 from acme.apps.host.agent import HostAgent
 from acme.apps.host.ceilings import Ceilings
 from acme.apps.host.config import Settings
+from acme.apps.host.main import host_transports, host_workspaces
 from acme.apps.host.probe import Probe, Probes, platform_and_clock
 from acme.apps.host.relay import ExecutorRelayImpl
 from acme.client.client import ApiClient
 from acme.client.types import IsolationMode
 from acme.infra.secrets.local import SecretsLocalImpl
+from acme.infra.transports import TransportInterface
 from acme.infra.transports.broker import BrokerNullImpl
 from acme.infra.transports.local import TransportLocalImpl
 from acme.infra.workspaces import IsolationMode as ProviderMode
+from acme.infra.workspaces import WorkspaceProviderInterface
 from acme.infra.workspaces.host import WorkspaceHostImpl
 from acme.om.base import new_id, utcnow
 from acme.om.context import TenantContext
@@ -243,20 +247,11 @@ async def directory_host(
     Its ceilings take any project and any egress, and read its root alone,
     unless the case names its own."""
     root = where / "workspaces"
-    agents: list[HostAgent] = []
-    executor = ExecutorRelayImpl(
-        lambda: agents[0].client(),
-        {
-            ProviderMode.HOST: TransportLocalImpl(
-                where / "records", SecretsLocalImpl(None), BrokerNullImpl()
-            )
-        },
-        {ProviderMode.HOST: WorkspaceHostImpl(root)},
-        flush_seconds=0.0,
-        renew_seconds=0.2,
-    )
-    host = HostAgent(
-        replace(api.settings(where / "home", await api.token(pool_id)), name=name),
+    transport = TransportLocalImpl(where / "records", SecretsLocalImpl(None), BrokerNullImpl())
+    host = await started_host(
+        api,
+        pool_id,
+        replace(api.settings(where / "home", None), name=name),
         ceilings
         or Ceilings(
             projects=None,
@@ -264,10 +259,62 @@ async def directory_host(
             egress=None,
             readable=(str(root),),
         ),
-        probes(IsolationMode.directory),
+        IsolationMode.directory,
+        {ProviderMode.HOST: transport},
+        {ProviderMode.HOST: WorkspaceHostImpl(root)},
+    )
+    return host, root
+
+
+async def container_host(api: Stack, pool_id: UUID, where: Path) -> HostAgent:
+    """A host of the pool as the host's `main` wires one: a container per
+    workspace on the local Docker, of the default image. Its ceilings take
+    any project, and let nothing leave."""
+    settings = api.settings(where / "home", None)
+    return await started_host(
+        api,
+        pool_id,
+        settings,
+        Ceilings(projects=None, min_isolation=IsolationMode.container, egress=frozenset()),
+        IsolationMode.container,
+        host_transports(settings),
+        host_workspaces(settings),
+    )
+
+
+async def started_host(
+    api: Stack,
+    pool_id: UUID,
+    settings: Settings,
+    ceilings: Ceilings,
+    mode: IsolationMode,
+    transports: Mapping[ProviderMode, TransportInterface],
+    workspaces: Mapping[ProviderMode, WorkspaceProviderInterface],
+) -> HostAgent:
+    """A host of the pool, enrolled and started, that probes `mode` alone."""
+    agents: list[HostAgent] = []
+    executor = ExecutorRelayImpl(
+        lambda: agents[0].client(),
+        transports,
+        workspaces,
+        flush_seconds=0.0,
+        renew_seconds=0.2,
+    )
+    host = HostAgent(
+        replace(settings, enrollment_token=await api.token(pool_id)),
+        ceilings,
+        probes(mode),
         api.client,
         executor,
     )
     agents.append(host)
     await host.start()
-    return host, root
+    return host
+
+
+def docker_runs() -> bool:
+    try:
+        reply = subprocess.run(["docker", "version"], capture_output=True, timeout=20)
+    except FileNotFoundError, subprocess.TimeoutExpired:
+        return False
+    return reply.returncode == 0
