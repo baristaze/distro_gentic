@@ -16,9 +16,10 @@ from acme.om.automations.types.automation import (
     Limits,
     RunStatus,
 )
+from acme.om.outbox.storage.tables.outbox_rows import OutboxRows
 from acme.om.outbox.types.row import OutboxRow
 from acme.om.storage.impl.pg_base import PgStorageBase, delete_batch, deleted
-from acme.om.storage.utils.translation import to_model, to_values
+from acme.om.storage.utils.translation import to_model, to_row, to_values
 
 STARTED = RunStatus.STARTED.value
 
@@ -36,6 +37,25 @@ class AutomationStoragePostgresImpl(PgStorageBase, AutomationStorageInterface):
         async with self._session_for(stmt, org_id=org_id) as session:
             row = (await session.execute(stmt)).scalar_one_or_none()
             return None if row is None else to_model(row, Automation)
+
+    async def write_automation(
+        self, org_id: UUID, automation: Automation, outbox_rows: tuple[OutboxRow, ...]
+    ) -> bool:
+        values = {k: v for k, v in to_values(automation, Automations).items() if k != "id"}
+        stmt = (
+            update(Automations)
+            .where(Automations.org_id == org_id, Automations.id == automation.id)
+            .values(**values)
+            .returning(Automations.id)
+        )
+        async with self._session_for(Automations, org_id=org_id) as session:
+            if (await session.execute(stmt)).scalar_one_or_none() is None:
+                await session.rollback()
+                return False
+            for outbox_row in outbox_rows:
+                session.add(to_row(outbox_row, OutboxRows, org_id=org_id))
+            await session.commit()
+            return True
 
     async def read_automations(
         self, org_id: UUID, after: UUID | None, limit: int

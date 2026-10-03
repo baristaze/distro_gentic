@@ -778,6 +778,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/automations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Automations
+         * @description The tenant's automations by id, after the id `after` names.
+         */
+        get: operations["list_automations_v1_automations_get"];
+        put?: never;
+        /**
+         * Create Automation
+         * @description An automation that runs as its maker, or as the automation principal.
+         */
+        post: operations["create_automation_v1_automations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/automations/principal": {
         parameters: {
             query?: never;
@@ -792,6 +816,29 @@ export interface paths {
          * @description The principal granted the role; a grant over a standing one keeps it.
          */
         put: operations["grant_principal_v1_automations_principal_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/automations/{automation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Automation */
+        get: operations["get_automation_v1_automations__automation_id__get"];
+        /**
+         * Update Automation
+         * @description The automation as edited. One that runs as its creator is edited by
+         *     its creator alone; one that runs as the automation principal takes its
+         *     editor as its creator.
+         */
+        put: operations["update_automation_v1_automations__automation_id__put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1253,6 +1300,71 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/knowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Entries
+         * @description The entries in a state by id, after the id `after` names.
+         */
+        get: operations["list_entries_v1_knowledge_get"];
+        put?: never;
+        /**
+         * Write Entry
+         * @description An entry a person writes, reviewed as it is written.
+         */
+        post: operations["write_entry_v1_knowledge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/knowledge/{entry_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Entry */
+        get: operations["get_entry_v1_knowledge__entry_id__get"];
+        /**
+         * Edit Entry
+         * @description The entry as edited, on the version `If-Match` names.
+         */
+        put: operations["edit_entry_v1_knowledge__entry_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/knowledge/{entry_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Review Entry
+         * @description A suggestion kept, so sessions recall it, or rejected.
+         */
+        post: operations["review_entry_v1_knowledge__entry_id__review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/live": {
         parameters: {
             query?: never;
@@ -1602,6 +1714,114 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/playbooks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publish
+         * @description The next version of the name.
+         */
+        post: operations["publish_v1_playbooks_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/playbooks/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Playbook
+         * @description The latest version of the name.
+         */
+        get: operations["get_playbook_v1_playbooks__name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Projects
+         * @description The tenant's projects by id, after the id `after` names.
+         */
+        get: operations["list_projects_v1_projects_get"];
+        put?: never;
+        /**
+         * Create Project
+         * @description A project bound to its repository, which never moves.
+         */
+        post: operations["create_project_v1_projects_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{project_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Project */
+        get: operations["get_project_v1_projects__project_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Remove Project
+         * @description The project as it stood, with its fetch credential gone. 409
+         *     `project_in_use` while a session belongs to it.
+         */
+        delete: operations["remove_project_v1_projects__project_id__delete"];
+        options?: never;
+        head?: never;
+        /** Rename Project */
+        patch: operations["rename_project_v1_projects__project_id__patch"];
+        trace?: never;
+    };
+    "/v1/projects/{project_id}/credential": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Fetch Credential
+         * @description A read-only credential of the project's repository; a later one
+         *     replaces it. The answer says who gave it when, never its value.
+         */
+        put: operations["put_fetch_credential_v1_projects__project_id__credential_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/realtime/tickets": {
         parameters: {
             query?: never;
@@ -1648,6 +1868,27 @@ export interface paths {
         post?: never;
         /** Revoke Session */
         delete: operations["revoke_session_v1_sessions__session_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tools/policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Policy */
+        get: operations["get_policy_v1_tools_policy_get"];
+        /**
+         * Write Policy
+         * @description The layer as written, on the version `If-Match` names.
+         */
+        put: operations["write_policy_v1_tools_policy_put"];
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1723,6 +1964,44 @@ export interface components {
             deleted_at: string;
             /** Provider Logout Url */
             provider_logout_url?: string | null;
+        };
+        /**
+         * ActionBody
+         * @description Start a session of `agent_kind` titled `title` in the tenant's project
+         *     `project_id`, or send the brief to the standing session `session_id`.
+         *     The brief is the creator's word.
+         */
+        ActionBody: {
+            /** Agent Kind */
+            agent_kind?: string | null;
+            /** Brief */
+            brief: string;
+            kind: components["schemas"]["ActionKind"];
+            /** Project Id */
+            project_id?: string | null;
+            /** Session Id */
+            session_id?: string | null;
+            /** Title */
+            title?: string | null;
+        };
+        /**
+         * ActionKind
+         * @enum {string}
+         */
+        ActionKind: "start_session" | "message_session";
+        /** ActionView */
+        ActionView: {
+            /** Agent Kind */
+            agent_kind: string | null;
+            /** Brief */
+            brief: string;
+            kind: components["schemas"]["ActionKind"];
+            /** Project Id */
+            project_id: string | null;
+            /** Session Id */
+            session_id: string | null;
+            /** Title */
+            title: string | null;
         };
         /**
          * Actor
@@ -1864,6 +2143,23 @@ export interface components {
             user_id: string;
         };
         /**
+         * ApproverRuleBody
+         * @description Who may approve a call of one class: people's roles, never a service.
+         */
+        ApproverRuleBody: {
+            /** Authorization Class */
+            authorization_class: string;
+            /** Roles */
+            roles: components["schemas"]["Role"][];
+        };
+        /** ApproverRuleView */
+        ApproverRuleView: {
+            /** Authorization Class */
+            authorization_class: string;
+            /** Roles */
+            roles: components["schemas"]["Role"][];
+        };
+        /**
          * AutomationPrincipalView
          * @description The tenant's automation principal: its id, the role it holds, and who
          *     granted it.
@@ -1885,6 +2181,69 @@ export interface components {
              */
             id: string;
             role: components["schemas"]["Role"];
+        };
+        /**
+         * AutomationRequest
+         * @description An automation whole, as made or as edited.
+         */
+        AutomationRequest: {
+            action: components["schemas"]["ActionBody"];
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            limits: components["schemas"]["LimitsBody"];
+            /** Name */
+            name: string;
+            /**
+             * Own Events
+             * @default false
+             */
+            own_events: boolean;
+            runs_as?: components["schemas"]["RunsAs"] | null;
+            trigger: components["schemas"]["TriggerBody"];
+        };
+        /**
+         * AutomationView
+         * @description An automation, whom it runs as, and who made and last edited it.
+         */
+        AutomationView: {
+            action: components["schemas"]["ActionView"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            limits: components["schemas"]["LimitsView"];
+            /** Name */
+            name: string;
+            /** Own Events */
+            own_events: boolean;
+            runs_as: components["schemas"]["RunsAs"];
+            trigger: components["schemas"]["TriggerView"];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Updated By
+             * Format: uuid
+             */
+            updated_by: string;
         };
         /**
          * BudgetScopeKind
@@ -2108,6 +2467,15 @@ export interface components {
             region: string;
         };
         /**
+         * CreateProjectRequest
+         * @description A project and the one repository it binds, which never moves.
+         */
+        CreateProjectRequest: {
+            /** Name */
+            name: string;
+            repository: components["schemas"]["RepositoryBody"];
+        };
+        /**
          * CreateTeamOrgRequest
          * @description A team org the caller makes and owns. `slug` is lower-case letters and
          *     digits joined by hyphens; left out, one is made from the name. A taken
@@ -2141,6 +2509,12 @@ export interface components {
          * @enum {string}
          */
         CrossingKind: "enrollment" | "claim" | "stream_part" | "artifact" | "result";
+        /**
+         * Decision
+         * @description From the least strict to the most.
+         * @enum {string}
+         */
+        Decision: "allow" | "approve" | "deny";
         /**
          * DecisionRequest
          * @description A person's decision on the tool call at a seq. A denial's note is what
@@ -2234,6 +2608,12 @@ export interface components {
             /** Device Code */
             device_code: string;
         };
+        /**
+         * Effect
+         * @description What a repeat of a call may do.
+         * @enum {string}
+         */
+        Effect: "read_only" | "idempotent" | "unsafe";
         /**
          * EnrollRequest
          * @description A host's name and its report, beside its enrollment token. The pool
@@ -2393,6 +2773,45 @@ export interface components {
          */
         ExecState: "queued" | "running" | "done" | "interrupted";
         /**
+         * FetchCredentialRequest
+         * @description A read-only credential of the project's repository, as source control
+         *     takes it over HTTPS. It goes to the tenant's store and is never read
+         *     back.
+         */
+        FetchCredentialRequest: {
+            /**
+             * Password
+             * Format: password
+             */
+            password: string;
+            /** Username */
+            username: string;
+        };
+        /**
+         * FetchCredentialView
+         * @description That the project's repository has a fetch credential, and who gave it
+         *     when. Never its value.
+         */
+        FetchCredentialView: {
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Updated By
+             * Format: uuid
+             */
+            updated_by: string;
+            /** Version */
+            version: number;
+        };
+        /**
          * FilePageView
          * @description One page of the org's stored files, oldest first. `next_cursor` fetches
          *     the next page and is null on the last one.
@@ -2452,6 +2871,26 @@ export interface components {
             status: components["schemas"]["FileStatus"];
             /** Subject Id */
             subject_id: string | null;
+        };
+        /**
+         * GateBody
+         * @description The calls a gate selects, by tool or by class, and what they need: a
+         *     person's approval, or a denial. A gate never allows.
+         */
+        GateBody: {
+            /** Authorization Class */
+            authorization_class?: string | null;
+            decision: components["schemas"]["Decision"];
+            /** Tool */
+            tool?: string | null;
+        };
+        /** GateView */
+        GateView: {
+            /** Authorization Class */
+            authorization_class: string | null;
+            decision: components["schemas"]["Decision"];
+            /** Tool */
+            tool: string | null;
         };
         /**
          * GiveBackRequest
@@ -2859,6 +3298,61 @@ export interface components {
             /** Url */
             url: string | null;
         };
+        /**
+         * KnowledgeRequest
+         * @description An entry: its title, the words that trigger it, all of which must
+         *     appear in what a session is about, and what it says. A trigger word
+         *     with none of a-z, 0-9, `_`, `.` or `-` is refused: recall reads nothing
+         *     in it, so it would match every session.
+         */
+        KnowledgeRequest: {
+            /** Text */
+            text: string;
+            /** Title */
+            title: string;
+            /** Trigger */
+            trigger: string[];
+        };
+        /**
+         * KnowledgeStatus
+         * @enum {string}
+         */
+        KnowledgeStatus: "suggested" | "reviewed" | "rejected";
+        /**
+         * KnowledgeView
+         * @description An entry, its state, who suggested and who reviewed it, and the
+         *     version an edit names in `If-Match`.
+         */
+        KnowledgeView: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Reviewed By */
+            reviewed_by: string | null;
+            status: components["schemas"]["KnowledgeStatus"];
+            /** Suggested By */
+            suggested_by: string | null;
+            /** Text */
+            text: string;
+            /** Title */
+            title: string;
+            /** Trigger */
+            trigger: string[];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Version */
+            version: number;
+        };
         /** LaneLoadView */
         LaneLoadView: {
             kind: components["schemas"]["WorkKind"];
@@ -2875,6 +3369,62 @@ export interface components {
         LastOwnerDetail: {
             /** Orgs */
             orgs: components["schemas"]["OwnedOrgRef"][];
+        };
+        /**
+         * LimitsBody
+         * @description The most its runs spend in a period, in millionths at list price, and
+         *     the share one run may take; the most firings a period; the most runs at
+         *     work at once; whether a stopped firing waits, and how many may; and the
+         *     longest chain of automations a firing extends.
+         */
+        LimitsBody: {
+            /** Concurrency */
+            concurrency: number;
+            /** Cost Cap Micros */
+            cost_cap_micros: number;
+            /**
+             * Hop Limit
+             * @default 3
+             */
+            hop_limit: number;
+            /** Period */
+            period?: string | null;
+            /**
+             * Queue
+             * @default false
+             */
+            queue: boolean;
+            /**
+             * Queue Depth
+             * @default 50
+             */
+            queue_depth: number;
+            /** Rate */
+            rate: number;
+            /** Run Cap Micros */
+            run_cap_micros: number;
+        };
+        /** LimitsView */
+        LimitsView: {
+            /** Concurrency */
+            concurrency: number;
+            /** Cost Cap Micros */
+            cost_cap_micros: number;
+            /** Hop Limit */
+            hop_limit: number;
+            /**
+             * Period
+             * Format: duration
+             */
+            period: string;
+            /** Queue */
+            queue: boolean;
+            /** Queue Depth */
+            queue_depth: number;
+            /** Rate */
+            rate: number;
+            /** Run Cap Micros */
+            run_cap_micros: number;
         };
         /** LivePageView */
         LivePageView: {
@@ -3418,6 +3968,68 @@ export interface components {
             /** Users */
             users: number;
         };
+        /** PlaybookView */
+        PlaybookView: {
+            /** Body */
+            body: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description: string;
+            /** Gates */
+            gates: components["schemas"]["GateView"][];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Published By
+             * Format: uuid
+             */
+            published_by: string;
+            /** Version */
+            version: number;
+        };
+        /**
+         * PolicyRuleBody
+         * @description What a rule matches and what it decides. A selector left unset matches
+         *     any call; every target attribute it names must equal the target's.
+         */
+        PolicyRuleBody: {
+            /** Authorization Class */
+            authorization_class?: string | null;
+            decision: components["schemas"]["Decision"];
+            effect?: components["schemas"]["Effect"] | null;
+            /** Target */
+            target?: {
+                [key: string]: string | number | boolean;
+            };
+            /** Target Kind */
+            target_kind?: string | null;
+            /** Tool */
+            tool?: string | null;
+        };
+        /** PolicyRuleView */
+        PolicyRuleView: {
+            /** Authorization Class */
+            authorization_class: string | null;
+            decision: components["schemas"]["Decision"];
+            effect: components["schemas"]["Effect"] | null;
+            /** Target */
+            target: {
+                [key: string]: unknown;
+            };
+            /** Target Kind */
+            target_kind: string | null;
+            /** Tool */
+            tool: string | null;
+        };
         /** PoolView */
         PoolView: {
             /**
@@ -3463,12 +4075,58 @@ export interface components {
             /** Held */
             held: boolean;
         };
+        /** ProjectView */
+        ProjectView: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            repository: components["schemas"]["RepositoryView"];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Updated By
+             * Format: uuid
+             */
+            updated_by: string;
+        };
         /**
          * Provenance
          * @description From the strongest to the weakest.
          * @enum {string}
          */
         Provenance: "real" | "twin" | "double" | "unavailable";
+        /**
+         * PublishRequest
+         * @description The next version of a playbook's name: its description, its body, and
+         *     its gates.
+         */
+        PublishRequest: {
+            /** Body */
+            body: string;
+            /** Description */
+            description: string;
+            /** Gates */
+            gates?: components["schemas"]["GateBody"][];
+            /** Name */
+            name: string;
+        };
         /** PurposeUsageView */
         PurposeUsageView: {
             /** Count */
@@ -3481,6 +4139,29 @@ export interface components {
             /** Size Bytes */
             size_bytes: number;
         };
+        /** RenameProjectRequest */
+        RenameProjectRequest: {
+            /** Name */
+            name: string;
+        };
+        /**
+         * RepositoryBody
+         * @description A repository by its host's domain and its path there, such as
+         *     `github.com` and `octo/reports`. Both are compared without case.
+         */
+        RepositoryBody: {
+            /** Host */
+            host: string;
+            /** Path */
+            path: string;
+        };
+        /** RepositoryView */
+        RepositoryView: {
+            /** Host */
+            host: string;
+            /** Path */
+            path: string;
+        };
         /**
          * ResultRequest
          * @description How an item ended: the JSON of an exec result, in base64.
@@ -3491,10 +4172,24 @@ export interface components {
             data: string;
         };
         /**
+         * ReviewRequest
+         * @description Keep a suggestion, so any session may recall it, or reject it.
+         */
+        ReviewRequest: {
+            /** Keep */
+            keep: boolean;
+        };
+        /**
          * Role
          * @enum {string}
          */
         Role: "owner" | "admin" | "member" | "viewer" | "service";
+        /**
+         * RunsAs
+         * @description Whose authority an automation's action runs on.
+         * @enum {string}
+         */
+        RunsAs: "creator" | "automation_principal";
         /**
          * SecondFactorRequest
          * @description The code from an authenticator, presented with a sign-in credential.
@@ -3917,6 +4612,38 @@ export interface components {
          */
         ToolFailure: "invalid_input" | "transient" | "timeout" | "denied" | "interrupted" | "permanent";
         /**
+         * ToolPolicyRequest
+         * @description The tenant's whole layer, written over the version `If-Match` names.
+         */
+        ToolPolicyRequest: {
+            /** Approvers */
+            approvers?: components["schemas"]["ApproverRuleBody"][];
+            /** Rules */
+            rules?: components["schemas"]["PolicyRuleBody"][];
+        };
+        /**
+         * ToolPolicyView
+         * @description The tenant's layer; version 1 and empty until its first write.
+         */
+        ToolPolicyView: {
+            /** Approvers */
+            approvers: components["schemas"]["ApproverRuleView"][];
+            /** Rules */
+            rules: components["schemas"]["PolicyRuleView"][];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Updated By
+             * Format: uuid
+             */
+            updated_by: string;
+            /** Version */
+            version: number;
+        };
+        /**
          * TotpConfirmedView
          * @description The second factor is enrolled: from now on the operator plane admits
          *     this identity only on a sign-in that verified a code, so the next
@@ -3933,6 +4660,39 @@ export interface components {
              * Format: uuid
              */
             identity_id: string;
+        };
+        /**
+         * TriggerBody
+         * @description An event that passes every filter set (one left empty matches any),
+         *     or a schedule, every `every` seconds, a minute at least.
+         */
+        TriggerBody: {
+            /** Arrivals */
+            arrivals?: string[];
+            /** Effects */
+            effects?: string[];
+            /** Every */
+            every?: string | null;
+            /** Integrations */
+            integrations?: string[];
+            kind: components["schemas"]["TriggerKind"];
+        };
+        /**
+         * TriggerKind
+         * @enum {string}
+         */
+        TriggerKind: "event" | "schedule";
+        /** TriggerView */
+        TriggerView: {
+            /** Arrivals */
+            arrivals: string[];
+            /** Effects */
+            effects: string[];
+            /** Every */
+            every: string | null;
+            /** Integrations */
+            integrations: string[];
+            kind: components["schemas"]["TriggerKind"];
         };
         /**
          * UpdateIdentityRequest
@@ -5681,6 +6441,80 @@ export interface operations {
             };
         };
     };
+    list_automations_v1_automations_get: {
+        parameters: {
+            query?: {
+                after?: string | null;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_automation_v1_automations_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                "idempotency-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutomationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_principal_v1_automations_principal_get: {
         parameters: {
             query?: never;
@@ -5738,6 +6572,80 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AutomationPrincipalView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_automation_v1_automations__automation_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                automation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_automation_v1_automations__automation_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                automation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutomationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationView"];
                 };
             };
             /** @description Validation Error */
@@ -6650,6 +7558,196 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InvitationView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_entries_v1_knowledge_get: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["KnowledgeStatus"];
+                after?: string | null;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    write_entry_v1_knowledge_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                "idempotency-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KnowledgeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_entry_v1_knowledge__entry_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    edit_entry_v1_knowledge__entry_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                /** @description The version the caller read, as an entity tag: `"3"`. 412 `precondition_failed` when the record changed since. */
+                "If-Match"?: string | null;
+            };
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KnowledgeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_entry_v1_knowledge__entry_id__review_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KnowledgeView"];
                 };
             };
             /** @description Validation Error */
@@ -7596,6 +8694,301 @@ export interface operations {
             };
         };
     };
+    publish_v1_playbooks_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                "idempotency-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublishRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaybookView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_playbook_v1_playbooks__name__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaybookView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_projects_v1_projects_get: {
+        parameters: {
+            query?: {
+                after?: string | null;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_project_v1_projects_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                "idempotency-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateProjectRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_project_v1_projects__project_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_project_v1_projects__project_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rename_project_v1_projects__project_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameProjectRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_fetch_credential_v1_projects__project_id__credential_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FetchCredentialRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FetchCredentialView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     mint_ticket_v1_realtime_tickets_post: {
         parameters: {
             query?: never;
@@ -7686,6 +9079,78 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_policy_v1_tools_policy_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolPolicyView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    write_policy_v1_tools_policy_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                /** @description The version the caller read, as an entity tag: `"3"`. 412 `precondition_failed` when the record changed since. */
+                "If-Match"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ToolPolicyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolPolicyView"];
                 };
             };
             /** @description Validation Error */

@@ -11,7 +11,7 @@ from acme.om.context import Permission, TenantContext
 from acme.om.exceptions import NotFound, TenantMismatch
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import OutboxRow, outbox_row
-from acme.om.projects.exceptions import ProjectFixed
+from acme.om.projects.exceptions import ProjectFixed, ProjectInUse
 from acme.om.projects.impl.sessions import bind
 from acme.om.projects.manager import ProjectsManagerInterface
 from acme.om.projects.storage import ProjectStorageInterface
@@ -19,10 +19,13 @@ from acme.om.projects.types.project import Project, Repository
 from acme.om.tenancy import TenancyManagerInterface
 
 CREATED = "projects.project.created"
+UPDATED = "projects.project.updated"
+DELETED = "projects.project.deleted"
 
 
 class ProjectsOptions(Platform):
     purge_batch: int = 1000  # rows one purge statement deletes at most
+    page: int = 200  # the most projects one list answers
 
 
 class ProjectsManagerImpl(ProjectsManagerInterface):
@@ -67,6 +70,41 @@ class ProjectsManagerImpl(ProjectsManagerInterface):
     async def get_project(self, ctx: TenantContext, project_id: UUID) -> Project:
         ctx.require(Permission.READ)
         return await self._project(ctx, project_id)
+
+    async def list_projects(
+        self, ctx: TenantContext, after: UUID | None, limit: int
+    ) -> tuple[Project, ...]:
+        ctx.require(Permission.READ)
+        limit = max(1, min(limit, self._options.page))
+        return tuple(await self._storage.read_projects(ctx.org_id, after, limit))
+
+    async def rename_project(self, ctx: TenantContext, project_id: UUID, name: str) -> Project:
+        ctx.require(Permission.MANAGE_MEMBERS)
+        stored = await self._project(ctx, project_id)
+        renamed = Project.model_validate(
+            {
+                **stored.model_dump(),
+                "name": name,
+                "updated_at": self._clock(),
+                "updated_by": ctx.user_id,
+            }
+        )
+        rows = (outbox_row(ctx, UPDATED, renamed.id, {}),)
+        if not await self._storage.write_project(ctx.org_id, renamed, rows):
+            raise NotFound(f"project {project_id} not found")
+        await self._relay_all(ctx, rows)
+        return renamed
+
+    async def remove_project(self, ctx: TenantContext, project_id: UUID) -> Project:
+        ctx.require(Permission.MANAGE_MEMBERS)
+        stored = await self._project(ctx, project_id)
+        rows = (outbox_row(ctx, DELETED, stored.id, {}),)
+        if not await self._storage.delete_project(ctx.org_id, project_id, rows):
+            if await self._storage.read_project(ctx.org_id, project_id) is None:
+                raise NotFound(f"project {project_id} not found")
+            raise ProjectInUse(f"project {project_id} has sessions, and stays")
+        await self._relay_all(ctx, rows)
+        return stored
 
     async def start_session(
         self, ctx: TenantContext, project_id: UUID, start: Start
