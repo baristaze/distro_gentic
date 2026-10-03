@@ -85,20 +85,36 @@ function bySeq<T extends { seq: number }>(pages: InfiniteData<{ items: T[] }> | 
   return pages?.pages.flatMap((page) => page.items);
 }
 
-/** The session's history, whole and in order. While it is active it is read
- * again every few seconds as well as on a push. */
+/** The steps after `after`, page after page to the end. */
+async function stepsAfter(id: string, after: number, signal: AbortSignal): Promise<StepView[]> {
+  const read: StepView[] = [];
+  for (let from = after; ; ) {
+    const page = await api.get<StepPageView>(`${path(id)}/steps?after_seq=${from}&limit=${WHOLE_PAGE_SIZE}`, { signal });
+    read.push(...page.items);
+    const last = page.items[page.items.length - 1];
+    if (!page.has_more || last === undefined) return read;
+    from = last.seq;
+  }
+}
+
+/** The session's history, whole and in order. A step is written once, so a
+ * read after the first asks only for the steps past the last one held: a
+ * long session's poll and its pushes read what is new, never the whole
+ * history again. While it is active it is read every few seconds as well as
+ * on a push. */
 export function useSteps(id: string, active: boolean, enabled = true) {
-  const query = useInfiniteQuery({
-    queryKey: keys.agentSessions.read(id, "steps"),
-    initialPageParam: 0,
-    getNextPageParam: (last: StepPageView) => (last.has_more ? last.items[last.items.length - 1]?.seq : undefined),
-    queryFn: ({ pageParam, signal }) =>
-      api.get<StepPageView>(`${path(id)}/steps?after_seq=${pageParam}&limit=${WHOLE_PAGE_SIZE}`, { signal }),
+  const queryClient = useQueryClient();
+  const queryKey = keys.agentSessions.read(id, "steps");
+  return useQuery({
+    queryKey,
+    queryFn: async ({ signal }) => {
+      const held = queryClient.getQueryData<StepView[]>(queryKey) ?? [];
+      const fresh = await stepsAfter(id, held[held.length - 1]?.seq ?? 0, signal);
+      return fresh.length === 0 ? held : [...held, ...fresh];
+    },
     refetchInterval: active ? ACTIVE_POLL_MS : false,
     enabled,
   });
-  const walking = useWalk(query);
-  return { ...query, data: bySeq<StepView>(query.data), isPending: query.isPending || walking };
 }
 
 export function useToolCalls(id: string, active: boolean, enabled = true) {
@@ -171,7 +187,7 @@ export function useStartSession() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: StartSessionRequest) => api.post<AgentSessionView>("/v1/agent-sessions", body),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.agentSessions.all }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.agentSessions.lists }),
   });
 }
 
@@ -180,7 +196,8 @@ export function useStartSession() {
 export function useSessionActions(id: string) {
   const queryClient = useQueryClient();
   const settled = () => queryClient.invalidateQueries({ queryKey: keys.agentSessions.one(id) });
-  const listed = () => queryClient.invalidateQueries({ queryKey: keys.agentSessions.all });
+  const listed = () =>
+    Promise.all([settled(), queryClient.invalidateQueries({ queryKey: keys.agentSessions.lists })]);
   return {
     message: useMutation({
       mutationFn: (text: string) => api.post<StepView>(`${path(id)}/messages`, { text }),

@@ -41,7 +41,7 @@ export function SessionPage() {
         <SegmentedControl label="Part of the session" value={vm.tab} options={SESSION_TABS} onChange={vm.setTab} />
       </div>
       {vm.tab === "thread" ? <ThreadPart vm={vm} /> : null}
-      {vm.tab === "timeline" ? <TimelinePart vm={vm} /> : null}
+      {vm.tab === "timeline" ? <TimelinePart key={vm.id} vm={vm} /> : null}
       {vm.tab === "tools" ? <ToolCallsPart vm={vm} /> : null}
       {vm.tab === "evidence" ? <EvidencePart vm={vm} /> : null}
       {vm.tab === "changes" ? <ChangesPart vm={vm} /> : null}

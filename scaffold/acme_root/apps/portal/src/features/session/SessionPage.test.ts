@@ -11,9 +11,10 @@ import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError, type AgentSessionView, type ExecutionView, type MeView, type StepView } from "@acme/client";
 import { SessionsPage } from "../sessions/SessionsPage";
+import { keys } from "../../queries/keys";
 import { SessionPage } from "./SessionPage";
 
-const net = vi.hoisted(() => ({ org: "a" as "a" | "b", calls: [] as string[] }));
+const net = vi.hoisted(() => ({ org: "a" as "a" | "b", calls: [] as string[], history: null as unknown[] | null }));
 
 const at = "2026-10-03T10:00:00Z";
 const sessionOf = (id: string, title: string): AgentSessionView => ({
@@ -82,6 +83,13 @@ function answer(path: string): unknown {
   const [, , , id, part] = path.split("?")[0]!.split("/");
   if (id !== held.id) throw new ApiError(404, "not_found", "session not found", "req-1");
   if (!part) return held;
+  if (part === "steps" && net.history) {
+    const query = new URLSearchParams(path.split("?")[1]);
+    const after = Number(query.get("after_seq"));
+    const limit = Number(query.get("limit"));
+    const rest = (net.history as StepView[]).filter((each) => each.seq > after);
+    return { has_more: rest.length > limit, items: rest.slice(0, limit) };
+  }
   if (part === "steps")
     return {
       has_more: false,
@@ -118,9 +126,10 @@ const container = document.createElement("div");
 document.body.append(container);
 let root: ReturnType<typeof createRoot> | null = null;
 
-async function open(org: "a" | "b", address: string) {
+async function open(org: "a" | "b", address: string, history: StepView[] | null = null) {
   net.org = org;
   net.calls = [];
+  net.history = history;
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const router = createMemoryRouter(
     [
@@ -131,7 +140,12 @@ async function open(org: "a" | "b", address: string) {
   );
   root = createRoot(container);
   await act(async () => root!.render(createElement(QueryClientProvider, { client: queryClient }, createElement(RouterProvider, { router }))));
-  // The reads settle over a few turns of the event loop.
+  await settle();
+  return queryClient;
+}
+
+/** The reads settle over a few turns of the event loop. */
+async function settle() {
   for (let turn = 0; turn < 5; turn += 1) await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
 }
 
@@ -169,6 +183,31 @@ describe("the org's own session", () => {
     await open("a", "/sessions/sa?tab=timeline");
     const steps = [...container.querySelectorAll("[aria-label='Steps'] [data-title]")].map((title) => title.textContent);
     expect(steps).toEqual(["Message from a person", "Model answered", "Loop ended: succeeded"]);
+  });
+
+  it("draws a 3,000-step timeline's lines and only the bodies opened", async () => {
+    const long = Array.from({ length: 3000 }, (_, index) =>
+      step(index + 1, { type: "tool_response", actor: "program", tool: "run", text: `output of step ${index + 1}` }),
+    );
+    const queryClient = await open("a", "/sessions/sa?tab=timeline", long);
+    const steps = container.querySelector("[aria-label='Steps']")!;
+    expect(steps.querySelectorAll("li")).toHaveLength(3000);
+    expect(steps.querySelectorAll(".acme-timeline-body")).toHaveLength(0);
+    expect(net.calls.filter((path) => path.includes("/steps?"))).toHaveLength(15);
+    const show = [...steps.querySelectorAll("li")][41]!.querySelector("button")!;
+    expect(show.textContent).toBe("Show");
+    await act(async () => show.click());
+    const bodies = [...steps.querySelectorAll(".acme-timeline-body")];
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]!.textContent).toContain("output of step 42");
+
+    // A push for the session reads only the steps past the last one held.
+    long.push(step(3001, { type: "loop_ended", outcome: "succeeded" }));
+    net.calls = [];
+    await act(async () => queryClient.invalidateQueries({ queryKey: keys.agentSessions.one("sa") }));
+    await settle();
+    expect(net.calls.filter((path) => path.includes("/steps?"))).toEqual(["/v1/agent-sessions/sa/steps?after_seq=3000&limit=200"]);
+    expect(steps.querySelectorAll("li")).toHaveLength(3001);
   });
 
   it("draws its evidence: each run with its outcome and a twin's provenance", async () => {

@@ -131,7 +131,10 @@ export function useSessionVm(id: string) {
   }, [may?.pause, may?.resume, may?.cancel, may?.compact, may?.takeControl, may?.archive, setTab, navigate]);
 
   const missing = session.error instanceof ApiError && session.error.status === 404;
-  const history = steps.data ?? [];
+  // Read again only when a step is added: the history holds its steps from one read to the next.
+  const history = steps.data;
+  const said = useMemo(() => (history ? thread(history) : null), [history]);
+  const lines = useMemo(() => (history ? timeline(history) : null), [history]);
   return {
     id,
     tab,
@@ -142,8 +145,8 @@ export function useSessionVm(id: string) {
     park: session.data?.park ? parkLine(session.data.park) : null,
     asks: asks(approvals.data ?? [], questions.data ?? []),
     may,
-    thread: steps.isPending ? null : thread(history),
-    timeline: steps.isPending ? null : timeline(history),
+    thread: steps.isPending ? null : (said ?? []),
+    timeline: steps.isPending ? null : (lines ?? []),
     stepsError: steps.error,
     toolCalls: toolCalls.isPending ? null : (toolCalls.data ?? []).map(toolCallRow),
     runs: executions.isPending ? null : (executions.data ?? []).map(runRow),

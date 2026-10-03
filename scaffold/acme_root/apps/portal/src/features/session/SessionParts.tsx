@@ -1,6 +1,6 @@
 // The parts of a session's page, one per tab, and the header above them.
 // Each draws what the view-model hands it; nothing here reads or decides.
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import {
   Banner,
@@ -174,13 +174,24 @@ export function ThreadPart({ vm }: { vm: SessionVm }) {
   );
 }
 
+/** Every step as a line of the timeline; a step's body is drawn only once
+ * its entry is opened, so a long session draws its lines and not its
+ * thousands of outputs. */
 export function TimelinePart({ vm }: { vm: SessionVm }) {
   const entries = vm.timeline;
-  const withBodies = (entries ?? []).filter((entry) => entry.bodyKind !== "none");
-  const items: LightboxItem[] = withBodies.map((entry) => ({
-    title: `${entry.seq}. ${entry.title}`,
-    content: <StepBody entry={entry} />,
-  }));
+  const [opened, setOpened] = useState<ReadonlySet<number>>(() => new Set());
+  const withBodies = useMemo(() => (entries ?? []).filter((entry) => entry.bodyKind !== "none"), [entries]);
+  const bodyIndex = useMemo(() => new Map(withBodies.map((entry, index) => [entry.seq, index])), [withBodies]);
+  const items: LightboxItem[] = useMemo(
+    () => withBodies.map((entry) => ({ title: `${entry.seq}. ${entry.title}`, content: <StepBody entry={entry} /> })),
+    [withBodies],
+  );
+  const toggle = (seq: number) =>
+    setOpened((was) => {
+      const next = new Set(was);
+      if (!next.delete(seq)) next.add(seq);
+      return next;
+    });
   return (
     <Card title="Timeline" id="timeline">
       {entries === null ? <Muted>Loading</Muted> : null}
@@ -194,13 +205,18 @@ export function TimelinePart({ vm }: { vm: SessionVm }) {
               <strong data-title>{entry.title}</strong>
               {entry.detail ? <Muted style={small}>{entry.detail}</Muted> : null}
               <Muted style={{ ...small, marginLeft: "auto" }}>{shortTime(entry.at)}</Muted>
+              {entry.bodyKind !== "none" ? (
+                <Button tone="plain" onClick={() => toggle(entry.seq)}>
+                  {opened.has(entry.seq) ? "Hide" : "Show"}
+                </Button>
+              ) : null}
               {entry.bodyKind !== "none" && entry.bodyKind !== "markdown" ? (
-                <Button tone="plain" onClick={() => vm.setShown(withBodies.indexOf(entry))}>
+                <Button tone="plain" onClick={() => vm.setShown(bodyIndex.get(entry.seq) ?? 0)}>
                   Enlarge
                 </Button>
               ) : null}
             </div>
-            {entry.bodyKind !== "none" ? (
+            {entry.bodyKind !== "none" && opened.has(entry.seq) ? (
               <div className="acme-timeline-body">
                 <StepBody entry={entry} />
               </div>
