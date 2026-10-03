@@ -7,7 +7,7 @@ from uuid import UUID
 
 from pydantic import Field, SecretStr, ValidationError
 
-from acme.infra.exceptions import SecretNotFound
+from acme.infra.exceptions import InfraException
 from acme.infra.secrets import SecretsInterface
 from acme.infra.workspaces import IsolationMode, IsolationSpec, Workspace, WorkspaceLost
 from acme.om.agent_sessions.types.agent_session import AgentSession
@@ -52,6 +52,8 @@ log = logging.getLogger(__name__)
 
 CREATED = "workspaces.egress_allowlist.created"
 UPDATED = "workspaces.egress_allowlist.updated"
+SECRET_NOT_FOUND = "secret_not_found"
+"""The code the tenant's store answers for a name it holds no value under."""
 
 
 class WorkspacesOptions(Platform):
@@ -458,7 +460,9 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
             value = await self._secrets.get(
                 ctx.org_id, rules.fetch_secret_name(project_id), deadline=ctx.deadline
             )
-        except SecretNotFound:
+        except InfraException as failed:
+            if failed.code != SECRET_NOT_FOUND:
+                raise
             raise Unavailable(f"the fetch credential of project {project_id} is gone") from None
         try:
             return FetchCredential.model_validate_json(value)

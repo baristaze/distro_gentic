@@ -24,7 +24,7 @@ from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, Isola
 from acme.integrations.events.twin import IntegrationTwinImpl
 from acme.om.agents.types.result import Claim
 from acme.om.base import new_id, utcnow
-from acme.om.exceptions import NotAuthorized, NotFound
+from acme.om.exceptions import NotAuthorized, NotFound, Unavailable
 from acme.om.platform_agents import kinds
 from acme.om.platform_agents.catalog import PlatformAgents
 from acme.om.platform_agents.kinds import ENGINEER_KIND
@@ -281,3 +281,22 @@ async def test_a_fetch_credential_is_kept_in_the_store_and_reaches_the_read_alon
     platform.reader.credentials.clear()
     with pytest.raises(NotFound):
         await workspaces.get_workspace(owner, session_id)
+
+
+async def test_a_fetch_credential_whose_value_left_the_store_reads_nothing(
+    tmp_path: Path,
+) -> None:
+    platform = Forged(tmp_path)
+    workspaces, owner = platform.loop.managers.workspaces, platform.loop.owner
+    project_id = platform.projects.project_id
+    credential = FetchCredential(username="reader", password=SecretStr(PASSWORD))
+    await workspaces.put_fetch_credential(owner, project_id, credential)
+    await platform.loop.infra.get_secrets().delete(
+        owner.org_id, rules.fetch_secret_name(project_id)
+    )
+
+    session_id = await platform.engineer()
+    workspace = await platform.loop.managers.tools.prepare_workspace(owner, session_id, TWIN)
+    with pytest.raises(Unavailable, match="is gone"):
+        await workspaces.delivery(owner, workspace)
+    assert platform.reader.credentials == [], "no read without the value"
