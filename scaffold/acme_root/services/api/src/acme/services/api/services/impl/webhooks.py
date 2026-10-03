@@ -10,6 +10,7 @@ from acme.om.base import utcnow
 from acme.om.context import RequestContext
 from acme.om.evidence.types.provenance import Provenance
 from acme.om.exceptions import ValidationFailed
+from acme.om.intake import IntakeManagerInterface
 from acme.om.intake.rules import event_of
 from acme.services.api.services.webhooks import SignedDelivery, WebhooksServiceInterface
 from acme.services.api.types.webhooks import DeliveryReceivedView
@@ -17,18 +18,22 @@ from acme.services.api.types.webhooks import DeliveryReceivedView
 
 class WebhooksServiceImpl(WebhooksServiceInterface):
     """The edge of an outside producer: the check, then the queue. What the
-    delivery means is the worker's to apply, under the org it names."""
+    delivery means is the worker's to apply, under the org it names: for an
+    integration's, the tenant that connected the installation it came
+    through."""
 
     def __init__(
         self,
         identity: IdentityProviderInterface,
         queues: QueuesInterface,
         integrations: Callable[[str], IntegrationInterface],
+        intake: IntakeManagerInterface,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._identity = identity
         self._queues = queues
         self._integrations = integrations
+        self._intake = intake
         self._clock = clock
 
     async def receive_identity(
@@ -50,8 +55,11 @@ class WebhooksServiceImpl(WebhooksServiceInterface):
     ) -> DeliveryReceivedView:
         integration = self._integrations(name)
         provided = integration.verify_delivery(delivery.payload, delivery.headers, self._clock())
+        # The installation is the system's own id: the tenant is the one that
+        # connected it, never one the delivery names.
+        tenant = await self._intake.tenant_of(rctx, name, provided.installation)
         try:
-            org_id, event = event_of(name, Provenance(integration.provenance), provided)
+            org_id, event = event_of(name, Provenance(integration.provenance), provided, tenant)
         except ValidationFailed as refused:
             raise DeliveryRefused(refused.message) from None
         # The shape the worker's feedback consumer reads: the org, and the event.

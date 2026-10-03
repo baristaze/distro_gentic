@@ -5,6 +5,9 @@ from datetime import timedelta
 
 from acme.infra.root import InfraInterface
 from acme.integrations.root import IntegrationsInterface
+from acme.om.automations import AutomationsManagerInterface
+from acme.om.intake import IntakeManagerInterface
+from acme.om.notifications import NotificationsManagerInterface
 from acme.om.root import Managers
 from acme.om.trust import TrustOperatorManagerInterface
 from acme.om.watch import WatchManagerInterface
@@ -23,18 +26,26 @@ from acme.services.api.services import (
     WatchServiceInterface,
     WebhooksServiceInterface,
 )
+from acme.services.api.services.automations import AutomationsServiceInterface
+from acme.services.api.services.budgets import BudgetsServiceInterface
 from acme.services.api.services.impl.admin import AdminServiceImpl
 from acme.services.api.services.impl.agent_sessions import AgentSessionsServiceImpl
+from acme.services.api.services.impl.automations import AutomationsServiceImpl
+from acme.services.api.services.impl.budgets import BudgetsServiceImpl
 from acme.services.api.services.impl.events import EventsServiceImpl
 from acme.services.api.services.impl.fleet import FleetServiceImpl
 from acme.services.api.services.impl.hosts import HostsServiceImpl
+from acme.services.api.services.impl.intake import IntakeServiceImpl
 from acme.services.api.services.impl.media import MediaServiceImpl
+from acme.services.api.services.impl.notifications import NotificationsServiceImpl
 from acme.services.api.services.impl.realtime import RealtimeServiceImpl
 from acme.services.api.services.impl.relay import RelayServiceImpl
 from acme.services.api.services.impl.stations import StationsServiceImpl
 from acme.services.api.services.impl.tenancy import TenancyServiceImpl
 from acme.services.api.services.impl.watch import WatchServiceImpl
 from acme.services.api.services.impl.webhooks import WebhooksServiceImpl
+from acme.services.api.services.intake import IntakeServiceInterface
+from acme.services.api.services.notifications import NotificationsServiceInterface
 
 
 class ServicesImpl(ServicesInterface):
@@ -51,6 +62,10 @@ class ServicesImpl(ServicesInterface):
         fleet: FleetServiceInterface,
         relay: RelayServiceInterface,
         stations: StationsServiceInterface,
+        intake: IntakeServiceInterface,
+        budgets: BudgetsServiceInterface,
+        automations: AutomationsServiceInterface,
+        notifications: NotificationsServiceInterface,
         watch: WatchServiceInterface,
     ) -> None:
         self._tenancy = tenancy
@@ -64,6 +79,10 @@ class ServicesImpl(ServicesInterface):
         self._fleet = fleet
         self._relay = relay
         self._stations = stations
+        self._intake = intake
+        self._budgets = budgets
+        self._automations = automations
+        self._notifications = notifications
         self._watch = watch
 
     def get_tenancy_service(self) -> TenancyServiceInterface:
@@ -99,6 +118,18 @@ class ServicesImpl(ServicesInterface):
     def get_stations_service(self) -> StationsServiceInterface:
         return self._stations
 
+    def get_intake_service(self) -> IntakeServiceInterface:
+        return self._intake
+
+    def get_budgets_service(self) -> BudgetsServiceInterface:
+        return self._budgets
+
+    def get_automations_service(self) -> AutomationsServiceInterface:
+        return self._automations
+
+    def get_notifications_service(self) -> NotificationsServiceInterface:
+        return self._notifications
+
     def get_watch_service(self) -> WatchServiceInterface:
         return self._watch
 
@@ -112,6 +143,9 @@ def build_services(
     trust_operator: TrustOperatorManagerInterface,
     *,
     project_required: bool,
+    intake: IntakeManagerInterface,
+    automations: AutomationsManagerInterface,
+    notifications: NotificationsManagerInterface,
 ) -> ServicesInterface:
     """In-process impls only: a Python caller outside the process reaches the
     same services through the typed client under `clients/python`."""
@@ -124,7 +158,10 @@ def build_services(
             managers.tenancy, managers.events, infra.get_topics(), head_max_age
         ),
         webhooks=WebhooksServiceImpl(
-            integrations.get_identity_provider(), infra.get_queues(), integrations.get_integration
+            integrations.get_identity_provider(),
+            infra.get_queues(),
+            integrations.get_integration,
+            intake,
         ),
         agent_sessions=AgentSessionsServiceImpl(
             managers.agent_sessions,
@@ -138,5 +175,9 @@ def build_services(
         fleet=FleetServiceImpl(managers.placement_operator, trust_operator),
         relay=RelayServiceImpl(managers.relay, infra.get_topics()),
         stations=StationsServiceImpl(managers.stations),
+        intake=IntakeServiceImpl(intake),
+        budgets=BudgetsServiceImpl(managers.budgets),
+        automations=AutomationsServiceImpl(automations),
+        notifications=NotificationsServiceImpl(notifications),
         watch=WatchServiceImpl(watch),
     )

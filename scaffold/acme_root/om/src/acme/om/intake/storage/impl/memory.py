@@ -2,16 +2,44 @@ from collections.abc import Sequence
 from uuid import UUID
 
 from acme.om.intake.storage import IntakeStorageInterface
-from acme.om.intake.types.link import AccountLink, HandleKind, PlatformAct, WorkBinding
+from acme.om.intake.types.link import (
+    AccountLink,
+    HandleKind,
+    Installation,
+    PlatformAct,
+    WorkBinding,
+)
 from acme.om.storage.impl.memory_base import MemoryStorageBase, MemoryTable
 
 
 class IntakeStorageMemoryImpl(MemoryStorageBase, IntakeStorageInterface):
     def __init__(self) -> None:
         super().__init__()
+        self._installations: MemoryTable[Installation] = {}
         self._links: MemoryTable[AccountLink] = {}
         self._bindings: MemoryTable[WorkBinding] = {}
         self._acts: MemoryTable[PlatformAct] = {}
+
+    async def create_installation(
+        self, org_id: UUID, installation: Installation
+    ) -> Installation | None:
+        async with self._lock:
+            # One tenant an installation: the unique index the table holds
+            # spans every tenant.
+            for org, held in self._installations.values():
+                if (held.integration, held.installation) == (
+                    installation.integration,
+                    installation.installation,
+                ):
+                    return held if org == org_id else None
+            self._put(self._installations, org_id, installation)
+            return installation
+
+    async def read_installation_org(self, integration: str, installation: str) -> UUID | None:
+        for org, held in self._installations.values():
+            if (held.integration, held.installation) == (integration, installation):
+                return org
+        return None
 
     async def create_link(self, org_id: UUID, link: AccountLink) -> AccountLink:
         async with self._lock:
@@ -87,13 +115,14 @@ class IntakeStorageMemoryImpl(MemoryStorageBase, IntakeStorageInterface):
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:
         async with self._lock:
             return (
-                _drop(self._links, org_id, limit)
+                _drop(self._installations, org_id, limit)
+                + _drop(self._links, org_id, limit)
                 + _drop(self._bindings, org_id, limit)
                 + _drop(self._acts, org_id, limit)
             )
 
 
-def _drop[E: AccountLink | WorkBinding | PlatformAct](
+def _drop[E: Installation | AccountLink | WorkBinding | PlatformAct](
     table: MemoryTable[E], org_id: UUID, limit: int
 ) -> int:
     ids = [row.id for org, row in table.values() if org == org_id][:limit]

@@ -15,6 +15,7 @@ from acme.om.base import Platform, utcnow
 from acme.om.billing.rules import ANOMALY_UNLOCK, FUNDS_UNLOCK
 from acme.om.context import Permission, TenantContext
 from acme.om.evidence.types.provenance import Provenance
+from acme.om.exceptions import NotFound
 from acme.om.intake import IntakeManagerInterface
 from acme.om.notifications.manager import NotificationsManagerInterface
 from acme.om.notifications.rules import (
@@ -23,6 +24,7 @@ from acme.om.notifications.rules import (
     SETS_BUDGETS,
     answer_link,
     as_budget,
+    budget_link,
     decision_link,
     held_calls,
     holding,
@@ -96,6 +98,17 @@ class NotificationsManagerImpl(NotificationsManagerInterface):
         bounded = max(1, min(limit, self._options.max_page))
         return tuple(await self._storage.read_notifications(ctx.org_id, ctx.user_id, bounded))
 
+    async def mark_read(self, ctx: TenantContext, notification_id: UUID) -> Notification:
+        # A person's own list: marking it read changes nothing of the
+        # tenant's, so reading is all it asks.
+        ctx.require(Permission.READ)
+        marked = await self._storage.mark_read(
+            ctx.org_id, ctx.user_id, notification_id, self._clock()
+        )
+        if marked is None:
+            raise NotFound(f"notification {notification_id} not found")
+        return marked
+
     async def purge_tenant(self, ctx: TenantContext) -> int:
         ctx.require(Permission.WRITE)
         if not await self._tenancy.tenant_expired(ctx):
@@ -134,7 +147,7 @@ class NotificationsManagerImpl(NotificationsManagerInterface):
             return [
                 Ask(
                     action="raise_budget",
-                    link=NO_ROUTE,
+                    link=budget_link(budget),
                     text=f"{title} waits for a raise of budget {budget}.",
                     recipients=holding_permission(members, SETS_BUDGETS),
                 )

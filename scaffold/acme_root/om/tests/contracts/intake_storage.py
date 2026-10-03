@@ -1,5 +1,5 @@
-"""The intake storage contract: a tenant's account links and its sessions'
-work bindings. The cases named in `CROSS_TENANT_CASES` are the tenant
+"""The intake storage contract: the installations a tenant connected, its
+account links, and its sessions' work bindings. The cases named in `CROSS_TENANT_CASES` are the tenant
 fence's evidence: each one presents another tenant's identifier and
 asserts that nothing is found and nothing changes."""
 
@@ -8,10 +8,17 @@ from uuid import UUID
 
 from acme.om.base import new_id, utcnow
 from acme.om.intake.storage import IntakeStorageInterface
-from acme.om.intake.types.link import AccountLink, HandleKind, PlatformAct, WorkBinding
+from acme.om.intake.types.link import (
+    AccountLink,
+    HandleKind,
+    Installation,
+    PlatformAct,
+    WorkBinding,
+)
 
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
+        "create_installation",
         "create_link",
         "read_link",
         "read_user_links",
@@ -25,6 +32,16 @@ CROSS_TENANT_CASES: frozenset[str] = frozenset(
 )
 """Every method of `IntakeStorageInterface` that takes a tenant has a case in
 this module that presents another tenant's."""
+
+
+def make_installation(installation: str = "71001") -> Installation:
+    return Installation(
+        id=new_id(),
+        created_at=utcnow(),
+        integration="forge",
+        installation=installation,
+        created_by=new_id(),
+    )
 
 
 def make_link(external_id: str = "U024BE7LH", user_id: UUID | None = None) -> AccountLink:
@@ -166,15 +183,38 @@ class IntakeStorageContract:
         await storage.create_binding(new_id(), binding)
         assert await storage.read_binding(new_id(), HandleKind.PULL_REQUEST, binding.handle) is None
 
+    async def test_create_installation_another_tenant_holds_connects_nothing(
+        self, storage: IntakeStorageInterface
+    ) -> None:
+        org_a, org_b = new_id(), new_id()
+        mine = make_installation()
+        assert await storage.create_installation(org_a, mine) == mine
+        assert await storage.create_installation(org_b, make_installation()) is None
+        assert await storage.create_installation(org_a, make_installation()) == mine
+        assert await storage.read_installation_org("forge", mine.installation) == org_a
+
+    async def test_read_installation_org_reads_every_tenants_and_names_one(
+        self, storage: IntakeStorageInterface
+    ) -> None:
+        org_a, org_b = new_id(), new_id()
+        await storage.create_installation(org_a, make_installation("71001"))
+        await storage.create_installation(org_b, make_installation("72002"))
+        assert await storage.read_installation_org("forge", "71001") == org_a
+        assert await storage.read_installation_org("forge", "72002") == org_b
+        assert await storage.read_installation_org("chat", "71001") is None
+        assert await storage.read_installation_org("forge", "79999") is None
+
     async def test_purge_tenant_takes_its_rows_and_no_other_tenants(
         self, storage: IntakeStorageInterface
     ) -> None:
         org_a, org_b = new_id(), new_id()
+        await storage.create_installation(org_a, make_installation())
         await storage.create_link(org_a, make_link())
         await storage.create_binding(org_a, make_binding())
         await storage.record_act(org_a, make_act())
         kept = make_link()
         await storage.create_link(org_b, kept)
-        assert await storage.purge_tenant(org_a, 10) == 3
+        assert await storage.purge_tenant(org_a, 10) == 4
         assert await storage.purge_tenant(org_a, 10) == 0
+        assert await storage.read_installation_org("forge", "71001") is None
         assert await storage.read_link(org_b, "chat", kept.external_id) == kept

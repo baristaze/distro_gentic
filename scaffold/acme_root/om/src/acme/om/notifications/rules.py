@@ -15,8 +15,10 @@ take it:
   session; its requester, or, when they hold no place now, the members
   who manage the tenant.
 
-A link names a route the API serves. An action no route serves yet
-carries none, and its text names the park instead.
+A link names a route the API serves: a call's decision, the session's
+controls, and a budget's amount. An action no route serves yet (topping
+up, approving a call past its norm) carries none, and its text names the
+park instead.
 
 A park on a price waits for the platform's operator, whom no tenant's
 member stands in for, and tells nobody here."""
@@ -92,10 +94,14 @@ def answer_link(session_id: UUID) -> str:
     return f"/v1/agent-sessions/{session_id}/controls"
 
 
+def budget_link(budget_id: UUID) -> str:
+    return f"/v1/budgets/{budget_id}/amount"
+
+
 NO_ROUTE = ""
-"""The link of an action no route of the API serves yet: raising a budget,
-topping up the account, and approving a call past its norm. Each such ask
-names its park in its text; it takes a link when its route comes."""
+"""The link of an action no route of the API serves yet: topping up the
+account, and approving a call past its norm. Each such ask names its park
+in its text; it takes a link when its route comes."""
 
 
 def parked_step(history: Sequence[Step], park: Park) -> Step | None:

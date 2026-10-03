@@ -142,9 +142,11 @@ async def test_a_budget_park_tells_who_sets_budgets(platform: Wired) -> None:
     notified = await platform.notifications.notify_park(platform.service, run)
     owner, admin = found[Role.OWNER].user_id, found[Role.ADMIN].user_id
     assert told(notified) == {(owner, PORTAL), (admin, PORTAL), (admin, "chat")}
-    # No route raises a budget yet: the notification names the budget.
-    assert {(n.action, n.link) for n in notified} == {("raise_budget", "")}
+    # The link is the budget's amount, and the text names the budget.
+    link = f"/v1/budgets/{budget.id}/amount"
+    assert {(n.action, n.link) for n in notified} == {("raise_budget", link)}
     assert all(str(budget.id) in n.text for n in notified)
+    assert routed(notified)
 
 
 async def test_a_park_on_a_person_tells_its_requester_alone(platform: Wired) -> None:
@@ -210,7 +212,7 @@ async def test_every_link_a_notification_carries_is_a_route_of_the_api(
         "raise_budget",
     }
     assert routed(notified)
-    assert {n.action for n in notified if not n.link} == {"approve_call", "top_up", "raise_budget"}
+    assert {n.action for n in notified if not n.link} == {"approve_call", "top_up"}
 
 
 async def test_a_park_that_clears_by_itself_tells_nobody(platform: Wired) -> None:

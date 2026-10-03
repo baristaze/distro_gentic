@@ -22,7 +22,9 @@ from acme.om.base import new_id
 from acme.om.billing.root import build_money_gate, refuse_open_money
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
 from acme.om.hosts.impl.placement import PlacementHostsImpl
+from acme.om.intake import IntakeManagerInterface
 from acme.om.intake.root import build_intake
+from acme.om.intake.tools import CommentImpl
 from acme.om.knowledge.root import KnowledgeLayer
 from acme.om.matrix.impl.resolver import MatrixOptions
 from acme.om.matrix.root import MatrixLayer
@@ -60,9 +62,13 @@ class RunnerContainer:
         self.infra = infra
         self.integrations = integrations
         self.managers = managers
-        # Whoever can clear a park its runs wrote is told, on their channels.
+        # Where a session's acts through the platform's account are recorded;
+        # whoever can clear a park its runs wrote is told, on their channels.
+        self.intake: IntakeManagerInterface = build_intake(
+            storage, managers, integrations=integrations
+        )
         self.notifications: NotificationsManagerInterface = build_notifications(
-            storage, managers, integrations, build_intake(storage, managers)
+            storage, managers, integrations, self.intake
         )
 
     @classmethod
@@ -165,6 +171,10 @@ class RunnerContainer:
 
         app = AppContext(type=AppType.WORKER, version=f"{settings.service_name}@{settings.version}")
         built: list[Managers] = []
+        held: list[RunnerContainer] = []
+        # The tools through which a session acts as the platform's account
+        # record each act with intake, which the container builds below.
+        acts = (CommentImpl(lambda: held[0].intake, integrations.get_integration),)
 
         def stage() -> RequestContext:
             """The request stage each relayed operation runs under, minted
@@ -183,7 +193,7 @@ class RunnerContainer:
             integrations=integrations,
             environment=settings.environment,
             agent_kinds=agent_kinds,
-            tool_catalog=tool_catalog,
+            tool_catalog=(*tool_catalog, *acts),
             domain_classes=domain_classes,
             platform_agents=platform_agents,
             budget_gate=ports.budget_gate or build_money_gate(storage),
@@ -205,7 +215,9 @@ class RunnerContainer:
         matrix.build(managers)
         playbooks.build(managers)
         knowledge.build(managers)
-        return cls(settings, storage, infra, integrations, managers)
+        container = cls(settings, storage, infra, integrations, managers)
+        held.append(container)
+        return container
 
     async def start(self) -> None:
         await self.infra.start()

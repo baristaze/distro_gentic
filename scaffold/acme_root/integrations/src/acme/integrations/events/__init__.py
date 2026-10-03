@@ -4,7 +4,10 @@ pushes, and tickets, a chat's messages. One interface for each, a real
 client or a twin, and a caller never knows which it holds.
 
 An integration checks the signature of each delivery its system sends and
-reads it into the platform's terms (`ProvidedEvent`). What served it is the
+reads it into the platform's terms (`ProvidedEvent`). It also checks the
+grant its system hands a person who installs the platform there, and
+answers the installation the grant names: the system's word for which
+installation a tenant connects, never the person's. What served it is the
 integration's own word (`provenance`), never the delivery's: a twin's
 event is a twin's whatever its body says. Nothing here imports the object
 model; the ingress maps an event into the router's shape."""
@@ -39,8 +42,9 @@ def delivery_key(integration: str, delivery_id: str) -> uuid.UUID:
 
 class ProvidedEvent(BaseModel):
     """One delivery, read: its key and the integration's id for it; the
-    installation it came through, which names the tenant; and the event in
-    the platform's terms, which the router validates."""
+    installation it came through, the system's own id, which the tenant
+    that connected it is found by; and the event in the platform's terms,
+    which the router validates."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -62,7 +66,8 @@ class ProvidedEvent(BaseModel):
 
 class PostedMessage(BaseModel):
     """A message the platform posted to an address of the integration, as the
-    integration recorded it, with what served it."""
+    integration recorded it, with what served it, and the mark it carries
+    when the platform named the act."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -71,6 +76,7 @@ class PostedMessage(BaseModel):
     text: str
     provenance: Provenance
     posted_at: datetime
+    mark: str | None = None
 
 
 class IntegrationInterface(ABC):
@@ -98,9 +104,23 @@ class IntegrationInterface(ABC):
         ...
 
     @abstractmethod
-    async def post(self, address: str, text: str) -> PostedMessage:
+    async def verify_installation(self, grant: str, now: datetime) -> str:
+        """The installation a grant names, once the system confirms it at
+        `now`: the grant the system hands the person who installed the
+        platform there. The system's scheme confirms it: its signature over
+        the grant, or a call to the system when the grant is a code or an
+        unsigned id, and never the id alone. `DeliveryRefused` when the grant
+        fails, naming what failed and never the secret; `ProviderUnavailable`
+        when the system cannot be asked."""
+        ...
+
+    @abstractmethod
+    async def post(self, address: str, text: str, mark: str | None = None) -> PostedMessage:
         """Posts `text` to an address of the integration, such as a person's
-        chat account; `ProviderUnavailable` when it cannot."""
+        chat account or a pull request; `ProviderUnavailable` when it cannot.
+        `mark` is the platform's name for the act: the system carries it on
+        what it makes, so every delivery of or after it names it among its
+        refs."""
         ...
 
     @abstractmethod
@@ -135,7 +155,10 @@ class IntegrationAbsentImpl(IntegrationInterface):
     ) -> ProvidedEvent:
         raise ProviderUnavailable(f"no {self._name} integration is configured")
 
-    async def post(self, address: str, text: str) -> PostedMessage:
+    async def verify_installation(self, grant: str, now: datetime) -> str:
+        raise ProviderUnavailable(f"no {self._name} integration is configured")
+
+    async def post(self, address: str, text: str, mark: str | None = None) -> PostedMessage:
         raise ProviderUnavailable(f"no {self._name} integration is configured")
 
     def describe(self) -> str:
