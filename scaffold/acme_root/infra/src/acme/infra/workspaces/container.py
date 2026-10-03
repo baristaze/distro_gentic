@@ -30,13 +30,24 @@ ORG_LABEL = "acme.org"
 SPEC_LABEL = "acme.spec"
 """The label that names the spec a container was started to."""
 
+DEPLOYMENT_LABEL = "acme.deployment"
+"""The label that names the deployment that started a container, and made
+its volume: a provider holds only its own deployment's, so two deployments
+on one Docker never let go of each other's."""
+
 HELD_AS = '{{.Names}} {{.Label "' + WORKSPACE_LABEL + '"}} {{.Label "' + ORG_LABEL + '"}}'
 """What a listing answers of each running container: its name, and the
 workspace and the tenant its labels name."""
 
-STARTED_TO = '{{.State.Running}} {{index .Config.Labels "' + SPEC_LABEL + '"}}'
-"""What an inspect answers of a container: whether it runs, and the spec it
-was started to."""
+STARTED_TO = (
+    '{{.State.Running}} {{index .Config.Labels "'
+    + SPEC_LABEL
+    + '"}} {{index .Config.Labels "'
+    + DEPLOYMENT_LABEL
+    + '"}}'
+)
+"""What an inspect answers of a container: whether it runs, the spec it was
+started to, and the deployment that started it."""
 
 
 def container_name(workspace_id: UUID) -> str:
@@ -60,13 +71,18 @@ class WorkspaceContainerImpl(WorkspaceProviderInterface):
     refused; so is every spec when Docker cannot be reached. There is no
     weaker place to fall back to.
 
+    Every container and volume it makes carries its deployment's label, and
+    it holds only those that carry it: a running container without it is
+    replaced at its next prepare, its files kept.
+
     The container drops every capability, takes no new privileges, and
     keeps nothing of the engine's environment: its variables are the
     image's."""
 
-    def __init__(self, image: str, timeout: timedelta) -> None:
+    def __init__(self, image: str, timeout: timedelta, deployment: str) -> None:
         self._image = image
         self._timeout = timeout
+        self._deployment = deployment
 
     async def prepare(self, org_id: UUID, workspace_id: UUID, spec: IsolationSpec) -> Workspace:
         why = refusal(
@@ -84,12 +100,14 @@ class WorkspaceContainerImpl(WorkspaceProviderInterface):
         workspace = Workspace(id=workspace_id, org_id=org_id, spec=spec, location=name)
         running = await docker("inspect", "--format", STARTED_TO, name, bound=self._timeout)
         printed = spec_print(spec)
-        if running.ok and running.stdout.split() == [b"true", printed.encode()]:
+        started_to = [b"true", printed.encode(), self._deployment.encode()]
+        if running.ok and running.stdout.split() == started_to:
             return workspace
         if running.ok:
             # A container left stopped, or started to another spec, such as
-            # one tightened since: its instance goes, its files stay, and
-            # the container that replaces it holds this spec.
+            # one tightened since, or without this deployment's label: its
+            # instance goes, its files stay, and the container that
+            # replaces it holds this spec and carries the label.
             removed = await docker("rm", "-f", name, bound=self._timeout)
             if not removed.ok:
                 raise BackendFailed("docker", "rm", removed.reason())
@@ -98,6 +116,8 @@ class WorkspaceContainerImpl(WorkspaceProviderInterface):
             f"{WORKSPACE_LABEL}={workspace_id}",
             "--label",
             f"{ORG_LABEL}={org_id}",
+            "--label",
+            f"{DEPLOYMENT_LABEL}={self._deployment}",
         )
         made = await docker("volume", "create", *labels, name, bound=self._timeout)
         if not made.ok:
@@ -142,10 +162,18 @@ class WorkspaceContainerImpl(WorkspaceProviderInterface):
 
     async def held(self) -> list[HeldInstance]:
         """The running containers this provider started: labelled with a
-        workspace and a tenant, and named for that workspace. A stopped one
-        holds nothing that runs, and its next prepare replaces it."""
+        workspace, a tenant, and this deployment, and named for that
+        workspace. A stopped one holds nothing that runs, and its next
+        prepare replaces it."""
         listed = await docker(
-            "ps", "--filter", f"label={WORKSPACE_LABEL}", "--format", HELD_AS, bound=self._timeout
+            "ps",
+            "--filter",
+            f"label={WORKSPACE_LABEL}",
+            "--filter",
+            f"label={DEPLOYMENT_LABEL}={self._deployment}",
+            "--format",
+            HELD_AS,
+            bound=self._timeout,
         )
         if not listed.ok:
             raise BackendFailed("docker", "ps", listed.reason())
@@ -153,7 +181,7 @@ class WorkspaceContainerImpl(WorkspaceProviderInterface):
         return [instance for instance in found if instance is not None]
 
     def describe(self) -> str:
-        return f"workspaces=container({self._image})"
+        return f"workspaces=container({self._image}, {self._deployment})"
 
     async def start(self) -> None:
         return None
