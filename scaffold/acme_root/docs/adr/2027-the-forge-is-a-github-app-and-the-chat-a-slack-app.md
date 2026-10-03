@@ -69,7 +69,7 @@ rename can free.
   Slack is marked `live` and runs by hand.
 - The ingress's answer carries a `challenge` when a system asks one.
 - The chat posts with one bot token, so it reaches the workspace that
-  token was made in.
+  token was made in, and a grant from any other workspace is refused.
 - A write reaches only a repository an installation the writing tenant
   connected holds. The client writes through the installation it is
   named; the platform finds the tenant, where a project binds a

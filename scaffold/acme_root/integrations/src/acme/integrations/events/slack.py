@@ -4,9 +4,11 @@ The client posts with the app's bot token, the platform's one account in
 the workspace it was made in, and checks each delivery with the app's
 signing secret (`slack_wire.py`). A tenant connects a workspace with the
 code Slack hands the person who installed the app there: the code is
-traded at Slack, and the workspace counts only when Slack names it. What
-the trade answers besides the workspace, a token among it, is used for
-nothing and kept nowhere (ADR 2020).
+traded at Slack, and the workspace counts only when Slack names it and it
+is the bot token's own, which Slack names once (`auth.test`): the client
+posts with that token alone, so a workspace it cannot reach is refused.
+What the trade answers besides the workspace, a token among it, is used
+for nothing and kept nowhere (ADR 2020).
 
 Slack answers most refusals with `200` and `ok: false`: an error that
 says the key is refused is unavailable, any other is refused."""
@@ -66,6 +68,7 @@ class SlackImpl(IntegrationInterface):
         self._client_secret = client_secret
         self._account = account
         self._api = api_url.rstrip("/")
+        self._team: str | None = None
 
     @property
     def name(self) -> str:
@@ -109,7 +112,22 @@ class SlackImpl(IntegrationInterface):
         workspace = team.get("id") if isinstance(team, dict) else None
         if not isinstance(workspace, str) or not workspace:
             raise DeliveryRefused("the chat named no workspace for the grant")
+        reached = await self._bot_team()
+        if workspace != reached:
+            raise DeliveryRefused(
+                f"workspace {workspace} is not {reached}, the one workspace the platform's "
+                "bot token posts to"
+            )
         return workspace
+
+    async def _bot_team(self) -> str:
+        """The workspace the bot token reaches, as Slack names it, asked once."""
+        if self._team is None:
+            team = (await self._call("auth.test", bearer=self._bot_token)).get("team_id")
+            if not isinstance(team, str) or not team:
+                raise ProviderUnavailable("the chat named no workspace for the bot token")
+            self._team = team
+        return self._team
 
     async def installation_of(self, target: str) -> str:
         raise ProviderRefused("the chat holds no repository")

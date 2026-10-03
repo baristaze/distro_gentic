@@ -125,12 +125,20 @@ def test_a_delivery_that_does_not_check_out_is_refused(tamper: str) -> None:
     assert SECRET not in str(refused.value)
 
 
-def oauth(ok: bool = True) -> Handler:
+def oauth(ok: bool = True, team: str = "T0TEAM001") -> Handler:
+    """Slack's side of a grant: the code traded for the workspace `team`,
+    and the bot token's own workspace, T0TEAM001."""
+
     def handle(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/auth.test":
+            assert request.headers["authorization"] == f"Bearer {BOT_TOKEN}"
+            return httpx.Response(200, content=recorded("auth_test"))
         assert request.url.path == "/api/oauth.v2.access"
         if not ok:
             return httpx.Response(200, json={"ok": False, "error": "invalid_code"})
-        return httpx.Response(200, content=recorded("oauth_access"))
+        answer = json.loads(recorded("oauth_access"))
+        answer["team"]["id"] = team
+        return httpx.Response(200, json=answer)
 
     return handle
 
@@ -144,6 +152,13 @@ async def test_a_grant_names_its_workspace_once_slack_confirms_the_code(
     # The workspace's token the trade answers is kept nowhere and shown nowhere.
     kept = json.loads(recorded("oauth_access"))["access_token"]
     assert kept not in repr(vars(client)) and kept not in caplog.text
+
+
+async def test_a_grant_from_a_workspace_the_bot_token_does_not_reach_is_refused() -> None:
+    client = chat(oauth(team="T0OTHER02"))
+    with pytest.raises(DeliveryRefused, match="T0OTHER02 is not T0TEAM001"):
+        await client.verify_installation("a-code", NOW)
+    assert await chat(oauth()).verify_installation("a-code", NOW) == "T0TEAM001"
 
 
 @pytest.mark.parametrize("grant", ["a-code", ""])
