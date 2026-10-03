@@ -72,8 +72,7 @@ of](../../../../README.md).
   reaches a customer's host. A secret held inside the wall never crosses
   into the cloud. A secret never declared is a cloud secret.
 - **A project's secret reaches its own sessions alone.** A session reads
-  a name as its project declares it, else as the tenant does, on no
-  project, and never as another project does.
+  a name as its project declares it, and never as another project does.
 - **A rotated key is never served,** and neither is a refused one.
 - **The tenant sees its key, never its value.**
 - **`read` never opens content**, and neither does `write`. Only a

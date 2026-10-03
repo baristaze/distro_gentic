@@ -54,6 +54,7 @@ from acme.om.evidence.rules import PROTECTED_CEILING
 from acme.om.exceptions import Unavailable, UnsafeConfiguration
 from acme.om.hosts import HostsManagerInterface
 from acme.om.hosts.impl.manager import HostsManagerImpl, HostsOptions
+from acme.om.hosts.impl.placement import inside_wall
 from acme.om.idempotency import IdempotencyManagerInterface
 from acme.om.idempotency.impl.manager import IdempotencyManagerImpl, IdempotencyOptions
 from acme.om.intake import IntakeManagerInterface
@@ -141,6 +142,7 @@ from acme.om.work.impl.operator import WorkOperatorManagerImpl
 from acme.om.workspaces import WorkspacesManagerInterface
 from acme.om.workspaces import rules as workspace_rules
 from acme.om.workspaces.git import RepositoryReaderInterface, WorkspaceGitInterface
+from acme.om.workspaces.impl.executor import ExecutorWorkspacesImpl
 from acme.om.workspaces.impl.forge import SourceControlAbsentImpl, SourceControlForgeImpl
 from acme.om.workspaces.impl.git import GitOptions, WorkspaceGitTransportImpl
 from acme.om.workspaces.impl.manager import WorkspacesManagerImpl, WorkspacesOptions
@@ -196,8 +198,8 @@ class Managers:
 class PlatformPorts:
     """The platform's ports a product hands each of its roots, each None for
     the platform's own: billing's money gate as the budget gate, the
-    evidence's result gate over the work product, the loud null executor,
-    the workspaces' work product, and the projects' rows for a session's
+    evidence's result gate over the work product, the platform's executor
+    (the loud null in `local`), the workspaces' work product, and the projects' rows for a session's
     project, which its workspace binds and its retention narrows by.
     Outside `local`, a root refuses a quiet null for any of them."""
 
@@ -429,8 +431,9 @@ def build_managers(
     The evidence takes the platform's two ports: `executor`, the fresh
     executor validation runs on, and `work_product`, which reads what a
     session delivered, and which the result gate reads too. None wires the
-    loud null executor, which refuses every validation, and the workspaces'
-    work product, the session's branch as its repository holds it, with the
+    platform's executor, a fresh instance of the cloud's for each run, or in
+    `local` the loud null, which refuses every validation; and the
+    workspaces' work product, the session's branch as its repository holds it, with the
     workspace this process holds for the session telling what was not
     delivered; one it does not hold, or one of no bound repository, is
     refused, so no success counts on a guess. Whatever
@@ -813,7 +816,21 @@ def build_managers(
         else PlacedWorkspacesRelayedImpl(lambda: managers.relay, lambda: managers.hosts),
     )
     # What makes a result: the runs, the policies, and validation on the
-    # executor, apart from every agent's workspace.
+    # executor, apart from every agent's workspace. Outside `local`, it is
+    # the platform's own: an instance of the cloud's made for each run, on
+    # the provider and the transport infra chose, never the relay's.
+    if executor is None and environment != LOCAL:
+        executor = ExecutorWorkspacesImpl(
+            infra.get_workspaces(),
+            transport,
+            workspaces.checks_tree,
+            lambda org_id, session_id: inside_wall(
+                storage.get_hosts_storage(),
+                storage.get_agent_session_storage(),
+                org_id,
+                session_id,
+            ),
+        )
     evidence = EvidenceManagerImpl(
         storage.get_evidence_storage(),
         tenancy,
@@ -852,11 +869,12 @@ def build_managers(
         outbox,
         hosts_options or HostsOptions(),
     )
-    # The validation sessions: station work on the queue, with no agent.
+    # The validation sessions: platform work on the queue, with no agent.
     platform = PlatformAgentsManagerImpl(
         storage.get_platform_agents_storage(),
         tenancy,
         outbox,
+        evidence,
         platform_agents_options or PlatformAgentsOptions(),
     )
     # The projects start a root session through the agents, under a project

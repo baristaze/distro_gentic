@@ -159,7 +159,7 @@ class WorkStorageInterface(ABC):
         self, org_id: UUID, lanes: Sequence[str], now: datetime
     ) -> dict[tuple[str, WorkKind], int]:
         """The tenant's queued items ready at `now` on each of `lanes`, by lane
-        and kind: what a host or a daemon of the tenant would be handed."""
+        and kind: what a host of the tenant would be handed."""
         ...
 
     @abstractmethod

@@ -132,6 +132,9 @@ class ReaderTwin(RepositoryReaderInterface):
     brought: list[FetchCredential | None] = field(default_factory=lambda: [])
     """The credential each checkout's bundle was read with, in order."""
 
+    trees: dict[tuple[str, str], bytes] = field(default_factory=lambda: {})
+    """The tar a validation's tree reads, by its version and source."""
+
     async def delivered(
         self, binding: RepositoryBinding, branch: str, credential: FetchCredential | None = None
     ) -> Delivered:
@@ -143,3 +146,17 @@ class ReaderTwin(RepositoryReaderInterface):
     ) -> Incoming:
         self.brought.append(credential)
         return Incoming(bundle=b"the default branch", default_branch="main")
+
+    async def tree(
+        self,
+        binding: RepositoryBinding,
+        version: str,
+        source: str,
+        protected: tuple[str, ...],
+        credential: FetchCredential | None = None,
+    ) -> bytes:
+        self.credentials.append(credential)
+        found = self.trees.get((version, source))
+        if found is None:
+            raise Unavailable(f"the repository holds no {version}")
+        return found

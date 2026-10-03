@@ -1,7 +1,8 @@
 """The platform's agents over Postgres: the assistant answers from its
 corpus with a citation, a call it makes to a shell is refused, and its
-draft leaves the live policy as it was; a validation session's station
-work is claimed by its lab's daemon and finished with no model call."""
+draft leaves the live policy as it was; a validation session is the
+platform's own work, run on the executor and finished with its execution
+record, with no model call."""
 
 import json
 from collections.abc import AsyncIterator
@@ -9,17 +10,20 @@ from datetime import timedelta
 from pathlib import Path
 
 import pytest
+from contracts.evidence import ScriptedExecutor
+from contracts.evidence_storage import make_policy
 from contracts.loops import reply, said
 from contracts.platform_agents import calls, platform_over
 
 from acme.om.base import new_id
 from acme.om.context import AppContext, AppType, RequestContext
-from acme.om.placement.types.claimant import Claimant, ClaimantKind
+from acme.om.evidence.rules import policy_key
 from acme.om.platform_agents import kinds
 from acme.om.platform_agents.types.validation import ValidationStart, ValidationStatus
 from acme.om.steps.types.header import LoopOutcome, ToolFailure
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.settings import MigrationSettings
+from acme.om.work.types.work_item import WorkKind
 
 pytestmark = pytest.mark.integration
 
@@ -78,39 +82,41 @@ async def test_the_assistant_over_postgres_cites_its_corpus_and_reaches_no_shell
     assert (await platform.managers.tools.get_policy(platform.owner)).rules == ()
 
 
-async def test_a_validation_session_over_postgres_runs_with_no_model_call(
+async def test_a_validation_session_over_postgres_is_platform_work_with_no_model_call(
     storage: StoragePostgresImpl, tmp_path: Path
 ) -> None:
-    platform = platform_over(tmp_path, storage=storage)
+    executor = ScriptedExecutor(capabilities=frozenset())
+    platform = platform_over(tmp_path, storage=storage, executor=executor)
     slug = f"ajax-{new_id().hex[-8:]}"
     platform.owner, _ = await platform.managers.tenancy.bootstrap(
         RequestContext(request_id=new_id(), app=APP), "Ajax", slug, f"ann-{slug}@x.test", "Ann"
     )
+    project_id = new_id()
+    await platform.managers.evidence.write_policy(
+        platform.owner, make_policy(policy_key(project_id))
+    )
     validations = platform.managers.platform_agents
-    lab = new_id()
     start = ValidationStart(
-        id=new_id(), lab_id=lab, check_name="report.totals", check_version="v1.4.0"
+        id=new_id(), project_id=project_id, check_name="unit", head="c" * 40, base="b" * 40
     )
 
     session = await validations.start_validation(platform.owner, start)
 
-    daemon = Claimant(
-        kind=ClaimantKind.DAEMON, id=new_id(), org_id=platform.owner.org_id, lab_id=lab
-    )
-    claimed = await platform.managers.placement.claim_for(
-        RequestContext(request_id=new_id(), app=WORKER), daemon, timedelta(seconds=30)
+    claimed = await platform.managers.work.claim(
+        RequestContext(request_id=new_id(), app=WORKER),
+        "default",
+        (WorkKind.VALIDATION,),
+        "maintenance-1",
+        timedelta(seconds=30),
     )
     assert claimed is not None
     ctx, item = claimed
-    assert item.target_id == session.id and item.claimed_by == f"daemon:{daemon.id}"
-    run_id = new_id()
-    await validations.finish_validation(ctx, session.id, run_id)
+    assert (item.kind, item.target_id) == (WorkKind.VALIDATION, session.id)
+    finished = await validations.run_validation(ctx, session.id)
     await platform.managers.work.complete(ctx, item)
 
     stored = await validations.get_validation(platform.owner, session.id)
-    assert (stored.status, stored.run_id) == (ValidationStatus.FINISHED, run_id)
+    (record,) = (await platform.managers.evidence.get_runs(ctx, session.id, None, 10)).items
+    assert stored == finished
+    assert (stored.status, stored.run_id) == (ValidationStatus.FINISHED, record.id)
     assert platform.model_calls() == 0
-    claimant_again = await platform.managers.placement.claim_for(
-        RequestContext(request_id=new_id(), app=WORKER), daemon, timedelta(seconds=30)
-    )
-    assert claimant_again is None

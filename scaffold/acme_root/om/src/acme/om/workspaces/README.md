@@ -25,6 +25,9 @@ rebuilt from.
 - **A project's egress allowlist**, one per project: the destinations a
   workspace reaches and the methods each takes, or open egress, chosen
   on purpose and recorded with its reason and who chose it.
+- **A validation's instance**: one for each run of a delivery's checks,
+  under an id nobody used, made by the platform's executor and destroyed
+  when the run ends ([ADR 2024](../../../../../docs/adr/2024-a-validation-session-is-platform-work-on-the-fresh-executor.md)).
 - **The levels**, as the engine names them: a VM per session, a
   container per session, a directory on a host, and the twin, which
   plays the lifecycle for tests in `local` alone.
@@ -78,6 +81,14 @@ rebuilt from.
   control, which writes with the integration's own credential. It ends
   when its lifetime passes, when the loop's workspace is prepared again
   or released, or when a newer one is minted.
+- **Run a delivery's checks.** The platform's executor
+  (`impl/executor.py`) makes a container with no egress for the run. It
+  writes in the tree the platform read from the project's repository:
+  the delivered commit, with every protected path from the base, and no
+  credential and no history. It runs each check's template there, reads
+  back and hashes the results within their bound, and destroys the
+  instance whatever ended the run. A session inside its tenant's wall is
+  refused.
 - **Purge.** A tenant deleted past its retention loses its workspaces,
   its allowlists, and its fetch credentials, each value out of the store
   before its record.
@@ -131,6 +142,9 @@ rebuilt from.
   `local`, a repository on disk is read too. A gone branch's fate
   comes from `PullRequestsInterface`, whose null knows none, so a branch
   gone for any reason ends the loop.
+- Outside `local`, the evidence's executor is this namespace's: the root
+  builds it over infra's provider and transport, never the relay's, and
+  reads its tree through `checks_tree`.
 - What a host offers beyond its provider is a `HostOffer`, its owner's
   and its probe's. The default offers nothing more: a host of the
   platform's cloud.

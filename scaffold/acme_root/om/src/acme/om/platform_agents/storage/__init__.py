@@ -1,7 +1,7 @@
 """Storage of the platform's agents: its validation sessions. Every
 operation takes org_id first. A create lands with its outbox rows, the one
-that asks for its station work among them, in one commit, and a write
-after it is a compare-and-set on the version."""
+that asks for its work among them, in one commit, and a write after it is
+a compare-and-set on the version."""
 
 from abc import ABC, abstractmethod
 from uuid import UUID

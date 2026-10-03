@@ -1,7 +1,7 @@
 """The payloads of the work a session produces outside the cloud's
 runners: what each kind must name so its item goes to the lane where its
 environment is. The work queue fixes them per kind (`WORK_PAYLOADS`); the
-kinds that carry what a host or a daemon runs add their fields here."""
+kinds that carry what a host runs add their fields here."""
 
 from enum import StrEnum
 from typing import Literal
@@ -91,10 +91,3 @@ class WorkspacePayload(Platform):
         if preparing != (self.pool_id is not None) or preparing == (self.host_id is not None):
             raise ValueError("a prepare names its pool alone, and a release or a purge its host")
         return self
-
-
-class StationPayload(Platform):
-    """Work on a station, for the daemon of the lab that serves it. Its item
-    goes to that lab's lane."""
-
-    lab_id: UUID

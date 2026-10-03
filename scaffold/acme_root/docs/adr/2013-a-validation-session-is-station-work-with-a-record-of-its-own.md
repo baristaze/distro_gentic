@@ -1,6 +1,6 @@
 # ADR 2013: A validation session is station work with a record of its own
 
-**Status**: accepted (2026-10-02)
+**Status**: superseded by [ADR 2024](2024-a-validation-session-is-platform-work-on-the-fresh-executor.md) (2026-10-03)
 
 ## Context
 

@@ -1,7 +1,9 @@
-"""A validation session: one check run on a station with no agent at all.
-It is work on the same queue an agent's station work takes, and its run is
-the same execution record an agent's run is. The session holds what the
-daemon runs and where, and, once the run is recorded, which record it is."""
+"""A validation session: one check of a delivery run with no agent at all,
+on a fresh executor. It is work on the same queue an agent's work takes,
+and its run is the same execution record an agent's validation writes. The
+session holds which of its project's checks it runs, at which commit and
+from which protected source, and, once the run is recorded, which record
+it is."""
 
 from datetime import datetime
 from enum import StrEnum
@@ -10,28 +12,30 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from acme.om.base import FrozenMapping, Identifiable, Platform, Trackable
+from acme.om.base import Identifiable, Platform, Trackable
 
 CHECK = r"^[a-z][a-z0-9_.-]{0,99}$"
-"""A check's name."""
-CHECK_VERSION = r"^\S{1,200}$"
-"""A check's version: a commit, a tag, a digest. No whitespace."""
+"""A check's name, as its project's policy declares it."""
+COMMIT = r"^([0-9a-f]{40}|[0-9a-f]{64})$"
+"""A commit's full id: a check runs at a commit, never at a name that moves."""
 
 
 class ValidationStatus(StrEnum):
-    QUEUED = "queued"  # its station work waits on its lab's lane, or runs there
+    QUEUED = "queued"  # its work waits on the queue, or runs on the executor
     FINISHED = "finished"  # its run is recorded
 
 
 class ValidationStart(Platform):
-    """A check to run on a station of a lab. `id` is the caller's, so a
-    start asked again answers the session it made."""
+    """A check of a project's policy to run at `head`, the delivered commit,
+    with the checks, fixtures, and runner taken from `base`, where the work
+    started. `id` is the caller's, so a start asked again answers the
+    session it made."""
 
     id: UUID
-    lab_id: UUID
+    project_id: UUID
     check_name: str = Field(pattern=CHECK)
-    check_version: str = Field(pattern=CHECK_VERSION)
-    parameters: FrozenMapping = Field(default_factory=dict, validate_default=True)
+    head: str = Field(pattern=COMMIT)
+    base: str = Field(pattern=COMMIT)
 
 
 class ValidationSession(Identifiable, Trackable):
@@ -42,12 +46,12 @@ class ValidationSession(Identifiable, Trackable):
         "version",
     )
 
-    lab_id: UUID
+    project_id: UUID
     check_name: str = Field(pattern=CHECK)
-    check_version: str = Field(pattern=CHECK_VERSION)
-    parameters: FrozenMapping = Field(default_factory=dict, validate_default=True)
+    head: str = Field(pattern=COMMIT)
+    base: str = Field(pattern=COMMIT)
     status: ValidationStatus = ValidationStatus.QUEUED
-    # The execution record of its run, once the daemon's run is recorded.
+    # The execution record of its run, once the run is recorded.
     run_id: UUID | None = None
     finished_at: datetime | None = None
     # Every write after the create is a compare-and-set on it.
