@@ -46,7 +46,7 @@ rebuilt from.
   cannot give before its provider is reached, and the provider refuses
   what it cannot meet: either way the loop parks on `resource` and asks
   again after a wait, and no weaker workspace is made ([ADR
-  2005](../../../../../docs/adr/2005-a-workspace-no-host-can-give-parks-the-loop-and-a-lost-one-ends-it.md)).
+  2005](../../../../../docs/adr/2005-a-workspace-no-host-can-give-parks-the-loop-and-a-lost-one-waits-for-a-person.md)).
   Then the checkout is brought up to the session's branch on the
   repository its project binds, from a bundle the platform reads on its
   own host with the project's fetch credential; the checkout fetches
@@ -56,8 +56,9 @@ rebuilt from.
   default branch on the session's first loop. One the remote held and
   lost is rebuilt from the default branch only when its pull request was
   merged or closed, and the loop is told. One that moved on both sides,
-  or vanished for no known reason, ends the loop, loudly; nothing
-  restarts silently from the default branch. Before any cut, what the
+  or vanished for no known reason, parks the loop, loudly, for a person
+  to say what comes next; nothing restarts silently from the default
+  branch. Before any cut, what the
   checkout holds is pushed to a snapshot ref, or nothing is cut.
 - **Release.** Before an instance goes, what its checkout holds that the
   remote lacks is committed to a snapshot ref beside the session's
@@ -150,7 +151,7 @@ rebuilt from.
   redirect is followed. The root walls off what the options name; in
   `local`, a repository on disk is read too. A gone branch's fate
   comes from `PullRequestsInterface`, whose null knows none, so a branch
-  gone for any reason ends the loop.
+  gone for any reason parks the loop for a person.
 - Outside `local`, the evidence's executor is this namespace's: the root
   builds it over infra's provider and transport for a session of the
   cloud, and over the relay's instances (`PlacedInstancesInterface`, in

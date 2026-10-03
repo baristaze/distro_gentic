@@ -31,7 +31,7 @@ class LoopManagerInterface(ABC):
         the session's workspace before its first model call. A workspace no
         provider can meet the spec of parks the loop on `resource`, to ask
         again after the options' wait, and one whose durable state is gone
-        (`WorkspaceLost`) ends it `errored`, both before any call is made;
+        (`WorkspaceLost`) parks it for a person, both before any call is made;
         what changed under the model since its last loop is written as an
         `environment_changed` step before the call. It settles a lost run's
         open requests by their effect, then drives the loop until it ends,

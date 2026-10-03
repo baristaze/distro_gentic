@@ -47,11 +47,11 @@ class BranchPlan(StrEnum):
     """What a prepare does with the session's branch (`rules.branch_plan`)."""
 
     TRACK = "track"  # the remote holds it: the work goes on from it
-    DIVERGED = "diverged"  # it moved here and there both: the loop fails, loudly
+    DIVERGED = "diverged"  # it moved here and there both: the loop parks for a person
     KEEP = "keep"  # never pushed, and the checkout holds it: the work goes on
     CUT = "cut"  # never pushed, held nowhere: cut from the default branch
     REBUILD = "rebuild"  # gone after its pull request closed: cut again, and told
-    LOST = "lost"  # gone, and nothing says why: the loop fails, loudly
+    LOST = "lost"  # gone, and nothing says why: the loop parks for a person
 
 
 class Incoming(Platform):

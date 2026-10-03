@@ -64,8 +64,8 @@ class WorkspacesManagerInterface(ABC):
         what the loop is told of it in `changed`: the snapshot of every
         instance let go since a loop was last told, and a branch rebuilt
         after its pull request closed. A branch the remote held and lost with
-        no known fate is `WorkspaceLost`, and nothing is checked out from the
-        default branch in its stead. A session whose project binds no
+        no known fate is `WorkspaceLost`, which parks the loop for a person,
+        and nothing is checked out from the default branch in its stead. A session whose project binds no
         repository has no checkout. Every command in the checkout carries
         `epoch`, the one the run that prepares it held when it began."""
         ...

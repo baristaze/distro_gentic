@@ -284,9 +284,10 @@ class LoopManagerImpl(LoopManagerInterface):
             if refused.code != WorkspaceLost.code:
                 raise
             # What the workspace is rebuilt from is gone: nothing restarts
-            # from scratch in its stead.
+            # from scratch in its stead, and a person says what comes next.
+            # The loop parks with everything it reached kept.
             log.error("session %s lost its workspace: %s", session_id, refused)
-            return await self._end(run, LoopOutcome.ERRORED)
+            return await self._park(run, Park(reason=ParkReason.PERSON, unlock=WORKSPACE_UNLOCK))
         try:
             if run.workspace.changed is not None:
                 # What changed under the model since its last loop, told

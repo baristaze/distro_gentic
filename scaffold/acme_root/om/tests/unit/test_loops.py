@@ -27,7 +27,14 @@ from contracts.loops import (
 )
 from contracts.step_storage import make_request, make_response
 
-from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
+from acme.infra.workspaces import (
+    EgressMode,
+    EgressPolicy,
+    IsolationMode,
+    IsolationSpec,
+    Workspace,
+    WorkspaceLost,
+)
 from acme.integrations.model_providers.calls import ModelCall
 from acme.integrations.model_providers.scripted import ScriptedFailure
 from acme.integrations.model_providers.types import ErrorKind, StopReason
@@ -481,6 +488,33 @@ async def test_a_workspace_that_cannot_meet_the_spec_parks_the_loop_before_any_c
     assert loop.anthropic.calls == [] and loop.anthropic.remaining == 1, "no call was made"
     steps = await loop.history(session_id)
     assert [step.type for step in steps] == [StepType.MESSAGE, StepType.PARKED]
+
+
+# A workspace whose branch is lost, and nothing says why, waits for a person:
+# the loop parks before any call, and nothing restarts from scratch.
+
+
+async def test_a_lost_workspace_parks_the_loop_for_a_person_before_any_call(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    loop = loop_over(tmp_path)
+    session_id = await loop.start("delivery")
+    await loop.say(session_id, "Build it.")
+    loop.anthropic.add(reply(said("Never asked.")))
+
+    async def lost(*args: object, **kwargs: object) -> Workspace:
+        raise WorkspaceLost("the branch of the session is gone, and nothing says why")
+
+    monkeypatch.setattr(loop.managers.tools, "prepare_workspace", lost)
+    run = await loop.loops.run(loop.owner, session_id)
+
+    assert run.end is RunEnd.PARKED and run.park is not None, "never ended errored"
+    assert (run.park.reason, run.park.unlock, run.park.retry_at) == (
+        ParkReason.PERSON,
+        "workspace",
+        None,
+    ), "a person clears it, never a clock"
+    assert loop.anthropic.calls == [] and loop.anthropic.remaining == 1, "no call was made"
 
 
 # Steering: controls out of band, and taking over.
