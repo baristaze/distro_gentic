@@ -474,6 +474,30 @@ async def test_a_branch_the_remote_lost_fails_loudly_and_nothing_restarts_from_m
     assert rebuilt.changed is not None and "merged" in rebuilt.changed and ref in rebuilt.changed
 
 
+async def test_a_merged_branch_rebuilt_is_cut_later_from_main_never_from_its_old_work(
+    checkout: Checkout,
+) -> None:
+    session_id = await checkout.session()
+    branch = session_branch(session_id)
+    workspace = await checkout.prepare(session_id)
+    here = Path(workspace.location)
+    (here / "feature.txt").write_text("the feature\n")
+    commit(here, "feature")
+    git(here, "push", "-q", "origin", branch)
+    await checkout.release(workspace)
+    git(checkout.remote, "update-ref", "-d", f"refs/heads/{branch}")
+    checkout.pull_requests.fates[branch] = PullRequestFate.MERGED
+    rebuilt = await checkout.prepare(session_id)
+    await checkout.release(rebuilt)
+    shutil.rmtree(here)
+
+    again = await checkout.prepare(session_id)
+
+    there = Path(again.location)
+    assert git(there, "rev-parse", "HEAD") == checkout.main, "cut from main again"
+    assert not (there / "feature.txt").exists(), "the merged work stays in its pull request"
+
+
 # The branch is brought up to what its repository holds.
 
 

@@ -56,7 +56,8 @@ rebuilt from.
   holds it, it is cut from its last snapshot, or from the default branch
   on the session's first loop. One the remote held and
   lost is rebuilt from the default branch only when its pull request was
-  merged or closed, and the loop is told. One that moved on both sides,
+  merged or closed, and the loop is told; a later cut starts there too,
+  never from a snapshot of the old work. One that moved on both sides,
   or vanished for no known reason, parks the loop, loudly, for a person
   to say what comes next; nothing restarts silently from the default
   branch. Before any cut, what the

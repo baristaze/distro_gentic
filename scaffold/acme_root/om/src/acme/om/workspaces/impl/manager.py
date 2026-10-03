@@ -167,6 +167,7 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         told = list(held.notices)
         seen = held.branch_seen
         kept: str | None = None
+        forget = False
         binding = await self._binding(ctx, held)
         if binding is not None:
             # The platform reads the repository on its own host, with the
@@ -213,6 +214,10 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
                 if snapshot.commit is not None:
                     kept = snapshot.ref
                     told.append(rules.told_of_snapshot(snapshot.ref, snapshot.commit, at))
+                if plan is BranchPlan.REBUILD:
+                    # Its work is in its pull request: a later cut starts
+                    # from the default branch, never from a snapshot of it.
+                    kept, forget = None, True
                 start = last if plan is BranchPlan.CUT else None
                 await self._git.cut(ctx, workspace, binding, held.branch, epoch=epoch, start=start)
             if plan is BranchPlan.REBUILD and fate is not None:
@@ -225,10 +230,15 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
                     fate.value,
                 )
             seen = state.remote
-        changed = bool(held.notices) or seen != held.branch_seen or kept is not None
+        changed = bool(held.notices) or seen != held.branch_seen or kept is not None or forget
         if changed or held.push_digest is not None:
             await self._update(
-                ctx, workspace.id, branch_seen=seen, snapshot_ref=kept, told=held.notices
+                ctx,
+                workspace.id,
+                branch_seen=seen,
+                snapshot_ref=kept,
+                forget_snapshot=forget,
+                told=held.notices,
             )
         return workspace.model_copy(update={"changed": "\n\n".join(told) or None})
 
@@ -601,17 +611,19 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         *,
         branch_seen: bool,
         snapshot_ref: str | None = None,
+        forget_snapshot: bool = False,
         told: tuple[str, ...] = (),
         adds: str | None = None,
     ) -> None:
         """The cache's state, written over the stored row; the loop's push
-        token, if one is live, ends with it."""
+        token, if one is live, ends with it. A snapshot is kept when one is
+        given, and cleared when it is forgotten."""
         changes: dict[str, object] = {
             "branch_seen": branch_seen,
             "push_digest": None,
             "push_expires_at": None,
         }
-        if snapshot_ref is not None:
+        if snapshot_ref is not None or forget_snapshot:
             changes["snapshot_ref"] = snapshot_ref
         await self._write(ctx, session_id, changes, told=told, adds=adds)
 
