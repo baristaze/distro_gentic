@@ -61,19 +61,21 @@ class WorkspacesManagerInterface(ABC):
     async def attach(self, ctx: TenantContext, workspace: Workspace) -> Workspace:
         """The prepared workspace, its checkout brought up to the session's
         branch on the repository its project binds (`rules.branch_plan`), and
-        what the loop is told of it in `changed`: the snapshot the last loop
-        left, and a branch rebuilt after its pull request closed. A branch
-        the remote held and lost with no known fate is `WorkspaceLost`, and
-        nothing is checked out from the default branch in its stead. A
-        session whose project binds no repository has no checkout."""
+        what the loop is told of it in `changed`: the snapshot of every
+        instance let go since a loop was last told, and a branch rebuilt
+        after its pull request closed. A branch the remote held and lost with
+        no known fate is `WorkspaceLost`, and nothing is checked out from the
+        default branch in its stead. A session whose project binds no
+        repository has no checkout."""
         ...
 
     @abstractmethod
     async def detach(self, ctx: TenantContext, workspace: Workspace) -> None:
         """Before the workspace's instance goes: what its checkout holds that
         the remote lacks is committed and pushed to a snapshot ref, and the
-        next loop will be told. Raises when it is not pushed, so the caller
-        lets nothing go that is not kept."""
+        next loop will be told, beside any notice it has not yet read. Raises
+        when it is not pushed, so the caller lets nothing go that is not
+        kept."""
         ...
 
     @abstractmethod
