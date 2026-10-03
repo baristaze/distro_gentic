@@ -81,7 +81,7 @@ These are the invariants. Each links the section that states it.
 > A team files a ticket: *"The checkout service sometimes drops a
 > request under load. Investigate and fix it."* An automation turns it
 > into a session pinned to the team's host pool, because its builds and
-> data must stay there. The agent's loop runs in the platform's cloud;
+> devices must stay there. The agent's loop runs in the platform's cloud;
 > its tool calls run on a workspace host in that pool. At 2 a.m. a model
 > provider fails; two hundred sessions park within a second and resume
 > when it recovers. By morning the session has a pull request, a report
@@ -560,7 +560,7 @@ which collapses at zero failures. The trial count, or a sequential test
 valid under optional stopping, is declared before the trials. The gate
 counts every trial at that version, and an aborted trial is classified
 by a declared rule, never dropped. Candidate and baseline trials
-interleave on the same executor, and a claim across many scenarios
+interleave on the same host, and a claim across many scenarios
 corrects for the number of comparisons.
 
 <!-- agents-only

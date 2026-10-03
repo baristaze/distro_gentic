@@ -197,7 +197,7 @@ optional stopping.
 
 **Principle.** The gate counts every trial at that version, and an
 aborted trial is classified by a declared rule, never dropped. Candidate
-and baseline trials interleave on the same executor, and a claim across
+and baseline trials interleave on the same host, and a claim across
 many scenarios corrects for the number of comparisons.
 
 **Source.** Evidence, Statistical Evidence.
@@ -208,7 +208,7 @@ across scenarios is corrected.
 
 **Violation.** A trial at the version dropped from the count; an aborted
 trial dropped, or classified by no declared rule; candidate and baseline
-run in separate blocks or on different executors; a claim across
+run in separate blocks or on different hosts; a claim across
 scenarios with no correction for the number of comparisons.
 
 **Severity.** high
