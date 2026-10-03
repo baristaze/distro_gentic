@@ -16,9 +16,10 @@ kinds of thing [Acme is made of](../../../../README.md).
   side of a deletion, `WAKE_SESSION` and `WAKE_SESSIONS` for the
   agent sessions a park's time or a raised budget frees, and `LOOP` for
   a session's loop, which the session runner runs. The platform adds
-  three that a host or a daemon claims through the gateway: `EXEC`,
-  `WORKSPACE`, and `STATION`. A kind whose payload names a time waits
-  until then.
+  `VALIDATION`, a validation session's check, which its own worker runs
+  on a fresh executor, and two that a host claims through the gateway:
+  `EXEC` and `WORKSPACE`. A kind whose payload names a time waits until
+  then.
 - **Lane**: a routing name, which
   [placement](../placement/README.md) answers at every enqueue. A
   worker serves one lane.

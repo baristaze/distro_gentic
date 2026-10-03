@@ -269,6 +269,21 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
                 f"the work product of session {workspace.id}: {error}"[:300]
             ) from None
 
+    async def checks_tree(
+        self,
+        ctx: TenantContext,
+        project_id: UUID,
+        version: str,
+        source: str,
+        protected: tuple[str, ...],
+    ) -> bytes:
+        ctx.require(Permission.READ)
+        binding = await self._projects.binding_of(ctx, project_id)
+        if binding is None:
+            raise Unavailable(f"project {project_id} binds no repository to validate")
+        credential = await self._fetch_credential(ctx, project_id)
+        return await self._reader.tree(binding, version, source, protected, credential)
+
     # Egress, and what acts outward.
 
     async def get_allowlist(self, ctx: TenantContext, project_id: UUID) -> EgressAllowlist | None:

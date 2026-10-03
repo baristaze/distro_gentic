@@ -36,8 +36,7 @@ def test_every_kind_is_asked_for_by_a_permission_as_wide_as_its_handler(tmp_path
     loop = build_loop(build_container(tmp_path))
     handlers = loop._handlers  # pyright: ignore[reportPrivateUsage] (the worker's own table)
     # The loop's work is the session runner's, whose own suite holds its
-    # handler to the same rule; a host's and a daemon's are claimed through
-    # the gateway.
+    # handler to the same rule; a host's are claimed through the gateway.
     assert set(handlers) == set(WorkKind) - {WorkKind.LOOP} - CLAIMED_THROUGH_THE_GATEWAY
     assert set(WorkKind) == set(WORK_ENQUEUE_PERMISSIONS)
     for kind, handler in handlers.items():

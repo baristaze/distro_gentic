@@ -190,6 +190,7 @@ def execution_request(
         checks=checks,
         trials=tuple(counts[check.name] for check in checks),
         rates=tuple(rules.get(check.name) for check in checks),
+        protected=policy.protected,
     )
 
 

@@ -29,13 +29,14 @@ workspace it works in, and which of its calls run without asking.
   product from its corpus and cites it, diagnoses where a session stands
   by reading it, drafts the tenant's tool policy and shows the difference
   from what is live, and hands engineering work to an engineer. It has no
-  workspace, repository, shell, or station.
+  workspace, repository, or shell.
 - **The corpus**: what the [knowledge map](../../../../../llms.txt) lists
   for the tenant's users, read once when the process starts. A document
   listed only for the platform's own people is not in it.
-- **A validation session**: one check run on a station of a lab, with no
-  agent. It holds the check, its version, its parameters, and its lab,
-  and, once its run is recorded, which run it was.
+- **A validation session**: one check of a project's policy, run on a
+  fresh executor with no agent. It holds the project, the check, the
+  delivered commit it runs at, and the base its checks, fixtures, and
+  runner come from, and, once its run is recorded, which run it was.
 
 ## What can happen
 
@@ -60,13 +61,16 @@ workspace it works in, and which of its calls run without asking.
   is recorded as the session's act, and the branch bound to it, before
   the push, and the pull request once it opens: a comment, a check, or a
   person's push on either finds the session ([intake](../intake/README.md)).
-- **Start a validation session.** Its station work goes on its lab's
-  lane of the [work queue](../work/README.md) in the same write, and the
-  lab's daemon claims it through the gateway, as it claims any station
-  work.
-- **Finish it.** The daemon's run is recorded as an execution record,
-  the record every run is, and the session names it. A session runs its
-  check once.
+- **Start a validation session.** Its `VALIDATION` work goes on the
+  platform's own lane of the [work queue](../work/README.md) in the same
+  write, and the platform's worker claims it.
+- **Run it.** The worker runs the check through the
+  [evidence](../evidence/README.md) on a fresh executor: an instance
+  nobody used, holding the delivered commit with the protected paths
+  from its base, destroyed after the run. The run is recorded as an
+  execution record, the record every run is, and finishing the session
+  names it. A session runs its check once: asked again after its run
+  was kept, it finishes with that run and runs nothing.
 - **Purge.** A tenant deleted past its retention loses its validation
   sessions.
 
@@ -84,7 +88,11 @@ workspace it works in, and which of its calls run without asking.
 - **A validation session calls no model.** It is a record of its own,
   never an agent session, and asks for no loop, so no runner claims it
   and nothing is spent on it ([ADR
-  2013](../../../../../docs/adr/2013-a-validation-session-is-station-work-with-a-record-of-its-own.md)).
+  2024](../../../../../docs/adr/2024-a-validation-session-is-platform-work-on-the-fresh-executor.md)).
+- **A validation session never runs where an agent worked.** Its tree
+  is read from the project's repository by the platform, and its
+  protected paths come from its base, whatever the delivered commit
+  holds there.
 - **Nothing routes.** A person chooses an agent by choosing the session
   they type in.
 - **Every validation session belongs to one org.**
@@ -95,6 +103,7 @@ A process ships these agents by handing its root the corpus
 (`PlatformAgents`); their kinds and tools join the adopter's. The tools
 that read a manager take it late, once the root has built it; the
 engineer's pull request also takes the intake the process builds over
-those managers, and with none it opens nothing. A station
-daemon's report, through the gateway, finishes a validation session with
-the id of the execution record its run wrote.
+those managers, and with none it opens nothing. The maintenance
+worker's `VALIDATION` handler runs a validation session
+(`run_validation`); the evidence the root builds over the platform's
+executor runs its check and keeps its execution record.

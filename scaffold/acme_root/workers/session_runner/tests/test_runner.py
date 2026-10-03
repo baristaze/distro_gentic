@@ -230,7 +230,7 @@ def test_every_kind_is_claimed_by_one_worker_and_asked_for_as_widely_as_it_runs(
     tmp_path: Path,
 ) -> None:
     """The maintenance worker and the runner split the kinds the platform's
-    own workers run, a host and a daemon claim the rest through the gateway,
+    own workers run, a host claims the rest through the gateway,
     and whoever may ask for the loop's work may make every call its handler
     and its guard make."""
     worker = WorkerContainer.for_tests(StorageMemoryImpl(), InfraLocalImpl(tmp_path / "worker"))

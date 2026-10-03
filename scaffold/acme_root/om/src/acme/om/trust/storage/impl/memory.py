@@ -45,19 +45,9 @@ class TrustStorageMemoryImpl(MemoryStorageBase, TrustStorageInterface):
     async def resolve_declaration(
         self, org_id: UUID, name: str, project_id: UUID | None
     ) -> SecretDeclaration | None:
-        if project_id is not None:
-            own = self._owned(org_id, SecretOwnerKind.PROJECT, project_id, name)
-            if own is not None:
-                return own
-        tenants = sorted(
-            (
-                d
-                for d in self._rows(self._declarations, org_id)
-                if d.name == name and d.owner_kind is not SecretOwnerKind.PROJECT
-            ),
-            key=lambda d: d.id,
-        )
-        return tenants[0] if tenants else None
+        if project_id is None:
+            return None
+        return self._owned(org_id, SecretOwnerKind.PROJECT, project_id, name)
 
     async def read_declarations(
         self, org_id: UUID, after: tuple[str, UUID] | None, limit: int

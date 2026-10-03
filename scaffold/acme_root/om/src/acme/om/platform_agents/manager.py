@@ -1,11 +1,12 @@
-"""The platform's agents swimlane: the validation session, a check run on a
-station with no agent at all. Its kinds and their tools are profiles over
+"""The platform's agents swimlane: the validation session, a delivery's
+check run with no agent at all. Its kinds and their tools are profiles over
 the engine's loop (`kinds.py`, `tools.py`), which a root wires; this
 manager holds what has a record of its own.
 
-A validation session is station work on the same queue an agent's takes,
-on its lab's lane, and its run is the same execution record. Nothing in
-its path asks for a loop or calls a model."""
+A validation session is platform work on the same queue an agent's takes,
+run on a fresh executor through the evidence namespace, and its run is the
+same execution record. Nothing in its path asks for a loop or calls a
+model."""
 
 from abc import ABC, abstractmethod
 from uuid import UUID
@@ -19,10 +20,10 @@ class PlatformAgentsManagerInterface(ABC):
     async def start_validation(
         self, ctx: TenantContext, start: ValidationStart
     ) -> ValidationSession:
-        """A validation session, and its station work on its lab's lane, in
-        one write: the lab's daemon claims it through the gateway and runs
-        the check. Requires the write permission. A start asked again under
-        the same id answers the session as stored."""
+        """A validation session, and its work on the queue, in one write:
+        the platform's worker claims it and runs the check
+        (`run_validation`). Requires the write permission. A start asked
+        again under the same id answers the session as stored."""
         ...
 
     @abstractmethod
@@ -32,10 +33,20 @@ class PlatformAgentsManagerInterface(ABC):
         ...
 
     @abstractmethod
+    async def run_validation(self, ctx: TenantContext, session_id: UUID) -> ValidationSession:
+        """Platform-internal, the work its start asked for: the session's
+        check run once on a fresh executor, through the evidence namespace,
+        at its head with the checks, fixtures, and runner from its base, and
+        the session finished with the execution record that run wrote. A
+        finished session runs nothing. Asked again after the run was kept,
+        it runs nothing more and finishes with that run."""
+        ...
+
+    @abstractmethod
     async def finish_validation(
         self, ctx: TenantContext, session_id: UUID, run_id: UUID
     ) -> ValidationSession:
-        """Platform-internal: the daemon's run is recorded as `run_id`, the
+        """Platform-internal: the session's run is recorded as `run_id`, the
         execution record every run is, and the session is finished. Asked
         again with the same run, it answers the session as stored; with
         another, `PreconditionFailed`, since a session runs its check once."""
