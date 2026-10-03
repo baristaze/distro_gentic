@@ -6,27 +6,12 @@
 // then finds the session in no list and nothing of it at its address.
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { expect, test, type Browser, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import { ORG, OWNER, signedIn, SLUG } from "./signIn";
 
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const SHOTS = fileURLToPath(new URL("./screenshots/", import.meta.url));
-const OWNER = process.env.SEED_EMAIL ?? "owner@example.test";
-const SLUG = process.env.SEED_SLUG ?? "ajax";
-const ORG = process.env.SEED_ORG ?? "Ajax";
 const KIND = process.env.ACME_E2E_KIND ?? "platform_assistant";
-
-/** Signs in by address on the local stack; a person in several orgs picks
- *  from the chooser. */
-async function signedIn(browser: Browser, email: string, org?: string): Promise<Page> {
-  const page = await (await browser.newContext()).newPage();
-  await page.goto("/login/dev");
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Name (for a new person)").fill(email.split("@")[0]!);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  if (org) await page.getByRole("menuitem", { name: new RegExp(`^${org}\\b`) }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
-  return page;
-}
 
 function recordEvidence(sessionId: string): void {
   execFileSync("uv", ["run", "--package", "acme-api", "python", "services/api/tests/portal_check.py", "evidence", SLUG, sessionId], {

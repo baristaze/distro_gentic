@@ -1,10 +1,21 @@
 import { Fragment } from "react";
 import { createBrowserRouter, Navigate, Outlet, useLocation, type RouteObject } from "react-router-dom";
+import { ApprovalsPage } from "../features/approvals/ApprovalsPage";
+import { AuditPage } from "../features/audit/AuditPage";
+import { AutomationPage } from "../features/automations/AutomationPage";
+import { AutomationsPage } from "../features/automations/AutomationsPage";
 import { HomePage } from "../features/home/HomePage";
+import { EntryPage } from "../features/knowledge/EntryPage";
+import { KnowledgePage } from "../features/knowledge/KnowledgePage";
+import { ModelsPage } from "../features/models/ModelsPage";
 import { NewOrgPage } from "../features/new_org/NewOrgPage";
+import { PlaybooksPage } from "../features/playbooks/PlaybooksPage";
+import { ProjectPage } from "../features/projects/ProjectPage";
+import { ProjectsPage } from "../features/projects/ProjectsPage";
 import { SessionPage } from "../features/session/SessionPage";
 import { SessionsPage } from "../features/sessions/SessionsPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
+import { UsagePage } from "../features/usage/UsagePage";
 import { CallbackPage } from "../features/sign_in/CallbackPage";
 import { DevSignInPage } from "../features/sign_in/DevSignInPage";
 import { LoginPage } from "../features/sign_in/LoginPage";
@@ -56,6 +67,17 @@ export const routes: RouteObject[] = [
       { path: "/", element: <HomePage /> },
       { path: "/sessions", element: <SessionsPage /> },
       { path: "/sessions/:sessionId", element: <SessionPage /> },
+      { path: "/projects", element: <ProjectsPage /> },
+      { path: "/projects/:projectId", element: <ProjectPage /> },
+      { path: "/models", element: <ModelsPage /> },
+      { path: "/automations", element: <AutomationsPage /> },
+      { path: "/automations/:automationId", element: <AutomationPage /> },
+      { path: "/playbooks", element: <PlaybooksPage /> },
+      { path: "/knowledge", element: <KnowledgePage /> },
+      { path: "/knowledge/:entryId", element: <EntryPage /> },
+      { path: "/approvals", element: <ApprovalsPage /> },
+      { path: "/audit", element: <AuditPage /> },
+      { path: "/usage", element: <UsagePage /> },
       { path: "/settings", element: <SettingsPage /> },
       { path: "/orgs/new", element: <NewOrgPage /> },
     ],
