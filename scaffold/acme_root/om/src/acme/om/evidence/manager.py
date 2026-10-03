@@ -83,19 +83,21 @@ class EvidenceManagerInterface(ABC):
     @abstractmethod
     async def validate(
         self, ctx: TenantContext, session_id: UUID, purpose: RunPurpose
-    ) -> Validation:
+    ) -> tuple[Validation, ...]:
         """Runs the session's checks on a fresh executor and keeps what it
         wrote: a `validation` at the committed head, of the checks the
         change asks for, or a `baseline` at the base, of every check the
-        policy requires. The checks, fixtures, and runner come from the
-        base. The policy is the session's project's, as the projects answer
-        it, never one the work product names. Refused before anything runs
+        policy requires. Each environment the checks name runs its own
+        validation on its own executor, in name order, and each is answered.
+        The checks, fixtures, and runner come from the base. The policy is
+        the session's project's, as the projects answer it, never one the
+        work product names. Refused before anything runs
         (`PreconditionFailed`) when the session holds no work product,
         belongs to no project, its project declares no policy, its
         tree is dirty, its change touches a protected path, nothing is asked
-        for, or the executor cannot run a check. Results that do not hash to
-        what the executor wrote, or that do not read as the contract says,
-        are `ValidationFailed`, and nothing is kept."""
+        for, or no executor here can run a check. Results that do not hash
+        to what an executor wrote, or that do not read as the contract says,
+        are `ValidationFailed`, and nothing of that validation is kept."""
         ...
 
     @abstractmethod

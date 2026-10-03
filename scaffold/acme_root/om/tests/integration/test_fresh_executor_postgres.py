@@ -197,7 +197,7 @@ async def test_a_deliverys_checks_run_in_a_fresh_container_and_the_gate_confirms
     owner, session_id, head = await delivered.session({"src/cart.py": "TOTAL = 3\n"})
     evidence = delivered.managers.evidence
 
-    validation = await evidence.validate(owner, session_id, RunPurpose.VALIDATION)
+    (validation,) = await evidence.validate(owner, session_id, RunPurpose.VALIDATION)
 
     (stream,) = delivered.infra.transport.read
     assert validation.results_sha256 == digest(stream.rstrip(b"\n")), (

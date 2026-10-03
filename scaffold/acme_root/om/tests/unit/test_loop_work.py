@@ -57,7 +57,7 @@ class Engine:
         work = self.storage.get_work_storage()
         assert isinstance(work, WorkStorageMemoryImpl)
         items = [item for _, item in work._items.values()]  # pyright: ignore[reportPrivateUsage]
-        return [i for i in items if i.kind is WorkKind.LOOP and i.target_id == session_id]
+        return [i for i in items if i.kind == WorkKind.LOOP and i.target_id == session_id]
 
     async def session(self, ctx: TenantContext) -> AgentSession:
         return await self.managers.agent_sessions.create_session(ctx, make_session())

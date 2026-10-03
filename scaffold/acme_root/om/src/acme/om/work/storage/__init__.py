@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 from uuid import UUID
 
-from acme.om.work.types.work_item import WorkItem, WorkKind
+from acme.om.work.types.work_item import WorkItem
 
 
 class InsertOutcome(StrEnum):
@@ -71,7 +71,7 @@ class WorkStorageInterface(ABC):
 
     @abstractmethod
     async def claim_next(
-        self, lane: str, kinds: Sequence[WorkKind], worker_id: str, lease: timedelta
+        self, lane: str, kinds: Sequence[str], worker_id: str, lease: timedelta
     ) -> tuple[UUID, WorkItem] | None:
         """Cross-tenant claim, one statement: the row on the lane that has been
         ready longest (the earliest `available_at`, then the lowest id),
@@ -89,7 +89,7 @@ class WorkStorageInterface(ABC):
         ...
 
     @abstractmethod
-    async def has_open_item(self, org_id: UUID, kind: WorkKind, target_id: UUID) -> bool:
+    async def has_open_item(self, org_id: UUID, kind: str, target_id: UUID) -> bool:
         """Whether one of the tenant's items of `kind` on `target_id` is
         queued or claimed. One read of the items in those passing statuses,
         which the status index holds few of."""
@@ -157,14 +157,14 @@ class WorkStorageInterface(ABC):
     @abstractmethod
     async def count_ready_on_lanes(
         self, org_id: UUID, lanes: Sequence[str], now: datetime
-    ) -> dict[tuple[str, WorkKind], int]:
+    ) -> dict[tuple[str, str], int]:
         """The tenant's queued items ready at `now` on each of `lanes`, by lane
         and kind: what a host of the tenant would be handed."""
         ...
 
     @abstractmethod
     async def read_latest_for_target(
-        self, org_id: UUID, kind: WorkKind, target_id: UUID
+        self, org_id: UUID, kind: str, target_id: UUID
     ) -> WorkItem | None:
         """The tenant's item of `kind` for `target_id` made last, whatever
         its status; None when there is none."""

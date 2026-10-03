@@ -22,16 +22,14 @@ from acme.om.exceptions import (
 )
 from acme.om.outbox.types.row import OutboxRow
 from acme.om.tenancy import TenancyManagerInterface
+from acme.om.work.kinds import WorkKinds, WorkKindSpec
 from acme.om.work.manager import WorkManagerInterface
 from acme.om.work.rules import attempts_after_hand_back, is_exhausted, retry_delay
 from acme.om.work.storage import InsertOutcome, WorkStorageInterface
 from acme.om.work.types.work_item import (
-    WORK_ENQUEUE_PERMISSIONS,
-    WORK_PAYLOADS,
     WORK_ROW_PREFIX,
     ScheduledPayload,
     WorkItem,
-    WorkKind,
     WorkStatus,
 )
 
@@ -64,11 +62,11 @@ def caused_by(rctx: RequestContext, item: WorkItem) -> RequestContext:
     return rctx.model_copy(update={"caused_by_request_id": cause})
 
 
-def not_before(kind: WorkKind, payload: object) -> datetime | None:
+def not_before(kind: WorkKindSpec, payload: object) -> datetime | None:
     """When work of this kind may run, read off its payload: the payload's
     `not_before` for a scheduled kind, None for any other. A payload that
     does not parse answers None here; `_land` refuses it with the reason."""
-    shape = WORK_PAYLOADS[kind]
+    shape = kind.payload
     if not issubclass(shape, ScheduledPayload):
         return None
     try:
@@ -85,10 +83,14 @@ class WorkManagerImpl(WorkManagerInterface):
         events: EventsManagerInterface,
         topics: TopicsInterface,
         options: WorkOptions,
+        kinds: WorkKinds,
         lanes: Lanes | None = None,
     ) -> None:
-        """`lanes` answers the lane an item goes to, at every enqueue, so no
-        producer picks it; None keeps the lane the item came with."""
+        """`kinds` is the registry every kind is read through: its payload,
+        and the permission that asks for it. `lanes` answers the lane an
+        item goes to, at every enqueue, so no producer picks it; None keeps
+        the lane the item came with."""
+        self._kinds = kinds
         self._storage = storage
         self._tenancy = tenancy
         self._events = events
@@ -101,12 +103,9 @@ class WorkManagerImpl(WorkManagerInterface):
         for on its own, which no core write announced. The actor is the
         context's and the key is the caller's. The caller authorizes the whole
         run, which has the service role, so it holds the permission the kind
-        is asked for with; a kind the table does not name is asked for by
+        is asked for with; a kind the registry does not hold is asked for by
         nobody."""
-        asking = WORK_ENQUEUE_PERMISSIONS.get(item.kind)
-        if asking is None:
-            raise NotAuthorized(f"no permission asks for work of kind {item.kind.value}")
-        ctx.require(asking)
+        ctx.require(self._asking(item))
         now = utcnow()
         queued = item.model_copy(
             update={
@@ -136,11 +135,11 @@ class WorkManagerImpl(WorkManagerInterface):
         the lane is the one `lanes` answers, else the default one. A kind
         whose payload is a `ScheduledPayload` waits in the queue until its
         `not_before`."""
-        kind = row.kind.removeprefix(WORK_ROW_PREFIX)
-        if kind not in {k.value for k in WorkKind}:
+        kind = self._kinds.get(row.kind.removeprefix(WORK_ROW_PREFIX))
+        if kind is None:
             raise ValidationFailed(f"outbox row {row.id} asks for unknown work {row.kind}")
         now = utcnow()
-        available_at = max(now, not_before(WorkKind(kind), row.payload) or now)
+        available_at = max(now, not_before(kind, row.payload) or now)
         return await self._land(
             org_id,
             WorkItem(
@@ -149,7 +148,7 @@ class WorkManagerImpl(WorkManagerInterface):
                 updated_at=now,
                 created_by=row.actor_id,  # the principal of the write that asked
                 updated_by=EMPTY_UUID,  # the machinery, from here on
-                kind=WorkKind(kind),
+                kind=kind.name,
                 target_id=row.target_id,
                 idempotency_key=row.id,
                 request_id=row.request_id,  # the request that made the write
@@ -160,6 +159,14 @@ class WorkManagerImpl(WorkManagerInterface):
             ),
         )
 
+    def _asking(self, item: WorkItem) -> Permission:
+        """The permission that asks for the item's kind; a kind the registry
+        does not hold is asked for by nobody."""
+        kind = self._kinds.get(item.kind)
+        if kind is None:
+            raise NotAuthorized(f"no permission asks for work of kind {item.kind}")
+        return kind.permission
+
     async def _land(self, org_id: UUID, queued: WorkItem) -> WorkItem:
         """The insert both enqueues share: the payload against the shape its kind
         fixes, the lane `lanes` answers, the create, and the wake. Ids are
@@ -168,10 +175,13 @@ class WorkManagerImpl(WorkManagerInterface):
         idempotency key, already written and nothing changes, a claim on the
         row included, so the row as stored is the answer and it was announced
         when it landed."""
+        kind = self._kinds.get(queued.kind)
+        if kind is None:
+            raise ValidationFailed(f"{queued.kind} is no kind of work this process knows")
         try:
-            WORK_PAYLOADS[queued.kind].model_validate(queued.payload)
+            kind.payload.model_validate(queued.payload)
         except ValidationError as error:
-            raise ValidationFailed(f"payload of {queued.kind.value} work: {error}"[:500]) from None
+            raise ValidationFailed(f"payload of {queued.kind} work: {error}"[:500]) from None
         if self._lanes is not None:
             queued = queued.model_copy(update={"lane": await self._lanes(org_id, queued)})
         outcome = await self._storage.create_item(org_id, queued)
@@ -184,7 +194,7 @@ class WorkManagerImpl(WorkManagerInterface):
                 produced_at=queued.created_at,
                 org_id=org_id,
                 lane=queued.lane,
-                kind=queued.kind.value,
+                kind=queued.kind,
             ),
         )
         return queued
@@ -193,7 +203,7 @@ class WorkManagerImpl(WorkManagerInterface):
         self,
         rctx: RequestContext,
         lane: str,
-        kinds: Sequence[WorkKind],
+        kinds: Sequence[str],
         worker_id: str,
         lease: timedelta,
     ) -> tuple[TenantContext, WorkItem] | None:
@@ -241,21 +251,18 @@ class WorkManagerImpl(WorkManagerInterface):
             raise NotFound(f"work item {item_id} not found")
         return item
 
-    async def has_open(self, ctx: TenantContext, kind: WorkKind, target_id: UUID) -> bool:
+    async def has_open(self, ctx: TenantContext, kind: str, target_id: UUID) -> bool:
         ctx.require(Permission.READ)
         return await self._storage.has_open_item(ctx.org_id, kind, target_id)
 
     async def latest_for_target(
-        self, ctx: TenantContext, kind: WorkKind, target_id: UUID
+        self, ctx: TenantContext, kind: str, target_id: UUID
     ) -> WorkItem | None:
         ctx.require(Permission.READ)
         return await self._storage.read_latest_for_target(ctx.org_id, kind, target_id)
 
     async def end_queued(self, ctx: TenantContext, item: WorkItem, reason: str) -> WorkItem | None:
-        asking = WORK_ENQUEUE_PERMISSIONS.get(item.kind)
-        if asking is None:
-            raise NotAuthorized(f"no permission asks for work of kind {item.kind.value}")
-        ctx.require(asking)
+        ctx.require(self._asking(item))
         ended = item.model_copy(
             update={
                 "status": WorkStatus.DONE,
@@ -440,7 +447,7 @@ class WorkManagerImpl(WorkManagerInterface):
         log.error(
             "work item %s (%s) in org %s failed for good: %s",
             item.id,
-            item.kind.value,
+            item.kind,
             org_id,
             reason,
         )
@@ -458,7 +465,7 @@ class WorkManagerImpl(WorkManagerInterface):
             log.error(
                 "work item %s (%s) failed for good: %s",
                 item.id,
-                item.kind.value,
+                item.kind,
                 item.last_error,
             )
             return
@@ -473,7 +480,7 @@ class WorkManagerImpl(WorkManagerInterface):
         log.error(
             "work item %s (%s) in org %s failed for good: %s",
             item.id,
-            item.kind.value,
+            item.kind,
             ctx.org_id,
             item.last_error,
         )
@@ -485,7 +492,7 @@ class WorkManagerImpl(WorkManagerInterface):
                 DEAD_LETTER_KIND,
                 item.id,
                 {
-                    "kind": item.kind.value,
+                    "kind": item.kind,
                     "work_target_id": str(item.target_id),
                     "attempts": item.attempts,
                     "last_error": item.last_error,

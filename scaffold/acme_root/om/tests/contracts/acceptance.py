@@ -144,7 +144,10 @@ class ScriptedRun:
         self.evidence.work.deliver(self.ctx.org_id, self.session, delivery)
 
     async def baseline(self) -> Validation:
-        return await self.evidence.manager.validate(self.ctx, self.session, RunPurpose.BASELINE)
+        (validation,) = await self.evidence.manager.validate(
+            self.ctx, self.session, RunPurpose.BASELINE
+        )
+        return validation
 
     async def work_run(self, version: str = BASE, files: tuple[str, ...] = ()) -> ExecutionRecord:
         """A run of the agent's own, in its workspace, with the files it made
@@ -182,7 +185,10 @@ class ScriptedRun:
     async def change(self, *changed: str) -> Validation:
         """Commits the change and validates the head."""
         self.deliver(HEAD, changed or ("src/export.py",))
-        return await self.evidence.manager.validate(self.ctx, self.session, RunPurpose.VALIDATION)
+        (validation,) = await self.evidence.manager.validate(
+            self.ctx, self.session, RunPurpose.VALIDATION
+        )
+        return validation
 
     async def judge(self, result: Result, **extra: Mapping[str, str]) -> AcceptanceVerdict:
         return await self.harness.judge(self.ctx, EXPORT, self.session, result, surfaces(**extra))

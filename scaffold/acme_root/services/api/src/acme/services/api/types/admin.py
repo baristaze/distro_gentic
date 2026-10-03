@@ -9,7 +9,7 @@ from pydantic import Field
 
 from acme.om.context import OperatorRole, Role
 from acme.om.tenancy.rules import MAX_OPERATOR_TOKEN_TTL
-from acme.om.work.types.work_item import WorkKind, WorkStatus
+from acme.om.work.types.work_item import WorkStatus
 from acme.services.api.types.common import RequestBody, View
 
 
@@ -131,7 +131,7 @@ class OperatorWorkItemView(View):
     The payload and the claim stay the worker's."""
 
     id: UUID
-    kind: WorkKind
+    kind: str  # a work kind, the platform's or a product's
     target_id: UUID
     status: WorkStatus
     available_at: datetime

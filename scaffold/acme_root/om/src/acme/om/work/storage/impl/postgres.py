@@ -23,7 +23,7 @@ from acme.om.storage.impl.pg_base import PLAN_WITH_VALUES, PgStorageBase, delete
 from acme.om.storage.utils.translation import to_model, to_values
 from acme.om.work.storage import InsertOutcome, WorkStorageInterface
 from acme.om.work.storage.tables.work_items import WorkItems
-from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
+from acme.om.work.types.work_item import WorkItem, WorkStatus
 
 
 class WorkStoragePostgresImpl(PgStorageBase, WorkStorageInterface):
@@ -102,7 +102,7 @@ class WorkStoragePostgresImpl(PgStorageBase, WorkStorageInterface):
             return written
 
     async def claim_next(
-        self, lane: str, kinds: Sequence[WorkKind], worker_id: str, lease: timedelta
+        self, lane: str, kinds: Sequence[str], worker_id: str, lease: timedelta
     ) -> tuple[UUID, WorkItem] | None:
         now = utcnow()
         candidate = (
@@ -110,7 +110,7 @@ class WorkStoragePostgresImpl(PgStorageBase, WorkStorageInterface):
             .where(
                 WorkItems.lane == lane,
                 WorkItems.status == WorkStatus.QUEUED.value,
-                WorkItems.kind.in_([kind.value for kind in kinds]),
+                WorkItems.kind.in_([str(kind) for kind in kinds]),
                 WorkItems.available_at <= now,
             )
             # The item ready longest goes first, by the claim's index, so a
@@ -147,7 +147,7 @@ class WorkStoragePostgresImpl(PgStorageBase, WorkStorageInterface):
             WorkItems.org_id == org_id,
             WorkItems.status == WorkStatus.CLAIMED.value,
             WorkItems.lease_expires_at > now,
-            WorkItems.kind == item.kind.value,
+            WorkItems.kind == item.kind,
             WorkItems.id != item.id,
             # Another lane, or before it in the claim order on its own.
             or_(
@@ -159,12 +159,12 @@ class WorkStoragePostgresImpl(PgStorageBase, WorkStorageInterface):
         async with self._session_for(stmt, org_id=org_id) as session:
             return (await session.execute(stmt)).scalar_one()
 
-    async def has_open_item(self, org_id: UUID, kind: WorkKind, target_id: UUID) -> bool:
+    async def has_open_item(self, org_id: UUID, kind: str, target_id: UUID) -> bool:
         stmt = select(
             exists().where(
                 WorkItems.org_id == org_id,
                 WorkItems.status.in_((WorkStatus.QUEUED.value, WorkStatus.CLAIMED.value)),
-                WorkItems.kind == kind.value,
+                WorkItems.kind == kind,
                 WorkItems.target_id == target_id,
             )
         )
@@ -293,7 +293,7 @@ class WorkStoragePostgresImpl(PgStorageBase, WorkStorageInterface):
 
     async def count_ready_on_lanes(
         self, org_id: UUID, lanes: Sequence[str], now: datetime
-    ) -> dict[tuple[str, WorkKind], int]:
+    ) -> dict[tuple[str, str], int]:
         if not lanes:
             return {}
         queued = literal_column(f"'{WorkStatus.QUEUED.value}'")
@@ -309,16 +309,16 @@ class WorkStoragePostgresImpl(PgStorageBase, WorkStorageInterface):
         )
         async with self._session_for(stmt, org_id=org_id) as session:
             rows = (await session.execute(stmt)).all()
-        return {(lane, WorkKind(kind)): count for lane, kind, count in rows}
+        return {(lane, kind): count for lane, kind, count in rows}
 
     async def read_latest_for_target(
-        self, org_id: UUID, kind: WorkKind, target_id: UUID
+        self, org_id: UUID, kind: str, target_id: UUID
     ) -> WorkItem | None:
         stmt = (
             select(WorkItems)
             .where(
                 WorkItems.org_id == org_id,
-                WorkItems.kind == kind.value,
+                WorkItems.kind == kind,
                 WorkItems.target_id == target_id,
             )
             .order_by(WorkItems.created_at.desc(), WorkItems.id.desc())

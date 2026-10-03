@@ -3,7 +3,7 @@ results stream as a fresh executor would, and the manager and the gate
 over memory storage with a work product the case sets."""
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any
@@ -14,7 +14,7 @@ from acme.om.base import utcnow
 from acme.om.context import TenantContext
 from acme.om.events.storage.impl.memory import EventStorageMemoryImpl
 from acme.om.evidence.collector import digest
-from acme.om.evidence.executor import ExecutorInterface
+from acme.om.evidence.executor import ExecutorInterface, Executors
 from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
 from acme.om.evidence.impl.manager import EvidenceManagerImpl, EvidenceOptions
 from acme.om.evidence.impl.ports import WorkProductMemoryImpl
@@ -161,8 +161,12 @@ class Evidence:
 
 
 def evidence_over(
-    executor: ScriptedExecutor | None = None, options: EvidenceOptions | None = None
+    executor: ScriptedExecutor | None = None,
+    options: EvidenceOptions | None = None,
+    executors: Mapping[str, ExecutorInterface] | None = None,
 ) -> Evidence:
+    """The evidence over memory, `executor` the platform's and `executors` a
+    product's, by environment."""
     outbox = OutboxStorageMemoryImpl()
     storage = EvidenceStorageMemoryImpl(outbox)
     members = Members()  # pyright: ignore[reportAbstractUsage] (a partial double)
@@ -171,7 +175,13 @@ def evidence_over(
     executor = executor or ScriptedExecutor()
     projects = SessionProjectsMemory(default=CHECKOUT)
     manager = EvidenceManagerImpl(
-        storage, members, relay, executor, work, projects, options or EvidenceOptions()
+        storage,
+        members,
+        relay,
+        Executors(executor, executors),
+        work,
+        projects,
+        options or EvidenceOptions(),
     )
     gate = ResultGateEvidenceImpl(storage, work, projects)
     return Evidence(manager, gate, storage, work, executor, members, projects)

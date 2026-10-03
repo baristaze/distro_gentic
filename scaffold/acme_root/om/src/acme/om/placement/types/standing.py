@@ -11,7 +11,7 @@ from acme.om.base import Platform
 from acme.om.hosts.rules import HostState
 from acme.om.hosts.types.host import Advertisement
 from acme.om.steps.types.header import Park
-from acme.om.work.types.work_item import WorkKind, WorkStatus
+from acme.om.work.types.work_item import WorkStatus
 
 
 class LoopStanding(Platform):
@@ -56,7 +56,7 @@ class LaneLoad(Platform):
     """The ready items of one kind on one lane."""
 
     lane: str
-    kind: WorkKind
+    kind: str  # a registered work kind
     ready: int
 
 

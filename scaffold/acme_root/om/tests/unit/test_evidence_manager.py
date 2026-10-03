@@ -13,6 +13,7 @@ from pydantic import ValidationError
 
 from acme.om.base import new_id
 from acme.om.context import Role, TenantContext
+from acme.om.evidence.executor import Executors
 from acme.om.evidence.impl.manager import EvidenceManagerImpl, EvidenceOptions
 from acme.om.evidence.impl.ports import ExecutorAbsentImpl, WorkProductAbsentImpl
 from acme.om.evidence.rules import policy_key
@@ -127,7 +128,7 @@ async def test_validation_keeps_what_the_executor_wrote_at_the_head() -> None:
     session = new_id()
     await evidence.manager.write_policy(context(Role.OWNER, org), checkout_policy())
     evidence.work.deliver(org.id, session, delivered())
-    validation = await evidence.manager.validate(ctx, session, RunPurpose.VALIDATION)
+    (validation,) = await evidence.manager.validate(ctx, session, RunPurpose.VALIDATION)
     assert (validation.version, validation.source, validation.executor) == (
         "c0ffee",
         "base0",
@@ -150,7 +151,7 @@ async def test_a_baseline_runs_every_required_check_at_the_base() -> None:
     )
     await evidence.manager.write_policy(context(Role.OWNER, org), policy)
     evidence.work.deliver(org.id, session, delivered(head="base0", changed=()))
-    baseline = await evidence.manager.validate(ctx, session, RunPurpose.BASELINE)
+    (baseline,) = await evidence.manager.validate(ctx, session, RunPurpose.BASELINE)
     assert baseline.version == "base0" and baseline.purpose is RunPurpose.BASELINE
     (request,) = evidence.executor.requests
     assert [check.name for check in request.checks] == ["trials", "unit"]
@@ -263,7 +264,7 @@ async def test_the_absent_ports_refuse_loudly() -> None:
         evidence.storage,
         evidence.members,
         evidence.manager._relay,  # pyright: ignore[reportPrivateUsage]
-        ExecutorAbsentImpl(),
+        Executors(ExecutorAbsentImpl()),
         WorkProductAbsentImpl(),
         evidence.projects,
         EvidenceOptions(),

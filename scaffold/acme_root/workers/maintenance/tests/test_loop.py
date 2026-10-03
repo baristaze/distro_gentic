@@ -135,7 +135,7 @@ class LeaseLosingWork(WorkManagerInterface):
         self,
         rctx: RequestContext,
         lane: str,
-        kinds: Sequence[WorkKind],
+        kinds: Sequence[str],
         worker_id: str,
         lease: timedelta,
     ) -> tuple[TenantContext, WorkItem] | None:
@@ -153,11 +153,11 @@ class LeaseLosingWork(WorkManagerInterface):
     async def claimed_ahead(self, ctx: TenantContext, item: WorkItem) -> int:
         return await self._inner.claimed_ahead(ctx, item)
 
-    async def has_open(self, ctx: TenantContext, kind: WorkKind, target_id: UUID) -> bool:
+    async def has_open(self, ctx: TenantContext, kind: str, target_id: UUID) -> bool:
         return await self._inner.has_open(ctx, kind, target_id)
 
     async def latest_for_target(
-        self, ctx: TenantContext, kind: WorkKind, target_id: UUID
+        self, ctx: TenantContext, kind: str, target_id: UUID
     ) -> WorkItem | None:
         return await self._inner.latest_for_target(ctx, kind, target_id)
 
@@ -267,7 +267,7 @@ class StopOnClaimWork(LeaseLosingWork):
         self,
         rctx: RequestContext,
         lane: str,
-        kinds: Sequence[WorkKind],
+        kinds: Sequence[str],
         worker_id: str,
         lease: timedelta,
     ) -> tuple[TenantContext, WorkItem] | None:
@@ -294,7 +294,7 @@ class EnqueueDuringClaimWork(LeaseLosingWork):
         self,
         rctx: RequestContext,
         lane: str,
-        kinds: Sequence[WorkKind],
+        kinds: Sequence[str],
         worker_id: str,
         lease: timedelta,
     ) -> tuple[TenantContext, WorkItem] | None:
@@ -320,7 +320,7 @@ class EmptyClaimCountingWork(LeaseLosingWork):
         self,
         rctx: RequestContext,
         lane: str,
-        kinds: Sequence[WorkKind],
+        kinds: Sequence[str],
         worker_id: str,
         lease: timedelta,
     ) -> tuple[TenantContext, WorkItem] | None:

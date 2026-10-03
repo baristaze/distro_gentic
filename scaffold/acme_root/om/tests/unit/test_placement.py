@@ -31,15 +31,15 @@ from acme.om.context import (
 from acme.om.exceptions import LeaseLost, NotAuthorized, NotFound, ValidationFailed
 from acme.om.placement.impl.manager import PlacementManagerImpl, PlacementOptions
 from acme.om.placement.impl.operator import SHARE_SET_KIND
-from acme.om.placement.rules import (
-    CLAIMED_THROUGH_THE_GATEWAY,
+from acme.om.placement.kinds import (
+    HOST,
+    PLACED_KINDS,
     claims_of,
-    host_lane,
-    own_lane,
-    pool_lane,
-    tier_lane,
+    platform_claimant_kinds,
+    platform_work_kinds,
 )
-from acme.om.placement.types.claimant import Claimant, ClaimantKind
+from acme.om.placement.rules import host_lane, own_lane, pool_lane, tier_lane
+from acme.om.placement.types.claimant import Claimant
 from acme.om.placement.types.work import ExecOperation, ExecPayload, WorkspaceOperation
 from acme.om.root import Managers, build_managers
 from acme.om.steps.rules import message_step
@@ -198,7 +198,7 @@ async def test_a_relayed_loop_lands_in_its_tenants_lane(
     session = await managers.agent_sessions.create_session(owner, make_session())
     said_now = message_step(new_id(), utcnow(), session.id, owner, "Why does checkout time out?")
     await managers.agent_sessions.receive(owner, session.id, [said_now])
-    (loop,) = [i for i in items_of(storage) if i.kind is WorkKind.LOOP]
+    (loop,) = [i for i in items_of(storage) if i.kind == WorkKind.LOOP]
     assert loop.lane == tier_lane("pro") and loop.target_id == session.id
 
 
@@ -212,7 +212,7 @@ async def test_each_kind_is_claimed_only_from_its_own_lane(
     owner = await an_owner(managers)
     mine, theirs = new_id(), new_id()
     my_pool, their_pool = new_id(), new_id()
-    host = Claimant(kind=ClaimantKind.HOST, id=mine, org_id=owner.org_id, pool_id=my_pool)
+    host = Claimant(kind=HOST, id=mine, org_id=owner.org_id, pool_id=my_pool)
     enqueued: dict[str, WorkItem] = {}
     for name, kind, payload in (
         ("loop", WorkKind.LOOP, {}),
@@ -256,15 +256,16 @@ async def test_each_kind_is_claimed_only_from_its_own_lane(
 
 def test_a_claimants_lanes_and_kinds_are_read_off_its_identity_alone() -> None:
     host_id, pool, org = new_id(), new_id(), new_id()
-    host = Claimant(kind=ClaimantKind.HOST, id=host_id, org_id=org, pool_id=pool)
-    assert claims_of(host) == (
+    host = Claimant(kind=HOST, id=host_id, org_id=org, pool_id=pool)
+    claimants, work = platform_claimant_kinds(), platform_work_kinds()
+    assert claims_of(claimants, work, host) == (
         (host_lane(host_id), (WorkKind.EXEC, WorkKind.WORKSPACE)),
         (pool_lane(pool), (WorkKind.WORKSPACE,)),
     )
-    claimed = {kind for _, kinds in claims_of(host) for kind in kinds}
-    assert claimed == CLAIMED_THROUGH_THE_GATEWAY
+    claimed = {kind for _, kinds in claims_of(claimants, work, host) for kind in kinds}
+    assert claimed == {spec.name for spec in PLACED_KINDS} == work.claimed_by(HOST)
     with pytest.raises(ValueError, match="pool_id"):
-        Claimant.model_validate({"kind": ClaimantKind.HOST, "id": new_id()})
+        Claimant.model_validate({"kind": HOST, "id": new_id()})
 
 
 async def test_work_routed_into_another_tenants_wall_is_never_handed_over(
@@ -276,8 +277,8 @@ async def test_work_routed_into_another_tenants_wall_is_never_handed_over(
     tenant."""
     ajax, beta = await an_owner(managers, "ajax"), await an_owner(managers, "beta")
     walled_id, cloud_id, pool = new_id(), new_id(), new_id()
-    walled = Claimant(kind=ClaimantKind.HOST, id=walled_id, org_id=ajax.org_id, pool_id=pool)
-    cloud = Claimant(kind=ClaimantKind.HOST, id=cloud_id, pool_id=new_id())
+    walled = Claimant(kind=HOST, id=walled_id, org_id=ajax.org_id, pool_id=pool)
+    cloud = Claimant(kind=HOST, id=cloud_id, pool_id=new_id())
     stray = await managers.work.enqueue(beta, an_item(beta, WorkKind.EXEC, exec_on(walled_id)))
     served = await managers.work.enqueue(beta, an_item(beta, WorkKind.EXEC, exec_on(cloud_id)))
 
@@ -396,7 +397,14 @@ async def test_a_tenant_past_its_retention_loses_its_share_and_a_living_one_keep
     )
     members = Members()  # pyright: ignore[reportAbstractUsage] (a partial double)
     shares = storage.get_placement_storage()
-    placement = PlacementManagerImpl(shares, managers.work, members, PlacementOptions())
+    placement = PlacementManagerImpl(
+        shares,
+        managers.work,
+        members,
+        PlacementOptions(),
+        platform_work_kinds(),
+        platform_claimant_kinds(),
+    )
     assert await placement.purge_tenant(owner) == 0, "a living tenant keeps it"
     assert await shares.read_share(owner.org_id) is not None
     members.expired = True

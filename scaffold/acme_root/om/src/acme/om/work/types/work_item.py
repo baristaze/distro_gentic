@@ -1,7 +1,7 @@
 """Durable background work is a row: what to do, for which record, under
 which producer key, on which lane, and its own claim. Payload shapes are
-fixed per kind by `WORK_PAYLOADS`, as `TOPIC_PAYLOADS` fixes them per topic;
-the row stores the dump."""
+fixed per kind by the kinds' registry (`work.kinds`), as `TOPIC_PAYLOADS`
+fixes them per topic; the row stores the dump."""
 
 from datetime import datetime
 from enum import StrEnum
@@ -10,14 +10,15 @@ from uuid import UUID
 from pydantic import Field
 
 from acme.om.base import FrozenMapping, Identifiable, Platform, Trackable
-from acme.om.context import Permission
 from acme.om.orchestrations.types.orchestration import ParkReason
-from acme.om.placement.types.work import ExecPayload, WorkspacePayload
 from acme.om.steps.types.header import Park
 from acme.om.steps.types.header import ParkReason as LoopParkReason
 
 
 class WorkKind(StrEnum):
+    """The names of the platform's own kinds. A kind is registered by its
+    name (`work.kinds`), and a product's kinds are names of its own."""
+
     NOOP = "NOOP"  # the maintenance worker's kind: no work beyond the sweep
     ORCHESTRATION = "ORCHESTRATION"  # one step of a long-running record
     WAKE_PARKED = "WAKE_PARKED"  # the reason an org's records parked for is gone
@@ -42,9 +43,9 @@ change, in the same statement, and the relay enqueues the item it names: the
 queue is a database role of its own, so no statement reaches both."""
 
 
-def work_row_kind(kind: WorkKind) -> str:
+def work_row_kind(kind: str) -> str:
     """The outbox row kind that asks for work of this kind."""
-    return WORK_ROW_PREFIX + kind.value
+    return WORK_ROW_PREFIX + kind
 
 
 def asks_for_work(row_kind: str) -> bool:
@@ -61,7 +62,7 @@ class WorkStatus(StrEnum):
 
 
 class WorkItem(Identifiable, Trackable):
-    kind: WorkKind  # what to do
+    kind: str = Field(pattern=r"^[A-Z][A-Z0-9_]{0,63}$")  # what to do: a registered kind
     target_id: UUID  # the record it advances
     idempotency_key: UUID  # unique
     # The request that caused the work and the trace context of that request,
@@ -76,7 +77,7 @@ class WorkItem(Identifiable, Trackable):
     traceparent: str | None = None
     payload: FrozenMapping = Field(
         default_factory=dict, validate_default=True
-    )  # the dump of WORK_PAYLOADS[kind]
+    )  # the dump of the payload its kind fixes
     lane: str = (
         "default"  # routing: "default", "region:<id>", ...; a string, because lanes are dynamic
     )
@@ -170,53 +171,3 @@ class DeleteOrgPayload(Platform):
     last."""
 
     provider_org_id: str | None = None
-
-
-WORK_PAYLOADS: dict[WorkKind, type[Platform]] = {
-    WorkKind.NOOP: NoopPayload,
-    WorkKind.ORCHESTRATION: OrchestrationPayload,
-    WorkKind.WAKE_PARKED: WakeParkedPayload,
-    WorkKind.DELETE_ACCOUNT: DeleteAccountPayload,
-    WorkKind.DELETE_ORG: DeleteOrgPayload,
-    WorkKind.WAKE_SESSION: WakeSessionPayload,
-    WorkKind.WAKE_SESSIONS: WakeSessionsPayload,
-    WorkKind.LOOP: LoopPayload,
-    WorkKind.VALIDATION: ValidationPayload,
-    WorkKind.EXEC: ExecPayload,
-    WorkKind.WORKSPACE: WorkspacePayload,
-}
-"""The payload shape of every kind; enqueue validates the item's payload against it."""
-
-WORK_ENQUEUE_PERMISSIONS: dict[WorkKind, Permission] = {
-    WorkKind.NOOP: Permission.WRITE,
-    WorkKind.ORCHESTRATION: Permission.WRITE,
-    WorkKind.WAKE_PARKED: Permission.WRITE,
-    # Only an account's deletion asks for this one, relayed from its own
-    # commit: leaving is every person's right whatever their role, so no
-    # route enqueues it, and the permission is the width of the handler.
-    WorkKind.DELETE_ACCOUNT: Permission.MANAGE_MEMBERS,
-    # Only the deletion of a team org, an owner's or an operator's, asks for
-    # this one, relayed from its own commit; no route enqueues it.
-    WorkKind.DELETE_ORG: Permission.MANAGE_MEMBERS,
-    # A park asks for the first and a raised budget for the second, each
-    # relayed from its own commit; the handlers append a control and project
-    # the status, which WRITE covers.
-    WorkKind.WAKE_SESSION: Permission.WRITE,
-    WorkKind.WAKE_SESSIONS: Permission.WRITE,
-    # A write that wakes a session asks for it, relayed from its own commit;
-    # the run appends steps and projects the status, which WRITE covers, and
-    # each tool call asks its principal's own permissions again.
-    WorkKind.LOOP: Permission.WRITE,
-    # A validation session's start asks for it, relayed from its own commit;
-    # the run writes the session's validation and finishes the session,
-    # which WRITE covers.
-    WorkKind.VALIDATION: Permission.WRITE,
-    # A session's run asks for these, relayed from its own commit; what each
-    # runs was asked for by a call its principal's own permissions allowed.
-    WorkKind.EXEC: Permission.WRITE,
-    WorkKind.WORKSPACE: Permission.WRITE,
-}
-"""The permission that asks for each kind. The person who asks authorizes
-the whole run once, so the permission has to be as wide as the run: every
-role that holds it holds every permission the kind's handler calls with,
-which the worker's tests hold each handler to."""
