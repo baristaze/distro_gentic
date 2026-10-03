@@ -6,10 +6,12 @@ from datetime import timedelta
 from acme.infra.root import InfraInterface
 from acme.integrations.root import IntegrationsInterface
 from acme.om.automations import AutomationsManagerInterface
+from acme.om.billing import BillingManagerInterface
 from acme.om.intake import IntakeManagerInterface
+from acme.om.matrix.root import MatrixManagers
 from acme.om.notifications import NotificationsManagerInterface
 from acme.om.root import Managers
-from acme.om.trust import TrustOperatorManagerInterface
+from acme.om.trust import TrustManagerInterface, TrustOperatorManagerInterface
 from acme.om.watch import WatchManagerInterface
 from acme.services.api.services import (
     AdminServiceInterface,
@@ -26,24 +28,32 @@ from acme.services.api.services import (
     WebhooksServiceInterface,
 )
 from acme.services.api.services.automations import AutomationsServiceInterface
+from acme.services.api.services.benchmarks import BenchmarksServiceInterface
 from acme.services.api.services.budgets import BudgetsServiceInterface
 from acme.services.api.services.impl.admin import AdminServiceImpl
 from acme.services.api.services.impl.agent_sessions import AgentSessionsServiceImpl
 from acme.services.api.services.impl.automations import AutomationsServiceImpl
+from acme.services.api.services.impl.benchmarks import BenchmarksServiceImpl
 from acme.services.api.services.impl.budgets import BudgetsServiceImpl
 from acme.services.api.services.impl.events import EventsServiceImpl
 from acme.services.api.services.impl.fleet import FleetServiceImpl
 from acme.services.api.services.impl.hosts import HostsServiceImpl
 from acme.services.api.services.impl.intake import IntakeServiceImpl
+from acme.services.api.services.impl.ledgers import LedgersServiceImpl
+from acme.services.api.services.impl.matrix import MatrixServiceImpl
 from acme.services.api.services.impl.media import MediaServiceImpl
 from acme.services.api.services.impl.notifications import NotificationsServiceImpl
+from acme.services.api.services.impl.provider_keys import ProviderKeysServiceImpl
 from acme.services.api.services.impl.realtime import RealtimeServiceImpl
 from acme.services.api.services.impl.relay import RelayServiceImpl
 from acme.services.api.services.impl.tenancy import TenancyServiceImpl
 from acme.services.api.services.impl.watch import WatchServiceImpl
 from acme.services.api.services.impl.webhooks import WebhooksServiceImpl
 from acme.services.api.services.intake import IntakeServiceInterface
+from acme.services.api.services.ledgers import LedgersServiceInterface
+from acme.services.api.services.matrix import MatrixServiceInterface
 from acme.services.api.services.notifications import NotificationsServiceInterface
+from acme.services.api.services.provider_keys import ProviderKeysServiceInterface
 
 
 class ServicesImpl(ServicesInterface):
@@ -64,6 +74,10 @@ class ServicesImpl(ServicesInterface):
         automations: AutomationsServiceInterface,
         notifications: NotificationsServiceInterface,
         watch: WatchServiceInterface,
+        matrix: MatrixServiceInterface,
+        provider_keys: ProviderKeysServiceInterface,
+        benchmarks: BenchmarksServiceInterface,
+        ledgers: LedgersServiceInterface,
     ) -> None:
         self._tenancy = tenancy
         self._admin = admin
@@ -80,6 +94,10 @@ class ServicesImpl(ServicesInterface):
         self._automations = automations
         self._notifications = notifications
         self._watch = watch
+        self._matrix = matrix
+        self._provider_keys = provider_keys
+        self._benchmarks = benchmarks
+        self._ledgers = ledgers
 
     def get_tenancy_service(self) -> TenancyServiceInterface:
         return self._tenancy
@@ -126,6 +144,18 @@ class ServicesImpl(ServicesInterface):
     def get_watch_service(self) -> WatchServiceInterface:
         return self._watch
 
+    def get_matrix_service(self) -> MatrixServiceInterface:
+        return self._matrix
+
+    def get_provider_keys_service(self) -> ProviderKeysServiceInterface:
+        return self._provider_keys
+
+    def get_benchmarks_service(self) -> BenchmarksServiceInterface:
+        return self._benchmarks
+
+    def get_ledgers_service(self) -> LedgersServiceInterface:
+        return self._ledgers
+
 
 def build_services(
     managers: Managers,
@@ -139,6 +169,9 @@ def build_services(
     intake: IntakeManagerInterface,
     automations: AutomationsManagerInterface,
     notifications: NotificationsManagerInterface,
+    matrix: MatrixManagers,
+    trust: TrustManagerInterface,
+    billing: BillingManagerInterface,
 ) -> ServicesInterface:
     """In-process impls only: a Python caller outside the process reaches the
     same services through the typed client under `clients/python`."""
@@ -172,4 +205,8 @@ def build_services(
         automations=AutomationsServiceImpl(automations),
         notifications=NotificationsServiceImpl(notifications),
         watch=WatchServiceImpl(watch),
+        matrix=MatrixServiceImpl(matrix.matrix, matrix.matrix_operator),
+        provider_keys=ProviderKeysServiceImpl(trust),
+        benchmarks=BenchmarksServiceImpl(managers.benchmarks),
+        ledgers=LedgersServiceImpl(billing),
     )

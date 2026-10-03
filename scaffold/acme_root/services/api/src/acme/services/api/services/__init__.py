@@ -7,13 +7,17 @@ from abc import ABC, abstractmethod
 from acme.services.api.services.admin import AdminServiceInterface
 from acme.services.api.services.agent_sessions import AgentSessionsServiceInterface
 from acme.services.api.services.automations import AutomationsServiceInterface
+from acme.services.api.services.benchmarks import BenchmarksServiceInterface
 from acme.services.api.services.budgets import BudgetsServiceInterface
 from acme.services.api.services.events import EventsServiceInterface
 from acme.services.api.services.fleet import FleetServiceInterface
 from acme.services.api.services.hosts import HostsServiceInterface
 from acme.services.api.services.intake import IntakeServiceInterface
+from acme.services.api.services.ledgers import LedgersServiceInterface
+from acme.services.api.services.matrix import MatrixServiceInterface
 from acme.services.api.services.media import MediaServiceInterface
 from acme.services.api.services.notifications import NotificationsServiceInterface
+from acme.services.api.services.provider_keys import ProviderKeysServiceInterface
 from acme.services.api.services.realtime import RealtimeServiceInterface
 from acme.services.api.services.relay import RelayServiceInterface
 from acme.services.api.services.tenancy import TenancyServiceInterface
@@ -24,13 +28,17 @@ __all__ = [
     "AdminServiceInterface",
     "AgentSessionsServiceInterface",
     "AutomationsServiceInterface",
+    "BenchmarksServiceInterface",
     "BudgetsServiceInterface",
     "EventsServiceInterface",
     "FleetServiceInterface",
     "HostsServiceInterface",
     "IntakeServiceInterface",
+    "LedgersServiceInterface",
+    "MatrixServiceInterface",
     "MediaServiceInterface",
     "NotificationsServiceInterface",
+    "ProviderKeysServiceInterface",
     "RealtimeServiceInterface",
     "RelayServiceInterface",
     "ServicesInterface",
@@ -85,3 +93,15 @@ class ServicesInterface(ABC):
 
     @abstractmethod
     def get_watch_service(self) -> WatchServiceInterface: ...
+
+    @abstractmethod
+    def get_matrix_service(self) -> MatrixServiceInterface: ...
+
+    @abstractmethod
+    def get_provider_keys_service(self) -> ProviderKeysServiceInterface: ...
+
+    @abstractmethod
+    def get_benchmarks_service(self) -> BenchmarksServiceInterface: ...
+
+    @abstractmethod
+    def get_ledgers_service(self) -> LedgersServiceInterface: ...

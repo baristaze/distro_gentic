@@ -12,13 +12,17 @@ from acme.services.api.services import (
     AdminServiceInterface,
     AgentSessionsServiceInterface,
     AutomationsServiceInterface,
+    BenchmarksServiceInterface,
     BudgetsServiceInterface,
     EventsServiceInterface,
     FleetServiceInterface,
     HostsServiceInterface,
     IntakeServiceInterface,
+    LedgersServiceInterface,
+    MatrixServiceInterface,
     MediaServiceInterface,
     NotificationsServiceInterface,
+    ProviderKeysServiceInterface,
     RealtimeServiceInterface,
     RelayServiceInterface,
     ServicesInterface,
@@ -99,6 +103,22 @@ def notifications_service(connection: HTTPConnection) -> NotificationsServiceInt
     return services_of(connection).get_notifications_service()
 
 
+def matrix_service(connection: HTTPConnection) -> MatrixServiceInterface:
+    return services_of(connection).get_matrix_service()
+
+
+def provider_keys_service(connection: HTTPConnection) -> ProviderKeysServiceInterface:
+    return services_of(connection).get_provider_keys_service()
+
+
+def benchmarks_service(connection: HTTPConnection) -> BenchmarksServiceInterface:
+    return services_of(connection).get_benchmarks_service()
+
+
+def ledgers_service(connection: HTTPConnection) -> LedgersServiceInterface:
+    return services_of(connection).get_ledgers_service()
+
+
 TenancyService = Annotated[TenancyServiceInterface, Depends(tenancy_service)]
 AdminService = Annotated[AdminServiceInterface, Depends(admin_service)]
 EventsService = Annotated[EventsServiceInterface, Depends(events_service)]
@@ -114,3 +134,7 @@ AutomationsService = Annotated[AutomationsServiceInterface, Depends(automations_
 BudgetsService = Annotated[BudgetsServiceInterface, Depends(budgets_service)]
 IntakeService = Annotated[IntakeServiceInterface, Depends(intake_service)]
 NotificationsService = Annotated[NotificationsServiceInterface, Depends(notifications_service)]
+MatrixService = Annotated[MatrixServiceInterface, Depends(matrix_service)]
+ProviderKeysService = Annotated[ProviderKeysServiceInterface, Depends(provider_keys_service)]
+BenchmarksService = Annotated[BenchmarksServiceInterface, Depends(benchmarks_service)]
+LedgersService = Annotated[LedgersServiceInterface, Depends(ledgers_service)]

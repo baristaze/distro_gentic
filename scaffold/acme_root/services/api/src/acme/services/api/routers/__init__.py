@@ -14,13 +14,18 @@ from acme.services.api.routers import (
     admin,
     agent_sessions,
     automations,
+    benchmarks,
     budgets,
     events,
     fleet,
     hosts,
     intake,
+    ledgers,
+    matrix,
+    matrix_operator,
     media,
     notifications,
+    provider_keys,
     relay,
     tenancy,
     watch,
@@ -53,6 +58,15 @@ HOSTED: dict[str, tuple[APIRouter, ...]] = {
     # A live read of a session by a scoped handle, and take control, a
     # command by hand, and give back, each the person's.
     "watch": (watch.router,),
+    # What a tenant on its own keys may choose of the model matrix, and its
+    # choices; and the operators' stage, publish, and read of a version.
+    "matrix": (matrix.router, matrix_operator.router),
+    # A tenant's own keys to its model providers, written and never read back.
+    "trust": (provider_keys.router,),
+    # The operators' read of the platform's benchmarks and their trend.
+    "benchmarks": (benchmarks.router,),
+    # The operators' read of a tenant's ledger.
+    "billing": (ledgers.router,),
 }
 """Every namespace this image hosts, and the routers that serve it."""
 
