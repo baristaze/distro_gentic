@@ -2,7 +2,7 @@
 
 The capabilities the platform asks for and never implements itself:
 cache, buckets, topics, queues, secrets, keys, the outage signal,
-observability, and where an agent's tools run: workspaces and the
+streams, observability, and where an agent's tools run: workspaces and the
 transport. Each is an
 interface with a twin that runs on a laptop and an implementation that
 runs in the cloud. The object model sees the interface alone, and
@@ -19,6 +19,7 @@ infra imports nothing from the object model.
 | Secrets | Get, has, put, and delete by name; the object model holds a name, never a value | The settings, from `.env` and the environment | Secrets Manager |
 | Keys | Make, unwrap, and re-wrap a data key bound to its tenant, its key, and its version; keeps no copy | In-process, derived from a root key | KMS, under the account's key |
 | Outage signal | A provider known to be failing for one credential, until its retry time; keyed by provider and credential; fails open | On the in-process cache, or on Valkey | On Valkey, shared by the fleet |
+| Streams | Short numbered logs read live while they are written, one per stream, in a group read together; bounded by entries, bytes, streams a group, streams overall, and an idle time, past which the oldest goes, never the newest; a cache of a record kept elsewhere, so it fails open | In-process, or Valkey streams | Valkey streams, shared by the fleet |
 | Observability | Structured logs, Prometheus metrics, OpenTelemetry traces, error reports | Prometheus, Grafana, Jaeger, GlitchTip | CloudWatch, X-Ray, a Sentry-compatible backend |
 | Workspaces | Prepare, release, and purge the place an agent works, to an isolation spec (a mode, an egress policy, limits); a spec the provider cannot meet is refused, never weakened; what a workspace is rebuilt from that is gone for good is `WorkspaceLost`, and what changed under the model since its last loop rides on the workspace prepared | A directory on this host, a container on the local Docker, or the twin | A container per workspace, or none; a directory on the host is refused at boot |
 | Transport | Run a command in a workspace, streamed, and read, write, and list its files; its whole process tree ends at its deadline; a secret is brokered, or injected into the one process and redacted from all it prints ([ADR 1003](../docs/adr/1003-a-secret-that-cannot-be-brokered-is-injected-into-one-process.md)); how each command ended is recorded beside the workspaces, its output sealed under its session's key by the seal the command comes with | This process, `docker exec`, or the twin | `docker exec` |

@@ -7,6 +7,7 @@ fenced, and gives it back."""
 import base64
 import hashlib
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 import pytest
@@ -46,6 +47,7 @@ async def test_a_viewer_watches_and_a_person_takes_control_over_the_stack(
         container.stream.emit(
             TextPart(session_id=session.id, step_id=step, n=0, index=0, text="Looking")
         )
+        await container.stream.flush()
         opened = await client.post(f"/v1/agent-sessions/{session.id}/live", headers=owner)
         read = await client.get("/v1/live", params={"handle": opened.json()["handle"]})
         assert read.status_code == 200, read.text
@@ -93,3 +95,43 @@ async def test_a_viewer_watches_and_a_person_takes_control_over_the_stack(
 
         back = await client.post(f"{control}/give-back", headers=owner, json={"summary": "Done."})
         assert back.status_code == 200 and back.json()["park"] is None
+
+
+async def test_a_handle_reads_only_its_own_sessions_streams_through_the_shared_cache(
+    tmp_path: Path,
+) -> None:
+    """Two sessions stream into the compose stack's Valkey at once. Each
+    handle reads its own session's stream and nothing of the other's, a
+    part that names one session's step from the other included."""
+    async with over_the_stack(tmp_path, live_read_key=KEY) as (container, client, owner):
+        assert container.infra.get_streams().describe().startswith("streams=valkey")
+        ctx = await tenant_of(container, owner)
+        mine = await container.managers.agent_sessions.create_session(ctx, make_session())
+        theirs = await container.managers.agent_sessions.create_session(ctx, make_session())
+        my_step, their_step = new_id(), new_id()
+        for n in range(3):
+            container.stream.emit(
+                TextPart(session_id=mine.id, step_id=my_step, n=n, index=0, text=f"mine {n}")
+            )
+            container.stream.emit(
+                TextPart(session_id=theirs.id, step_id=their_step, n=n, index=0, text="theirs")
+            )
+        container.stream.emit(
+            TextPart(session_id=theirs.id, step_id=my_step, n=3, index=0, text="theirs")
+        )
+        await container.stream.flush()
+
+        async def read(session_id: UUID) -> list[dict[str, Any]]:
+            opened = await client.post(f"/v1/agent-sessions/{session_id}/live", headers=owner)
+            read = await client.get("/v1/live", params={"handle": opened.json()["handle"]})
+            assert read.status_code == 200, read.text
+            assert read.json()["session_id"] == str(session_id)
+            return read.json()["streams"]
+
+        (own,) = await read(mine.id)
+        assert own["step_id"] == str(my_step)
+        assert "".join(part["text"] for part in own["parts"]) == "mine 0mine 1mine 2"
+        other = await read(theirs.id)
+        assert {stream["step_id"] for stream in other} == {str(their_step), str(my_step)}
+        texts = {part["text"] for stream in other for part in stream["parts"]}
+        assert {text.replace("theirs", "") for text in texts} == {""}
