@@ -23,10 +23,13 @@ environment is.
 - **A claimant**: a machine outside the platform's processes, as its
   credential says it is: its kind, its id, the tenant whose wall it sits
   in (none for one of the platform's own pool), and its pool. The
-  platform's kind is the host; a product registers its own.
+  platform's kind is the host; a product registers its own. Each enrolls
+  and holds its credential the way a host does
+  ([hosts](../hosts/README.md)).
 - **The kinds' registries** (`kinds.py`): each kind of work with its
   lane and the claimant kind that takes it, and each claimant kind with
-  the lanes and kinds its identity claims. The platform's go through them
+  the prefix of its credential and the lanes and kinds its identity
+  claims. The platform's go through them
   as a product's do.
 - **A fair share**: each tenant's plan tier, whether its loops run in a
   lane of their own, and how many of them run at once. A tenant with
@@ -88,7 +91,7 @@ environment is.
 
 A kind a host runs names where it runs in its payload
 (`types/work.py`): a host or a pool. A product's kind names it too, and
-its registered lane reads it. The gateway resolves a caller's credential
-to a `Claimant` and calls `claim_for`, then `held_for`, `extend_for`,
-and `report_for` for a product's claimant, each under the claim token
-`claim_for` handed it; it never passes a lane or a kind.
+its registered lane reads it. The hosts manager resolves a caller's
+credential to a `Claimant` and calls `claim_for`, then `held_for`,
+`extend_for`, and `report_for` for a product's claimant, each under the
+claim token `claim_for` handed it; it never passes a lane or a kind.

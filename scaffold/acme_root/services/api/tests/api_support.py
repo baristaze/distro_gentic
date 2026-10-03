@@ -43,10 +43,12 @@ def build_container(
     integrations: IntegrationsInterface | None = None,
     *,
     agent_kinds: tuple[AgentKind, ...] = (),
+    ports: PlatformPorts | None = None,
     **overrides: object,
 ) -> AppContainer:
     """The test container over the memory storage root and the local infra
-    root, with the local sign-in on, and the agent kinds a case runs. A test
+    root, with the local sign-in on, the agent kinds a case runs, and the
+    ports a product hands its roots, its own kinds among them. A test
     that needs a bound or a deadline of its own names the settings it
     overrides, one that needs storage to behave a certain way passes its own
     root, and one that signs in through the identity provider passes the
@@ -67,7 +69,7 @@ def build_container(
         InfraLocalImpl(tmp_path),
         settings,
         integrations,
-        ports=PlatformPorts(kinds=ProductKinds(agents=agent_kinds)),
+        ports=ports or PlatformPorts(kinds=ProductKinds(agents=agent_kinds)),
     )
 
 

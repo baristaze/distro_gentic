@@ -11,6 +11,7 @@ from pydantic import Field
 
 from acme.om.hosts.types.host import Capability, IsolationMode
 from acme.om.hosts.types.pool import Label, Region
+from acme.om.placement.kinds import HOST
 from acme.services.api.types.common import RequestBody, View
 
 
@@ -29,9 +30,17 @@ class PoolView(View):
     created_by: UUID
 
 
+class IssueEnrollmentTokenRequest(RequestBody):
+    """The claimant kind the token enrolls: a host unless it names a kind a
+    product registered."""
+
+    kind: str = Field(default=HOST, pattern=r"^[a-z][a-z0-9_]{0,31}$")
+
+
 class EnrollmentTokenView(View):
     id: UUID
     pool_id: UUID
+    kind: str
     expires_at: datetime
     revoked_at: datetime | None
     created_at: datetime
@@ -39,9 +48,9 @@ class EnrollmentTokenView(View):
 
 
 class IssuedEnrollmentTokenView(View):
-    """The token in the clear, once: it enrolls hosts into its pool until
-    it expires or is revoked. It is minted on every call, so a retry mints
-    another, and the one never read expires on its own."""
+    """The token in the clear, once: it enrolls claimants of its kind into
+    its pool until it expires or is revoked. It is minted on every call, so
+    a retry mints another, and the one never read expires on its own."""
 
     secret_fields = frozenset({"token"})
 

@@ -1,8 +1,9 @@
 """The claimant kinds, as a registry, and the platform's kinds a claimant
-takes. A claimant kind names who claims through the gateway and, read off
-its identity alone, the lanes it takes work from and the kinds it takes
-from each. The platform's host registers here as a product's claimant does
-at its roots (`root.PlatformPorts.kinds`)."""
+takes. A claimant kind names who claims through the gateway, the prefix of
+the credential the platform issues it, and, read off its identity alone,
+the lanes it takes work from and the kinds it takes from each. The
+platform's host registers here as a product's claimant does at its roots
+(`root.PlatformPorts.kinds`)."""
 
 import re
 from collections.abc import Callable, Iterable, Iterator, Mapping
@@ -19,6 +20,10 @@ from acme.om.work.types.work_item import WorkKind
 CLAIMANT_NAME = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
 """A claimant kind's name: the prefix of the name its claims carry."""
 
+CREDENTIAL_PREFIX = re.compile(r"^[a-z]{2,7}_$")
+"""A claimant kind's credential prefix: a few letters and an underscore, so
+no prefix starts another."""
+
 Claims = Callable[[Claimant], tuple[tuple[str, tuple[str, ...]], ...]]
 """The lanes a claimant takes work from, in the order it takes it, and the
 kinds it takes from each, all read off its identity."""
@@ -27,32 +32,52 @@ HOST = "host"
 """The platform's claimant: a workspace host, which prepares workspaces and
 runs commands in them."""
 
+HOST_PREFIX = "hst_"
+"""A host credential's prefix: the gateway's tenant transitions know no
+such prefix and refuse it, and the host routes refuse every other."""
+
 
 @dataclass(frozen=True)
 class ClaimantKindSpec:
-    """Who claims through the gateway: its name, and the lanes and kinds its
-    identity claims. A kind it names is taken only when that kind names this
-    claimant kind back (`WorkKindSpec.claimant`)."""
+    """Who claims through the gateway: its name, the lanes and kinds its
+    identity claims, and the prefix of the credential the platform issues
+    it, which names its kind. A kind it names is taken only when that kind
+    names this claimant kind back (`WorkKindSpec.claimant`)."""
 
     name: str
     claims: Claims
+    prefix: str
 
     def __post_init__(self) -> None:
         if not CLAIMANT_NAME.match(self.name):
             raise ValueError(f"a claimant kind is named in lower case, never {self.name!r}")
+        if not CREDENTIAL_PREFIX.match(self.prefix):
+            raise ValueError(
+                f"claimant kind {self.name}: a credential prefix is a few lower-case "
+                f"letters and an underscore, never {self.prefix!r}"
+            )
 
 
 class ClaimantKinds:
-    """The claimant kinds a process knows, each once; a name registered twice
-    is refused, so a product never takes over the platform's host."""
+    """The claimant kinds a process knows, each once; a name or a credential
+    prefix registered twice is refused, so a product never takes over the
+    platform's host, and a credential names one kind. `reserved` are the
+    prefixes of the platform's other credentials, which no claimant kind
+    takes."""
 
-    def __init__(self, specs: Iterable[ClaimantKindSpec]) -> None:
+    def __init__(self, specs: Iterable[ClaimantKindSpec], reserved: Iterable[str] = ()) -> None:
+        taken = frozenset(reserved)
         found: dict[str, ClaimantKindSpec] = {}
+        prefixes: dict[str, ClaimantKindSpec] = {}
         for spec in specs:
             if spec.name in found:
                 raise ValueError(f"claimant kind {spec.name} is registered twice")
+            if spec.prefix in prefixes or spec.prefix in taken:
+                raise ValueError(f"claimant kind {spec.name}: prefix {spec.prefix} is taken")
             found[spec.name] = spec
+            prefixes[spec.prefix] = spec
         self._specs: Mapping[str, ClaimantKindSpec] = MappingProxyType(found)
+        self._prefixes: Mapping[str, ClaimantKindSpec] = MappingProxyType(prefixes)
 
     def __contains__(self, name: object) -> bool:
         return name in self._specs
@@ -62,6 +87,11 @@ class ClaimantKinds:
 
     def get(self, name: str) -> ClaimantKindSpec | None:
         return self._specs.get(name)
+
+    def of_credential(self, credential: str) -> ClaimantKindSpec | None:
+        """The kind whose prefix the credential carries; None for any other."""
+        head, underscore, _ = credential.partition("_")
+        return self._prefixes.get(head + underscore) if underscore else None
 
 
 def held_to(claimants: ClaimantKinds, work: WorkKinds) -> None:
@@ -137,7 +167,7 @@ PLACED_KINDS: tuple[WorkKindSpec, ...] = (
 """The platform's kinds a host claims through the gateway, each on the
 lane where its environment is."""
 
-HOST_CLAIMANT = ClaimantKindSpec(HOST, _host_claims)
+HOST_CLAIMANT = ClaimantKindSpec(HOST, _host_claims, HOST_PREFIX)
 
 
 def platform_work_kinds() -> WorkKinds:
