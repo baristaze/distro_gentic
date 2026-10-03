@@ -21,6 +21,7 @@ from acme.infra.transports.injection import BASE_LANG, injected
 from acme.infra.transports.processes import drive, end_tree, spawn
 from acme.infra.transports.records import RecordBook, opened_result, sealed_record
 from acme.infra.workspaces import IsolationMode, Workspace
+from acme.infra.workspaces.network import NO_HOST_NETWORK, HostNetwork
 
 DEFAULT_PATH = "/usr/local/bin:/usr/bin:/bin"
 """The search path of a command's environment, which holds nothing else of
@@ -32,8 +33,9 @@ class TransportLocalImpl(TransportInterface):
     directory on it: the transport of the host provider. A command is a
     process of its own session, whose environment is built from nothing: the
     search path, the workspace as its home, a locale, the command's own
-    variables, and its injected secrets. A path names a place inside the
-    workspace, links resolved, or it is refused."""
+    variables, its injected secrets, and, under open egress, the host's
+    proxy and CA file (`HostNetwork`), laid over the command's own. A path
+    names a place inside the workspace, links resolved, or it is refused."""
 
     def __init__(
         self,
@@ -41,11 +43,13 @@ class TransportLocalImpl(TransportInterface):
         secrets: SecretsInterface,
         broker: CredentialBrokerInterface,
         search_path: str = DEFAULT_PATH,
+        network: HostNetwork = NO_HOST_NETWORK,
     ) -> None:
         self._book = RecordBook(records)
         self._secrets = secrets
         self._broker = broker
         self._search_path = search_path
+        self._network = network
 
     async def run(
         self,
@@ -70,6 +74,7 @@ class TransportLocalImpl(TransportInterface):
                     "LANG": BASE_LANG,
                     **dict(command.env),
                     **injection.env,
+                    **self._network.variables(workspace.spec.egress.mode),
                 }
                 try:
                     process = await spawn(command.argv, cwd, env)

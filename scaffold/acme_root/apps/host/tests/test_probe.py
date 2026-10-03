@@ -5,11 +5,13 @@ passed."""
 import dataclasses
 import getpass
 from datetime import timedelta
+from pathlib import Path
 
 import httpx
 import pytest
 from host_support import Stack, failing, probes
 
+from acme.apps.host.main import host_network
 from acme.apps.host.probe import Misconfigured, directory, proxy, startup
 from acme.client.client import ApiClient
 from acme.client.types import IsolationMode
@@ -70,3 +72,15 @@ def test_a_bare_directory_runs_only_as_a_dedicated_user() -> None:
     assert not directory("root").passed
     assert not directory(getpass.getuser()).passed
     assert not directory("no-such-user-on-this-machine").passed
+
+
+def test_a_ca_file_the_host_cannot_read_stops_it_before_any_prepare(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The host reads its CA file once, as it starts, for every container it
+    will prepare: one it cannot read stops it there, as a failed probe
+    does, and no session's prepare ever meets it."""
+    monkeypatch.setenv("SSL_CERT_FILE", str(tmp_path / "absent.pem"))
+    with pytest.raises(Misconfigured) as refused:
+        host_network()
+    assert [probe.name for probe in refused.value.failed] == ["trust_store"]
