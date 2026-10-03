@@ -38,6 +38,9 @@ SUITES = {SUITE: frozenset({"complete_suite.py"})}
 """Each hidden suite's own source and the files it holds: a store apart
 from the project's repository, which the executor fetches from only when
 it runs the suite, and no workspace holds."""
+SUITE_PROJECT = "checkout-suites"
+"""The project whose repository holds the hidden suites, apart from the
+scenario's."""
 
 COMPLETE = CheckDeclaration(
     name="export-complete",
@@ -55,7 +58,11 @@ EXPORT = Scenario(
     root_cause=("page boundary",),
     visible=("unit",),
     hidden=HiddenSuite(
-        source=SUITE, checks=(COMPLETE,), markers=("export-complete", "complete_suite.py")
+        project=SUITE_PROJECT,
+        source=SUITE,
+        paths=("complete_suite.py",),
+        checks=(COMPLETE,),
+        markers=("export-complete", "complete_suite.py"),
     ),
     forbidden=("tests/**", "service/**"),
 )
@@ -82,15 +89,21 @@ def surfaces(**extra: Mapping[str, str]) -> dict[Surface, dict[str, str]]:
 class DefectExecutor(ScriptedExecutor):
     """An executor over a defect: at a version in `broken` the visible check
     fails, and the hidden suite passes unless `hidden_passes` says not. It
-    finds the hidden suite only in the suite's own source: asked for it
-    from anywhere else, as from the project's tree, its check fails."""
+    finds the hidden suite only in the suite's own source, with its paths
+    protected: asked for it from anywhere else, as from the project's tree,
+    its check fails."""
 
     broken: frozenset[str] = frozenset({BASE})
     hidden_passes: bool = True
 
     async def run(self, ctx: TenantContext, request: ExecutionRequest) -> ExecutorReport:
         broken = request.version in self.broken
-        hidden = self.hidden_passes and request.source in SUITES
+        hidden = (
+            self.hidden_passes
+            and request.source_project == SUITE_PROJECT
+            and request.source in SUITES
+            and request.protected == EXPORT.hidden.paths
+        )
 
         def outcome(check: str, trial: int) -> str:
             if check == COMPLETE.name:

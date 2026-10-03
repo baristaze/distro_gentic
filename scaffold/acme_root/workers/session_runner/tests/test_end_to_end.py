@@ -61,6 +61,7 @@ from acme.om.exceptions import StaleWriter
 from acme.om.matrix.types.matrix import MatrixStatus
 from acme.om.placement.rules import DEFAULT_TIER, tier_lane
 from acme.om.privacy.impl.sealed_steps import says_something
+from acme.om.root import PlatformPorts, ProductKinds
 from acme.om.steps.types.content import ContentState
 from acme.om.steps.types.header import LoopEndedHeader, LoopOutcome, ToolResponseHeader
 from acme.om.storage.migrate import VERSION_TABLE
@@ -266,7 +267,7 @@ async def stack(emptied: None, tmp_path: Path) -> AsyncIterator[Stack]:
         postgres_storage(settings),
         InfraConfiguredImpl(settings),
         absent_integrations(),
-        agent_kinds=E2E_KINDS,
+        ports=PlatformPorts(kinds=ProductKinds(agents=E2E_KINDS)),
     )
     app = create_app(container)
     workspaces = tmp_path / "workspaces"

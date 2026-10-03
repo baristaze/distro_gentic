@@ -5,7 +5,9 @@ is there for the next.
 
 The tree comes in from outside: the delivered commit with the checks,
 fixtures, and runner taken from the protected source, read from the
-project's repository by the platform (`Tree`) and written in as files. No
+project's repository by the platform (`Tree`) and written in as files. A
+hidden suite's source is a repository of its own, which the request
+names by its project. No
 credential and no history enters the instance, and nothing leaves it: its
 egress is none. Each check's
 command template runs with `{version}` and `{out}` filled, in the tree,
@@ -69,9 +71,10 @@ UNPACK = 'mkdir -p "$1" "$2" && tar -xf "$3" -C "$1" && rm -f "$3" && pwd'
 """Unpacks the tree and answers the instance's root, as its commands see it."""
 EPOCH = 1
 """The one epoch of an instance's commands: no other run ever reaches it."""
-Tree = Callable[[TenantContext, UUID, str, str, tuple[str, ...]], Awaitable[bytes]]
+Tree = Callable[[TenantContext, UUID, str, str, tuple[str, ...], UUID], Awaitable[bytes]]
 """The tree a validation of a project runs on, as a tar, by the project, the
-commit, the protected source, and the protected patterns: the workspaces'
+commit, the protected source, the protected patterns, and the project whose
+repository holds the source: the workspaces'
 (`WorkspacesManagerInterface.checks_tree`)."""
 MISSING = 404
 """The status a transport answers for a file the instance does not hold."""
@@ -147,11 +150,14 @@ class ExecutorWorkspacesImpl(ExecutorInterface):
                 f"session {request.session_id} runs inside its tenant's wall, and this "
                 "process reaches no host of its pool, so its checks never run here"
             )
+        named = (request.project, request.source_project or request.project)
         try:
-            project_id = UUID(request.project)
+            project_id, source_id = (UUID(project) for project in named)
         except ValueError:
-            raise Unavailable(f"{request.project} is no project's id to validate") from None
-        tree = await self._tree(ctx, project_id, request.version, request.source, request.protected)
+            raise Unavailable(f"no project's id to validate in {sorted(set(named))}") from None
+        tree = await self._tree(
+            ctx, project_id, request.version, request.source, request.protected, source_id
+        )
         instance = new_id()
         if pinned is None:
             spec = IsolationSpec(
