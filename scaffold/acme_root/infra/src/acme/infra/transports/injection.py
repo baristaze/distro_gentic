@@ -8,9 +8,15 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
 from acme.infra.secrets import SecretsInterface
-from acme.infra.transports import CommandSpec, CredentialBrokerInterface, SecretVia
+from acme.infra.transports import (
+    CommandSpec,
+    CredentialBrokerInterface,
+    ReservedVariable,
+    SecretVia,
+)
 from acme.infra.transports.redaction import Redactor
 from acme.infra.workspaces import Workspace
+from acme.infra.workspaces.network import HOST_NETWORK_VARIABLES
 
 BASE_LANG = "C.UTF-8"
 
@@ -32,7 +38,12 @@ async def injected(
     """Attaches the brokered secrets, resolves the injected ones, and takes
     back what was attached when the command ends, however it ends. A secret
     that cannot be attached or resolved refuses the command before it runs:
-    a brokered one is never injected in its stead."""
+    a brokered one is never injected in its stead. So does one injected into
+    a variable the host's network holds, before anything is attached."""
+    landing = {use.env for use in command.secrets if use.via is SecretVia.INJECTED and use.env}
+    reserved = sorted(landing & HOST_NETWORK_VARIABLES)
+    if reserved:
+        raise ReservedVariable(f"no secret lands in {', '.join(reserved)}: the host's network does")
     brokered = [use for use in command.secrets if use.via is SecretVia.BROKERED]
     try:
         for use in brokered:

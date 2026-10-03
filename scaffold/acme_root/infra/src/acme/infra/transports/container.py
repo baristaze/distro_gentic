@@ -23,7 +23,8 @@ from acme.infra.transports.injection import BASE_LANG, injected
 from acme.infra.transports.processes import drive, end_tree, spawn
 from acme.infra.transports.records import RecordBook, opened_result, sealed_record
 from acme.infra.workspaces import IsolationMode, Workspace
-from acme.infra.workspaces.container import MOUNT
+from acme.infra.workspaces.container import CA_MOUNT, MOUNT
+from acme.infra.workspaces.network import HostNetwork
 
 LAUNCHER = 'echo $$ > "$1"; shift; exec "$@"'
 """Writes the command's own pid where the end of its tree finds it, then
@@ -81,8 +82,9 @@ def exec_argv(
 class TransportContainerImpl(TransportInterface):
     """Runs commands in a container workspace through `docker exec`. A
     command's environment inside is the image's, the workspace as its home,
-    a locale, its own variables, and its injected secrets
-    (`exec_argv`). At the deadline the command's tree inside the container
+    a locale, its own variables, its injected secrets (`exec_argv`), and,
+    under open egress, the host's proxy and CA file, which the container
+    holds at `CA_MOUNT` (`HostNetwork`), laid over its own. At the deadline the command's tree inside the container
     ends, and the command line with it. Records and the epoch fence are
     kept on this host, beside the workspaces."""
 
@@ -92,11 +94,13 @@ class TransportContainerImpl(TransportInterface):
         secrets: SecretsInterface,
         broker: CredentialBrokerInterface,
         timeout: timedelta,
+        network: HostNetwork = HostNetwork(),
     ) -> None:
         self._book = RecordBook(records)
         self._secrets = secrets
         self._broker = broker
         self._timeout = timeout
+        self._network = network
 
     async def run(
         self,
@@ -114,7 +118,12 @@ class TransportContainerImpl(TransportInterface):
         else:
             pidfile = f"/tmp/acme-{command.key.hex}.pid"
             async with injected(self._secrets, self._broker, workspace, command) as injection:
-                plain = {"HOME": MOUNT, "LANG": BASE_LANG, **dict(command.env)}
+                plain = {
+                    "HOME": MOUNT,
+                    "LANG": BASE_LANG,
+                    **dict(command.env),
+                    **self._network.variables(workspace.spec.egress.mode, CA_MOUNT),
+                }
                 process = await spawn(
                     exec_argv(name, workdir, plain, tuple(injection.env), pidfile, command.argv),
                     Path("/"),

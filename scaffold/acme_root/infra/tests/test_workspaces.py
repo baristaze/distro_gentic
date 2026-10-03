@@ -1,8 +1,9 @@
 """Isolation is chosen up front and never weakened. A provider meets a spec
 whole or refuses it, before it creates anything, and never hands back a
 weaker place: not the host directory for a container, and not a container
-with open egress for one that asked for none. A host directory's release
-ends what its commands left running there."""
+with open egress for one that asked for none. A container holds the host's
+CA file, read-only, under open egress alone. A host directory's release ends
+what its commands left running there."""
 
 import asyncio
 import contextlib
@@ -32,8 +33,9 @@ from acme.infra.workspaces import (
     Workspace,
     WorkspaceProviderInterface,
 )
-from acme.infra.workspaces.container import WorkspaceContainerImpl, container_name
+from acme.infra.workspaces.container import CA_MOUNT, WorkspaceContainerImpl, container_name
 from acme.infra.workspaces.host import WorkspaceHostImpl
+from acme.infra.workspaces.network import HostNetwork
 from acme.infra.workspaces.twin import WorkspaceNullImpl, WorkspaceTwinImpl
 
 DEPLOYMENT = "acme-test"
@@ -295,6 +297,51 @@ async def test_a_running_container_is_reused_only_under_the_spec_it_was_started_
     assert docker.labels["acme.deployment"] == DEPLOYMENT
     volume = docker.calls[-2]
     assert f"acme.deployment={DEPLOYMENT}" in volume, "its volume carries it as well"
+
+
+async def test_a_container_holds_the_hosts_ca_read_only_under_open_egress_alone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A container with open egress mounts the host's CA file read-only,
+    and one with no egress mounts nothing of the host's. One started
+    without the file, as before the host named one, is replaced, its files
+    kept, so no command is pointed at a file its container lacks."""
+    ca = tmp_path / "host-ca.pem"
+    ca.write_text("the host's own")
+    docker = LocalDocker()
+    monkeypatch.setattr("acme.infra.workspaces.container.docker", docker)
+    bare = WorkspaceContainerImpl("python:3.14-slim", timedelta(seconds=5), DEPLOYMENT)
+    networked = WorkspaceContainerImpl(
+        "python:3.14-slim",
+        timedelta(seconds=5),
+        DEPLOYMENT,
+        network=HostNetwork.of({"SSL_CERT_FILE": str(ca)}),
+    )
+    org, workspace_id = new_id(), new_id()
+    await bare.prepare(org, workspace_id, spec(IsolationMode.CONTAINER, OPEN))
+    docker.calls.clear()
+    await networked.prepare(org, workspace_id, spec(IsolationMode.CONTAINER, OPEN))
+    assert [call[0] for call in docker.calls] == [
+        "version",
+        "inspect",
+        "rm",
+        "image",
+        "volume",
+        "run",
+    ]
+    run = docker.calls[-1]
+    mounts = [run[i + 1] for i, flag in enumerate(run) if flag == "--mount"]
+    assert mounts == [f"type=bind,source={ca},target={CA_MOUNT},readonly"]
+    assert not any(call[:2] == ("volume", "rm") for call in docker.calls), "its files stay"
+
+    docker.calls.clear()
+    await networked.prepare(org, workspace_id, spec(IsolationMode.CONTAINER, OPEN))
+    assert [call[0] for call in docker.calls] == ["version", "inspect"], "it is reused"
+
+    docker.calls.clear()
+    await networked.prepare(org, workspace_id, spec(IsolationMode.CONTAINER, NONE))
+    run = docker.calls[-1]
+    assert run[0] == "run" and "--mount" not in run
 
 
 async def test_an_absent_image_is_pulled_under_the_pull_limit_before_the_run(

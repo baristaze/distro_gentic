@@ -45,6 +45,12 @@ uv run acme-host run          # every start after it
   host. One it cannot make is answered as refused, so another host of
   the pool may. When another host holds the workspace already, this
   host's goes.
+- **Shares its proxy and its CA, under open egress alone.** A command in
+  a workspace with open egress goes through the proxy the host's
+  environment names, without any credential in its URL, and trusts the
+  CA file `SSL_CERT_FILE` names, which its container holds read-only.
+  Nothing else of the host's environment reaches it. A workspace with no
+  egress gets neither, and no secret may land in their variables.
 - **Lets go of an instance when asked.** The platform asks the host
   that holds a session's workspace to release it once no run accounts
   for it past a grace, after it has pushed the checkout's work. The host

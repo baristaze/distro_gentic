@@ -14,9 +14,14 @@ from acme.infra.workspaces import (
     WorkspaceProviderInterface,
     refusal,
 )
+from acme.infra.workspaces.network import HostNetwork
 
 MOUNT = "/workspace"
 """Where a workspace's files sit inside its container."""
+
+CA_MOUNT = "/etc/ssl/host-ca.pem"
+"""Where the host's CA file sits inside a container with open egress, read
+only."""
 
 DEFAULT_IMAGE = "python:3.14"
 """The image a container workspace runs unless a setting names another. An
@@ -66,10 +71,11 @@ def container_name(workspace_id: UUID) -> str:
     return f"acme-ws-{workspace_id.hex}"
 
 
-def spec_print(spec: IsolationSpec) -> str:
-    """The fingerprint of a spec, as a container started to it is labelled:
-    a running container is reused only under the spec it was started to."""
-    return hashlib.sha256(spec.model_dump_json().encode()).hexdigest()
+def spec_print(spec: IsolationSpec, *mounts: str) -> str:
+    """The fingerprint of a spec and the host's files mounted for it, as a
+    container started to them is labelled: a running container is reused
+    only under the spec and the mounts it was started to."""
+    return hashlib.sha256("\n".join((spec.model_dump_json(), *mounts)).encode()).hexdigest()
 
 
 class WorkspaceContainerImpl(WorkspaceProviderInterface):
@@ -88,7 +94,8 @@ class WorkspaceContainerImpl(WorkspaceProviderInterface):
 
     The container drops every capability, takes no new privileges, and
     keeps nothing of the engine's environment: its variables are the
-    image's."""
+    image's. Under open egress it holds the host's CA file read-only at
+    `CA_MOUNT`, and under any other egress nothing of the host's."""
 
     def __init__(
         self,
@@ -96,11 +103,13 @@ class WorkspaceContainerImpl(WorkspaceProviderInterface):
         timeout: timedelta,
         deployment: str,
         pull_timeout: timedelta = DEFAULT_PULL_TIMEOUT,
+        network: HostNetwork = HostNetwork(),
     ) -> None:
         self._image = image
         self._timeout = timeout
         self._deployment = deployment
         self._pull_timeout = pull_timeout
+        self._network = network
 
     async def prepare(self, org_id: UUID, workspace_id: UUID, spec: IsolationSpec) -> Workspace:
         why = refusal(
@@ -117,7 +126,8 @@ class WorkspaceContainerImpl(WorkspaceProviderInterface):
         name = container_name(workspace_id)
         workspace = Workspace(id=workspace_id, org_id=org_id, spec=spec, location=name)
         running = await docker("inspect", "--format", STARTED_TO, name, bound=self._timeout)
-        printed = spec_print(spec)
+        mounts = self._mounts(spec)
+        printed = spec_print(spec, *mounts)
         started_to = [b"true", printed.encode(), self._deployment.encode()]
         if running.ok and running.stdout.split() == started_to:
             return workspace
@@ -164,6 +174,7 @@ class WorkspaceContainerImpl(WorkspaceProviderInterface):
             "no-new-privileges",
             *_network(spec),
             *_limits(spec),
+            *(flag for mount in mounts for flag in ("--mount", mount)),
             "--volume",
             f"{name}:{MOUNT}",
             "--workdir",
@@ -206,6 +217,15 @@ class WorkspaceContainerImpl(WorkspaceProviderInterface):
             raise BackendFailed("docker", "ps", listed.reason())
         found = (_held(line) for line in listed.stdout.decode(errors="replace").splitlines())
         return [instance for instance in found if instance is not None]
+
+    def _mounts(self, spec: IsolationSpec) -> tuple[str, ...]:
+        """The host's files a container to `spec` holds: its CA file, read
+        only, under open egress alone. A bind `--mount` refuses a source
+        that is not there, where a `--volume` would make one."""
+        ca_file = self._network.ca_file
+        if spec.egress.mode is not EgressMode.OPEN or ca_file is None:
+            return ()
+        return (f"type=bind,source={ca_file},target={CA_MOUNT},readonly",)
 
     def describe(self) -> str:
         return f"workspaces=container({self._image})"

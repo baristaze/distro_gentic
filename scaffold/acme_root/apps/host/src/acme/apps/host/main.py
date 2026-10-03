@@ -8,6 +8,7 @@ platform is unreachable at startup, 5 a startup probe failed."""
 import asyncio
 import contextlib
 import logging
+import os
 import sys
 from collections.abc import Coroutine
 from datetime import timedelta
@@ -29,6 +30,7 @@ from acme.infra.transports.broker import BrokerNullImpl
 from acme.infra.transports.container import TransportContainerImpl
 from acme.infra.workspaces import IsolationMode, WorkspaceProviderInterface
 from acme.infra.workspaces.container import WorkspaceContainerImpl
+from acme.infra.workspaces.network import HostNetwork
 
 log = logging.getLogger(__name__)
 
@@ -111,10 +113,15 @@ def host_transports(settings: Settings) -> dict[IsolationMode, TransportInterfac
     """The transports this host runs work through: a container per session,
     on its local Docker. A bare directory runs only as the host's dedicated
     user, which no transport here does yet, so an item at that mode is
-    refused rather than run as the host's own user."""
+    refused rather than run as the host's own user. A command under open
+    egress goes through the host's proxy and trusts its CA file."""
     secrets = SecretsLocalImpl(settings.secrets_path)
     container = TransportContainerImpl(
-        settings.records_path, secrets, BrokerNullImpl(), timedelta(seconds=30)
+        settings.records_path,
+        secrets,
+        BrokerNullImpl(),
+        timedelta(seconds=30),
+        HostNetwork.of(os.environ),
     )
     return {IsolationMode.CONTAINER: container}
 
@@ -122,13 +129,14 @@ def host_transports(settings: Settings) -> dict[IsolationMode, TransportInterfac
 def host_workspaces(settings: Settings) -> dict[IsolationMode, WorkspaceProviderInterface]:
     """What makes a workspace its pool asks this host to prepare, by the
     mode its transport runs: a container per session, of the image its
-    owner names."""
+    owner names, holding the host's CA file under open egress."""
     return {
         IsolationMode.CONTAINER: WorkspaceContainerImpl(
             settings.workspace_image,
             timedelta(seconds=30),
             f"host-{settings.name}",
             timedelta(seconds=settings.pull_timeout_seconds),
+            HostNetwork.of(os.environ),
         )
     }
 
