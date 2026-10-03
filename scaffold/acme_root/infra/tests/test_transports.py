@@ -138,14 +138,18 @@ def what_the_host_hands(ca_path: str) -> dict[str, str]:
 
 
 async def seen_by(
-    transport: TransportInterface, workspace: Workspace, python: str, **fields: object
-) -> dict[str, object]:
+    transport: TransportInterface,
+    workspace: Workspace,
+    python: str,
+    env: tuple[tuple[str, str], ...] = (),
+) -> tuple[dict[str, str], str | None]:
     """The environment a command sees, and the CA file it reads there."""
     result = await transport.run(
-        workspace, command(python, "-c", PRINTS_ITS_NETWORK, **fields), seal=SEAL
+        workspace, command(python, "-c", PRINTS_ITS_NETWORK, env=env), seal=SEAL
     )
     assert result.exit_code == 0, result.stderr
-    return json.loads(result.stdout)
+    seen = json.loads(result.stdout)
+    return seen["env"], seen["ca"]
 
 
 def kept_at(records: Path) -> bytes:
@@ -456,11 +460,10 @@ class TestTransportLocal(TransportContract):
         bare = TransportLocalImpl(records, secrets, broker, search_path)
         networked = TransportLocalImpl(records, secrets, broker, search_path, network)
         own = (("HTTPS_PROXY", "http://elsewhere.test:1"),)
-        alone = await seen_by(bare, workspace, self.python, env=own)
-        seen = await seen_by(networked, workspace, self.python, env=own)
-        assert seen["env"] == {**alone["env"], **what_the_host_hands(str(ca))}  # type: ignore[dict-item]
-        assert seen["ca"] == CA_TEXT
-        assert not {"HOST_ONLY", ENGINE_CREDENTIAL} & set(seen["env"])  # type: ignore[arg-type]
+        alone, _ = await seen_by(bare, workspace, self.python, env=own)
+        seen, read = await seen_by(networked, workspace, self.python, env=own)
+        assert seen == {**alone, **what_the_host_hands(str(ca))} and read == CA_TEXT
+        assert not {"HOST_ONLY", ENGINE_CREDENTIAL} & set(seen)
         assert "hunter2" not in json.dumps(seen)
 
     async def test_under_no_egress_a_command_sees_nothing_of_the_hosts_network(
@@ -483,8 +486,8 @@ class TestTransportLocal(TransportContract):
                 )
             }
         )
-        seen = await seen_by(networked, closed, self.python)
-        assert not HOST_NETWORK_VARIABLES & set(seen["env"]) and seen["ca"] is None  # type: ignore[arg-type]
+        seen, read = await seen_by(networked, closed, self.python)
+        assert not HOST_NETWORK_VARIABLES & set(seen) and read is None
 
     async def test_with_no_broker_a_brokered_secret_refuses_the_command(
         self, tmp_path: Path, workspace: Workspace
@@ -607,12 +610,12 @@ async def test_a_container_with_open_egress_holds_the_hosts_ca_read_only(
         timedelta(seconds=60),
         network,
     )
-    seen: dict[EgressMode, dict[str, object]] = {}
+    seen: dict[EgressMode, dict[str, str]] = {}
     for egress in (EgressMode.OPEN, EgressMode.NONE):
         spec = IsolationSpec(mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode=egress))
         workspace = await provider.prepare(new_id(), new_id(), spec)
         try:
-            seen[egress] = await seen_by(transport, workspace, "python3")
+            seen[egress], read = await seen_by(transport, workspace, "python3")
             listed = await transport.run(workspace, command("ls", CA_MOUNT), seal=SEAL)
             written = await transport.run(
                 workspace, command("sh", "-c", f"echo more >> {CA_MOUNT}"), seal=SEAL
@@ -620,17 +623,16 @@ async def test_a_container_with_open_egress_holds_the_hosts_ca_read_only(
         finally:
             await provider.purge(workspace.org_id, workspace.id)
         if egress is EgressMode.OPEN:
-            assert seen[egress]["ca"] == CA_TEXT
+            assert read == CA_TEXT
             assert written.exit_code != 0 and "Read-only" in written.stderr
         else:
             assert listed.exit_code != 0, "no egress, no file of the host's"
-    opened = seen[EgressMode.OPEN]["env"]
-    assert isinstance(opened, dict)
+    opened = seen[EgressMode.OPEN]
     assert {name: opened[name] for name in HOST_NETWORK_VARIABLES & set(opened)} == (
         what_the_host_hands(CA_MOUNT)
     )
     assert not {"HOST_ONLY", ENGINE_CREDENTIAL} & set(opened)
-    assert not HOST_NETWORK_VARIABLES & set(seen[EgressMode.NONE]["env"])  # type: ignore[arg-type]
+    assert not HOST_NETWORK_VARIABLES & set(seen[EgressMode.NONE])
 
 
 @pytest.mark.integration
@@ -738,5 +740,6 @@ async def test_a_container_command_takes_the_hosts_network_under_open_egress_alo
         assert handed == what_the_host_hands(CA_MOUNT)
     else:
         assert handed == dict(own), "the command's own, and nothing of the host's"
-    assert not HOST_NETWORK_VARIABLES & set(seen["env"])  # type: ignore[arg-type]
+    line_env = seen["env"]
+    assert isinstance(line_env, dict) and not HOST_NETWORK_VARIABLES & set(line_env)
     assert "hunter2" not in " ".join(argv)
