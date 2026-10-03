@@ -4,8 +4,9 @@ writes or edits, and a person's review of a suggestion."""
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
+from acme.om.knowledge.rules import words
 from acme.om.knowledge.types.knowledge import MAX_TEXT, KnowledgeStatus
 from acme.om.steps.types.content import MAX_NAME
 from acme.services.api.types.common import RequestBody, View
@@ -15,11 +16,20 @@ MAX_TRIGGER_WORDS = 20
 
 class KnowledgeRequest(RequestBody):
     """An entry: its title, the words that trigger it, all of which must
-    appear in what a session is about, and what it says."""
+    appear in what a session is about, and what it says. A trigger word
+    with none of a-z, 0-9, `_`, `.` or `-` is refused: recall reads nothing
+    in it, so it would match every session."""
 
     title: str = Field(min_length=1, max_length=MAX_NAME)
     trigger: list[str] = Field(min_length=1, max_length=MAX_TRIGGER_WORDS)
     text: str = Field(min_length=1, max_length=MAX_TEXT)
+
+    @field_validator("trigger")
+    @classmethod
+    def _each_word_matches_something(cls, trigger: list[str]) -> list[str]:
+        if any(not words(word) for word in trigger):
+            raise ValueError("each trigger word holds one of a-z, 0-9, _, . or - at least")
+        return trigger
 
 
 class ReviewRequest(RequestBody):

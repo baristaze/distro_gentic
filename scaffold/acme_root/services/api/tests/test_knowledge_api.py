@@ -150,6 +150,29 @@ async def test_a_malformed_entry_is_refused_whole(
     assert (await client.get("/v1/knowledge", headers=ajax.owner)).json() == []
 
 
+async def test_a_trigger_word_recall_reads_nothing_in_is_refused(
+    client: httpx.AsyncClient, container: AppContainer
+) -> None:
+    ajax = await tenant(client, container, "ajax")
+    written = await client.post("/v1/knowledge", headers=keyed(ajax.owner, "w"), json=ENTRY)
+    assert written.json()["trigger"] == ["staging", "database"]
+    url = f"/v1/knowledge/{written.json()['id']}"
+    for word in ["日本", "?", ""]:
+        body = {**ENTRY, "trigger": ["staging", word]}
+        write = await client.post("/v1/knowledge", headers=keyed(ajax.owner, word), json=body)
+        refused(write, 422, "validation_failed")
+        refused(await client.put(url, headers=at(ajax.owner, 1), json=body), 422, "validation_failed")
+    kept = await client.put(url, headers=at(ajax.owner, 1), json={**ENTRY, "trigger": ["staging"]})
+    assert kept.status_code == 200, kept.text
+    assert kept.json()["trigger"] == ["staging"]
+    assert len((await client.get("/v1/knowledge", headers=ajax.owner)).json()) == 1
+
+
+def keyed(headers: dict[str, str], key: str) -> dict[str, str]:
+    """The headers with an `Idempotency-Key` of their own."""
+    return {**headers, "Idempotency-Key": f"trigger-{key.encode().hex()}"}
+
+
 def at(headers: dict[str, str], version: int) -> dict[str, str]:
     """The headers with `If-Match` naming the version read."""
     return {**headers, "If-Match": f'"{version}"'}

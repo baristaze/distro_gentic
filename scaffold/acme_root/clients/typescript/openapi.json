@@ -2787,7 +2787,7 @@
       },
       "KnowledgeRequest": {
         "additionalProperties": false,
-        "description": "An entry: its title, the words that trigger it, all of which must\nappear in what a session is about, and what it says.",
+        "description": "An entry: its title, the words that trigger it, all of which must\nappear in what a session is about, and what it says. A trigger word\nwith none of a-z, 0-9, `_`, `.` or `-` is refused: recall reads nothing\nin it, so it would match every session.",
         "properties": {
           "text": {
             "maxLength": 10000,

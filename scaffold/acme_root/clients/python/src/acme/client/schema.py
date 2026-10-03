@@ -641,7 +641,9 @@ class IssuedTotpSecretView(BaseModel):
 class KnowledgeRequest(BaseModel):
     """
     An entry: its title, the words that trigger it, all of which must
-    appear in what a session is about, and what it says.
+    appear in what a session is about, and what it says. A trigger word
+    with none of a-z, 0-9, `_`, `.` or `-` is refused: recall reads nothing
+    in it, so it would match every session.
     """
     model_config = ConfigDict(
         extra='forbid',
