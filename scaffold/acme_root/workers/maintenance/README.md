@@ -6,7 +6,9 @@ side, started in `main.py`.
 - **The work loop** (`loop.py`) claims items from the work queue on its
   lane and runs each under the context the claim built. It renews each
   lease, and completes, fails, parks, or refuses the item. The handlers are
-  in `handler.py`, `orchestrations.py`, `accounts.py`, and `sessions.py`.
+  in `handler.py`, `orchestrations.py`, `accounts.py`, `sessions.py`, and
+  `validations.py`, which runs a validation session's check on the
+  platform's fresh executor.
 - **The delivery consumer** (`deliveries.py`) long-polls `Queues.WEBHOOKS`,
   where the API queues each provider's verified delivery, and applies it
   once in the org it names. A message that can never apply is dropped; any
