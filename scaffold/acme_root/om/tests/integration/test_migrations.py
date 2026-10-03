@@ -1,13 +1,16 @@
 """Every role's migrated schema agrees with the ORM metadata, the latest
 revision of every role downgrades and upgrades again, the logins are safe to
-make twice, a migration behind a held lock gives up within its bound, and a
-data migration passes the fence it runs under and fails when it misses rows."""
+make twice, a migration behind a held lock gives up within its bound, a
+data migration passes the fence it runs under and fails when it misses rows,
+and a workspace's notices move to the one notice and back, every tenant's."""
 
 import asyncio
 import time
+from uuid import UUID
 
 import pytest
 from contracts.event_storage import make_event
+from contracts.workspace_storage import make_workspace
 from sqlalchemy import Connection, text
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -27,6 +30,7 @@ from acme.om.storage.migrate import (
 )
 from acme.om.storage.roles import DatabaseRole
 from acme.om.storage.settings import MigrationSettings
+from acme.om.workspaces.storage.impl.postgres import WorkspaceStoragePostgresImpl
 
 pytestmark = pytest.mark.integration
 
@@ -169,3 +173,39 @@ async def on_core(url: str, sql: str) -> list[tuple[object, ...]]:
             return [tuple(row) for row in result] if result.returns_rows else []
     finally:
         await engine.dispose()
+
+
+async def notices_of(url: str, org: UUID, session_id: UUID) -> object:
+    """A workspace's notices as the migration login reads them, inside its
+    tenant's fence."""
+    engine = create_async_engine(url)
+    try:
+        async with engine.begin() as connection:
+            await connection.exec_driver_sql(f"SET LOCAL app.org_id = '{org}'")
+            read = await connection.exec_driver_sql(
+                f"SELECT notices FROM core.session_workspaces WHERE id = '{session_id}'"
+            )
+            return read.scalar_one()
+    finally:
+        await engine.dispose()
+
+
+async def test_a_workspaces_notices_move_to_the_one_notice_and_back_for_every_tenant(
+    pg_sessions: LoginSessions, migrated: dict[DatabaseRole, str]
+) -> None:
+    """Down, the last notice written is the one the previous release holds;
+    up, it is the list's one entry, in both tenants' rows."""
+    storage = WorkspaceStoragePostgresImpl(pg_sessions)
+    held: dict[UUID, UUID] = {}
+    for org in (new_id(), new_id()):
+        workspace = make_workspace().model_copy(update={"notices": ("older", "newer")})
+        assert await storage.create_workspace(org, workspace)
+        held[org] = workspace.id
+    core = migrated[DatabaseRole.CORE]
+
+    await downgrade(DatabaseRole.CORE, core, "202610034800")
+    await upgrade(DatabaseRole.CORE, core)
+
+    for org, session_id in held.items():
+        assert await notices_of(core, org, session_id) == ["newer"]
+    assert await check(DatabaseRole.CORE, core) == []
