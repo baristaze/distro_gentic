@@ -64,9 +64,7 @@ class ProjectStoragePostgresImpl(PgStorageBase, ProjectStorageInterface):
         )
         return await self._landed(stmt, org_id, outbox_rows)
 
-    async def _landed(
-        self, stmt: Any, org_id: UUID, outbox_rows: tuple[OutboxRow, ...]
-    ) -> bool:
+    async def _landed(self, stmt: Any, org_id: UUID, outbox_rows: tuple[OutboxRow, ...]) -> bool:
         """A statement that returns the project's id when it touched it, and
         the rows that announce it, in one commit; nothing lands when it
         touched none."""
