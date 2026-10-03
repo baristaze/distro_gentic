@@ -15,6 +15,7 @@ from acme.services.api.routers import (
     agent_sessions,
     automations,
     budgets,
+    claimants,
     events,
     fleet,
     hosts,
@@ -40,8 +41,8 @@ HOSTED: dict[str, tuple[APIRouter, ...]] = {
     # Sessions with an agent; their loops run in the session runner.
     "agent_sessions": (agent_sessions.router,),
     # A tenant's pools and hosts, and a host's own calls: enroll, rotate,
-    # beat, and claim.
-    "hosts": (hosts.router,),
+    # beat, and claim; and a product's claimant's, through the same path.
+    "hosts": (hosts.router, claimants.router),
     # The exec work a host holds and its control stream: a host's own calls,
     # each opened from inside its wall.
     "relay": (relay.router, control.router),

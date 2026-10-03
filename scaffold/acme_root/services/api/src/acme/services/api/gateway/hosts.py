@@ -1,14 +1,16 @@
-"""The gateway's transitions for a workspace host, a client of the gateway
-that is no person. A host enrolls with its tenant's enrollment token, and
-every later call carries its own credential, whose prefix no other
+"""The gateway's transitions for a claimant, a client of the gateway that is
+no person: a workspace host, or a claimant of a product's kind. A claimant
+enrolls with its tenant's enrollment token, and every later call carries
+its own credential, whose prefix names its kind and which no other
 transition accepts. Its identity comes from that credential alone, so
-nothing a host sends names its tenant, its pool, or a lane."""
+nothing a claimant sends names its kind, its tenant, its pool, or a
+lane."""
 
 from typing import Annotated
 
 from fastapi import Depends, Header, Request
 
-from acme.om.hosts.types.host import HostIdentity
+from acme.om.hosts.types.host import ClaimantIdentity, HostIdentity
 from acme.services.api.gateway.admission import READ_METHODS
 from acme.services.api.gateway.auth import Rctx, bearer_of
 from acme.services.api.gateway.ratelimit import count, failures_counted
@@ -16,9 +18,9 @@ from acme.services.api.gateway.resolve import container_of
 
 
 async def enrollment_token(authorization: Annotated[str | None, Header()] = None) -> str:
-    """The enrollment token a host presents once, as its bearer. The hosts
-    manager checks it; the route's budget is counted per address, as a
-    sign-in's is, since no credential of the host's exists yet."""
+    """The enrollment token a claimant presents once, as its bearer. The
+    hosts manager checks it; the route's budget is counted per address, as a
+    sign-in's is, since no credential of the claimant's exists yet."""
     return bearer_of(authorization)
 
 
@@ -43,3 +45,23 @@ async def current_host(
 
 
 Host = Annotated[HostIdentity, Depends(current_host)]
+
+
+async def current_claimant(
+    request: Request,
+    rctx: Rctx,
+    authorization: Annotated[str | None, Header()] = None,
+) -> ClaimantIdentity:
+    """The claimant of a product's kind behind its own credential, held as a
+    host's is: the lookup counts its failures against the client address,
+    and the credential spends its own budget, under its tenant."""
+    hosts = container_of(request).managers.hosts
+    credential = bearer_of(authorization)
+    async with failures_counted(request):
+        claimant = await hosts.authenticate_claimant(rctx, credential)
+    route = "reads" if request.method in READ_METHODS else "writes"
+    await count(request, route, claimant.org_id, f"cred:{claimant.credential_id}")
+    return claimant
+
+
+Claimant = Annotated[ClaimantIdentity, Depends(current_claimant)]

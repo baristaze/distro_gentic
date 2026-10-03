@@ -1,12 +1,21 @@
 """The hosts service: what the wire can do with a tenant's pools, its
-hosts, and where its sessions run, and what a host's own calls do, in
-views."""
+hosts and its other claimants, and where its sessions run, and what a
+host's or a product's claimant's own calls do, in views."""
 
 from abc import ABC, abstractmethod
 from uuid import UUID
 
 from acme.om.context import RequestContext, TenantContext
-from acme.om.hosts.types.host import HostIdentity
+from acme.om.hosts.types.host import ClaimantIdentity, HostIdentity
+from acme.services.api.types.claimants import (
+    ClaimantClaimView,
+    ClaimantEnrollRequest,
+    ClaimantReportRequest,
+    ClaimantView,
+    ClaimantWorkView,
+    ExtendLeaseRequest,
+    IssuedClaimantCredentialView,
+)
 from acme.services.api.types.hosts import (
     ClaimRequest,
     ClaimView,
@@ -41,7 +50,7 @@ class HostsServiceInterface(ABC):
 
     @abstractmethod
     async def issue_enrollment_token(
-        self, ctx: TenantContext, pool_id: UUID
+        self, ctx: TenantContext, pool_id: UUID, kind: str
     ) -> IssuedEnrollmentTokenView: ...
 
     @abstractmethod
@@ -51,6 +60,9 @@ class HostsServiceInterface(ABC):
 
     @abstractmethod
     async def revoke_host(self, ctx: TenantContext, host_id: UUID) -> HostView: ...
+
+    @abstractmethod
+    async def revoke_claimant(self, ctx: TenantContext, claimant_id: UUID) -> ClaimantView: ...
 
     @abstractmethod
     async def place_session(
@@ -81,3 +93,43 @@ class HostsServiceInterface(ABC):
     async def claim(
         self, rctx: RequestContext, host: HostIdentity, body: ClaimRequest
     ) -> ClaimView: ...
+
+    # A product's claimant's calls.
+
+    @abstractmethod
+    async def enroll_claimant(
+        self, rctx: RequestContext, token: str, body: ClaimantEnrollRequest
+    ) -> IssuedClaimantCredentialView: ...
+
+    @abstractmethod
+    async def rotate_claimant(
+        self, rctx: RequestContext, claimant: ClaimantIdentity
+    ) -> IssuedClaimantCredentialView: ...
+
+    @abstractmethod
+    async def claim_as(
+        self, rctx: RequestContext, claimant: ClaimantIdentity
+    ) -> ClaimantClaimView: ...
+
+    @abstractmethod
+    async def held_as(
+        self, rctx: RequestContext, claimant: ClaimantIdentity, item_id: UUID, claim_token: UUID
+    ) -> ClaimantWorkView: ...
+
+    @abstractmethod
+    async def extend_as(
+        self,
+        rctx: RequestContext,
+        claimant: ClaimantIdentity,
+        item_id: UUID,
+        body: ExtendLeaseRequest,
+    ) -> ClaimantWorkView: ...
+
+    @abstractmethod
+    async def report_as(
+        self,
+        rctx: RequestContext,
+        claimant: ClaimantIdentity,
+        item_id: UUID,
+        body: ClaimantReportRequest,
+    ) -> ClaimantWorkView: ...

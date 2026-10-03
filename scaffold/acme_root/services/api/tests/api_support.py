@@ -16,6 +16,7 @@ from acme.integrations.root import IntegrationsInterface
 from acme.om.agents.types.kind import AgentKind
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, OperatorRole, RequestContext, Role
+from acme.om.root import PlatformPorts
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.tenancy.rules import totp_code, totp_step
@@ -42,10 +43,12 @@ def build_container(
     integrations: IntegrationsInterface | None = None,
     *,
     agent_kinds: tuple[AgentKind, ...] = (),
+    ports: PlatformPorts | None = None,
     **overrides: object,
 ) -> AppContainer:
     """The test container over the memory storage root and the local infra
-    root, with the local sign-in on, and the agent kinds a case runs. A test
+    root, with the local sign-in on, the agent kinds a case runs, and the
+    ports a product hands its roots, its own kinds among them. A test
     that needs a bound or a deadline of its own names the settings it
     overrides, one that needs storage to behave a certain way passes its own
     root, and one that signs in through the identity provider passes the
@@ -67,6 +70,7 @@ def build_container(
         settings,
         integrations,
         agent_kinds=agent_kinds,
+        ports=ports,
     )
 
 

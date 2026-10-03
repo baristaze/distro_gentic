@@ -4,9 +4,12 @@ from acme.om.base import thaw_mapping, utcnow
 from acme.om.context import RequestContext, TenantContext
 from acme.om.hosts import HostsManagerInterface
 from acme.om.hosts.rules import WIRE_VERSION, WireType, at_or_above_floor
-from acme.om.hosts.types.credential import EnrollmentToken, IssuedHostCredential
+from acme.om.hosts.types.credential import EnrollmentToken, IssuedCredential
 from acme.om.hosts.types.host import (
     Advertisement,
+    ClaimantEnrollment,
+    ClaimantIdentity,
+    EnrolledClaimant,
     Enrollment,
     Host,
     HostIdentity,
@@ -14,7 +17,17 @@ from acme.om.hosts.types.host import (
     HostStatus,
 )
 from acme.om.hosts.types.pool import HostPool
+from acme.om.work.types.work_item import WorkItem
 from acme.services.api.services.hosts import HostsServiceInterface
+from acme.services.api.types.claimants import (
+    ClaimantClaimView,
+    ClaimantEnrollRequest,
+    ClaimantReportRequest,
+    ClaimantView,
+    ClaimantWorkView,
+    ExtendLeaseRequest,
+    IssuedClaimantCredentialView,
+)
 from acme.services.api.types.hosts import (
     AdvertisementBody,
     AdvertisementView,
@@ -82,13 +95,43 @@ def advertisement(body: AdvertisementBody) -> Advertisement:
     )
 
 
-def credential_view(issued: IssuedHostCredential) -> IssuedHostCredentialView:
+def credential_view(issued: IssuedCredential) -> IssuedHostCredentialView:
     return IssuedHostCredentialView(
         token=issued.credential,
         credential_id=issued.credential_id,
-        host_id=issued.host_id,
+        host_id=issued.claimant_id,
         pool_id=issued.pool_id,
         expires_at=issued.expires_at,
+    )
+
+
+def claimant_credential_view(issued: IssuedCredential) -> IssuedClaimantCredentialView:
+    return IssuedClaimantCredentialView(
+        token=issued.credential,
+        credential_id=issued.credential_id,
+        kind=issued.kind,
+        claimant_id=issued.claimant_id,
+        pool_id=issued.pool_id,
+        expires_at=issued.expires_at,
+    )
+
+
+def claimant_view(claimant: EnrolledClaimant) -> ClaimantView:
+    return ClaimantView.model_validate(claimant)
+
+
+def work_view(org_id: UUID, item: WorkItem) -> ClaimantWorkView:
+    """An item a claimant holds, in its own tenant."""
+    return ClaimantWorkView(
+        id=item.id,
+        org_id=org_id,
+        kind=item.kind,
+        status=item.status,
+        target_id=item.target_id,
+        payload=thaw_mapping(item.payload),
+        lease_expires_at=item.lease_expires_at,
+        attempts=item.attempts,
+        claim_token=item.claim_token,
     )
 
 
@@ -119,9 +162,9 @@ class HostsServiceImpl(HostsServiceInterface):
         return [status_view(status) for status in await self._hosts.get_hosts(ctx, pool_id)]
 
     async def issue_enrollment_token(
-        self, ctx: TenantContext, pool_id: UUID
+        self, ctx: TenantContext, pool_id: UUID, kind: str
     ) -> IssuedEnrollmentTokenView:
-        issued = await self._hosts.issue_enrollment_token(ctx, pool_id)
+        issued = await self._hosts.issue_enrollment_token(ctx, pool_id, kind)
         return IssuedEnrollmentTokenView(
             token=issued.token, enrollment=token_view(issued.enrollment)
         )
@@ -133,6 +176,9 @@ class HostsServiceImpl(HostsServiceInterface):
 
     async def revoke_host(self, ctx: TenantContext, host_id: UUID) -> HostView:
         return host_view(await self._hosts.revoke_host(ctx, host_id), online=False)
+
+    async def revoke_claimant(self, ctx: TenantContext, claimant_id: UUID) -> ClaimantView:
+        return claimant_view(await self._hosts.revoke_claimant(ctx, claimant_id))
 
     async def place_session(
         self, ctx: TenantContext, session_id: UUID, body: PlaceSessionRequest
@@ -191,3 +237,48 @@ class HostsServiceImpl(HostsServiceInterface):
                 wire_version=WIRE_VERSION[WireType.EXEC],
             )
         )
+
+    async def enroll_claimant(
+        self, rctx: RequestContext, token: str, body: ClaimantEnrollRequest
+    ) -> IssuedClaimantCredentialView:
+        enrollment = ClaimantEnrollment(name=body.name)
+        issued = await self._hosts.enroll_claimant(rctx, token, enrollment)
+        return claimant_credential_view(issued)
+
+    async def rotate_claimant(
+        self, rctx: RequestContext, claimant: ClaimantIdentity
+    ) -> IssuedClaimantCredentialView:
+        return claimant_credential_view(await self._hosts.rotate(rctx, claimant))
+
+    async def claim_as(self, rctx: RequestContext, claimant: ClaimantIdentity) -> ClaimantClaimView:
+        claimed = await self._hosts.claim_as(rctx, claimant)
+        if claimed is None:
+            return ClaimantClaimView(item=None)
+        ctx, item = claimed
+        return ClaimantClaimView(item=work_view(ctx.org_id, item))
+
+    async def held_as(
+        self, rctx: RequestContext, claimant: ClaimantIdentity, item_id: UUID, claim_token: UUID
+    ) -> ClaimantWorkView:
+        item = await self._hosts.held_as(rctx, claimant, item_id, claim_token)
+        return work_view(claimant.org_id, item)
+
+    async def extend_as(
+        self,
+        rctx: RequestContext,
+        claimant: ClaimantIdentity,
+        item_id: UUID,
+        body: ExtendLeaseRequest,
+    ) -> ClaimantWorkView:
+        item = await self._hosts.extend_as(rctx, claimant, item_id, body.claim_token)
+        return work_view(claimant.org_id, item)
+
+    async def report_as(
+        self,
+        rctx: RequestContext,
+        claimant: ClaimantIdentity,
+        item_id: UUID,
+        body: ClaimantReportRequest,
+    ) -> ClaimantWorkView:
+        item = await self._hosts.report_as(rctx, claimant, body.report(item_id))
+        return work_view(claimant.org_id, item)

@@ -22,6 +22,7 @@ from acme.services.api.types.hosts import (
     HostView,
     IssuedEnrollmentTokenView,
     IssuedHostCredentialView,
+    IssueEnrollmentTokenRequest,
     PlacementView,
     PlaceSessionRequest,
     PoolView,
@@ -51,12 +52,17 @@ async def get_hosts(ctx: Ctx, hosts: HostsService, pool_id: UUID) -> list[HostVi
 
 @router.post("/host-pools/{pool_id}/enrollment-tokens", response_model=IssuedEnrollmentTokenView)
 async def issue_enrollment_token(
-    ctx: Ctx, hosts: HostsService, pool_id: UUID
+    ctx: Ctx,
+    hosts: HostsService,
+    pool_id: UUID,
+    body: IssueEnrollmentTokenRequest | None = None,
 ) -> IssuedEnrollmentTokenView:
-    """A token that enrolls hosts into the pool, in the clear once. A retry
-    mints another, so it takes no Idempotency-Key; the one never read
-    expires on its own."""
-    return await hosts.issue_enrollment_token(ctx, pool_id)
+    """A token that enrolls claimants of a kind into the pool, in the clear
+    once: hosts, unless the body names a product's kind. A retry mints
+    another, so it takes no Idempotency-Key; the one never read expires on
+    its own."""
+    kind = (body or IssueEnrollmentTokenRequest()).kind
+    return await hosts.issue_enrollment_token(ctx, pool_id, kind)
 
 
 @router.delete("/host-enrollment-tokens/{token_id}", response_model=EnrollmentTokenView)

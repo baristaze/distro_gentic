@@ -883,6 +883,155 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/claimants/enrollments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Enroll Claimant
+         * @description A claimant enrolls once, with its tenant's enrollment token of its
+         *     kind as its bearer, and gets a credential under its kind's prefix. A
+         *     retry enrolls another claimant, so it takes no Idempotency-Key. A host
+         *     enrolls at `/hosts/enrollments`, with what it probed.
+         */
+        post: operations["enroll_claimant_v1_claimants_enrollments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/claimants/me/claims": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Claim
+         * @description The next item of the claimant's kind on the lanes its identity names,
+         *     or none. The call names nothing: what it is handed is its credential's
+         *     to say.
+         */
+        post: operations["claim_v1_claimants_me_claims_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/claimants/me/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rotate Claimant
+         * @description The claimant's next credential; the one it called with ends after a
+         *     short grace.
+         */
+        post: operations["rotate_claimant_v1_claimants_me_credentials_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/claimants/me/items/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Held
+         * @description The item the claimant holds, under the claim token its claim was
+         *     handed (the `Claim-Token` header). Any other is not found.
+         */
+        get: operations["held_v1_claimants_me_items__item_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/claimants/me/items/{item_id}/lease": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Extend
+         * @description Renews the lease on the item the claimant holds.
+         */
+        post: operations["extend_v1_claimants_me_items__item_id__lease_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/claimants/me/items/{item_id}/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report
+         * @description The claimant's answer for the item it holds: done, or failed with
+         *     why. A failure is retried until its attempts are spent.
+         */
+        post: operations["report_v1_claimants_me_items__item_id__report_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/claimants/{claimant_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke Claimant
+         * @description Ends the claimant and its credentials at once; it is handed no more
+         *     work. An owner's or an admin's.
+         */
+        delete: operations["revoke_claimant_v1_claimants__claimant_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/events": {
         parameters: {
             query?: never;
@@ -949,9 +1098,10 @@ export interface paths {
         put?: never;
         /**
          * Issue Enrollment Token
-         * @description A token that enrolls hosts into the pool, in the clear once. A retry
-         *     mints another, so it takes no Idempotency-Key; the one never read
-         *     expires on its own.
+         * @description A token that enrolls claimants of a kind into the pool, in the clear
+         *     once: hosts, unless the body names a product's kind. A retry mints
+         *     another, so it takes no Idempotency-Key; the one never read expires on
+         *     its own.
          */
         post: operations["issue_enrollment_token_v1_host_pools__pool_id__enrollment_tokens_post"];
         delete?: never;
@@ -2291,6 +2441,109 @@ export interface components {
             item: components["schemas"]["ClaimedWorkView"] | null;
         };
         /**
+         * ClaimantClaimView
+         * @description What a claim answers: the item, or none when nothing is ready.
+         */
+        ClaimantClaimView: {
+            item: components["schemas"]["ClaimantWorkView"] | null;
+        };
+        /**
+         * ClaimantEnrollRequest
+         * @description A claimant's name, beside its enrollment token. The kind and the pool
+         *     are the token's.
+         */
+        ClaimantEnrollRequest: {
+            /** Name */
+            name: string;
+        };
+        /**
+         * ClaimantReportRequest
+         * @description A claimant's answer for an item it holds: done, or failed with why,
+         *     under its claim token. It is held to the report's shape before anything
+         *     reads it: a failure names its reason, within bounds, and a success
+         *     names none.
+         */
+        ClaimantReportRequest: {
+            /**
+             * Claim Token
+             * Format: uuid
+             */
+            claim_token: string;
+            /** Error */
+            error?: string | null;
+            outcome: components["schemas"]["ReportOutcome"];
+        };
+        /**
+         * ClaimantView
+         * @description A claimant as its owner reads it.
+         */
+        ClaimantView: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Kind */
+            kind: string;
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
+            /** Name */
+            name: string;
+            /**
+             * Pool Id
+             * Format: uuid
+             */
+            pool_id: string;
+            /** Revoked At */
+            revoked_at: string | null;
+        };
+        /**
+         * ClaimantWorkView
+         * @description One item a claimant holds, under a lease and the claim token its
+         *     claim was handed, which its read, its renewal, and its report carry;
+         *     none once its report handed it back. `payload` is the item's, as its
+         *     kind fixes it. `org_id` is the tenant whose work it is, the claimant's
+         *     own.
+         */
+        ClaimantWorkView: {
+            /** Attempts */
+            attempts: number;
+            /** Claim Token */
+            claim_token: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Lease Expires At */
+            lease_expires_at: string | null;
+            /**
+             * Org Id
+             * Format: uuid
+             */
+            org_id: string;
+            /** Payload */
+            payload: {
+                [key: string]: unknown;
+            };
+            status: components["schemas"]["WorkStatus"];
+            /**
+             * Target Id
+             * Format: uuid
+             */
+            target_id: string;
+        };
+        /**
          * ClaimedWorkView
          * @description One item a host was handed, under a lease, as `exec` work of
          *     `wire_version`. `payload` is the item's, as its kind fixes it.
@@ -2648,6 +2901,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Kind */
+            kind: string;
             /**
              * Pool Id
              * Format: uuid
@@ -2772,6 +3027,17 @@ export interface components {
          * @enum {string}
          */
         ExecState: "queued" | "running" | "done" | "interrupted";
+        /**
+         * ExtendLeaseRequest
+         * @description The claim token of the item whose lease the claimant renews.
+         */
+        ExtendLeaseRequest: {
+            /**
+             * Claim Token
+             * Format: uuid
+             */
+            claim_token: string;
+        };
         /**
          * FetchCredentialRequest
          * @description A read-only credential of the project's repository, as source control
@@ -3142,6 +3408,18 @@ export interface components {
          */
         IsolationMode: "vm" | "container" | "directory";
         /**
+         * IssueEnrollmentTokenRequest
+         * @description The claimant kind the token enrolls: a host unless it names a kind a
+         *     product registered.
+         */
+        IssueEnrollmentTokenRequest: {
+            /**
+             * Kind
+             * @default host
+             */
+            kind: string;
+        };
+        /**
          * IssuedApiKeyView
          * @description The key in the clear is present on the first response only: the stored
          *     outcome of the create carries no secret, so a replay under the same
@@ -3152,6 +3430,38 @@ export interface components {
             api_key: components["schemas"]["ApiKeyView"];
             /** Key */
             key: string | null;
+        };
+        /**
+         * IssuedClaimantCredentialView
+         * @description The claimant's own credential in the clear, once, under its kind's
+         *     prefix, and the identity it carries. It lives an hour; the claimant
+         *     rotates it before then.
+         */
+        IssuedClaimantCredentialView: {
+            /**
+             * Claimant Id
+             * Format: uuid
+             */
+            claimant_id: string;
+            /**
+             * Credential Id
+             * Format: uuid
+             */
+            credential_id: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Kind */
+            kind: string;
+            /**
+             * Pool Id
+             * Format: uuid
+             */
+            pool_id: string;
+            /** Token */
+            token: string | null;
         };
         /**
          * IssuedDownloadView
@@ -3170,9 +3480,9 @@ export interface components {
         };
         /**
          * IssuedEnrollmentTokenView
-         * @description The token in the clear, once: it enrolls hosts into its pool until
-         *     it expires or is revoked. It is minted on every call, so a retry mints
-         *     another, and the one never read expires on its own.
+         * @description The token in the clear, once: it enrolls claimants of its kind into
+         *     its pool until it expires or is revoked. It is minted on every call, so
+         *     a retry mints another, and the one never read expires on its own.
          */
         IssuedEnrollmentTokenView: {
             enrollment: components["schemas"]["EnrollmentTokenView"];
@@ -4146,6 +4456,11 @@ export interface components {
             /** Name */
             name: string;
         };
+        /**
+         * ReportOutcome
+         * @enum {string}
+         */
+        ReportOutcome: "done" | "failed";
         /**
          * RepositoryBody
          * @description A repository by its host's domain and its path there, such as
@@ -6732,6 +7047,258 @@ export interface operations {
             };
         };
     };
+    enroll_claimant_v1_claimants_enrollments_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClaimantEnrollRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuedClaimantCredentialView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    claim_v1_claimants_me_claims_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClaimantClaimView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rotate_claimant_v1_claimants_me_credentials_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuedClaimantCredentialView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    held_v1_claimants_me_items__item_id__get: {
+        parameters: {
+            query?: never;
+            header: {
+                "claim-token": string;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClaimantWorkView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    extend_v1_claimants_me_items__item_id__lease_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExtendLeaseRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClaimantWorkView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    report_v1_claimants_me_items__item_id__report_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClaimantReportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClaimantWorkView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_claimant_v1_claimants__claimant_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                claimant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClaimantView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_events_v1_events_get: {
         parameters: {
             query?: {
@@ -6887,7 +7454,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["IssueEnrollmentTokenRequest"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
