@@ -11,13 +11,13 @@ from acme.om.evidence.collector import collect, digest
 from acme.om.evidence.executor import ExecutorInterface, Executors
 from acme.om.evidence.manager import EvidenceManagerInterface
 from acme.om.evidence.rules import (
+    by_environment,
     compatibility_refusal,
     execution_request,
     policy_key,
     protection_target,
 )
 from acme.om.evidence.storage import EvidenceStorageInterface
-from acme.om.evidence.types.contract import CheckDeclaration
 from acme.om.evidence.types.inference import Inference, InferenceKind, InferencePage
 from acme.om.evidence.types.policy import ValidationPolicy
 from acme.om.evidence.types.record import ExecutionRecord, ExecutionRecordPage, RunPurpose
@@ -191,7 +191,7 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
 
     async def validate(
         self, ctx: TenantContext, session_id: UUID, purpose: RunPurpose
-    ) -> Validation:
+    ) -> tuple[Validation, ...]:
         ctx.require(Permission.WRITE)
         delivery = await self._work_product.delivered(ctx, session_id)
         if delivery is None:
@@ -207,7 +207,8 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
         request = execution_request(session_id, policy, delivery, purpose)
         if isinstance(request, str):
             raise PreconditionFailed(request)
-        return await self._run(ctx, await self._executor_for(ctx, request.checks), request)
+        planned = await self._planned(ctx, request)
+        return tuple([await self._run(ctx, executor, part) for executor, part in planned])
 
     async def run_check(
         self,
@@ -228,7 +229,6 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
         declared = next((each for each in policy.checks if each.name == check), None)
         if declared is None:
             raise PreconditionFailed(f"the project {project_id} declares no check {check}")
-        executor = await self._executor_for(ctx, (declared,))
         request = ExecutionRequest(
             session_id=session_id,
             project=policy.project,
@@ -239,29 +239,29 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
             trials=(1,),
             protected=policy.protected,
         )
-        return await self._run(ctx, executor, request)
+        ((executor, part),) = await self._planned(ctx, request)
+        return await self._run(ctx, executor, part)
 
-    async def _executor_for(
-        self, ctx: TenantContext, checks: Sequence[CheckDeclaration]
-    ) -> ExecutorInterface:
-        """The executor of the environment the checks name, once it offers
-        what each needs. A validation runs in one environment, so checks
-        that name two are refused, as is an environment no executor of this
-        process runs; nothing has run yet."""
-        environments = sorted({check.environment for check in checks})
-        if len(environments) != 1:
-            raise PreconditionFailed(
-                f"the checks asked for run in {environments}, and a validation runs in one"
-            )
-        executor = self._executors.get(environments[0])
-        if executor is None:
-            raise PreconditionFailed(f"no executor here runs the {environments[0]} environment")
-        offer = await executor.offer(ctx)
-        for check in checks:
-            refusal = compatibility_refusal(check, offer)
-            if refusal is not None:
-                raise PreconditionFailed(refusal)
-        return executor
+    async def _planned(
+        self, ctx: TenantContext, request: ExecutionRequest
+    ) -> list[tuple[ExecutorInterface, ExecutionRequest]]:
+        """Each environment the request's checks name, with its executor and
+        its part of the request, once every executor offers what its checks
+        need. An environment no executor of this process runs, or a check
+        its executor cannot run, refuses the whole request before anything
+        runs."""
+        planned: list[tuple[ExecutorInterface, ExecutionRequest]] = []
+        for environment, part in by_environment(request).items():
+            executor = self._executors.get(environment)
+            if executor is None:
+                raise PreconditionFailed(f"no executor here runs the {environment} environment")
+            offer = await executor.offer(ctx)
+            for check in part.checks:
+                refusal = compatibility_refusal(check, offer)
+                if refusal is not None:
+                    raise PreconditionFailed(refusal)
+            planned.append((executor, part))
+        return planned
 
     async def _run(
         self, ctx: TenantContext, executor: ExecutorInterface, request: ExecutionRequest

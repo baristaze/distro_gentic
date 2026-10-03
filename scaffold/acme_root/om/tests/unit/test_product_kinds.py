@@ -33,7 +33,7 @@ from acme.om.base import Platform, new_id, utcnow
 from acme.om.context import AppContext, AppType, Permission, RequestContext, Role, TenantContext
 from acme.om.evidence.executor import Executors
 from acme.om.evidence.types.contract import PLATFORM_ENVIRONMENT
-from acme.om.evidence.types.policy import ValidationPolicy
+from acme.om.evidence.types.policy import Requirement, ValidationPolicy
 from acme.om.evidence.types.provenance import Provenance
 from acme.om.evidence.types.record import RunPurpose
 from acme.om.exceptions import NotAuthorized, NotFound, PreconditionFailed, ValidationFailed
@@ -458,6 +458,55 @@ async def test_a_products_executor_passes_the_gate_only_as_the_platforms_does(
     products = await gate_reads(BATCH, SCRIPTS[script])
     assert products == platforms
     assert (platforms == "succeeded") == (script == "passes")
+
+
+def two_environments(platform_check: str = "unit") -> ValidationPolicy:
+    """The `checkout` policy with a `frames` check run in `batch`: a change
+    under `src/` needs it and `platform_check`, which runs on the
+    platform's executor."""
+    policy = checkout_policy(Requirement(check=platform_check, paths=("src/**",)))
+    frames = policy.declared("unit").model_copy(update={"name": "frames", "environment": BATCH})
+    return ValidationPolicy.model_validate(
+        {
+            **dict(policy),
+            "checks": (*policy.checks, frames),
+            "requirements": (
+                *policy.requirements,
+                Requirement(check="frames", paths=("src/**",)),
+            ),
+        }
+    )
+
+
+async def test_a_change_needing_checks_of_two_environments_validates_in_each() -> None:
+    platform, product = ScriptedExecutor(), ScriptedExecutor(name="batch-1")
+    evidence = evidence_over(platform, executors={BATCH: product})
+    org = make_org()
+    owner, ctx = context(Role.OWNER, org), context(Role.MEMBER, org)
+    session = new_id()
+    await evidence.manager.write_policy(owner, two_environments())
+    work = make_record(session, step_id=new_id())
+    await evidence.manager.record_run(ctx, work)
+    evidence.work.deliver(org.id, session, delivered())
+    kept = await evidence.manager.validate(ctx, session, RunPurpose.VALIDATION)
+    assert [validation.executor for validation in kept] == ["batch-1", "executor-1"]
+    assert [check.name for request in product.requests for check in request.checks] == ["frames"]
+    assert [check.name for request in platform.requests for check in request.checks] == ["unit"]
+    result = Result(claim=Claim.SUCCEEDED, evidence=(work.id,))
+    verdict = await evidence.gate.check(ctx, session, result)
+    assert verdict.accepted and verdict.verified and verdict.outcome is LoopOutcome.SUCCEEDED
+
+    # Every executor's offer is read before any runs: a check the platform's
+    # cannot run refuses the product's too.
+    platform = ScriptedExecutor(capabilities=frozenset())
+    product = ScriptedExecutor(name="batch-1")
+    evidence = evidence_over(platform, executors={BATCH: product})
+    await evidence.manager.write_policy(owner, two_environments("trials"))
+    evidence.work.deliver(org.id, session, delivered())
+    with pytest.raises(PreconditionFailed, match="browser"):
+        await evidence.manager.validate(ctx, session, RunPurpose.VALIDATION)
+    assert platform.requests == product.requests == []
+    assert not await evidence.storage.read_validations(org.id, session, None, 10)
 
 
 async def test_a_check_runs_only_in_an_environment_an_executor_is_registered_for() -> None:

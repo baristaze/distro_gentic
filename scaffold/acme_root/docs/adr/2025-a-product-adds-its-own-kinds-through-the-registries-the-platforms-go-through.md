@@ -75,6 +75,8 @@ before it is kept, and the result gate reads the record alike.
 - A row asking for a kind its process does not know is refused at the
   relay and ends a dead letter, which an audit event names. Every root
   reads the kinds from the one hand-off so none omits them.
-- A validation whose checks name two environments is refused before
-  anything runs.
+- A change whose checks name two environments takes one validation in
+  each, on that environment's executor. Every executor's offer is read
+  before any runs, and a check none can run refuses all of them. The
+  gate reads every validation at the head, each with its own runs.
 - `distro-scaffold-work-kind` adds a kind to a copy.

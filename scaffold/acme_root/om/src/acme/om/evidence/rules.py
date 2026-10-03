@@ -192,6 +192,27 @@ def execution_request(
     )
 
 
+def by_environment(request: ExecutionRequest) -> dict[str, ExecutionRequest]:
+    """The request as one request per environment its checks name, in name
+    order: each holds that environment's checks with their own trials and
+    rates, so all of a check's runs are one validation's, and the gate
+    reads their batches and provenance per validation as it always does."""
+    rates = request.rates or (None,) * len(request.checks)
+    parts: dict[str, list[int]] = {}
+    for at, check in enumerate(request.checks):
+        parts.setdefault(check.environment, []).append(at)
+    return {
+        environment: request.model_copy(
+            update={
+                "checks": tuple(request.checks[at] for at in held),
+                "trials": tuple(request.trials[at] for at in held),
+                "rates": tuple(rates[at] for at in held) if request.rates else (),
+            }
+        )
+        for environment, held in sorted(parts.items())
+    }
+
+
 # The result gate.
 
 

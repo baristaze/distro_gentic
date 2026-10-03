@@ -269,7 +269,10 @@ class ValidateInput(ToolInput):
 
 
 class Validated(Platform):
-    validation_id: UUID
+    """The validations it kept, one per environment the checks name, and
+    every run they wrote."""
+
+    validations: tuple[UUID, ...]
     version: str
     runs: tuple[UUID, ...]
 
@@ -306,9 +309,11 @@ class ValidateImpl(NativeToolImpl):
     ) -> Platform:
         assert isinstance(call_input, ValidateInput)
         purpose = RunPurpose.BASELINE if call_input.baseline else RunPurpose.VALIDATION
-        validation = await self._evidence().validate(ctx, runtime.session_id, purpose)
+        kept = await self._evidence().validate(ctx, runtime.session_id, purpose)
         return Validated(
-            validation_id=validation.id, version=validation.version, runs=validation.records
+            validations=tuple(validation.id for validation in kept),
+            version=kept[0].version,
+            runs=tuple(run for validation in kept for run in validation.records),
         )
 
 
