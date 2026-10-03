@@ -20,8 +20,11 @@ repository has to be done by the platform, outside it.
 
 **In: a bundle the platform reads.** Before a loop, the platform fetches
 the default branch, and the session's branch where the repository holds
-it, on its own host, with the project's fetch credential, as the read of
-a delivery does. It hands the workspace a git bundle of them through the
+it, with the tags in their history, on its own host, with the project's
+fetch credential, as the read of a delivery does. It reads only where a
+workspace may reach: it resolves the repository's host first, refuses it
+when any address is in the networks no workspace reaches, holds git to
+those addresses, and follows no redirect. It hands the workspace a git bundle of them through the
 transport's files. The checkout fetches from that bundle and from
 nothing else. A cut starts from the default branch as the bundle
 brought it.
@@ -35,7 +38,9 @@ bundle is written: not another branch, not a tag. A release's snapshot
 goes the same way, to its snapshot ref.
 
 **Forward only.** The forge never forces a ref. A session's branch only
-moves forward, so no commit on it is lost, a person's included.
+moves forward, so no commit on it is lost, a person's included. The
+engineer is told so: a fix is a new commit on top, never an amend or a
+rebase, and a refused move says the same.
 
 **The head is on the branch before it is validated.** Validation reads
 the delivered head from the repository, never from the workspace, which
@@ -55,5 +60,6 @@ and says to open the pull request.
   until an attach's bundle passes a tenth of its bound, 51 MB by default.
 - A branch that a session rewrote is refused by the forge, and the
   engineer adds a commit instead.
-- The twin forge pushes for real when it is given a repository's
-  credential, so the local stack shows the whole path.
+- The local stack's twin forge pushes for real, with a repository's
+  credential where it is given one, so the next loop finds the branch and
+  the snapshots, and the local stack shows the whole path.

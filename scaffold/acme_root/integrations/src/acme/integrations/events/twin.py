@@ -17,11 +17,12 @@ over `<timestamp>.installation:<installation>`, and carried as
 `<installation>;t=<timestamp>, v1=<signature>`.
 
 The forge's twin holds the refs the platform points and the pull requests
-it opens, by name and head. Made with a repository's credential
-(`writes_with`), it also pushes each ref's commits to the repository for
-real, from the platform's bundle, as a forge does (`git.py`); made with
-none, it holds names alone, with no commits behind them. Any other
-integration's twin holds no repository."""
+it opens, by name and head. Made to write (`writes`), it also pushes each
+ref's commits to the repository for real, from the platform's bundle, as a
+forge does (`git.py`), with a repository's `credential` where it is given
+one: the local stack's forge twin writes, so the next loop finds what was
+pushed. Made not to, it holds names alone, with no commits behind them.
+Any other integration's twin holds no repository."""
 
 import hashlib
 import hmac
@@ -104,11 +105,13 @@ class IntegrationTwinImpl(IntegrationInterface):
         self,
         name: str,
         secret: str = TWIN_SECRET,
-        writes_with: tuple[str, str] | None = None,
+        writes: bool = False,
+        credential: tuple[str, str] | None = None,
     ) -> None:
         self._name = name
         self._secret = secret
-        self._writes_with = writes_with
+        self._writes = writes
+        self._credential = credential
         self._counter = itertools.count(1)
         self.posted: list[PostedMessage] = []
         """Every message the platform posted through the twin, in order."""
@@ -191,8 +194,8 @@ class IntegrationTwinImpl(IntegrationInterface):
 
     async def push(self, repository: str, ref: str, head: str, bundle: bytes) -> None:
         self._holds_repositories()
-        if self._writes_with is not None:
-            await push_bundle(repository, ref, head, bundle, self._writes_with)
+        if self._writes:
+            await push_bundle(repository, ref, head, bundle, self._credential)
         self.refs[(repository, ref)] = head
 
     async def open_pull_request(

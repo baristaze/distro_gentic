@@ -78,7 +78,8 @@ ENGINEER_KIND = AgentKind(
         "in your workspace. Take a baseline with validate before you change anything. "
         "Change what the objective needs and nothing else, and commit it. Open its pull "
         "request with open_pull_request, so your head is on your branch and a person can "
-        "review it, then validate that head. Submit the result with submit_result, citing "
+        "review it, then validate that head. Your branch only moves forward: a fix is a new "
+        "commit on top, never an amend or a rebase. Submit the result with submit_result, citing "
         "the runs validate answered: a success counts only when the validation at your "
         "head passed. A failure you explain with those runs is a result too.",
     ),

@@ -10,7 +10,7 @@ from datetime import timedelta
 import httpx
 
 from acme.integrations.events import INTEGRATIONS, IntegrationAbsentImpl, IntegrationInterface
-from acme.integrations.events.twin import IntegrationTwinImpl
+from acme.integrations.events.twin import FORGE, IntegrationTwinImpl
 from acme.integrations.exceptions import ProviderUnavailable, UnsafeIntegration
 from acme.integrations.identity import IdentityProviderInterface
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
@@ -48,9 +48,11 @@ def refuse_unsafe(settings: IntegrationsSettings, environment: str, deployed: bo
 
 def integrations_for(settings: IntegrationsSettings) -> dict[str, IntegrationInterface]:
     """Each integration the platform names, from settings: its twin, or the
-    absent one, which refuses every call as unavailable."""
+    absent one, which refuses every call as unavailable. The forge's twin
+    writes what is pushed to the repository, so a session's branch and its
+    snapshots are there for its next loop."""
     if settings.integrations == "twin":
-        return {name: IntegrationTwinImpl(name) for name in INTEGRATIONS}
+        return {name: IntegrationTwinImpl(name, writes=name == FORGE) for name in INTEGRATIONS}
     return {name: IntegrationAbsentImpl(name) for name in INTEGRATIONS}
 
 

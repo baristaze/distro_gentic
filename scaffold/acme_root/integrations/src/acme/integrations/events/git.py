@@ -2,12 +2,14 @@
 integration's own host: the repository's branches fetched into a fresh,
 empty repository, the platform's bundle fetched over them with every object
 checked, and the one commit named pushed to the one ref named, forward
-only. Nothing else in the bundle is written, and nothing of the system's or
-the user's git configuration takes part.
+only: a branch moves only to a commit built on its head, so no commit on it
+is lost. Nothing else in the bundle is written, and nothing of the system's
+or the user's git configuration takes part.
 
-The credential reaches git through the environment of the commands that ask
-the repository, as a basic authorization header for the repository's URL
-alone: never on a command line, in a file, or in any message."""
+The credential, where the repository asks one, reaches git through the
+environment of the commands that ask the repository, as a basic
+authorization header for the repository's URL alone: never on a command
+line, in a file, or in any message."""
 
 import asyncio
 import base64
@@ -23,15 +25,19 @@ TIMEOUT_SECONDS = 300.0
 INCOMING = "refs/incoming"
 """Where the bundle's refs land in the fresh repository, apart from the
 repository's own."""
+BRANCHES = "refs/heads/"
+HELD = "refs/remotes/origin/"
+"""Where the repository's branches land in the fresh repository."""
 
 
 async def push_bundle(
-    repository: str, ref: str, head: str, bundle: bytes, credential: tuple[str, str]
+    repository: str, ref: str, head: str, bundle: bytes, credential: tuple[str, str] | None
 ) -> None:
     """Points `ref` of `repository` at `head`, carrying the commits it needs
-    from `bundle`. `ProviderRefused` when the bundle does not hold `head`, or
-    the repository refuses the move, a move that is not forward among them;
-    `ProviderUnavailable` when the repository cannot be reached."""
+    from `bundle`. `ProviderRefused` when the bundle does not hold `head`, a
+    branch's `head` is not built on the branch's own, or the repository
+    refuses the move; `ProviderUnavailable` when the repository cannot be
+    reached."""
     with tempfile.TemporaryDirectory(prefix="forge-push-") as root:
         repo = Path(root) / "repo"
         env = _environment(Path(root))
@@ -63,6 +69,25 @@ async def push_bundle(
         await _git(
             env, repo, "cat-file", "-e", f"{head}^{{commit}}", refused=f"no commit {head} came"
         )
+        held = ""
+        if ref.startswith(BRANCHES):
+            listed = HELD + ref.removeprefix(BRANCHES)
+            held = await _git(env, repo, "for-each-ref", "--format=%(objectname)", listed)
+        if held.strip():
+            tip = held.split()[0]
+            await _git(
+                env,
+                repo,
+                "merge-base",
+                "--is-ancestor",
+                tip,
+                head,
+                refused=(
+                    f"{ref} only moves forward, and {head} is not built on its head {tip}: "
+                    "add a commit on top of it, never an amend or a rebase (`git reset "
+                    f"--soft {tip}` keeps your changes to commit there)"
+                ),
+            )
         await _git(
             remote,
             repo,
@@ -77,10 +102,10 @@ async def push_bundle(
 
 async def _git(
     env: Mapping[str, str], repo: Path | None, *args: str, refused: str | None = None
-) -> None:
-    """One git command, with no replacement objects. A failure is the
-    `refused` message when one is given, and unavailable otherwise; git's own
-    output never reaches a message."""
+) -> str:
+    """One git command, with no replacement objects; answers what it printed.
+    A failure is the `refused` message when one is given, and unavailable
+    otherwise; git's own output never reaches a message."""
     argv = ["git", "--no-replace-objects"]
     if repo is not None:
         argv += ["--git-dir", str(repo)]
@@ -89,11 +114,11 @@ async def _git(
         *args,
         env=dict(env),
         stdin=asyncio.subprocess.DEVNULL,
-        stdout=asyncio.subprocess.DEVNULL,
+        stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.DEVNULL,
     )
     try:
-        await asyncio.wait_for(process.wait(), TIMEOUT_SECONDS)
+        out, _ = await asyncio.wait_for(process.communicate(), TIMEOUT_SECONDS)
     except TimeoutError:
         process.kill()
         await process.wait()
@@ -102,6 +127,7 @@ async def _git(
         if refused is not None:
             raise ProviderRefused(refused)
         raise ProviderUnavailable(f"git {args[0]} of a push ended with exit {process.returncode}")
+    return out.decode()
 
 
 def _environment(home: Path) -> dict[str, str]:
@@ -119,9 +145,12 @@ def _environment(home: Path) -> dict[str, str]:
     }
 
 
-def _authorized(url: str, credential: tuple[str, str]) -> dict[str, str]:
+def _authorized(url: str, credential: tuple[str, str] | None) -> dict[str, str]:
     """A basic authorization header for requests to `url` alone, so a
-    redirect to anywhere else carries none."""
+    redirect to anywhere else carries none. Nothing when there is no
+    credential."""
+    if credential is None:
+        return {}
     pair = base64.b64encode(f"{credential[0]}:{credential[1]}".encode()).decode()
     return {
         "GIT_CONFIG_COUNT": "1",

@@ -44,9 +44,7 @@ from acme.om.workspaces.rules import SNAPSHOT_PREFIX, session_branch
 from acme.workers.session_runner.workspaces import HeldOptions, HeldWorkspacesSweep
 
 GIT = shutil.which("git")
-FORGE = SourceControlForgeImpl(
-    lambda name: IntegrationTwinImpl(name, writes_with=("forge", "unasked"))
-)
+FORGE = SourceControlForgeImpl(lambda name: IntegrationTwinImpl(name, writes=True))
 """A forge that pushes to the repository on disk, which asks no credential
 of it."""
 APP = AppContext(type=AppType.WORKER, version="session-runner@test")

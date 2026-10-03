@@ -349,7 +349,8 @@ class OpenPullRequestImpl(NativeToolImpl):
             "Opens the pull request of your committed head on your session's own branch of "
             "the project's repository, with a title and a body; answers where a person reads "
             "it. Commit first: only the committed head is opened. Opening it again moves the "
-            "branch to your new head, and keeps the one pull request."
+            "branch forward to your new head, and keeps the one pull request. The branch only "
+            "moves forward: a fix is a new commit on top, never an amend or a rebase."
         ),
         input_model=PullRequestInput,
         output_model=PullRequestOpened,
