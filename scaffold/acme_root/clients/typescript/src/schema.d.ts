@@ -42,6 +42,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/matrix/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record Result
+         * @description What a benchmark run showed of a model for a model role. The latest
+         *     result for the two decides whether a version that serves the role with
+         *     the model may be published.
+         */
+        post: operations["record_result_v1_admin_matrix_results_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/matrix/retirements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retire
+         * @description A model its provider retired: no session resolves to it again, each
+         *     session on it switches at its next loop, and no version that names it
+         *     is published. A model retired already answers its first record.
+         */
+        post: operations["retire_v1_admin_matrix_retirements_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/matrix/versions": {
         parameters: {
             query?: never;
@@ -321,7 +365,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Ledger */
+        /**
+         * Get Ledger
+         * @description The tenant's entries, the newest first, narrowed to one kind, one
+         *     hold (its hold, settlement, and charge), or one session (its holds and
+         *     approvals) when named. `has_more` says the read was cut at its limit.
+         */
         get: operations["get_ledger_v1_admin_orgs__org_id__ledger_get"];
         put?: never;
         post?: never;
@@ -2150,6 +2199,59 @@ export interface components {
             role: components["schemas"]["Role"];
         };
         /**
+         * BenchmarkResultRequest
+         * @description What a benchmark run showed of a model for a model role: whether it
+         *     passed, and where its evidence is (`run`, such as the run's id or its
+         *     report's address). The latest result for the model and the role decides
+         *     whether a version that serves the role with the model may be
+         *     published.
+         */
+        BenchmarkResultRequest: {
+            /** Benchmark */
+            benchmark: string;
+            /** Model */
+            model: string;
+            /** Passed */
+            passed: boolean;
+            provider: components["schemas"]["ProviderName"];
+            /** Role */
+            role: string;
+            /** Run */
+            run: string;
+        };
+        /**
+         * BenchmarkResultView
+         * @description A recorded result, written once.
+         */
+        BenchmarkResultView: {
+            /** Benchmark */
+            benchmark: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Model */
+            model: string;
+            /** Passed */
+            passed: boolean;
+            provider: components["schemas"]["ProviderName"];
+            /**
+             * Recorded By
+             * Format: uuid
+             */
+            recorded_by: string;
+            /** Role */
+            role: string;
+            /** Run */
+            run: string;
+        };
+        /**
          * BenchmarkSummaryView
          * @description One run of a scenario, without its trials: a point of the scenario's
          *     trend.
@@ -3388,6 +3490,18 @@ export interface components {
             /** Units */
             units?: number | null;
         };
+        /**
+         * LedgerPageView
+         * @description One read of a tenant's ledger, the newest first. `has_more` says the
+         *     read was cut at its limit and older entries match it too: narrow it by
+         *     kind, hold, or session to reach them.
+         */
+        LedgerPageView: {
+            /** Has More */
+            has_more: boolean;
+            /** Items */
+            items: components["schemas"]["LedgerEntryView"][];
+        };
         /** LivePageView */
         LivePageView: {
             /**
@@ -4128,6 +4242,40 @@ export interface components {
             data: string;
         };
         /**
+         * RetireRequest
+         * @description A model its provider retired, by name, as a fill names it.
+         */
+        RetireRequest: {
+            /** Model */
+            model: string;
+            provider: components["schemas"]["ProviderName"];
+        };
+        /**
+         * RetirementView
+         * @description A retired model: no session resolves to it again, and a version that
+         *     names it is not published. Recorded once a model.
+         */
+        RetirementView: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Model */
+            model: string;
+            provider: components["schemas"]["ProviderName"];
+            /**
+             * Recorded By
+             * Format: uuid
+             */
+            recorded_by: string;
+        };
+        /**
          * Role
          * @enum {string}
          */
@@ -4799,6 +4947,82 @@ export interface operations {
             };
         };
     };
+    record_result_v1_admin_matrix_results_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                "idempotency-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BenchmarkResultRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchmarkResultView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retire_v1_admin_matrix_retirements_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                "idempotency-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetireRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetirementView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     stage_v1_admin_matrix_versions_post: {
         parameters: {
             query?: never;
@@ -5373,6 +5597,8 @@ export interface operations {
         parameters: {
             query?: {
                 kind?: components["schemas"]["EntryKind"] | null;
+                hold_id?: string | null;
+                session_id?: string | null;
                 limit?: number;
             };
             header?: {
@@ -5393,7 +5619,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LedgerEntryView"][];
+                    "application/json": components["schemas"]["LedgerPageView"];
                 };
             };
             /** @description Validation Error */

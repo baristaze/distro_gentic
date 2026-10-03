@@ -649,6 +649,16 @@ class LedgerEntryView(BaseModel):
     units: Annotated[int | None, Field(title='Units')] = None
 
 
+class LedgerPageView(BaseModel):
+    """
+    One read of a tenant's ledger, the newest first. `has_more` says the
+    read was cut at its limit and older entries match it too: narrow it by
+    kind, hold, or session to reach them.
+    """
+    has_more: Annotated[bool, Field(title='Has More')]
+    items: Annotated[list[LedgerEntryView], Field(title='Items')]
+
+
 class LiveReadView(BaseModel):
     """
     A handle to one session's open streams until `expires_at`. Read it
@@ -971,6 +981,29 @@ class PurposeUsageView(BaseModel):
     pending_size_bytes: Annotated[int, Field(title='Pending Size Bytes')]
     purpose: FilePurpose
     size_bytes: Annotated[int, Field(title='Size Bytes')]
+
+
+class RetireRequest(BaseModel):
+    """
+    A model its provider retired, by name, as a fill names it.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    model: Annotated[str, Field(max_length=200, min_length=1, title='Model')]
+    provider: ProviderName
+
+
+class RetirementView(BaseModel):
+    """
+    A retired model: no session resolves to it again, and a version that
+    names it is not published. Recorded once a model.
+    """
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    id: Annotated[UUID, Field(title='Id')]
+    model: Annotated[str, Field(title='Model')]
+    provider: ProviderName
+    recorded_by: Annotated[UUID, Field(title='Recorded By')]
 
 
 class Role(StrEnum):
@@ -1449,6 +1482,40 @@ class AutomationPrincipalView(BaseModel):
     granted_by: Annotated[UUID, Field(title='Granted By')]
     id: Annotated[UUID, Field(title='Id')]
     role: Role
+
+
+class BenchmarkResultRequest(BaseModel):
+    """
+    What a benchmark run showed of a model for a model role: whether it
+    passed, and where its evidence is (`run`, such as the run's id or its
+    report's address). The latest result for the model and the role decides
+    whether a version that serves the role with the model may be
+    published.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    benchmark: Annotated[str, Field(pattern='^[a-z][a-z0-9_.-]{0,99}$', title='Benchmark')]
+    model: Annotated[str, Field(max_length=200, min_length=1, title='Model')]
+    passed: Annotated[bool, Field(title='Passed')]
+    provider: ProviderName
+    role: Annotated[str, Field(pattern='^[a-z][a-z0-9_]{0,63}$', title='Role')]
+    run: Annotated[str, Field(max_length=500, min_length=1, title='Run')]
+
+
+class BenchmarkResultView(BaseModel):
+    """
+    A recorded result, written once.
+    """
+    benchmark: Annotated[str, Field(title='Benchmark')]
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    id: Annotated[UUID, Field(title='Id')]
+    model: Annotated[str, Field(title='Model')]
+    passed: Annotated[bool, Field(title='Passed')]
+    provider: ProviderName
+    recorded_by: Annotated[UUID, Field(title='Recorded By')]
+    role: Annotated[str, Field(title='Role')]
+    run: Annotated[str, Field(title='Run')]
 
 
 class BudgetView(BaseModel):

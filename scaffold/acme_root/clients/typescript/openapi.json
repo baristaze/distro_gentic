@@ -425,6 +425,107 @@
         "title": "AutomationPrincipalView",
         "type": "object"
       },
+      "BenchmarkResultRequest": {
+        "additionalProperties": false,
+        "description": "What a benchmark run showed of a model for a model role: whether it\npassed, and where its evidence is (`run`, such as the run's id or its\nreport's address). The latest result for the model and the role decides\nwhether a version that serves the role with the model may be\npublished.",
+        "properties": {
+          "benchmark": {
+            "pattern": "^[a-z][a-z0-9_.-]{0,99}$",
+            "title": "Benchmark",
+            "type": "string"
+          },
+          "model": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Model",
+            "type": "string"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ProviderName"
+          },
+          "role": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "title": "Role",
+            "type": "string"
+          },
+          "run": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Run",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "role",
+          "benchmark",
+          "passed",
+          "run"
+        ],
+        "title": "BenchmarkResultRequest",
+        "type": "object"
+      },
+      "BenchmarkResultView": {
+        "description": "A recorded result, written once.",
+        "properties": {
+          "benchmark": {
+            "title": "Benchmark",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ProviderName"
+          },
+          "recorded_by": {
+            "format": "uuid",
+            "title": "Recorded By",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "run": {
+            "title": "Run",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "model",
+          "role",
+          "benchmark",
+          "passed",
+          "run",
+          "created_at",
+          "recorded_by"
+        ],
+        "title": "BenchmarkResultView",
+        "type": "object"
+      },
       "BenchmarkSummaryView": {
         "description": "One run of a scenario, without its trials: a point of the scenario's\ntrend.",
         "properties": {
@@ -2977,6 +3078,28 @@
         "title": "LedgerEntryView",
         "type": "object"
       },
+      "LedgerPageView": {
+        "description": "One read of a tenant's ledger, the newest first. `has_more` says the\nread was cut at its limit and older entries match it too: narrow it by\nkind, hold, or session to reach them.",
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LedgerEntryView"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "has_more"
+        ],
+        "title": "LedgerPageView",
+        "type": "object"
+      },
       "LivePageView": {
         "properties": {
           "session_id": {
@@ -4569,6 +4692,63 @@
         "title": "ResultRequest",
         "type": "object"
       },
+      "RetireRequest": {
+        "additionalProperties": false,
+        "description": "A model its provider retired, by name, as a fill names it.",
+        "properties": {
+          "model": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Model",
+            "type": "string"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ProviderName"
+          }
+        },
+        "required": [
+          "provider",
+          "model"
+        ],
+        "title": "RetireRequest",
+        "type": "object"
+      },
+      "RetirementView": {
+        "description": "A retired model: no session resolves to it again, and a version that\nnames it is not published. Recorded once a model.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ProviderName"
+          },
+          "recorded_by": {
+            "format": "uuid",
+            "title": "Recorded By",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "model",
+          "created_at",
+          "recorded_by"
+        ],
+        "title": "RetirementView",
+        "type": "object"
+      },
       "Role": {
         "enum": [
           "owner",
@@ -6065,6 +6245,226 @@
           }
         },
         "summary": "Get Benchmark",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/matrix/results": {
+      "post": {
+        "description": "What a benchmark run showed of a model for a model role. The latest\nresult for the two decides whether a version that serves the role with\nthe model may be published.",
+        "operationId": "record_result_v1_admin_matrix_results_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BenchmarkResultRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BenchmarkResultView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record Result",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/matrix/retirements": {
+      "post": {
+        "description": "A model its provider retired: no session resolves to it again, each\nsession on it switches at its next loop, and no version that names it\nis published. A model retired already answers its first record.",
+        "operationId": "retire_v1_admin_matrix_retirements_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetireRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetirementView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retire",
         "tags": [
           "admin"
         ]
@@ -7605,6 +8005,7 @@
     },
     "/v1/admin/orgs/{org_id}/ledger": {
       "get": {
+        "description": "The tenant's entries, the newest first, narrowed to one kind, one\nhold (its hold, settlement, and charge), or one session (its holds and\napprovals) when named. `has_more` says the read was cut at its limit.",
         "operationId": "get_ledger_v1_admin_orgs__org_id__ledger_get",
         "parameters": [
           {
@@ -7631,6 +8032,40 @@
                 }
               ],
               "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "hold_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hold Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
             }
           },
           {
@@ -7697,11 +8132,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/LedgerEntryView"
-                  },
-                  "title": "Response Get Ledger V1 Admin Orgs  Org Id  Ledger Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/LedgerPageView"
                 }
               }
             },
