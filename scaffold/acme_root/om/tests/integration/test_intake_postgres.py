@@ -3,7 +3,8 @@ pull request wakes it as data, and fires an automation whose run starts a
 session held to its share of the cost cap, recorded once. A schedule
 fires once a slot however many workers tick it at once, and an
 automation run as the tenant's automation principal acts on that
-principal's role alone."""
+principal's role alone. A scheduled station job runs under the lease its
+grant gives, one fencing token after another."""
 
 import asyncio
 from collections.abc import AsyncIterator
@@ -29,12 +30,14 @@ from acme.om.automations.types.automation import (
     Refusal,
     RunsAs,
     RunStatus,
+    StationWork,
     Trigger,
     TriggerKind,
 )
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext, Role, TenantContext
 from acme.om.evidence.types.provenance import Provenance
+from acme.om.evidence.types.record import RunOutcome
 from acme.om.intake.rules import described
 from acme.om.intake.types.event import (
     Arrival,
@@ -47,6 +50,8 @@ from acme.om.intake.types.event import (
 from acme.om.intake.types.link import HandleKind
 from acme.om.intake.types.route import Effect
 from acme.om.root import build_managers
+from acme.om.stations.types.job import JobReport, StationCommand
+from acme.om.stations.types.station import Lab, Station, StationPool
 from acme.om.steps.rules import message_step
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.settings import MigrationSettings
@@ -236,3 +241,70 @@ async def test_an_automation_run_as_the_automation_principal_holds_its_role_alon
         Refusal.ACTION,
         None,
     )
+
+
+DAEMON = AppContext(type=AppType.API, version="station-daemon@test")
+
+
+async def test_a_scheduled_station_job_runs_under_its_lease_one_token_after_another_over_postgres(
+    storage: StoragePostgresImpl, tmp_path: Path
+) -> None:
+    owner = await an_owner(storage, tmp_path)
+    platform = wired(tmp_path, storage=storage, owner=owner)
+    stations, now = platform.managers.stations, utcnow()
+    by = {"created_at": now, "updated_at": now, "created_by": owner.user_id}
+    by["updated_by"] = owner.user_id
+    lab = await stations.create_lab(owner, Lab(id=new_id(), **by, name="lab-1"))
+    pool = await stations.create_pool(owner, StationPool(id=new_id(), **by, name="arms"))
+    await stations.add_station(
+        owner, Station(id=new_id(), **by, lab_id=lab.id, pool_id=pool.id, name="arm-1")
+    )
+    issued = await stations.issue_daemon_credential(owner, lab.id)
+    daemon = await stations.authenticate(
+        RequestContext(request_id=new_id(), app=DAEMON), issued.credential
+    )
+    work = StationWork(
+        pool_id=pool.id,
+        project="acme/firmware",
+        candidate="4f0405f",
+        procedure="smoke",
+        procedure_version="v1",
+        commands=(StationCommand(operation="apply", parameters={"speed": 0.5}),),
+    )
+    creator = platform.person(Role.ADMIN)
+    smoke = await platform.automations.create_automation(
+        creator,
+        every_hour(creator).model_copy(
+            update={"action": Action(kind=ActionKind.RUN_STATION_JOB, station=work)}
+        ),
+    )
+    for token in (1, 2):
+        await platform.automations.tick(platform.service)
+        (run, *_) = await platform.automations.get_runs(owner, smoke.id, 10)
+        assert run.status is RunStatus.STARTED and run.job_id is not None
+        claimed = await stations.claim(RequestContext(request_id=new_id(), app=DAEMON), daemon, 1)
+        assert claimed is not None and claimed.job is not None
+        assert (claimed.job.id, claimed.job.token, claimed.job.commands) == (
+            run.job_id,
+            token,
+            work.commands,
+        )
+        at = utcnow()
+        report = JobReport(
+            run_id=new_id(),
+            outcome=RunOutcome.PASSED,
+            started_at=at,
+            finished_at=at,
+            commands_run=1,
+            adapter="twin:arm-1",
+            provenance=Provenance.TWIN,
+            daemon_version="station-daemon@test",
+        )
+        await stations.report(
+            RequestContext(request_id=new_id(), app=DAEMON), daemon, run.job_id, report
+        )
+        platform.clock.now += timedelta(hours=1)
+    # The next tick closes the second run: its job ran.
+    await platform.automations.tick(platform.service)
+    runs = await platform.automations.get_runs(owner, smoke.id, 10)
+    assert sum(1 for run in runs if run.closed_at is not None) == 2
