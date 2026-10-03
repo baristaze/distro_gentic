@@ -1,6 +1,8 @@
-"""Wire types of a tenant's budgets: one budget as stored, and the new
-amount a person sets on it."""
+"""Wire types of a tenant's budgets: one budget as stored, the new amount a
+person sets on it, and the tenant's usage, each budget with what its
+current window spent."""
 
+from datetime import datetime
 from typing import Self
 from uuid import UUID
 
@@ -36,3 +38,24 @@ class AmountRequest(RequestBody):
         if self.cost_micros is None and self.tokens is None:
             raise ValueError("an amount bounds reference cost, native tokens, or both")
         return self
+
+
+class BudgetUsageView(View):
+    """A budget and its current window: what open holds reserve and what
+    settled calls spent, in reference cost (millionths) and native tokens,
+    against the budget's amount."""
+
+    budget: BudgetView
+    window_start: datetime
+    held_cost_micros: int
+    held_tokens: int
+    spent_cost_micros: int
+    spent_tokens: int
+
+
+class UsagePageView(View):
+    """One page of the tenant's budgets with their usage, by budget id.
+    `next_cursor` fetches the next page and is null on the last one."""
+
+    items: list[BudgetUsageView]
+    next_cursor: str | None

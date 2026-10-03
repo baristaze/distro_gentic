@@ -45,12 +45,23 @@ class Probe:
     detail: str
 
 
+PASSES_WITH_TIME = frozenset({"platform", "clock"})
+"""The startup probes whose failure passes without a person: the platform
+comes back, and the machine's clock comes into step."""
+
+
 class Misconfigured(RuntimeError):
     """A startup probe failed: the host does not start, and says which."""
 
     def __init__(self, failed: list[Probe]) -> None:
         super().__init__("; ".join(f"{probe.name}: {probe.detail}" for probe in failed))
         self.failed = failed
+
+    @property
+    def passes_with_time(self) -> bool:
+        """Whether every failed probe is one that passes with time, so a
+        later start may succeed where this one did not."""
+        return all(probe.name in PASSES_WITH_TIME for probe in self.failed)
 
 
 # The startup probes.

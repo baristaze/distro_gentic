@@ -8,6 +8,7 @@ from pydantic import Field
 from acme.infra.exceptions import InfraException
 from acme.integrations.events import IntegrationInterface
 from acme.om.agent_sessions import AgentSessionsManagerInterface
+from acme.om.agent_sessions.rules import QUESTION
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agents.loop_rules import APPROVAL_UNLOCK
 from acme.om.agents.types.run import LoopRun, RunEnd
@@ -19,19 +20,24 @@ from acme.om.exceptions import NotFound
 from acme.om.intake import IntakeManagerInterface
 from acme.om.notifications.manager import NotificationsManagerInterface
 from acme.om.notifications.rules import (
+    ANSWER_QUESTION,
     APPROVES_CALLS,
     NO_ROUTE,
     SETS_BUDGETS,
     answer_link,
     as_budget,
+    asked_question,
     budget_link,
     decision_link,
     held_calls,
     holding,
     holding_permission,
+    message_link,
     needs_person,
     notification_id,
     parked_step,
+    question_text,
+    requester_or_managers,
 )
 from acme.om.notifications.storage import NotificationStorageInterface
 from acme.om.notifications.types.notification import PORTAL, Ask, Notification
@@ -175,15 +181,21 @@ class NotificationsManagerImpl(NotificationsManagerInterface):
                     recipients=holding_permission(members, APPROVES_CALLS),
                 )
             ]
-        # Any other park on a person waits on the person who asked; one who
-        # holds no place now leaves it to the people who manage the tenant.
+        # A question, and any other park on a person, waits on the person who
+        # asked; one who holds no place now leaves it to the people who
+        # manage the tenant.
         requester = session.speaker.id if session.speaker is not None else session.created_by
-        held = {member.user_id for member in members}
-        recipients = (
-            (requester,)
-            if requester in held
-            else holding_permission(members, Permission.MANAGE_MEMBERS)
-        )
+        recipients = requester_or_managers(requester, members)
+        if park == QUESTION:
+            # Only a principal's message answers it: a control re-parks it.
+            return [
+                Ask(
+                    action=ANSWER_QUESTION,
+                    link=message_link(session.id),
+                    text=question_text(title, asked_question(history)),
+                    recipients=recipients,
+                )
+            ]
         return [
             Ask(
                 action=park.unlock,

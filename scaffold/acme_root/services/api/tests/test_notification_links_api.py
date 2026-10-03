@@ -13,6 +13,7 @@ import pytest
 from api_support import PROJECT_ID, add_member, build_container, seed_request, sign_in_as
 from contracts.step_storage import make_message, make_request, make_response, make_tool_request
 
+from acme.om.agent_sessions.rules import QUESTION
 from acme.om.agents.loop_rules import APPROVAL_UNLOCK
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
 from acme.om.agents.types.run import LoopRun, RunEnd
@@ -184,6 +185,27 @@ async def test_a_park_on_its_requesters_link_answers_who_may_steer_it_alone(
     assert crossed.status_code == 404, crossed.text
     answered = await follow(client, "POST", link, ajax[Role.MEMBER], **unlock)
     assert answered.status_code == 201, answered.text
+
+
+async def test_a_questions_link_takes_its_requesters_answer_as_a_message(
+    client: httpx.AsyncClient, container: AppContainer, ajax: Tenant
+) -> None:
+    run = await parked(client, container, ajax, QUESTION)
+    notified = await told(container, ajax, run)
+    assert await recipients(container, ajax, notified) == {Role.MEMBER}
+    (link,) = {n.link for n in notified}
+    assert link == f"/v1/agent-sessions/{run.session_id}/messages"
+    answer = {"json": {"text": "Week 12."}}
+    viewer = await follow(client, "POST", link, ajax[Role.VIEWER], **answer)
+    assert viewer.status_code == 403, viewer.text
+    crossed = await follow(client, "POST", link, ajax.stranger, **answer)
+    assert crossed.status_code == 404, crossed.text
+    path = f"/v1/agent-sessions/{run.session_id}"
+    assert (await client.get(path, headers=ajax[Role.MEMBER])).json()["park"] is not None
+    answered = await follow(client, "POST", link, ajax[Role.MEMBER], **answer)
+    assert answered.status_code == 201, answered.text
+    session = await client.get(path, headers=ajax[Role.MEMBER])
+    assert session.json()["park"] is None, "the answer clears the park"
 
 
 async def test_a_budgets_link_answers_who_sets_budgets_alone(

@@ -13,6 +13,7 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
+from contracts.benchmark_storage import operator
 from contracts.budget_storage import make_budget
 from contracts.loops import ASSISTANT, reply, said
 from contracts.money import Money, money_over
@@ -51,8 +52,8 @@ from acme.om.budgets.types.amount import Spend
 from acme.om.budgets.types.breach import Refusal
 from acme.om.budgets.types.budget import BudgetScope, BudgetScopeKind, WindowKind
 from acme.om.budgets.types.hold import Billed, HoldRequest, Settlement
-from acme.om.context import TenantContext
-from acme.om.exceptions import BudgetRefused, GateParked, SpenderUnknown
+from acme.om.context import OperatorPermission, OperatorRole, TenantContext
+from acme.om.exceptions import BudgetRefused, GateParked, NotAuthorized, SpenderUnknown
 from acme.om.models.types.fill import MAIN, Eligibility
 from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.steps.types.header import ParkReason
@@ -209,6 +210,50 @@ async def test_a_hold_a_settlement_and_a_charge_post_to_the_one_ledger(tmp_path:
     )
     engine_ledger = money.loop.storage.get_ledger_storage()
     assert await engine_ledger.read_hold(org, hold.id) is None, "no second ledger"
+
+
+async def test_an_operator_reads_the_ledger_of_the_tenant_it_names_under_its_read(
+    tmp_path: Path,
+) -> None:
+    """The operators' read of a tenant's ledger: its entries, of one kind, one
+    hold, or one session when named, and whether the read was cut at its
+    limit; another tenant named reads none of them, and an operator who holds
+    no read reads nothing."""
+    money = money_over(tmp_path)
+    await money.open(plan="team")
+    session_id = await money.loop.start()
+    await money.loop.say(session_id, "What is the total?")
+    money.loop.anthropic.add(reply(said("The total is 12.")))
+    assert (await money.loop.loops.run(money.loop.owner, session_id)).end is RunEnd.ENDED
+    org = money.loop.owner.org_id
+    reader = operator(OperatorRole.READ)
+
+    page = await money.billing.get_entries(reader, org, limit=50)
+    assert not page.has_more
+    assert sorted(type(entry).__name__ for entry in page.items) == [
+        "Charge",
+        "FundedHold",
+        "Settlement",
+    ]
+    (charge,) = (
+        await money.billing.get_entries(reader, org, kind=EntryKind.CHARGE, limit=50)
+    ).items
+    assert isinstance(charge, Charge)
+    (hold,) = (await money.billing.get_entries(reader, org, session_id=session_id, limit=50)).items
+    assert isinstance(hold, FundedHold)
+    of_hold = await money.billing.get_entries(reader, org, hold_id=hold.id, limit=50)
+    assert sorted(type(entry).__name__ for entry in of_hold.items) == [
+        "Charge",
+        "FundedHold",
+        "Settlement",
+    ]
+    cut = await money.billing.get_entries(reader, org, limit=2)
+    assert len(cut.items) == 2 and cut.has_more
+    elsewhere = await money.billing.get_entries(reader, new_id(), limit=50)
+    assert elsewhere.items == () and not elsewhere.has_more
+    minting = reader.model_copy(update={"permissions": frozenset({OperatorPermission.MINT})})
+    with pytest.raises(NotAuthorized):
+        await money.billing.get_entries(minting, org, limit=50)
 
 
 async def test_the_buckets_are_drawn_in_their_fixed_order_and_prepaid_differs_only_in_which_pays(

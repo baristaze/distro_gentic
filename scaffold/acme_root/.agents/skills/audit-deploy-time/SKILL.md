@@ -90,7 +90,7 @@ env file and no token.
    after the apply returns:
 
    ```bash
-   aws ecs describe-services --cluster acme-<env> --services api maintenance \
+   aws ecs describe-services --cluster acme-<env> --services api maintenance session-runner \
      --profile acme-<env>-investigate --region <region> > ~/Downloads/acme_deploy_time_<yyyy-mm-dd>/services.json
    uv run python ops/audit/deploy_timeline.py events ~/Downloads/acme_deploy_time_<yyyy-mm-dd>/services.json \
      --since <the apply step's start> --until <its end plus two minutes>

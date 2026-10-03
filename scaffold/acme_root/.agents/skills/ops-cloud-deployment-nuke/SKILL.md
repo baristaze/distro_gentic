@@ -52,8 +52,9 @@ remains; removing them is the person's call.
 
 ## Procedure
 
-The processes are `api` and `maintenance`, the ECS services of the
-cluster `acme-<env>`, as `deployment/README.md` lists them.
+The processes are `api`, `maintenance`, and `session-runner`, the ECS
+services of the cluster `acme-<env>`, as `deployment/README.md` lists
+them.
 
 1. Verify the administrator profile as Role and credential states.
 2. Production only, two checks, both before the script runs:
@@ -89,7 +90,7 @@ cluster `acme-<env>`, as `deployment/README.md` lists them.
 
    ```bash
    aws ecs describe-services --cluster acme-<env> \
-     --services api maintenance --profile <admin_profile>
+     --services api maintenance session-runner --profile <admin_profile>
    aws s3api list-buckets --query 'Buckets[?starts_with(Name, `acme-<env>-`)].Name' \
      --profile <admin_profile>
    aws secretsmanager list-secrets --filters Key=name,Values=acme/<env>/app/org/ \

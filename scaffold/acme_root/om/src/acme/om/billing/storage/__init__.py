@@ -17,6 +17,7 @@ from acme.om.billing.types.ledger import (
     Charge,
     Count,
     Credit,
+    Entry,
     EntryKind,
     FundedHold,
     Grant,
@@ -25,8 +26,6 @@ from acme.om.billing.types.ledger import (
 )
 from acme.om.budgets.types.hold import Hold, Settlement
 from acme.om.outbox.types.row import OutboxRow
-
-Entry = FundedHold | Settlement | Charge | Credit | Grant | WindowRaise | Approval
 
 
 class AccountStorageInterface(ABC):

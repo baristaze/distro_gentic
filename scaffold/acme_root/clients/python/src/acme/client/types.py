@@ -5,6 +5,7 @@ renames a generated class is absorbed here."""
 from acme.client.schema import (
     ActionBody,
     AdvertisementBody,
+    AgentSessionPageView,
     AgentSessionView,
     ApiKeyPageView,
     ApiKeyView,
@@ -82,6 +83,7 @@ from acme.client.schema import (
 __all__ = [
     "ActionBody",
     "AdvertisementBody",
+    "AgentSessionPageView",
     "AgentSessionView",
     "ApiKeyPageView",
     "ApiKeyView",

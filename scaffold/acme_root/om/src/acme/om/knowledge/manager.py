@@ -1,7 +1,9 @@
 """The knowledge swimlane: what a session should not rediscover, recalled
-into it when its trigger matches, as data. An agent may suggest an entry;
-only a person's review lets any session recall it, so one session cannot
-plant instructions for the next."""
+into it when its trigger matches, as data, and searched and read by its
+agent on demand. An agent may suggest an entry; only a person's review lets
+any session recall or read it, so one session cannot plant instructions
+for the next. A session reaches its tenant's entries of its own project and
+of no project, never another project's or another tenant's."""
 
 from abc import ABC, abstractmethod
 from uuid import UUID
@@ -16,8 +18,9 @@ class KnowledgeManagerInterface(ABC):
         self, ctx: TenantContext, session_id: UUID, title: str, trigger: tuple[str, ...], text: str
     ) -> Knowledge:
         """An entry an agent suggests from its session, as its call's context
-        may: it waits for a person's review and is recalled by no session
-        before it."""
+        may, for the session's project, or for the whole tenant when the
+        session has none: it waits for a person's review and is recalled or
+        read by no session before it."""
         ...
 
     @abstractmethod
@@ -78,9 +81,24 @@ class KnowledgeManagerInterface(ABC):
     async def recall(
         self, ctx: TenantContext, session_id: UUID, about: str
     ) -> tuple[Knowledge, ...]:
-        """Brings the reviewed entries whose trigger `about` matches into the
-        session, each as an event it reads as data at its next model call,
-        once; answers them."""
+        """Brings the reviewed entries the session reaches whose trigger
+        `about` matches into the session, each as an event it reads as data
+        at its next model call, once; answers them."""
+        ...
+
+    @abstractmethod
+    async def search(
+        self, ctx: TenantContext, session_id: UUID, query: str, limit: int
+    ) -> tuple[Knowledge, ...]:
+        """The reviewed entries the session reaches that share the most of
+        the query's words, best first, at most `limit`."""
+        ...
+
+    @abstractmethod
+    async def read(self, ctx: TenantContext, session_id: UUID, slug: str) -> Knowledge:
+        """The reviewed entry of `slug` the session reaches. One waiting for
+        its review, rejected, of another project, or of another tenant is
+        `NotFound`, as one that never existed is."""
         ...
 
     @abstractmethod

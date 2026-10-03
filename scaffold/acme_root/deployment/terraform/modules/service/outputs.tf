@@ -20,3 +20,13 @@ output "rollout_gate" {
   description = "Known once this instance's pre-rollout task ran; another instance passes it as rollout_after."
   value       = var.pre_rollout == null ? "" : terraform_data.pre_rollout[0].id
 }
+
+output "task_policy_arns" {
+  description = "The policies the task role attaches, as attached: what the process itself may reach, beside the collector's telemetry."
+  value       = aws_iam_role_policy_attachment.task[*].policy_arn
+}
+
+output "injected_secret_names" {
+  description = "The variables the execution role injects from the secret store, which are the only secrets it may read."
+  value       = sort(keys(var.secrets))
+}
