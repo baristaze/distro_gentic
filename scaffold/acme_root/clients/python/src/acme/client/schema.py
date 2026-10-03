@@ -1164,9 +1164,9 @@ class WorkKind(StrEnum):
     WAKE_SESSION = 'WAKE_SESSION'
     WAKE_SESSIONS = 'WAKE_SESSIONS'
     LOOP = 'LOOP'
+    VALIDATION = 'VALIDATION'
     EXEC = 'EXEC'
     WORKSPACE = 'WORKSPACE'
-    STATION = 'STATION'
 
 
 class WorkStatus(StrEnum):

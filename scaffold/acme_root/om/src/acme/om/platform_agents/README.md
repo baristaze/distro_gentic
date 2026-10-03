@@ -13,9 +13,10 @@ workspace it works in, and which of its calls run without asking.
 
 - **The engineer** takes an objective to a validated, reviewable change.
   It works in a container of its own, from which nothing leaves: it reads
-  and writes files and runs commands. It asks for a validation of its
-  committed head on a fresh executor, opens its pull request on its own
-  branch, and submits its result through the
+  and writes files and runs commands. It opens its pull request on its
+  own branch, which puts its committed head on the repository, asks for a
+  validation of that head on a fresh executor, and submits its result
+  through the
   [result gate](../evidence/README.md), citing the runs that validation
   wrote. A success counts only when the validation at its head passed.
 - **Analysis** reads what a run produced (its logs, telemetry, and

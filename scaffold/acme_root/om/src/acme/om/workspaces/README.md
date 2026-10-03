@@ -47,7 +47,9 @@ rebuilt from.
   again after a wait, and no weaker workspace is made ([ADR
   2005](../../../../../docs/adr/2005-a-workspace-no-host-can-give-parks-the-loop-and-a-lost-one-ends-it.md)).
   Then the checkout is brought up to the session's branch on the
-  repository its project binds.
+  repository its project binds, from a bundle the platform reads on its
+  own host with the project's fetch credential; the checkout fetches
+  nothing itself ([ADR 2023](../../../../../docs/adr/2023-a-workspaces-repository-comes-in-and-its-work-goes-out-as-bundles-the-platform-makes.md)).
 - **The branch.** One the remote holds is tracked, fast-forwarded to
   what the remote holds, and one never pushed is kept, or cut from the
   default branch on the session's first loop. One the remote held and
@@ -58,9 +60,10 @@ rebuilt from.
   checkout holds is pushed to a snapshot ref, or nothing is cut.
 - **Release.** Before an instance goes, what its checkout holds that the
   remote lacks is committed to a snapshot ref beside the session's
-  branch, never on it, and pushed. The branch, the index, and the files
-  stay as they were. A push that does not land lets nothing go: the
-  instance and its work stay. The next loop is told where the work is. A
+  branch, never on it, and pushed: the platform bundles it, and source
+  control pushes it with its own credential. The branch, the index, and
+  the files stay as they were. A push that does not land lets nothing
+  go: the instance and its work stay. The next loop is told where the work is. A
   release lets go only of what its own run holds, by the run's epoch: a
   session that resumes while it is still being released keeps the
   workspace its new run took.
@@ -126,12 +129,20 @@ rebuilt from.
 - The checkout runs in the workspace through the transport the tools
   take, under the epoch of the run that holds the session: for a session
   pinned to its tenant's hosts, the relay to the host that holds it.
+  Nothing it runs reaches the repository: a bundle comes in through the
+  transport's files, and one goes out the same way.
 - A pinned session's workspace is made by a host of its pool, not by this
   process (`placed.PlacedWorkspacesInterface`, the relay's): it is held to
   the same pin, and its loop waits on the resource until a host holds it.
 - A session's project and the repository it binds are the projects'
-  rows, read through `WorkspaceProjectsInterface`; a repository is cloned
-  over HTTPS and cut from its own default branch. A gone branch's fate
+  rows, read through `WorkspaceProjectsInterface`; a repository is read
+  over HTTPS on the platform's host (`impl/reader.py`), with the tags in
+  its branches' history, and a branch cut from its own default branch.
+  The read reaches only where a workspace may: a host any of whose
+  addresses is in a network no workspace reaches is refused before
+  anything is fetched, git is held to the addresses checked, and no
+  redirect is followed. The root walls off what the options name; in
+  `local`, a repository on disk is read too. A gone branch's fate
   comes from `PullRequestsInterface`, whose null knows none, so a branch
   gone for any reason ends the loop.
 - Outside `local`, the evidence's executor is this namespace's: the root
@@ -151,6 +162,8 @@ rebuilt from.
   project's fetch credential, handed to that git alone.
 - The engineer's pull request goes through
   `WorkspacesManagerInterface.open_pull_request`, which checks the push
-  token and writes through `SourceControlInterface` (`projects.py`); the
-  root wires the forge's (`impl/forge.py`), and with none every write is
+  token, bundles the committed head out of the workspace this host
+  holds, and writes through `SourceControlInterface` (`projects.py`): the
+  one head, to the session's branch alone, forward only. The root wires
+  the forge's (`impl/forge.py`), and with none every write is
   unavailable.

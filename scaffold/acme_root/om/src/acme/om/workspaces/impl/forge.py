@@ -1,6 +1,7 @@
-"""Source control as the forge integration holds it: a session's branch and
-its pull request, written with the integration's own credential, which
-never leaves the integration. The workspaces call it only for a write the
+"""Source control as the forge integration holds it: a session's branch, its
+snapshots, and its pull request, written with the integration's own
+credential, which never leaves the integration; the commits go to it as the
+platform's bundle. The workspaces call it only for a write the
 session's push token reaches. A write the forge refuses is
 `ValidationFailed`; one it cannot take now, or with no forge at all, is
 `Unavailable`."""
@@ -22,11 +23,11 @@ class SourceControlForgeImpl(SourceControlInterface):
     def __init__(self, integration: Callable[[str], IntegrationInterface]) -> None:
         self._integration = integration
 
-    async def push_branch(self, binding: RepositoryBinding, branch: str, head: str) -> None:
+    async def push(self, binding: RepositoryBinding, ref: str, head: str, bundle: bytes) -> None:
         try:
-            await self._integration(FORGE).push_branch(binding.repository, branch, head)
+            await self._integration(FORGE).push(binding.repository, ref, head, bundle)
         except InfraException as failed:
-            raise _failure(f"the forge took no branch {branch}", failed) from None
+            raise _failure(f"the forge took no {ref}", failed) from None
 
     async def open_pull_request(
         self, binding: RepositoryBinding, branch: str, title: str, body: str
@@ -49,7 +50,7 @@ def _failure(what: str, failed: InfraException) -> PlatformException:
 class SourceControlAbsentImpl(SourceControlInterface):
     """No forge is connected: every write is unavailable."""
 
-    async def push_branch(self, binding: RepositoryBinding, branch: str, head: str) -> None:
+    async def push(self, binding: RepositoryBinding, ref: str, head: str, bundle: bytes) -> None:
         raise Unavailable("no forge is connected")
 
     async def open_pull_request(

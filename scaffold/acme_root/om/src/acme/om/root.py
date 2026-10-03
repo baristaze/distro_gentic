@@ -140,6 +140,7 @@ from acme.om.work import WorkManagerInterface, WorkOperatorManagerInterface
 from acme.om.work.impl.manager import WorkManagerImpl, WorkOptions
 from acme.om.work.impl.operator import WorkOperatorManagerImpl
 from acme.om.workspaces import WorkspacesManagerInterface
+from acme.om.workspaces import rules as workspace_rules
 from acme.om.workspaces.git import RepositoryReaderInterface, WorkspaceGitInterface
 from acme.om.workspaces.impl.executor import ExecutorWorkspacesImpl
 from acme.om.workspaces.impl.forge import SourceControlAbsentImpl, SourceControlForgeImpl
@@ -491,10 +492,13 @@ def build_managers(
     None writes through the forge integration, and with no integrations,
     nowhere. `workspace_git` runs the checkout; None runs it in the
     workspace through the transport the tools take, so a workspace inside
-    a tenant's wall is checked out there. `workspace_reader` reads what a
+    a tenant's wall is checked out there, from bundles the reader brings
+    and source control pushes. `workspace_reader` reads what a
     session delivered from its repository; None fetches it into a fresh
-    repository of this process's own, with the project's fetch credential. `workspaces_options` names the
-    networks no workspace reaches, and the sweep's batch."""
+    repository of this process's own, with the project's fetch credential,
+    never from a network no workspace reaches, and from disk in `local`
+    alone. `workspaces_options` names those networks, and the sweep's
+    batch."""
     if platform_agents is not None:
         # Their tools read the managers built below, so each edge is bound
         # at call time.
@@ -594,6 +598,15 @@ def build_managers(
     # decorator below pins it before the session is written. Its checkout
     # runs in the workspace through the transport the tools take, under the
     # session's epoch.
+    writes = source_control or (
+        SourceControlAbsentImpl()
+        if integrations is None
+        else SourceControlForgeImpl(integrations.get_integration)
+    )
+    # What a session delivered is read from its repository, and what it has
+    # not from the workspace this process holds for it.
+    held = HeldWorkspaces()
+    workspaces_options = workspaces_options or WorkspacesOptions()
     workspaces = WorkspacesManagerImpl(
         storage.get_workspace_storage(),
         tenancy,
@@ -601,16 +614,17 @@ def build_managers(
         kinds,
         bound,
         pull_requests or PullRequestsNullImpl(),
-        workspace_git or WorkspaceGitTransportImpl(placed, steps, records, GitOptions()),
-        workspace_reader or RepositoryReaderGitImpl(),
-        workspaces_options or WorkspacesOptions(),
-        infra.get_secrets(),
-        source_control
-        or (
-            SourceControlAbsentImpl()
-            if integrations is None
-            else SourceControlForgeImpl(integrations.get_integration)
+        workspace_git or WorkspaceGitTransportImpl(placed, steps, records, GitOptions(), writes),
+        workspace_reader
+        or RepositoryReaderGitImpl(
+            walled=workspace_rules.NEVER_REACHED
+            + workspace_rules.networks(workspaces_options.internal_networks),
+            on_disk=environment == LOCAL,
         ),
+        workspaces_options,
+        infra.get_secrets(),
+        writes,
+        held,
     )
     engine_sessions = AgentSessionsManagerImpl(
         storage.get_agent_session_storage(),
@@ -703,9 +717,6 @@ def build_managers(
         outbox,
         attribution_options or AttributionOptions(),
     )
-    # What a session delivered is read from its repository, and what it has
-    # not from the workspace this process holds for it.
-    held = HeldWorkspaces()
     products = work_product or WorkProductWorkspacesImpl(workspaces, held)
     # A budget and a validation policy set per project are read through the
     # session's project.

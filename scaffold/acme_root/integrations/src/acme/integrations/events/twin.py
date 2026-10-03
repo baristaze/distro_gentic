@@ -16,9 +16,13 @@ window in constant time. An installation's grant is signed the same way
 over `<timestamp>.installation:<installation>`, and carried as
 `<installation>;t=<timestamp>, v1=<signature>`.
 
-The forge's twin holds the branches the platform points and the pull
-requests it opens, by name and head alone, with no commits behind them;
-any other integration's twin holds no repository."""
+The forge's twin holds the refs the platform points and the pull requests
+it opens, by name and head. Made to write (`writes`), it also pushes each
+ref's commits to the repository for real, from the platform's bundle, as a
+forge does (`git.py`), with a repository's `credential` where it is given
+one: the local stack's forge twin writes, so the next loop finds what was
+pushed. Made not to, it holds names alone, with no commits behind them.
+Any other integration's twin holds no repository."""
 
 import hashlib
 import hmac
@@ -38,6 +42,7 @@ from acme.integrations.events import (
     ProvidedEvent,
     delivery_key,
 )
+from acme.integrations.events.git import push_bundle
 from acme.integrations.exceptions import DeliveryRefused, ProviderRefused
 
 SIGNATURE_HEADER = "twin-signature"
@@ -96,14 +101,23 @@ def verified_signature(payload: bytes, signature: str | None, secret: str, now: 
 
 
 class IntegrationTwinImpl(IntegrationInterface):
-    def __init__(self, name: str, secret: str = TWIN_SECRET) -> None:
+    def __init__(
+        self,
+        name: str,
+        secret: str = TWIN_SECRET,
+        writes: bool = False,
+        credential: tuple[str, str] | None = None,
+    ) -> None:
         self._name = name
         self._secret = secret
+        self._writes = writes
+        self._credential = credential
         self._counter = itertools.count(1)
         self.posted: list[PostedMessage] = []
         """Every message the platform posted through the twin, in order."""
-        self.branches: dict[tuple[str, str], str] = {}
-        """Each branch the platform pointed, by repository and name: its head."""
+        self.refs: dict[tuple[str, str], str] = {}
+        """Each ref the platform pointed, by repository and full name: its
+        head."""
         self.pull_requests: list[OpenedPullRequest] = []
         """Every pull request the platform opened through the twin, in order."""
 
@@ -178,15 +192,17 @@ class IntegrationTwinImpl(IntegrationInterface):
         self.posted.append(message)
         return message
 
-    async def push_branch(self, repository: str, branch: str, head: str) -> None:
+    async def push(self, repository: str, ref: str, head: str, bundle: bytes) -> None:
         self._holds_repositories()
-        self.branches[(repository, branch)] = head
+        if self._writes:
+            await push_bundle(repository, ref, head, bundle, self._credential)
+        self.refs[(repository, ref)] = head
 
     async def open_pull_request(
         self, repository: str, head: str, base: str | None, title: str, body: str
     ) -> OpenedPullRequest:
         self._holds_repositories()
-        if (repository, head) not in self.branches:
+        if (repository, f"refs/heads/{head}") not in self.refs:
             raise ProviderRefused(f"{repository} has no branch {head}")
         for opened in self.pull_requests:
             if (opened.repository, opened.head) == (repository, head):

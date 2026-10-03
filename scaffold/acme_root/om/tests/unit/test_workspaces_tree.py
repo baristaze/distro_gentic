@@ -89,7 +89,7 @@ def members(tar: bytes) -> dict[str, bytes]:
 async def test_a_tree_is_the_head_with_its_protected_paths_from_the_base(tmp_path: Path) -> None:
     binding, base, head = delivered(tmp_path)
 
-    tar = await RepositoryReaderGitImpl().tree(binding, head, base, ("checks/**",))
+    tar = await RepositoryReaderGitImpl(on_disk=True).tree(binding, head, base, ("checks/**",))
 
     assert members(tar) == {
         "app.py": b"v2",
@@ -102,11 +102,13 @@ async def test_a_tree_is_read_at_a_commit_and_within_its_bound(tmp_path: Path) -
     binding, base, head = delivered(tmp_path)
 
     with pytest.raises(Unavailable, match="full id"):
-        await RepositoryReaderGitImpl().tree(binding, "main", base, ())
+        await RepositoryReaderGitImpl(on_disk=True).tree(binding, "main", base, ())
     with pytest.raises(Unavailable, match="past the 100 bytes"):
-        await RepositoryReaderGitImpl(ReaderOptions(max_tree=100)).tree(binding, head, base, ())
+        await RepositoryReaderGitImpl(ReaderOptions(max_tree=100), on_disk=True).tree(
+            binding, head, base, ()
+        )
     with pytest.raises(Unavailable):
-        await RepositoryReaderGitImpl().tree(binding, "f" * 40, base, ())
+        await RepositoryReaderGitImpl(on_disk=True).tree(binding, "f" * 40, base, ())
 
 
 def attributed(tmp_path: Path) -> tuple[RepositoryBinding, str, str]:
@@ -143,7 +145,7 @@ async def test_a_tree_holds_each_file_as_stored_whatever_its_attributes_say(
 ) -> None:
     binding, base, head = attributed(tmp_path)
 
-    tar = await RepositoryReaderGitImpl().tree(binding, head, base, ("checks/**",))
+    tar = await RepositoryReaderGitImpl(on_disk=True).tree(binding, head, base, ("checks/**",))
 
     assert members(tar) == {
         "app.py": b"v2\n",
