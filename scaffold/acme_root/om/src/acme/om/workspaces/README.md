@@ -16,6 +16,12 @@ rebuilt from.
   that egress came from. It also holds what the cache knows between
   loops: the session's branch, whether the remote has held it, the last
   snapshot of its work, and what the next loop is told.
+- **A project's fetch credential**, one per project: a read-only
+  credential of the repository it binds. Its value is in the tenant's
+  store; the record here says who gave it, and when.
+- **A session's push token**, as its digest and its expiry on the
+  session's workspace: the one token that writes the session's branch
+  and its pull request.
 - **A project's egress allowlist**, one per project: the destinations a
   workspace reaches and the methods each takes, or open egress, chosen
   on purpose and recorded with its reason and who chose it.
@@ -61,8 +67,17 @@ rebuilt from.
 - **Outward.** A push to the session's own branch or its snapshots, and
   its own pull request, on the one repository its project binds, are its
   work product. Every other write acts outward, for the rule of two.
-- **Purge.** A tenant deleted past its retention loses its workspaces
-  and its allowlists.
+- **Give a fetch credential.** A person who manages the tenant's members
+  gives a project's repository one, and a later one replaces it.
+- **Mint a push token, and write with it.** A token is minted for the
+  session's branch on its project's repository. It writes that branch,
+  its snapshots, and its pull request, and nothing else, through source
+  control, which writes with the integration's own credential. It ends
+  when its lifetime passes, when the loop's workspace is prepared again
+  or released, or when a newer one is minted.
+- **Purge.** A tenant deleted past its retention loses its workspaces,
+  its allowlists, and its fetch credentials, each value out of the store
+  before its record.
 
 ## The rules
 
@@ -82,6 +97,10 @@ rebuilt from.
   same way by its host's
   [runner sweep](../../../../../workers/session_runner/README.md), past a
   grace.
+- **The agent never holds a repository's credential**
+  ([ADR 2022](../../../../../docs/adr/2022-a-repositorys-credentials-are-the-platforms-and-the-agent-never-holds-one.md)).
+  The fetch credential reaches only the platform's own read, and the
+  push token only the platform's check; neither is in a workspace.
 - **Egress is an allowlist of destinations and methods.** Open egress is
   a recorded choice, and what is never reached is never reached.
 
@@ -107,4 +126,10 @@ rebuilt from.
   repository of the platform's own with nothing of the agent's config,
   refs, or replacements (`impl/reader.py`), giving the base, the head,
   and the paths changed; and dirty when the checkout this host holds has
-  work that is not there.
+  work that is not there. A private repository is read with its
+  project's fetch credential, handed to that git alone.
+- The engineer's pull request goes through
+  `WorkspacesManagerInterface.open_pull_request`, which checks the push
+  token and writes through `SourceControlInterface` (`projects.py`); the
+  root wires the forge's (`impl/forge.py`), and with none every write is
+  unavailable.

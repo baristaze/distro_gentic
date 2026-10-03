@@ -320,3 +320,17 @@ def test_every_other_write_acts_outward(write: RepositoryWrite, why: str) -> Non
     assert not rules.is_work_product(write, BOUND, BRANCH), why
     own = RepositoryWrite(repository=BOUND.repository, kind=WriteKind.PUSH, ref=BRANCH)
     assert not rules.is_work_product(own, None, BRANCH), "no repository is bound"
+
+
+@pytest.mark.parametrize(
+    ("repository", "key"),
+    [
+        ("https://git.example.com/ajax/app.git", "git.example.com/ajax/app"),
+        ("https://reader@git.example.com:8443/Ajax/App/", "git.example.com/ajax/app"),
+        ("git@git.example.com:ajax/app.git", "git.example.com/ajax/app"),
+        ("/srv/git/ajax/app.git", "srv/git/ajax/app"),
+    ],
+)
+def test_a_projects_work_product_is_named_by_its_repository(repository: str, key: str) -> None:
+    binding = RepositoryBinding(project_id=new_id(), repository=repository)
+    assert rules.project_key(binding) == key
