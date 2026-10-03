@@ -66,7 +66,7 @@ The first kind only:
 |------|--------|
 | `services/api/src/<name>/services/api/container.py` | `AppContainer.build` passes `ports=PlatformPorts(kinds=PRODUCT_KINDS)` to `over` |
 | `workers/maintenance/src/<name>/workers/maintenance/container.py` | `WorkerContainer.build` passes `PlatformPorts(kinds=PRODUCT_KINDS)` to `worker_managers` |
-| `workers/session_runner/src/<name>/workers/session_runner/entry.py` | `run(ports=PlatformPorts(kinds=PRODUCT_KINDS))` |
+| `workers/session_runner/src/<name>/workers/session_runner/entry.py` | `run(ports=PlatformPorts(kinds=PRODUCT_KINDS))`, both imported inside `main` after the trust store is installed |
 
 When a root already passes ports of the product's, `kinds=` joins them.
 
@@ -100,7 +100,11 @@ When a root already passes ports of the product's, `kinds=` joins them.
    `om/tests/unit/test_product_kinds.py`, over the managers built with
    `product_kinds=PRODUCT_KINDS`:
    - the kind goes to its lane, and only its claimant kind takes it:
-     `test_a_products_kind_goes_to_its_lane_and_only_its_claimant_kind_takes_it`;
+     `test_a_products_kind_goes_to_its_lane_and_only_its_claimant_kind_takes_it`,
+     with a second claimant kind registered in the test beside
+     `PRODUCT_KINDS` that claims the kind from its lane but is not named
+     back, as the sibling's `GREEDY` is, so the case holds a registered
+     kind out and not only an unknown one;
    - a claimant inside a tenant's wall is never handed another tenant's
      item: `test_a_claimant_in_a_tenants_wall_is_never_handed_another_tenants_render`;
    - a claimant reads and answers only the items it holds:
