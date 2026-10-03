@@ -500,11 +500,13 @@ class SlowPushGit(GitTwin):
         binding: RepositoryBinding,
         branch: str,
         ref: str,
+        *,
+        epoch: int,
     ) -> Snapshot:
         if self.cue is not None:
             self.waiting.set()
             await self.cue.wait()
-        return await super().snapshot(ctx, workspace, binding, branch, ref)
+        return await super().snapshot(ctx, workspace, binding, branch, ref, epoch=epoch)
 
 
 async def test_a_run_that_resumes_before_the_last_release_lands_keeps_its_workspace(

@@ -69,6 +69,7 @@ class GitTwin(WorkspaceGitInterface):
     diverged: bool = False  # the session's branch moved here and on the remote both
     calls: list[str] = field(default_factory=lambda: list[str]())
     cuts: list[str] = field(default_factory=lambda: list[str]())
+    epochs: list[int] = field(default_factory=lambda: list[int]())  # each command's
 
     async def sync(
         self,
@@ -77,19 +78,30 @@ class GitTwin(WorkspaceGitInterface):
         binding: RepositoryBinding,
         branch: str,
         incoming: Incoming,
+        *,
+        epoch: int,
     ) -> BranchState:
+        self.epochs.append(epoch)
         remote, local = branch in self.remote, branch in self.local
         return BranchState(remote=remote, local=local, diverged=remote and local and self.diverged)
 
     async def cut(
-        self, ctx: TenantContext, workspace: Workspace, binding: RepositoryBinding, branch: str
+        self,
+        ctx: TenantContext,
+        workspace: Workspace,
+        binding: RepositoryBinding,
+        branch: str,
+        *,
+        epoch: int,
     ) -> None:
+        self.epochs.append(epoch)
         self.calls.append("cut")
         self.cuts.append(branch)
         self.local.add(branch)
         self.dirty = False  # what the checkout held is gone with the cut
 
-    async def checkout(self, ctx: TenantContext, workspace: Workspace) -> Checkout:
+    async def checkout(self, ctx: TenantContext, workspace: Workspace, *, epoch: int) -> Checkout:
+        self.epochs.append(epoch)
         return Checkout(head=self.head, dirty=self.dirty)
 
     async def snapshot(
@@ -99,7 +111,10 @@ class GitTwin(WorkspaceGitInterface):
         binding: RepositoryBinding,
         branch: str,
         ref: str,
+        *,
+        epoch: int,
     ) -> Snapshot:
+        self.epochs.append(epoch)
         self.calls.append("snapshot")
         if not self.dirty:
             return Snapshot(ref=ref, remote_branch=branch in self.remote)
@@ -109,13 +124,17 @@ class GitTwin(WorkspaceGitInterface):
         self.pushed[ref] = commit
         return Snapshot(ref=ref, commit=commit, remote_branch=branch in self.remote)
 
-    async def outgoing(self, ctx: TenantContext, workspace: Workspace, head: str) -> bytes:
+    async def outgoing(
+        self, ctx: TenantContext, workspace: Workspace, head: str, *, epoch: int
+    ) -> bytes:
+        self.epochs.append(epoch)
         self.calls.append("outgoing")
         return f"bundle of {head}".encode()
 
     async def landed(
-        self, ctx: TenantContext, workspace: Workspace, branch: str, head: str
+        self, ctx: TenantContext, workspace: Workspace, branch: str, head: str, *, epoch: int
     ) -> None:
+        self.epochs.append(epoch)
         self.calls.append("landed")
         self.remote.add(branch)
 

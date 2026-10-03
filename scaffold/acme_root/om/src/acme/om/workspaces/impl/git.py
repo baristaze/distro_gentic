@@ -1,7 +1,8 @@
 """The checkout's operations as commands in the workspace, through the
 engine's transport: one shell command each, recorded under a key of its own
-and fenced by the epoch of the run that holds the session, so a run that
-lost its claim moves nothing. The environment is the transport's, built
+and fenced by the epoch the run that asks held when it began, never one
+read again as each command runs, so a run that lost its claim moves
+nothing. The environment is the transport's, built
 from nothing, so no credential of the platform's reaches git; what git
 prints is the session's content, sealed in the transport's record like a
 tool's.
@@ -28,7 +29,6 @@ from acme.infra.workspaces import Workspace
 from acme.om.base import Platform, new_id, utcnow
 from acme.om.context import TenantContext
 from acme.om.exceptions import Unavailable
-from acme.om.steps import StepsManagerInterface
 from acme.om.tools.seal import RecordSealInterface
 from acme.om.workspaces.git import WorkspaceGitInterface
 from acme.om.workspaces.projects import SourceControlInterface
@@ -185,14 +185,12 @@ class WorkspaceGitTransportImpl(WorkspaceGitInterface):
     def __init__(
         self,
         transport: TransportInterface,
-        steps: StepsManagerInterface,
         record_seal: RecordSealInterface,
         options: GitOptions,
         source_control: SourceControlInterface,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._transport = transport
-        self._steps = steps
         self._record_seal = record_seal
         self._options = options
         self._source_control = source_control
@@ -205,28 +203,35 @@ class WorkspaceGitTransportImpl(WorkspaceGitInterface):
         binding: RepositoryBinding,
         branch: str,
         incoming: Incoming,
+        *,
+        epoch: int,
     ) -> BranchState:
-        cursor = await self._steps.get_cursor(ctx, workspace.id)
-        await self._transport.write_file(workspace, INCOMING, incoming.bundle, cursor.epoch)
+        await self._transport.write_file(workspace, INCOMING, incoming.bundle, epoch)
         env = {
             "REPOSITORY": binding.repository,
             "BRANCH": branch,
             "BUNDLE": INCOMING,
             "DEFAULT": incoming.default_branch,
         }
-        words = await self._run(ctx, workspace, "sync", SYNC, env)
+        words = await self._run(ctx, workspace, epoch, "sync", SYNC, env)
         if len(words) != 4 or words[0] != "branch":
             raise Unavailable(f"the checkout of session {workspace.id} answered no branch")
         remote, local, moved = (word == "yes" for word in words[1:])
         return BranchState(remote=remote, local=local, diverged=remote and local and not moved)
 
     async def cut(
-        self, ctx: TenantContext, workspace: Workspace, binding: RepositoryBinding, branch: str
+        self,
+        ctx: TenantContext,
+        workspace: Workspace,
+        binding: RepositoryBinding,
+        branch: str,
+        *,
+        epoch: int,
     ) -> None:
-        await self._run(ctx, workspace, "cut", CUT, {"BRANCH": branch})
+        await self._run(ctx, workspace, epoch, "cut", CUT, {"BRANCH": branch})
 
-    async def checkout(self, ctx: TenantContext, workspace: Workspace) -> Checkout:
-        words = await self._run(ctx, workspace, "checkout", CHECKOUT, {})
+    async def checkout(self, ctx: TenantContext, workspace: Workspace, *, epoch: int) -> Checkout:
+        words = await self._run(ctx, workspace, epoch, "checkout", CHECKOUT, {})
         if len(words) != 3 or words[0] != "checkout":
             raise Unavailable(f"the checkout of session {workspace.id} answered no state")
         return Checkout(head=None if words[1] == "-" else words[1], dirty=words[2] == "yes")
@@ -238,6 +243,8 @@ class WorkspaceGitTransportImpl(WorkspaceGitInterface):
         binding: RepositoryBinding,
         branch: str,
         ref: str,
+        *,
+        epoch: int,
     ) -> Snapshot:
         options = self._options
         env = {
@@ -250,7 +257,7 @@ class WorkspaceGitTransportImpl(WorkspaceGitInterface):
             "GIT_COMMITTER_NAME": options.author,
             "GIT_COMMITTER_EMAIL": options.email,
         }
-        words = await self._run(ctx, workspace, "snapshot", SNAPSHOT, env)
+        words = await self._run(ctx, workspace, epoch, "snapshot", SNAPSHOT, env)
         if len(words) != 4 or words[0] != "snapshot" or not words[3].isdigit():
             raise Unavailable(f"the snapshot of session {workspace.id} answered nothing")
         commit = None if words[1] == "-" else words[1]
@@ -259,17 +266,20 @@ class WorkspaceGitTransportImpl(WorkspaceGitInterface):
             await self._source_control.push(binding, ref, commit, bundle)
         return Snapshot(ref=ref, commit=commit, remote_branch=words[2] == "yes")
 
-    async def outgoing(self, ctx: TenantContext, workspace: Workspace, head: str) -> bytes:
+    async def outgoing(
+        self, ctx: TenantContext, workspace: Workspace, head: str, *, epoch: int
+    ) -> bytes:
         env = {"COMMIT": head, "BUNDLE": OUTGOING, "OUTGOING_REF": OUTGOING_REF}
-        words = await self._run(ctx, workspace, "outgoing", OUTGOING_SCRIPT, env)
+        words = await self._run(ctx, workspace, epoch, "outgoing", OUTGOING_SCRIPT, env)
         if len(words) != 2 or words[0] != "outgoing" or not words[1].isdigit():
             raise Unavailable(f"the checkout of session {workspace.id} bundled nothing")
         return await self._bundle(workspace, int(words[1]))
 
     async def landed(
-        self, ctx: TenantContext, workspace: Workspace, branch: str, head: str
+        self, ctx: TenantContext, workspace: Workspace, branch: str, head: str, *, epoch: int
     ) -> None:
-        await self._run(ctx, workspace, "landed", LANDED, {"BRANCH": branch, "COMMIT": head})
+        env = {"BRANCH": branch, "COMMIT": head}
+        await self._run(ctx, workspace, epoch, "landed", LANDED, env)
 
     async def _bundle(self, workspace: Workspace, size: int) -> bytes:
         """The bundle a script made, read back whole: empty when it made none,
@@ -290,33 +300,34 @@ class WorkspaceGitTransportImpl(WorkspaceGitInterface):
         self,
         ctx: TenantContext,
         workspace: Workspace,
+        epoch: int,
         operation: str,
         script: str,
         env: dict[str, str],
     ) -> list[str]:
         """The words of the last line a script printed."""
-        lines = await self._lines(ctx, workspace, operation, script, env)
+        lines = await self._lines(ctx, workspace, epoch, operation, script, env)
         return lines[-1].split() if lines else []
 
     async def _lines(
         self,
         ctx: TenantContext,
         workspace: Workspace,
+        epoch: int,
         operation: str,
         script: str,
         env: dict[str, str],
     ) -> list[str]:
-        """Runs one script under the epoch of the run that holds the session,
-        and answers the lines it printed. A script that fails is
+        """Runs one script under `epoch`, the one the asking run held when it
+        began, and answers the lines it printed. A script that fails is
         `Unavailable`, named by its exit and never by its output, which is
         the session's content."""
-        cursor = await self._steps.get_cursor(ctx, workspace.id)
         key = new_id()
         command = CommandSpec(
             argv=("sh", "-c", script),
             env=tuple(sorted(env.items())),
             key=key,
-            epoch=cursor.epoch,
+            epoch=epoch,
             deadline=self._clock() + self._options.timeout,
         )
         seal = RecordSeal(

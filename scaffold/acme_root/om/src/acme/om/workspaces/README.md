@@ -132,7 +132,8 @@ rebuilt from.
   pinned as it is created, and the engine's tools manager, so every
   workspace is held to its pin. The loop sees the engine's interfaces.
 - The checkout runs in the workspace through the transport the tools
-  take, under the epoch of the run that holds the session: for a session
+  take, each command under the epoch its run held when it began, so a run
+  that lost its claim moves nothing: for a session
   pinned to its tenant's hosts, the relay to the host that holds it.
   Nothing it runs reaches the repository: a bundle comes in through the
   transport's files, and one goes out the same way.

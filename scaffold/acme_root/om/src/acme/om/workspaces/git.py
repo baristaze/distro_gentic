@@ -5,8 +5,9 @@ hands the checkout a bundle (`RepositoryReaderInterface.incoming`), and
 takes the session's commits out as a bundle it makes there, for source
 control to push. A root wires the transport's
 (`acme.om.workspaces.impl.git.WorkspaceGitTransportImpl`), which runs each
-operation as one command in the workspace, the engine's one way in, under
-the epoch of the run that holds the session."""
+operation as one command in the workspace, the engine's one way in. Each
+command carries `epoch`: the epoch the run that asks held when it began,
+so the transport refuses every command of a run that lost its claim."""
 
 from abc import ABC, abstractmethod
 
@@ -32,6 +33,8 @@ class WorkspaceGitInterface(ABC):
         binding: RepositoryBinding,
         branch: str,
         incoming: Incoming,
+        *,
+        epoch: int,
     ) -> BranchState:
         """Names the checkout's `origin` for the bound repository, brings in
         its branches from the `incoming` bundle, never from the repository
@@ -43,7 +46,13 @@ class WorkspaceGitInterface(ABC):
 
     @abstractmethod
     async def cut(
-        self, ctx: TenantContext, workspace: Workspace, binding: RepositoryBinding, branch: str
+        self,
+        ctx: TenantContext,
+        workspace: Workspace,
+        binding: RepositoryBinding,
+        branch: str,
+        *,
+        epoch: int,
     ) -> None:
         """Checks `branch` out anew from the default branch as the last
         `sync` brought it in, over whatever the checkout held: the caller
@@ -51,7 +60,7 @@ class WorkspaceGitInterface(ABC):
         ...
 
     @abstractmethod
-    async def checkout(self, ctx: TenantContext, workspace: Workspace) -> Checkout:
+    async def checkout(self, ctx: TenantContext, workspace: Workspace, *, epoch: int) -> Checkout:
         """What the checkout says of itself: its HEAD and whether it holds
         uncommitted work. The agent can write all of it, so it tells only
         what was not delivered (`RepositoryReaderInterface`)."""
@@ -65,6 +74,8 @@ class WorkspaceGitInterface(ABC):
         binding: RepositoryBinding,
         branch: str,
         ref: str,
+        *,
+        epoch: int,
     ) -> Snapshot:
         """Commits what the checkout holds uncommitted, beside its branch and
         never on it, and has source control push it to `ref` on the bound
@@ -75,7 +86,9 @@ class WorkspaceGitInterface(ABC):
         ...
 
     @abstractmethod
-    async def outgoing(self, ctx: TenantContext, workspace: Workspace, head: str) -> bytes:
+    async def outgoing(
+        self, ctx: TenantContext, workspace: Workspace, head: str, *, epoch: int
+    ) -> bytes:
         """A git bundle the platform makes of the commit `head` and every
         commit it needs that the remote lacked when it was last brought in;
         empty when the remote held them all. `Unavailable` when the checkout
@@ -84,7 +97,7 @@ class WorkspaceGitInterface(ABC):
 
     @abstractmethod
     async def landed(
-        self, ctx: TenantContext, workspace: Workspace, branch: str, head: str
+        self, ctx: TenantContext, workspace: Workspace, branch: str, head: str, *, epoch: int
     ) -> None:
         """Tells the checkout that the remote's `branch` is at `head` now, once
         source control pushed it, so a release keeps no snapshot of work the

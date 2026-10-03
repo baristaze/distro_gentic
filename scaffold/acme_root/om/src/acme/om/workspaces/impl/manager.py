@@ -159,7 +159,7 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
 
     # Around a loop.
 
-    async def attach(self, ctx: TenantContext, workspace: Workspace) -> Workspace:
+    async def attach(self, ctx: TenantContext, workspace: Workspace, epoch: int) -> Workspace:
         ctx.require(Permission.WRITE)
         held = await self._storage.read_workspace(ctx.org_id, workspace.id)
         if held is None:
@@ -175,7 +175,9 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
             incoming = await self._reader.incoming(
                 binding, held.branch, await self._fetch_credential(ctx, binding.project_id)
             )
-            state = await self._git.sync(ctx, workspace, binding, held.branch, incoming)
+            state = await self._git.sync(
+                ctx, workspace, binding, held.branch, incoming, epoch=epoch
+            )
             fate = None
             if not state.remote and seen:
                 fate = await self._pull_requests.fate_of(ctx, binding, held.branch)
@@ -199,11 +201,13 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
                 # push that does not land raises, and nothing is cut.
                 at = self._clock()
                 ref = rules.snapshot_ref(held.branch, at)
-                snapshot = await self._git.snapshot(ctx, workspace, binding, held.branch, ref)
+                snapshot = await self._git.snapshot(
+                    ctx, workspace, binding, held.branch, ref, epoch=epoch
+                )
                 if snapshot.commit is not None:
                     kept = snapshot.ref
                     told.append(rules.told_of_snapshot(snapshot.ref, snapshot.commit, at))
-                await self._git.cut(ctx, workspace, binding, held.branch)
+                await self._git.cut(ctx, workspace, binding, held.branch, epoch=epoch)
             if plan is BranchPlan.REBUILD and fate is not None:
                 told.append(rules.told_of_rebuild(held.branch, fate, binding.default_branch))
                 log.warning(
@@ -221,7 +225,7 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
             )
         return workspace.model_copy(update={"changed": "\n\n".join(told) or None})
 
-    async def detach(self, ctx: TenantContext, workspace: Workspace) -> None:
+    async def detach(self, ctx: TenantContext, workspace: Workspace, epoch: int) -> None:
         ctx.require(Permission.WRITE)
         held = await self._storage.read_workspace(ctx.org_id, workspace.id)
         if held is None:
@@ -231,7 +235,7 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
             return
         at = self._clock()
         ref = rules.snapshot_ref(held.branch, at)
-        snapshot = await self._git.snapshot(ctx, workspace, binding, held.branch, ref)
+        snapshot = await self._git.snapshot(ctx, workspace, binding, held.branch, ref, epoch=epoch)
         seen = held.branch_seen or snapshot.remote_branch
         if snapshot.commit is None:
             if seen != held.branch_seen or held.push_digest is not None:
@@ -264,7 +268,7 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         delivered = await self._reader.delivered(
             binding, held.branch, await self._fetch_credential(ctx, binding.project_id)
         )
-        local = await self._git.checkout(ctx, workspace)
+        local = await self._git.checkout(ctx, workspace, epoch=self._epoch(workspace.id))
         try:
             return Delivery(
                 project=rules.project_key(binding),
@@ -460,11 +464,12 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         workspace = self._held.get(session_id)
         if workspace is None:
             raise Unavailable(f"the workspace of session {session_id} is not held here")
+        epoch = self._epoch(session_id)
         # The session's commits go out as a bundle the platform makes, and
         # source control pushes the one head to the session's branch alone.
-        bundle = await self._git.outgoing(ctx, workspace, head)
+        bundle = await self._git.outgoing(ctx, workspace, head, epoch=epoch)
         await self._source_control.push(binding, f"refs/heads/{held.branch}", head, bundle)
-        await self._git.landed(ctx, workspace, held.branch, head)
+        await self._git.landed(ctx, workspace, held.branch, head, epoch=epoch)
         if not held.branch_seen:
             await self._write(ctx, session_id, {"branch_seen": True})
         return await self._source_control.open_pull_request(binding, held.branch, title, body)
@@ -484,6 +489,14 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         return gone + await self._storage.purge_tenant(ctx.org_id, self._options.purge_batch)
 
     # Helpers.
+
+    def _epoch(self, session_id: UUID) -> int:
+        """The epoch of the run that holds the session's workspace here: a
+        command for a tool of that run carries it."""
+        epoch = self._held.epoch_of(session_id)
+        if epoch is None:
+            raise Unavailable(f"the workspace of session {session_id} is not held here")
+        return epoch
 
     async def _fetch_credential(
         self, ctx: TenantContext, project_id: UUID

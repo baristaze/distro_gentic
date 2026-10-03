@@ -246,7 +246,7 @@ class HeldWorkspacesSweep:
         if not await self._kept(ctx, session_id, cursor.head, pinned.snapshot_ref):
             # Kept first, through the relay: a push that does not land
             # raises, and the instance and its work stay.
-            await self._workspaces.detach(ctx, workspace)
+            await self._workspaces.detach(ctx, workspace, cursor.epoch)
         await self._relay.ask_release(ctx, session_id, workspace.spec)
         log.info(
             "session %s of org %s: host %s is asked to let go of its instance no run held",

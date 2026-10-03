@@ -14,6 +14,7 @@ import subprocess
 import sys
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 import pytest
@@ -28,6 +29,7 @@ from acme.infra.transports import (
     CommandSpec,
     OutputSink,
     RecordSeal,
+    StaleCommand,
     TransportInterface,
 )
 from acme.infra.transports.local import DEFAULT_PATH, TransportLocalImpl
@@ -375,6 +377,36 @@ async def test_a_notice_written_while_an_attach_syncs_outlives_that_attach(
     await host_b.steps.begin_run(checkout.ctx, session_id)
     following = await host_b.tools.prepare_workspace(checkout.ctx, session_id, DIRECTORY)
     assert following.changed is not None and late in following.changed, "the next loop is told"
+
+
+# A lost claim stops the checkout: each command carries the epoch its run
+# held when it began, never one read again as the command runs.
+
+
+async def test_a_release_whose_run_lost_its_claim_midway_moves_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    infra = HostInfra(tmp_path)
+    checkout = Checkout(tmp_path, infra=infra)
+    session_id = await checkout.session()
+    branch = session_branch(session_id)
+    await checkout.managers.steps.begin_run(checkout.ctx, session_id)
+    workspace = await checkout.prepare(session_id)
+    (Path(workspace.location) / "notes.txt").write_text("the stale run's draft\n")
+    binding_of = checkout.projects.binding_of
+
+    async def claimed_meanwhile(*args: Any, **kwargs: Any) -> object:
+        # The session's next run claims it, and its first command lands.
+        found = await binding_of(*args, **kwargs)
+        epoch = await checkout.managers.steps.begin_run(checkout.ctx, session_id)
+        await infra.get_transport().write_file(workspace, ".claimed", b"", epoch)
+        return found
+
+    monkeypatch.setattr(checkout.projects, "binding_of", claimed_meanwhile)
+    with pytest.raises(StaleCommand):
+        await checkout.release(workspace)
+
+    assert checkout.snapshots(branch) == [], "the run that lost its claim pushed nothing"
 
 
 # Check 2: a vanished branch with no known reason fails loudly.

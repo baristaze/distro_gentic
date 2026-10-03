@@ -618,7 +618,7 @@ def build_managers(
         kinds,
         bound,
         pull_requests or PullRequestsNullImpl(),
-        workspace_git or WorkspaceGitTransportImpl(placed, steps, records, GitOptions(), writes),
+        workspace_git or WorkspaceGitTransportImpl(placed, records, GitOptions(), writes),
         workspace_reader
         or RepositoryReaderGitImpl(
             walled=workspace_rules.NEVER_REACHED
