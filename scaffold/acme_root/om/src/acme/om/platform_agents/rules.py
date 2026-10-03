@@ -7,6 +7,7 @@ in, values out."""
 import re
 from collections.abc import Collection, Iterable, Mapping
 from pathlib import PurePosixPath
+from typing import NamedTuple
 
 from acme.infra.workspaces import IsolationMode
 from acme.om.agents.types.kind import AgentKind
@@ -52,9 +53,13 @@ MOST_COUNTED = 100
 """The most places a refused match counts before it says "at least"."""
 
 
-class EditRefused(ValueError):
-    """An edit that cannot land on exactly the place it names: why, in words
-    the model reads."""
+class Edit(NamedTuple):
+    """A text with one place replaced: the new text, the line the place
+    starts on, and how many lines the new text holds there."""
+
+    text: str
+    line: int
+    lines: int
 
 
 def lines_of(text: str) -> list[str]:
@@ -74,24 +79,23 @@ def edited(
     old_text: str | None = None,
     start_line: int | None = None,
     end_line: int | None = None,
-) -> tuple[str, int, int]:
-    """The text with one place replaced by `new_text`, the line that place
-    starts on, and how many lines the new text holds there. The place is
+) -> Edit | str:
+    """The text with one place replaced by `new_text`. The place is
     `old_text` where it matches exactly one place, overlapping matches
     counted, or the lines `start_line` to `end_line`, counted from 1, both
     included; a new text that drops the range's last line end keeps it.
-    `EditRefused` for a match of no place or of more than one, and for a
-    range past the text's end."""
+    Why it cannot land, in words the model reads, for a match of no place
+    or of more than one, and for a range past the text's end."""
     if old_text is not None:
         start = text.find(old_text)
         if start < 0:
-            raise EditRefused("old_text matches no place in the file: read it again, and copy it")
+            return "old_text matches no place in the file: read it again, and copy it"
         found, at = 1, text.find(old_text, start + 1)
         while at >= 0 and found < MOST_COUNTED:
             found, at = found + 1, text.find(old_text, at + 1)
         if found > 1:
             places = f"{found}" if at < 0 else f"at least {found}"
-            raise EditRefused(
+            return (
                 f"old_text matches {places} places in the file, and an edit changes one: "
                 "give more of the text around it, so it matches one place"
             )
@@ -100,7 +104,7 @@ def edited(
         assert start_line is not None and end_line is not None
         lines = lines_of(text)
         if end_line > len(lines):
-            raise EditRefused(f"the file has {len(lines)} lines, and the range ends at {end_line}")
+            return f"the file has {len(lines)} lines, and the range ends at {end_line}"
         start = sum(len(line) for line in lines[: start_line - 1])
         end = start + sum(len(line) for line in lines[start_line - 1 : end_line])
         last = lines[end_line - 1]
@@ -108,7 +112,7 @@ def edited(
         if new_text and not new_text.endswith("\n") and last.endswith("\n"):
             replacement += "\r\n" if last.endswith("\r\n") else "\n"
     line = text.count("\n", 0, start) + 1
-    return text[:start] + replacement + text[end:], line, len(lines_of(replacement))
+    return Edit(text[:start] + replacement + text[end:], line, len(lines_of(replacement)))
 
 
 # The matches of a search of the code.

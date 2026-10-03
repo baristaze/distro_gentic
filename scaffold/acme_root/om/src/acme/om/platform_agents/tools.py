@@ -284,19 +284,18 @@ class EditFileImpl(FileChangeImpl):
             text = data.decode()
         except UnicodeDecodeError:
             raise ToolFailed(ToolFailure.PERMANENT, f"{path} is not UTF-8 text") from None
-        try:
-            changed, line, lines = rules.edited(
-                text,
-                call_input.new_text,
-                old_text=call_input.old_text,
-                start_line=call_input.start_line,
-                end_line=call_input.end_line,
-            )
-        except rules.EditRefused as refused:
-            raise ToolFailed(ToolFailure.PERMANENT, f"{path}: {refused}") from None
-        written = changed.encode()
+        edit = rules.edited(
+            text,
+            call_input.new_text,
+            old_text=call_input.old_text,
+            start_line=call_input.start_line,
+            end_line=call_input.end_line,
+        )
+        if isinstance(edit, str):
+            raise ToolFailed(ToolFailure.PERMANENT, f"{path}: {edit}")
+        written = edit.text.encode()
         await runtime.write_file(path, written)
-        return Edited(path=path, line=line, lines=lines, size=len(written))
+        return Edited(path=path, line=edit.line, lines=edit.lines, size=len(written))
 
 
 class SearchCodeInput(ToolInput):
