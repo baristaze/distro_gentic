@@ -223,6 +223,15 @@ class TenancyManagerInterface(ABC):
         ...
 
     @abstractmethod
+    async def tenant_deleted(self, rctx: RequestContext, org_id: UUID) -> bool | None:
+        """Platform-internal, for a sweep that lets go of what a tenant left
+        only on proof that the tenant is gone: True when the org is marked
+        deleted, purged or not; False when it is live; None when this
+        database holds no such org, as after a restore to before it was
+        made, or when it is another deployment's. For no principal."""
+        ...
+
+    @abstractmethod
     async def member_context(
         self, rctx: RequestContext, org_id: UUID, user_id: UUID, key_id: UUID | None = None
     ) -> TenantContext:
