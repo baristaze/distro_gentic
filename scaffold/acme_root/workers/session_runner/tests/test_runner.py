@@ -63,6 +63,7 @@ from acme.workers.session_runner.fair_share import FairShareGuardImpl
 from acme.workers.session_runner.main import build_runner, loop_options
 from acme.workers.session_runner.runs import LoopHandlerImpl
 from acme.workers.session_runner.settings import SessionRunnerSettings
+from acme.workers.session_runner.workspaces import HeldWorkspacesSweep
 
 ENV_EXAMPLE = Path(__file__).resolve().parents[3] / ".env.example"
 COLLECTOR = ENV_EXAMPLE.parent / "deployment" / "local" / "otel-collector" / "collector.yml"
@@ -256,6 +257,14 @@ def test_the_runner_sweeps_recovery_alone_on_knobs_of_its_own() -> None:
         "runner-test",
     )
     assert loop_options(settings()).lane == "loop:standard", "the default tier's lane"
+
+
+def test_the_runners_sweep_lets_go_of_what_its_host_holds(tmp_path: Path) -> None:
+    """Beside recovery, the one duty the runner's sweep carries: the
+    instances its host holds that no run accounts for."""
+    duties = build_runner(runner_over(tmp_path))._across  # pyright: ignore[reportPrivateUsage]
+    assert set(duties) == {"workspaces"}
+    assert isinstance(duties["workspaces"], HeldWorkspacesSweep)
 
 
 def test_every_knob_of_the_runner_is_in_the_example_env() -> None:

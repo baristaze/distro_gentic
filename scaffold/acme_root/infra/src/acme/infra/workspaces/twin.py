@@ -2,6 +2,7 @@ from uuid import UUID
 
 from acme.infra.workspaces import (
     EgressMode,
+    HeldInstance,
     IsolationMode,
     IsolationRefused,
     IsolationSpec,
@@ -19,6 +20,7 @@ class WorkspaceTwinImpl(WorkspaceProviderInterface):
 
     def __init__(self) -> None:
         self.live: set[UUID] = set()
+        self._orgs: dict[UUID, UUID] = {}  # each workspace's tenant, as its prepare named it
 
     async def prepare(self, org_id: UUID, workspace_id: UUID, spec: IsolationSpec) -> Workspace:
         why = refusal(
@@ -30,6 +32,7 @@ class WorkspaceTwinImpl(WorkspaceProviderInterface):
         if why is not None:
             raise IsolationRefused(why)
         self.live.add(workspace_id)
+        self._orgs[workspace_id] = org_id
         return Workspace(
             id=workspace_id, org_id=org_id, spec=spec, location=f"twin:{workspace_id.hex}"
         )
@@ -39,6 +42,12 @@ class WorkspaceTwinImpl(WorkspaceProviderInterface):
 
     async def purge(self, org_id: UUID, workspace_id: UUID) -> None:
         self.live.discard(workspace_id)
+
+    async def held(self) -> list[HeldInstance]:
+        return [
+            HeldInstance(id=held, org_id=self._orgs[held], location=f"twin:{held.hex}")
+            for held in sorted(self.live)
+        ]
 
     def describe(self) -> str:
         return "workspaces=twin"
@@ -64,6 +73,9 @@ class WorkspaceNullImpl(WorkspaceProviderInterface):
 
     async def purge(self, org_id: UUID, workspace_id: UUID) -> None:
         return None
+
+    async def held(self) -> list[HeldInstance]:
+        return []
 
     def describe(self) -> str:
         return "workspaces=none"

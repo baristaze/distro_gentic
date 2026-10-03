@@ -7,7 +7,9 @@ Isolation is chosen up front and never weakened. A provider meets a spec
 whole or refuses it with `IsolationRefused`, before it creates anything, and
 never hands back a weaker place in its stead. A released workspace keeps its
 files and loses its instance: the next prepare under the same id finds the
-files again. A purged one keeps nothing.
+files again. A purged one keeps nothing. A provider names the instances it
+holds on its host (`held`), so one whose run died before its release is
+found and let go.
 
 What a workspace is rebuilt from may be gone for good, such as the branch a
 checkout tracks. A layer that prepares one then raises `WorkspaceLost`, and
@@ -29,6 +31,7 @@ from acme.infra.exceptions import InfraException, InfraValidationFailed
 __all__ = [
     "EgressMode",
     "EgressPolicy",
+    "HeldInstance",
     "IsolationMode",
     "IsolationRefused",
     "IsolationSpec",
@@ -103,6 +106,16 @@ class Workspace(InfraModel):
         return cls(id=workspace_id, org_id=org_id, spec=spec, location="")
 
 
+class HeldInstance(InfraModel):
+    """An instance a provider holds on its host: prepared, and not released
+    or purged since. Named by the ids `prepare` named it by, and where its
+    transport finds it."""
+
+    id: UUID
+    org_id: UUID
+    location: str
+
+
 class IsolationRefused(InfraValidationFailed):
     """A provider cannot meet a spec. Refused before anything is created,
     never met with something weaker."""
@@ -159,6 +172,13 @@ class WorkspaceProviderInterface(ABC):
         `workspace_id` go, found by the ids `prepare` names it by, so a purge
         needs no workspace in hand. Purging one already gone, or never made,
         does nothing; one this provider cannot remove is an error."""
+        ...
+
+    @abstractmethod
+    async def held(self) -> list[HeldInstance]:
+        """Every instance this provider holds on its host, by the marks it
+        made at `prepare`, whichever process prepared it. Nothing it did not
+        make is among them."""
         ...
 
     @abstractmethod
