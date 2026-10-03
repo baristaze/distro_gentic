@@ -38,7 +38,10 @@ count and runs on a node of the batch pool its payload names".
 
 A kind a worker of the product's own runs from a lane it serves, with no
 claimant, is the guideline's kind of work: `arch-scaffold-worker`, not
-this skill.
+this skill. Its name goes in `WorkKind` as that skill says, but in this
+base its payload goes in `WORK_PAYLOADS` and its spec, with its
+permission, in `WORK_KINDS`, both in `om/src/<name>/om/work/kinds.py`.
+It never goes in `ProductKinds`, which refuses a kind with no claimant.
 
 ## Created
 
@@ -94,8 +97,12 @@ When a root already passes ports of the product's, `kinds=` joins them.
 5. With `--stream`: a `StreamKind` with its entries, its bytes, and its
    open streams of one group, each the most one stream of the kind may
    hold. The open streams of every group and the idle time are the
-   step's; a kind never sets them. Its streams are written and read
-   through `build_kind_streams` in `om/src/<name>/om/watch/root.py`.
+   step's; a kind never sets them. This skill registers the kind and
+   adds no stream route: `build_kind_streams` in
+   `om/src/<name>/om/watch/root.py` builds the writer and the reader of
+   its streams, and the code that writes them, the route a viewer reads
+   them through, and that viewer's authorization are the product's. Name
+   them in the output as what the product still needs.
 6. The tests, each the shape of its namesake in
    `om/tests/unit/test_product_kinds.py`, over the managers built with
    `product_kinds=PRODUCT_KINDS`:
@@ -116,8 +123,9 @@ When a root already passes ports of the product's, `kinds=` joins them.
      `test_a_products_stream_kind_is_held_to_its_bounds`.
 7. A claimant reaches the gateway with a credential of its own, which
    the product's own route resolves to a `Claimant` before it calls
-   `claim_for`, `held_for`, `extend_for`, and `report_for` on placement,
-   as the hosts' routes resolve a host's. The credential and the route
+   `claim_for`, then `held_for`, `extend_for`, and `report_for` on
+   placement under the claim token `claim_for` handed it, as the hosts'
+   routes resolve a host's. The credential and the route
    are not this skill's: name them in the output as what the product
    still needs.
 
