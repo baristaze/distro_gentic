@@ -10,7 +10,7 @@ from acme.om.matrix.types.record import BenchmarkRun
 
 
 def schedule(pairs: int) -> tuple[Arm, ...]:
-    """The order a run takes `pairs` trials of each arm in, on one station:
+    """The order a run takes `pairs` trials of each arm in, on one executor:
     candidate, baseline, baseline, candidate, and again. Neither arm runs
     two ahead of the other, and a drift that grows steadily over the run
     falls on both alike."""
@@ -30,7 +30,7 @@ def schedule(pairs: int) -> tuple[Arm, ...]:
 
 def interleaving_refusal(trials: Sequence[Trial]) -> str | None:
     """Why the trials are no fair comparison: an arm with no trial, arms
-    with different counts, more than one station, or one arm run ahead of
+    with different counts, more than one executor, or one arm run ahead of
     the other, as a block run before the other is. Read in the order the
     trials started, no point holds two more of one arm than of the other."""
     counts = {arm: sum(1 for trial in trials if trial.arm is arm) for arm in Arm}
@@ -38,9 +38,9 @@ def interleaving_refusal(trials: Sequence[Trial]) -> str | None:
         return "a benchmark runs trials of both the candidate and the baseline"
     if counts[Arm.CANDIDATE] != counts[Arm.BASELINE]:
         return f"the arms ran different counts of trials: {counts[Arm.CANDIDATE]} and {counts[Arm.BASELINE]}"
-    stations = sorted({trial.station for trial in trials})
-    if len(stations) > 1:
-        return f"the candidate and the baseline ran on more than one station: {stations}"
+    executors = sorted({trial.executor for trial in trials})
+    if len(executors) > 1:
+        return f"the candidate and the baseline ran on more than one executor: {executors}"
     ahead = 0
     for trial in sorted(trials, key=lambda found: found.started_at):
         ahead += 1 if trial.arm is Arm.CANDIDATE else -1

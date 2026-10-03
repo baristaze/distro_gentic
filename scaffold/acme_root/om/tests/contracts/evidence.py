@@ -30,11 +30,11 @@ from acme.om.outbox.storage.impl.memory import OutboxStorageMemoryImpl
 from contracts.doubles import Members, SessionProjectsMemory
 from contracts.evidence_storage import make_policy
 
-ARM = UUID("0192f3a0-0000-7000-8000-00000000a12a")
-"""The `arm` project's id: every session of a suite's evidence belongs to
+CHECKOUT = UUID("0192f3a0-0000-7000-8000-00000000a12a")
+"""The `checkout` project's id: every session of a suite's evidence belongs to
 it unless the suite names another."""
-ARM_KEY = policy_key(ARM)
-"""The key the `arm` project's policy, and each of its validations, is kept
+CHECKOUT_KEY = policy_key(CHECKOUT)
+"""The key the `checkout` project's policy, and each of its validations, is kept
 under."""
 
 Outcome = Callable[[str, int], str]
@@ -57,7 +57,7 @@ class ScriptedExecutor(ExecutorInterface):
     name: str = "executor-1"
     outcome: Outcome = all_pass
     provenance: Provenance = Provenance.REAL
-    capabilities: frozenset[str] = frozenset({"arm"})
+    capabilities: frozenset[str] = frozenset({"browser"})
     tamper: Callable[[bytes], bytes] | None = None
     cases: tuple[str, ...] | None = None
     requests: list[ExecutionRequest] = field(default_factory=list)
@@ -119,7 +119,7 @@ def stream(
             "environment": {"image": "sha256:" + "2" * 64, "toolchain": {"python": "3.14"}},
             "host": "executor-host",
             "isolation": "vm",
-            "dependencies": [{"name": "arm", "provenance": provenance.value}],
+            "dependencies": [{"name": "browser", "provenance": provenance.value}],
             "started_at": at.isoformat(),
         },
         *(
@@ -156,7 +156,7 @@ def evidence_over(
     relay = OutboxRelayImpl(outbox, EventStorageMemoryImpl(), TopicsMemoryImpl())
     work = WorkProductMemoryImpl()
     executor = executor or ScriptedExecutor()
-    projects = SessionProjectsMemory(default=ARM)
+    projects = SessionProjectsMemory(default=CHECKOUT)
     manager = EvidenceManagerImpl(
         storage, members, relay, executor, work, projects, options or EvidenceOptions()
     )
@@ -164,11 +164,11 @@ def evidence_over(
     return Evidence(manager, gate, storage, work, executor, members, projects)
 
 
-def arm_policy(
-    *requirements: Requirement, protected: tuple[str, ...] = ("tests/**",), project: UUID = ARM
+def checkout_policy(
+    *requirements: Requirement, protected: tuple[str, ...] = ("tests/**",), project: UUID = CHECKOUT
 ) -> ValidationPolicy:
-    """The `arm` project's policy, kept under `project`: the `unit` check
-    and the `trials` check, which needs the arm, declared; `unit` required
+    """The `checkout` project's policy, kept under `project`: the `unit` check
+    and the `trials` check, which needs a browser, declared; `unit` required
     for a change under `src/` unless the case names its own requirements."""
     policy = make_policy(policy_key(project))
     checks = (
@@ -178,7 +178,7 @@ def arm_policy(
             version="1",
             command=("run-trials", "{version}", "{out}"),
             kind="scenario",
-            capabilities=("arm",),
+            capabilities=("browser",),
             schema_version=1,
         ),
     )
@@ -193,6 +193,6 @@ def arm_policy(
 
 
 def delivered(
-    head: str = "c0ffee", changed: tuple[str, ...] = ("src/grip.py",), dirty: bool = False
+    head: str = "c0ffee", changed: tuple[str, ...] = ("src/cart.py",), dirty: bool = False
 ) -> Delivery:
-    return Delivery(project="arm", base="base0", head=head, dirty=dirty, changed=changed)
+    return Delivery(project="checkout", base="base0", head=head, dirty=dirty, changed=changed)

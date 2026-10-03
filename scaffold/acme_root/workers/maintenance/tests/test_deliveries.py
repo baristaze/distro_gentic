@@ -202,8 +202,8 @@ async def a_project(container: WorkerContainer, ctx: TenantContext) -> UUID:
         updated_at=now,
         created_by=ctx.user_id,
         updated_by=ctx.user_id,
-        name="the arm",
-        repository=Repository(host="github.com", path="ajax/arm"),
+        name="the checkout service",
+        repository=Repository(host="github.com", path="ajax/checkout"),
     )
     return (await container.managers.projects.create_project(ctx, project)).id
 

@@ -10,10 +10,10 @@ from uuid import UUID
 import pytest
 from contracts.doubles import context
 from contracts.evidence import (
-    ARM_KEY,
+    CHECKOUT_KEY,
     Evidence,
     ScriptedExecutor,
-    arm_policy,
+    checkout_policy,
     delivered,
     evidence_over,
 )
@@ -41,7 +41,7 @@ from acme.om.storage.impl.memory import StorageMemoryImpl
 
 
 class Case:
-    """One session of the `arm` project: its policy written, a work run of
+    """One session of the `checkout` project: its policy written, a work run of
     the agent's to cite, and its work product as the case delivers it."""
 
     def __init__(self, evidence: Evidence, ctx: TenantContext) -> None:
@@ -57,7 +57,7 @@ class Case:
         org = make_org()
         case = cls(evidence_over(executor), context(Role.MEMBER, org))
         owner = context(Role.OWNER, org)
-        await case.evidence.manager.write_policy(owner, arm_policy(*requirements))
+        await case.evidence.manager.write_policy(owner, checkout_policy(*requirements))
         await case.evidence.manager.record_run(case.ctx, case.run)
         case.deliver()
         return case
@@ -87,19 +87,19 @@ def refused(verdict: Verdict, *words: str) -> bool:
 
 async def test_a_delivery_is_judged_by_its_sessions_project_whatever_it_names() -> None:
     """The work product names a project; the gate and the validation read
-    the session's own, from the projects, and judge by its policy: `arm`'s
+    the session's own, from the projects, and judge by its policy: `checkout`'s
     asks for the unit check of a change under `src/`, the other's for none."""
     org = make_org()
     evidence = evidence_over()
     owner, ctx = context(Role.OWNER, org), context(Role.MEMBER, org)
     other = new_id()
-    await evidence.manager.write_policy(owner, arm_policy())
+    await evidence.manager.write_policy(owner, checkout_policy())
     await evidence.manager.write_policy(
-        owner, arm_policy(Requirement(check="unit", paths=("docs/**",)), project=other)
+        owner, checkout_policy(Requirement(check="unit", paths=("docs/**",)), project=other)
     )
-    ours, theirs = new_id(), new_id()  # a session of `arm`, and one of the other
+    ours, theirs = new_id(), new_id()  # a session of `checkout`, and one of the other
     evidence.projects.sessions[theirs] = other
-    for session_id, named in ((ours, str(other)), (theirs, ARM_KEY)):
+    for session_id, named in ((ours, str(other)), (theirs, CHECKOUT_KEY)):
         delivery = delivered().model_copy(update={"project": named})
         evidence.work.deliver(org.id, session_id, delivery)
     runs = {s: make_record(s, step_id=new_id()) for s in (ours, theirs)}
@@ -112,7 +112,7 @@ async def test_a_delivery_is_judged_by_its_sessions_project_whatever_it_names() 
 
     assert refused(await submit(ours), "no validation ran at the head c0ffee")
     validation = await evidence.manager.validate(ctx, ours, RunPurpose.VALIDATION)
-    assert validation.project == ARM_KEY, "validated under the session's project"
+    assert validation.project == CHECKOUT_KEY, "validated under the session's project"
     assert [check.name for check in evidence.executor.requests[0].checks] == ["unit"]
     assert succeeded(await submit(ours))
 
@@ -151,7 +151,7 @@ async def test_a_success_on_runs_its_executor_did_not_write_is_refused() -> None
     storage, org = case.evidence.storage, case.ctx.org_id
     # Runs another writer wrote, listed by a validation that names the
     # executor: their provenance does not name it.
-    validation, runs = make_validation(case.session, 1, executor="executor-1", project=ARM_KEY)
+    validation, runs = make_validation(case.session, 1, executor="executor-1", project=CHECKOUT_KEY)
     forged = tuple(run.model_copy(update={"executor": "agent-workspace"}) for run in runs)
     assert await storage.create_validation(org, validation, forged)
     assert refused(await case.submit(), "not a result its validation's executor wrote")
@@ -277,8 +277,8 @@ def test_a_run_reports_its_weakest_dependency_and_never_claims_real() -> None:
     served = run.model_copy(
         update={
             "dependencies": (
-                Dependency(name="arm", provenance=Provenance.REAL),
-                Dependency(name="camera", provenance=Provenance.TWIN),
+                Dependency(name="browser", provenance=Provenance.REAL),
+                Dependency(name="payments-api", provenance=Provenance.TWIN),
             )
         }
     )
@@ -304,14 +304,14 @@ async def test_a_change_touching_a_protected_path_voids_validation() -> None:
     await case.validate()
     assert succeeded(await case.submit())
     # The same head, read again with the test the agent changed beside it.
-    case.deliver(changed=("src/grip.py", "tests/test_grip.py"))
+    case.deliver(changed=("src/cart.py", "tests/test_cart.py"))
     assert refused(await case.submit(), "touches protected paths", "voids validation")
     with pytest.raises(PreconditionFailed, match="voids validation"):
         await case.validate()
     # Spelled another way, it is the same path.
-    case.deliver(changed=("src/grip.py", "./Tests//test_grip.py"))
+    case.deliver(changed=("src/cart.py", "./Tests//test_cart.py"))
     assert refused(await case.submit(), "touches protected paths")
-    case.deliver(changed=("src/grip.py", "src/../tests/test_grip.py"))
+    case.deliver(changed=("src/cart.py", "src/../tests/test_cart.py"))
     assert refused(await case.submit(), "touches protected paths")
 
 
@@ -344,7 +344,7 @@ async def test_an_aborted_trial_is_classified_by_the_declared_rule() -> None:
     stops = ScriptedExecutor(outcome=lambda check, trial: "aborted" if trial == 0 else "passed")
     case = await Case.start(stops, trials(300, aborted=AbortRule.INCONCLUSIVE))
     await case.validate()
-    assert refused(await case.submit(), "1 trials a safety stop ended")
+    assert refused(await case.submit(), "1 trials an abort ended")
     counted = await Case.start(
         ScriptedExecutor(outcome=lambda check, trial: "aborted" if trial == 0 else "passed"),
         trials(300, max_rate=0.01),
@@ -366,7 +366,7 @@ async def test_two_rates_judged_together_take_a_corrected_confidence() -> None:
 async def test_fewer_trials_than_declared_are_refused() -> None:
     case = await Case.start(ScriptedExecutor(), trials(300))
     storage, org = case.evidence.storage, case.ctx.org_id
-    validation, runs = make_validation(case.session, 3, project=ARM_KEY)
+    validation, runs = make_validation(case.session, 3, project=CHECKOUT_KEY)
     moved = tuple(run.model_copy(update={"check": "trials"}) for run in runs)
     assert await storage.create_validation(org, validation, moved)
     assert refused(await case.submit(), "trials ran 3 of the 300 trials declared")
@@ -400,7 +400,7 @@ async def test_a_sequential_test_stopped_anywhere_else_is_refused() -> None:
         (50, ("ran 50 trials, on past trial 36", "where its sequential test stopped")),
     ):
         case = await Case.start(ScriptedExecutor(), sequential())
-        validation, runs = make_validation(case.session, count, project=ARM_KEY)
+        validation, runs = make_validation(case.session, count, project=CHECKOUT_KEY)
         moved = tuple(run.model_copy(update={"check": "trials"}) for run in runs)
         assert await case.evidence.storage.create_validation(case.ctx.org_id, validation, moved)
         assert refused(await case.submit(), *words)
@@ -424,7 +424,7 @@ async def test_a_fixed_count_claim_runs_every_trial_and_refuses_to_stop_early() 
     assert len([run for run in runs if run.check == "trials"]) == 50
     assert succeeded(await case.submit())
     stopped = await Case.start(ScriptedExecutor(), trials(50, max_rate=0.1))
-    validation, early = make_validation(stopped.session, 36, project=ARM_KEY)
+    validation, early = make_validation(stopped.session, 36, project=CHECKOUT_KEY)
     moved = tuple(run.model_copy(update={"check": "trials"}) for run in early)
     assert await stopped.evidence.storage.create_validation(stopped.ctx.org_id, validation, moved)
     assert refused(await stopped.submit(), "trials ran 36 of the 50 trials declared")
@@ -433,7 +433,7 @@ async def test_a_fixed_count_claim_runs_every_trial_and_refuses_to_stop_early() 
 def test_a_sequential_test_is_its_checks_one_rate() -> None:
     fixed = trials(300)
     with pytest.raises(ValueError, match="sequential test declares no other rate"):
-        arm_policy(sequential(), fixed)
+        checkout_policy(sequential(), fixed)
 
 
 # A run that passed no case is no passing run.
@@ -495,7 +495,7 @@ async def test_a_root_given_no_gate_ends_every_success_through_the_evidence_gate
     )
     ctx = context(Role.MEMBER)
     session = await managers.agents.start_session(
-        ctx, Start(id=new_id(), kind="delivery", title="fix the grip")
+        ctx, Start(id=new_id(), kind="delivery", title="fix the cart")
     )
     run = make_record(session.id)
     await managers.evidence.record_run(ctx, run)
