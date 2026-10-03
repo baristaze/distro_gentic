@@ -98,4 +98,7 @@ context, then an audit entry of that context.
 The delivery consumer hands each event to the router under the tenant's
 service context, then hands what the router answered to
 [automations](../automations/README.md). An agent's tool that opens a
-pull request or pushes a branch binds it to its session.
+pull request or pushes a branch binds it to its session. A tool that acts
+as the platform's account records the act before it acts, under a mark
+the system carries on what it makes, and then under the system's id for
+it: `comment` (`tools.py`) is the one the session runner ships.
