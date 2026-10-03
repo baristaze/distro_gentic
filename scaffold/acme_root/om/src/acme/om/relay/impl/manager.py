@@ -220,7 +220,7 @@ class RelayManagerImpl(RelayManagerInterface):
             if met is None:
                 raise NotFound(f"exec item {item_id} not found")
             return await self._attach(ctx, met, call)
-        await self._enqueue(ctx, item)
+        await self._enqueue(ctx, item, call.by_person)
         OUTCOMES.labels(subsystem="relay", outcome="sent").inc()
         return item
 
@@ -260,6 +260,26 @@ class RelayManagerImpl(RelayManagerInterface):
         if item.state is ExecState.RUNNING:
             await self._control(ctx, item, kind)
         return item
+
+    async def running(self, rctx: RequestContext, org_id: UUID, session_id: UUID) -> list[ExecItem]:
+        await self._service(rctx, org_id)
+        return await self._storage.read_running(org_id, session_id, self._options.call_items)
+
+    async def interrupt_running(
+        self, rctx: RequestContext, org_id: UUID, session_id: UUID, below: int | None
+    ) -> list[ExecItem]:
+        ctx = await self._service(rctx, org_id)
+        running = await self._storage.read_running(org_id, session_id, self._options.call_items)
+        answered: list[ExecItem] = []
+        for item in running:
+            if below is not None and not stale(item.epoch, below):
+                continue
+            outcome = ExecOutcome(stopped=StopKind.INTERRUPT)
+            ended = await self._settle(ctx, item, outcome, revoke=True)
+            if ended is not None:
+                answered.append(ended)
+                OUTCOMES.labels(subsystem="relay", outcome="interrupted").inc()
+        return answered
 
     async def outcome_of(
         self, rctx: RequestContext, org_id: UUID, session_id: UUID, key: UUID, epoch: int
@@ -534,7 +554,7 @@ class RelayManagerImpl(RelayManagerInterface):
             written = await self._storage.write_item(ctx.org_id, again, item.version)
             if written is None:
                 raise PreconditionFailed(f"exec item {item.id} moved while it was sent again")
-            await self._enqueue(ctx, written)
+            await self._enqueue(ctx, written, call.by_person)
             return written
         newer = call.epoch is not None and (item.epoch is None or item.epoch < call.epoch)
         if item.state is ExecState.QUEUED and newer:
@@ -545,11 +565,12 @@ class RelayManagerImpl(RelayManagerInterface):
             return written or await self._item(ctx.org_id, item.id)
         return item
 
-    async def _enqueue(self, ctx: TenantContext, item: ExecItem) -> None:
+    async def _enqueue(self, ctx: TenantContext, item: ExecItem, by_person: bool) -> None:
         """The item's queue row, on the lane of the host that holds the
         workspace. An unsafe one is claimed once: a lost lease fails it in
         the queue's own sweep, never back to the queue. It names the
-        session's project, which a host's owner may hold its work to."""
+        session's project, which a host's owner may hold its work to, and
+        whether a person sent it by hand, which the owner may refuse."""
         isolation, egress, reads = asks(item.spec, item.location)
         project = await self._projects.project_of(ctx, item.session_id)
         payload = ExecPayload(
@@ -563,6 +584,7 @@ class RelayManagerImpl(RelayManagerInterface):
             isolation=isolation,
             egress=egress,
             reads=reads,
+            by_person=by_person,
             project_id=None if project is None else project.id,
         )
         now = self._clock()

@@ -54,6 +54,21 @@ class RelayStoragePostgresImpl(PgStorageBase, RelayStorageInterface):
             rows = (await session.execute(stmt)).scalars().all()
             return [to_model(row, ExecItem) for row in rows]
 
+    async def read_running(self, org_id: UUID, session_id: UUID, limit: int) -> list[ExecItem]:
+        stmt = (
+            select(ExecItems)
+            .where(
+                ExecItems.org_id == org_id,
+                ExecItems.session_id == session_id,
+                ExecItems.state == ExecState.RUNNING.value,
+            )
+            .order_by(ExecItems.created_at, ExecItems.id)
+            .limit(limit)
+        )
+        async with self._session_for(stmt, org_id=org_id) as session:
+            rows = (await session.execute(stmt)).scalars().all()
+            return [to_model(row, ExecItem) for row in rows]
+
     async def write_item(
         self, org_id: UUID, item: ExecItem, expected_version: int
     ) -> ExecItem | None:

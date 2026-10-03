@@ -85,6 +85,9 @@ class ExecCall(Platform):
     deadline: datetime
     epoch: int | None = Field(ge=0)  # the run's writer epoch; a read carries none
     spec: IsolationSpec
+    # A command a person runs by hand, never an agent's: its host's owner
+    # may refuse every such command (`people_commands`).
+    by_person: bool = False
 
 
 class ExecOutcome(Platform):

@@ -85,6 +85,10 @@ def effect_of(facts: Facts) -> Effect:
             if facts.author is AuthorKind.BOT:
                 return Effect.WAIT
             return Effect.WAKE if principal else Effect.WAKE_AS_DATA
+        case Arrival.CHAT:
+            # Chat instructs only when it addresses the agent: anything
+            # else is any other person's comment, whoever wrote it.
+            return Effect.WAIT if facts.author is AuthorKind.BOT else Effect.WAKE_AS_DATA
         case Arrival.TICKET:
             return Effect.WAKE_AS_DATA
         case Arrival.CI_OUTPUT:
@@ -105,6 +109,7 @@ def in_person(ctx: TenantContext) -> bool:
 
 ARRIVALS: dict[Arrival, str] = {
     Arrival.MESSAGE: "message",
+    Arrival.CHAT: "chat message not addressed to the agent",
     Arrival.COMMENT: "comment",
     Arrival.TICKET: "ticket reopened or reassigned to the agent",
     Arrival.CHECK: "check",
