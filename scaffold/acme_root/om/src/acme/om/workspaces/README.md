@@ -60,7 +60,10 @@ rebuilt from.
   remote lacks is committed to a snapshot ref beside the session's
   branch, never on it, and pushed. The branch, the index, and the files
   stay as they were. A push that does not land lets nothing go: the
-  instance and its work stay. The next loop is told where the work is.
+  instance and its work stay. The next loop is told where the work is. A
+  release lets go only of what its own run holds, by the run's epoch: a
+  session that resumes while it is still being released keeps the
+  workspace its new run took.
 - **Egress.** The egress proxy asks for each connection. A metadata
   endpoint, the host itself, and the platform's internal network are
   never reached, under any egress, by name or by the address a name

@@ -4,7 +4,14 @@ whatever a loop asks, and the host refuses what it cannot give
 (`rules.host_refusal`) before its provider is reached, so the loop parks on
 the resource and no weaker place is made. A prepared workspace is brought
 up to the session's branch; a release first pushes what the workspace
-holds. Every other operation is the engine's, unchanged.
+holds, then lets go only of what its own run holds. Every other operation is
+the engine's, unchanged.
+
+A run is named by its epoch, read from storage as it prepares: a session
+that resumes on this host while the run before it is still being released
+is the later run's from the moment its prepare starts here, so the earlier
+release leaves its instance, and what this host holds of it, to the later
+one. A later run on another host makes its own there, and this host's goes.
 
 The host is this process: what it offers and how many directory sessions it
 holds live are its own, never the control plane's. A session that runs
@@ -21,6 +28,7 @@ from uuid import UUID
 from acme.infra.transports import OutputSink
 from acme.infra.workspaces import IsolationMode, IsolationRefused, IsolationSpec, Workspace
 from acme.om.context import TenantContext
+from acme.om.steps import StepsManagerInterface
 from acme.om.steps.types.step import Step
 from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.tools.registry import ToolRegistry
@@ -35,21 +43,31 @@ log = logging.getLogger(__name__)
 
 
 class HeldWorkspaces:
-    """The workspaces this host holds prepared, by session: from a prepare
-    that succeeded to the release that let it go. What a session delivered
-    is read from the one it holds (`WorkProductWorkspacesImpl`)."""
+    """The workspaces this host holds prepared, by session, each under the
+    epoch of the run that prepared it: from a prepare that succeeded to the
+    release that let it go. What a session delivered is read from the one it
+    holds (`WorkProductWorkspacesImpl`)."""
 
     def __init__(self) -> None:
-        self._held: dict[UUID, Workspace] = {}
+        self._held: dict[UUID, tuple[Workspace, int]] = {}
 
     def get(self, session_id: UUID) -> Workspace | None:
-        return self._held.get(session_id)
+        held = self._held.get(session_id)
+        return None if held is None else held[0]
 
-    def hold(self, workspace: Workspace) -> None:
-        self._held[workspace.id] = workspace
+    def epoch_of(self, session_id: UUID) -> int | None:
+        """The epoch of the run that holds the session's workspace here."""
+        held = self._held.get(session_id)
+        return None if held is None else held[1]
 
-    def let_go(self, session_id: UUID) -> None:
-        self._held.pop(session_id, None)
+    def hold(self, workspace: Workspace, epoch: int) -> None:
+        self._held[workspace.id] = (workspace, epoch)
+
+    def let_go(self, session_id: UUID, epoch: int | None = None) -> None:
+        """Lets the session's workspace go: with an epoch, only when the run
+        of that epoch still holds it, so a later run's stays."""
+        if epoch is None or self.epoch_of(session_id) == epoch:
+            self._held.pop(session_id, None)
 
 
 class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
@@ -57,6 +75,7 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         self,
         inner: ToolsManagerInterface,
         workspaces: WorkspacesManagerInterface,
+        steps: StepsManagerInterface,
         offer: HostOffer,
         *,
         local: bool,
@@ -65,21 +84,40 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
     ) -> None:
         self._inner = inner
         self._workspaces = workspaces
+        self._steps = steps
         self._offer = offer
         self._local = local
         self._held = held or HeldWorkspaces()
         self._placed = placed
-        self._directories: set[UUID] = set()  # the directory workspaces live here
+        # The directory workspaces live here, each under its run's epoch.
+        self._directories: dict[UUID, int] = {}
         self._hosted: set[UUID] = set()  # the workspaces a host of the tenant's holds
+        self._preparing: dict[UUID, int] = {}  # the prepares under way here, by session
 
     # The workspace.
 
     async def prepare_workspace(
         self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec
     ) -> Workspace:
+        # Marked before the first await, and until the workspace is held: a
+        # release that lands meanwhile leaves the instance to this run.
+        self._preparing[session_id] = self._preparing.get(session_id, 0) + 1
+        try:
+            return await self._prepare(ctx, session_id, spec)
+        finally:
+            left = self._preparing.pop(session_id) - 1
+            if left:
+                self._preparing[session_id] = left
+
+    async def _prepare(
+        self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec
+    ) -> Workspace:
         pinned = await self._workspaces.pinned(ctx, session_id, spec)
         if pinned.mode is IsolationMode.NONE:
             return await self._inner.prepare_workspace(ctx, session_id, pinned)
+        # The run that prepares it took its epoch just before: what this
+        # host holds for the session is held under it.
+        epoch = (await self._steps.get_cursor(ctx, session_id)).epoch
         if self._placed is not None:
             hosted = await self._placed.held_on_host(ctx, session_id, pinned)
             if hosted is not None:
@@ -87,20 +125,20 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
                 # brought up to the session's branch there.
                 attached = await self._workspaces.attach(ctx, hosted)
                 self._hosted.add(session_id)
-                self._held.hold(attached)
+                self._held.hold(attached, epoch)
                 return attached
-        running = len(self._directories - {session_id})
+        running = len(self._directories.keys() - {session_id})
         why = host_refusal(pinned, self._offer, local=self._local, running=running)
         if why is not None:
             raise IsolationRefused(why)
         # Held before the first await, so two prepares at once count each
         # other.
         if pinned.mode is IsolationMode.HOST:
-            self._directories.add(session_id)
+            self._directories[session_id] = epoch
         try:
             workspace = await self._inner.prepare_workspace(ctx, session_id, pinned)
         except BaseException:
-            self._directories.discard(session_id)
+            self._directories.pop(session_id, None)
             raise
         try:
             attached = await self._workspaces.attach(ctx, workspace)
@@ -111,29 +149,46 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
                 await self._inner.release_workspace(ctx, workspace)
             except Exception:
                 log.exception("session %s: the workspace was not released", session_id)
-            self._directories.discard(session_id)
+            self._directories.pop(session_id, None)
             raise
-        self._held.hold(attached)
+        self._held.hold(attached, epoch)
         return attached
 
     async def release_workspace(self, ctx: TenantContext, workspace: Workspace) -> None:
+        # The run that releases it holds it until here: a later run's
+        # prepare cannot land before its first await.
+        epoch = self._held.epoch_of(workspace.id)
         if workspace.spec.mode is not IsolationMode.NONE:
             # Kept first: a push that does not land raises, and the instance
             # and its work stay.
             await self._workspaces.detach(ctx, workspace)
-        if workspace.id in self._hosted:
+        if epoch is not None and self._taken_here(workspace.id, epoch):
+            # The session resumed here while its work was kept: the instance
+            # is the later run's, to let go when it ends.
+            log.info("session %s: a later run holds its workspace, which stays", workspace.id)
+        elif workspace.id in self._hosted:
             # Its host holds it, warm for the next loop: nothing of this
             # process's goes.
             self._hosted.discard(workspace.id)
         else:
             await self._inner.release_workspace(ctx, workspace)
-        self._held.let_go(workspace.id)
-        self._directories.discard(workspace.id)
+        if epoch is not None:
+            # Only what this run holds: a later run's stays held.
+            self._held.let_go(workspace.id, epoch)
+            if self._directories.get(workspace.id) == epoch:
+                del self._directories[workspace.id]
+
+    def _taken_here(self, session_id: UUID, epoch: int) -> bool:
+        """Whether a later run in this process prepares the session's
+        workspace or holds it. One on another host, or one that never
+        prepares, takes nothing of this host's."""
+        held = self._held.epoch_of(session_id)
+        return session_id in self._preparing or (held is not None and held != epoch)
 
     async def purge_workspace(self, org_id: UUID, session_id: UUID) -> None:
         await self._inner.purge_workspace(org_id, session_id)
         self._held.let_go(session_id)
-        self._directories.discard(session_id)
+        self._directories.pop(session_id, None)
         self._hosted.discard(session_id)
 
     # The engine's, unchanged.
