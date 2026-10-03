@@ -3,9 +3,11 @@ leaves its instance prepared, its work uncommitted in it, and nothing to
 release it. Once no loop item accounts for it, a pass past the grace
 releases it the way a run does: its work pushed to a snapshot ref first.
 An instance a live loop holds, and a directory no prepare marked, are left
-alone; a push that does not land keeps the instance for the next pass; and
-an instance whose session is gone is purged."""
+alone; a push that does not land keeps the instance for the next pass. An
+instance whose tenant is deleted is purged, and one whose tenant or
+session this database holds no record of is left alone."""
 
+import logging
 import shutil
 import subprocess
 import sys
@@ -32,7 +34,7 @@ from acme.infra.workspaces.twin import WorkspaceTwinImpl
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.base import new_id, utcnow
-from acme.om.context import AppContext, AppType, RequestContext, TenantContext
+from acme.om.context import AppContext, AppType, OperatorRole, RequestContext, TenantContext
 from acme.om.root import Managers, build_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.work.types.work_item import WorkItem, WorkKind
@@ -244,7 +246,55 @@ async def test_a_push_that_does_not_land_keeps_the_instance_for_the_next_pass(
     assert await host.held() == set() and len(source.pushed) == 1
 
 
-async def test_an_instance_whose_session_is_gone_is_purged(tmp_path: Path) -> None:
+async def deleted(managers: Managers, org_id: UUID) -> None:
+    """The tenant's deletion carried to its end: an operator asks it, and
+    the worker ends it."""
+    tenancy = managers.tenancy
+    await tenancy.bootstrap(
+        request(), "Ops", "ops", "root@ops.test", "Root", operator_role=OperatorRole.WRITE
+    )
+    token = await tenancy.grant_operator_token(request(), "root@ops.test")
+    admin = await tenancy.admit_operator(await tenancy.authenticate_login(request(), token.token))
+    await managers.tenancy_operator.delete_org(admin, org_id)
+    await tenancy.org.delete_closed_org(
+        await tenancy.service_context(request(), org_id, admin.identity_id)
+    )
+
+
+@pytest.mark.skipif(GIT is None, reason="git is not on this host")
+async def test_a_deleted_tenants_instance_is_purged_past_the_grace(
+    tmp_path: Path, remote: Path
+) -> None:
+    infra = HostInfra(tmp_path)
+    managers = build_managers(
+        StorageMemoryImpl(),
+        infra,
+        agent_kinds=(worker(DIRECTORY),),
+        workspace_projects=ProjectsTwin(repository=str(remote)),
+        pull_requests=PullRequestsTwin(),
+    )
+    host = Host(managers, infra.get_workspaces())
+    await host.start()
+    session_id, _, here = await host.run_left(DIRECTORY)
+    (here / "notes.txt").write_text("half done\n")
+    await deleted(managers, host.owner.org_id)
+    assert await managers.tenancy.tenant_deleted(request(), host.owner.org_id) is True
+
+    assert await host.passes() == 0, "the grace begins"
+    assert await host.held() == {session_id}
+    assert await host.passes(GRACE) == 1
+    assert await host.held() == set()
+    assert not here.exists(), "its files go with it"
+    assert git(remote, "for-each-ref", f"{SNAPSHOT_PREFIX}/") == "", "nothing is pushed"
+
+
+async def test_an_instance_this_database_holds_no_record_of_is_left_alone(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """After a restore to an earlier point, the host may hold instances
+    whose tenant the database never had, whose session it never had, or
+    whose session's history it no longer holds. Each may hold the only copy
+    of its work: past the grace it stays, and is logged once."""
     infra = InfraLocalImpl(tmp_path)
     managers = build_managers(
         StorageMemoryImpl(),
@@ -258,11 +308,20 @@ async def test_an_instance_whose_session_is_gone_is_purged(tmp_path: Path) -> No
     assert isinstance(provider, WorkspaceTwinImpl)
     host = Host(managers, provider)
     await host.start()
+    stranger = new_id()
+    assert await managers.tenancy.tenant_deleted(request(), stranger) is None
+    unknown_org = await provider.prepare(stranger, new_id(), TWIN)
+    unknown_session = await provider.prepare(host.owner.org_id, new_id(), TWIN)
     session_id, item, _ = await host.run_left(TWIN)
     await managers.work.complete(host.owner, item)
     gone = await managers.steps.purge_histories([(host.owner.org_id, session_id)])
     assert gone == [(host.owner.org_id, session_id)], "its history went with its retention"
 
-    assert await host.passes() == 0
-    assert await host.passes(GRACE) == 1
-    assert await host.held() == set()
+    with caplog.at_level(logging.WARNING):
+        assert await host.passes() == 0
+        assert await host.passes(GRACE) == 0
+        assert await host.passes(GRACE) == 0
+    assert await host.held() == {unknown_org.id, unknown_session.id, session_id}
+    told = [record.getMessage() for record in caplog.records if "no record" in record.getMessage()]
+    assert len(told) == 3, "each is logged once"
+    assert any(str(stranger) in line and "its tenant" in line for line in told)

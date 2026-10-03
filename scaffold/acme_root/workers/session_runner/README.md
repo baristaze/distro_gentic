@@ -39,13 +39,15 @@ inside the API ([ADR 1011](../../docs/adr/1011-a-sessions-loop-runs-in-a-worker-
   is safe to repeat runs again, and one that is not is answered as
   interrupted, never repeated.
 - **The sweep** takes back the expired leases and relays the outbox a crash
-  left. Then it reads the workspace instances this host holds. One whose
-  session has no loop item queued or claimed is no run's; once a pass
-  finds it so past a grace (`ACME_RUNNER_WORKSPACE_GRACE_SECONDS`), it is
-  released the way a run releases it, its work pushed to a snapshot ref
-  first. A push that does not land keeps it for the next pass. One whose
-  session is gone is purged. The sweep purges no rows: the purges, and
-  the purge login, are the maintenance worker's.
+  left. Then it reads the workspace instances this host holds for its
+  deployment (`ACME_WORKSPACE_DEPLOYMENT`). One whose session has no loop
+  item queued or claimed is no run's; once a pass finds it so past a
+  grace (`ACME_RUNNER_WORKSPACE_GRACE_SECONDS`), it is released the way a
+  run releases it, its work pushed to a snapshot ref first. A push that
+  does not land keeps it for the next pass. One whose tenant is deleted
+  is purged. One whose tenant or session the database holds no record
+  of, as after a restore, is left alone and logged. The sweep purges no
+  rows: the purges, and the purge login, are the maintenance worker's.
 
 The runner holds the model providers' keys and runs tools in the
 workspaces its settings name. It holds no purge login. Every call it

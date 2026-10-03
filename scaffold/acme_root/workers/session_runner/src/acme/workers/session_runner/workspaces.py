@@ -11,10 +11,12 @@ within. It goes through the release a run makes, under its tenant's
 context: what its checkout holds is pushed to a snapshot ref first, and a
 push that does not land lets nothing go, so the next pass tries again.
 
-An instance whose session is gone, its history purged past its retention
-or its tenant deleted, has nothing left to keep its work for: it is
-purged. A session marked deleted keeps its history and may come back, so
-its instance is released like any other."""
+An instance is purged only on proof that nothing is left to keep its
+work for: its tenant's org row marks it deleted. One whose tenant this
+database holds no row of, or whose session it holds no history of, is
+left alone and logged: after a restore to an earlier point, it may hold
+the only copy of its work. A session marked deleted keeps its history
+and may come back, so its instance is released like any other."""
 
 import logging
 from collections.abc import Callable
@@ -26,7 +28,6 @@ from pydantic import Field
 from acme.infra.workspaces import HeldInstance, Workspace, WorkspaceProviderInterface
 from acme.om.base import EMPTY_UUID, Platform, utcnow
 from acme.om.context import RequestContext, TenantContext
-from acme.om.exceptions import InvalidCredential
 from acme.om.steps import StepsManagerInterface
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tools.manager import ToolsManagerInterface
@@ -71,6 +72,8 @@ class HeldWorkspacesSweep:
         # Each instance no run accounted for at a pass, and when a pass first
         # found it so.
         self._unaccounted: dict[UUID, datetime] = {}
+        # Each instance logged as one this database holds no record of.
+        self._logged: set[UUID] = set()
 
     async def __call__(self, rctx: RequestContext) -> int:
         """One pass over what this host holds; returns how many it let go."""
@@ -78,6 +81,7 @@ class HeldWorkspacesSweep:
         now = self._clock()
         ids = {instance.id for instance in held}
         self._unaccounted = {id_: at for id_, at in self._unaccounted.items() if id_ in ids}
+        self._logged &= ids
         let_go = 0
         for instance in held:
             try:
@@ -94,27 +98,32 @@ class HeldWorkspacesSweep:
     async def _let_go(self, rctx: RequestContext, instance: HeldInstance, now: datetime) -> bool:
         """Lets one instance go when no run accounts for it past the grace;
         False when it stays. A failed push raises, and it stays."""
-        ctx: TenantContext | None
-        try:
+        deleted = await self._tenancy.tenant_deleted(rctx, instance.org_id)
+        if deleted is None:
+            self._unknown(instance, "its tenant")
+            return False
+        ctx: TenantContext | None = None
+        if not deleted:
             # The platform lets it go, as no person: the system user.
             ctx = await self._tenancy.service_context(rctx, instance.org_id, EMPTY_UUID)
-        except InvalidCredential:
-            ctx = None  # its tenant is deleted
-        if ctx is not None and await self._work.has_open(ctx, WorkKind.LOOP, instance.id):
-            self._unaccounted.pop(instance.id, None)
-            return False
+            if await self._work.has_open(ctx, WorkKind.LOOP, instance.id):
+                self._unaccounted.pop(instance.id, None)
+                return False
         since = self._unaccounted.setdefault(instance.id, now)
         if now - since < self._options.grace:
             return False
-        if ctx is None or (await self._steps.get_cursor(ctx, instance.id)).epoch == 0:
-            # A run took an epoch before it prepared this instance, so a
-            # session with none left has had its history purged.
+        if ctx is None:
             await self._tools.purge_workspace(instance.org_id, instance.id)
             log.info(
-                "session %s of org %s is gone: its instance is purged",
+                "session %s of org %s: its tenant is deleted, and its instance is purged",
                 instance.id,
                 instance.org_id,
             )
+        elif (await self._steps.get_cursor(ctx, instance.id)).epoch == 0:
+            # A run took an epoch before it prepared this instance, so a
+            # session with none here is one this database has no history of.
+            self._unknown(instance, "its session")
+            return False
         else:
             pinned = await self._workspaces.get_workspace(ctx, instance.id)
             workspace = Workspace(
@@ -131,3 +140,18 @@ class HeldWorkspacesSweep:
             )
         self._unaccounted.pop(instance.id, None)
         return True
+
+    def _unknown(self, instance: HeldInstance, what: str) -> None:
+        """Logs, once a process, an instance this database cannot account
+        for, which stays."""
+        if instance.id in self._logged:
+            return
+        self._logged.add(instance.id)
+        log.warning(
+            "session %s of org %s: this database holds no record of %s, so its "
+            "instance at %s is left as it is",
+            instance.id,
+            instance.org_id,
+            what,
+            instance.location,
+        )
