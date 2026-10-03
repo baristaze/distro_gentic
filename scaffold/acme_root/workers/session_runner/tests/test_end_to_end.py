@@ -47,13 +47,16 @@ from acme.infra.transports.records import RecordBook
 from acme.integrations.impl.configured import absent_integrations
 from acme.integrations.model_providers.scripted import SCRIPT, Turn
 from acme.integrations.model_providers.types import ProviderName
+from acme.integrations.payments.twin import PaymentProviderTwinImpl
 from acme.om.agents.loop_rules import ended_step
 from acme.om.base import new_id, utcnow
+from acme.om.billing.root import build_billing
 from acme.om.billing.types.account import FundingMode
 from acme.om.billing.types.ledger import EntryKind, FundedHold
 from acme.om.budgets.types.budget import Budget, BudgetScopeKind, WindowKind
 from acme.om.budgets.types.hold import Settlement
 from acme.om.context import TenantContext
+from acme.om.evidence.rules import policy_key
 from acme.om.exceptions import StaleWriter
 from acme.om.matrix.types.matrix import MatrixStatus
 from acme.om.placement.rules import DEFAULT_TIER, tier_lane
@@ -66,7 +69,6 @@ from acme.om.storage.settings import MigrationSettings
 from acme.om.trust.impl.manager import CALL_AUDITED
 from acme.om.trust.types.identities import CallAudit
 from acme.om.work.types.work_item import WorkKind, WorkStatus
-from acme.om.workspaces.rules import project_key
 from acme.om.workspaces.types.source import RepositoryBinding
 from acme.services.api.app import create_app
 from acme.services.api.container import AppContainer, postgres_storage
@@ -493,7 +495,7 @@ async def test_one_session_in_a_project_meets_every_gate_on_its_way_to_a_success
     stack: Stack,
 ) -> None:
     person = await owner_of(stack)
-    project = project_key(stack.repository(person.project_id))
+    project = policy_key(person.project_id)
     await stack.container.managers.evidence.write_policy(person.ctx, make_policy(project))
     runner = stack.runner(
         "runner-gates", [runs(*FIXES_THE_REPORT), validates(), submits("succeeded")]
@@ -661,7 +663,10 @@ async def test_a_real_loop_runs_end_to_end_on_a_live_provider(
     session = await settled(stack, person, session_id)
 
     steps = await history(stack, person, session_id)
-    spend = await stack.container.managers.budgets.get_spend(person.ctx, budget.id)
+    # The calls held and spent through billing's money gate, in its ledger.
+    container = stack.container
+    billing = build_billing(container.storage, container.managers, PaymentProviderTwinImpl())
+    spend = await billing.get_spend(person.ctx, budget.id)
     report |= {
         "steps": [step["type"] for step in steps],
         "answer": of_type(steps, "model_response")[-1]["text"],
