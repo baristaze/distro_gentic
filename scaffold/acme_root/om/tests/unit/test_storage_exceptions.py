@@ -104,6 +104,9 @@ STORAGE_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         # credential is found by digest, which finds the tenant with it.
         ("HostsStorageInterface", "read_enrollment_token_by_digest"),
         ("HostsStorageInterface", "read_host_by_credential_digest"),
+        # A system's delivery names no tenant: the installation it came
+        # through is found among every tenant's, which finds the tenant.
+        ("IntakeStorageInterface", "read_installation_org"),
         # The sweep's read of running exec items whose lease ended, each named
         # with its tenant, whose service context the sweep settles it under.
         ("RelayStorageInterface", "read_expired"),
@@ -307,6 +310,10 @@ REQUEST_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
         ("HostsManagerInterface", "rotate"),
         ("HostsManagerInterface", "heartbeat"),
         ("HostsManagerInterface", "claim"),
+        # A system's delivery names no tenant until its installation is
+        # found: the ingress reads the tenant that connected it from the
+        # request stage, and queues the event under that tenant.
+        ("IntakeManagerInterface", "tenant_of"),
         # The relay runs below any principal: the runner's transport sends,
         # watches, stops, and recovers a session's exec items, and a host
         # reads, streams, settles, and renews the items it holds and reads its

@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import Field
 
+from acme.integrations.events import IntegrationInterface
+from acme.integrations.exceptions import DeliveryRefused
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agents import AgentsManagerInterface
@@ -11,15 +13,21 @@ from acme.om.agents.loop import LoopManagerInterface
 from acme.om.attribution import PrincipalContext
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import Platform, derived_id, new_id, utcnow
-from acme.om.context import Permission, TenantContext
+from acme.om.context import Permission, RequestContext, TenantContext
 from acme.om.events import EventsManagerInterface
 from acme.om.events.manager import audit_event
-from acme.om.exceptions import Conflict, NotAuthorized, NotFound
+from acme.om.exceptions import Conflict, NotAuthorized, NotFound, ValidationFailed
 from acme.om.intake.manager import IntakeManagerInterface
 from acme.om.intake.rules import DELIVERED, Facts, effect_of, in_person, input_step
 from acme.om.intake.storage import IntakeStorageInterface
 from acme.om.intake.types.event import AuthorKind, ChatApproval, FeedbackEvent
-from acme.om.intake.types.link import AccountLink, HandleKind, PlatformAct, WorkBinding
+from acme.om.intake.types.link import (
+    AccountLink,
+    HandleKind,
+    Installation,
+    PlatformAct,
+    WorkBinding,
+)
 from acme.om.intake.types.route import Effect, Routed
 from acme.om.steps.types.header import ParkReason
 from acme.om.steps.types.step import Step
@@ -27,6 +35,7 @@ from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tools.manager import ToolsManagerInterface
 
 ROUTED = "intake.event.routed"
+CONNECTED = "intake.installation.created"
 UNLINKED = "intake.account_link.deleted"
 APPROVED = "intake.chat_approval.decided"
 REFUSED = "intake.chat_approval.refused"
@@ -50,10 +59,12 @@ class IntakeManagerImpl(IntakeManagerInterface):
         events: EventsManagerInterface,
         tenancy: TenancyManagerInterface,
         principal_context: PrincipalContext,
+        integrations: Callable[[str], IntegrationInterface],
         options: IntakeOptions,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._storage = storage
+        self._integrations = integrations
         self._sessions = sessions
         self._agents = agents
         self._loop = loop
@@ -63,6 +74,35 @@ class IntakeManagerImpl(IntakeManagerInterface):
         self._live = principal_context
         self._options = options
         self._clock = clock
+
+    async def connect_installation(
+        self, ctx: TenantContext, integration: str, grant: str
+    ) -> Installation:
+        ctx.require(Permission.MANAGE_MEMBERS)
+        if not in_person(ctx):
+            raise NotAuthorized("an installation is connected by a person, in person")
+        try:
+            named = self._integrations(integration).verify_installation(grant, self._clock())
+        except DeliveryRefused as refused:
+            raise ValidationFailed(f"the {integration} grant: {refused.message}") from None
+        installation = Installation(
+            id=new_id(),
+            created_at=self._clock(),
+            integration=integration,
+            installation=named,
+            created_by=ctx.user_id,
+        )
+        held = await self._storage.create_installation(ctx.org_id, installation)
+        if held is None:
+            raise Conflict(f"{integration} installation {named} is another tenant's")
+        if held.id == installation.id:
+            await self._audit(ctx, CONNECTED, held.id, {"integration": integration})
+        return held
+
+    async def tenant_of(
+        self, rctx: RequestContext, integration: str, installation: str
+    ) -> UUID | None:
+        return await self._storage.read_installation_org(integration, installation)
 
     async def link_account(
         self, ctx: TenantContext, integration: str, external_id: str, user_id: UUID

@@ -4,20 +4,45 @@ branch it names, and the routing table decides what it does there: wake
 the session, wait in its inbox, hand it over, or only be recorded. Only a
 mapped user who may instruct the session speaks to it as a principal;
 everything else arrives as data. A chat approval counts only as a mapped
-user's."""
+user's. A delivery reaches the one tenant that connected the installation
+it names."""
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from uuid import UUID
 
-from acme.om.context import TenantContext
+from acme.om.context import RequestContext, TenantContext
 from acme.om.intake.types.event import ChatApproval, FeedbackEvent
-from acme.om.intake.types.link import AccountLink, HandleKind, WorkBinding
+from acme.om.intake.types.link import AccountLink, HandleKind, Installation, WorkBinding
 from acme.om.intake.types.route import Routed
 from acme.om.steps.types.step import Step
 
 
 class IntakeManagerInterface(ABC):
+    @abstractmethod
+    async def connect_installation(
+        self, ctx: TenantContext, integration: str, grant: str
+    ) -> Installation:
+        """Connects to the tenant the installation of the platform that
+        `grant` names, as a person who manages its members may, in person: a
+        context an agent's call runs under is `NotAuthorized`. The
+        integration checks the grant its system handed the person who
+        installed it, so the installation is the system's word, never the
+        person's: a grant that does not check out is `ValidationFailed`.
+        One tenant an installation: connected already, the tenant's own
+        answers, and one another tenant holds is `Conflict`."""
+        ...
+
+    @abstractmethod
+    async def tenant_of(
+        self, rctx: RequestContext, integration: str, installation: str
+    ) -> UUID | None:
+        """Platform-internal: a system's delivery names no tenant, so the
+        ingress reads the one that connected the installation it came
+        through, before any tenant is known, and places the delivery there.
+        None when no tenant did."""
+        ...
+
     @abstractmethod
     async def link_account(
         self, ctx: TenantContext, integration: str, external_id: str, user_id: UUID

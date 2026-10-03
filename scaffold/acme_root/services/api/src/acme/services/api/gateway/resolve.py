@@ -11,10 +11,14 @@ from starlette.requests import HTTPConnection
 from acme.services.api.services import (
     AdminServiceInterface,
     AgentSessionsServiceInterface,
+    AutomationsServiceInterface,
+    BudgetsServiceInterface,
     EventsServiceInterface,
     FleetServiceInterface,
     HostsServiceInterface,
+    IntakeServiceInterface,
     MediaServiceInterface,
+    NotificationsServiceInterface,
     RealtimeServiceInterface,
     RelayServiceInterface,
     ServicesInterface,
@@ -79,6 +83,22 @@ def stations_service(connection: HTTPConnection) -> StationsServiceInterface:
     return services_of(connection).get_stations_service()
 
 
+def automations_service(connection: HTTPConnection) -> AutomationsServiceInterface:
+    return services_of(connection).get_automations_service()
+
+
+def budgets_service(connection: HTTPConnection) -> BudgetsServiceInterface:
+    return services_of(connection).get_budgets_service()
+
+
+def intake_service(connection: HTTPConnection) -> IntakeServiceInterface:
+    return services_of(connection).get_intake_service()
+
+
+def notifications_service(connection: HTTPConnection) -> NotificationsServiceInterface:
+    return services_of(connection).get_notifications_service()
+
+
 TenancyService = Annotated[TenancyServiceInterface, Depends(tenancy_service)]
 AdminService = Annotated[AdminServiceInterface, Depends(admin_service)]
 EventsService = Annotated[EventsServiceInterface, Depends(events_service)]
@@ -90,3 +110,7 @@ HostsService = Annotated[HostsServiceInterface, Depends(hosts_service)]
 FleetService = Annotated[FleetServiceInterface, Depends(fleet_service)]
 RelayService = Annotated[RelayServiceInterface, Depends(relay_service)]
 StationsService = Annotated[StationsServiceInterface, Depends(stations_service)]
+AutomationsService = Annotated[AutomationsServiceInterface, Depends(automations_service)]
+BudgetsService = Annotated[BudgetsServiceInterface, Depends(budgets_service)]
+IntakeService = Annotated[IntakeServiceInterface, Depends(intake_service)]
+NotificationsService = Annotated[NotificationsServiceInterface, Depends(notifications_service)]

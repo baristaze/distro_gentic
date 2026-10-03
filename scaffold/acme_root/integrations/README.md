@@ -52,14 +52,19 @@ that holds a session's work, and the chat its people talk in
 /webhooks/integrations/<name>`. The integration checks the signature
 over the body and its timestamp, reads the event into the platform's
 terms, and keys it with a UUID v5 over its name and its id for the
-delivery. It also posts a message to an account of its system.
+delivery. The installation a delivery came through is the system's own
+id; the tenant that connected it is the one the event is queued for. An
+integration also checks the grant its system hands the person who
+installs the platform there (`verify_installation`), so a tenant connects
+the installation the system names, never one a person types. It also
+posts a message to an account of its system.
 
 What served an event is the integration's word (`provenance`), never the
 delivery's, so a twin's event is a twin's whatever its body claims.
 
 | Implementation | What it is |
 |----------------|------------|
-| `events/twin.py` | The twin of every integration, in memory. It signs its own deliveries (`Twin-Signature`, HMAC-SHA256 over `<timestamp>.<body>`, a five-minute window), records each message posted through it, says `twin` on every record it writes, and mints every id as `twin_`. Refused at boot outside `local` and `test`. |
+| `events/twin.py` | The twin of every integration, in memory. It signs its own deliveries (`Twin-Signature`, HMAC-SHA256 over `<timestamp>.<body>`, a five-minute window) and its installations' grants the same way, records each message posted through it, says `twin` on every record it writes, and mints every id as `twin_`. Refused at boot outside `local` and `test`. |
 | `events.IntegrationAbsentImpl` | The integration of a process with none configured: every delivery and every post is unavailable, `503`. |
 
 A real client of a forge or a chat is not built yet.

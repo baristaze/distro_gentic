@@ -21,8 +21,8 @@ here: `integration`, by an `external` actor. Nothing an event says sets
 either. The session's own acts, which come back through the integration
 as the platform's account, are audited and never delivered.
 
-The ingress reads a delivery into an event (`event_of`): its id the
-delivery's key, which the integration derives from its id for the
+The ingress reads a delivery into an event (`event_of`), for the tenant
+that connected the installation it names: its id the delivery's key, which the integration derives from its id for the
 delivery, so a redelivery is the same event, and what served it the
 integration's word, so a twin's event is named a twin's on every record of
 it."""
@@ -114,16 +114,16 @@ ARRIVALS: dict[Arrival, str] = {
 
 
 def event_of(
-    integration: str, provenance: Provenance, provided: ProvidedEvent
+    integration: str, provenance: Provenance, provided: ProvidedEvent, tenant: UUID | None
 ) -> tuple[UUID, FeedbackEvent]:
-    """A verified delivery as the ingress queues it: the org its installation
-    names, and the event, keyed by the delivery's key, served by what the
-    integration says, and its text cut to what an event carries.
-    `ValidationFailed` when it names no org or is no event."""
-    try:
-        org_id = UUID(provided.installation)
-    except ValueError:
-        raise ValidationFailed("the delivery names no installation of the platform") from None
+    """A verified delivery as the ingress queues it: `tenant`, the one that
+    connected the installation the delivery names, and the event, keyed by
+    the delivery's key, served by what the integration says, and its text
+    cut to what an event carries. `ValidationFailed` when no tenant
+    connected the installation, whatever it names, or it is no event."""
+    if tenant is None:
+        raise ValidationFailed("the delivery names no installation a tenant connected")
+    org_id = tenant
     try:
         session_id = None if provided.session_id is None else UUID(provided.session_id)
         event = FeedbackEvent(

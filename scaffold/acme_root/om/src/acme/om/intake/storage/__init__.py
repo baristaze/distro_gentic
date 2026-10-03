@@ -1,15 +1,39 @@
-"""Storage of the intake swimlane: the tenant's account links, the work
-bindings of its sessions, and the acts its sessions made through the
-platform's account. Every operation takes org_id first."""
+"""Storage of the intake swimlane: the installations the tenant connected,
+its account links, the work bindings of its sessions, and the acts its
+sessions made through the platform's account. Every operation takes org_id
+first, but the ingress's read of the tenant an installation names, which
+no tenant scopes."""
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from uuid import UUID
 
-from acme.om.intake.types.link import AccountLink, HandleKind, PlatformAct, WorkBinding
+from acme.om.intake.types.link import (
+    AccountLink,
+    HandleKind,
+    Installation,
+    PlatformAct,
+    WorkBinding,
+)
 
 
 class IntakeStorageInterface(ABC):
+    @abstractmethod
+    async def create_installation(
+        self, org_id: UUID, installation: Installation
+    ) -> Installation | None:
+        """The installation, or the one the tenant holds for it already,
+        which answers instead; None when another tenant holds it: one tenant
+        an installation."""
+        ...
+
+    @abstractmethod
+    async def read_installation_org(self, integration: str, installation: str) -> UUID | None:
+        """Cross-tenant: the tenant that connected the installation, read
+        among every tenant's in the system scope, since a delivery names no
+        tenant. None when none did."""
+        ...
+
     @abstractmethod
     async def create_link(self, org_id: UUID, link: AccountLink) -> AccountLink:
         """The link, or the one the tenant holds for the account already,

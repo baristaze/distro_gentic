@@ -692,6 +692,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/automations/principal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Principal */
+        get: operations["get_principal_v1_automations_principal_get"];
+        /**
+         * Grant Principal
+         * @description The principal granted the role; a grant over a standing one keeps it.
+         */
+        put: operations["grant_principal_v1_automations_principal_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/budgets/{budget_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Budget */
+        get: operations["get_budget_v1_budgets__budget_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/budgets/{budget_id}/amount": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Change Amount
+         * @description The budget at its new amount, on the version `If-Match` names.
+         */
+        put: operations["change_amount_v1_budgets__budget_id__amount_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/events": {
         parameters: {
             query?: never;
@@ -988,6 +1046,27 @@ export interface paths {
          * @description Ends the host and its credentials at once; it is handed no more work.
          */
         delete: operations["revoke_host_v1_hosts__host_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/integrations/{integration}/installations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Connect Installation
+         * @description The installation the grant names, connected to the tenant; connected
+         *     already, it answers as it stands.
+         */
+        post: operations["connect_installation_v1_integrations__integration__installations_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1330,6 +1409,43 @@ export interface paths {
         head?: never;
         /** Update Membership */
         patch: operations["update_membership_v1_memberships__user_id__patch"];
+        trace?: never;
+    };
+    "/v1/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Notifications */
+        get: operations["list_notifications_v1_notifications_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/notifications/{notification_id}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark Read
+         * @description The notification marked read; the first mark holds.
+         */
+        post: operations["mark_read_v1_notifications__notification_id__read_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/orgs": {
@@ -1842,6 +1958,17 @@ export interface components {
             title: string;
         };
         /**
+         * AmountRequest
+         * @description A budget's new amount: reference cost in millionths, native tokens, or
+         *     both. A unit left out is not bounded, and an amount bounds one at least.
+         */
+        AmountRequest: {
+            /** Cost Micros */
+            cost_micros?: number | null;
+            /** Tokens */
+            tokens?: number | null;
+        };
+        /**
          * ApiKeyPageView
          * @description One page of the api key list, newest first; `next_cursor` as on
          *     `UserPageView`.
@@ -1879,6 +2006,58 @@ export interface components {
              * Format: uuid
              */
             user_id: string;
+        };
+        /**
+         * AutomationPrincipalView
+         * @description The tenant's automation principal: its id, the role it holds, and who
+         *     granted it.
+         */
+        AutomationPrincipalView: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Granted By
+             * Format: uuid
+             */
+            granted_by: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            role: components["schemas"]["Role"];
+        };
+        /**
+         * BudgetScopeKind
+         * @enum {string}
+         */
+        BudgetScopeKind: "session" | "tree" | "person" | "project" | "team" | "tenant";
+        /**
+         * BudgetView
+         * @description A budget: its scope, its window, its amount, and the version a change
+         *     of the amount names in `If-Match`.
+         */
+        BudgetView: {
+            /** Cost Micros */
+            cost_micros: number | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Scope Key */
+            scope_key: string;
+            scope_kind: components["schemas"]["BudgetScopeKind"];
+            /** Tokens */
+            tokens: number | null;
+            /** Version */
+            version: number;
+            window_kind: components["schemas"]["WindowKind"];
+            /** Window Seconds */
+            window_seconds: number | null;
         };
         /** CaseTallyBody */
         CaseTallyBody: {
@@ -2000,6 +2179,15 @@ export interface components {
         ConfirmTotpRequest: {
             /** Totp Code */
             totp_code: string;
+        };
+        /**
+         * ConnectInstallationRequest
+         * @description The grant the system handed the person who installed the platform:
+         *     the integration reads the installation from it, never from the caller.
+         */
+        ConnectInstallationRequest: {
+            /** Grant */
+            grant: string;
         };
         /**
          * ContentState
@@ -2454,6 +2642,13 @@ export interface components {
             /** Subject Id */
             subject_id: string | null;
         };
+        /**
+         * GrantRequest
+         * @description The role the automation principal holds: never above the granter's.
+         */
+        GrantRequest: {
+            role: components["schemas"]["Role"];
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -2562,6 +2757,32 @@ export interface components {
             operator_role: components["schemas"]["OperatorRole"] | null;
             /** Time Zone */
             time_zone?: string | null;
+        };
+        /**
+         * InstallationView
+         * @description An installation of the platform in a system, connected by the tenant:
+         *     every delivery that names it reaches this tenant alone.
+         */
+        InstallationView: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Installation */
+            installation: string;
+            /** Integration */
+            integration: string;
         };
         /**
          * InvitationPageView
@@ -3141,6 +3362,43 @@ export interface components {
             /** Expires In */
             expires_in?: number | null;
             permission: components["schemas"]["OperatorRole"];
+        };
+        /**
+         * NotificationView
+         * @description What waits on the caller: the session, why it parked, the one action
+         *     that clears it, and that action's route, empty when none serves it yet.
+         *     `read_at` is when the caller marked it read.
+         */
+        NotificationView: {
+            /** Action */
+            action: string;
+            /** Channel */
+            channel: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Link */
+            link: string;
+            provenance: components["schemas"]["Provenance"] | null;
+            /** Read At */
+            read_at: string | null;
+            reason: components["schemas"]["ParkReason"];
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+            /** Text */
+            text: string;
+            /** Unlock */
+            unlock: string;
         };
         /**
          * OperatorEventView
@@ -4185,6 +4443,11 @@ export interface components {
             /** Error Type */
             type: string;
         };
+        /**
+         * WindowKind
+         * @enum {string}
+         */
+        WindowKind: "life" | "hour" | "day" | "week" | "month" | "span";
         /**
          * WorkKind
          * @enum {string}
@@ -5706,6 +5969,152 @@ export interface operations {
             };
         };
     };
+    get_principal_v1_automations_principal_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationPrincipalView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    grant_principal_v1_automations_principal_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GrantRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutomationPrincipalView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_budget_v1_budgets__budget_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    change_amount_v1_budgets__budget_id__amount_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                /** @description The version the caller read, as an entity tag: `"3"`. 412 `precondition_failed` when the record changed since. */
+                "If-Match"?: string | null;
+            };
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AmountRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_events_v1_events_get: {
         parameters: {
             query?: {
@@ -6264,6 +6673,54 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HostView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    connect_installation_v1_integrations__integration__installations_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                integration: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConnectInstallationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstallationView"];
+                };
+            };
+            /** @description another tenant connected it */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Validation Error */
@@ -7220,6 +7677,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MembershipView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_notifications_v1_notifications_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_read_v1_notifications__notification_id__read_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                notification_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationView"];
                 };
             };
             /** @description Validation Error */

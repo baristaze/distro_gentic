@@ -141,6 +141,7 @@ TABLE_SCOPES: dict[str, TableScope] = {
     "hosts": TableScope(ScopeKind.ORG),
     "host_credentials": TableScope(ScopeKind.ORG),
     "session_placements": TableScope(ScopeKind.ORG),
+    "installations": TableScope(ScopeKind.ORG),
     "account_links": TableScope(ScopeKind.ORG),
     "work_bindings": TableScope(ScopeKind.ORG),
     "platform_acts": TableScope(ScopeKind.ORG),

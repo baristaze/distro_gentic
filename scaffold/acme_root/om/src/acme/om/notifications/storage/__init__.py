@@ -2,6 +2,7 @@
 on which channel. Every operation takes org_id first."""
 
 from abc import ABC, abstractmethod
+from datetime import datetime
 from uuid import UUID
 
 from acme.om.notifications.types.notification import Notification
@@ -24,6 +25,15 @@ class NotificationStorageInterface(ABC):
         self, org_id: UUID, recipient: UUID, limit: int
     ) -> list[Notification]:
         """A recipient's notifications, newest first."""
+        ...
+
+    @abstractmethod
+    async def mark_read(
+        self, org_id: UUID, recipient: UUID, notification_id: UUID, at: datetime
+    ) -> Notification | None:
+        """The recipient's notification marked read at `at`, or as marked
+        before: the first mark holds. None when the recipient holds no
+        notification of that id."""
         ...
 
     @abstractmethod

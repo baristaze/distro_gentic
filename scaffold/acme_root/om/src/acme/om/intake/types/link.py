@@ -1,6 +1,6 @@
-"""The two facts the router reads to place an event: which user of the
-tenant an outside account is, and which session a pull request or a branch
-is the work of."""
+"""The facts the router reads to place an event: which tenant a system's
+installation belongs to, which user of the tenant an outside account is,
+and which session a pull request or a branch is the work of."""
 
 from enum import StrEnum
 from uuid import UUID
@@ -9,6 +9,16 @@ from pydantic import Field
 
 from acme.om.base import Created, Identifiable
 from acme.om.steps.types.content import MAX_NAME, Stored
+
+
+class Installation(Identifiable, Created):
+    """A system's installation of the platform, the system's own id for it,
+    connected by a tenant: every delivery that names it belongs to that
+    tenant. One tenant an installation, across every tenant."""
+
+    integration: Stored = Field(min_length=1, max_length=MAX_NAME)
+    installation: Stored = Field(min_length=1, max_length=MAX_NAME)
+    created_by: UUID
 
 
 class AccountLink(Identifiable, Created):

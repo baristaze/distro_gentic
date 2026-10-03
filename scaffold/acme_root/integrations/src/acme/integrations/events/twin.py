@@ -12,7 +12,9 @@ delivery.
 The signature is HMAC-SHA256 over `<timestamp>.<body>` under the twin's
 secret, the timestamp in whole seconds, sent as `t=<timestamp>,
 v1=<signature>` in `Twin-Signature`, and checked inside a five-minute
-window in constant time."""
+window in constant time. An installation's grant is signed the same way
+over `<timestamp>.installation:<installation>`, and carried as
+`<installation>;t=<timestamp>, v1=<signature>`."""
 
 import hashlib
 import hmac
@@ -48,8 +50,27 @@ def sign(payload: bytes, secret: str, at: datetime) -> str:
     return f"t={stamp}, v1={digest}"
 
 
+def _granted(installation: str) -> bytes:
+    """What an installation's grant signs: never a delivery's body, which is
+    JSON."""
+    return f"installation:{installation}".encode()
+
+
 def verified(payload: bytes, signature: str | None, secret: str, now: datetime) -> dict[str, Any]:
     """The delivery's body, once its signature checks out at `now`;
+    `DeliveryRefused` otherwise, naming what failed and never the secret."""
+    verified_signature(payload, signature, secret, now)
+    try:
+        body = json.loads(payload)
+    except json.JSONDecodeError, UnicodeDecodeError:
+        raise DeliveryRefused("the body is not JSON") from None
+    if not isinstance(body, dict):
+        raise DeliveryRefused("the body is not a delivery")
+    return body
+
+
+def verified_signature(payload: bytes, signature: str | None, secret: str, now: datetime) -> None:
+    """Nothing, once `signature` over `payload` checks out at `now`;
     `DeliveryRefused` otherwise, naming what failed and never the secret."""
     if not signature:
         raise DeliveryRefused("no signature")
@@ -66,13 +87,6 @@ def verified(payload: bytes, signature: str | None, secret: str, now: datetime) 
     given = digest[3:]
     if not given.isascii() or not hmac.compare_digest(given, expected):
         raise DeliveryRefused("the signature did not check out")
-    try:
-        body = json.loads(payload)
-    except json.JSONDecodeError, UnicodeDecodeError:
-        raise DeliveryRefused("the body is not JSON") from None
-    if not isinstance(body, dict):
-        raise DeliveryRefused("the body is not a delivery")
-    return body
 
 
 class IntegrationTwinImpl(IntegrationInterface):
@@ -112,6 +126,18 @@ class IntegrationTwinImpl(IntegrationInterface):
         }
         payload = json.dumps(body, default=str).encode()
         return payload, {SIGNATURE_HEADER: sign(payload, self._secret, at)}
+
+    def grant(self, installation: str, at: datetime) -> str:
+        """The grant the twin's system hands the person who installs the
+        platform as `installation`, at `at`."""
+        return f"{installation};{sign(_granted(installation), self._secret, at)}"
+
+    def verify_installation(self, grant: str, now: datetime) -> str:
+        installation, _, signature = grant.rpartition(";")
+        if not installation:
+            raise DeliveryRefused("the grant names no installation")
+        verified_signature(_granted(installation), signature, self._secret, now)
+        return installation
 
     def verify_delivery(
         self, payload: bytes, headers: Mapping[str, str], now: datetime

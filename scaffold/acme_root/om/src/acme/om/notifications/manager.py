@@ -6,6 +6,7 @@ is told once a park on each channel: the platform's own list, and every
 account of theirs an integration holds."""
 
 from abc import ABC, abstractmethod
+from uuid import UUID
 
 from acme.om.agents.types.run import LoopRun
 from acme.om.context import TenantContext
@@ -26,6 +27,12 @@ class NotificationsManagerInterface(ABC):
     @abstractmethod
     async def get_notifications(self, ctx: TenantContext, limit: int) -> tuple[Notification, ...]:
         """The caller's own notifications, newest first; `limit` is clamped."""
+        ...
+
+    @abstractmethod
+    async def mark_read(self, ctx: TenantContext, notification_id: UUID) -> Notification:
+        """The caller's own notification marked read; the first mark holds.
+        One told to anyone else, or to another tenant, is `NotFound`."""
         ...
 
     @abstractmethod

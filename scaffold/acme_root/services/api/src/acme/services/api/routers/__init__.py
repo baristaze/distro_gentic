@@ -13,10 +13,14 @@ from acme.services.api.realtime import control, socket
 from acme.services.api.routers import (
     admin,
     agent_sessions,
+    automations,
+    budgets,
     events,
     fleet,
     hosts,
+    intake,
     media,
+    notifications,
     relay,
     stations,
     tenancy,
@@ -40,6 +44,15 @@ HOSTED: dict[str, tuple[APIRouter, ...]] = {
     # A tenant's labs, pools, and stations, the line, leases, and jobs, and a
     # lab daemon's own calls: rotate, claim, renew, and report.
     "stations": (stations.router,),
+    # A tenant's connections to the systems whose events reach its sessions.
+    "intake": (intake.router,),
+    # What a tenant may spend: a budget's amount, which a raise of wakes the
+    # sessions waiting on it.
+    "budgets": (budgets.router,),
+    # The tenant's automation principal and its grant.
+    "automations": (automations.router,),
+    # What waits on a person, and their mark that they read it.
+    "notifications": (notifications.router,),
 }
 """Every namespace this image hosts, and the routers that serve it."""
 

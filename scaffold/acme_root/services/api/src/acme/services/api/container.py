@@ -18,6 +18,9 @@ from acme.infra.trust import install_trust_store
 from acme.integrations.impl.configured import IntegrationsConfiguredImpl, absent_integrations
 from acme.integrations.root import IntegrationsInterface
 from acme.om.agents.types.kind import AgentKind
+from acme.om.automations.root import build_automations
+from acme.om.intake.root import build_intake
+from acme.om.notifications.root import build_notifications
 from acme.om.root import Managers, TenancyOperatorOptions, TenancyOptions, build_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.impl.postgres import StoragePostgresImpl
@@ -200,12 +203,18 @@ class AppContainer:
             environment=settings.environment,
             agent_kinds=agent_kinds,
         )
+        # Where a tenant connects a system, and where a person reads and
+        # clears what waits on them.
+        intake = build_intake(storage, managers, integrations=integrations)
         services = build_services(
             managers,
             infra,
             integrations,
             timedelta(seconds=settings.realtime_head_max_age_seconds),
             build_trust_operator(storage, infra),
+            intake=intake,
+            automations=build_automations(storage, managers),
+            notifications=build_notifications(storage, managers, integrations, intake),
         )
         return cls(
             settings,

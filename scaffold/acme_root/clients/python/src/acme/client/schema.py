@@ -39,6 +39,35 @@ class Capability(RootModel[str]):
     root: Annotated[str, Field(pattern='^[a-z][a-z0-9_.-]{0,62}$')]
 
 
+class CostMicros(RootModel[int]):
+    root: Annotated[int, Field(ge=0, title='Cost Micros')]
+
+
+class Tokens(RootModel[int]):
+    root: Annotated[int, Field(ge=0, title='Tokens')]
+
+
+class AmountRequest(BaseModel):
+    """
+    A budget's new amount: reference cost in millionths, native tokens, or
+    both. A unit left out is not bounded, and an amount bounds one at least.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    cost_micros: Annotated[CostMicros | None, Field(title='Cost Micros')] = None
+    tokens: Annotated[Tokens | None, Field(title='Tokens')] = None
+
+
+class BudgetScopeKind(StrEnum):
+    session = 'session'
+    tree = 'tree'
+    person = 'person'
+    project = 'project'
+    team = 'team'
+    tenant = 'tenant'
+
+
 class CaseTallyBody(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -111,6 +140,17 @@ class ConfirmTotpRequest(BaseModel):
         extra='forbid',
     )
     totp_code: Annotated[str, Field(max_length=6, min_length=6, title='Totp Code')]
+
+
+class ConnectInstallationRequest(BaseModel):
+    """
+    The grant the system handed the person who installed the platform:
+    the integration reads the installation from it, never from the caller.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    grant: Annotated[str, Field(max_length=4096, min_length=1, title='Grant')]
 
 
 class ContentState(StrEnum):
@@ -446,6 +486,18 @@ class HostState(StrEnum):
     online = 'online'
     offline = 'offline'
     below_floor = 'below_floor'
+
+
+class InstallationView(BaseModel):
+    """
+    An installation of the platform in a system, connected by the tenant:
+    every delivery that names it reaches this tenant alone.
+    """
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    created_by: Annotated[UUID, Field(title='Created By')]
+    id: Annotated[UUID, Field(title='Id')]
+    installation: Annotated[str, Field(title='Installation')]
+    integration: Annotated[str, Field(title='Integration')]
 
 
 class InvitationState(StrEnum):
@@ -1236,6 +1288,15 @@ class ValidationError(BaseModel):
     type: Annotated[str, Field(title='Error Type')]
 
 
+class WindowKind(StrEnum):
+    life = 'life'
+    hour = 'hour'
+    day = 'day'
+    week = 'week'
+    month = 'month'
+    span = 'span'
+
+
 class WorkKind(StrEnum):
     NOOP = 'NOOP'
     ORCHESTRATION = 'ORCHESTRATION'
@@ -1328,6 +1389,32 @@ class ApiKeyView(BaseModel):
     user_id: Annotated[UUID, Field(title='User Id')]
 
 
+class AutomationPrincipalView(BaseModel):
+    """
+    The tenant's automation principal: its id, the role it holds, and who
+    granted it.
+    """
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    granted_by: Annotated[UUID, Field(title='Granted By')]
+    id: Annotated[UUID, Field(title='Id')]
+    role: Role
+
+
+class BudgetView(BaseModel):
+    """
+    A budget: its scope, its window, its amount, and the version a change
+    of the amount names in `If-Match`.
+    """
+    cost_micros: Annotated[int | None, Field(title='Cost Micros')]
+    id: Annotated[UUID, Field(title='Id')]
+    scope_key: Annotated[str, Field(title='Scope Key')]
+    scope_kind: BudgetScopeKind
+    tokens: Annotated[int | None, Field(title='Tokens')]
+    version: Annotated[int, Field(title='Version')]
+    window_kind: WindowKind
+    window_seconds: Annotated[int | None, Field(title='Window Seconds')]
+
+
 class ClaimView(BaseModel):
     """
     What a claim answers: the item, or none when nothing is ready.
@@ -1380,6 +1467,16 @@ class FilePageView(BaseModel):
     """
     items: Annotated[list[FileView], Field(title='Items')]
     next_cursor: Annotated[str | None, Field(title='Next Cursor')]
+
+
+class GrantRequest(BaseModel):
+    """
+    The role the automation principal holds: never above the granter's.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    role: Role
 
 
 class HTTPValidationError(BaseModel):
@@ -1559,6 +1656,25 @@ class MintOperatorTokenRequest(BaseModel):
     )
     expires_in: Annotated[ExpiresIn | None, Field(title='Expires In')] = None
     permission: OperatorRole
+
+
+class NotificationView(BaseModel):
+    """
+    What waits on the caller: the session, why it parked, the one action
+    that clears it, and that action's route, empty when none serves it yet.
+    `read_at` is when the caller marked it read.
+    """
+    action: Annotated[str, Field(title='Action')]
+    channel: Annotated[str, Field(title='Channel')]
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    id: Annotated[UUID, Field(title='Id')]
+    link: Annotated[str, Field(title='Link')]
+    provenance: Provenance | None
+    read_at: Annotated[AwareDatetime | None, Field(title='Read At')]
+    reason: ParkReason
+    session_id: Annotated[UUID, Field(title='Session Id')]
+    text: Annotated[str, Field(title='Text')]
+    unlock: Annotated[str, Field(title='Unlock')]
 
 
 class OperatorTokenPageView(BaseModel):

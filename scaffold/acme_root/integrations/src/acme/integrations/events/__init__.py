@@ -4,7 +4,10 @@ pushes, and tickets, a chat's messages. One interface for each, a real
 client or a twin, and a caller never knows which it holds.
 
 An integration checks the signature of each delivery its system sends and
-reads it into the platform's terms (`ProvidedEvent`). What served it is the
+reads it into the platform's terms (`ProvidedEvent`). It also checks the
+grant its system hands a person who installs the platform there, and
+answers the installation the grant names: the system's word for which
+installation a tenant connects, never the person's. What served it is the
 integration's own word (`provenance`), never the delivery's: a twin's
 event is a twin's whatever its body says. Nothing here imports the object
 model; the ingress maps an event into the router's shape."""
@@ -39,8 +42,9 @@ def delivery_key(integration: str, delivery_id: str) -> uuid.UUID:
 
 class ProvidedEvent(BaseModel):
     """One delivery, read: its key and the integration's id for it; the
-    installation it came through, which names the tenant; and the event in
-    the platform's terms, which the router validates."""
+    installation it came through, the system's own id, which the tenant
+    that connected it is found by; and the event in the platform's terms,
+    which the router validates."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -98,6 +102,14 @@ class IntegrationInterface(ABC):
         ...
 
     @abstractmethod
+    def verify_installation(self, grant: str, now: datetime) -> str:
+        """The installation a grant names, once the system's signature over it
+        checks out at `now`: the grant the system hands the person who
+        installed the platform there. `DeliveryRefused` otherwise, naming what
+        failed and never the secret."""
+        ...
+
+    @abstractmethod
     async def post(self, address: str, text: str) -> PostedMessage:
         """Posts `text` to an address of the integration, such as a person's
         chat account; `ProviderUnavailable` when it cannot."""
@@ -133,6 +145,9 @@ class IntegrationAbsentImpl(IntegrationInterface):
     def verify_delivery(
         self, payload: bytes, headers: Mapping[str, str], now: datetime
     ) -> ProvidedEvent:
+        raise ProviderUnavailable(f"no {self._name} integration is configured")
+
+    def verify_installation(self, grant: str, now: datetime) -> str:
         raise ProviderUnavailable(f"no {self._name} integration is configured")
 
     async def post(self, address: str, text: str) -> PostedMessage:

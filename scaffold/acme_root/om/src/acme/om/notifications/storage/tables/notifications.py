@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import Index
@@ -27,3 +28,4 @@ class Notifications(IdentifiableMixin, CreatedMixin, Base):
     address: Mapped[str]
     provenance: Mapped[str | None]
     text: Mapped[str]
+    read_at: Mapped[datetime | None]
