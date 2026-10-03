@@ -43,7 +43,7 @@ async def test_the_first_host_to_answer_holds_the_workspace_and_a_second_lets_it
     api: Stack, tmp_path: Path
 ) -> None:
     relay = api.container.managers.relay
-    pool = await api.pool()
+    pool = await api.pool("pool-a")
     session_id = await a_pinned_session(api, pool.id)
     assert await relay.ask_prepare(api.owner, session_id, DIRECTORY)
     assert not await relay.ask_prepare(api.owner, session_id, DIRECTORY)  # one ask waits
@@ -71,7 +71,7 @@ async def test_a_host_that_cannot_make_it_hands_the_prepare_back_to_its_pool(
     api: Stack, tmp_path: Path
 ) -> None:
     relay = api.container.managers.relay
-    pool = await api.pool()
+    pool = await api.pool("pool-a")
     session_id = await a_pinned_session(api, pool.id)
     await relay.ask_prepare(api.owner, session_id, DIRECTORY)
     # Its owner takes no project's work: the ceilings refuse the prepare.
@@ -113,7 +113,7 @@ async def test_a_prepare_whose_spec_opens_egress_its_fields_close_is_refused_and
     api: Stack, tmp_path: Path
 ) -> None:
     relay = api.container.managers.relay
-    pool = await api.pool()
+    pool = await api.pool("pool-a")
     session_id = await a_pinned_session(api, pool.id)
     await relay.ask_prepare(api.owner, session_id, SEALED)
     # Its owner lets nothing leave, and the prepare's fields say nothing
@@ -134,7 +134,7 @@ async def test_a_prepare_whose_spec_opens_egress_its_fields_close_is_refused_and
 
 
 async def test_a_host_answers_only_a_prepare_it_holds(api: Stack, tmp_path: Path) -> None:
-    pool = await api.pool()
+    pool = await api.pool("pool-a")
     host, _ = await directory_host(api, pool.id, tmp_path)
     async with host.client() as client:
         with pytest.raises(ApiError) as refused:

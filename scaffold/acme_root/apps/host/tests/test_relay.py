@@ -316,7 +316,7 @@ async def test_a_bound_workspace_whose_directory_went_is_made_again_and_its_call
     api: Stack, tmp_path: Path
 ) -> None:
     opened = IsolationSpec(mode=IsolationMode.HOST, egress=EgressPolicy(mode=EgressMode.OPEN))
-    host, _ = await directory_host(api, (await api.pool()).id, tmp_path)
+    host, _ = await directory_host(api, (await api.pool("pool-a")).id, tmp_path)
     session_id, location = await bound_on(host, api, opened)
     shutil.rmtree(location)  # its host's disk lost it
     ran = await run_on(host, api, session_id, opened, "pwd")
@@ -329,7 +329,7 @@ async def test_a_bound_sessions_stopped_container_is_prepared_again_and_its_call
     api: Stack, tmp_path: Path
 ) -> None:
     sealed = IsolationSpec(mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode=EgressMode.NONE))
-    host = await container_host(api, (await api.pool()).id, tmp_path)
+    host = await container_host(api, (await api.pool("pool-a")).id, tmp_path)
     session_id, name = await bound_on(host, api, sealed)
     try:
         await run_on(host, api, session_id, sealed, "touch", "kept")

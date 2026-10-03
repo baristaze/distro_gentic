@@ -488,7 +488,7 @@ async def test_a_pinned_sessions_checkout_and_its_push_run_on_the_host_that_hold
             updated_at=now,
             created_by=owner.user_id,
             updated_by=owner.user_id,
-            name="lab",
+            name="pool-a",
             region="eu-west",
         ),
     )
