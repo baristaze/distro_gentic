@@ -2835,23 +2835,19 @@ export interface components {
          * @description A fill: a provider's model, how hard it works, its output bound and
          *     shape, its context window, and what it offers. The output bound fits
          *     inside the window, and a schema is named exactly when the output is one.
+         *     An output left out is text, and an eligibility left out offers
+         *     nothing.
          */
         FillBody: {
             /** Context Window */
             context_window: number;
             effort?: components["schemas"]["Effort"] | null;
-            /**
-             * @default {
-             *       "zero_retention": false
-             *     }
-             */
-            eligibility: components["schemas"]["EligibilityBody"];
+            eligibility?: components["schemas"]["EligibilityBody"] | null;
             /** Max Output Tokens */
             max_output_tokens: number;
             /** Model */
             model: string;
-            /** @default text */
-            output: components["schemas"]["OutputShape"];
+            output?: components["schemas"]["OutputShape"] | null;
             provider: components["schemas"]["ProviderName"];
             /** Schema Name */
             schema_name?: string | null;
@@ -3549,13 +3545,13 @@ export interface components {
         /**
          * MatrixRowBody
          * @description A row: the questions it matches, and its fills, the first the fill and
-         *     the rest the fallbacks, each named once.
+         *     the rest the fallbacks, each named once. A row that names no match
+         *     matches every question.
          */
         MatrixRowBody: {
             /** Fills */
             fills: components["schemas"]["FillBody"][];
-            /** @default {} */
-            matches: components["schemas"]["MatrixKeyBody"];
+            matches?: components["schemas"]["MatrixKeyBody"] | null;
         };
         /**
          * MatrixRowView

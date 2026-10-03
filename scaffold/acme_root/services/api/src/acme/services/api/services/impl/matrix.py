@@ -20,7 +20,7 @@ from acme.services.api.types.matrix import (
 def fill_of(body: FillBody) -> Fill:
     """The fill a body names; a fill it may not be is `ValidationFailed`."""
     try:
-        return Fill.model_validate(body.model_dump())
+        return Fill.model_validate(body.model_dump(exclude_none=True))
     except ValidationError as error:
         raise ValidationFailed(f"fill: {error}"[:500]) from None
 
@@ -28,7 +28,9 @@ def fill_of(body: FillBody) -> Fill:
 def row_of(body: MatrixRowBody) -> MatrixRow:
     try:
         return MatrixRow(
-            key=MatrixKey.model_validate(body.matches.model_dump()),
+            key=MatrixKey()
+            if body.matches is None
+            else MatrixKey.model_validate(body.matches.model_dump()),
             fills=tuple(fill_of(fill) for fill in body.fills),
         )
     except ValidationError as error:

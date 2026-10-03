@@ -1542,16 +1542,18 @@ class FillBody(BaseModel):
     A fill: a provider's model, how hard it works, its output bound and
     shape, its context window, and what it offers. The output bound fits
     inside the window, and a schema is named exactly when the output is one.
+    An output left out is text, and an eligibility left out offers
+    nothing.
     """
     model_config = ConfigDict(
         extra='forbid',
     )
     context_window: Annotated[int, Field(gt=0, title='Context Window')]
     effort: Effort | None = None
-    eligibility: Annotated[EligibilityBody | None, Field(validate_default=True)] = {'zero_retention': False}
+    eligibility: EligibilityBody | None = None
     max_output_tokens: Annotated[int, Field(gt=0, title='Max Output Tokens')]
     model: Annotated[str, Field(max_length=200, min_length=1, title='Model')]
-    output: OutputShape | None = 'text'
+    output: OutputShape | None = None
     provider: ProviderName
     schema_name: Annotated[SchemaName | None, Field(title='Schema Name')] = None
     thinking_budget: Annotated[ThinkingBudget | None, Field(title='Thinking Budget')] = None
@@ -1758,13 +1760,14 @@ class LoopStandingView(BaseModel):
 class MatrixRowBody(BaseModel):
     """
     A row: the questions it matches, and its fills, the first the fill and
-    the rest the fallbacks, each named once.
+    the rest the fallbacks, each named once. A row that names no match
+    matches every question.
     """
     model_config = ConfigDict(
         extra='forbid',
     )
     fills: Annotated[list[FillBody], Field(max_length=8, min_length=1, title='Fills')]
-    matches: Annotated[MatrixKeyBody | None, Field(validate_default=True)] = {}
+    matches: MatrixKeyBody | None = None
 
 
 class MatrixRowView(BaseModel):

@@ -1834,7 +1834,7 @@
       },
       "FillBody": {
         "additionalProperties": false,
-        "description": "A fill: a provider's model, how hard it works, its output bound and\nshape, its context window, and what it offers. The output bound fits\ninside the window, and a schema is named exactly when the output is one.",
+        "description": "A fill: a provider's model, how hard it works, its output bound and\nshape, its context window, and what it offers. The output bound fits\ninside the window, and a schema is named exactly when the output is one.\nAn output left out is text, and an eligibility left out offers\nnothing.",
         "properties": {
           "context_window": {
             "exclusiveMinimum": 0.0,
@@ -1852,10 +1852,14 @@
             ]
           },
           "eligibility": {
-            "$ref": "#/components/schemas/EligibilityBody",
-            "default": {
-              "zero_retention": false
-            }
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EligibilityBody"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "max_output_tokens": {
             "exclusiveMinimum": 0.0,
@@ -1869,8 +1873,14 @@
             "type": "string"
           },
           "output": {
-            "$ref": "#/components/schemas/OutputShape",
-            "default": "text"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OutputShape"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "provider": {
             "$ref": "#/components/schemas/ProviderName"
@@ -3367,7 +3377,7 @@
       },
       "MatrixRowBody": {
         "additionalProperties": false,
-        "description": "A row: the questions it matches, and its fills, the first the fill and\nthe rest the fallbacks, each named once.",
+        "description": "A row: the questions it matches, and its fills, the first the fill and\nthe rest the fallbacks, each named once. A row that names no match\nmatches every question.",
         "properties": {
           "fills": {
             "items": {
@@ -3379,8 +3389,14 @@
             "type": "array"
           },
           "matches": {
-            "$ref": "#/components/schemas/MatrixKeyBody",
-            "default": {}
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MatrixKeyBody"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [

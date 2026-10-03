@@ -28,17 +28,19 @@ class EligibilityBody(RequestBody):
 class FillBody(RequestBody):
     """A fill: a provider's model, how hard it works, its output bound and
     shape, its context window, and what it offers. The output bound fits
-    inside the window, and a schema is named exactly when the output is one."""
+    inside the window, and a schema is named exactly when the output is one.
+    An output left out is text, and an eligibility left out offers
+    nothing."""
 
     provider: ProviderName
     model: str = Field(min_length=1, max_length=200)
     effort: Effort | None = None
     thinking_budget: int | None = Field(default=None, gt=0)
     max_output_tokens: int = Field(gt=0)
-    output: OutputShape = OutputShape.TEXT
+    output: OutputShape | None = None
     schema_name: str | None = Field(default=None, min_length=1, max_length=200)
     context_window: int = Field(gt=0)
-    eligibility: EligibilityBody = EligibilityBody()
+    eligibility: EligibilityBody | None = None
 
 
 class EligibilityView(View):
@@ -72,9 +74,10 @@ class MatrixKeyBody(RequestBody):
 
 class MatrixRowBody(RequestBody):
     """A row: the questions it matches, and its fills, the first the fill and
-    the rest the fallbacks, each named once."""
+    the rest the fallbacks, each named once. A row that names no match
+    matches every question."""
 
-    matches: MatrixKeyBody = MatrixKeyBody()
+    matches: MatrixKeyBody | None = None
     fills: list[FillBody] = Field(min_length=1, max_length=MAX_FILLS)
 
 
