@@ -19,7 +19,6 @@ members = [
     "clients/python",
     "apps/cli",
     "apps/host",
-    "apps/station_daemon",
     "ops",
     "checkers",
 ]
@@ -34,7 +33,6 @@ acme-session-runner = { workspace = true }
 acme-client = { workspace = true }
 acme-cli = { workspace = true }
 acme-host = { workspace = true }
-acme-station-daemon = { workspace = true }
 acme-ops = { workspace = true }
 acme-checkers = { workspace = true }
 
@@ -61,7 +59,6 @@ pythonpath = [
     "clients/python/tests",
     "apps/cli/tests",
     "apps/host/tests",
-    "apps/station_daemon/tests",
     "ops/tests",
     "ops/audit",
     "checkers/tests",
@@ -77,7 +74,6 @@ testpaths = [
     "clients/python/tests",
     "apps/cli/tests",
     "apps/host/tests",
-    "apps/station_daemon/tests",
     "ops/tests",
     "checkers/tests",
 ]
