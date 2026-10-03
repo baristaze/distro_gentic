@@ -52,8 +52,9 @@ rebuilt from.
   own host with the project's fetch credential; the checkout fetches
   nothing itself ([ADR 2023](../../../../../docs/adr/2023-a-workspaces-repository-comes-in-and-its-work-goes-out-as-bundles-the-platform-makes.md)).
 - **The branch.** One the remote holds is tracked, fast-forwarded to
-  what the remote holds, and one never pushed is kept, or cut from the
-  default branch on the session's first loop. One the remote held and
+  what the remote holds, and one never pushed is kept. Where nothing
+  holds it, it is cut from its last snapshot, or from the default branch
+  on the session's first loop. One the remote held and
   lost is rebuilt from the default branch only when its pull request was
   merged or closed, and the loop is told. One that moved on both sides,
   or vanished for no known reason, parks the loop, loudly, for a person

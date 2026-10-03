@@ -69,6 +69,7 @@ class GitTwin(WorkspaceGitInterface):
     diverged: bool = False  # the session's branch moved here and on the remote both
     calls: list[str] = field(default_factory=lambda: list[str]())
     cuts: list[str] = field(default_factory=lambda: list[str]())
+    starts: list[str | None] = field(default_factory=lambda: list[str | None]())  # each cut's
     epochs: list[int] = field(default_factory=lambda: list[int]())  # each command's
 
     async def sync(
@@ -93,10 +94,12 @@ class GitTwin(WorkspaceGitInterface):
         branch: str,
         *,
         epoch: int,
+        start: str | None = None,
     ) -> None:
         self.epochs.append(epoch)
         self.calls.append("cut")
         self.cuts.append(branch)
+        self.starts.append(start)
         self.local.add(branch)
         self.dirty = False  # what the checkout held is gone with the cut
 
@@ -166,7 +169,12 @@ class ReaderTwin(RepositoryReaderInterface):
         return Delivered(base=BASE, head=self.head, changed=self.changed)
 
     async def incoming(
-        self, binding: RepositoryBinding, branch: str, credential: FetchCredential | None = None
+        self,
+        binding: RepositoryBinding,
+        branch: str,
+        credential: FetchCredential | None = None,
+        *,
+        snapshot: str | None = None,
     ) -> Incoming:
         self.brought.append(credential)
         return Incoming(bundle=b"the default branch", default_branch="main")

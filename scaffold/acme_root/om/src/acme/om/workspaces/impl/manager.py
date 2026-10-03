@@ -172,8 +172,14 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
             # The platform reads the repository on its own host, with the
             # project's fetch credential, and the checkout takes a bundle:
             # no credential enters the workspace.
+            # A branch the repository never held may live on in its last
+            # snapshot alone, which the cut then starts from.
+            last = None if seen else held.snapshot_ref
             incoming = await self._reader.incoming(
-                binding, held.branch, await self._fetch_credential(ctx, binding.project_id)
+                binding,
+                held.branch,
+                await self._fetch_credential(ctx, binding.project_id),
+                snapshot=last,
             )
             state = await self._git.sync(
                 ctx, workspace, binding, held.branch, incoming, epoch=epoch
@@ -207,7 +213,8 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
                 if snapshot.commit is not None:
                     kept = snapshot.ref
                     told.append(rules.told_of_snapshot(snapshot.ref, snapshot.commit, at))
-                await self._git.cut(ctx, workspace, binding, held.branch, epoch=epoch)
+                start = last if plan is BranchPlan.CUT else None
+                await self._git.cut(ctx, workspace, binding, held.branch, epoch=epoch, start=start)
             if plan is BranchPlan.REBUILD and fate is not None:
                 told.append(rules.told_of_rebuild(held.branch, fate, binding.default_branch))
                 log.warning(

@@ -53,10 +53,12 @@ class WorkspaceGitInterface(ABC):
         branch: str,
         *,
         epoch: int,
+        start: str | None = None,
     ) -> None:
-        """Checks `branch` out anew from the default branch as the last
-        `sync` brought it in, over whatever the checkout held: the caller
-        keeps that first (`snapshot`)."""
+        """Checks `branch` out anew, over whatever the checkout held: the
+        caller keeps that first (`snapshot`). It starts from the snapshot ref
+        `start` when the last `sync` brought it in, and from the default
+        branch as that sync brought it otherwise."""
         ...
 
     @abstractmethod
@@ -135,13 +137,19 @@ class RepositoryReaderInterface(ABC):
 
     @abstractmethod
     async def incoming(
-        self, binding: RepositoryBinding, branch: str, credential: FetchCredential | None = None
+        self,
+        binding: RepositoryBinding,
+        branch: str,
+        credential: FetchCredential | None = None,
+        *,
+        snapshot: str | None = None,
     ) -> Incoming:
-        """The bound repository's default branch, and the session's `branch`
-        where the repository holds it, fetched by the repository's URL as
-        `delivered` fetches them, with the same `credential`, and handed on
-        as a bundle with no credential in it. `Unavailable` when the
-        repository cannot be read, or the bundle is past its bound."""
+        """The bound repository's default branch, the session's `branch`, and
+        its last `snapshot` of that branch, each where the repository holds
+        it, fetched by the repository's URL as `delivered` fetches them,
+        with the same `credential`, and handed on as a bundle with no
+        credential in it. `Unavailable` when the repository cannot be read,
+        or the bundle is past its bound."""
         ...
 
     @abstractmethod

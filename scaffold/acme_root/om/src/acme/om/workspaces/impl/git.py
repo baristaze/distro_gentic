@@ -58,7 +58,8 @@ if git remote get-url origin >/dev/null 2>&1; then
 else
   git remote add origin "$REPOSITORY"
 fi
-git fetch -q --prune "$BUNDLE" "+refs/heads/*:refs/remotes/origin/*"
+git fetch -q --prune "$BUNDLE" "+refs/heads/*:refs/remotes/origin/*" \
+  "+refs/snapshots/*:refs/snapshots/*"
 rm -f "$BUNDLE"
 git symbolic-ref refs/remotes/origin/HEAD "refs/remotes/origin/$DEFAULT"
 remote=no
@@ -78,17 +79,23 @@ echo "branch $remote $held $moved"
 """
 """Names `origin` for the bound repository, brings its branches in from the
 platform's bundle, with the tags in their history that the checkout does
-not hold yet, and the branch out where either side holds it,
-fast-forwarded to the remote's; prints whether the remote and the checkout
-hold it, and whether the checkout reached the remote's branch."""
+not hold yet and the session's last snapshot when it came, and the branch
+out where either side holds it, fast-forwarded to the remote's; prints
+whether the remote and the checkout hold it, and whether the checkout
+reached the remote's branch."""
 
 CUT = """set -eu
-git checkout -q --force --no-track -B "$BRANCH" refs/remotes/origin/HEAD
+start=refs/remotes/origin/HEAD
+if [ -n "$START" ] && git rev-parse -q --verify "$START^{commit}" >/dev/null; then
+  start="$START"
+fi
+git checkout -q --force --no-track -B "$BRANCH" "$start"
 git clean -q -fd
 echo cut
 """
-"""Cuts the branch anew from the default branch as the sync just brought it
-in, over whatever the checkout held: the caller keeps that first."""
+"""Cuts the branch anew, over whatever the checkout held (the caller keeps
+that first): from the snapshot `$START` names when the sync brought it in,
+and from the default branch as the sync brought it otherwise."""
 
 BUNDLE_OUT = """
 rm -f "$BUNDLE"
@@ -232,8 +239,10 @@ class WorkspaceGitTransportImpl(WorkspaceGitInterface):
         branch: str,
         *,
         epoch: int,
+        start: str | None = None,
     ) -> None:
-        await self._run(ctx, workspace, epoch, "cut", CUT, {"BRANCH": branch})
+        env = {"BRANCH": branch, "START": start or ""}
+        await self._run(ctx, workspace, epoch, "cut", CUT, env)
 
     async def checkout(self, ctx: TenantContext, workspace: Workspace, *, epoch: int) -> Checkout:
         words = await self._run(ctx, workspace, epoch, "checkout", CHECKOUT, {})

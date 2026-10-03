@@ -157,7 +157,12 @@ class RepositoryReaderGitImpl(RepositoryReaderInterface):
         return Delivered(base=base, head=head, changed=tuple(sorted(set(paths))))
 
     async def incoming(
-        self, binding: RepositoryBinding, branch: str, credential: FetchCredential | None = None
+        self,
+        binding: RepositoryBinding,
+        branch: str,
+        credential: FetchCredential | None = None,
+        *,
+        snapshot: str | None = None,
     ) -> Incoming:
         with tempfile.TemporaryDirectory(prefix="incoming-") as root:
             repo = Path(root) / "repo"
@@ -171,13 +176,18 @@ class RepositoryReaderGitImpl(RepositoryReaderInterface):
             wanted = [f"+refs/heads/{default}:refs/heads/{default}"]
             if (await self._git(remote, repo, "ls-remote", url, f"refs/heads/{branch}")).strip():
                 wanted.append(f"+refs/heads/{branch}:refs/heads/{branch}")
+            kept: list[str] = []
+            if snapshot is not None and snapshot.startswith(f"{rules.SNAPSHOT_PREFIX}/{branch}/"):
+                if (await self._git(remote, repo, "ls-remote", url, snapshot)).strip():
+                    wanted.append(f"+{snapshot}:{snapshot}")
+                    kept.append(snapshot)
             # The tags in the branches' history come along, as git follows
             # them, so the checkout describes its commits as the repository
             # does.
             await self._git(remote, repo, "fetch", "-q", url, *wanted)
             bundle = Path(root) / "incoming.bundle"
             await self._git(
-                env, repo, "bundle", "create", "-q", str(bundle), "--branches", "--tags"
+                env, repo, "bundle", "create", "-q", str(bundle), "--branches", "--tags", *kept
             )
             if bundle.stat().st_size > self._options.max_bundle:
                 raise Unavailable(

@@ -238,6 +238,31 @@ async def test_a_clean_checkout_the_remote_holds_pushes_nothing(checkout: Checko
     assert held.branch_seen and held.notices == ()
 
 
+async def test_a_branch_held_nowhere_is_cut_from_its_last_snapshot(checkout: Checkout) -> None:
+    session_id = await checkout.session()
+    branch = session_branch(session_id)
+    workspace = await checkout.prepare(session_id)
+    here = Path(workspace.location)
+    (here / "feature.txt").write_text("the feature\n")
+    git(here, "add", "feature.txt")
+    git(here, "-c", "user.name=a", "-c", "user.email=a@example.invalid", "commit", "-qm", "f")
+    (here / "notes.txt").write_text("half done\n")
+    await checkout.release(workspace)
+    (ref,) = checkout.snapshots(branch)
+    # The instance went with its checkout; the repository never held the
+    # branch.
+    shutil.rmtree(here)
+
+    again = await checkout.prepare(session_id)
+
+    there = Path(again.location)
+    assert git(there, "rev-parse", "--abbrev-ref", "HEAD") == branch
+    assert git(there, "rev-parse", "HEAD") == git(checkout.remote, "rev-parse", ref)
+    assert (there / "feature.txt").read_text() == "the feature\n", "its commit came back"
+    assert (there / "notes.txt").read_text() == "half done\n", "and the work left uncommitted"
+    assert again.changed is not None and ref in again.changed, "the next loop is told"
+
+
 # Every instance let go is told of: a release adds its notice beside any the
 # next loop has not read, and an attach clears only the notices it read.
 

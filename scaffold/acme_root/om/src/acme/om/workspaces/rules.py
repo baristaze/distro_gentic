@@ -244,11 +244,12 @@ def egress_decision(
 def branch_plan(state: BranchState, *, seen: bool, fate: PullRequestFate | None) -> BranchPlan:
     """What a prepare does with the session's branch. One the remote holds is
     tracked. One the remote never held is kept where the checkout holds it,
-    and cut from the default branch where nothing does. One the remote held
-    and lost is rebuilt only when its pull request was merged or closed;
-    anything else fails, and nothing restarts from the default branch. A
-    branch that moved on the remote and in the checkout both fails too:
-    nothing merges the two silently."""
+    and cut where nothing does: from its last snapshot, which holds its
+    commits and the work left uncommitted, or from the default branch when
+    it has none. One the remote held and lost is rebuilt only when its pull
+    request was merged or closed; anything else fails, and nothing restarts
+    from the default branch. A branch that moved on the remote and in the
+    checkout both fails too: nothing merges the two silently."""
     if state.remote:
         return BranchPlan.DIVERGED if state.diverged else BranchPlan.TRACK
     if not seen:
