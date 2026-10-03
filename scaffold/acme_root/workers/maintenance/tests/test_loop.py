@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime, timedelta
 from pathlib import Path
 from uuid import UUID
@@ -43,7 +43,7 @@ from acme.om.work.impl.manager import DEAD_LETTER_KIND, WorkOptions
 from acme.om.work.types.handler import WorkHandlerInterface, WorkParked, WorkRefused
 from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
 from acme.workers.maintenance.container import WorkerContainer
-from acme.workers.maintenance.loop import LoopOptions, WorkerLoop
+from acme.workers.maintenance.loop import AcrossStep, LoopOptions, WorkerLoop
 from acme.workers.maintenance.main import unstaged
 from acme.workers.maintenance.settings import MaintenanceSettings
 
@@ -379,6 +379,7 @@ def start_loop(
     *,
     work: WorkManagerInterface | None = None,
     liveness: CacheInterface | None = None,
+    across: Mapping[str, AcrossStep] | None = None,
 ) -> tuple[WorkerLoop, asyncio.Task[None]]:
     loop = WorkerLoop(
         work=work or container.managers.work,
@@ -388,7 +389,9 @@ def start_loop(
             "tenancy": container.managers.tenancy.purge_tenant,
             "events": container.managers.events.purge_tenant,
         },
-        across={
+        across=across
+        if across is not None
+        else {
             "media": unstaged(container.managers.media.purge_across_tenants),
             "tenancy": unstaged(container.managers.tenancy.purge_across_tenants),
             "idempotency": unstaged(container.managers.idempotency.purge_across_tenants),
@@ -829,10 +832,13 @@ class HousekeepingRecordingWork(RequeueRecordingWork):
         return await self._inner.purge_items()
 
 
-async def test_a_worker_that_purges_nothing_sweeps_recovery_alone(tmp_path: Path) -> None:
+async def test_a_worker_that_purges_nothing_sweeps_recovery_and_its_own_duties_alone(
+    tmp_path: Path,
+) -> None:
     # A gone worker's item comes back to the queue and runs, and the pass
     # visits no tenant, judges none purged, and purges nothing: those are the
-    # maintenance worker's, which holds the purges.
+    # maintenance worker's, which holds the purges. The duty across tenants
+    # it was given runs every pass.
     container = build_container(tmp_path)
     ctx = await sign_in(container)
     item = make_item(ctx)
@@ -843,12 +849,20 @@ async def test_a_worker_that_purges_nothing_sweeps_recovery_alone(tmp_path: Path
     assert lost is not None
     work = HousekeepingRecordingWork(container.managers.work)
     handler = RecordingHandler()
-    loop, task = start_loop(container, handler, fast_options(recovery_only=True), work=work)
+    duties: list[RequestContext] = []
+
+    async def duty(rctx: RequestContext) -> int:
+        duties.append(rctx)
+        return 0
+
+    options = fast_options(recovery_only=True)
+    loop, task = start_loop(container, handler, options, work=work, across={"duty": duty})
     await until(lambda: [h.id for h in handler.handled] == [item.id] and loop.sweeps >= 2)
     loop.stop()
     await task
     assert work.requeued[0] == 1, "the expired lease came back on the first pass"
     assert work.housekeeping == []
+    assert len(duties) >= loop.sweeps >= 2, "its own duty ran once a pass"
 
 
 async def test_a_departed_members_queued_item_still_runs(tmp_path: Path) -> None:
