@@ -213,6 +213,30 @@ async def test_the_rate_stops_a_firing_or_queues_it_until_the_period_turns(
     assert [(r.id, r.status) for r in moved] == [(late[queued.id].id, RunStatus.STARTED)]
 
 
+async def test_a_full_queue_refuses_a_firing_and_keeps_the_runs_that_wait(
+    platform: Wired, creator: TenantContext
+) -> None:
+    queues = await made(platform, creator, limits=limits(rate=1, queue=True, queue_depth=2))
+    runs: list[AutomationRun] = []
+    for _ in range(4):
+        runs.extend(await fired(platform, comment()))
+        platform.clock.now += timedelta(seconds=1)  # so the oldest is first
+    assert [(r.status, r.refusal) for r in runs] == [
+        (RunStatus.STARTED, None),
+        (RunStatus.QUEUED, Refusal.RATE),
+        (RunStatus.QUEUED, Refusal.RATE),
+        (RunStatus.REFUSED, Refusal.QUEUE_FULL),
+    ]
+    assert runs[3].event_text == "" and runs[3].session_id is None
+    stored = await platform.automations.get_runs(platform.owner, queues.id, 10)
+    assert sorted(r.id for r in stored if r.status is RunStatus.QUEUED) == sorted(
+        r.id for r in runs[1:3]
+    )
+    platform.clock.now += timedelta(days=1, seconds=1)
+    moved = await platform.automations.tick(platform.service)
+    assert [(r.id, r.status) for r in moved] == [(runs[1].id, RunStatus.STARTED)]
+
+
 async def test_the_concurrency_stops_a_firing_while_its_runs_are_at_work(
     platform: Wired, creator: TenantContext
 ) -> None:
@@ -468,7 +492,7 @@ def act_event(path: str, ref: str) -> FeedbackEvent:
     if path == "another_sessions_pull_request":
         names = WorkNames(pull_request=OTHER_PR)
     elif path == "an_unbound_pull_request":
-        names = WorkNames(pull_request="acme/robot#99")
+        names = WorkNames(pull_request="acme/widgets#99")
     else:
         author = Author(kind=AuthorKind.BOT, external_id="ci", name="ci")
         names, arrival, check = WorkNames(branch=ref), Arrival.CHECK, CheckState.FAILED
@@ -486,7 +510,7 @@ def act_event(path: str, ref: str) -> FeedbackEvent:
     )
 
 
-OTHER_PR = "acme/robot#12"
+OTHER_PR = "acme/widgets#12"
 PATHS = ["another_sessions_pull_request", "an_unbound_pull_request", "its_own_branch"]
 
 

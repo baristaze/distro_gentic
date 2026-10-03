@@ -10,7 +10,8 @@ is made of](../../../../README.md).
   [projects](../projects/README.md), message a standing one, or run a job
   on a station of one of its [pools](../stations/README.md)), and
   limits of its own: a cost cap over a period and the share one run may take, a rate,
-  a concurrency, whether to queue when limited, and a hop limit. It runs
+  a concurrency, whether to queue when limited and how deep, and a hop
+  limit. It runs
   as its creator, or as the tenant's automation principal.
 - **Automation principal**: a service principal the tenant grants, one a
   tenant, holding one role.
@@ -51,6 +52,10 @@ is made of](../../../../README.md).
 - **The rate and the concurrency hold,** and a firing they stop is
   queued or refused, as the automation says. A run counts in the period
   it starts in, however long it was queued.
+- **A queue holds at most its depth.** A firing that finds it full is
+  refused, and says so; a run already queued keeps its place. The depth
+  is read in the write that admits the run, so two firings at once never
+  both take its last place.
 - **A run keeps the event's text only while it is queued.** The
   session it starts holds it from then on.
 - **It runs as its creator,** read live at each firing: a creator who
