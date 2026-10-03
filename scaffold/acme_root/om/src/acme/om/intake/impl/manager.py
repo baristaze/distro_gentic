@@ -46,6 +46,8 @@ class IntakeOptions(Platform):
     purge_batch: int = Field(default=1000, gt=0)
     # The most accounts one read of a user's links answers.
     links: int = Field(default=50, gt=0)
+    # The most handles one read of a session's work answers.
+    work: int = Field(default=50, gt=0)
 
 
 class IntakeManagerImpl(IntakeManagerInterface):
@@ -156,7 +158,10 @@ class IntakeManagerImpl(IntakeManagerInterface):
     async def get_work(self, ctx: TenantContext, session_id: UUID) -> tuple[WorkBinding, ...]:
         ctx.require(Permission.READ)
         await self._sessions.get_session(ctx, session_id)
-        return tuple(await self._storage.read_session_bindings(ctx.org_id, session_id))
+        bound = await self._storage.read_session_bindings(
+            ctx.org_id, session_id, self._options.work
+        )
+        return tuple(bound)
 
     async def record_act(
         self, ctx: TenantContext, session_id: UUID, integration: str, refs: Sequence[str]

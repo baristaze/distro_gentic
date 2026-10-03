@@ -137,11 +137,14 @@ class IntakeStoragePostgresImpl(PgStorageBase, IntakeStorageInterface):
             row = (await session.execute(stmt)).scalar_one_or_none()
             return None if row is None else to_model(row, WorkBinding)
 
-    async def read_session_bindings(self, org_id: UUID, session_id: UUID) -> list[WorkBinding]:
+    async def read_session_bindings(
+        self, org_id: UUID, session_id: UUID, limit: int
+    ) -> list[WorkBinding]:
         stmt = (
             select(WorkBindings)
             .where(WorkBindings.org_id == org_id, WorkBindings.session_id == session_id)
             .order_by(WorkBindings.created_at, WorkBindings.id)
+            .limit(limit)
         )
         async with self._session_for(stmt, org_id=org_id) as session:
             rows = (await session.execute(stmt)).scalars().all()

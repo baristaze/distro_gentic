@@ -144,8 +144,9 @@ class IntakeStorageContract:
         await storage.create_binding(org, pull)
         await storage.create_binding(org, branch)
         await storage.create_binding(org, make_binding("acme/checkout#13"))
-        assert await storage.read_session_bindings(org, session_id) == [branch, pull]
-        assert await storage.read_session_bindings(org, new_id()) == []
+        assert await storage.read_session_bindings(org, session_id, 10) == [branch, pull]
+        assert await storage.read_session_bindings(org, session_id, 1) == [branch]
+        assert await storage.read_session_bindings(org, new_id(), 10) == []
 
     async def test_create_link_in_another_tenant_is_its_own(
         self, storage: IntakeStorageInterface
@@ -205,7 +206,7 @@ class IntakeStorageContract:
     ) -> None:
         binding = make_binding()
         await storage.create_binding(new_id(), binding)
-        assert await storage.read_session_bindings(new_id(), binding.session_id) == []
+        assert await storage.read_session_bindings(new_id(), binding.session_id, 10) == []
 
     async def test_create_installation_another_tenant_holds_connects_nothing(
         self, storage: IntakeStorageInterface

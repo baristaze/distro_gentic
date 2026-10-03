@@ -67,8 +67,11 @@ class IntakeStorageInterface(ABC):
     ) -> WorkBinding | None: ...
 
     @abstractmethod
-    async def read_session_bindings(self, org_id: UUID, session_id: UUID) -> list[WorkBinding]:
-        """The handles bound to a session as its work, oldest first."""
+    async def read_session_bindings(
+        self, org_id: UUID, session_id: UUID, limit: int
+    ) -> list[WorkBinding]:
+        """The first `limit` handles bound to a session as its work, oldest
+        first."""
         ...
 
     @abstractmethod

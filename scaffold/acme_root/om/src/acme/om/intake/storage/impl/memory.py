@@ -86,9 +86,11 @@ class IntakeStorageMemoryImpl(MemoryStorageBase, IntakeStorageInterface):
     async def read_binding(self, org_id: UUID, kind: HandleKind, handle: str) -> WorkBinding | None:
         return self._binding(org_id, kind, handle)
 
-    async def read_session_bindings(self, org_id: UUID, session_id: UUID) -> list[WorkBinding]:
+    async def read_session_bindings(
+        self, org_id: UUID, session_id: UUID, limit: int
+    ) -> list[WorkBinding]:
         bound = [b for b in self._rows(self._bindings, org_id) if b.session_id == session_id]
-        return sorted(bound, key=lambda binding: (binding.created_at, binding.id))
+        return sorted(bound, key=lambda binding: (binding.created_at, binding.id))[:limit]
 
     def _binding(self, org_id: UUID, kind: HandleKind, handle: str) -> WorkBinding | None:
         found = [
