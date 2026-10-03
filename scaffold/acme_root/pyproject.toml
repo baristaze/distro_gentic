@@ -163,6 +163,7 @@ reason = "the watch keeps no rows: its buffers are a cache, and its records are 
 [tool.arch-check.options.CTX-12]
 tenantless = [
     "AgentSessionStorageInterface.read_purgeable",
+    "AgentSessionStorageInterface.read_stalled",
     "BenchmarkStorageInterface.create_benchmark",
     "BenchmarkStorageInterface.read_benchmark",
     "BenchmarkStorageInterface.read_history",
@@ -171,6 +172,7 @@ tenantless = [
     "HostsStorageInterface.read_enrollment_token_by_digest",
     "HostsStorageInterface.read_host_by_credential_digest",
     "IdempotencyStorageInterface.purge_records",
+    "LedgerStorageInterface.read_open",
     "MatrixStorageInterface.add_result",
     "MatrixStorageInterface.add_retirement",
     "MatrixStorageInterface.create_version",

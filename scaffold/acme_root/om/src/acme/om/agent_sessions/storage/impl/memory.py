@@ -73,6 +73,18 @@ class AgentSessionStorageMemoryImpl(MemoryStorageBase, AgentSessionStorageInterf
             if s.deleted_at is not None and s.deleted_at < deleted_before
         ][:limit]
 
+    async def read_stalled(
+        self, after: datetime, before: datetime, limit: int
+    ) -> list[tuple[UUID, AgentSession]]:
+        stalled = [
+            (org_id, s)
+            for org_id, s in self._rows_across_tenants(self._sessions)
+            if s.status is SessionStatus.PENDING
+            and s.deleted_at is None
+            and after <= s.updated_at < before
+        ]
+        return sorted(stalled, key=lambda found: found[1].updated_at)[:limit]
+
     async def tree_holds_others(self, org_id: UUID, root_id: UUID, session_id: UUID) -> bool:
         return any(
             s.root_id == root_id and s.id != session_id for s in self._rows(self._sessions, org_id)

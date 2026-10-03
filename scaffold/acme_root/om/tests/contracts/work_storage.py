@@ -20,6 +20,7 @@ CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
         "count_claimed_ahead",
         "create_item",
+        "has_open_item",
         "read_item",
         "read_item_by_key",
         "write_item_if_failed",
@@ -422,6 +423,34 @@ class WorkStorageContract:
         await storage.create_item(org, mine)
         assert await storage.count_claimed_ahead(org, mine, now) == 1
         assert await storage.count_claimed_ahead(other_org, mine, now) == 0
+
+    async def test_an_open_item_is_one_of_its_kind_on_its_target_queued_or_claimed(
+        self, storage: WorkStorageInterface, lane: str
+    ) -> None:
+        org, other_org, now = new_id(), new_id(), utcnow()
+        waiting, running, settled = new_id(), new_id(), new_id()
+
+        def loop_on(target: UUID, status: WorkStatus) -> WorkItem:
+            return make_item(lane=lane).model_copy(
+                update={"kind": WorkKind.LOOP, "target_id": target, "status": status}
+            )
+
+        claimed = loop_on(running, WorkStatus.CLAIMED).model_copy(
+            update={"claimed_by": "runner", "claim_token": new_id(), "lease_expires_at": now}
+        )
+        for item in (
+            loop_on(waiting, WorkStatus.QUEUED),
+            claimed,
+            loop_on(settled, WorkStatus.DONE),
+            loop_on(settled, WorkStatus.FAILED),
+            make_item(lane=lane).model_copy(update={"target_id": settled}),
+        ):
+            assert await storage.create_item(org, item) is InsertOutcome.INSERTED
+        assert await storage.has_open_item(org, WorkKind.LOOP, waiting)
+        assert await storage.has_open_item(org, WorkKind.LOOP, running), "a lapsed lease too"
+        assert not await storage.has_open_item(org, WorkKind.LOOP, settled), "done, failed, a noop"
+        assert not await storage.has_open_item(org, WorkKind.LOOP, new_id())
+        assert not await storage.has_open_item(other_org, WorkKind.LOOP, waiting)
 
     async def test_reads_and_writes_are_tenant_scoped(self, storage: WorkStorageInterface) -> None:
         org_a, org_b = new_id(), new_id()

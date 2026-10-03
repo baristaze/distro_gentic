@@ -68,6 +68,18 @@ def parked(session: AgentSession, version: int) -> AgentSession:
     )
 
 
+def pending(session: AgentSession, version: int, at: datetime) -> AgentSession:
+    """The session as a projection leaves it when an input wakes it, at `at`."""
+    return session.model_copy(
+        update={
+            "status": SessionStatus.PENDING,
+            "pending_input": new_id(),
+            "version": version,
+            "updated_at": at,
+        }
+    )
+
+
 def marked(
     session: AgentSession, version: int, at: datetime, *, claimed: bool = False
 ) -> AgentSession:
@@ -203,6 +215,38 @@ class AgentSessionStorageContract:
         found = await storage.read_purgeable(now - timedelta(days=30), 10)
         assert {(org, session.id): session for org, session in found} == due
         assert len(await storage.read_purgeable(now - timedelta(days=30), 2)) == 2
+
+    async def test_read_stalled_answers_pending_sessions_of_the_slice_oldest_first(
+        self, storage: AgentSessionStorageInterface
+    ) -> None:
+        """The sweep's read across tenants: every session pending, and not
+        marked deleted, whose last write falls in the slice, each with its
+        tenant, oldest write first, a batch at most; never one written since
+        the slice, one before it, one in another status, or one marked."""
+        first, second, now = new_id(), new_id(), utcnow()
+        old, older, recent, ancient, idle, hidden = (make_session() for _ in range(6))
+        writes = {
+            (first, old): now - timedelta(hours=1),
+            (second, older): now - timedelta(hours=2),
+            (first, recent): now - timedelta(minutes=1),
+            (second, ancient): now - timedelta(days=3),
+        }
+        for (org, session), at in writes.items():
+            assert await storage.create_session(org, session, ())
+            await storage.write_session(org, pending(session, 2, at), 1, ())
+        assert await storage.create_session(first, idle, ())
+        assert await storage.create_session(second, hidden, ())
+        gone = marked(pending(hidden, 2, now - timedelta(hours=1)), 2, now - timedelta(hours=1))
+        await storage.write_session(second, gone, 1, ())
+        cut, floor = now - timedelta(minutes=20), now - timedelta(days=1)
+        found = await storage.read_stalled(floor, cut, 10)
+        assert [(org, session.id) for org, session in found] == [
+            (second, older.id),
+            (first, old.id),
+        ]
+        assert [session.id for _, session in await storage.read_stalled(floor, cut, 1)] == [
+            older.id
+        ]
 
     async def test_tree_holds_others_answers_for_its_tree_and_tenant_alone(
         self, storage: AgentSessionStorageInterface
