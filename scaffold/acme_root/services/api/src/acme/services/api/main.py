@@ -268,10 +268,8 @@ def seed_platform_of(args: argparse.Namespace) -> int:
             seeded = await seed_platform(container.storage, container.managers, owner)
         finally:
             await container.close()
-        print(
-            f"seeded org {args.slug}: project {seeded.project.id}, "
-            f"matrix version {seeded.matrix_version}"
-        )
+        project = "seeded before" if seeded.project is None else seeded.project.id
+        print(f"seeded org {args.slug}: project {project}, matrix version {seeded.matrix_version}")
         return 0
 
     return asyncio.run(run())

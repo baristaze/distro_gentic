@@ -297,6 +297,7 @@ async def owner_of(stack: Stack) -> Person:
     )
     seeded = await seed_platform(stack.container.storage, stack.container.managers, ctx, E2E_KINDS)
     headers = await sign_in_as(stack.client, "ann@example.test", org.id)
+    assert seeded.project is not None
     return Person(ctx, headers, seeded.project.id)
 
 

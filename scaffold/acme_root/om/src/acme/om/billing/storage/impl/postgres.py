@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
+from acme.om.base import EMPTY_UUID
 from acme.om.billing.rules import (
     CountKey,
     closed,
@@ -36,7 +37,6 @@ from acme.om.billing.types.ledger import (
     Turned,
     WindowRaise,
 )
-from acme.om.base import EMPTY_UUID
 from acme.om.budgets.types.hold import Hold, Settlement
 from acme.om.exceptions import NotFound, PreconditionFailed, TenantMismatch, ValidationFailed
 from acme.om.outbox.storage.tables.outbox_rows import OutboxRows

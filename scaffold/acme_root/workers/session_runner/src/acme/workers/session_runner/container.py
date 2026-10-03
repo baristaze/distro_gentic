@@ -20,8 +20,6 @@ from acme.om.attribution.types.principal import Principal
 from acme.om.automations.root import automation_principals
 from acme.om.base import new_id
 from acme.om.billing.root import build_money_gate, refuse_open_money
-from acme.om.platform_agents.catalog import PlatformAgents
-from acme.om.platform_agents.settings import shipped_agents
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
 from acme.om.hosts.impl.placement import PlacementHostsImpl
 from acme.om.intake.root import build_intake
@@ -30,6 +28,8 @@ from acme.om.matrix.impl.resolver import MatrixOptions
 from acme.om.matrix.root import MatrixLayer
 from acme.om.notifications.manager import NotificationsManagerInterface
 from acme.om.notifications.root import build_notifications
+from acme.om.platform_agents.catalog import PlatformAgents
+from acme.om.platform_agents.settings import shipped_agents
 from acme.om.playbooks.root import PlaybooksLayer
 from acme.om.relay.impl.placement import PlacementRelayedImpl
 from acme.om.relay.impl.transport import TransportPlacedImpl, TransportRelayImpl

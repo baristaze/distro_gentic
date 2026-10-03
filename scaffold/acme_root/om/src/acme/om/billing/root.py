@@ -13,10 +13,13 @@ settles what nobody settled, through the same gate, on the same ledger."""
 from collections.abc import Callable
 from datetime import datetime
 
+from acme.integrations.payments import PaymentProviderInterface
 from acme.om.base import utcnow
 from acme.om.billing.gate import MoneyGateInterface
 from acme.om.billing.impl.gate import MoneyGateImpl, MoneyGateOptions
+from acme.om.billing.impl.manager import BillingManagerImpl
 from acme.om.billing.impl.pager import OperatorPagerLogImpl
+from acme.om.billing.manager import BillingManagerInterface
 from acme.om.billing.pager import OperatorPagerInterface
 from acme.om.billing.types.plan import PLANS, UNITS, PlanCatalog, UnitScale
 from acme.om.exceptions import UnsafeConfiguration
@@ -46,6 +49,28 @@ def build_money_gate(
         units,
         options or MoneyGateOptions(),
         clock,
+    )
+
+
+def build_billing(
+    storage: StorageInterface,
+    managers: Managers,
+    payments: PaymentProviderInterface,
+    *,
+    plans: PlanCatalog = PLANS,
+    units: UnitScale = UNITS,
+) -> BillingManagerInterface:
+    """Billing's manager over the accounts and the one ledger the money gate
+    reads: an account opened here is the one the gate asks who pays of."""
+    return BillingManagerImpl(
+        storage.get_account_storage(),
+        storage.get_money_ledger_storage(),
+        managers.budgets,
+        managers.agent_sessions,
+        payments,
+        managers.outbox,
+        plans,
+        units,
     )
 
 
