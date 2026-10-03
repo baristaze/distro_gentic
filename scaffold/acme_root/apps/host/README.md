@@ -11,6 +11,10 @@ ACME_ENROLLMENT_TOKEN=hen_... uv run acme-host run   # the first start
 uv run acme-host run          # every start after it
 ```
 
+On a tenant's machine it runs as a service of a user of its own, which
+[deployment/host/](../../deployment/host/README.md) installs on Linux and
+macOS.
+
 ## What it does
 
 - **Probes at startup.** It checks its trust store, its proxy, that the

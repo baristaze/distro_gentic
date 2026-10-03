@@ -46,8 +46,10 @@ of](../../../../README.md).
   the provider does not authenticate is marked refused, so every session
   that needs it waits for a new one; a permission the key lacks parks only
   the session that met it.
-- **Choose.** A tenant on its own keys chooses a fill for a model role,
-  or drops its choice.
+- **Choose.** A tenant on its own keys reads what it may choose from:
+  for each model role of the published version, the fills qualified for
+  it from a provider it holds a live key for. It chooses one of them for
+  a model role, or drops its choice.
 - **Count.** Each settled model call counts its tokens and its spend
   under the version its session is pinned to, a published one, so the
   operator's dashboard reads spend by version; a session pinned to none

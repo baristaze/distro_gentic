@@ -10,7 +10,8 @@ Terraform. Nothing is clicked into place in either.
 | Path | What it holds |
 |------|---------------|
 | `local/` | The compose stack: the backing services, the app containers, and the developer dashboards. [local/README.md](local/README.md) |
-| `docker/` | One Dockerfile per process (`api`, `maintenance`, `portal`): two stages, a non-root user, a liveness probe |
+| `docker/` | One Dockerfile per process (`api`, `maintenance`, `session-runner`, `portal`): two stages, a non-root user, a liveness probe |
+| `host/` | The workspace host's installers, for a tenant's Linux (systemd) or macOS (launchd) machine, and the check that holds its unit's walls. [host/README.md](host/README.md) |
 | `terraform/` | The bootstrap roots (one per AWS account), the environment roots (staging, production), and the modules they call. [terraform/modules/README.md](terraform/modules/README.md) |
 | `cloud/` | `environments.json`, the values of one deployment; the first-time AWS setup; the sizes and what they cost. [cloud/README.md](cloud/README.md) |
 | `workos/environments.yaml` | The desired state of the identity provider's application per WorkOS environment, which `acme-ops workos-bootstrap` reconciles |
@@ -23,7 +24,8 @@ Terraform. Nothing is clicked into place in either.
 |-------|-------------------|--------------------------|
 | The API | the `api` container, or a host process (`scripts/dev.sh`) | a container service behind a load balancer |
 | The maintenance worker | the `maintenance` container, or a host process | a container service that rolls one task at a time, since it holds leases |
-| The session runner | a host process (`scripts/dev.sh`) | none yet: it comes with the first environment that runs a session's loop ([ADR 1011](../docs/adr/1011-a-sessions-loop-runs-in-a-worker-of-its-own.md)) |
+| The session runner | a host process (`scripts/dev.sh`) | a container service that rolls one task at a time and prepares no workspace: a session's tools run on a host of its tenant's pool ([ADR 2026](../docs/adr/2026-the-runner-is-a-cloud-service-with-no-workspace-and-a-host-installs-as-a-user-of-its-own.md)) |
+| The workspace host | a host process (`uv run acme-host run`) | not in the cloud: a service on a tenant's own machine ([host/README.md](host/README.md)) |
 | The portal | nginx in a container, or Vite on the host; each forwards `/v1` to the API | a private bucket behind CloudFront, which serves `/v1` from the load balancer too |
 | The company site | Vite on the host | the portal's module, called with the site's parameters |
 | Postgres | one container, one schema per database role | a managed instance |
@@ -32,7 +34,7 @@ Terraform. Nothing is clicked into place in either.
 | Buckets | MinIO over the S3 API | S3, private and versioned |
 | Secrets | `.env` | Secrets Manager |
 | Logs, metrics, traces, errors | Prometheus, Grafana, Jaeger, GlitchTip (the `devx` profile) | CloudWatch, X-Ray, a Sentry-compatible tracker, through a collector sidecar per task |
-| Alarms and the dashboard | Grafana's provisioned overview | one CloudWatch dashboard per environment, fifteen alarms to one topic |
+| Alarms and the dashboard | Grafana's provisioned overview | one CloudWatch dashboard per environment, sixteen alarms to one topic |
 
 ## The convention
 

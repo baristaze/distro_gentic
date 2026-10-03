@@ -220,6 +220,7 @@ jobs:
     outputs:
       api_image: ${{ steps.images.outputs.api_image }}
       maintenance_image: ${{ steps.images.outputs.maintenance_image }}
+      session_runner_image: ${{ steps.images.outputs.session_runner_image }}
       site_domain_name: ${{ steps.site.outputs.site_domain_name }}
     steps:
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
@@ -280,11 +281,16 @@ jobs:
           }
           api_image="$(resolve acme-api)"
           maintenance_image="$(resolve acme-maintenance)"
+          session_runner_image="$(resolve acme-session-runner)"
           verify "$api_image" acme-api
           verify "$maintenance_image" acme-maintenance
-          echo "api_image=$api_image" >> "$GITHUB_OUTPUT"
-          echo "maintenance_image=$maintenance_image" >> "$GITHUB_OUTPUT"
-          echo "Images staging built for \`$SHA\`: \`$api_image\`, \`$maintenance_image\`." >> "$GITHUB_STEP_SUMMARY"
+          verify "$session_runner_image" acme-session-runner
+          {
+            echo "api_image=$api_image"
+            echo "maintenance_image=$maintenance_image"
+            echo "session_runner_image=$session_runner_image"
+          } >> "$GITHUB_OUTPUT"
+          echo "Images staging built for \`$SHA\`: \`$api_image\`, \`$maintenance_image\`, \`$session_runner_image\`." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.guard.outputs.sha }}
@@ -399,6 +405,7 @@ jobs:
           PORTAL_SENTRY_DSN: ${{ vars.PORTAL_SENTRY_DSN }}
           API_IMAGE: ${{ needs.resolve.outputs.api_image }}
           MAINTENANCE_IMAGE: ${{ needs.resolve.outputs.maintenance_image }}
+          SESSION_RUNNER_IMAGE: ${{ needs.resolve.outputs.session_runner_image }}
           SHA: ${{ needs.guard.outputs.sha }}
           RUN: ${{ github.run_id }}-${{ github.run_attempt }}
         run: |
@@ -410,6 +417,7 @@ jobs:
           terraform -chdir=deployment/terraform/environments/prod plan -input=false -out=tfplan \
             -var "api_image=$API_IMAGE" \
             -var "maintenance_image=$MAINTENANCE_IMAGE" \
+            -var "session_runner_image=$SESSION_RUNNER_IMAGE" \
             -var "alarm_email=$ALARM_EMAIL" \
             -var "api_domain_name=$API_DOMAIN_NAME" \
             -var "app_domain_name=$APP_DOMAIN_NAME" \
@@ -422,7 +430,7 @@ jobs:
           {
             echo "## production plan for \`$SHA\`"
             echo ""
-            echo "Images: \`$API_IMAGE\`, \`$MAINTENANCE_IMAGE\`."
+            echo "Images: \`$API_IMAGE\`, \`$MAINTENANCE_IMAGE\`, \`$SESSION_RUNNER_IMAGE\`."
             echo ""
             grep -E '^(Plan:|No changes\.)' plan.txt || echo "See the plan below."
             echo ""
@@ -487,6 +495,7 @@ jobs:
         env:
           API_IMAGE: ${{ needs.resolve.outputs.api_image }}
           MAINTENANCE_IMAGE: ${{ needs.resolve.outputs.maintenance_image }}
+          SESSION_RUNNER_IMAGE: ${{ needs.resolve.outputs.session_runner_image }}
           SHA: ${{ needs.guard.outputs.sha }}
         run: |
           keep() {
@@ -509,6 +518,7 @@ jobs:
           }
           keep "$API_IMAGE"
           keep "$MAINTENANCE_IMAGE"
+          keep "$SESSION_RUNNER_IMAGE"
       # Exactly the approved plan: Terraform refuses it once the state moved.
       # The migration runs inside, on the new API task definition, before
       # either service rolls.
@@ -657,15 +667,22 @@ jobs:
               -q "[.[] | select(.context == \"deployed/$1\" and .state == \"success\")] | first | .description // empty"
           }
           registry="$(aws sts get-caller-identity --query Account --output text).dkr.ecr.$AWS_REGION.amazonaws.com"
-          for name in acme-api acme-maintenance; do
+          # A release from before the session runner ran none, and staging
+          # recorded no image of it: the runner then stays as it is.
+          for name in acme-api acme-maintenance acme-session-runner; do
+            want="$(recorded "$name")"
+            if [ "$name" = acme-session-runner ] && [ -z "$want" ]; then
+              echo "\`$SHA\` carries no \`deployed/$name\`: the session runner stays as it is." >> "$GITHUB_STEP_SUMMARY"
+              continue
+            fi
             digest="$(aws ecr describe-images --repository-name "$name" --image-ids "imageTag=prod-$SHA" \
               --query 'imageDetails[0].imageDigest' --output text 2>/dev/null || true)"
-            want="$(recorded "$name")"
             if [ -z "$digest" ] || [ "$digest" = "None" ] || [ "$digest" != "$want" ]; then
               echo "::error::$name tagged prod-$SHA is '${digest}', and staging recorded '${want}': the previous release's image is not the one it ran."
               exit 1
             fi
-            echo "${name#acme-}_image=$registry/$name@$digest" >> "$GITHUB_OUTPUT"
+            name_key="${name#acme-}"
+            echo "${name_key//-/_}_image=$registry/$name@$digest" >> "$GITHUB_OUTPUT"
           done
           aws s3 sync --quiet "s3://$ARTIFACTS_BUCKET/builds/portal/$SHA" portal-dist
           have="$(scripts/build_digest.sh portal-dist)"
@@ -698,6 +715,7 @@ jobs:
         env:
           API_IMAGE: ${{ steps.previous.outputs.api_image }}
           MAINTENANCE_IMAGE: ${{ steps.previous.outputs.maintenance_image }}
+          SESSION_RUNNER_IMAGE: ${{ steps.previous.outputs.session_runner_image }}
         run: |
           cluster="$(terraform -chdir=deployment/terraform/environments/prod output -raw cluster_name)"
           swap() {
@@ -721,7 +739,12 @@ jobs:
           }
           swap api "$API_IMAGE"
           swap maintenance "$MAINTENANCE_IMAGE"
-          aws ecs wait services-stable --cluster "$cluster" --services api maintenance
+          services=(api maintenance)
+          if [ -n "$SESSION_RUNNER_IMAGE" ]; then
+            swap session-runner "$SESSION_RUNNER_IMAGE"
+            services+=(session-runner)
+          fi
+          aws ecs wait services-stable --cluster "$cluster" --services "${services[@]}"
       - name: publish the previous release's portal
         run: scripts/deploy_static.sh portal deployment/terraform/environments/prod portal-dist
       - name: publish the previous release's site

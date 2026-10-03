@@ -2,8 +2,10 @@
 one loop; the platform assistant holds no workspace, repository, or shell
 tool, and a call to one is refused; it drafts configuration and a
 person applies it; its corpus is what the knowledge map lists for the
-tenant's users and nothing else; and a validation session is platform
-work on the queue, run on a fresh executor with no model call."""
+tenant's users and nothing else; the engineer's edit changes exactly the
+one place it names, and a search of the code answers within its bound and
+inside the workspace alone; and a validation session is platform work on
+the queue, run on a fresh executor with no model call."""
 
 import json
 from datetime import timedelta
@@ -11,15 +13,37 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
+from contracts.doubles import context
 from contracts.evidence import ScriptedExecutor
 from contracts.evidence_storage import make_policy
+from contracts.factories import make_org
 from contracts.loops import reply, said
 from contracts.platform_agents import CORPUS, Later, Platform, calls, platform_over
 from contracts.project_storage import in_project, make_binding
+from contracts.tools import (
+    HOST_SPEC,
+    Tools,
+    failure_of,
+    put_call,
+    registry_of,
+    result_text,
+    tools_over,
+)
 
 from acme.infra.impl.local import InfraLocalImpl
-from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
+from acme.infra.secrets.local import SecretsLocalImpl
+from acme.infra.transports.broker import BrokerTwinImpl
+from acme.infra.transports.local import TransportLocalImpl
+from acme.infra.workspaces import (
+    EgressMode,
+    EgressPolicy,
+    IsolationMode,
+    IsolationSpec,
+    Workspace,
+)
+from acme.infra.workspaces.host import WorkspaceHostImpl
 from acme.integrations.model_providers.calls import ModelCall, ModelReply
+from acme.om import base
 from acme.om.agent_sessions.types.agent_session import SessionStatus
 from acme.om.agents.types.kind import AgentKind, DoneRule
 from acme.om.agents.types.result import Claim
@@ -53,15 +77,22 @@ from acme.om.platform_agents.kinds import (
     PLATFORM_ASSISTANT_KIND,
     SHIPPED,
 )
+from acme.om.platform_agents.tools import (
+    MAX_EDIT,
+    MAX_MATCH_TEXT,
+    EditFileImpl,
+    SearchCodeImpl,
+)
 from acme.om.platform_agents.types.validation import ValidationStart, ValidationStatus
 from acme.om.root import build_managers
 from acme.om.steps.types.content import TextBlock, ToolResultBlock
 from acme.om.steps.types.header import LoopOutcome, ToolFailure
+from acme.om.steps.types.step import Step
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import permissions_of
-from acme.om.tools.tool import ToolInterface
+from acme.om.tools.tool import ToolInterface, ToolRuntime
 from acme.om.tools.types.policy import Decision, PolicyRule, ToolPolicy
-from acme.om.tools.types.tool import ToolClass
+from acme.om.tools.types.tool import ToolClass, ToolInput
 from acme.om.work.storage.impl.memory import WorkStorageMemoryImpl
 from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
 
@@ -87,6 +118,7 @@ def shipped_catalog() -> tuple[ToolInterface, ...]:
         evidence=unbound,  # pyright: ignore[reportArgumentType]
         workspaces=unbound,  # pyright: ignore[reportArgumentType]
         intake=unbound,  # pyright: ignore[reportArgumentType]
+        knowledge=unbound,  # pyright: ignore[reportArgumentType]
     )
 
 
@@ -131,8 +163,15 @@ def items_of(platform: Platform) -> list[WorkItem]:
 
 def test_every_shipped_agent_is_a_profile_that_sets_its_powers() -> None:
     classes = classes_of(shipped_catalog())
-    names = [kind.name for kind in SHIPPED]
-    assert names == ["engineer", "analysis", "planner", "platform_assistant"]
+    names = [(kind.name, kind.version) for kind in SHIPPED]
+    assert names == [
+        ("engineer", 1),
+        ("engineer", 2),
+        ("analysis", 1),
+        ("analysis", 2),
+        ("planner", 1),
+        ("platform_assistant", 1),
+    ]
     for kind in SHIPPED:
         assert set(kind.tools) <= set(classes), f"{kind.name} names a tool the catalog lacks"
         assert kind.prompts, f"{kind.name} carries its prompts"
@@ -141,6 +180,19 @@ def test_every_shipped_agent_is_a_profile_that_sets_its_powers() -> None:
     assert kinds.VALIDATE in ENGINEER_KIND.tools
     assert ENGINEER_KIND.isolation.mode is IsolationMode.CONTAINER
     assert {classes[tool] for tool in ENGINEER_KIND.tools} >= {"write", "execute"}
+    # The engineer edits by one place, searches the code, and uses the
+    # knowledge base; analysis searches and reads, and changes nothing.
+    assert {
+        kinds.EDIT_FILE,
+        kinds.SEARCH_CODE,
+        kinds.SEARCH_KNOWLEDGE,
+        kinds.READ_KNOWLEDGE,
+        kinds.SUGGEST_KNOWLEDGE,
+    } <= set(ENGINEER_KIND.tools)
+    assert {kinds.SEARCH_CODE, kinds.SEARCH_KNOWLEDGE, kinds.READ_KNOWLEDGE} <= set(
+        ANALYSIS_KIND.tools
+    )
+    assert {classes[tool] for tool in ANALYSIS_KIND.tools} == {"read", "execute"}
 
 
 # Each shipped kind reaches an accepted end; the engineer's success only on
@@ -670,3 +722,248 @@ async def test_a_validation_session_is_its_tenants_and_a_reader_starts_none(
         await validations.start_validation(
             member_of(platform, Permission.READ), start.model_copy(update={"id": new_id()})
         )
+
+
+# The engineer's edit and search, in a directory on this host, with real
+# files and real processes.
+
+SOURCE = (
+    "def total(cart):\n"
+    "    tax = 0\n"
+    "    return sum(cart) + tax\n"
+    "\n"
+    "\n"
+    "def count(cart):\n"
+    "    tax = 0\n"
+    "    return len(cart)\n"
+)
+
+
+def on_the_host(tmp_path: Path) -> Tools:
+    transport = TransportLocalImpl(
+        tmp_path / "records", SecretsLocalImpl(None, {}), BrokerTwinImpl()
+    )
+    return tools_over(transport, WorkspaceHostImpl(tmp_path / "workspaces"))
+
+
+async def called(
+    tools: Tools,
+    tool: ToolInterface,
+    ctx: TenantContext,
+    workspace: Workspace,
+    **call_input: object,
+) -> Step:
+    """The tool's call, run as the loop runs one the gate let through."""
+    found = await put_call(
+        tools.manager,
+        tools.steps,
+        ctx,
+        tool.spec.name,
+        dict(call_input),
+        tool.spec.authorization_class,
+    )
+    return await tools.manager.execute(
+        ctx,
+        registry_of(tool),
+        found.request,
+        found.call_input,
+        workspace,
+        epoch=found.epoch,
+        tree_deadline=None,
+    )
+
+
+async def test_an_edit_changes_exactly_the_place_it_names(tmp_path: Path) -> None:
+    ctx = context(Role.SERVICE, make_org())
+    tools = on_the_host(tmp_path)
+    workspace = await tools.manager.prepare_workspace(ctx, new_id(), HOST_SPEC)
+    cart = Path(workspace.location) / "cart.py"
+    cart.write_text(SOURCE)
+    edit = EditFileImpl(unbound)  # pyright: ignore[reportArgumentType]
+    # One exact match: that place changes, and every other byte stays.
+    response = await called(
+        tools,
+        edit,
+        ctx,
+        workspace,
+        path="cart.py",
+        old_text="sum(cart) + tax",
+        new_text="sum(cart) + tax + 1",
+    )
+    assert failure_of(response) is None, result_text(response)
+    assert cart.read_text() == SOURCE.replace("sum(cart) + tax", "sum(cart) + tax + 1")
+    assert json.loads(result_text(response))["line"] == 3
+    # A line range: those lines and no other, the last one's end kept.
+    before = cart.read_text().splitlines(keepends=True)
+    response = await called(
+        tools,
+        edit,
+        ctx,
+        workspace,
+        path="cart.py",
+        start_line=7,
+        end_line=8,
+        new_text="    return len(cart) or 0",
+    )
+    assert failure_of(response) is None, result_text(response)
+    assert cart.read_text() == "".join([*before[:6], "    return len(cart) or 0\n"])
+    assert json.loads(result_text(response)) | {"size": 0} == {
+        "path": "cart.py",
+        "line": 7,
+        "lines": 1,
+        "size": 0,
+    }
+    # A file whose lines end in CRLF keeps them.
+    windows = Path(workspace.location) / "notes.txt"
+    windows.write_bytes(b"one\r\ntwo\r\nthree\r\n")
+    response = await called(
+        tools, edit, ctx, workspace, path="notes.txt", start_line=2, end_line=2, new_text="2"
+    )
+    assert failure_of(response) is None, result_text(response)
+    assert windows.read_bytes() == b"one\r\n2\r\nthree\r\n"
+
+
+async def test_an_edit_that_is_not_one_place_is_refused_and_changes_nothing(
+    tmp_path: Path,
+) -> None:
+    ctx = context(Role.SERVICE, make_org())
+    tools = on_the_host(tmp_path)
+    workspace = await tools.manager.prepare_workspace(ctx, new_id(), HOST_SPEC)
+    root = Path(workspace.location)
+    (root / "cart.py").write_text(SOURCE)
+    (root / "aaa.txt").write_text("aaa\n")
+    (root / "blob.bin").write_bytes(b"\xff\xfe tax = 0\n")
+    (root / "big.txt").write_text("tax = 0\n" + "x" * MAX_EDIT)
+    outside = tmp_path / "outside.py"
+    outside.write_text(SOURCE)
+    names = ("cart.py", "aaa.txt", "blob.bin", "big.txt")
+    files = {path: path.read_bytes() for path in (*(root / name for name in names), outside)}
+    edit = EditFileImpl(unbound)  # pyright: ignore[reportArgumentType]
+    refused = (
+        # Two places, then two overlapping ones: the edit lands on neither.
+        ({"path": "cart.py", "old_text": "    tax = 0\n"}, "matches 2 places"),
+        ({"path": "aaa.txt", "old_text": "aa"}, "matches 2 places"),
+        ({"path": "cart.py", "old_text": "    tax = 1\n"}, "matches no place"),
+        ({"path": "cart.py", "start_line": 8, "end_line": 9}, "has 8 lines"),
+        # Not text, or past the bound: never written back cut or mangled.
+        ({"path": "blob.bin", "old_text": "tax = 0"}, "not UTF-8 text"),
+        ({"path": "big.txt", "old_text": "tax = 0"}, "past the"),
+    )
+    for change, why in refused:
+        response = await called(tools, edit, ctx, workspace, new_text="tax = 2", **change)
+        assert failure_of(response) is ToolFailure.PERMANENT, change
+        assert why in result_text(response), result_text(response)
+    # A call that names both places, or neither, or a range backwards, and a
+    # path out of the workspace, is refused before anything is read.
+    for change in (
+        {"path": "cart.py", "old_text": "tax", "start_line": 2, "end_line": 2},
+        {"path": "cart.py"},
+        {"path": "cart.py", "start_line": 3, "end_line": 2},
+        {"path": "cart.py", "start_line": 3},
+        {"path": "../../outside.py", "old_text": "    return len(cart)\n"},
+        {"path": str(outside), "old_text": "    return len(cart)\n"},
+    ):
+        response = await called(tools, edit, ctx, workspace, new_text="tax = 2", **change)
+        assert failure_of(response) is ToolFailure.INVALID_INPUT, change
+    assert {path: path.read_bytes() for path in files} == files
+
+
+async def test_a_search_of_the_code_answers_within_its_bound(tmp_path: Path) -> None:
+    ctx = context(Role.SERVICE, make_org())
+    tools = on_the_host(tmp_path)
+    workspace = await tools.manager.prepare_workspace(ctx, new_id(), HOST_SPEC)
+    root = Path(workspace.location)
+    (root / "src").mkdir()
+    for n in range(30):
+        (root / "src" / f"m{n:02}.py").write_text(f"import os\nvalue = 'needle {n}'\n")
+    (root / "src" / "long.py").write_text("needle " + "x" * 5_000 + "\n")
+    (root / ".git").mkdir()
+    (root / ".git" / "config").write_text("needle\n")
+    (root / "blob.bin").write_bytes(b"needle\x00\n")
+    search = SearchCodeImpl()
+    response = await called(tools, search, ctx, workspace, pattern="needle", limit=5)
+    answer = json.loads(result_text(response))
+    assert len(answer["matches"]) == 5 and answer["more"] is True
+    response = await called(tools, search, ctx, workspace, pattern="needle", path="src", limit=100)
+    answer = json.loads(result_text(response))
+    assert answer["more"] is False and len(answer["matches"]) == 31
+    paths = {match["path"] for match in answer["matches"]}
+    assert all(path.startswith("src/") for path in paths), "never .git, never a binary file"
+    assert max(len(match["text"]) for match in answer["matches"]) == MAX_MATCH_TEXT
+    response = await called(tools, search, ctx, workspace, pattern="needle 1[0-9]'$")
+    answer = json.loads(result_text(response))
+    assert sorted((m["path"], m["line"]) for m in answer["matches"]) == [
+        (f"src/m{n}.py", 2) for n in range(10, 20)
+    ]
+    # The bound holds on bytes too: a flood of long lines is read only to
+    # the output's bound, and the answer still holds its limit.
+    for n in range(300):
+        (root / "src" / f"wide{n:03}.py").write_text(("needle " + "y" * 2_000 + "\n") * 3)
+    response = await called(tools, search, ctx, workspace, pattern="needle y", limit=100)
+    answer = json.loads(result_text(response))
+    assert len(answer["matches"]) == 100 and answer["more"] is True
+    assert len(result_text(response)) < 50_000, "within what the model reads of one output"
+    # No match is an empty answer; a pattern grep cannot read is the model's.
+    response = await called(tools, search, ctx, workspace, pattern="haystack")
+    assert json.loads(result_text(response)) == {"matches": [], "more": False}
+    response = await called(tools, search, ctx, workspace, pattern="needle (")
+    assert failure_of(response) is ToolFailure.PERMANENT
+
+
+async def test_a_search_of_the_code_reads_inside_the_workspace_alone(tmp_path: Path) -> None:
+    ctx = context(Role.SERVICE, make_org())
+    tools = on_the_host(tmp_path)
+    workspace = await tools.manager.prepare_workspace(ctx, new_id(), HOST_SPEC)
+    (Path(workspace.location) / "kept.py").write_text("needle inside\n")
+    (tmp_path / "beside.txt").write_text("needle outside\n")
+    search = SearchCodeImpl()
+    for path in ("..", "../..", "../../beside.txt", "src/../..", "/", str(tmp_path), "a\x00b"):
+        response = await called(tools, search, ctx, workspace, pattern="needle", path=path)
+        assert failure_of(response) is ToolFailure.INVALID_INPUT, path
+    response = await called(tools, search, ctx, workspace, pattern="needle")
+    answer = json.loads(result_text(response))
+    assert [m["path"] for m in answer["matches"]] == ["kept.py"]
+
+
+async def test_a_search_of_one_file_answers_its_matching_line(tmp_path: Path) -> None:
+    ctx = context(Role.SERVICE, make_org())
+    tools = on_the_host(tmp_path)
+    workspace = await tools.manager.prepare_workspace(ctx, new_id(), HOST_SPEC)
+    (Path(workspace.location) / "src").mkdir()
+    (Path(workspace.location) / "src" / "cart.py").write_text("import os\nvalue = 'needle'\n")
+    search = SearchCodeImpl()
+    response = await called(tools, search, ctx, workspace, pattern="needle", path="src/cart.py")
+    assert json.loads(result_text(response)) == {
+        "matches": [{"path": "src/cart.py", "line": 2, "text": "value = 'needle'"}],
+        "more": False,
+    }
+
+
+class WatchedSearch(SearchCodeImpl):
+    """The search, counting the times it runs."""
+
+    def __init__(self) -> None:
+        self.runs = 0
+
+    async def run(
+        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
+    ) -> base.Platform:
+        self.runs += 1
+        return await super().run(ctx, call_input, runtime)
+
+
+async def test_a_pattern_of_more_than_one_line_is_refused_before_it_runs(
+    tmp_path: Path,
+) -> None:
+    ctx = context(Role.SERVICE, make_org())
+    tools = on_the_host(tmp_path)
+    workspace = await tools.manager.prepare_workspace(ctx, new_id(), HOST_SPEC)
+    (Path(workspace.location) / "kept.py").write_text("needle\nhaystack\n")
+    search = WatchedSearch()
+    for pattern in ("needle\n", "needle\r", "\nneedle", "needle\r\nhay"):
+        response = await called(tools, search, ctx, workspace, pattern=pattern)
+        assert failure_of(response) is ToolFailure.INVALID_INPUT, pattern
+    assert search.runs == 0
+    response = await called(tools, search, ctx, workspace, pattern="needle")
+    assert [m["text"] for m in json.loads(result_text(response))["matches"]] == ["needle"]
+    assert search.runs == 1

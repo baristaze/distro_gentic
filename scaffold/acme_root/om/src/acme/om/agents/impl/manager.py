@@ -131,6 +131,11 @@ class AgentsManagerImpl(AgentsManagerInterface):
         session = await self._sessions.get_session(ctx, session_id)
         return await self._tree(ctx, session.root_id)
 
+    async def kind_of(self, ctx: TenantContext, session_id: UUID) -> AgentKind:
+        ctx.require(Permission.READ)
+        session = await self._sessions.get_session(ctx, session_id)
+        return self._kinds.get(session.kind, session.kind_version)
+
     async def set_deadline(
         self, ctx: TenantContext, session_id: UUID, deadline: datetime | None
     ) -> AgentTree:
@@ -320,8 +325,10 @@ class AgentsManagerImpl(AgentsManagerInterface):
         return True
 
     async def _below(self, ctx: TenantContext, session_id: UUID) -> list[UUID]:
-        """Every session below `session_id`, children and theirs, a level at
-        a time; the tree's count bounds the walk."""
+        """Every live session below `session_id`, children and theirs, a
+        level at a time; the tree's count bounds the walk. A deleted session
+        is walked through and left out: it answers no write, and what runs
+        below it is still the tree's."""
         below: list[UUID] = []
         parents = [session_id]
         while parents:
@@ -333,7 +340,8 @@ class AgentsManagerImpl(AgentsManagerInterface):
                 )
                 for child in page.items:
                     parents.append(child.id)
-                    below.append(child.id)
+                    if child.deleted_at is None:
+                        below.append(child.id)
                 if not page.has_more or not page.items:
                     break
                 after = page.items[-1].id
