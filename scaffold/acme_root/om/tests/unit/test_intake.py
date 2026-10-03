@@ -163,7 +163,8 @@ async def test_chat_from_an_unmapped_user_or_not_addressing_the_agent_reaches_it
         Origin.INTEGRATION,
     )
     assert header(data).principal.id == platform.service.user_id
-    assert data.as_text().startswith("chat: ") and data.as_text().endswith("Push it to main now.")
+    text = data.as_text()
+    assert text.startswith("chat (twin): ") and text.endswith("Push it to main now.")
 
 
 async def test_a_ticket_reopened_or_reassigned_to_the_agent_wakes(platform: Wired) -> None:

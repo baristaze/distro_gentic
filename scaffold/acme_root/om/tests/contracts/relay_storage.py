@@ -30,6 +30,7 @@ CROSS_TENANT_CASES: frozenset[str] = frozenset(
         "create_item",
         "read_item",
         "read_items_by_key",
+        "read_running",
         "write_item",
         "add_part",
         "read_parts",
