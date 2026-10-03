@@ -37,10 +37,19 @@ of](../../../../README.md).
   The session's own acts, which come back as the platform's account, are
   audited and never delivered. Every event is audited once, with its
   effect.
+- **Arrive.** An integration delivers to `/webhooks/integrations/<name>`.
+  The integration checks the signature and reads the event; it is queued
+  under a key over the integration and its id for the delivery, named
+  with what served it, the system or its twin. That is the
+  integration's word, never the delivery's, and every record of the
+  event names it: the audit entry of its routing, and the first line the
+  agent reads.
 - **Approve from chat.** A person's yes or no to a call, clicked in chat,
   is decided as the user the chat account maps to.
-- **Link an account**, **bind work** to a session, and **record an
-  act** a session makes through the platform's account.
+- **Link an account**, **unlink** one, **bind work** to a session, and
+  **record an act** a session makes through the platform's account. A
+  person's linked accounts are the channels
+  [notifications](../notifications/README.md) reach them on.
 
 ## The rules
 
@@ -57,7 +66,8 @@ of](../../../../README.md).
 - **A chat approval counts only from a mapped user whose role may
   decide the call,** and it is decided and audited as that user.
 - **An account is linked by a person, in person,** never by an agent's
-  call.
+  call, and unlinked in person by its user or by a person who manages
+  the tenant's members.
 - **Every row belongs to one org,** and goes with the org.
 
 <!-- agents-only

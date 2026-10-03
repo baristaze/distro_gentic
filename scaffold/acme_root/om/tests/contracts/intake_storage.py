@@ -14,6 +14,8 @@ CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
         "create_link",
         "read_link",
+        "read_user_links",
+        "delete_link",
         "create_binding",
         "read_binding",
         "record_act",
@@ -127,6 +129,24 @@ class IntakeStorageContract:
         link = make_link()
         await storage.create_link(new_id(), link)
         assert await storage.read_link(new_id(), "chat", link.external_id) is None
+
+    async def test_a_users_links_are_read_and_one_unlinked_in_its_tenant_alone(
+        self, storage: IntakeStorageInterface
+    ) -> None:
+        org, other = new_id(), new_id()
+        user = new_id()
+        chat = await storage.create_link(org, make_link("U-ANN", user))
+        forge = await storage.create_link(
+            org, make_link("ann", user).model_copy(update={"integration": "forge"})
+        )
+        await storage.create_link(org, make_link("U-BOB"))
+        assert await storage.read_user_links(org, user, 10) == [chat, forge]
+        assert await storage.read_user_links(other, user, 10) == []
+        assert not await storage.delete_link(other, "chat", "U-ANN")
+        assert await storage.read_link(org, "chat", "U-ANN") == chat
+        assert await storage.delete_link(org, "chat", "U-ANN")
+        assert not await storage.delete_link(org, "chat", "U-ANN")
+        assert await storage.read_user_links(org, user, 10) == [forge]
 
     async def test_create_binding_in_another_tenant_is_its_own(
         self, storage: IntakeStorageInterface

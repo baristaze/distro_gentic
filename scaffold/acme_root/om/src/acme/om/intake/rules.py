@@ -19,15 +19,34 @@ Only a mapped user's words become a message; everything else from outside
 is an event, which the engine renders as data, quoted, with the origin set
 here: `integration`, by an `external` actor. Nothing an event says sets
 either. The session's own acts, which come back through the integration
-as the platform's account, are audited and never delivered."""
+as the platform's account, are audited and never delivered.
+
+The ingress reads a delivery into an event (`event_of`): its id the
+delivery's key, which the integration derives from its id for the
+delivery, so a redelivery is the same event, and what served it the
+integration's word, so a twin's event is named a twin's on every record of
+it."""
 
 from datetime import datetime
 from uuid import UUID
 
+from pydantic import ValidationError
+
+from acme.integrations.events import ProvidedEvent
 from acme.om.attribution.types.principal import Principal
 from acme.om.base import Platform, derived_id
 from acme.om.context import CredentialKind, TenantContext
-from acme.om.intake.types.event import MAX_TEXT, Arrival, AuthorKind, CheckState, FeedbackEvent
+from acme.om.evidence.types.provenance import Provenance
+from acme.om.exceptions import ValidationFailed
+from acme.om.intake.types.event import (
+    MAX_TEXT,
+    Arrival,
+    Author,
+    AuthorKind,
+    CheckState,
+    FeedbackEvent,
+    WorkNames,
+)
 from acme.om.intake.types.route import Effect
 from acme.om.steps.types.content import Content, TextBlock
 from acme.om.steps.types.header import InputHeader
@@ -99,15 +118,57 @@ ARRIVALS: dict[Arrival, str] = {
 }
 
 
+def event_of(
+    integration: str, provenance: Provenance, provided: ProvidedEvent
+) -> tuple[UUID, FeedbackEvent]:
+    """A verified delivery as the ingress queues it: the org its installation
+    names, and the event, keyed by the delivery's key, served by what the
+    integration says, and its text cut to what an event carries.
+    `ValidationFailed` when it names no org or is no event."""
+    try:
+        org_id = UUID(provided.installation)
+    except ValueError:
+        raise ValidationFailed("the delivery names no installation of the platform") from None
+    try:
+        session_id = None if provided.session_id is None else UUID(provided.session_id)
+        event = FeedbackEvent(
+            id=provided.key,
+            integration=integration,
+            provenance=provenance,
+            arrival=Arrival(provided.arrival),
+            author=Author(
+                kind=AuthorKind(provided.author_kind),
+                external_id=provided.author_id,
+                name=provided.author_name,
+            ),
+            names=WorkNames(
+                session_id=session_id,
+                pull_request=provided.pull_request,
+                branch=provided.branch,
+            ),
+            refs=provided.refs,
+            text=provided.text[:MAX_TEXT],
+            check=None if provided.check is None else CheckState(provided.check),
+            occurred_at=provided.occurred_at,
+        )
+    except ValueError, ValidationError:
+        raise ValidationFailed("the delivery is no event") from None
+    return org_id, event
+
+
 def described(event: FeedbackEvent) -> str:
     """An event as the agent reads it, as data: a first line the platform
-    writes from the fields the integration read, then what it says, its end
-    cut so the whole stays within the text an event may carry."""
+    writes from the fields the integration read, which names a twin that
+    served it, then what it says, its end cut so the whole stays within the
+    text an event may carry."""
     on = event.names.pull_request or event.names.branch
     what = ARRIVALS[event.arrival]
     if event.check is not None:
         what = f"{what} {event.check.value}"
-    head = f"{event.integration}: {what} by {event.author.kind.value} {event.author.name}"
+    source = event.integration
+    if event.provenance is not Provenance.REAL:
+        source = f"{source} ({event.provenance.value})"
+    head = f"{source}: {what} by {event.author.kind.value} {event.author.name}"
     head = f"{head} on {on}" if on else head
     if not event.text:
         return head[:MAX_TEXT]

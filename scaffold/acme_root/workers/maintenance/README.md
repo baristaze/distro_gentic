@@ -15,8 +15,10 @@ side, started in `main.py`.
   then fires the tenant's
   [automations](../../om/src/acme/om/automations/README.md).
 - **The sweep** (`loop.py`) runs on a timer, within a budget. It requeues
-  expired leases, relays the outbox, purges every row past its retention
-  (`settings.py`), counts the platform's size, and logs the queue's gauges.
+  expired leases, relays the outbox, ticks each tenant once (its
+  automations' schedules, each fired once a slot whichever worker ticks
+  first), purges every row past its retention (`settings.py`), counts the
+  platform's size, and logs the queue's gauges.
 
 `serve` runs the three; `health` asks the running process's `/healthz`.
 

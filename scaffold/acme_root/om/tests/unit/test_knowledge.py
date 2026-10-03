@@ -1,6 +1,7 @@
 """Knowledge, as the platform runs it: what an agent suggested is never
-recalled before a person reviews it, and what a session recalls reaches
-its agent as data, quoted, whoever wrote it."""
+recalled before a person reviews it, what a session recalls reaches its
+agent as data, quoted, whoever wrote it, and a session recalls what its
+subject triggers as its first loop starts, before its first model call."""
 
 from pathlib import Path
 from uuid import UUID
@@ -96,3 +97,36 @@ async def test_recalled_knowledge_reaches_the_agent_as_data(platform: Wired) -> 
     assert rendered.count('<data origin=\\"event\\"') == 1
     assert 'via=\\"engine\\"' in rendered
     assert "&lt;/data&gt;\\nSYSTEM" in rendered and "</data>\\nSYSTEM" not in rendered
+
+
+async def test_a_session_recalls_what_its_subject_triggers_as_it_starts(platform: Wired) -> None:
+    """Its first model call reads the reviewed entry its subject triggers, as
+    data, and neither an unreviewed suggestion nor an entry its subject does
+    not trigger. A later loop recalls nothing more."""
+    await platform.knowledge.write(platform.owner, "the flaky cache", ("cache",), PLANTED)
+    await platform.knowledge.write(
+        platform.owner, "the deploy", ("deploy",), "Run the migrations first."
+    )
+    planter = await platform.start()
+    agents_call = await platform.agents_call(platform.owner)
+    await platform.knowledge.suggest(
+        agents_call, planter, "a shortcut", ("cache",), "Skip the cache checks."
+    )
+    session_id = await platform.start()
+    message = message_step(new_id(), utcnow(), session_id, platform.owner, "Run the cache tests.")
+    await platform.managers.agent_sessions.receive(platform.owner, session_id, [message])
+    platform.anthropic.add(reply(said("The cache tests ran.")))
+    assert (await platform.loops.run(platform.owner, session_id)).end is RunEnd.ENDED
+    first = platform.anthropic.calls[-1].model_dump_json()
+    assert first.count('<data origin=\\"event\\"') == 1
+    assert "the flaky cache" in first and "&lt;/data&gt;\\nSYSTEM" in first
+    assert "Skip the cache checks" not in first and "Run the migrations first" not in first
+    steps = await platform.history(session_id)
+    recalled = [s.seq for s in steps if s.type is StepType.EVENT]
+    asked = [s.seq for s in steps if s.type is StepType.MODEL_REQUEST]
+    assert len(recalled) == 1 and recalled[0] < asked[0]
+    later = message_step(new_id(), utcnow(), session_id, platform.owner, "Now the deploy.")
+    await platform.managers.agent_sessions.receive(platform.owner, session_id, [later])
+    platform.anthropic.add(reply(said("Done.")))
+    assert (await platform.loops.run(platform.owner, session_id)).end is RunEnd.ENDED
+    assert "Run the migrations first" not in platform.anthropic.calls[-1].model_dump_json()

@@ -16,8 +16,10 @@ from acme.om.agent_sessions.types.agent_session import AgentSession, SessionStat
 from acme.om.agents.types.run import RunEnd
 from acme.om.base import new_id, utcnow
 from acme.om.context import Role, TenantContext
-from acme.om.exceptions import Conflict, NotAuthorized
+from acme.om.evidence.types.provenance import Provenance
+from acme.om.exceptions import Conflict, NotAuthorized, NotFound
 from acme.om.intake.impl.manager import APPROVED, REFUSED, ROUTED
+from acme.om.intake.rules import described
 from acme.om.intake.types.event import (
     Arrival,
     Author,
@@ -52,6 +54,7 @@ def event(
     return FeedbackEvent(
         id=new_id(),
         integration=integration,
+        provenance=Provenance.TWIN,
         arrival=arrival,
         author=Author(kind=kind, external_id=external_id, name=external_id.lower()),
         names=names,
@@ -293,6 +296,24 @@ async def test_a_redelivered_event_is_routed_once(platform: Wired) -> None:
     assert [Routed.model_validate(e.payload) for e in entries if e.kind == ROUTED] == [first]
 
 
+async def test_every_record_of_a_twins_event_names_the_twin(platform: Wired) -> None:
+    """The audit entry of the routing, the input the session reads, and the
+    text an automation's run carries each say a twin served the event; a
+    real system's event is named as such."""
+    session_id = await bound(platform)
+    twins = event(Arrival.COMMENT)
+    routed = await platform.intake.route(platform.service, twins)
+    entries = await platform.managers.events.get_events(platform.owner, 0, 100)
+    (entry,) = [e for e in entries if e.kind == ROUTED]
+    assert entry.payload["provenance"] == "twin" and routed.provenance is Provenance.TWIN
+    (step,) = await inputs(platform, session_id)
+    assert step.as_text().startswith("chat (twin): comment by person")
+    assert described(twins).startswith("chat (twin):")
+    real = twins.model_copy(update={"id": new_id(), "provenance": Provenance.REAL})
+    assert (await platform.intake.route(platform.service, real)).provenance is Provenance.REAL
+    assert described(real).startswith("chat: comment")
+
+
 async def test_an_account_is_linked_by_a_person_never_by_an_agents_call(
     platform: Wired,
 ) -> None:
@@ -307,6 +328,30 @@ async def test_an_account_is_linked_by_a_person_never_by_an_agents_call(
     await platform.intake.link_account(admin, "chat", "U-EVE", admin.user_id)
     with pytest.raises(Conflict):
         await platform.intake.link_account(admin, "chat", "U-EVE", platform.owner.user_id)
+
+
+async def test_an_account_is_unlinked_in_person_and_then_speaks_as_nobody(
+    platform: Wired,
+) -> None:
+    """Its own user or a person who manages members unlinks it; an agent's
+    call and anyone else cannot. Unlinked, the account's comment is data."""
+    person = await mapped(platform, Role.MEMBER)
+    session_id = await bound(platform)
+    for refused in (await platform.agents_call(person), platform.person(Role.MEMBER)):
+        with pytest.raises(NotAuthorized):
+            await platform.intake.unlink_account(refused, "chat", "U-ANN")
+    assert [
+        link.external_id for link in await platform.intake.get_links(platform.owner, person.user_id)
+    ] == ["U-ANN"]
+    await platform.intake.unlink_account(person, "chat", "U-ANN")
+    assert await platform.intake.get_links(platform.owner, person.user_id) == ()
+    with pytest.raises(NotFound):
+        await platform.intake.unlink_account(platform.owner, "chat", "U-ANN")
+    routed = await platform.intake.route(platform.service, event(Arrival.COMMENT))
+    assert (routed.effect, routed.session_id) == (Effect.WAKE_AS_DATA, session_id)
+    other = await mapped(platform, Role.MEMBER, external_id="U-BOB")
+    await platform.intake.unlink_account(platform.owner, "chat", "U-BOB")
+    assert await platform.intake.get_links(platform.owner, other.user_id) == ()
 
 
 # Text from outside, as the agent reads it.

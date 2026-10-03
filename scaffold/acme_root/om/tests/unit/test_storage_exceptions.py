@@ -39,6 +39,7 @@ from contracts import (
     matrix_storage,
     media_storage,
     money_ledger_storage,
+    notification_storage,
     orchestration_storage,
     outbox_storage,
     placement_storage,
@@ -193,6 +194,7 @@ CROSS_TENANT_CASES: dict[str, frozenset[str]] = {
     "AutomationStorageInterface": automation_storage.CROSS_TENANT_CASES,
     "PlaybookStorageInterface": playbook_storage.CROSS_TENANT_CASES,
     "KnowledgeStorageInterface": knowledge_storage.CROSS_TENANT_CASES,
+    "NotificationStorageInterface": notification_storage.CROSS_TENANT_CASES,
     "WorkStorageInterface": work_storage.CROSS_TENANT_CASES,
     "WorkspaceStorageInterface": workspace_storage.CROSS_TENANT_CASES,
 }

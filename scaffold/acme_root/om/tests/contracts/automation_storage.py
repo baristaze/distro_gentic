@@ -11,6 +11,7 @@ from acme.om.automations.types.automation import (
     Action,
     ActionKind,
     Automation,
+    AutomationPrincipal,
     AutomationRun,
     Limits,
     Refusal,
@@ -19,6 +20,7 @@ from acme.om.automations.types.automation import (
     TriggerKind,
 )
 from acme.om.base import new_id, utcnow
+from acme.om.context import Role
 from contracts.racing import race
 
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
@@ -33,6 +35,9 @@ CROSS_TENANT_CASES: frozenset[str] = frozenset(
         "read_open_runs",
         "read_queued_runs",
         "read_session_run",
+        "read_run",
+        "write_principal",
+        "read_principal",
         "purge_tenant",
     }
 )
@@ -74,6 +79,10 @@ def make_run(automation_id: UUID, session_id: UUID | None = None) -> AutomationR
         hop=1,
         session_id=session_id,
     )
+
+
+def make_principal(role: Role) -> AutomationPrincipal:
+    return AutomationPrincipal(id=new_id(), created_at=utcnow(), role=role, granted_by=new_id())
 
 
 class AutomationStorageContract:
@@ -244,6 +253,29 @@ class AutomationStorageContract:
         await storage.write_run(org, run.model_copy(update={"session_id": session_id}))
         assert await storage.read_session_run(new_id(), session_id) is None
 
+    async def test_a_run_reads_back_by_its_id_in_its_tenant_alone(
+        self, storage: AutomationStorageInterface
+    ) -> None:
+        org = new_id()
+        automation = make_automation()
+        await storage.create_automation(org, automation, ())
+        run = await storage.create_run(org, make_run(automation.id))
+        assert await storage.read_run(org, run.id) == run
+        assert await storage.read_run(new_id(), run.id) is None
+
+    async def test_one_principal_a_tenant_whose_grant_keeps_its_id(
+        self, storage: AutomationStorageInterface
+    ) -> None:
+        org, other = new_id(), new_id()
+        first = make_principal(Role.MEMBER)
+        assert await storage.write_principal(org, first) == first
+        again = await storage.write_principal(org, make_principal(Role.VIEWER))
+        assert (again.id, again.role) == (first.id, Role.VIEWER)
+        assert await storage.read_principal(org) == again
+        assert await storage.read_principal(other) is None
+        theirs = await storage.write_principal(other, make_principal(Role.MEMBER))
+        assert theirs.id != first.id and await storage.read_principal(org) == again
+
     async def test_purge_tenant_takes_its_rows_and_no_other_tenants(
         self, storage: AutomationStorageInterface
     ) -> None:
@@ -251,8 +283,12 @@ class AutomationStorageContract:
         automation = make_automation()
         await storage.create_automation(org_a, automation, ())
         await storage.create_run(org_a, make_run(automation.id))
+        await storage.write_principal(org_a, make_principal(Role.MEMBER))
         kept = make_automation()
         await storage.create_automation(org_b, kept, ())
-        assert await storage.purge_tenant(org_a, 10) == 2
+        held = await storage.write_principal(org_b, make_principal(Role.MEMBER))
+        assert await storage.purge_tenant(org_a, 10) == 3
+        assert await storage.read_principal(org_a) is None
+        assert await storage.read_principal(org_b) == held
         assert await storage.purge_tenant(org_a, 10) == 0
         assert await storage.read_automation(org_b, kept.id) == kept
