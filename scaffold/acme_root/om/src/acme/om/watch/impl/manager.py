@@ -131,6 +131,7 @@ class WatchManagerImpl(WatchManagerInterface):
             deadline=self._clock() + timedelta(seconds=command.timeout_seconds),
             epoch=cursor.epoch,
             spec=workspace.spec(),
+            by_person=True,
         )
         item = await self._relay.send(ctx, ctx.org_id, call, 0)
         return HandRun(

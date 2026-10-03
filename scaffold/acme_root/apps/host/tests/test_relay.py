@@ -31,12 +31,23 @@ from acme.infra.transports.broker import BrokerNullImpl
 from acme.infra.transports.local import TransportLocalImpl
 from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec, Workspace
 from acme.om.base import new_id
-from acme.om.context import AppContext, AppType, RequestContext
+from acme.om.context import (
+    AppContext,
+    AppType,
+    CredentialKind,
+    RequestContext,
+    TenantContext,
+    build_context,
+)
 from acme.om.exceptions import ToolFailed
 from acme.om.placement.types.work import ExecPayload
 from acme.om.relay.impl.transport import TransportRelayImpl
 from acme.om.relay.types.exec import ExecState, StopKind
 from acme.om.steps.types.header import ToolFailure
+from acme.om.tenancy.rules import permissions_of
+from acme.om.watch.impl.stream import StreamServiceMemoryImpl
+from acme.om.watch.root import build_watch
+from acme.om.watch.types.control import HandCommand
 from acme.services.api.services.impl import relay as relay_service
 
 RUNNER = AppContext(type=AppType.WORKER, version="runner@test")
@@ -260,6 +271,42 @@ async def test_a_relayed_call_names_its_sessions_project_to_the_hosts_ceilings(
     else:
         with pytest.raises(Exception, match="a project this host does not serve"):
             await waiting
+
+
+async def test_a_host_whose_owner_takes_no_persons_command_refuses_a_command_by_hand(
+    relayed: Relayed,
+) -> None:
+    api = relayed.api
+    session_id = relayed.workspace.id
+    await api.container.managers.workspaces.pinned(api.owner, session_id, DIRECTORY)
+    watch = build_watch(api.container.managers, StreamServiceMemoryImpl())
+    person = _in_person(api.owner)
+    await watch.take_control(person, session_id)
+    command = HandCommand(key=new_id(), argv=("echo", "by hand"))
+    await watch.run_command(person, session_id, command)
+    handled = None
+    for _ in range(100):
+        handled = await relayed.host.claim_once()
+        if handled is not None:
+            break
+        await asyncio.sleep(0.01)
+    assert handled is not None
+    assert handled.refused == ["a person's command, which this host does not accept"]
+    ended = await watch.command(person, session_id, command.key, -1)
+    assert ended.state is ExecState.DONE and ended.outcome is not None
+    assert ended.outcome.refused == "refused_by_host" and ended.outcome.exit_code is None
+
+
+def _in_person(of: TenantContext) -> TenantContext:
+    """The owner at the portal, signed in on a session of their own."""
+    return build_context(
+        _request(),
+        user_id=of.user_id,
+        org_id=of.org_id,
+        role=of.role,
+        permissions=permissions_of(of.role),
+        credential_kind=CredentialKind.SESSION_TOKEN,
+    )
 
 
 class FailsOnceAt(httpx.AsyncBaseTransport):
