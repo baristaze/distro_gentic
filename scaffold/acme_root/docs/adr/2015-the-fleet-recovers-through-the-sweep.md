@@ -9,7 +9,7 @@ every session that meets its outage signal parks, naming the provider,
 and when the signal's retry time passes the parked sessions are woken,
 staggered. Sessions die with their runners, and the platform notices
 through the guideline's sweep, which every cloud worker runs and no host
-or daemon does. The platform adds its duties to that sweep: among them,
+does. The platform adds its duties to that sweep: among them,
 a hold nobody settled settles at usage retrieved from the provider, else
 at its full amount, and is released only when the provider provably did
 not bill; and a session with a pending input and no queued loop is
@@ -72,8 +72,7 @@ at its gate.
   write moves it or an operator requeues the dead letter, as any dead
   letter does. So does one whose loop a run held when a pass read it and
   whose work then failed for good: the pass reads on past it.
-- The duties of the relay, the stations, and their lines join the same
-  list when those parts land: each one's own, across tenants, bounded,
-  and safe to run twice.
+- The relay's duties join the same list: its own, across tenants,
+  bounded, and safe to run twice.
 - The sweep reads the ledger the gate writes. A root that wires another
   gate wires the read of its ledger with it.

@@ -109,7 +109,7 @@ class Placement(PlacementInterface):
 
     host: Executor = field(
         default_factory=lambda: Executor(
-            kind=ExecutorKind.HOST, credential_id=new_id(), label="lab-host-1"
+            kind=ExecutorKind.HOST, credential_id=new_id(), label="build-host-1"
         )
     )
     cloud: Executor = field(

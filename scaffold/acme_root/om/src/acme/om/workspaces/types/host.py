@@ -17,8 +17,8 @@ class HostOffer(Platform):
     # A directory workspace runs as a dedicated, unprivileged user, who reads
     # neither the host's credential, its secret store, nor another workspace.
     dedicated_user: bool = False
-    # Its workspaces never reach the platform's internal network, a cloud
-    # metadata endpoint, or a station's network, whatever their egress.
+    # Its workspaces never reach the platform's internal network or a cloud
+    # metadata endpoint, whatever their egress.
     blocks_internal: bool = False
     # An egress proxy holds an allowlist's destinations and methods.
     enforces_allowlist: bool = False
