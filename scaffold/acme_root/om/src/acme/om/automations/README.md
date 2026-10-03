@@ -7,21 +7,23 @@ is made of](../../../../README.md).
 
 - **Automation**: a trigger (an event with filters, or a schedule), an
   action (start a session in one of the tenant's
-  [projects](../projects/README.md), or message a standing one), and
+  [projects](../projects/README.md), message a standing one, or run a job
+  on a station of one of its [pools](../stations/README.md)), and
   limits of its own: a cost cap over a period and the share one run may take, a rate,
   a concurrency, whether to queue when limited, and a hop limit. It runs
   as its creator, or as the tenant's automation principal.
 - **Automation principal**: a service principal the tenant grants, one a
   tenant, holding one role.
 - **Run**: the record of one firing: started, queued, or refused, and
-  why; its place in a chain; the session it started or messaged; and the
-  budget that holds a started session to its share.
+  why; its place in a chain; the session it started or messaged, or the
+  station job it runs; and the budget that holds a started session to its
+  share.
 
 ## What can happen
 
 - **Create** an automation, by a person in person. A start names a
   project of the tenant; outside a local stack, one that names none is
-  refused.
+  refused. A station job names a pool of the tenant.
 - **Grant** the automation principal a role, by a person who manages the
   tenant's members, in person, never above their own role. A second
   grant changes the role and keeps the principal.
@@ -69,6 +71,12 @@ is made of](../../../../README.md).
   that names no project is refused when it is saved, and one stored
   with none starts nothing when it fires: its run is refused, and says
   why.
+- **A station job holds its pool's line.** It joins as the automation
+  runs, carrying its job, and runs once a grant gives it a lease and its
+  fencing token; its run holds the place, and is at work until the job's
+  run is recorded. It calls no model, so its share of the cost cap goes
+  back once it joins; the rate and the concurrency hold it. Another
+  tenant's pool is refused when the automation is saved.
 - **The brief is the creator's word; the event is data.**
 - **Every firing is a recorded run,** and one event makes one run.
 
@@ -77,7 +85,9 @@ The limits are asked inside the write that records a run
 (`AutomationStorageInterface.admit`, which holds the automation's row in
 Postgres), from `rules.admitted`. A started session's tree gets a
 `LIFE` budget of `run_cap_micros` before its brief wakes it, and starts
-through the projects' `start_session`. `build_automations` takes
+through the projects' `start_session`. A station job joins through
+`StationsManagerInterface.join_with_job`, under an entry id derived from
+the run, which its job takes at the grant. `build_automations` takes
 `project_required`, which a root sets outside `local`. The
 principal's live context is `root.automation_principals`, the transition
 a root hands `build_managers` too, so its sessions' calls are answered by

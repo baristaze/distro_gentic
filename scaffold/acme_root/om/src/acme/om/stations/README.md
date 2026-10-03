@@ -26,11 +26,13 @@ the kinds of thing [Acme is made of](../../../../README.md).
 - **A line entry**: one session's ask, for a station or for any of a pool
   with the capabilities it needs, bound to the candidate under test and
   the procedure. Each pool and each station has a line, and a station's
-  own line and its pool's are served together, in rank order.
+  own line and its pool's are served together, in rank order. An entry
+  may carry its job instead, for work no session runs: an automation's
+  run holds its place, and the job's run is recorded under it.
 - **A lease**: a time-limited, renewable right to one station, with a
   fencing token one above the station's last. It is a session's, never a
-  work item's: an agent session's that waited in line, or a validation
-  session's.
+  work item's: an agent session's that waited in line, a validation
+  session's, or that of an automation's run whose entry carried its job.
 - **A job**: what a session sends a station under its lease: operations
   with their parameters, data and never code. Its station, its token,
   and what it runs are the lease's.
@@ -42,12 +44,15 @@ the kinds of thing [Acme is made of](../../../../README.md).
 - **Join a line.** A session asks, and is told its place and an
   estimate. It waits once it is parked on the line, and its park offers
   every station that serves a line it stands in: the sessions every
-  namespace is handed carry the offer.
+  namespace is handed carry the offer. An entry that carries its job
+  waits from the moment it joins, since no loop parks for it.
 - **Grant.** A free station goes to the first entry in line whose
   session waits. The grant is one conditional write on the station's
   row, and it wakes the session with an event naming the station and its
   lease, and the unlock its park waits for. A session that no longer
-  waits is passed, and leaves every line it stood in.
+  waits is passed, and leaves every line it stood in. An entry that
+  carries its job is granted with the job, in the grant's one write; the
+  job runs alone under the lease, and its report ends the lease.
 - **Reorder.** A person who manages the stations moves an entry.
 - **Leave.** A session leaves every line it stands in.
 - **Send a job.** Under a live lease; its station work goes to its lab's
@@ -79,7 +84,11 @@ the kinds of thing [Acme is made of](../../../../README.md).
 - **A waiting session is parked on the line.** Only a session parked on
   `rules.LINE_PARK` is granted. One whose loop ended, or that parked on
   anything else, no longer waits: it is never granted, and leaves every
-  line. One that has not parked yet keeps its place.
+  line. One that has not parked yet keeps its place. An entry that
+  carries its job always waits.
+- **No job stands without its lease.** A session sends one under a live
+  lease; a carried job lands in its grant's write, and no other job is
+  sent under its lease.
 - **A daemon grants itself nothing.** Its identity is its credential's;
   its claims come from its lab's lane alone; it renews only the lease of
   a job it claimed, and only while the lease lives.
@@ -106,6 +115,7 @@ an event and an `unlock` control through `receive`.
 A session's tool joins a line with `join` and its loop parks on
 `rules.LINE_PARK`. The grant's event names the station and the lease; the
 tool sends jobs with `submit_job` and lets the lease go with
-`release_lease`. The gateway resolves a daemon's credential with
+`release_lease`. An automation joins a line with `join_with_job`, and
+reads its place and its job with `get_entry` and `get_job`. The gateway resolves a daemon's credential with
 `authenticate`, and calls `claim`, `renew`, and `report`; the run lands
 through the evidence namespace's `record_run`.

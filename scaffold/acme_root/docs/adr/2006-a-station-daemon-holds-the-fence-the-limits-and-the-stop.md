@@ -66,6 +66,13 @@ write, and its check is the job's one command. Otherwise it waits on its
 lab's lane. The daemon fences and guards it as any job, and its report
 finishes the session and gives the station back to the line.
 
+**An automation's station job stands in line.** No loop parks for it,
+so its line entry carries its job and waits from the moment it joins;
+the automation's run holds its place, and the job's run is recorded
+under it. Its grant writes the job in the grant's own commit, under the
+lease and its token, so a job never stands without its lease. It runs
+alone under that lease, and its report ends the lease.
+
 **A refused command is evidence.** The daemon writes the job's report,
 every refused command in it, to its disk before it sends it, and keeps
 it there until the platform recorded it. The platform records the run as

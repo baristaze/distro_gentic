@@ -59,6 +59,14 @@ refused when it is saved, and one stored with none is refused at each
 firing, before its limits reserve anything: its run records why, and no
 session starts.
 
+**An automation's station job holds its pool's line.** Its pool is one
+of the tenant's, read when the automation is saved: another tenant's is
+refused there, as one that never existed is. The firing joins the pool's
+line as the automation runs, carrying the job, and the run holds the
+place as a session would, at work until the job's run is recorded. The
+job calls no model, so the run's share of the cost cap goes back once it
+joins; the rate and the concurrency hold it.
+
 ## Consequences
 
 - An automation run as the principal starts nothing its role cannot
@@ -69,6 +77,8 @@ session starts.
 - Before a principal is granted, no automation that runs as it is made.
 - An automation stored with no project fires only refused runs outside
   `local`. One that names a project is made in its place.
+- A station job's run counts in the concurrency while it waits in line,
+  so a busy pool queues or refuses the automation's next firings.
 - The transition is a second site that builds a tenant context beside the
   tenancy manager's, and the stage checks list it.
 - A schedule's period is its own, not the sweep's: a sweep interval longer
