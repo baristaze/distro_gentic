@@ -48,6 +48,9 @@ of](../../../../README.md).
   belongs to a run that died. The sweep settles it through its gate, at
   the bill the provider gives, else whole, and releases it only on the
   provider's proof (`sweep.py`).
+- **Purge a deleted tenant.** Its account goes with its other rows. Its
+  ledger is counted and never deleted, so the sweep never marks the
+  tenant purged while an entry remains (`purge.py`).
 
 ## The rules
 

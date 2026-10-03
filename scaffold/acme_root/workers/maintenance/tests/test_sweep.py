@@ -18,6 +18,8 @@ from typing import cast
 from uuid import UUID
 
 import pytest
+from contracts.account_storage import make_account
+from contracts.money_ledger_storage import a_funded_hold, funding
 from prometheus_client import REGISTRY
 from worker_support import (
     build_container,
@@ -41,6 +43,8 @@ from acme.om.agents.types.tree import AgentTree
 from acme.om.attribution.types.authority import AuthorityMode, SessionAuthority
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import EMPTY_UUID, new_id, utcnow
+from acme.om.billing.storage.impl.memory import MoneyLedgerStorageMemoryImpl
+from acme.om.billing.types.ledger import FundedHold
 from acme.om.budgets.rules import lines_of
 from acme.om.budgets.types.amount import Spend
 from acme.om.budgets.types.budget import Budget, BudgetScopeKind, WindowKind
@@ -615,6 +619,39 @@ async def test_a_deleted_tenants_budgets_go_and_it_stays_unmarked_while_its_ledg
     assert await ledger.count_tenant(org_id, 10) == 2, "the hold and its tally stay"
     kept = await tenancy.read_org(org_id)
     assert kept is not None and kept.purged_at is None, "its ledger remains"
+
+
+async def test_a_deleted_tenants_account_goes_and_it_stays_unmarked_while_its_money_ledger_remains(
+    tmp_path: Path,
+) -> None:
+    """Every hold, settlement, and charge behind the money gate is an entry
+    of billing's ledger. The tenant's account goes with its other rows; its
+    entries cannot, since no serving login deletes one, so the tenant is
+    never marked purged while any remain, and is marked once they are gone."""
+    container = build_container(tmp_path)
+    org_id, _ = await deleted_org(container, days_ago=40)
+    accounts = container.storage.get_account_storage()
+    ledger = container.storage.get_money_ledger_storage()
+    assert await accounts.create_account(org_id, make_account(org_id), ())
+    held = await ledger.open_hold(org_id, a_funded_hold(units=1, paid_by=funding(included=10)))
+    assert isinstance(held, FundedHold)
+    loop = build_loop(container)
+    tenancy = container.storage.get_tenancy_storage()
+
+    for _ in range(3):
+        await loop._sweep_once()  # pyright: ignore[reportPrivateUsage]
+    assert await accounts.read_account(org_id) is None
+    assert await ledger.count_tenant(org_id, 10) > 0, "the hold and its counts stay"
+    kept = await tenancy.read_org(org_id)
+    assert kept is not None and kept.purged_at is None, "its money ledger remains"
+
+    # What no serving login deletes goes by hand, under the owner's login.
+    assert isinstance(ledger, MoneyLedgerStorageMemoryImpl)
+    ledger._entries.clear()  # pyright: ignore[reportPrivateUsage]
+    ledger._counts.clear()  # pyright: ignore[reportPrivateUsage]
+    await loop._sweep_once()  # pyright: ignore[reportPrivateUsage]
+    marked = await tenancy.read_org(org_id)
+    assert marked is not None and marked.purged_at is not None, "nothing was left"
 
 
 async def test_a_pass_reads_no_org_row_to_ask_whether_a_tenant_expired(

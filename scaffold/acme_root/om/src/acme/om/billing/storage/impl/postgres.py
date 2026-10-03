@@ -41,7 +41,7 @@ from acme.om.budgets.types.hold import Hold, Settlement
 from acme.om.exceptions import NotFound, PreconditionFailed, TenantMismatch, ValidationFailed
 from acme.om.outbox.storage.tables.outbox_rows import OutboxRows
 from acme.om.outbox.types.row import OutboxRow
-from acme.om.storage.impl.pg_base import PLAN_WITH_VALUES, PgStorageBase
+from acme.om.storage.impl.pg_base import PLAN_WITH_VALUES, PgStorageBase, delete_batch, deleted
 from acme.om.storage.utils.translation import to_model, to_row, to_values
 
 ENTRY_TYPES: Mapping[EntryKind, type[Entry]] = {
@@ -111,6 +111,13 @@ class AccountStoragePostgresImpl(PgStorageBase, AccountStorageInterface):
             for outbox_row in outbox_rows:
                 db.add(to_row(outbox_row, OutboxRows, org_id=org_id))
             await db.commit()
+
+    async def purge_tenant(self, org_id: UUID) -> int:
+        stmt = delete_batch(BillingAccounts, BillingAccounts.org_id == org_id, limit=1)
+        async with self._session_for(stmt, org_id=org_id) as session:
+            purged = deleted(await session.execute(stmt))
+            await session.commit()
+            return purged
 
 
 def _row(
@@ -331,6 +338,21 @@ class MoneyLedgerStoragePostgresImpl(PgStorageBase, MoneyLedgerStorageInterface)
         async with self._session_for(stmt, org_id=org_id) as session:
             rows = (await session.execute(stmt)).scalars().all()
             return {(row.counter, row.start): to_model(row, Count) for row in rows}
+
+    async def count_tenant(self, org_id: UUID, limit: int) -> int:
+        # Each count stops at the limit.
+        counts = [
+            select(func.count())
+            .select_from(select(column).where(table.org_id == org_id).limit(limit).subquery())
+            .scalar_subquery()
+            for table, column in (
+                (LedgerEntries, LedgerEntries.id),
+                (LedgerCounts, LedgerCounts.counter),
+            )
+        ]
+        stmt = select(counts[0] + counts[1])
+        async with self._session_for(LedgerEntries, org_id=org_id) as session:
+            return min(int((await session.execute(stmt)).scalar_one()), limit)
 
     async def _post_once(
         self,

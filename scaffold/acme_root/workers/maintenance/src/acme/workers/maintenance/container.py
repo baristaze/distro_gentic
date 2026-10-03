@@ -19,7 +19,7 @@ from acme.om.automations.impl.manager import AutomationsOptions
 from acme.om.automations.root import build_automations
 from acme.om.base import new_id
 from acme.om.billing.impl.sweep import HoldSweepImpl, HoldSweepOptions
-from acme.om.billing.root import build_money_gate, refuse_open_money
+from acme.om.billing.root import build_billing_purge, build_money_gate, refuse_open_money
 from acme.om.billing.sweep import ProviderBillsUnknownImpl
 from acme.om.budgets.impl.manager import BudgetsOptions
 from acme.om.events.impl.manager import EventsOptions
@@ -201,6 +201,8 @@ class WorkerContainer:
         self.knowledge = build_knowledge(
             storage, managers, options=KnowledgeOptions(purge_batch=batch)
         )
+        # Billing's account, for its purge, and its ledger, counted.
+        self.billing = build_billing_purge(storage, managers, purge_batch=batch)
         # The platform's duties the sweep carries across tenants: a hold
         # nobody settled settles through the money gate whose ledger holds
         # it, at the provider's bill, else whole; and a session pending with

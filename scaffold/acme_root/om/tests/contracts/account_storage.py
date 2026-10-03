@@ -13,7 +13,9 @@ from acme.om.billing.storage import AccountStorageInterface
 from acme.om.billing.types.account import Account, FundingMode, ZoneChange
 from acme.om.exceptions import PreconditionFailed, TenantMismatch
 
-CROSS_TENANT_CASES: frozenset[str] = frozenset({"create_account", "read_account", "write_account"})
+CROSS_TENANT_CASES: frozenset[str] = frozenset(
+    {"create_account", "purge_tenant", "read_account", "write_account"}
+)
 """Every method of `AccountStorageInterface` that takes a tenant has a case
 in this module that presents another tenant's."""
 
@@ -75,3 +77,14 @@ class AccountStorageContract:
         with pytest.raises(PreconditionFailed):
             await storage.write_account(other, account.model_copy(update={"version": 2}), 1, ())
         assert await storage.read_account(org) == account
+
+    async def test_purge_tenant_deletes_the_tenants_account_and_no_other(
+        self, storage: AccountStorageInterface
+    ) -> None:
+        org, other = new_id(), new_id()
+        await storage.create_account(org, make_account(org), ())
+        await storage.create_account(other, make_account(other), ())
+        assert await storage.purge_tenant(org) == 1
+        assert await storage.read_account(org) is None
+        assert await storage.purge_tenant(org) == 0
+        assert await storage.read_account(other) is not None
