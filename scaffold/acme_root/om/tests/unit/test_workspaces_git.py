@@ -1,7 +1,8 @@
 """The checkout, over a directory on this host, the transport that runs its
 commands here, and a repository on disk as the remote: git itself, through
-the engine's one way into a workspace. A release pushes the work a loop
-left to a snapshot ref and leaves the branch, the index, and the files as
+the engine's one way into a workspace, which brings the repository in and
+takes the work out as bundles, for the forge to push. A release pushes the
+work a loop left to a snapshot ref and leaves the branch, the index, and the files as
 they were; a branch the remote lost with no known fate fails loudly and
 nothing is checked out from the default branch; one gone after its pull
 request merged is cut again from it."""
@@ -30,11 +31,13 @@ from acme.infra.workspaces import (
     WorkspaceProviderInterface,
 )
 from acme.infra.workspaces.host import WorkspaceHostImpl
+from acme.integrations.events.twin import IntegrationTwinImpl
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.context import Role, TenantContext
 from acme.om.root import Managers, build_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
+from acme.om.workspaces.impl.forge import SourceControlForgeImpl
 from acme.om.workspaces.rules import SNAPSHOT_PREFIX, session_branch
 from acme.om.workspaces.types.source import PullRequestFate
 
@@ -96,12 +99,16 @@ class Checkout:
         git(seed, "push", "-q", str(self.remote), "main")
         self.main = git(self.remote, "rev-parse", "main")
         self.pull_requests = PullRequestsTwin()
+        # The forge pushes to the repository on disk, which asks no
+        # credential of it.
+        self.forge = IntegrationTwinImpl("forge", writes_with=("forge", "unasked"))
         self.managers: Managers = build_managers(
             StorageMemoryImpl(),
             HostInfra(tmp_path),
             agent_kinds=(WORKER,),
             workspace_projects=ProjectsTwin(repository=str(self.remote)),
             pull_requests=self.pull_requests,
+            source_control=SourceControlForgeImpl(lambda name: self.forge),
         )
         self.ctx: TenantContext = context(Role.MEMBER)
 

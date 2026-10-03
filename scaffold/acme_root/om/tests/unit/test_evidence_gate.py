@@ -142,7 +142,7 @@ async def test_a_success_on_a_dirty_tree_is_refused_and_validation_too() -> None
     await case.validate()
     case.deliver(dirty=True)
     assert refused(await case.submit(), "uncommitted changes")
-    with pytest.raises(PreconditionFailed, match="uncommitted changes"):
+    with pytest.raises(PreconditionFailed, match="open your pull request"):
         await case.validate()
 
 
