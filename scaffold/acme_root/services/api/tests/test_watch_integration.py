@@ -130,7 +130,8 @@ async def test_a_handle_reads_only_its_own_sessions_streams_through_the_shared_c
 
         (own,) = await read(mine.id)
         assert own["step_id"] == str(my_step)
-        assert [part["text"] for part in own["parts"]] == ["mine 0", "mine 1", "mine 2"]
+        assert "".join(part["text"] for part in own["parts"]) == "mine 0mine 1mine 2"
         other = await read(theirs.id)
         assert {stream["step_id"] for stream in other} == {str(their_step), str(my_step)}
-        assert {part["text"] for stream in other for part in stream["parts"]} == {"theirs"}
+        texts = {part["text"] for stream in other for part in stream["parts"]}
+        assert {text.replace("theirs", "") for text in texts} == {""}

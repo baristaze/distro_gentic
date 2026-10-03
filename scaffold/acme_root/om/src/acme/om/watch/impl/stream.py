@@ -2,7 +2,7 @@ import asyncio
 import logging
 from collections import deque
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
 from uuid import UUID
 
@@ -42,6 +42,13 @@ class StreamOptions(Platform):
     # The most parts and changes waiting in this process to be written: past
     # it, the oldest goes, never the newest, and the loop never waits.
     max_queued: int = Field(default=4096, gt=0)
+    # A stream writes at most once a window, however fast its parts come:
+    # the first part after a quiet window goes at once, and the parts behind
+    # it are joined, one entry for each run of a block's parts, until the
+    # window ends, a new block starts, the stream completes, or the run's
+    # text reaches `join_bytes`. Zero writes each part as it comes.
+    window: timedelta = Field(default=timedelta(milliseconds=100), ge=timedelta(0))
+    join_bytes: int = Field(default=16 * 1024, gt=0)
 
     def bounds(self) -> StreamBounds:
         return StreamBounds(
@@ -63,15 +70,27 @@ class _Change:
     step_id: UUID
 
 
+@dataclass
+class _Held:
+    """A stream that wrote within its window, and the parts it holds until
+    the window ends. A stream with none goes at once."""
+
+    timer: asyncio.TimerHandle
+    parts: list[StreamPart] = field(default_factory=lambda: [])
+    size: int = 0  # the bytes of the held parts' text
+
+
 class StreamServiceImpl(StreamServiceInterface):
     """The parts this process emits, queued in their order and written to
     the shared cache's streams by one task, so an emit never waits and a
     stream's parts land in order: a stream per step, in a group per session.
     A stream's opening and its completion are written in that order too:
     each is an entry in the tenant's event stream and a hint on the channel,
-    and completing ends the stream, since its step holds it whole. `events`
-    is read when a change is written, so a root can build this before the
-    managers whose loop it is the sink of."""
+    and completing ends the stream, since its step holds it whole. A
+    stream's parts are joined for its window first, so the cache sees a
+    write a window, not a write a part. `events` is read when a change is
+    written, so a root can build this before the managers whose loop it is
+    the sink of."""
 
     def __init__(
         self,
@@ -88,14 +107,36 @@ class StreamServiceImpl(StreamServiceInterface):
         self._queue: deque[StreamPart | _Change] = deque(maxlen=self._options.max_queued)
         self._writer: asyncio.Task[None] | None = None
         self._overflowed = False
+        self._window = self._options.window.total_seconds()
+        self._held: dict[tuple[UUID, UUID], _Held] = {}
 
     def emit(self, part: StreamPart) -> None:
-        self._put(part)
+        if not self._window:
+            self._put(part)
+            return
+        key = (part.session_id, part.step_id)
+        held = self._held.get(key)
+        if held is None:
+            # Quiet for a window: the part goes at once, and those behind it
+            # wait for the window's end.
+            self._put(part)
+            self._held[key] = _Held(self._later(key))
+            return
+        if held.parts and not _continues(held.parts[-1], part):
+            self._release(held)
+        held.parts.append(part)
+        held.size += len(part.text.encode())
+        if held.size >= self._options.join_bytes:
+            self._release(held)
 
     def opened(self, ctx: TenantContext, session_id: UUID, step_id: UUID) -> None:
         self._put(_Change(OPENED, ctx, session_id, step_id))
 
     def completed(self, ctx: TenantContext, session_id: UUID, step_id: UUID) -> None:
+        held = self._held.pop((session_id, step_id), None)
+        if held is not None:
+            held.timer.cancel()
+            self._release(held)
         self._put(_Change(COMPLETED, ctx, session_id, step_id))
 
     async def read(self, session_id: UUID, seen: Sequence[Seen]) -> tuple[LiveStream, ...]:
@@ -121,12 +162,39 @@ class StreamServiceImpl(StreamServiceInterface):
         return tuple(streams)
 
     async def flush(self) -> None:
-        """Waits until what is queued now is written."""
+        """Writes what each stream holds now, and waits until what is queued
+        is written."""
+        for held in self._held.values():
+            self._release(held)
         while self._writer is not None and not self._writer.done():
             await asyncio.wait({self._writer})
 
     async def close(self) -> None:
+        for held in self._held.values():
+            held.timer.cancel()
         await self.flush()
+        self._held.clear()
+
+    def _later(self, key: tuple[UUID, UUID]) -> asyncio.TimerHandle:
+        return asyncio.get_running_loop().call_later(self._window, self._tick, key)
+
+    def _tick(self, key: tuple[UUID, UUID]) -> None:
+        """A stream's window ends: what it held goes, and the next window
+        starts; a stream that held nothing is quiet again."""
+        held = self._held.get(key)
+        if held is None:
+            return
+        if not held.parts:
+            del self._held[key]
+            return
+        self._release(held)
+        held.timer = self._later(key)
+
+    def _release(self, held: _Held) -> None:
+        """Queues what a stream holds, as one part."""
+        if held.parts:
+            parts, held.parts, held.size = held.parts, [], 0
+            self._put(_joined(parts))
 
     def _put(self, item: StreamPart | _Change) -> None:
         if len(self._queue) == self._queue.maxlen and not self._overflowed:
@@ -166,7 +234,7 @@ class StreamServiceImpl(StreamServiceInterface):
         await self._streams.append(
             first.session_id,
             first.step_id,
-            [(part.n, PARTS.dump_json(part)) for part in batch],
+            [(part.n, PARTS.dump_json(part, exclude_none=True)) for part in batch],
             self._bounds,
         )
 
@@ -192,6 +260,27 @@ class StreamServiceImpl(StreamServiceInterface):
                 actor_id=event.actor_id,
             ),
         )
+
+
+def _continues(before: StreamPart, part: StreamPart) -> bool:
+    """`part` is the next place of the block `before` is in: its stream,
+    its kind, its block, and its channel or its call the same."""
+    return part.n == before.end + 1 and _block(part) == _block(before)
+
+
+def _block(part: StreamPart) -> dict[str, object]:
+    return part.model_dump(exclude={"n", "last", "text"})
+
+
+def _joined(parts: Sequence[StreamPart]) -> StreamPart:
+    """A run of one block's parts as one: the first's place, the last's as
+    its `last`, and their text in order."""
+    first = parts[0]
+    if len(parts) == 1:
+        return first
+    return first.model_copy(
+        update={"last": parts[-1].end, "text": "".join(part.text for part in parts)}
+    )
 
 
 def _part(entry: bytes) -> StreamPart | None:

@@ -256,7 +256,9 @@ class AppContainer:
             # Outside a local stack, a session starts in a project.
             project_required=settings.environment != LOCAL,
             intake=intake,
-            automations=build_automations(storage, managers),
+            automations=build_automations(
+                storage, managers, project_required=settings.environment != LOCAL
+            ),
             notifications=build_notifications(storage, managers, integrations, intake),
         )
         return cls(

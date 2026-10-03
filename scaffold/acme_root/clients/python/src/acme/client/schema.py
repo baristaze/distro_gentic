@@ -1741,13 +1741,16 @@ class LastOwnerDetail(BaseModel):
 
 class LivePartView(BaseModel):
     """
-    One part of a stream: its kind, its place, and its text. `index` is
-    the block of a model response it belongs to; a tool call's input names
-    the call, and a tool's output its channel.
+    One part of a stream: its kind, its places, and its text. A part may
+    join a run of one block's parts: it holds the places from `n` to
+    `last`, and a reader resumes after `last`. `index` is the block of a
+    model response it belongs to; a tool call's input names the call, and a
+    tool's output its channel.
     """
     channel: Annotated[str | None, Field(title='Channel')] = None
     index: Annotated[int | None, Field(title='Index')] = None
     kind: PartKind
+    last: Annotated[int, Field(title='Last')]
     n: Annotated[int, Field(title='N')]
     text: Annotated[str, Field(title='Text')]
     tool: Annotated[str | None, Field(title='Tool')] = None

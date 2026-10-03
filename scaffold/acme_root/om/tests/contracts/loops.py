@@ -75,7 +75,8 @@ class Lookup(ToolInterface):
     """A read-only lookup that touches no workspace. It keeps who it ran as,
     and holds its first call until `release` is set when `holds` is. When
     `remote` is, it reads its target from the system it acts on, an await
-    that suspends."""
+    that suspends; when `argv` is, it runs that command in the workspace
+    first, and what the command prints streams."""
 
     def __init__(
         self,
@@ -97,6 +98,7 @@ class Lookup(ToolInterface):
         )
         self.holds = holds
         self.remote = False
+        self.argv: tuple[str, ...] = ()
         self.started = asyncio.Event()
         self.release = asyncio.Event()
         self.ran_as: list[UUID] = []
@@ -120,6 +122,8 @@ class Lookup(ToolInterface):
     ) -> Platform:
         assert isinstance(call_input, Asked)
         self.ran_as.append(ctx.user_id)
+        if self.argv:
+            await runtime.run(self.argv)
         if self.holds and len(self.ran_as) == 1:
             self.started.set()
             await self.release.wait()

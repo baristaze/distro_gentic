@@ -25,7 +25,7 @@ from acme.services.api.types.watch import (
 
 
 def seen_of(after: Sequence[str]) -> tuple[Seen, ...]:
-    """Each `<step_id>:<n>` a reader names, read; anything else is refused."""
+    """Each `<step_id>:<last>` a reader names, read; anything else is refused."""
     if len(after) > MAX_SEEN:
         raise ValidationFailed(f"a read names at most {MAX_SEEN} streams")
     seen: list[Seen] = []
@@ -34,12 +34,12 @@ def seen_of(after: Sequence[str]) -> tuple[Seen, ...]:
         try:
             seen.append(Seen(step_id=UUID(step), n=int(n)))
         except ValueError:
-            raise ValidationFailed(f"{mark[:80]!r} is not <step_id>:<n>") from None
+            raise ValidationFailed(f"{mark[:80]!r} is not <step_id>:<last>") from None
     return tuple(seen)
 
 
 def part_view(part: StreamPart) -> LivePartView:
-    view = LivePartView(kind=PartKind(part.kind), n=part.n, text=part.text)
+    view = LivePartView(kind=PartKind(part.kind), n=part.n, last=part.end, text=part.text)
     if isinstance(part, TextPart | ThinkingPart):
         return view.model_copy(update={"index": part.index})
     if isinstance(part, ToolInputPart):

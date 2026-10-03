@@ -70,10 +70,17 @@ The service is `impl/stream.StreamServiceImpl` over infra's
 `StreamsInterface` (Valkey when the cache is, memory otherwise), built
 by `root.build_stream`. It implements the loop's `StreamSinkInterface`:
 the session runner passes it to `build_managers` as `stream_sink`, and
-the API to `build_watch`. An emit, `opened`, or `completed` is queued
+the API to `build_watch`. A stream writes at most once a
+`StreamOptions.window` (100 ms): the first part after a quiet window
+goes at once, and the parts behind it are held, one run of a block's
+parts joined into one part that holds the places `n` to `last`, until
+the window ends, a new block starts, `completed`, or `join_bytes`. A
+reader resumes after a part's `last`, so its mark and its `dropped` stay
+exact. An emit, `opened`, or `completed` is queued
 (at most `max_queued`, the oldest dropped) and written in order by one
 task: parts of a step in one append to the stream `step_id` of the
-group `session_id`; `opened` and `completed` as `watch.stream.opened`
+group `session_id`, each entry numbered by its part's `n`; `opened` and
+`completed` as `watch.stream.opened`
 and `watch.stream.completed`, appended under the session with the
 step's id, then published as `ENTITY_CHANGED`; `completed` ends the
 stream first. A read keeps a part only when it names the session and
