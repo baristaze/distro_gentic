@@ -35,13 +35,15 @@ from acme.om.evidence import ExecutorInterface, WorkProductInterface
 from acme.om.models.impl.credentials import CallCredentialsPlatformImpl
 from acme.om.models.layer import ModelsLayer
 from acme.om.projects.impl.policies import SessionProjectsBoundImpl
-from acme.om.root import Managers, build_managers
+from acme.om.root import Managers, build_managers, engine_tools
 from acme.om.steps.types.content import TextBlock, ToolUseBlock
 from acme.om.steps.types.header import LoopOutcome, ParkReason
 from acme.om.steps.types.step import Step, StepType
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.tenancy.rules import permissions_of
+from acme.om.tools.attachments import AttachmentReaderInterface
+from acme.om.tools.impl.attachments import AttachmentReaderNullImpl
 from acme.om.tools.tool import ToolInterface, ToolRuntime
 from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule, Target
 from acme.om.tools.types.tool import Effect, ToolClass, ToolInput, ToolSpec
@@ -167,6 +169,18 @@ DELIVERY = AgentKind(
     policy=ALLOWED,
 )
 
+HELPER = AgentKind(
+    name="helper",
+    version=1,
+    tools=("lookup", "ask_person", "write_plan", "read_attachment"),
+    done_rule=DoneRule.ANSWER,
+    authority=AuthorityMode.DELEGATED,
+    tree=TreeLimits(height=1, count=0),
+    prompts=("You work on the records, and ask your person what you cannot find.",),
+    policy=ALLOWED,
+)
+"""A kind that names the engine's own tools."""
+
 
 class Clock:
     def __init__(self) -> None:
@@ -262,18 +276,20 @@ def loop_over(
     work_product: WorkProductInterface | None = None,
     call_gate: Callable[[Managers, Clock], CallGateInterface] | None = None,
     models_layer: ModelsLayer | None = None,
+    reader: AttachmentReaderInterface | None = None,
     **roots: Any,
 ) -> Loop:
     """`storage` None is the memory storage, and `owner` None a fresh
     tenant's owner; a suite over Postgres hands in both. `jitter` is what
-    the loop draws its retry waits from. `result_gate` None is the engine's
-    null gate, which accepts a result and marks it unverified, as the
-    engine's suites read it; `executor` and `work_product` go to the root as
-    they are. `call_gate` None is the budgets' gate behind the call gate; a
-    suite of a gate of its own builds it from the managers and the clock.
-    `models_layer` goes to the root as a platform's root hands it in, and
-    the loop takes the layer's call credentials; and `roots` is what else
-    the managers are built with."""
+    the loop draws its retry waits from. The loop's catalog holds the
+    engine's tools before the suite's, over `reader`, None the null.
+    `result_gate` None is the engine's null gate, which accepts a result
+    and marks it unverified, as the engine's suites read it; `executor` and
+    `work_product` go to the root as they are. `call_gate` None is the
+    budgets' gate behind the call gate; a suite of a gate of its own builds
+    it from the managers and the clock. `models_layer` goes to the root as
+    a platform's root hands it in, and the loop takes the layer's call
+    credentials; and `roots` is what else the managers are built with."""
     infra = InfraLocalImpl(tmp_path)
     anthropic = ModelProviderScriptedImpl(ProviderName.ANTHROPIC)
     openai = ModelProviderScriptedImpl(ProviderName.OPENAI)
@@ -283,6 +299,7 @@ def loop_over(
     integrations = IntegrationsOverImpl(IdentityProviderAbsentImpl(), providers)
     catalog = tools()
     storage = storage or StorageMemoryImpl()
+    reader = reader or AttachmentReaderNullImpl()
     managers = build_managers(
         storage,
         infra,
@@ -290,6 +307,7 @@ def loop_over(
         agent_kinds=kinds,
         principal_context=live,
         tool_catalog=tuple(catalog.values()),
+        attachment_reader=reader,
         result_gate=result_gate or ResultGateNullImpl(),
         executor=executor,
         work_product=work_product,
@@ -332,7 +350,7 @@ def loop_over(
         ),
         outages or infra.get_outages(),
         sink,
-        tuple(catalog.values()),
+        engine_tools(managers.steps, reader) + tuple(catalog.values()),
         options,
         clock,
         sleep,
@@ -356,6 +374,11 @@ def reply(*blocks: TextBlock | ToolUseBlock, model: str = SONNET) -> ModelReply:
 
 def use(name: str, q: str = "the total", use_id: str | None = None) -> ToolUseBlock:
     return ToolUseBlock(id=use_id or f"use_{name}_{new_id().hex[:8]}", name=name, input={"q": q})
+
+
+def call(name: str, **call_input: object) -> ToolUseBlock:
+    """A call of any tool, with the input the model wrote."""
+    return ToolUseBlock(id=f"use_{name}_{new_id().hex[:8]}", name=name, input=call_input)
 
 
 def said(text: str) -> TextBlock:
