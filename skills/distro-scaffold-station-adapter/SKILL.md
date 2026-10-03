@@ -9,10 +9,8 @@ allowed-tools: Read, Grep, Glob, Write, Edit, Bash(make check), Bash(uv run:*), 
 A path that starts with `../` is read from this skill's folder as
 `realpath` resolves it.
 Conventions: `../_shared/scaffold-conventions.md`.
-Sections of `../../distro_gentic_spec.md`: Stations (Leases, The
-Station Daemon, The Guard Nearest the Resource), Evidence (Execution
+Sections of `../../distro_gentic_spec.md`: Evidence (Execution
 Records).
-Lenses: `../../lenses/stations.md`.
 
 ## Input
 
