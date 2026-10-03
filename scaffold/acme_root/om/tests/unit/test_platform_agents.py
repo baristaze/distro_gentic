@@ -258,7 +258,7 @@ async def test_analysis_the_planner_and_the_assistant_end_by_their_answer(
         assert answer in [step.as_text() for step in steps], kind
 
 
-# Check 1: the assistant holds no workspace, repository, shell, or station
+# Check 1: the assistant holds no workspace, repository, shell, or domain
 # tool, and a call to one is refused.
 
 
@@ -279,7 +279,7 @@ def test_the_assistant_only_reads_and_hands_on_and_has_no_workspace() -> None:
         ("run_command", ToolClass.EXECUTE),  # a shell
         ("write_file", ToolClass.WRITE),  # a workspace
         ("open_pull_request", ToolClass.INTEGRATION),  # a repository
-        ("run_on_station", "station"),  # a station, a product's domain class
+        ("ship_order", "shipping"),  # a product's domain class
         ("apply_tool_policy", ToolClass.CONFIGURATION),
         ("bind_secret", ToolClass.CREDENTIALS),
     ],
