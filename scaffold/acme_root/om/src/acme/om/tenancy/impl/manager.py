@@ -542,6 +542,12 @@ class TenancyManagerImpl(TenancyManagerInterface):
             credential_kind=CredentialKind.INTERNAL,
         )
 
+    async def tenant_deleted(self, rctx: RequestContext, org_id: UUID) -> bool | None:
+        # The org row stays as the record of a deleted tenant, purged or not,
+        # so only a database that never held the org reads none.
+        org = await self._storage.read_org(org_id)
+        return None if org is None else org.deleted_at is not None
+
     async def member_context(
         self, rctx: RequestContext, org_id: UUID, user_id: UUID, key_id: UUID | None = None
     ) -> TenantContext:

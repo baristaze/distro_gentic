@@ -10,7 +10,8 @@ namespace's purge of its rows past their retention across tenants,
 then the purges of done outbox rows and settled work items, within a time
 budget, then the tally of the platform's size when it is due, then the four
 gauges of the queue and the outbox; a worker that purges nothing sweeps the
-first two alone), and drain first on stop."""
+first two, then the duties across tenants it was given), and drain first on
+stop."""
 
 import asyncio
 import contextlib
@@ -120,9 +121,11 @@ class LoopOptions(Platform):
     # plane asks of it (ADR 0074). Each worker counts on its own clock.
     tally_interval: timedelta = timedelta(minutes=5)
     # A worker that purges nothing sweeps what bounds recovery and no more:
-    # the expired leases and the outbox a crash left. The purges, the tally,
-    # and the gauges are the maintenance worker's, which holds the purge
-    # login; a worker with no purges never judges a tenant purged.
+    # the expired leases and the outbox a crash left, then the duties across
+    # tenants it was given, such as the instances a session runner's host
+    # holds. The purges, the tally, and the gauges are the maintenance
+    # worker's, which holds the purge login; a worker with no purges never
+    # judges a tenant purged.
     recovery_only: bool = False
 
 
@@ -490,9 +493,13 @@ class WorkerLoop:
     async def _recover_once(self) -> None:
         """The pass of a worker that purges nothing: the expired leases go
         back to the queue, and the outbox rows a crash left are relayed,
-        within the budget, as every pass begins."""
+        within the budget, as every pass begins; then each duty across
+        tenants it was given runs once, and again while its batch comes
+        back full and the budget lasts."""
         deadline = asyncio.get_running_loop().time() + self._options.sweep_budget.total_seconds()
-        await self._recover(self._request(), deadline)
+        rctx = self._request()
+        await self._recover(rctx, deadline)
+        await self._purge_across(rctx, deadline)
         self.sweeps += 1
 
     async def _recover(self, rctx: RequestContext, deadline: float) -> None:

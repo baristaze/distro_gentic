@@ -411,7 +411,7 @@ def docker_runs() -> bool:
 class TestTransportContainer(TransportContract):
     @pytest.fixture
     async def provided(self) -> AsyncIterator[tuple[WorkspaceProviderInterface, Workspace]]:
-        provider = WorkspaceContainerImpl("python:3.14-slim", timedelta(seconds=300))
+        provider = WorkspaceContainerImpl("python:3.14-slim", timedelta(seconds=300), "transports")
         spec = IsolationSpec(
             mode=IsolationMode.CONTAINER,
             egress=EgressPolicy(mode=EgressMode.NONE),
