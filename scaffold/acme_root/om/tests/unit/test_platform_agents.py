@@ -922,3 +922,17 @@ async def test_a_search_of_the_code_reads_inside_the_workspace_alone(tmp_path: P
     response = await called(tools, search, ctx, workspace, pattern="needle")
     answer = json.loads(result_text(response))
     assert [m["path"] for m in answer["matches"]] == ["kept.py"]
+
+
+async def test_a_search_of_one_file_answers_its_matching_line(tmp_path: Path) -> None:
+    ctx = context(Role.SERVICE, make_org())
+    tools = on_the_host(tmp_path)
+    workspace = await tools.manager.prepare_workspace(ctx, new_id(), HOST_SPEC)
+    (Path(workspace.location) / "src").mkdir()
+    (Path(workspace.location) / "src" / "cart.py").write_text("import os\nvalue = 'needle'\n")
+    search = SearchCodeImpl()
+    response = await called(tools, search, ctx, workspace, pattern="needle", path="src/cart.py")
+    assert json.loads(result_text(response)) == {
+        "matches": [{"path": "src/cart.py", "line": 2, "text": "value = 'needle'"}],
+        "more": False,
+    }

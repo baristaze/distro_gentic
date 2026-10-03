@@ -361,6 +361,8 @@ class SearchCodeImpl(NativeToolImpl):
             "-I",
             "-E",
             "--null",
+            # Named on every match: grep names none when its path is one file.
+            "--with-filename",
             f"--max-count={call_input.limit}",
             "--exclude-dir=.git",
             "-e",
