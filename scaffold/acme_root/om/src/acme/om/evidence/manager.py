@@ -99,6 +99,27 @@ class EvidenceManagerInterface(ABC):
         ...
 
     @abstractmethod
+    async def run_check(
+        self,
+        ctx: TenantContext,
+        session_id: UUID,
+        project_id: UUID,
+        check: str,
+        version: str,
+        source: str,
+    ) -> Validation:
+        """Platform-internal: one check the project's policy declares, run
+        once on a fresh executor at `version`, with the checks, fixtures, and
+        runner from `source`, for `session_id`, a session with no agent (a
+        validation session). What it wrote is kept as `validate` keeps it. A
+        session runs its check once: asked again, it answers the validation
+        it kept and runs nothing. Refused before anything runs
+        (`PreconditionFailed`) when the project declares no policy, the
+        policy declares no such check, or the executor cannot run it; its
+        results are refused as `validate` refuses them."""
+        ...
+
+    @abstractmethod
     async def get_validations(
         self, ctx: TenantContext, session_id: UUID, limit: int
     ) -> tuple[Validation, ...]:

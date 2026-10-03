@@ -82,3 +82,21 @@ class RepositoryReaderInterface(ABC):
         and the repository's URL. `Unavailable` when the repository cannot be
         read."""
         ...
+
+    @abstractmethod
+    async def tree(
+        self,
+        binding: RepositoryBinding,
+        version: str,
+        source: str,
+        protected: tuple[str, ...],
+        credential: FetchCredential | None = None,
+    ) -> bytes:
+        """The tree a validation runs on, as a tar: the bound repository at
+        the commit `version`, with every path a `protected` pattern matches
+        taken from the commit `source` instead, and left out where `source`
+        holds none. Both commits are fetched by the repository's URL, with
+        the same `credential` as `delivered`, and nothing of git comes with
+        the tree: no history, no config, no hooks. `Unavailable` when either
+        commit cannot be read, or the tar is past its bound."""
+        ...
