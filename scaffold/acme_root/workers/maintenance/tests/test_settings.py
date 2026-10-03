@@ -75,6 +75,8 @@ LOCAL_DEFAULT_SERVES_THE_CLOUD = {
     "model_script": "the scripted twin's only, which a deployed process refuses",
     "model_script_pace_seconds": "the scripted twin's only, which a deployed process refuses",
     "integrations": "none until a real forge or chat client is built; the twin is refused deployed",
+    "forge_twin_username": "the forge twin's only, which a deployed process refuses",
+    "forge_twin_password": "the forge twin's only, which a deployed process refuses",
     "anthropic_base_url": "the hosted API everywhere",
     "openai_api_key": "no process here calls a model",
     "openai_base_url": "the hosted API everywhere",
