@@ -15,6 +15,7 @@ enrollment token its owner issued.
 sudo deployment/host/install.sh --token-file ~/acme-host.token \
      --api-url https://api.acme.example --name build-01 --engine rootless
 rm ~/acme-host.token                      # host.env holds it now
+sudo install -m 0640 -g acme-host /dev/null /etc/acme-host/ceilings.toml
 sudoedit /etc/acme-host/ceilings.toml     # the owner's ceilings
 sudo systemctl start acme-host
 journalctl -u acme-host -f
