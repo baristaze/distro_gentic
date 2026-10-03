@@ -30,7 +30,7 @@ from acme.om.billing.types.ledger import (
     Turned,
     WindowRaise,
 )
-from acme.om.budgets.types.hold import Settlement
+from acme.om.budgets.types.hold import Hold, Settlement
 from acme.om.exceptions import NotFound, PreconditionFailed, TenantMismatch
 from acme.om.outbox.storage import OutboxLandingInterface
 from acme.om.outbox.types.row import OutboxRow
@@ -67,6 +67,13 @@ class AccountStorageMemoryImpl(MemoryStorageBase, AccountStorageInterface):
                     f"account {account.id} is no longer at version {expected_version}"
                 )
             self._put(self._accounts, org_id, account, outbox_rows)
+
+    async def purge_tenant(self, org_id: UUID) -> int:
+        async with self._lock:
+            if self._get(self._accounts, org_id, org_id) is None:
+                return 0
+            del self._accounts[org_id]
+            return 1
 
 
 class _Row:
@@ -195,6 +202,25 @@ class MoneyLedgerStorageMemoryImpl(MemoryStorageBase, MoneyLedgerStorageInterfac
             )
             return approval
 
+    async def read_open(
+        self, after: datetime, before: datetime, limit: int
+    ) -> list[tuple[UUID, Hold]]:
+        closed = {
+            (row.org_id, row.hold_id) for row in self._entries if row.kind is EntryKind.SETTLEMENT
+        }
+        found = sorted(
+            (
+                (row.org_id, row.entry.hold)
+                for row in self._entries
+                if row.kind is EntryKind.HOLD
+                and isinstance(row.entry, FundedHold)
+                and after <= row.entry.hold.created_at < before
+                and (row.org_id, row.hold_id) not in closed
+            ),
+            key=lambda pair: (pair[1].created_at, pair[1].id),
+        )
+        return found[:limit]
+
     async def read_entries(
         self,
         org_id: UUID,
@@ -219,6 +245,11 @@ class MoneyLedgerStorageMemoryImpl(MemoryStorageBase, MoneyLedgerStorageInterfac
     ) -> dict[tuple[str, datetime], Count]:
         found = {key: self._counts.get((org_id, *key)) for key in keys}
         return {key: count for key, count in found.items() if count is not None}
+
+    async def count_tenant(self, org_id: UUID, limit: int) -> int:
+        entries = sum(1 for row in self._entries if row.org_id == org_id)
+        counts = sum(1 for org, _, _ in self._counts if org == org_id)
+        return min(entries + counts, limit)
 
     def _row_by_id(self, entry_id: UUID) -> _Row | None:
         for row in self._entries:

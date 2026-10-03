@@ -29,7 +29,7 @@ seven days by default.
 ## Role and credential
 
 Investigator, read-only, and no tenant's rows: every number is a
-series by matrix version and kind of token, never by tenant. `--env local` needs
+series by matrix version, plan tier, and kind of token, never by tenant. `--env local` needs
 the compose stack with the `devx` profile up (`make devx-up`) and the
 env file; no cloud credential. `--env staging` and `--env production`
 run under `acme-<env>-investigate`, checked with
@@ -50,15 +50,15 @@ block below does. Never print a token.
    platform's size or an error of its own, and the run goes on. Make
    the report's folder, `~/Downloads/acme_model_spend_<yyyy-mm-dd>/`
    (`mkdir -p`).
-2. Read the window's spend by matrix version, and its tokens by matrix
-   version and kind, once each. Locally:
+2. Read the window's spend by matrix version and plan tier, and its
+   tokens by matrix version, plan tier, and kind, once each. Locally:
 
    ```bash
    set -a; . ~/.config/acme/ops/<env>.env; set +a
    curl -sG "$ACME_PROMETHEUS_URL/api/v1/query" \
-     --data-urlencode 'query=sum by (matrix_version) (increase(acme_model_spend_micros_total[<since>])) / 1e6'
+     --data-urlencode 'query=sum by (matrix_version, plan_tier) (increase(acme_model_spend_micros_total[<since>])) / 1e6'
    curl -sG "$ACME_PROMETHEUS_URL/api/v1/query" \
-     --data-urlencode 'query=sum by (matrix_version, kind) (increase(acme_model_tokens_total[<since>]))'
+     --data-urlencode 'query=sum by (matrix_version, plan_tier, kind) (increase(acme_model_tokens_total[<since>]))'
    ```
 
    In the cloud, by the dashboard's schemas, an hour a datapoint:
@@ -68,26 +68,29 @@ block below does. Never print a token.
      --start-time <start> --end-time <end> --output text \
      --query 'MetricDataResults[?length(Values) > `0`].[Id,Label,sum(Values)]' \
      --metric-data-queries '[
-       {"Id":"spend","Period":3600,"Label":"${PROP('"'"'Dim.matrix_version'"'"')}","Expression":"SEARCH('"'"'{\"Acme\",OTelLib,environment,matrix_version,service} MetricName=\"acme_model_spend_micros_total\" environment=\"<env>\"'"'"', '"'"'Sum'"'"', 3600)"},
-       {"Id":"tokens","Period":3600,"Label":"${PROP('"'"'Dim.matrix_version'"'"')} ${PROP('"'"'Dim.kind'"'"')}","Expression":"SEARCH('"'"'{\"Acme\",OTelLib,environment,kind,matrix_version,service} MetricName=\"acme_model_tokens_total\" environment=\"<env>\"'"'"', '"'"'Sum'"'"', 3600)"}
+       {"Id":"spend","Period":3600,"Label":"${PROP('"'"'Dim.matrix_version'"'"')} ${PROP('"'"'Dim.plan_tier'"'"')}","Expression":"SEARCH('"'"'{\"Acme\",OTelLib,environment,matrix_version,plan_tier,service} MetricName=\"acme_model_spend_micros_total\" environment=\"<env>\"'"'"', '"'"'Sum'"'"', 3600)"},
+       {"Id":"tokens","Period":3600,"Label":"${PROP('"'"'Dim.matrix_version'"'"')} ${PROP('"'"'Dim.plan_tier'"'"')} ${PROP('"'"'Dim.kind'"'"')}","Expression":"SEARCH('"'"'{\"Acme\",OTelLib,environment,kind,matrix_version,plan_tier,service} MetricName=\"acme_model_tokens_total\" environment=\"<env>\"'"'"', '"'"'Sum'"'"', 3600)"}
      ]'
    ```
 
    A `spend` line is millionths of a dollar; divide by 1,000,000. A
    query that answers nothing is written as "none in the window", never
    read again with a wider window.
-3. Compute, per matrix version: the hit rate, `cache_read / (input + cache_read +
-   cache_write)`; the share of the prompt written to a cache,
+3. Compute, for each (matrix version, plan tier) pair on its own: the
+   hit rate, `cache_read / (input + cache_read + cache_write)`; the
+   share of the prompt written to a cache,
    `cache_write / (input + cache_read + cache_write)`; and the spend's
    share of the whole. The price of a cache write against an uncached
    token is the price table's, in `om/src/acme/om/budgets/` (read it
    with `Read`), so the cost of rebuilt caches is the cache writes at
-   the write rate's premium over the input rate, per matrix version, as
-   an estimate the report labels so.
-4. Judge each matrix version: a hit rate under half, or cache writes
-   above a tenth of the prompt, is a finding; so is a version whose
-   spend share is far above its share of tokens. `none` is every call
-   whose session no matrix pinned, judged the same way.
+   the write rate's premium over the input rate, per pair, as an
+   estimate the report labels so. Each version's total across its tiers
+   is reported beside its pairs.
+4. Judge each (matrix version, plan tier) pair: a hit rate under half,
+   or cache writes above a tenth of the prompt, is a finding; so is a
+   pair whose spend share is far above its share of tokens. `none` is
+   every call whose session no matrix pinned, judged the same way, tier
+   by tier.
 5. Write the report, with each finding's proposed ticket: what to
    change (a prompt's stable prefix, a cache breakpoint, a fill), the
    evidence, and the effort. The audit proposes; it never fixes.

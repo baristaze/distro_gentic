@@ -10,6 +10,10 @@ runner takes the loop under a new epoch once the lease runs out, the lost
 run can append nothing more, and the call it left open is settled by its
 effect.
 
+Every case runs in the first project `make seed` writes, its repository a
+bare one on this host, and one session there meets every gate on its way
+to a success: its claim, its money, its audit, its result, and its seal.
+
 Needs a migrated stack (`make migrate`); every case starts on empty
 tables. The one case that calls a live provider spends money and runs by
 hand alone (`make test-live`)."""
@@ -31,8 +35,9 @@ from uuid import UUID
 import httpx
 import pytest
 from api_support import seed_request, sign_in_as
+from contracts.evidence_storage import make_policy
 from httpx import ASGITransport
-from runner_support import KINDS, answers, runs
+from runner_support import E2E_KINDS, answers, runs, submits, validates
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -42,17 +47,32 @@ from acme.infra.transports.records import RecordBook
 from acme.integrations.impl.configured import absent_integrations
 from acme.integrations.model_providers.scripted import SCRIPT, Turn
 from acme.integrations.model_providers.types import ProviderName
+from acme.integrations.payments.twin import PaymentProviderTwinImpl
 from acme.om.agents.loop_rules import ended_step
 from acme.om.base import new_id, utcnow
+from acme.om.billing.root import build_billing
+from acme.om.billing.types.account import FundingMode
+from acme.om.billing.types.ledger import EntryKind, FundedHold
 from acme.om.budgets.types.budget import Budget, BudgetScopeKind, WindowKind
+from acme.om.budgets.types.hold import Settlement
 from acme.om.context import TenantContext
+from acme.om.evidence.rules import policy_key
 from acme.om.exceptions import StaleWriter
-from acme.om.steps.types.header import LoopOutcome
+from acme.om.matrix.types.matrix import MatrixStatus
+from acme.om.placement.rules import DEFAULT_TIER, tier_lane
+from acme.om.privacy.impl.sealed_steps import says_something
+from acme.om.steps.types.content import ContentState
+from acme.om.steps.types.header import LoopEndedHeader, LoopOutcome, ToolResponseHeader
 from acme.om.storage.migrate import VERSION_TABLE
 from acme.om.storage.roles import DatabaseRole
 from acme.om.storage.settings import MigrationSettings
+from acme.om.trust.impl.manager import CALL_AUDITED
+from acme.om.trust.types.identities import CallAudit
+from acme.om.work.types.work_item import WorkKind, WorkStatus
+from acme.om.workspaces.types.source import RepositoryBinding
 from acme.services.api.app import create_app
 from acme.services.api.container import AppContainer, postgres_storage
+from acme.services.api.seed import CONTENT_LIFETIME, REPOSITORY, seed_platform
 from acme.services.api.settings import ApiSettings
 
 pytestmark = [pytest.mark.integration, pytest.mark.slow]
@@ -112,7 +132,14 @@ class Stack:
     client: httpx.AsyncClient
     tmp_path: Path
     workspaces: Path
+    repositories: Path
     runners: list[Runner] = field(default_factory=lambda: [])
+
+    def repository(self, project_id: UUID) -> RepositoryBinding:
+        """The seeded project's binding as the runner clones it: from the
+        bare repository on this host."""
+        url = f"file://{self.repositories}/{REPOSITORY.host}/{REPOSITORY.path}.git"
+        return RepositoryBinding(project_id=project_id, repository=url)
 
     def runner(self, name: str, script: list[Turn] | None = None, **env: str) -> Runner:
         """A runner process over the stack. With `script`, the scripted model
@@ -130,6 +157,10 @@ class Stack:
             "ACME_WORKSPACES_ROOT": str(self.workspaces),
             "ACME_SENTRY_DSN": "off",
             "ACME_OTEL_ENDPOINT": "",
+            # The platform's agents and their tools ship over this checkout's
+            # knowledge map, and each bound repository is a bare one here.
+            "ACME_CORPUS_ROOT": str(REPO),
+            "E2E_REPOSITORIES": str(self.repositories),
             **env,
         }
         if script is not None:
@@ -191,6 +222,32 @@ def empty_tables(settings: MigrationSettings) -> None:
     asyncio.run(truncate())
 
 
+def bare_repository(at: Path) -> None:
+    """A bound repository on this host, its default branch holding one
+    commit of the report a session fixes."""
+    work = at.parent / f"{at.name}.work"
+    (work / "src").mkdir(parents=True)
+    (work / "src" / "report.py").write_text("rows = [1, 2, 3]\n")
+
+    def git(*args: str, cwd: Path | None = None) -> None:
+        subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True)
+
+    git("init", "-q", "--bare", "-b", "main", str(at))
+    git("init", "-q", "-b", "main", cwd=work)
+    git("add", ".", cwd=work)
+    git(
+        "-c",
+        "user.name=Ann",
+        "-c",
+        "user.email=ann@example.test",
+        "commit",
+        "-qm",
+        "Report",
+        cwd=work,
+    )
+    git("push", "-q", str(at), "main", cwd=work)
+
+
 @pytest.fixture
 def emptied() -> None:
     settings = MigrationSettings()
@@ -209,14 +266,16 @@ async def stack(emptied: None, tmp_path: Path) -> AsyncIterator[Stack]:
         postgres_storage(settings),
         InfraConfiguredImpl(settings),
         absent_integrations(),
-        agent_kinds=KINDS,
+        agent_kinds=E2E_KINDS,
     )
     app = create_app(container)
     workspaces = tmp_path / "workspaces"
+    repositories = tmp_path / "repositories"
+    bare_repository(repositories / REPOSITORY.host / f"{REPOSITORY.path}.git")
     async with app.router.lifespan_context(app):
         transport = ASGITransport(app=app, raise_app_exceptions=False)
         async with httpx.AsyncClient(transport=transport, base_url="http://e2e") as client:
-            built = Stack(container, client, tmp_path, workspaces)
+            built = Stack(container, client, tmp_path, workspaces, repositories)
             try:
                 yield built
             finally:
@@ -228,24 +287,35 @@ async def stack(emptied: None, tmp_path: Path) -> AsyncIterator[Stack]:
 class Person:
     ctx: TenantContext
     headers: dict[str, str]
+    project_id: UUID
 
 
 async def owner_of(stack: Stack) -> Person:
+    """The owner of an org seeded as `make seed` seeds one: its account on a
+    plan, its first project, its retention policy, and the published matrix,
+    so a session's calls pass the money gate and resolve by the matrix."""
     ctx, org = await stack.container.managers.tenancy.bootstrap(
         seed_request(), "Ajax", "ajax", "ann@example.test", "Ann"
     )
-    return Person(ctx, await sign_in_as(stack.client, "ann@example.test", org.id))
+    seeded = await seed_platform(stack.container.storage, stack.container.managers, ctx, E2E_KINDS)
+    headers = await sign_in_as(stack.client, "ann@example.test", org.id)
+    assert seeded.project is not None
+    return Person(ctx, headers, seeded.project.id)
 
 
 def created(headers: dict[str, str]) -> dict[str, str]:
     return {**headers, "Idempotency-Key": str(new_id())}
 
 
-async def started(stack: Stack, person: Person) -> str:
+async def started(stack: Stack, person: Person, kind: str = "assistant") -> str:
     answered = await stack.client.post(
         "/v1/agent-sessions",
         headers=created(person.headers),
-        json={"kind": "assistant", "title": "the dropped object"},
+        json={
+            "kind": kind,
+            "title": "the dropped object",
+            "project_id": str(person.project_id),
+        },
     )
     assert answered.status_code == 201, answered.text
     return answered.json()["id"]
@@ -411,6 +481,135 @@ async def test_a_message_sent_mid_run_is_kept_at_once_and_read_by_the_next_reque
     assert steps[-1]["outcome"] == "succeeded"
 
 
+FIXES_THE_REPORT = (
+    "sh",
+    "-c",
+    "echo 'total = sum(rows)' >> src/report.py"
+    " && git -c user.name=Engineer -c user.email=engineer@example.test commit -qam 'Add the total'"
+    " && git push -q origin HEAD",
+)
+"""The engineer's change: committed, and pushed to its session's branch."""
+
+
+async def test_one_session_in_a_project_meets_every_gate_on_its_way_to_a_success(
+    stack: Stack,
+) -> None:
+    person = await owner_of(stack)
+    project = policy_key(person.project_id)
+    await stack.container.managers.evidence.write_policy(person.ctx, make_policy(project))
+    runner = stack.runner(
+        "runner-gates", [runs(*FIXES_THE_REPORT), validates(), submits("succeeded")]
+    )
+    session_id = await started(stack, person, "engineer")
+
+    await say(stack, person, session_id, "The weekly report misses its total. Fix it.")
+    # The command's output marks the session, and a validation from a
+    # workspace with open egress acts outward: it waits for a person.
+    parked = await settled(stack, person, session_id)
+    assert parked["park"] == {"reason": "person", "unlock": "approval", "retry_at": None}
+    asked = of_type(await history(stack, person, session_id), "tool_request")[-1]
+    assert asked["tool"] == "validate"
+    approved = await stack.client.post(
+        f"/v1/agent-sessions/{session_id}/calls/{asked['seq']}/decision",
+        headers=created(person.headers),
+        json={"approve": True},
+    )
+    assert approved.status_code == 201, approved.text
+    await until_steps(stack, person, session_id, "loop_ended")
+    session = await settled(stack, person, session_id)
+
+    org_id, sid = person.ctx.org_id, UUID(session_id)
+    storage = stack.container.storage
+    found: dict[str, object] = {"status": session["status"]}
+
+    # Its loop was claimed from its plan tier's lane, and its run completed.
+    work = storage.get_work_storage()
+    deadline = asyncio.get_running_loop().time() + SETTLE_SECONDS
+    item = await work.read_latest_for_target(org_id, WorkKind.LOOP, sid)
+    while item is not None and item.status is not WorkStatus.DONE:
+        assert asyncio.get_running_loop().time() < deadline, f"the loop's run is {item.status}"
+        await asyncio.sleep(0.2)
+        item = await work.read_latest_for_target(org_id, WorkKind.LOOP, sid)
+    assert item is not None and item.lane == tier_lane(DEFAULT_TIER)
+    found["claim"] = f"lane {item.lane}, {item.status.value} after {item.attempts} attempt(s)"
+
+    # Each model call was held and settled through the money gate.
+    ledger = storage.get_money_ledger_storage()
+    holds = await ledger.read_entries(org_id, session_id=sid, kind=EntryKind.HOLD, limit=10)
+    assert len(holds) == 3, "one hold for each of the three model calls"
+    bills: list[str] = []
+    for held in holds:
+        assert isinstance(held, FundedHold) and held.funding.mode is FundingMode.PLATFORM
+        entries = await ledger.read_entries(org_id, hold_id=held.hold.id, limit=5)
+        (settlement,) = [entry for entry in entries if isinstance(entry, Settlement)]
+        bills.append(settlement.bill.kind)
+    assert bills == ["billed"] * 3
+    plans = {held.funding.plan.id for held in holds if isinstance(held, FundedHold)}
+    found["money"] = f"{len(holds)} holds on plan {sorted(plans)}, settled {bills}"
+
+    # Its spend counts under the matrix version it ran on and its plan tier.
+    published = await storage.get_matrix_storage().read_latest(MatrixStatus.PUBLISHED)
+    assert published is not None
+    async with httpx.AsyncClient(timeout=5) as client:
+        exposed = (await client.get(f"http://127.0.0.1:{runner.port}/metrics")).text
+    spend = [line for line in exposed.splitlines() if line.startswith("acme_model_spend_micros")]
+    assert spend and not [line for line in spend if 'matrix_version="none"' in line]
+    assert [
+        line
+        for line in spend
+        if f'matrix_version="{published.number}"' in line and f'plan_tier="{DEFAULT_TIER}"' in line
+    ]
+    found["spend"] = [line for line in spend if "_total{" in line]
+
+    # Its tool call was audited with its four identities.
+    events = await storage.get_event_storage().read_after(org_id, 0, 1000)
+    audits = [
+        CallAudit.model_validate(event.payload)
+        for event in events
+        if event.kind == CALL_AUDITED and event.payload.get("session_id") == session_id
+    ]
+    command = next(audit for audit in audits if audit.tool == "run_command")
+    assert command.executor.label == "runner-gates"
+    assert command.actor.agent is not None and command.actor.agent.kind == "engineer"
+    found["audit"] = {
+        "tool": command.tool,
+        "executor": command.executor.label,
+        "principal": command.principal.kind.value,
+        "spender": command.spender.kind.value,
+        "actor": command.actor.actor.value,
+    }
+
+    # Its success was decided by the result gate, at its pushed head.
+    opened = (await stack.container.managers.steps.get_steps(person.ctx, sid, 0, 200)).items
+    accepted = [
+        step.header.accepted
+        for step in opened
+        if isinstance(step.header, ToolResponseHeader) and step.header.accepted is not None
+    ]
+    assert len(accepted) == 1 and accepted[0].verified
+    assert accepted[0].outcome is LoopOutcome.SUCCEEDED
+    ended = opened[-1].header
+    assert isinstance(ended, LoopEndedHeader) and ended.outcome is LoopOutcome.SUCCEEDED
+    found["result"] = f"{accepted[0].outcome.value}, verified {accepted[0].verified}"
+
+    # Its content is sealed, under the retention its snapshot holds.
+    snapshot = await storage.get_retention_storage().read_snapshot(org_id, sid)
+    assert snapshot is not None and snapshot.project_id == person.project_id
+    lifetime = snapshot.policy.content_lifetime
+    assert lifetime is not None and lifetime == CONTENT_LIFETIME and snapshot.at_rest
+    raw = {
+        step.id: step for step in await storage.get_step_storage().read_steps(org_id, sid, 0, 200)
+    }
+    saying = [step for step in opened if says_something(step)]
+    assert saying and all(raw[step.id].content.state is ContentState.SEALED for step in saying)
+    assert all(not raw[step.id].content.blocks for step in saying)
+    found["seal"] = (
+        f"{len(saying)} of {len(opened)} steps sealed; content kept "
+        f"{lifetime.days} days, project {snapshot.project_id}"
+    )
+    print(json.dumps(found, indent=1))
+
+
 LIVE_BUDGET_MICROS = 500_000
 """The most the live case may spend, in millionths of a dollar: its tenant's
 budget, which the gate holds every call to before it is made."""
@@ -464,7 +663,10 @@ async def test_a_real_loop_runs_end_to_end_on_a_live_provider(
     session = await settled(stack, person, session_id)
 
     steps = await history(stack, person, session_id)
-    spend = await stack.container.managers.budgets.get_spend(person.ctx, budget.id)
+    # The calls held and spent through billing's money gate, in its ledger.
+    container = stack.container
+    billing = build_billing(container.storage, container.managers, PaymentProviderTwinImpl())
+    spend = await billing.get_spend(person.ctx, budget.id)
     report |= {
         "steps": [step["type"] for step in steps],
         "answer": of_type(steps, "model_response")[-1]["text"],

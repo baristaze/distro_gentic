@@ -316,6 +316,7 @@ def loop_over(
                 managers.agent_sessions,
                 SessionProjectsBoundImpl(storage.get_project_storage()),
                 version=None if models_layer is None else models_layer.version,
+                tier=None if models_layer is None else models_layer.tier,
             )
             if call_gate is None
             else call_gate(managers, clock)

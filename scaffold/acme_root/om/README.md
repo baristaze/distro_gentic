@@ -290,8 +290,9 @@ arrive twice, so the second copy gets the first one's answer.
 - A project names its org and binds one repository. A session started
   under a project belongs to it, of its own org, from before it exists
   and never moved; a session it spawns or hands work to belongs to the
-  same. A session the API starts names no project, and takes its org's
-  policies alone.
+  same. The API's start names the session's project, and outside
+  `local` refuses a session that names none. An automation's start names
+  none yet, so a session it starts takes its org's policies alone.
 - A session takes its tenant's retention policy as a snapshot when it is
   created, so a tightening reaches it and a loosening never does. A
   policy names its org, one each, and a snapshot its session.

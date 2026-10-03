@@ -4354,11 +4354,15 @@ export interface components {
         };
         /**
          * StartSessionRequest
-         * @description A session to start on the latest version of a kind the product runs.
+         * @description A session to start on the latest version of a kind the product runs,
+         *     in a project of the caller's tenant. Outside a local stack a session
+         *     starts in a project or not at all.
          */
         StartSessionRequest: {
             /** Kind */
             kind: string;
+            /** Project Id */
+            project_id?: string | null;
             /** Title */
             title: string;
         };

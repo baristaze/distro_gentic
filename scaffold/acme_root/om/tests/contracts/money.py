@@ -97,6 +97,7 @@ def money_over(
             managers.agent_sessions,
             SessionProjectsBoundImpl(storage.get_project_storage()),
             version=None if models_layer is None else models_layer.version,
+            tier=None if models_layer is None else models_layer.tier,
         )
         built.append((gate, calls))
         return calls

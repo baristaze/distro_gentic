@@ -19,19 +19,23 @@ from acme.om.attribution.impl.manager import members_context
 from acme.om.attribution.types.principal import Principal
 from acme.om.automations.root import automation_principals
 from acme.om.base import new_id
+from acme.om.billing.root import build_money_gate, refuse_open_money
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
-from acme.om.evidence import ExecutorInterface, WorkProductInterface
 from acme.om.hosts.impl.placement import PlacementHostsImpl
 from acme.om.intake import IntakeManagerInterface
 from acme.om.intake.root import build_intake
 from acme.om.intake.tools import CommentImpl
 from acme.om.knowledge.root import KnowledgeLayer
+from acme.om.matrix.impl.resolver import MatrixOptions
+from acme.om.matrix.root import MatrixLayer
 from acme.om.notifications.manager import NotificationsManagerInterface
 from acme.om.notifications.root import build_notifications
+from acme.om.platform_agents.catalog import PlatformAgents
+from acme.om.platform_agents.settings import shipped_agents
 from acme.om.playbooks.root import PlaybooksLayer
 from acme.om.relay.impl.placement import PlacementRelayedImpl
 from acme.om.relay.impl.transport import TransportPlacedImpl, TransportRelayImpl
-from acme.om.root import Managers, build_managers
+from acme.om.root import Managers, PlatformPorts, build_managers
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.tools.manager import ToolsManagerInterface
@@ -75,15 +79,15 @@ class RunnerContainer:
         agent_kinds: tuple[AgentKind, ...] = (),
         tool_catalog: tuple[ToolInterface, ...] = (),
         domain_classes: tuple[str, ...] = (),
-        executor: ExecutorInterface | None = None,
-        work_product: WorkProductInterface | None = None,
+        ports: PlatformPorts | None = None,
     ) -> RunnerContainer:
         """Over the database, the infra, and the providers the settings
         name. `agent_kinds`, `tool_catalog`, and `domain_classes` are the
         product's, as every process that builds the managers passes them;
-        so are `executor` and `work_product`, the evidence's ports. The
-        result gate every success passes is the evidence's, over that work
-        product: with none wired, no success counts."""
+        so are the platform's `ports`, among them the evidence's executor
+        and work product. The result gate every success passes is the
+        evidence's, over that work product: with none wired, no success
+        counts."""
         storage = StoragePostgresImpl(
             settings.role_urls(),
             settings.role_pools(),
@@ -101,8 +105,8 @@ class RunnerContainer:
             agent_kinds=agent_kinds,
             tool_catalog=tool_catalog,
             domain_classes=domain_classes,
-            executor=executor,
-            work_product=work_product,
+            ports=ports,
+            platform_agents=shipped_agents(settings, settings.environment),
         )
 
     @classmethod
@@ -116,8 +120,8 @@ class RunnerContainer:
         agent_kinds: tuple[AgentKind, ...] = (),
         tool_catalog: tuple[ToolInterface, ...] = (),
         domain_classes: tuple[str, ...] = (),
-        executor: ExecutorInterface | None = None,
-        work_product: WorkProductInterface | None = None,
+        ports: PlatformPorts | None = None,
+        platform_agents: PlatformAgents | None = None,
     ) -> RunnerContainer:
         """The managers over whichever roots the caller chose, every tool call
         held to the trust swimlane's rules: audited with its four answers,
@@ -126,7 +130,18 @@ class RunnerContainer:
         transport. A session pinned to its tenant's hosts is inside the wall,
         its sub-agents with it: none of their calls runs on this runner. Each
         travels as exec work to the host that holds its workspace, its
-        executor, and until one does it is refused."""
+        executor, and until one does it is refused.
+
+        Every model call passes billing's money gate, which asks who pays
+        before it holds, and its fills come from the model matrix, whose
+        version and the tenant's plan tier its spend and tokens count
+        under; a tenant on its own keys calls on them, through trust.
+        Outside `local`, a quiet null for any of `ports`, or a budget gate
+        that is not the money gate, is refused at boot. `platform_agents`
+        ships the platform's agents beside the product's kinds, as the API
+        does: a deployed runner reads them from its corpus root, and refuses
+        to boot with none."""
+        ports = ports or PlatformPorts()
         runner = Executor(kind=ExecutorKind.CLOUD, credential_id=new_id(), label=settings.runner_id)
         placement = PlacementRelayedImpl(
             PlacementHostsImpl(
@@ -135,6 +150,12 @@ class RunnerContainer:
             storage.get_relay_storage(),
         )
         trust = TrustLayer(storage, infra, placement=placement, probe=KeyProbeAbsentImpl())
+        matrix = MatrixLayer(
+            storage,
+            options=MatrixOptions(environment=settings.environment),
+            clients=lambda: trust.managers.provider_clients,
+            kinds=agent_kinds,
+        )
         playbooks = PlaybooksLayer(storage)
         knowledge = KnowledgeLayer(storage)
 
@@ -174,8 +195,14 @@ class RunnerContainer:
             agent_kinds=agent_kinds,
             tool_catalog=(*tool_catalog, *acts),
             domain_classes=domain_classes,
-            executor=executor,
-            work_product=work_product,
+            platform_agents=platform_agents,
+            budget_gate=ports.budget_gate or build_money_gate(storage),
+            result_gate=ports.result_gate,
+            executor=ports.executor,
+            work_product=ports.work_product,
+            session_projects=ports.session_projects,
+            workspace_projects=ports.workspace_projects,
+            models_layer=matrix.layer,
             tools_layer=layers,
             transport_layer=placed,
             # A call of a session the tenant's automation principal started
@@ -183,7 +210,9 @@ class RunnerContainer:
             principal_context=automation_principals(storage.get_automation_storage(), members),
         )
         built.append(managers)
+        refuse_open_money(settings.environment, managers)
         trust.build(managers)
+        matrix.build(managers)
         playbooks.build(managers)
         knowledge.build(managers)
         container = cls(settings, storage, infra, integrations, managers)

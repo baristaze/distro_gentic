@@ -32,6 +32,9 @@ from acme.om.attribution.impl.manager import (
 from acme.om.base import utcnow
 from acme.om.benchmarks import BenchmarksManagerInterface
 from acme.om.benchmarks.impl.manager import BenchmarksManagerImpl
+from acme.om.billing.gate import MoneyGateInterface
+from acme.om.billing.impl.gate import MoneyCallGateImpl
+from acme.om.billing.impl.prices import PriceBookTableImpl
 from acme.om.budgets import BudgetGateInterface, BudgetsManagerInterface
 from acme.om.budgets.impl.gate import BudgetGateImpl, BudgetGateOptions
 from acme.om.budgets.impl.manager import BudgetsManagerImpl, BudgetsOptions
@@ -185,16 +188,34 @@ class Managers:
     stations: StationsManagerInterface
 
 
+@dataclass(frozen=True)
+class PlatformPorts:
+    """The platform's ports a product hands each of its roots, each None for
+    the platform's own: billing's money gate as the budget gate, the
+    evidence's result gate over the work product, the loud null executor,
+    the workspaces' work product, and the projects' rows for a session's
+    project, which its workspace binds and its retention narrows by.
+    Outside `local`, a root refuses a quiet null for any of them."""
+
+    budget_gate: BudgetGateInterface | None = None
+    result_gate: ResultGateInterface | None = None
+    executor: ExecutorInterface | None = None
+    work_product: WorkProductInterface | None = None
+    session_projects: SessionProjectInterface | None = None
+    workspace_projects: WorkspaceProjectsInterface | None = None
+
+
 LOCAL = "local"
-"""The one environment a root accepts a quiet null budget gate, ledger, or
-result gate in."""
+"""The one environment a root accepts a quiet null budget gate, ledger,
+result gate, or platform port in."""
 
 
 def refuse_quiet_nulls(environment: str, *capabilities: object) -> None:
-    """Outside `local`, a root refuses a quiet null budget gate, ledger, or
-    result gate at boot: every model call would pass a gate that holds
-    nothing, and spend outside every budget, and every success would end
-    unverified. A loud null is no such risk: it refuses each call itself."""
+    """Outside `local`, a root refuses a quiet null budget gate, ledger,
+    result gate, or platform port at boot: every model call would pass a
+    gate that holds nothing, and spend outside every budget, every success
+    would end unverified, and a policy keyed by a session's project would
+    never apply. A loud null is no such risk: it refuses each call itself."""
     if environment == LOCAL:
         return
     for capability in capabilities:
@@ -361,16 +382,18 @@ def build_managers(
     `models_layer` is a layer's own models: its resolver in place of the
     table, a face over the models manager every namespace reaches, the
     client each model call runs on, and the version each session is pinned
-    to, which its calls' tokens and spend count under. None keeps the
-    engine's: the table, the manager as it is, every call on the platform's
-    key, and every call counted under `none`.
+    to and its tenant's plan tier, which its calls' tokens and spend count
+    under. None keeps the engine's: the table, the manager as it is, every
+    call on the platform's key, and every call counted under `none`.
 
     `call_gate` is the budget gate every model call passes, the loop's and a
     compaction's, and `prompt_hash` the key service's hash a request's
     header records. None wires the budgets' gate behind the one, and the
     privacy namespace's keyed hash behind the other. `budget_gate` None is
-    the gate over the ledger; outside `environment` `local`, a quiet null
-    gate or ledger is refused at boot (`UnsafeConfiguration`).
+    the gate over the ledger; billing's money gate puts billing's call gate
+    behind the one, priced from the price book by version. Outside
+    `environment` `local`, a quiet null gate or ledger is refused at boot
+    (`UnsafeConfiguration`).
     `artifact_seal` is what seals an artifact's text under its session's
     key, and `record_seal` what seals a command's output in its transport's
     record; None wires the privacy namespace's seal over the session keys.
@@ -383,7 +406,8 @@ def build_managers(
     wires the tenancy manager's own, which answers for a person by the
     membership they hold at the call and for no service principal, and the
     evidence's gate over `work_product`. Outside `environment` `local`, a
-    quiet null result gate is refused at boot (`UnsafeConfiguration`).
+    quiet null result gate or work product is refused at boot
+    (`UnsafeConfiguration`).
 
     The loop takes the rest: `tool_catalog`, the adopter's tools, of which a
     session's registry holds those its kind names, with `domain_classes`,
@@ -432,7 +456,8 @@ def build_managers(
     the tenant's key alone, and the engine's revocation is the
     destruction. `session_projects` names a new session's project; None
     reads the row the projects' start wrote, and a session with no row
-    takes its tenant's policy unnarrowed; and
+    takes its tenant's policy unnarrowed (a quiet null one is refused
+    outside `local`); and
     `retention_options` the sweep's batches.
 
     The platform's projects take `projects_options`, the purges' batch.
@@ -443,8 +468,9 @@ def build_managers(
     The workspaces take six. `workspace_host` is what this process, the
     host its tools run on, offers beyond its provider; None offers nothing
     more, as a host of the platform's cloud. `workspace_projects` answers a
-    session's project and the repository it binds, and `pull_requests` why
-    a session's branch is gone; None reads the projects' rows for the one,
+    session's project and the repository it binds (a quiet null one is
+    refused outside `local`), and `pull_requests` why a session's branch is
+    gone; None reads the projects' rows for the one,
     and knows no pull request, so a branch gone for any reason fails
     loudly. `workspace_git` runs the checkout; None runs it in the
     workspace through the transport. `workspace_reader` reads what a
@@ -534,6 +560,12 @@ def build_managers(
         instructs=lambda ctx, session_id: managers.agents.require_instructor(ctx, session_id),
     )
     kinds = AgentKindCatalog(kinds=agent_kinds)
+    # A session's project, which its workspace binds and its retention
+    # narrows by: outside `local`, a port that answers none for every session
+    # is refused, so no per-project policy silently never applies.
+    bound = workspace_projects or WorkspaceProjectsBoundImpl(storage.get_project_storage())
+    narrowed = session_projects or SessionProjectBoundImpl(storage.get_project_storage())
+    refuse_quiet_nulls(environment, bound, narrowed)
     # Each session's workspace, pinned as the session is created: a
     # decorator below pins it before the session is written. Its checkout
     # runs in the workspace through the transport, under the session's
@@ -543,7 +575,7 @@ def build_managers(
         tenancy,
         outbox,
         kinds,
-        workspace_projects or WorkspaceProjectsBoundImpl(storage.get_project_storage()),
+        bound,
         pull_requests or PullRequestsNullImpl(),
         workspace_git
         or WorkspaceGitTransportImpl(infra.get_transport(), steps, records, GitOptions()),
@@ -585,7 +617,7 @@ def build_managers(
         tenancy,
         events,
         outbox,
-        session_projects or SessionProjectBoundImpl(storage.get_project_storage()),
+        narrowed,
         retention_options or RetentionOptions(),
     )
     retained = AgentSessionsRetainedImpl(engine_sessions, retention, privacy)
@@ -615,10 +647,14 @@ def build_managers(
     gate = budget_gate or BudgetGateImpl(
         storage.get_budget_storage(), storage.get_ledger_storage(), BudgetGateOptions()
     )
-    refuse_quiet_nulls(environment, gate, storage.get_ledger_storage())
+    refuse_quiet_nulls(
+        environment, gate, storage.get_ledger_storage(), storage.get_money_ledger_storage()
+    )
     # The one source of prices, which the resolver asks before it answers a
-    # fill and the gate prices every call by.
-    pricing = PricingTableImpl()
+    # fill and the gate prices every call by. Behind billing's gate it is the
+    # price book, read by version, so a call held at one is billed at it.
+    book = PriceBookTableImpl() if isinstance(gate, MoneyGateInterface) else None
+    pricing: PricingInterface = book or PricingTableImpl()
     # A session's fills. The resolver refuses a model with no price row of
     # its own.
     prices = model_prices or ModelPricesFromPricingImpl(pricing)
@@ -654,7 +690,7 @@ def build_managers(
     results = result_gate or ResultGateEvidenceImpl(
         storage.get_evidence_storage(), products, session_policies
     )
-    refuse_quiet_nulls(environment, results)
+    refuse_quiet_nulls(environment, results, products)
     agents = AgentsManagerImpl(
         storage.get_agent_storage(),
         agent_sessions,
@@ -681,12 +717,16 @@ def build_managers(
     )
     # The one gate every model call passes, priced from the one source, and
     # the place each call's tokens and spend are counted.
-    calls = call_gate or CallGateBudgetImpl(
-        gate,
-        pricing,
-        agent_sessions,
-        session_policies,
-        version=None if models_layer is None else models_layer.version,
+    version = None if models_layer is None else models_layer.version
+    tier = None if models_layer is None else models_layer.tier
+    calls = call_gate or (
+        CallGateBudgetImpl(
+            gate, pricing, agent_sessions, session_policies, version=version, tier=tier
+        )
+        if book is None or not isinstance(gate, MoneyGateInterface)
+        else MoneyCallGateImpl(
+            gate, book, agent_sessions, session_policies, version=version, tier=tier
+        )
     )
     windows = WindowsManagerImpl(
         storage.get_window_storage(),

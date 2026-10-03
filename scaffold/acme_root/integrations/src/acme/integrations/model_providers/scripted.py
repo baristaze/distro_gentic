@@ -25,7 +25,12 @@ from acme.integrations.model_providers.calls import (
     ThinkingDelta,
     ToolUseDelta,
 )
-from acme.integrations.model_providers.content import TextBlock, ThinkingBlock, ToolUseBlock
+from acme.integrations.model_providers.content import (
+    TextBlock,
+    ThinkingBlock,
+    ToolResultBlock,
+    ToolUseBlock,
+)
 from acme.integrations.model_providers.failures import ModelCallFailed
 from acme.integrations.model_providers.types import ErrorKind, ProviderName
 
@@ -51,6 +56,52 @@ Turn = ModelReply | ScriptedFailure
 SCRIPT = TypeAdapter(dict[ProviderName, list[Turn]])
 """A script as a file holds it: each provider's turns, in the order its
 calls take them."""
+
+
+LAST_RESULT = "$last_result."
+"""A tool input's value `$last_result.<field>` is answered at the call by
+that field of the JSON object the call's last tool result holds: a script
+written before the run cites what a tool answers in it, such as the ids of
+the runs a validation wrote. A value with no such field stays as written."""
+
+
+def last_result(call: ModelCall) -> dict[str, object] | None:
+    """The JSON object the call's last tool result holds, or None when its
+    text is not one."""
+    for message in reversed(call.messages):
+        for block in reversed(message.blocks):
+            if isinstance(block, ToolResultBlock):
+                text = "".join(part.text for part in block.parts if isinstance(part, TextBlock))
+                try:
+                    found = json.loads(text)
+                except ValueError:
+                    return None
+                return found if isinstance(found, dict) else None
+    return None
+
+
+def filled(reply: ModelReply, call: ModelCall) -> ModelReply:
+    """The reply with each `$last_result.<field>` input answered (`LAST_RESULT`)."""
+    fields = last_result(call)
+    if fields is None:
+        return reply
+
+    def value(given: object) -> object:
+        if isinstance(given, str) and given.startswith(LAST_RESULT):
+            return fields.get(given.removeprefix(LAST_RESULT), given)
+        return given
+
+    blocks = tuple(
+        ToolUseBlock(
+            id=block.id,
+            name=block.name,
+            input={key: value(given) for key, given in thaw_mapping(block.input).items()},
+        )
+        if isinstance(block, ToolUseBlock)
+        else block
+        for block in reply.blocks
+    )
+    return reply.model_copy(update={"blocks": blocks})
 
 
 def read_script(path: Path) -> dict[ProviderName, list[Turn]]:
@@ -122,6 +173,7 @@ class ModelProviderScriptedImpl(ModelProviderInterface):
                 retry_after=turn.retry_after,
                 partial=turn.partial,
             )
+        turn = filled(turn, call)
         for part in parts_of(turn):
             yield part
         yield Finished(reply=turn)

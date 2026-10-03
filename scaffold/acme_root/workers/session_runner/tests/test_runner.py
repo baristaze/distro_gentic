@@ -37,7 +37,8 @@ from acme.om.context import (
     TenantContext,
 )
 from acme.om.exceptions import NotFound, UnknownAgentKind
-from acme.om.placement.rules import CLAIMED_THROUGH_THE_GATEWAY
+from acme.om.matrix.types.matrix import MatrixStatus
+from acme.om.placement.rules import CLAIMED_THROUGH_THE_GATEWAY, DEFAULT_TIER
 from acme.om.steps.rules import message_step
 from acme.om.steps.types.header import LoopOutcome
 from acme.om.steps.types.step import StepType
@@ -54,6 +55,7 @@ from acme.om.work.types.work_item import (
     WorkKind,
     WorkStatus,
 )
+from acme.services.api.seed import seed_platform
 from acme.workers.maintenance.container import WorkerContainer
 from acme.workers.maintenance.main import build_loop
 from acme.workers.session_runner.container import RunnerContainer
@@ -295,6 +297,7 @@ async def signed_in(tmp_path: Path) -> tuple[RunnerContainer, TenantContext]:
     owner, _ = await container.managers.tenancy.bootstrap(
         RequestContext(request_id=new_id(), app=APP), "Ajax", "ajax", "ann@example.test", "Ann"
     )
+    await seed_platform(container.storage, container.managers, owner, ABSENT)
     return container, owner
 
 
@@ -344,16 +347,21 @@ def counted(name: str, **labels: str) -> float:
 
 
 async def test_a_call_the_runner_settles_counts_its_tokens_and_its_spend(tmp_path: Path) -> None:
-    """The runner's root wires the budgets' gate, the one every call settles
-    through, and that settle counts the call: its tokens by kind and its
-    spend, under `none`, since no matrix pins a session of this root."""
+    """The runner's root wires billing's money gate, the one every call
+    settles through, and the matrix, and that settle counts the call: its
+    tokens by kind and its spend, under the matrix version its session is
+    pinned to and its tenant's plan tier, never under `none`."""
     container, owner = await signed_in(tmp_path)
+    published = await container.storage.get_matrix_storage().read_latest(MatrixStatus.PUBLISHED)
+    assert published is not None
+    labels = {"matrix_version": str(published.number), "plan_tier": DEFAULT_TIER}
     twin = container.integrations.get_model_providers().get(ProviderName.ANTHROPIC)
     twin.add(answers("It drops it when the grip is released early."))  # pyright: ignore[reportAttributeAccessIssue]
     before = (
-        counted("acme_model_tokens_total", matrix_version="none", kind="input"),
-        counted("acme_model_tokens_total", matrix_version="none", kind="output"),
-        counted("acme_model_spend_micros_total", matrix_version="none"),
+        counted("acme_model_tokens_total", **labels, kind="input"),
+        counted("acme_model_tokens_total", **labels, kind="output"),
+        counted("acme_model_spend_micros_total", **labels),
+        counted("acme_model_spend_micros_total", matrix_version="none", plan_tier="none"),
     )
     session = await container.managers.agents.start_session(
         owner, Start(id=new_id(), kind="assistant", title="the dropped object")
@@ -368,14 +376,14 @@ async def test_a_call_the_runner_settles_counts_its_tokens_and_its_spend(tmp_pat
         runner.stop()
         await running
 
-    tokens_in, tokens_out, spend = before
+    tokens_in, tokens_out, spend, unlabelled = before
+    assert counted("acme_model_tokens_total", **labels, kind="input") == tokens_in + 160
+    assert counted("acme_model_tokens_total", **labels, kind="output") == tokens_out + 20
+    assert counted("acme_model_spend_micros_total", **labels) > spend
     assert (
-        counted("acme_model_tokens_total", matrix_version="none", kind="input") == tokens_in + 160
-    )
-    assert (
-        counted("acme_model_tokens_total", matrix_version="none", kind="output") == tokens_out + 20
-    )
-    assert counted("acme_model_spend_micros_total", matrix_version="none") > spend
+        counted("acme_model_spend_micros_total", matrix_version="none", plan_tier="none")
+        == unlabelled
+    ), "nothing counted under none"
 
 
 class Nothing(ToolInput):
@@ -454,6 +462,7 @@ async def test_a_call_made_on_what_a_key_said_runs_no_higher_than_the_key(
     managers = container.managers
     rctx = RequestContext(request_id=new_id(), app=APP)
     owner, _ = await managers.tenancy.bootstrap(rctx, "Ajax", "ajax", "ann@example.test", "Ann")
+    await seed_platform(container.storage, managers, owner, (ASKING,))
     issued = await managers.tenancy.credentials.create_api_key(owner, "ci", Role.MEMBER)
     program = await managers.tenancy.authenticate(rctx, issued.key)
     twin = container.integrations.get_model_providers().get(ProviderName.ANTHROPIC)

@@ -22,6 +22,10 @@ COPY infra infra
 COPY integrations integrations
 COPY services/api services/api
 RUN uv sync --frozen --no-dev --package acme-api
+# The knowledge map and the documents it lists for tenant users, outside the
+# packages above: the platform's agents are served over them (ACME_CORPUS_ROOT).
+COPY llms.txt ./
+COPY apps/cli/README.md apps/cli/
 
 FROM python:3.14-slim
 RUN useradd --create-home --uid 10001 acme

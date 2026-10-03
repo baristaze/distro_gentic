@@ -19,9 +19,19 @@ from acme.integrations.impl.configured import IntegrationsConfiguredImpl, absent
 from acme.integrations.root import IntegrationsInterface
 from acme.om.agents.types.kind import AgentKind
 from acme.om.automations.root import build_automations
+from acme.om.billing.root import build_money_gate, refuse_open_money
 from acme.om.intake.root import build_intake
 from acme.om.notifications.root import build_notifications
-from acme.om.root import Managers, TenancyOperatorOptions, TenancyOptions, build_managers
+from acme.om.platform_agents.catalog import PlatformAgents
+from acme.om.platform_agents.settings import shipped_agents
+from acme.om.root import (
+    LOCAL,
+    Managers,
+    PlatformPorts,
+    TenancyOperatorOptions,
+    TenancyOptions,
+    build_managers,
+)
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
@@ -165,6 +175,7 @@ class AppContainer:
             IntegrationsConfiguredImpl(
                 settings, settings.environment, settings.is_cloud_environment
             ),
+            platform_agents=shipped_agents(settings, settings.environment),
         )
 
     @classmethod
@@ -176,6 +187,7 @@ class AppContainer:
         integrations: IntegrationsInterface | None = None,
         *,
         agent_kinds: tuple[AgentKind, ...] = (),
+        ports: PlatformPorts | None = None,
     ) -> AppContainer:
         settings = settings or ApiSettings.model_validate(
             {
@@ -186,7 +198,9 @@ class AppContainer:
         )
         # No identity provider unless the test hands one in.
         integrations = integrations or absent_integrations()
-        return cls.over(settings, storage, infra, integrations, agent_kinds=agent_kinds)
+        return cls.over(
+            settings, storage, infra, integrations, agent_kinds=agent_kinds, ports=ports
+        )
 
     @classmethod
     def over(
@@ -197,10 +211,19 @@ class AppContainer:
         integrations: IntegrationsInterface,
         *,
         agent_kinds: tuple[AgentKind, ...] = (),
+        ports: PlatformPorts | None = None,
+        platform_agents: PlatformAgents | None = None,
     ) -> AppContainer:
         """Managers, then services, over whichever roots the caller chose.
         `agent_kinds` are the product's: a session starts on one of them, and
-        the session runner runs its loop with the same kinds."""
+        the session runner runs its loop with the same kinds. `ports` are the
+        platform's ports the product sets, None each for the platform's own:
+        billing's money gate, and the evidence's result gate. Outside
+        `local`, a quiet null for any of them, or a budget gate that is not
+        the money gate, is refused at boot. `platform_agents` ships the
+        platform's agents beside the product's kinds: a deployed process
+        reads them from its corpus root, and refuses to boot with none."""
+        ports = ports or PlatformPorts()
         managers = build_managers(
             storage,
             infra,
@@ -209,7 +232,15 @@ class AppContainer:
             integrations,
             environment=settings.environment,
             agent_kinds=agent_kinds,
+            platform_agents=platform_agents,
+            budget_gate=ports.budget_gate or build_money_gate(storage),
+            result_gate=ports.result_gate,
+            executor=ports.executor,
+            work_product=ports.work_product,
+            session_projects=ports.session_projects,
+            workspace_projects=ports.workspace_projects,
         )
+        refuse_open_money(settings.environment, managers)
         # Where a tenant connects a system, and where a person reads and
         # clears what waits on them.
         intake = build_intake(storage, managers, integrations=integrations)
@@ -222,6 +253,8 @@ class AppContainer:
             timedelta(seconds=settings.realtime_head_max_age_seconds),
             watch,
             build_trust_operator(storage, infra),
+            # Outside a local stack, a session starts in a project.
+            project_required=settings.environment != LOCAL,
             intake=intake,
             automations=build_automations(storage, managers),
             notifications=build_notifications(storage, managers, integrations, intake),

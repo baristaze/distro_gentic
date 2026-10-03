@@ -1146,12 +1146,15 @@ class SsoLinkView(BaseModel):
 
 class StartSessionRequest(BaseModel):
     """
-    A session to start on the latest version of a kind the product runs.
+    A session to start on the latest version of a kind the product runs,
+    in a project of the caller's tenant. Outside a local stack a session
+    starts in a project or not at all.
     """
     model_config = ConfigDict(
         extra='forbid',
     )
     kind: Annotated[str, Field(max_length=200, min_length=1, title='Kind')]
+    project_id: Annotated[UUID | None, Field(title='Project Id')] = None
     title: Annotated[str, Field(max_length=200, min_length=1, title='Title')]
 
 

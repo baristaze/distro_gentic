@@ -10,7 +10,8 @@ The layer gives the engine four things: the matrix as its resolver, a face
 over its models manager that resolves within the tenant's retention and
 switches a retired model at the next loop, the key each call goes out on,
 the tenant's own when it pays its providers, and the version each session
-is pinned to, which its calls' tokens and spend count under."""
+is pinned to and its tenant's plan tier, which its calls' tokens and spend
+count under."""
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -26,9 +27,11 @@ from acme.om.matrix.impl.manager import MatrixManagerImpl, MatrixOperatorManager
 from acme.om.matrix.impl.models import ModelsManagerMatrixImpl
 from acme.om.matrix.impl.resolver import MatrixOptions, MatrixResolverImpl, Workload
 from acme.om.matrix.manager import MatrixManagerInterface, MatrixOperatorManagerInterface
+from acme.om.matrix.types.matrix import MatrixKey, MatrixRow
 from acme.om.models.credentials import CallCredentialsInterface
 from acme.om.models.impl.credentials import CallCredentialsPlatformImpl
 from acme.om.models.impl.prices import ModelPricesFromPricingImpl
+from acme.om.models.impl.resolver import DEFAULT_TABLE
 from acme.om.models.layer import ModelsLayer
 from acme.om.models.manager import ModelsManagerInterface
 from acme.om.models.prices import ModelPricesInterface
@@ -38,6 +41,18 @@ from acme.om.root import Managers
 from acme.om.storage.root import StorageInterface
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.trust.keys import ProviderClientsInterface
+
+
+def engine_rows() -> tuple[MatrixRow, ...]:
+    """The engine's own table as rows of a matrix: a row for each of its
+    roles, and its first fill and fallbacks again as the row that matches
+    every question, so every role a kind names has an answer."""
+    rows = [
+        MatrixRow(key=MatrixKey(role=entry.role), fills=(entry.fill, *entry.fallbacks))
+        for entry in DEFAULT_TABLE
+    ]
+    first = DEFAULT_TABLE[0]
+    return (*rows, MatrixRow(fills=(first.fill, *first.fallbacks)))
 
 
 @dataclass(frozen=True)
@@ -84,6 +99,7 @@ class MatrixLayer:
             models=self.models,
             credentials=self.credentials,
             version=self.version,
+            tier=self.tier,
         )
 
     def resolver(self, prices: ModelPricesInterface) -> MatrixResolverImpl:
@@ -124,6 +140,12 @@ class MatrixLayer:
         its first loop resolved them."""
         pin = await self._storage.get_matrix_tenant_storage().read_pin(ctx.org_id, session_id)
         return None if pin is None else pin.matrix_version
+
+    async def tier(self, ctx: TenantContext, session_id: UUID) -> str:
+        """The plan tier the session's tenant is served at, the one the
+        matrix resolves its fills by: its share's, else the default."""
+        share = await self._storage.get_placement_storage().read_share(ctx.org_id)
+        return self.options.default_tier if share is None else share.plan_tier
 
     def credentials(self, providers: ModelProvidersInterface) -> CallCredentialsInterface:
         clients = self._clients

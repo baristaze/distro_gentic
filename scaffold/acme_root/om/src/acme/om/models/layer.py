@@ -24,9 +24,12 @@ class ModelsLayer:
     `credentials` builds the client each call runs on over the providers'
     registry, which holds the platform's key. `version` reads the version
     of the layer's table a session's fills came from last, None before
-    they are resolved: the label a call's tokens and spend count under."""
+    they are resolved: the label a call's tokens and spend count under.
+    `tier` reads the plan tier the session's tenant is served at, the label
+    beside it."""
 
     resolver: Callable[[ModelPricesInterface], ModelResolverInterface]
     models: Callable[[ModelsManagerInterface, TenancyManagerInterface], ModelsManagerInterface]
     credentials: Callable[[ModelProvidersInterface], CallCredentialsInterface]
     version: Callable[[TenantContext, UUID], Awaitable[int | None]] | None = None
+    tier: Callable[[TenantContext, UUID], Awaitable[str]] | None = None

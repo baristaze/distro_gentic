@@ -186,6 +186,7 @@ tenantless = [
     "MatrixStorageInterface.read_version",
     "MediaStorageInterface.purge_files_across_tenants",
     "MediaStorageInterface.read_purgeable",
+    "MoneyLedgerStorageInterface.read_open",
     "OrchestrationsStorageInterface.purge_settled",
     "OutboxStorageInterface.claim_pending",
     "OutboxStorageInterface.count_failed_since",

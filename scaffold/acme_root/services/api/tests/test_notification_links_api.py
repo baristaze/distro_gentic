@@ -10,7 +10,7 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from api_support import add_member, build_container, seed_request, sign_in_as
+from api_support import PROJECT_ID, add_member, build_container, seed_request, sign_in_as
 from contracts.step_storage import make_message, make_request, make_response, make_tool_request
 
 from acme.om.agents.loop_rules import APPROVAL_UNLOCK
@@ -27,6 +27,7 @@ from acme.om.notifications.types.notification import PORTAL, Notification
 from acme.om.steps.types.header import Park, ParkReason
 from acme.om.steps.types.step import Step
 from acme.services.api.container import AppContainer
+from acme.services.api.seed import first_project
 
 ASSISTANT = AgentKind(
     name="assistant",
@@ -57,9 +58,11 @@ class Tenant:
 
 @pytest.fixture
 async def ajax(client: httpx.AsyncClient, container: AppContainer) -> Tenant:
-    _, org = await container.managers.tenancy.bootstrap(
+    ctx, org = await container.managers.tenancy.bootstrap(
         seed_request(), "Ajax", "ajax", "owner@ajax.test", "Owner"
     )
+    project = first_project(ctx).model_copy(update={"id": UUID(PROJECT_ID)})
+    await container.storage.get_project_storage().create_project(org.id, project, ())
     headers = {Role.OWNER: await sign_in_as(client, "owner@ajax.test", org.id)}
     for role in (Role.ADMIN, Role.MEMBER, Role.VIEWER):
         email = f"{role.value}@ajax.test"
@@ -95,7 +98,7 @@ async def parked(
     started = await client.post(
         "/v1/agent-sessions",
         headers=created(tenant[Role.MEMBER]),
-        json={"kind": "assistant", "title": "the dropped object"},
+        json={"kind": "assistant", "title": "the dropped object", "project_id": PROJECT_ID},
     )
     assert started.status_code == 201, started.text
     session_id = UUID(started.json()["id"])

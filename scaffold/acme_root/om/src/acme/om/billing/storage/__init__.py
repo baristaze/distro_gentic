@@ -23,7 +23,7 @@ from acme.om.billing.types.ledger import (
     Turned,
     WindowRaise,
 )
-from acme.om.budgets.types.hold import Settlement
+from acme.om.budgets.types.hold import Hold, Settlement
 from acme.om.outbox.types.row import OutboxRow
 
 Entry = FundedHold | Settlement | Charge | Credit | Grant | WindowRaise | Approval
@@ -58,6 +58,12 @@ class AccountStorageInterface(ABC):
         `PreconditionFailed` otherwise, landing nothing."""
         ...
 
+    @abstractmethod
+    async def purge_tenant(self, org_id: UUID) -> int:
+        """The sweep, for a deleted tenant: deletes its account, and answers
+        how many rows went, 1 or 0."""
+        ...
+
 
 class MoneyLedgerStorageInterface(ABC):
     @abstractmethod
@@ -86,6 +92,16 @@ class MoneyLedgerStorageInterface(ABC):
         closes once: one closed already answers its first settlement and
         charge, and nothing moves. A hold the tenant does not hold is
         `NotFound`, and nothing moves."""
+        ...
+
+    @abstractmethod
+    async def read_open(
+        self, after: datetime, before: datetime, limit: int
+    ) -> list[tuple[UUID, Hold]]:
+        """Cross-tenant, for the sweep, in the system scope: at most `limit`
+        holds opened at or after `after` and before `before` that no
+        settlement has closed, whatever their tenant, each with its tenant,
+        oldest first."""
         ...
 
     @abstractmethod
@@ -134,4 +150,11 @@ class MoneyLedgerStorageInterface(ABC):
         self, org_id: UUID, keys: Sequence[tuple[str, datetime]]
     ) -> dict[tuple[str, datetime], Count]:
         """The counts of the keys asked for that exist."""
+        ...
+
+    @abstractmethod
+    async def count_tenant(self, org_id: UUID, limit: int) -> int:
+        """How many entries and counts the tenant keeps, counted up to
+        `limit` and no further: what the sweep reads of a deleted tenant's
+        ledger, which no serving login deletes."""
         ...

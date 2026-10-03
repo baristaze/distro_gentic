@@ -23,6 +23,7 @@ from acme.om.tenancy.types.identity import Identity
 from acme.om.tenancy.types.membership import Membership
 from acme.om.tenancy.types.user import User
 from acme.services.api.container import AppContainer
+from acme.services.api.seed import first_project
 from acme.services.api.settings import ApiSettings
 
 OWNER = {"email": "ann@example.test", "name": "Ann"}
@@ -94,11 +95,21 @@ async def sign_in_as(client: httpx.AsyncClient, email: str, org_id: UUID) -> dic
     }
 
 
+PROJECT_ID = "0199a000-0000-7000-8000-000000000001"
+"""The project `sign_in` writes for the org it bootstraps: a session the
+API starts names it, as every session outside a local stack names one."""
+
+
 async def sign_in(client: httpx.AsyncClient, container: AppContainer) -> dict[str, str]:
-    """Bootstraps an org, signs its owner in, and returns the tenant headers."""
-    _, org = await container.managers.tenancy.bootstrap(
+    """Bootstraps an org with its first project, signs its owner in, and
+    returns the tenant headers."""
+    ctx, org = await container.managers.tenancy.bootstrap(
         seed_request(), "Ajax", "ajax", OWNER["email"], OWNER["name"]
     )
+    # Written below the manager, so it announces nothing: a case that counts
+    # the org's stream counts what it did itself.
+    project = first_project(ctx).model_copy(update={"id": UUID(PROJECT_ID)})
+    await container.storage.get_project_storage().create_project(org.id, project, ())
     return await sign_in_as(client, OWNER["email"], org.id)
 
 

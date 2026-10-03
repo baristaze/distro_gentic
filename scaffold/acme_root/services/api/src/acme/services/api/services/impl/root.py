@@ -142,6 +142,7 @@ def build_services(
     watch: WatchManagerInterface,
     trust_operator: TrustOperatorManagerInterface,
     *,
+    project_required: bool,
     intake: IntakeManagerInterface,
     automations: AutomationsManagerInterface,
     notifications: NotificationsManagerInterface,
@@ -163,7 +164,12 @@ def build_services(
             intake,
         ),
         agent_sessions=AgentSessionsServiceImpl(
-            managers.agent_sessions, managers.agents, managers.steps, managers.tools
+            managers.agent_sessions,
+            managers.agents,
+            managers.steps,
+            managers.tools,
+            managers.projects,
+            project_required=project_required,
         ),
         hosts=HostsServiceImpl(managers.hosts),
         fleet=FleetServiceImpl(managers.placement_operator, trust_operator),

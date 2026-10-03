@@ -139,6 +139,7 @@ STORAGE_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         # service context the sweep then works it under.
         ("AgentSessionStorageInterface", "read_stalled"),
         ("LedgerStorageInterface", "read_open"),
+        ("MoneyLedgerStorageInterface", "read_open"),
         ("EventStorageInterface", "trim"),
         ("OrchestrationsStorageInterface", "purge_settled"),
         # The sweep's gauges: one read each across every tenant's rows.
