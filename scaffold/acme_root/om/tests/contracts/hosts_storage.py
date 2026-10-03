@@ -110,7 +110,9 @@ def make_host(pool_id: UUID) -> Host:
 
 def claimant_of(host: Host) -> EnrolledClaimant:
     """A host as a claimant's read returns it: its claimant's fields alone."""
-    return EnrolledClaimant.model_validate(host, from_attributes=True)
+    return EnrolledClaimant.model_validate(
+        host.model_dump(include=set(EnrolledClaimant.model_fields))
+    )
 
 
 def make_claimant(pool_id: UUID) -> EnrolledClaimant:

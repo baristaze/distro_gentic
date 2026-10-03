@@ -14,7 +14,9 @@ from acme.om.storage.impl.memory_base import MemoryStorageBase, MemoryTable
 
 def claimant_of(row: EnrolledClaimant | Host) -> EnrolledClaimant:
     """A row as its claimant's fields alone, whatever its kind."""
-    return EnrolledClaimant.model_validate(row, from_attributes=True)
+    return EnrolledClaimant.model_validate(
+        row.model_dump(include=set(EnrolledClaimant.model_fields))
+    )
 
 
 class HostsStorageMemoryImpl(MemoryStorageBase, HostsStorageInterface):
