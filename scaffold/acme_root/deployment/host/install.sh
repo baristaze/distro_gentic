@@ -45,7 +45,7 @@ while [ $# -gt 0 ]; do
     --engine) ENGINE="${2:-}"; shift 2 ;;
     --token-file) TOKEN_FILE="${2:-}"; shift 2 ;;
     --no-start) START=0; shift ;;
-    -h|--help) sed -n '2,25p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,24p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
