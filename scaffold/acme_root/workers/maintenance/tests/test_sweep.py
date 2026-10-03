@@ -247,6 +247,35 @@ async def test_a_pass_within_its_budget_reaches_every_tenant(tmp_path: Path) -> 
     assert sorted(org for _, org in calls) == sorted(ctx.org_id for ctx in contexts)
 
 
+async def test_each_tenant_is_ticked_once_a_pass_and_a_failing_tick_stops_nothing(
+    tmp_path: Path,
+) -> None:
+    """A tick, such as the schedules of a tenant's automations, runs once for
+    every tenant a pass, before its purges; one that raises is logged, and
+    the tenant's other ticks and purges still run."""
+    container = build_container(tmp_path)
+    contexts = service_contexts(2)
+    calls: list[tuple[str, UUID]] = []
+
+    async def broken(ctx: TenantContext) -> None:
+        calls.append(("broken", ctx.org_id))
+        raise RuntimeError("the schedules could not be read")
+
+    loop = WorkerLoop(
+        work=listed(contexts),
+        outbox=quiet_outbox(),
+        purges={"purge": recording(calls, "purge")},
+        ticks={"broken": broken, "tick": recording(calls, "tick")},
+        handlers={},
+        topics=container.infra.get_topics(),
+        liveness=container.infra.get_cache(CacheScope.WORKER_LIVENESS),
+        options=fast_options(),
+    )
+    await loop._sweep_once()  # pyright: ignore[reportPrivateUsage]
+    ids = [ctx.org_id for ctx in sorted(contexts, key=lambda ctx: ctx.org_id)]
+    assert calls == [(name, org) for org in ids for name in ("broken", "tick", "purge")]
+
+
 async def test_a_full_batch_is_purged_again_while_the_budget_lasts(tmp_path: Path) -> None:
     """A purge that returns a whole batch may have more; it is called again,
     in turn with the other full ones, until it returns less. A purge that

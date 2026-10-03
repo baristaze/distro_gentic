@@ -102,6 +102,16 @@ class LedgerStorageInterface(ABC):
         ...
 
     @abstractmethod
+    async def read_open(
+        self, after: datetime, before: datetime, limit: int
+    ) -> list[tuple[UUID, Hold]]:
+        """Cross-tenant, for the sweep, in the system scope: at most `limit`
+        holds opened at or after `after` and before `before` that no
+        settlement has closed, whatever their tenant, each with its tenant,
+        oldest first."""
+        ...
+
+    @abstractmethod
     async def count_tenant(self, org_id: UUID, limit: int) -> int:
         """How many holds, settlements, and tallies the tenant keeps, counted
         up to `limit` and no further: what the sweep reads of a deleted

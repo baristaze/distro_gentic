@@ -127,6 +127,25 @@ async def test_a_run_whose_time_is_up_hands_its_item_back_at_once(tmp_path: Path
     assert parked.value.resume_after == timedelta(0), "the next run goes on at once"
 
 
+@pytest.mark.parametrize("end", [RunEnd.ENDED, RunEnd.PARKED, RunEnd.STALE, RunEnd.IDLE])
+async def test_a_run_that_parks_tells_before_its_item_completes(
+    tmp_path: Path, end: RunEnd
+) -> None:
+    container, ctx = await signed_in(tmp_path)
+    told: list[LoopRun] = []
+
+    async def notify(_: TenantContext, run: LoopRun) -> None:
+        told.append(run)
+
+    handler = LoopHandlerImpl(
+        Answering(ending(end)),  # pyright: ignore[reportAbstractUsage]
+        container.managers.agent_sessions,
+        notify,
+    )
+    await handler.handle(ctx, an_item(ctx, new_id()))
+    assert [run.end for run in told] == ([RunEnd.PARKED] if end is RunEnd.PARKED else [])
+
+
 def not_found(session_id: UUID) -> LoopRun:
     raise NotFound(f"agent session {session_id} not found")
 

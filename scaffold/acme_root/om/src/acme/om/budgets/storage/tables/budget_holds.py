@@ -1,6 +1,7 @@
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import Index
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -13,6 +14,11 @@ class BudgetHolds(IdentifiableMixin, CreatedMixin, Base):
     nothing more (ADR 1006)."""
 
     __tablename__ = "budget_holds"
+    __table_args__ = (
+        # The sweep reads the holds no settlement closed, across tenants, a
+        # slice of their opening times at a time.
+        Index("ix_budget_holds_created_at", "created_at"),
+    )
     spender_id: Mapped[UUID]
     session_id: Mapped[UUID | None]
     purpose: Mapped[str]

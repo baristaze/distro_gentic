@@ -96,6 +96,14 @@ class WorkStorageMemoryImpl(MemoryStorageBase, WorkStorageInterface):
             )
         )
 
+    async def has_open_item(self, org_id: UUID, kind: WorkKind, target_id: UUID) -> bool:
+        return any(
+            item.kind is kind
+            and item.target_id == target_id
+            and item.status in (WorkStatus.QUEUED, WorkStatus.CLAIMED)
+            for item in self._rows(self._items, org_id)
+        )
+
     async def requeue_stale(
         self, now: datetime, stagger: timedelta, limit: int
     ) -> list[tuple[UUID, WorkItem]]:

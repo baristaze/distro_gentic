@@ -153,6 +153,9 @@ class LeaseLosingWork(WorkManagerInterface):
     async def claimed_ahead(self, ctx: TenantContext, item: WorkItem) -> int:
         return await self._inner.claimed_ahead(ctx, item)
 
+    async def has_open(self, ctx: TenantContext, kind: WorkKind, target_id: UUID) -> bool:
+        return await self._inner.has_open(ctx, kind, target_id)
+
     async def defer(self, ctx: TenantContext, item: WorkItem, delay: timedelta) -> WorkItem:
         return await self._inner.defer(ctx, item, delay)
 

@@ -76,6 +76,16 @@ class AgentSessionStorageInterface(ABC):
         ...
 
     @abstractmethod
+    async def read_stalled(
+        self, after: datetime, before: datetime, limit: int
+    ) -> list[tuple[UUID, AgentSession]]:
+        """Cross-tenant, for the sweep, in the system scope: at most `limit`
+        sessions pending and not marked deleted whose last write is at or
+        after `after` and before `before`, whatever their tenant, each with
+        its tenant, oldest write first."""
+        ...
+
+    @abstractmethod
     async def tree_holds_others(self, org_id: UUID, root_id: UUID, session_id: UUID) -> bool:
         """Whether the tree `root_id` holds a session besides `session_id`,
         marked deleted or not."""

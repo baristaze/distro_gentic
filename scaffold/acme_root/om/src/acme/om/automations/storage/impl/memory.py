@@ -3,7 +3,13 @@ from uuid import UUID
 
 from acme.om.automations.rules import admitted, holds, period_start, tally
 from acme.om.automations.storage import AutomationStorageInterface
-from acme.om.automations.types.automation import Automation, AutomationRun, Limits, RunStatus
+from acme.om.automations.types.automation import (
+    Automation,
+    AutomationPrincipal,
+    AutomationRun,
+    Limits,
+    RunStatus,
+)
 from acme.om.outbox.storage import OutboxLandingInterface
 from acme.om.outbox.types.row import OutboxRow
 from acme.om.storage.impl.memory_base import MemoryStorageBase, MemoryTable
@@ -14,6 +20,7 @@ class AutomationStorageMemoryImpl(MemoryStorageBase, AutomationStorageInterface)
         super().__init__(outbox)
         self._automations: MemoryTable[Automation] = {}
         self._runs: MemoryTable[AutomationRun] = {}
+        self._principals: MemoryTable[AutomationPrincipal] = {}
 
     async def create_automation(
         self, org_id: UUID, automation: Automation, outbox_rows: tuple[OutboxRow, ...]
@@ -60,6 +67,22 @@ class AutomationStorageMemoryImpl(MemoryStorageBase, AutomationStorageInterface)
             if self._get(self._runs, org_id, run.id) is not None:
                 self._put(self._runs, org_id, run)
 
+    async def read_run(self, org_id: UUID, run_id: UUID) -> AutomationRun | None:
+        return self._get(self._runs, org_id, run_id)
+
+    async def write_principal(
+        self, org_id: UUID, principal: AutomationPrincipal
+    ) -> AutomationPrincipal:
+        async with self._lock:
+            held = next(iter(self._rows(self._principals, org_id)), None)
+            if held is not None:
+                principal = principal.model_copy(update={"id": held.id})
+            self._put(self._principals, org_id, principal)
+            return principal
+
+    async def read_principal(self, org_id: UUID) -> AutomationPrincipal | None:
+        return next(iter(self._rows(self._principals, org_id)), None)
+
     async def read_runs(self, org_id: UUID, automation_id: UUID, limit: int) -> list[AutomationRun]:
         rows = [r for r in self._rows(self._runs, org_id) if r.automation_id == automation_id]
         return sorted(rows, key=lambda r: (r.created_at, r.id), reverse=True)[:limit]
@@ -96,10 +119,16 @@ class AutomationStorageMemoryImpl(MemoryStorageBase, AutomationStorageInterface)
 
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:
         async with self._lock:
-            return _drop(self._automations, org_id, limit) + _drop(self._runs, org_id, limit)
+            return (
+                _drop(self._automations, org_id, limit)
+                + _drop(self._runs, org_id, limit)
+                + _drop(self._principals, org_id, limit)
+            )
 
 
-def _drop[E: Automation | AutomationRun](table: MemoryTable[E], org_id: UUID, limit: int) -> int:
+def _drop[E: Automation | AutomationRun | AutomationPrincipal](
+    table: MemoryTable[E], org_id: UUID, limit: int
+) -> int:
     ids = [row.id for org, row in table.values() if org == org_id][:limit]
     for row_id in ids:
         del table[row_id]

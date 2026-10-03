@@ -29,6 +29,21 @@ class IntakeManagerInterface(ABC):
         ...
 
     @abstractmethod
+    async def unlink_account(self, ctx: TenantContext, integration: str, external_id: str) -> None:
+        """The account's link to its user gone, in person, by that user or by
+        a person who manages the tenant's members: a context an agent's call
+        runs under, or anyone else, is `NotAuthorized`. The account then
+        speaks to no session as a principal and approves no call. An account
+        with no link is `NotFound`."""
+        ...
+
+    @abstractmethod
+    async def get_links(self, ctx: TenantContext, user_id: UUID) -> tuple[AccountLink, ...]:
+        """The accounts linked to a user of the tenant: the channels the
+        platform reaches them on beside its own."""
+        ...
+
+    @abstractmethod
     async def bind_work(
         self, ctx: TenantContext, session_id: UUID, kind: HandleKind, handle: str
     ) -> WorkBinding:

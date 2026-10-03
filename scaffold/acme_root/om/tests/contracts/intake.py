@@ -1,7 +1,9 @@
 """The platform's loop over the memory storage and the scripted provider,
-with the intake, automations, playbooks, and knowledge swimlanes wired as
-a root wires them: the engine's tools manager wrapped in the trust layer
-and the playbooks layer, and each manager built over the engine's. What
+with the intake, automations, playbooks, knowledge, and notifications
+swimlanes wired as a root wires them, every integration served by its
+twin: the engine's tools manager wrapped in the trust layer,
+the playbooks layer, and the knowledge layer, and each manager built over
+the engine's. What
 their suites share: a tenant whose members a case names with a role, the
 tenant's service context, and the steps a session holds."""
 
@@ -12,6 +14,7 @@ from pathlib import Path
 from uuid import UUID
 
 from acme.infra.impl.local import InfraLocalImpl
+from acme.integrations.events.twin import IntegrationTwinImpl
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
 from acme.integrations.impl.configured import IntegrationsOverImpl
 from acme.integrations.model_providers.registry import ModelProvidersOverImpl
@@ -21,10 +24,11 @@ from acme.om.agents.impl.loop import LoopManagerImpl, LoopOptions
 from acme.om.agents.impl.sink import StreamSinkMemoryImpl
 from acme.om.agents.types.kind import AgentKindCatalog
 from acme.om.agents.types.request import Start
+from acme.om.attribution import PrincipalContext
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.automations.manager import AutomationsManagerInterface
-from acme.om.automations.root import build_automations
-from acme.om.base import EMPTY_UUID, new_id
+from acme.om.automations.root import automation_principals, build_automations
+from acme.om.base import EMPTY_UUID, new_id, utcnow
 from acme.om.context import (
     AppContext,
     AppType,
@@ -38,8 +42,10 @@ from acme.om.exceptions import NotAuthorized
 from acme.om.intake.manager import IntakeManagerInterface
 from acme.om.intake.root import build_intake
 from acme.om.knowledge.manager import KnowledgeManagerInterface
-from acme.om.knowledge.root import build_knowledge
+from acme.om.knowledge.root import KnowledgeLayer
 from acme.om.models.impl.credentials import CallCredentialsPlatformImpl
+from acme.om.notifications.manager import NotificationsManagerInterface
+from acme.om.notifications.root import build_notifications
 from acme.om.playbooks.manager import PlaybooksManagerInterface
 from acme.om.playbooks.root import PlaybooksLayer
 from acme.om.root import Managers, build_managers
@@ -47,6 +53,9 @@ from acme.om.steps.types.step import Step
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.tenancy.rules import permissions_of
+from acme.om.tenancy.types.identity import Identity
+from acme.om.tenancy.types.membership import Membership
+from acme.om.tenancy.types.user import User
 from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.tools.tool import ToolInterface
 from acme.om.trust.impl.keys import KeyProbeTwinImpl
@@ -94,12 +103,18 @@ class Wired:
     anthropic: ModelProviderScriptedImpl
     clock: Clock
     members: Members
+    principals: PrincipalContext
+    """The root's transition: the tenant's automation principal by its
+    grant, and everyone else as `members` answers."""
     owner: TenantContext
     service: TenantContext
     intake: IntakeManagerInterface
     automations: AutomationsManagerInterface
     playbooks: PlaybooksManagerInterface
     knowledge: KnowledgeManagerInterface
+    notifications: NotificationsManagerInterface
+    chat: IntegrationTwinImpl
+    storage: StorageInterface
     lookup: Lookup
 
     def person(self, role: Role = Role.MEMBER) -> TenantContext:
@@ -113,6 +128,51 @@ class Wired:
             credential_kind=CredentialKind.SESSION_TOKEN,
         )
         self.members.roles[ctx.user_id] = role
+        return ctx
+
+    async def member(self, role: Role = Role.MEMBER) -> TenantContext:
+        """A person at the portal, as `person` gives one, whose membership the
+        tenant also holds, so a listing of its members finds them."""
+        ctx = self.person(role)
+        tenancy = self.storage.get_tenancy_storage()
+        now = utcnow()
+        identity_id = new_id()
+        email = f"{ctx.user_id.hex}@example.test"
+        await tenancy.write_identity(
+            Identity(
+                id=identity_id,
+                created_at=now,
+                updated_at=now,
+                created_by=identity_id,
+                updated_by=identity_id,
+                email=email,
+            )
+        )
+        await tenancy.write_user(
+            ctx.org_id,
+            User(
+                id=ctx.user_id,
+                created_at=now,
+                updated_at=now,
+                created_by=ctx.user_id,
+                updated_by=ctx.user_id,
+                identity_id=identity_id,
+                email=email,
+                display_name="A member",
+            ),
+        )
+        await tenancy.write_membership(
+            ctx.org_id,
+            Membership(
+                id=new_id(),
+                created_at=now,
+                updated_at=now,
+                created_by=ctx.user_id,
+                updated_by=ctx.user_id,
+                user_id=ctx.user_id,
+                role=role,
+            ),
+        )
         return ctx
 
     async def agents_call(self, ctx: TenantContext) -> TenantContext:
@@ -163,6 +223,7 @@ def wired(
     )
     members = Members(org_id=owner.org_id)
     members.roles[owner.user_id] = Role.OWNER
+    principals = automation_principals(storage.get_automation_storage(), members)
     service = build_context(
         RequestContext(request_id=new_id(), app=WORKER),
         user_id=EMPTY_UUID,
@@ -185,16 +246,23 @@ def wired(
         clock=clock,
     )
     playbooks = PlaybooksLayer(storage, clock=clock)
+    knowledge = KnowledgeLayer(storage, clock=clock)
 
     def layers(inner: ToolsManagerInterface) -> ToolsManagerInterface:
-        return playbooks.tools(trust.tools(inner))
+        return knowledge.tools(playbooks.tools(trust.tools(inner)))
 
+    chat = IntegrationTwinImpl("chat")
+    integrations = IntegrationsOverImpl(
+        IdentityProviderAbsentImpl(),
+        providers,
+        {"chat": chat, "forge": IntegrationTwinImpl("forge")},
+    )
     managers = build_managers(
         storage,
         infra,
-        integrations=IntegrationsOverImpl(IdentityProviderAbsentImpl(), providers),
+        integrations=integrations,
         agent_kinds=(STEADY,),
-        principal_context=members,
+        principal_context=principals,
         tool_catalog=catalog,
         tools_layer=layers,
     )
@@ -222,6 +290,7 @@ def wired(
         clock,
         sleep,
     )
+    intake = build_intake(storage, managers, principal_context=members, clock=clock)
     return Wired(
         infra=infra,
         managers=managers,
@@ -229,11 +298,15 @@ def wired(
         anthropic=anthropic,
         clock=clock,
         members=members,
+        principals=principals,
         owner=owner,
         service=service,
-        intake=build_intake(storage, managers, principal_context=members, clock=clock),
+        intake=intake,
         automations=build_automations(storage, managers, principal_context=members, clock=clock),
         playbooks=playbooks.build(managers),
-        knowledge=build_knowledge(storage, managers, clock=clock),
+        knowledge=knowledge.build(managers),
+        notifications=build_notifications(storage, managers, integrations, intake, clock=clock),
+        chat=chat,
+        storage=storage,
         lookup=lookup,
     )

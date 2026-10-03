@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from uuid import UUID
@@ -11,21 +12,24 @@ from acme.om.agents.types.request import Start
 from acme.om.attribution import PrincipalContext
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.automations.manager import AutomationsManagerInterface
-from acme.om.automations.rules import due, hop_after, ignored, matches
+from acme.om.automations.rules import hop_after, ignored, matches, slot
 from acme.om.automations.storage import AutomationStorageInterface
 from acme.om.automations.types.automation import (
     ActionKind,
     Automation,
+    AutomationPrincipal,
     AutomationRun,
     Firing,
     Refusal,
+    RunsAs,
     RunStatus,
-    TriggerKind,
 )
 from acme.om.base import Platform, derived_id, new_id, utcnow
 from acme.om.budgets import BudgetsManagerInterface
 from acme.om.budgets.types.budget import Budget, BudgetScopeKind, WindowKind
-from acme.om.context import Permission, TenantContext
+from acme.om.context import Permission, Role, TenantContext
+from acme.om.events import EventsManagerInterface
+from acme.om.events.manager import audit_event
 from acme.om.exceptions import NotAuthorized, NotFound, PlatformException
 from acme.om.intake.rules import in_person
 from acme.om.outbox import OutboxRelayInterface
@@ -35,8 +39,12 @@ from acme.om.steps.types.content import Content, TextBlock
 from acme.om.steps.types.header import InputHeader
 from acme.om.steps.types.step import Actor, Origin, Step, StepType
 from acme.om.tenancy import TenancyManagerInterface
+from acme.om.tenancy.rules import role_at_most
+
+log = logging.getLogger(__name__)
 
 CREATED = "automations.automation.created"
+GRANTED = "automations.principal.granted"
 
 
 class AutomationsOptions(Platform):
@@ -58,6 +66,7 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         budgets: BudgetsManagerInterface,
         tenancy: TenancyManagerInterface,
         relay: OutboxRelayInterface,
+        events: EventsManagerInterface,
         principal_context: PrincipalContext,
         options: AutomationsOptions,
         clock: Callable[[], datetime] = utcnow,
@@ -68,6 +77,7 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         self._budgets = budgets
         self._tenancy = tenancy
         self._relay = relay
+        self._events = events
         self._live = principal_context
         self._options = options
         self._clock = clock
@@ -76,6 +86,14 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         ctx.require(Permission.WRITE)
         if not in_person(ctx):
             raise NotAuthorized("an automation is made by a person, never by an agent's call")
+        if automation.runs_as is RunsAs.AUTOMATION_PRINCIPAL:
+            granted = await self._storage.read_principal(ctx.org_id)
+            if granted is None:
+                raise NotAuthorized("an automation runs as no principal before one is granted")
+            if not role_at_most(granted.role, ctx.role):
+                raise NotAuthorized(
+                    f"a {ctx.role.value} makes no automation that runs as a {granted.role.value}"
+                )
         now = self._clock()
         made = Automation.model_validate(
             {
@@ -90,6 +108,28 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         if await self._storage.create_automation(ctx.org_id, made, rows):
             await self._relay.relay_all(ctx.org_id, rows)
         return await self.get_automation(ctx, made.id)
+
+    async def grant_principal(self, ctx: TenantContext, role: Role) -> AutomationPrincipal:
+        ctx.require(Permission.MANAGE_MEMBERS)
+        if not in_person(ctx):
+            raise NotAuthorized("an automation principal is granted by a person, in person")
+        if not role_at_most(role, ctx.role):
+            raise NotAuthorized(f"a {ctx.role.value} grants no {role.value} principal")
+        granted = await self._storage.write_principal(
+            ctx.org_id,
+            AutomationPrincipal(
+                id=new_id(), created_at=self._clock(), role=role, granted_by=ctx.user_id
+            ),
+        )
+        await self._audit(ctx, granted)
+        return granted
+
+    async def get_principal(self, ctx: TenantContext) -> AutomationPrincipal:
+        ctx.require(Permission.READ)
+        found = await self._storage.read_principal(ctx.org_id)
+        if found is None:
+            raise NotFound("no automation principal is granted")
+        return found
 
     async def get_automation(self, ctx: TenantContext, automation_id: UUID) -> Automation:
         ctx.require(Permission.READ)
@@ -123,12 +163,12 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         now = self._clock()
         runs: list[AutomationRun] = []
         for automation in await self._enabled(ctx):
-            runs.extend(await self._drain(ctx, automation))
-            if automation.trigger.kind is not TriggerKind.SCHEDULE:
-                continue
-            latest = await self._storage.read_runs(ctx.org_id, automation.id, 1)
-            if due(automation.trigger, latest[0].created_at if latest else None, now):
-                runs.append(await self._fire_one(ctx, automation, Firing(), None))
+            try:
+                runs.extend(await self._tick_one(ctx, automation, now))
+            except Exception:
+                # One automation that fails never stops the tenant's others:
+                # its queue and its slot are asked again at the next tick.
+                log.exception("automation %s of org %s failed its tick", automation.id, ctx.org_id)
         return tuple(runs)
 
     async def purge_tenant(self, ctx: TenantContext) -> int:
@@ -139,16 +179,34 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
 
     # A firing.
 
+    async def _tick_one(
+        self, ctx: TenantContext, automation: Automation, now: datetime
+    ) -> list[AutomationRun]:
+        """Its queued runs as its limits start them, and its schedule's slot
+        at `now` when no run holds it yet."""
+        runs = await self._drain(ctx, automation)
+        at = slot(automation.trigger, automation.created_at, now)
+        if at is None:
+            return runs
+        run_id = derived_id(automation.id, at, "schedule")
+        if await self._storage.read_run(ctx.org_id, run_id) is not None:
+            return runs
+        runs.append(await self._fire_one(ctx, automation, Firing(), None, run_id=run_id))
+        return runs
+
     async def _fire_one(
         self,
         ctx: TenantContext,
         automation: Automation,
         firing: Firing,
         cause: AutomationRun | None,
+        *,
+        run_id: UUID | None = None,
     ) -> AutomationRun:
         now = self._clock()
-        # One run an event: a redelivered event finds the run it made.
-        run_id = new_id()
+        # One run an event, and one a schedule's slot: a redelivered event,
+        # or another worker's tick in the slot, finds the run it made.
+        run_id = run_id or new_id()
         if firing.event_id is not None and firing.occurred_at is not None:
             run_id = derived_id(firing.event_id, firing.occurred_at, f"automation:{automation.id}")
         run = AutomationRun(
@@ -173,7 +231,7 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         self, ctx: TenantContext, automation: Automation, run: AutomationRun
     ) -> AutomationRun:
         """Asks the limits, and runs the action of a run they start."""
-        creator = await self._creator(ctx, automation)
+        creator = await self._runs_as(ctx, automation)
         if creator is None:
             refused = run.model_copy(
                 update={
@@ -320,15 +378,38 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
                 closed = run.model_copy(update={"closed_at": now, "event_text": ""})
                 await self._storage.write_run(ctx.org_id, closed)
 
-    async def _creator(self, ctx: TenantContext, automation: Automation) -> TenantContext | None:
-        """The creator's live context, read at the firing: none when they hold
-        no place in the tenant now."""
+    async def _runs_as(self, ctx: TenantContext, automation: Automation) -> TenantContext | None:
+        """The live context the automation's action runs under, read at the
+        firing: its creator's, or the tenant's automation principal's as the
+        transition answers for its grant. None when the creator holds no
+        place in the tenant now, no principal is granted, or the grant is
+        above the creator's role now: the session's calls are answered by
+        the grant alone, so a firing that would lend its creator a role
+        starts nothing."""
         try:
-            return await self._live(
+            creator = await self._live(
                 ctx, ctx.org_id, Principal(kind=PrincipalKind.PERSON, id=automation.created_by)
             )
         except NotAuthorized:
             return None
+        if automation.runs_as is not RunsAs.AUTOMATION_PRINCIPAL:
+            return creator
+        granted = await self._storage.read_principal(ctx.org_id)
+        if granted is None:
+            return None
+        try:
+            live = await self._live(
+                ctx, ctx.org_id, Principal(kind=PrincipalKind.SERVICE, id=granted.id)
+            )
+        except NotAuthorized:
+            return None
+        if not role_at_most(live.role, creator.role):
+            return None
+        return live
+
+    async def _audit(self, ctx: TenantContext, granted: AutomationPrincipal) -> None:
+        facts = {"role": granted.role.value}
+        await self._events.append_event(ctx, audit_event(ctx, new_id(), GRANTED, granted.id, facts))
 
     async def _enabled(self, ctx: TenantContext) -> list[Automation]:
         found: list[Automation] = []

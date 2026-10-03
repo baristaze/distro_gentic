@@ -26,6 +26,7 @@ from contracts import (
     agent_storage,
     attribution_storage,
     automation_storage,
+    benchmark_storage,
     budget_storage,
     event_storage,
     evidence_storage,
@@ -38,6 +39,7 @@ from contracts import (
     matrix_storage,
     media_storage,
     money_ledger_storage,
+    notification_storage,
     orchestration_storage,
     outbox_storage,
     placement_storage,
@@ -129,6 +131,11 @@ STORAGE_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         # tenant, whose service context the sweep then works it under.
         ("RetentionStorageInterface", "read_behind"),
         ("RetentionStorageInterface", "read_due"),
+        # The sweep's duties' reads: the sessions pending with no loop, and
+        # the holds no settlement closed, each named with its tenant, whose
+        # service context the sweep then works it under.
+        ("AgentSessionStorageInterface", "read_stalled"),
+        ("LedgerStorageInterface", "read_open"),
         ("EventStorageInterface", "trim"),
         ("OrchestrationsStorageInterface", "purge_settled"),
         # The sweep's gauges: one read each across every tenant's rows.
@@ -154,6 +161,11 @@ STORAGE_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         ("MatrixStorageInterface", "read_results"),
         ("MatrixStorageInterface", "add_retirement"),
         ("MatrixStorageInterface", "read_retirements"),
+        # What the benchmark job showed: global rows of the system scope, the
+        # platform's own record, no tenant's.
+        ("BenchmarkStorageInterface", "create_benchmark"),
+        ("BenchmarkStorageInterface", "read_benchmark"),
+        ("BenchmarkStorageInterface", "read_history"),
     }
 )
 
@@ -162,6 +174,7 @@ CROSS_TENANT_CASES: dict[str, frozenset[str]] = {
     "AgentSessionStorageInterface": agent_session_storage.CROSS_TENANT_CASES,
     "AgentStorageInterface": agent_storage.CROSS_TENANT_CASES,
     "AttributionStorageInterface": attribution_storage.CROSS_TENANT_CASES,
+    "BenchmarkStorageInterface": benchmark_storage.CROSS_TENANT_CASES,
     "BudgetStorageInterface": budget_storage.CROSS_TENANT_CASES,
     "EventStorageInterface": event_storage.CROSS_TENANT_CASES,
     "EvidenceStorageInterface": evidence_storage.CROSS_TENANT_CASES,
@@ -191,6 +204,7 @@ CROSS_TENANT_CASES: dict[str, frozenset[str]] = {
     "AutomationStorageInterface": automation_storage.CROSS_TENANT_CASES,
     "PlaybookStorageInterface": playbook_storage.CROSS_TENANT_CASES,
     "KnowledgeStorageInterface": knowledge_storage.CROSS_TENANT_CASES,
+    "NotificationStorageInterface": notification_storage.CROSS_TENANT_CASES,
     "WorkStorageInterface": work_storage.CROSS_TENANT_CASES,
     "WorkspaceStorageInterface": workspace_storage.CROSS_TENANT_CASES,
 }
@@ -219,6 +233,9 @@ MANAGER_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         # And each namespace's purge of its rows past their retention, the
         # same kind of step: it runs for no tenant and no principal.
         ("MediaManagerInterface", "purge_across_tenants"),
+        # The sweep's read of the sessions pending with no loop, for no
+        # tenant and no principal: each comes named with its tenant.
+        ("AgentSessionsManagerInterface", "pending_across_tenants"),
         ("TenancyManagerInterface", "purge_across_tenants"),
         ("IdempotencyManagerInterface", "purge_across_tenants"),
         ("EventsManagerInterface", "purge_across_tenants"),

@@ -7,6 +7,7 @@ from sqlalchemy import (
     Interval,
     and_,
     case,
+    exists,
     func,
     literal,
     literal_column,
@@ -147,6 +148,18 @@ class WorkStoragePostgresImpl(PgStorageBase, WorkStorageInterface):
         )
         async with self._session_for(stmt, org_id=org_id) as session:
             return (await session.execute(stmt)).scalar_one()
+
+    async def has_open_item(self, org_id: UUID, kind: WorkKind, target_id: UUID) -> bool:
+        stmt = select(
+            exists().where(
+                WorkItems.org_id == org_id,
+                WorkItems.status.in_((WorkStatus.QUEUED.value, WorkStatus.CLAIMED.value)),
+                WorkItems.kind == kind.value,
+                WorkItems.target_id == target_id,
+            )
+        )
+        async with self._session_for(stmt, org_id=org_id) as session:
+            return bool((await session.execute(stmt)).scalar_one())
 
     async def requeue_stale(
         self, now: datetime, stagger: timedelta, limit: int

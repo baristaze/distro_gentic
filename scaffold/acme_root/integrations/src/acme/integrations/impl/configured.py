@@ -4,11 +4,14 @@ deployed environment, the way the infra root refuses a local backend; the
 caller says whether the environment is one, from the settings it booted
 with."""
 
+from collections.abc import Mapping
 from datetime import timedelta
 
 import httpx
 
-from acme.integrations.exceptions import UnsafeIntegration
+from acme.integrations.events import INTEGRATIONS, IntegrationAbsentImpl, IntegrationInterface
+from acme.integrations.events.twin import IntegrationTwinImpl
+from acme.integrations.exceptions import ProviderUnavailable, UnsafeIntegration
 from acme.integrations.identity import IdentityProviderInterface
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
 from acme.integrations.identity.twin import IdentityProviderTwinImpl
@@ -37,6 +40,18 @@ def refuse_unsafe(settings: IntegrationsSettings, environment: str, deployed: bo
         raise UnsafeIntegration(
             f"ACME_MODEL_PROVIDERS=scripted is refused when ACME_ENVIRONMENT={environment}"
         )
+    if deployed and settings.integrations == "twin":
+        raise UnsafeIntegration(
+            f"ACME_INTEGRATIONS=twin is refused when ACME_ENVIRONMENT={environment}"
+        )
+
+
+def integrations_for(settings: IntegrationsSettings) -> dict[str, IntegrationInterface]:
+    """Each integration the platform names, from settings: its twin, or the
+    absent one, which refuses every call as unavailable."""
+    if settings.integrations == "twin":
+        return {name: IntegrationTwinImpl(name) for name in INTEGRATIONS}
+    return {name: IntegrationAbsentImpl(name) for name in INTEGRATIONS}
 
 
 def model_providers_for(settings: IntegrationsSettings) -> ModelProvidersInterface:
@@ -90,10 +105,14 @@ class IntegrationsOverImpl(IntegrationsInterface):
     providers of a process that signs nobody in and calls no model."""
 
     def __init__(
-        self, identity: IdentityProviderInterface, model_providers: ModelProvidersInterface
+        self,
+        identity: IdentityProviderInterface,
+        model_providers: ModelProvidersInterface,
+        integrations: Mapping[str, IntegrationInterface] | None = None,
     ) -> None:
         self._identity = identity
         self._model_providers = model_providers
+        self._integrations = dict(integrations or {})
 
     def get_identity_provider(self) -> IdentityProviderInterface:
         return self._identity
@@ -101,16 +120,27 @@ class IntegrationsOverImpl(IntegrationsInterface):
     def get_model_providers(self) -> ModelProvidersInterface:
         return self._model_providers
 
+    def get_integration(self, name: str) -> IntegrationInterface:
+        held = self._integrations.get(name)
+        if held is None:
+            raise ProviderUnavailable(f"no {name} integration is configured")
+        return held
+
     def describe(self) -> list[str]:
-        return [self._identity.describe(), *self._model_providers.describe()]
+        held = [integration.describe() for integration in self._integrations.values()]
+        return [self._identity.describe(), *self._model_providers.describe(), *held]
 
     async def start(self) -> None:
         await self._identity.start()
         await self._model_providers.start()
+        for integration in self._integrations.values():
+            await integration.start()
 
     async def close(self) -> None:
         await self._identity.close()
         await self._model_providers.close()
+        for integration in self._integrations.values():
+            await integration.close()
 
 
 def absent_integrations() -> IntegrationsInterface:
@@ -121,4 +151,8 @@ def absent_integrations() -> IntegrationsInterface:
 class IntegrationsConfiguredImpl(IntegrationsOverImpl):
     def __init__(self, settings: IntegrationsSettings, environment: str, deployed: bool) -> None:
         refuse_unsafe(settings, environment, deployed)
-        super().__init__(identity_provider_for(settings), model_providers_for(settings))
+        super().__init__(
+            identity_provider_for(settings),
+            model_providers_for(settings),
+            integrations_for(settings),
+        )

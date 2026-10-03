@@ -57,6 +57,12 @@ class IntegrationsSettings(BaseSettings):
     # to send, and between two parts of a streamed answer.
     model_timeout_seconds: float = Field(default=120.0, gt=0)
 
+    # What serves the integrations whose events reach a session and through
+    # which a person is told what waits on them (`events.INTEGRATIONS`): their
+    # twins (local only, refused at boot anywhere else), or none, which
+    # refuses every delivery and every post as unavailable.
+    integrations: Literal["twin", "none"] = "none"
+
     @field_validator("workos_api_key", "anthropic_api_key", "openai_api_key")
     @classmethod
     def _key_off_is_none(cls, value: SecretStr | None) -> SecretStr | None:

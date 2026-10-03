@@ -1,7 +1,7 @@
 # Integrations
 
-The third-party providers Acme talks to: the identity provider and the
-model providers. Each is one interface with a real client and a twin,
+The third-party providers Acme talks to: the identity provider, the
+model providers, and the integrations whose events reach a session. Each is one interface with a real client and a twin,
 and a caller never knows which it holds. Nothing here imports the object
 model: a provider's errors root at infra's exception family, since a
 provider is a dependency the way a backend is.
@@ -43,6 +43,27 @@ passes is queued on `webhooks` with a key that is a UUID v5 over the
 provider's event id, so a redelivery carries the same key. The
 maintenance worker applies it.
 
+## The integrations
+
+`events.IntegrationInterface` is an integration whose events reach a
+session and through which a person is told what waits on them: the forge
+that holds a session's work, and the chat its people talk in
+(`events.INTEGRATIONS`). Each delivers to `POST
+/webhooks/integrations/<name>`. The integration checks the signature
+over the body and its timestamp, reads the event into the platform's
+terms, and keys it with a UUID v5 over its name and its id for the
+delivery. It also posts a message to an account of its system.
+
+What served an event is the integration's word (`provenance`), never the
+delivery's, so a twin's event is a twin's whatever its body claims.
+
+| Implementation | What it is |
+|----------------|------------|
+| `events/twin.py` | The twin of every integration, in memory. It signs its own deliveries (`Twin-Signature`, HMAC-SHA256 over `<timestamp>.<body>`, a five-minute window), records each message posted through it, says `twin` on every record it writes, and mints every id as `twin_`. Refused at boot outside `local` and `test`. |
+| `events.IntegrationAbsentImpl` | The integration of a process with none configured: every delivery and every post is unavailable, `503`. |
+
+A real client of a forge or a chat is not built yet.
+
 ## Settings
 
 | Setting | What |
@@ -52,6 +73,7 @@ maintenance worker applies it.
 | `ACME_WORKOS_API_KEY` | The application's own API key: the exchange's client secret and the key of every management call. Empty or `off` leaves WorkOS unconfigured. |
 | `ACME_WORKOS_WEBHOOK_SECRET` | The webhook endpoint's signing secret, injected at start. Unset, every delivery is refused as unavailable. |
 | `ACME_WORKOS_BASE_URL`, `ACME_WORKOS_TIMEOUT_SECONDS` | Where the client calls, and the timeout of every call. |
+| `ACME_INTEGRATIONS` | `twin` or `none` (the default): what serves the forge and the chat. The twin is refused at boot outside `local` and `test`. |
 
 [The WorkOS runbook](../docs/runbooks/providers/workos.md) sets them up.
 

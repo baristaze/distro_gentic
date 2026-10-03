@@ -86,6 +86,7 @@ markers = [
     "slow: takes more than a few seconds",
     "telemetry: needs the devx profile",
     "live: calls a live model provider and spends; `make test-live` runs it by hand",
+    "benchmark: judges an acceptance scenario and records the run; `make benchmark` runs it, never a gate",
 ]
 
 # The engine's static checker (`make agentic-check`), which `checkers/`
@@ -154,12 +155,17 @@ reason = "a static page with no script and no state; the portal and every app th
 tenantless = [
     "AgentSessionStorageInterface.read_purgeable",
     "AgentSessionStorageInterface.count_parked",
+    "AgentSessionStorageInterface.read_stalled",
+    "BenchmarkStorageInterface.create_benchmark",
+    "BenchmarkStorageInterface.read_benchmark",
+    "BenchmarkStorageInterface.read_history",
     "EventStorageInterface.count_since",
     "EventStorageInterface.trim",
     "HostsStorageInterface.read_enrollment_token_by_digest",
     "HostsStorageInterface.read_host_by_credential_digest",
     "HostsStorageInterface.count_hosts",
     "IdempotencyStorageInterface.purge_records",
+    "LedgerStorageInterface.read_open",
     "MatrixStorageInterface.add_result",
     "MatrixStorageInterface.add_retirement",
     "MatrixStorageInterface.create_version",
@@ -232,6 +238,7 @@ sites = [
     "om/src/acme/om/tenancy/impl/manager.py::TenancyManagerImpl.service_context",
     "om/src/acme/om/tenancy/impl/manager.py::TenancyManagerImpl.service_contexts",
     "om/src/acme/om/tenancy/impl/manager.py::TenancyManagerImpl.member_context",
+    "om/src/acme/om/automations/root.py::automation_principals",
 ]
 builders = ["build_context"]
 

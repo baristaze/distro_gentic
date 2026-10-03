@@ -4,18 +4,50 @@
 
 `principal_context` is the transition that gives an automation's creator
 their live context at each firing; None takes the tenancy manager's
-members, as the engine's own root does."""
+members, as the engine's own root does. Either way the tenant's automation
+principal is answered for by its grant (`automation_principals`), and a
+root that runs the sessions an automation starts hands the same transition
+to `build_managers`, so their calls run on the principal's role alone."""
 
 from collections.abc import Callable
 from datetime import datetime
+from uuid import UUID
 
 from acme.om.attribution import PrincipalContext
 from acme.om.attribution.impl.manager import members_context
+from acme.om.attribution.types.principal import Principal
 from acme.om.automations.impl.manager import AutomationsManagerImpl, AutomationsOptions
 from acme.om.automations.manager import AutomationsManagerInterface
+from acme.om.automations.storage import AutomationStorageInterface
 from acme.om.base import utcnow
+from acme.om.context import CredentialKind, RequestContext, TenantContext, build_context
 from acme.om.root import Managers
 from acme.om.storage.root import StorageInterface
+from acme.om.tenancy.rules import permissions_of
+
+
+def automation_principals(
+    storage: AutomationStorageInterface, fallback: PrincipalContext
+) -> PrincipalContext:
+    """The transition that answers for the tenant's automation principal by
+    its grant, read at each call: its id, the role granted, that role's
+    permissions, and nothing else, whichever kind a step names it as. Every
+    other principal is `fallback`'s to answer."""
+
+    async def live(rctx: RequestContext, org_id: UUID, principal: Principal) -> TenantContext:
+        granted = await storage.read_principal(org_id)
+        if granted is None or principal.id != granted.id:
+            return await fallback(rctx, org_id, principal)
+        return build_context(
+            rctx,
+            user_id=granted.id,
+            org_id=org_id,
+            role=granted.role,
+            permissions=permissions_of(granted.role),
+            credential_kind=CredentialKind.INTERNAL,
+        )
+
+    return live
 
 
 def build_automations(
@@ -26,14 +58,16 @@ def build_automations(
     options: AutomationsOptions | None = None,
     clock: Callable[[], datetime] = utcnow,
 ) -> AutomationsManagerInterface:
+    held = storage.get_automation_storage()
     return AutomationsManagerImpl(
-        storage.get_automation_storage(),
+        held,
         managers.agents,
         managers.agent_sessions,
         managers.budgets,
         managers.tenancy,
         managers.outbox,
-        principal_context or members_context(managers.tenancy),
+        managers.events,
+        automation_principals(held, principal_context or members_context(managers.tenancy)),
         options or AutomationsOptions(),
         clock,
     )
