@@ -14,17 +14,16 @@ class ValidationSessions(IdentifiableMixin, TrackableMixin, Base):
     record of its run once it is recorded. Read by its id alone."""
 
     __tablename__ = "validation_sessions"
-    # A lab, a check's own version, and its parameters were a station's:
-    # they leave the mapping a release before they leave the table (ADR
-    # 0038).
+    # The columns the previous release wrote: they leave the mapping a
+    # release before they leave the table (ADR 0038).
     __table_args__ = (
         Column("lab_id", Uuid()),
         Column("check_version", Text()),
         Column("parameters", JSONB()),
     )
     __mapper_args__ = {"exclude_properties": ["lab_id", "check_version", "parameters"]}
-    # Null only in a row the previous release wrote, which names a lab: the
-    # model holds every one, and they turn not null with the drop.
+    # Null only in a row the previous release wrote: the model holds every
+    # one, and they turn not null with the drop.
     project_id: Mapped[UUID | None]
     check_name: Mapped[str]
     head: Mapped[str | None]

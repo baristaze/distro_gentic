@@ -20,9 +20,8 @@ from acme.om.tools.types.tool import ToolClass
 ASSISTANT_CLASSES: frozenset[str] = frozenset({ToolClass.READ, ToolClass.SPAWN})
 """The only classes of call the platform assistant makes: it reads, and it
 hands work to an engineer. A tool that writes, runs code, reaches a bound
-system such as a repository, changes configuration or credentials, or acts
-on a station is of another class, so no profile of the assistant holds
-one."""
+system such as a repository, or changes configuration or credentials is of
+another class, so no profile of the assistant holds one."""
 
 
 def reach_refusal(kind: AgentKind, classes: Mapping[str, str]) -> str | None:

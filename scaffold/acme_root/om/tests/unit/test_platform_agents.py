@@ -555,7 +555,7 @@ def test_a_listed_link_that_leads_out_of_the_repository_is_refused(tmp_path: Pat
         read_corpus(root)
 
 
-# Check 4: a validation session is platform work on the queue, run on a
+# Check 2: a validation session is platform work on the queue, run on a
 # fresh executor with no model call.
 
 HEAD = "c" * 40
