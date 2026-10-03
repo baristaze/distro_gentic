@@ -54,9 +54,10 @@ over the body and its timestamp, reads the event into the platform's
 terms, and keys it with a UUID v5 over its name and its id for the
 delivery. The installation a delivery came through is the system's own
 id; the tenant that connected it is the one the event is queued for. An
-integration also checks the grant its system hands the person who
-installs the platform there (`verify_installation`), so a tenant connects
-the installation the system names, never one a person types. It also
+integration also confirms the grant its system hands the person who
+installs the platform there (`verify_installation`), by the system's
+signature or by a call to the system, so a tenant connects the
+installation the system names, never one a person types. It also
 posts a message to an account of its system.
 
 What served an event is the integration's word (`provenance`), never the

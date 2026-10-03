@@ -132,7 +132,7 @@ class IntegrationTwinImpl(IntegrationInterface):
         platform as `installation`, at `at`."""
         return f"{installation};{sign(_granted(installation), self._secret, at)}"
 
-    def verify_installation(self, grant: str, now: datetime) -> str:
+    async def verify_installation(self, grant: str, now: datetime) -> str:
         installation, _, signature = grant.rpartition(";")
         if not installation:
             raise DeliveryRefused("the grant names no installation")

@@ -82,7 +82,7 @@ class IntakeManagerImpl(IntakeManagerInterface):
         if not in_person(ctx):
             raise NotAuthorized("an installation is connected by a person, in person")
         try:
-            named = self._integrations(integration).verify_installation(grant, self._clock())
+            named = await self._integrations(integration).verify_installation(grant, self._clock())
         except DeliveryRefused as refused:
             raise ValidationFailed(f"the {integration} grant: {refused.message}") from None
         installation = Installation(

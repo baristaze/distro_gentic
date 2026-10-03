@@ -206,6 +206,9 @@ async def test_an_installation_is_connected_by_one_tenant_with_the_systems_grant
         forged = IntegrationTwinImpl("forge", secret="not-the-forges").grant("73003", utcnow())
         unsigned = await client.post(CONNECT, headers=headers, json={"grant": forged})
         assert unsigned.status_code == 422, unsigned.text
+        # The refused grant connected nothing: a delivery through it names no tenant.
+        payload, signed = a_check(forge, "73003")
+        assert (await client.post(ROUTE, content=payload, headers=signed)).status_code == 400
         await add_member(container, bravo, "member@bravo.test", Role.MEMBER)
         member = await sign_in_as(client, "member@bravo.test", bravo)
         refused = await connect(client, member, forge, "73003")

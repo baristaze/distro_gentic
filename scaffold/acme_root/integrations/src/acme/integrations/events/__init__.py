@@ -104,11 +104,14 @@ class IntegrationInterface(ABC):
         ...
 
     @abstractmethod
-    def verify_installation(self, grant: str, now: datetime) -> str:
-        """The installation a grant names, once the system's signature over it
-        checks out at `now`: the grant the system hands the person who
-        installed the platform there. `DeliveryRefused` otherwise, naming what
-        failed and never the secret."""
+    async def verify_installation(self, grant: str, now: datetime) -> str:
+        """The installation a grant names, once the system confirms it at
+        `now`: the grant the system hands the person who installed the
+        platform there. The system's scheme confirms it: its signature over
+        the grant, or a call to the system when the grant is a code or an
+        unsigned id, and never the id alone. `DeliveryRefused` when the grant
+        fails, naming what failed and never the secret; `ProviderUnavailable`
+        when the system cannot be asked."""
         ...
 
     @abstractmethod
@@ -152,7 +155,7 @@ class IntegrationAbsentImpl(IntegrationInterface):
     ) -> ProvidedEvent:
         raise ProviderUnavailable(f"no {self._name} integration is configured")
 
-    def verify_installation(self, grant: str, now: datetime) -> str:
+    async def verify_installation(self, grant: str, now: datetime) -> str:
         raise ProviderUnavailable(f"no {self._name} integration is configured")
 
     async def post(self, address: str, text: str, mark: str | None = None) -> PostedMessage:
