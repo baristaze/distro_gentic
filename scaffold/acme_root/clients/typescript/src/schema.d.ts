@@ -1150,8 +1150,8 @@ export interface paths {
         put?: never;
         /**
          * Released
-         * @description The host's answer to a release it claimed: the instance is gone, and
-         *     its files stay on the host.
+         * @description The host's answer to a release or a purge it claimed: the instance is
+         *     gone. A release keeps its files on the host; a purge keeps none.
          */
         post: operations["released_v1_hosts_me_workspaces__item_id__released_post"];
         delete?: never;
