@@ -979,7 +979,6 @@ threat model each deployment writes.
 [e]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md
 [e-read]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#how-to-read-this
 [e-durable]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#durable-by-default
-[e-approvals]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#approvals
 [e-streams]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#streams
 [e-steering]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#steering
 [e-gate]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#done-rules-and-the-result-gate
