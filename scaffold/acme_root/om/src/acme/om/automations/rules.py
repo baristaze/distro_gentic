@@ -17,7 +17,9 @@ A firing passes these, in order, and the first that stops it says why:
 - the concurrency: the most runs at work at once.
 
 The cost cap, the rate, and the concurrency queue a firing when the
-automation says so; the other two refuse it for good."""
+automation says so, while fewer than its queue depth of runs wait; past
+that, and for the other two, it is refused for good. A run already
+queued keeps its place."""
 
 from datetime import datetime
 
@@ -82,8 +84,10 @@ def limited(limits: Limits, tally: Tally) -> Refusal | None:
 def admitted(run: AutomationRun, limits: Limits, tally: Tally, now: datetime) -> AutomationRun:
     """A run asking to start at `now`, as its limits leave it: started then,
     with its run cap reserved, queued when a limit stops it and the
-    automation queues, or refused. Only a queued run keeps the event's
-    text, which it needs when it starts; a refused one never does."""
+    automation queues, or refused. A firing finds the queue full once
+    `queue_depth` other runs wait; a run already queued is never dropped
+    from it. Only a queued run keeps the event's text, which it needs when
+    it starts; a refused one never does."""
     stop = limited(limits, tally)
     if stop is None:
         return run.model_copy(
@@ -95,6 +99,9 @@ def admitted(run: AutomationRun, limits: Limits, tally: Tally, now: datetime) ->
             }
         )
     queued = limits.queue and stop in QUEUEABLE
+    waiting = run.status is RunStatus.QUEUED
+    if queued and not waiting and tally.queued >= limits.queue_depth:
+        stop, queued = Refusal.QUEUE_FULL, False
     return run.model_copy(
         update={
             "status": RunStatus.QUEUED if queued else RunStatus.REFUSED,
@@ -122,13 +129,15 @@ def holds(run: AutomationRun, since: datetime) -> bool:
     )
 
 
-def tally(runs: list[AutomationRun], since: datetime) -> Tally:
-    """What `runs`, an automation's started runs, hold at `since`."""
+def tally(runs: list[AutomationRun], since: datetime, *, queued: int) -> Tally:
+    """What `runs`, an automation's started runs, hold at `since`, beside
+    the `queued` others that wait."""
     started = [r for r in runs if r.status is RunStatus.STARTED and r.started_at is not None]
     return Tally(
         started=sum(r.started_at is not None and r.started_at >= since for r in started),
         reserved_micros=sum(r.reserved_micros for r in started if holds(r, since)),
         at_work=sum(r.closed_at is None for r in started),
+        queued=queued,
     )
 
 

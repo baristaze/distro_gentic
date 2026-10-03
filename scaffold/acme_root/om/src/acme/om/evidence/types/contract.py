@@ -4,9 +4,10 @@ stream, one JSON object a line, and its cases stream as they finish."""
 
 from datetime import datetime
 from enum import StrEnum
+from string import Formatter
 from typing import Annotated, Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from acme.om.base import FrozenMapping, Platform
 from acme.om.evidence.types.provenance import ArtifactRef, Dependency
@@ -16,6 +17,9 @@ SCHEMA = 1
 """The results schema this platform writes and reads."""
 SCHEMAS = frozenset({SCHEMA})
 """Every results schema the one collector reads."""
+FIELDS = frozenset({"version", "out"})
+"""The fields a check's command template names: the version under test,
+and where the results stream goes."""
 
 
 class CheckDeclaration(Platform):
@@ -23,7 +27,9 @@ class CheckDeclaration(Platform):
     template a runner is started with, its kind, the capabilities a place
     must offer to run it, and the version of the results schema it writes.
     `{version}` and `{out}` in the template are the version under test and
-    where the results stream goes."""
+    where the results stream goes. The template is checked when it is
+    declared: it parses, it names those two fields alone and each bare, and
+    it names `{out}`, so a runner it starts always writes its results."""
 
     name: str = Field(pattern=NAME)
     version: str = Field(pattern=VERSION)
@@ -33,6 +39,14 @@ class CheckDeclaration(Platform):
     kind: str = Field(pattern=NAME)
     capabilities: tuple[Annotated[str, Field(pattern=NAME)], ...] = ()
     schema_version: int = Field(ge=1)
+
+    @field_validator("command")
+    @classmethod
+    def _a_template_a_runner_fills(cls, command: tuple[str, ...]) -> tuple[str, ...]:
+        named = {field for argument in command for field in _fields(argument)}
+        if "out" not in named:
+            raise ValueError("the command names {out}, where the results stream goes")
+        return command
 
 
 class Offer(Platform):
@@ -87,3 +101,24 @@ class EndLine(Platform):
 
 
 ResultsLine = Annotated[StartLine | CaseLine | EndLine, Field(discriminator="kind")]
+
+
+def _fields(argument: str) -> set[str]:
+    """The fields one argument of a command template names. An argument
+    that does not parse, or that names any other field, or one with a
+    conversion or a format of its own, is refused."""
+    try:
+        parsed = list(Formatter().parse(argument))
+    except ValueError as error:
+        raise ValueError(f"the command argument {argument!r} does not parse: {error}") from None
+    named: set[str] = set()
+    for _, field, spec, conversion in parsed:
+        if field is None:
+            continue
+        if field not in FIELDS or spec or conversion:
+            raise ValueError(
+                f"the command argument {argument!r} names a field other than a bare "
+                "{version} or {out}"
+            )
+        named.add(field)
+    return named
