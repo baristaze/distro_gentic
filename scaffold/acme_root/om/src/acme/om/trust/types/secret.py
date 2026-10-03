@@ -1,16 +1,16 @@
 """An environment secret, as the platform knows it: by name, never by
-value. It is declared on a project or a station, with the variable a
-command sees, the scope the credential is minted for, and the store that
-holds its value: the platform's, in its cloud, or the store of the machine
-that executes the call, inside a customer's wall. The value lives only in
+value. It is declared on a project, with the variable a command sees,
+the scope the credential is minted for, and the store that holds its
+value: the platform's, in its cloud, or the store of the machine that
+executes the call, inside a customer's wall. The value lives only in
 that store; the platform keeps the declaration. A name is one owner's:
 each project declares its own secret of a name, and keeps its own value."""
 
 from enum import StrEnum
-from typing import ClassVar, Self
+from typing import ClassVar
 from uuid import UUID
 
-from pydantic import Field, model_validator
+from pydantic import Field
 
 from acme.infra.transports import ENV_NAME
 from acme.om.base import Identifiable, Trackable
@@ -24,7 +24,6 @@ class SecretOwnerKind(StrEnum):
     """What a secret is declared on."""
 
     PROJECT = "project"
-    STATION = "station"
 
 
 class SecretStore(StrEnum):
@@ -36,10 +35,7 @@ class SecretStore(StrEnum):
 
 class SecretDeclaration(Identifiable, Trackable):
     """A secret by name: what a command that uses it sees it as, what it may
-    do, and which store holds it. No field holds its value.
-
-    A station's secret is held on its station's host, so it is declared in
-    the host's store and never in the cloud's."""
+    do, and which store holds it. No field holds its value."""
 
     MANAGER_OWNED_FIELDS: ClassVar[tuple[str, ...]] = ()
 
@@ -49,12 +45,6 @@ class SecretDeclaration(Identifiable, Trackable):
     owner_id: UUID
     scope: Stored = Field(min_length=1, max_length=MAX_NAME)
     store: SecretStore
-
-    @model_validator(mode="after")
-    def _a_station_keeps_its_secrets(self) -> Self:
-        if self.owner_kind is SecretOwnerKind.STATION and self.store is not SecretStore.HOST:
-            raise ValueError("a station's secret is held on its host, never in the cloud")
-        return self
 
 
 def kept_as(declaration: SecretDeclaration) -> str:

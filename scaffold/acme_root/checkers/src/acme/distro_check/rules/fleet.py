@@ -24,7 +24,6 @@ UNBOUNDED = frozenset(
         "principal",
         "request",
         "workspace",
-        "station",
         "project",
         "repository",
     }
@@ -83,7 +82,7 @@ def spelled(
     "FLT-12",
     coverage="partial",
     summary="No Prometheus metric is labelled by a tenant, a host, a session, a person, a request, "
-    "a workspace, a station, or a project, in a literal or a module constant.",
+    "a workspace, or a project, in a literal or a module constant.",
 )
 def the_dashboards_labels_are_bounded(project: Project) -> Iterator[Violation]:
     """Every `prometheus_client` metric (`Counter`, `Gauge`, `Histogram`,
@@ -93,7 +92,7 @@ def the_dashboards_labels_are_bounded(project: Project) -> Iterator[Violation]:
     its module or imported from another), names no label for a value
     that grows with the tenants:
     a tenant or an org, a host, a session, a person (a user, a member, a
-    principal), a request, a workspace, a station, or a project or a
+    principal), a request, a workspace, or a project or a
     repository, alone or followed by a name, a slug, an email, a key, a
     uuid, a hash, a url, or a ref (`tenant`, `host_name`). A label that
     ends in `_id` is the guideline's DEL-35, which `arch-check` decides.

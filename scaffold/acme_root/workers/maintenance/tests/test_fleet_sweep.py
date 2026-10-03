@@ -1,8 +1,8 @@
 """Who runs the sweep, and what it carries. Every cloud worker runs it: the
 maintenance worker's pass carries the platform's duties beside the purges,
 and a session runner's takes back expired leases. A program a customer runs
-inside its own wall, a host or a station's daemon, never runs it: it holds
-no worker, no manager, and no storage, so it cannot reach the fleet."""
+inside its own wall, a host, never runs it: it holds no worker, no
+manager, and no storage, so it cannot reach the fleet."""
 
 import ast
 import tomllib
@@ -66,8 +66,8 @@ def test_the_maintenance_sweep_carries_the_platforms_duties(tmp_path: Path) -> N
     assert not loop._options.recovery_only  # pyright: ignore[reportPrivateUsage]
 
 
-def test_a_host_or_a_daemon_never_runs_the_sweep() -> None:
-    """Every program under `apps/`, a host's and a daemon's among them,
+def test_a_host_never_runs_the_sweep() -> None:
+    """Every program under `apps/`, a host's among them,
     imports nothing that reaches the fleet and depends on no distribution
     that does, the infra it runs its work through included; and the sweep's
     loop is built only by a cloud worker."""

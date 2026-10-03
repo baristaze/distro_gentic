@@ -304,7 +304,7 @@ def is_work_product(write: RepositoryWrite, binding: RepositoryBinding | None, b
 
 def fetch_secret_name(project_id: UUID) -> str:
     """The name the tenant's store keeps a project's fetch credential under:
-    apart from every declared secret's (`project-`, `station-`) and every
+    apart from every declared secret's (`project-`) and every
     provider key's (`provider-key-`)."""
     return f"repository-fetch-{project_id.hex}"
 

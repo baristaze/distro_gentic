@@ -59,9 +59,9 @@ rebuilt from.
   stay as they were. A push that does not land lets nothing go: the
   instance and its work stay. The next loop is told where the work is.
 - **Egress.** The egress proxy asks for each connection. A metadata
-  endpoint, the host itself, the platform's internal network, and a
-  station's network are never reached, under any egress, by name or by
-  the address a name resolves to. Then no egress refuses all, open
+  endpoint, the host itself, and the platform's internal network are
+  never reached, under any egress, by name or by the address a name
+  resolves to. Then no egress refuses all, open
   egress allows the rest, and an allowlist allows a destination and port
   it names, by a method that rule takes.
 - **Outward.** A push to the session's own branch or its snapshots, and

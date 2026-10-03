@@ -152,7 +152,7 @@ class Stack:
             workspace_user=None,
         )
 
-    async def pool(self, name: str = "lab") -> HostPool:
+    async def pool(self, name: str = "build") -> HostPool:
         now = utcnow()
         pool = HostPool(
             id=new_id(),

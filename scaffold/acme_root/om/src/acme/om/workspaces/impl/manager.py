@@ -60,8 +60,6 @@ class WorkspacesOptions(Platform):
     # The platform's internal network, which no workspace reaches: every
     # private range unless a deployment names its own.
     internal_networks: tuple[str, ...] = rules.PLATFORM_NETWORKS
-    # The networks the stations sit on, which no workspace reaches either.
-    station_networks: tuple[str, ...] = ()
     purge_batch: int = Field(default=1000, gt=0)  # rows one purge statement deletes at most
     # How often a write of the cache's state is tried against a writer that
     # landed first.
@@ -99,9 +97,7 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         self._secrets = secrets_store
         self._source_control = source_control
         self._clock = clock
-        self._internal = rules.networks(options.internal_networks) + rules.networks(
-            options.station_networks
-        )
+        self._internal = rules.networks(options.internal_networks)
 
     # The pin.
 
