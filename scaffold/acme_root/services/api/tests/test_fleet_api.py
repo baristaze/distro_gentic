@@ -31,7 +31,7 @@ ASSISTANT = AgentKind(
     authority=AuthorityMode.DELEGATED,
     tree=TreeLimits(height=1, count=0),
 )
-SAID = "the gripper drops the cup at the second waypoint"
+SAID = "checkout drops the order at the payment step"
 READER = "sup@example.test"
 
 
@@ -60,7 +60,7 @@ async def a_session_that_was_told(client: httpx.AsyncClient, owner: dict[str, st
     started = await client.post(
         "/v1/agent-sessions",
         headers={**owner, "Idempotency-Key": str(uuid4())},
-        json={"kind": "assistant", "title": "the dropped cup", "project_id": PROJECT_ID},
+        json={"kind": "assistant", "title": "the dropped order", "project_id": PROJECT_ID},
     )
     assert started.status_code == 201, started.text
     session_id = started.json()["id"]

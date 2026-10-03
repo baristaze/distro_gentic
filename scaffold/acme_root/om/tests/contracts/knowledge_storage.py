@@ -27,9 +27,9 @@ def make_entry(status: KnowledgeStatus = KnowledgeStatus.SUGGESTED) -> Knowledge
         updated_at=now,
         created_by=actor,
         updated_by=actor,
-        title="the lab's flaky camera",
-        trigger=("camera",),
-        text="The camera on station 3 drops frames under load; rerun once.",
+        title="the flaky staging database",
+        trigger=("database",),
+        text="The staging database drops connections under load; rerun once.",
         status=status,
     )
 

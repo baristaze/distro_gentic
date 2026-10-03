@@ -94,7 +94,7 @@ def automation(**changes: object) -> Automation:
     ).model_copy(update=changes)
 
 
-def comment(caused_by: UUID | None = None, text: str = "Why is the gripper slow?") -> Firing:
+def comment(caused_by: UUID | None = None, text: str = "Why is checkout slow?") -> Firing:
     return Firing(
         event_id=new_id(),
         occurred_at=utcnow(),
@@ -571,7 +571,7 @@ async def test_a_comment_through_a_sessions_tool_carries_its_cause_and_hop_and_f
     first = next(r for r in await fired(platform, comment()) if r.automation_id == ping.id)
     assert first.session_id is not None
     said_on = ToolUseBlock(
-        id="use_comment", name=COMMENT, input={"on": OTHER_PR, "text": "The gripper waits."}
+        id="use_comment", name=COMMENT, input={"on": OTHER_PR, "text": "Checkout waits."}
     )
     platform.anthropic.add(reply(said_on), reply(said("Commented.")))
     # A comment acts outward, so the platform's ceiling on outward calls
@@ -605,12 +605,12 @@ async def test_an_unmarked_sessions_comment_waits_on_the_outward_ceiling(platfor
     comment on a repository other than its own still waits for a person:
     the comment acts outward, and the platform's ceiling caps it."""
     started = await platform.managers.agents.start_session(
-        platform.owner, Start(id=new_id(), kind=ACTING.name, title="the gripper")
+        platform.owner, Start(id=new_id(), kind=ACTING.name, title="the checkout")
     )
     message = message_step(new_id(), utcnow(), started.id, platform.owner, "Tell them.")
     await platform.managers.agent_sessions.receive(platform.owner, started.id, [message])
     said_on = ToolUseBlock(
-        id="use_comment", name=COMMENT, input={"on": OTHER_PR, "text": "The gripper waits."}
+        id="use_comment", name=COMMENT, input={"on": OTHER_PR, "text": "Checkout waits."}
     )
     platform.anthropic.add(reply(said_on))
     run = await platform.loops.run(platform.owner, started.id)

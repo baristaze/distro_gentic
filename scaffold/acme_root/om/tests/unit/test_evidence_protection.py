@@ -10,7 +10,7 @@ from uuid import UUID
 
 import pytest
 from contracts.doubles import context
-from contracts.evidence import arm_policy, evidence_over
+from contracts.evidence import checkout_policy, evidence_over
 from contracts.factories import make_org
 from contracts.tools import put_call, registry_of, result_text, tools_over, twin_transport
 
@@ -91,7 +91,7 @@ ALLOW_WRITES = PolicyLayer(
 async def test_an_agents_edit_to_a_protected_path_is_refused(tmp_path: Path) -> None:
     org = make_org()
     evidence = evidence_over()
-    await evidence.manager.write_policy(context(Role.OWNER, org), arm_policy())
+    await evidence.manager.write_policy(context(Role.OWNER, org), checkout_policy())
     tools = tools_over(twin_transport(tmp_path)[0], options=ToolsOptions(ceilings=CEILINGS))
     admin = context(Role.ADMIN, org)
     # The tenant lets every write run unattended, as the kind does.
@@ -102,9 +102,9 @@ async def test_an_agents_edit_to_a_protected_path_is_refused(tmp_path: Path) -> 
     registry = registry_of(write)
     workspace = Workspace.absent(ctx.org_id, new_id())
     for path, claim in (
-        ("tests/test_grip.py", {}),
-        ("tests/test_grip.py", {"protected": False}),
-        ("./TESTS/fixtures/arm.json", {}),
+        ("tests/test_cart.py", {}),
+        ("tests/test_cart.py", {"protected": False}),
+        ("./TESTS/fixtures/orders.json", {}),
     ):
         call = await put_call(
             tools.manager,
@@ -122,7 +122,7 @@ async def test_an_agents_edit_to_a_protected_path_is_refused(tmp_path: Path) -> 
         header = gate.response.header
         assert isinstance(header, ToolResponseHeader) and header.failure is ToolFailure.DENIED
     free = await put_call(
-        tools.manager, tools.steps, ctx, "write_file", {"path": "src/grip.py", "text": "x"}, "write"
+        tools.manager, tools.steps, ctx, "write_file", {"path": "src/cart.py", "text": "x"}, "write"
     )
     gate = await tools.manager.gate(
         ctx, registry, ALLOW_WRITES, free.request, free.call_input, workspace
@@ -137,7 +137,9 @@ async def test_a_folder_a_policy_protects_refuses_an_edit_inside_it(
 ) -> None:
     org = make_org()
     evidence = evidence_over()
-    await evidence.manager.write_policy(context(Role.OWNER, org), arm_policy(protected=(pattern,)))
+    await evidence.manager.write_policy(
+        context(Role.OWNER, org), checkout_policy(protected=(pattern,))
+    )
     tools = tools_over(twin_transport(tmp_path)[0], options=ToolsOptions(ceilings=CEILINGS))
     ctx = context(Role.SERVICE, org)
     call = await put_call(
@@ -161,11 +163,11 @@ async def test_the_engineers_write_to_a_protected_path_is_refused_at_the_call(
 ) -> None:
     org = make_org()
     evidence = evidence_over()
-    await evidence.manager.write_policy(context(Role.OWNER, org), arm_policy())
+    await evidence.manager.write_policy(context(Role.OWNER, org), checkout_policy())
     tools = tools_over(twin_transport(tmp_path)[0], options=ToolsOptions(ceilings=CEILINGS))
     ctx = context(Role.SERVICE, org)
     registry = registry_of(WriteFileImpl(lambda: evidence.manager))
-    # A session of `arm`, whose policy protects `tests/`, and one of a
+    # A session of `checkout`, whose policy protects `tests/`, and one of a
     # project that declares no policy.
     elsewhere = new_id()
     evidence.projects.sessions[elsewhere] = new_id()
@@ -176,7 +178,7 @@ async def test_the_engineers_write_to_a_protected_path_is_refused_at_the_call(
             tools.steps,
             ctx,
             "write_file",
-            {"path": "tests/test_grip.py", "text": "x"},
+            {"path": "tests/test_cart.py", "text": "x"},
             "write",
             session_id,
         )

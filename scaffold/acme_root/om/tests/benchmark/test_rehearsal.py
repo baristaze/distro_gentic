@@ -1,5 +1,5 @@
 """The benchmark job's rehearsal: an acceptance scenario's trials, a
-candidate and a baseline interleaved on one station, each judged by the
+candidate and a baseline interleaved on one executor, each judged by the
 harness and recorded over the stack as a benchmark, written once, and
 what it shows of the model the candidate changed recorded with the model
 matrix.

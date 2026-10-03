@@ -33,7 +33,7 @@ class RunOutcome(StrEnum):
     PASSED = "passed"
     FAILED = "failed"
     ERRORED = "errored"  # it could not run to a verdict: a broken fixture, a crash
-    ABORTED = "aborted"  # a safety stop ended it; a declared rule classifies it
+    ABORTED = "aborted"  # an abort ended it; a declared rule classifies it
 
 
 class Environment(Platform):
@@ -89,7 +89,7 @@ class ExecutionRecord(Identifiable, Created):
         if self.finished_at < self.started_at:
             raise ValueError("a run finishes after it starts")
         if (self.outcome is RunOutcome.ABORTED) != (self.abort is not None):
-            raise ValueError("an aborted run names its safety stop, and only an aborted one")
+            raise ValueError("an aborted run names its abort, and only an aborted one")
         if self.outcome is RunOutcome.PASSED and self.cases.failed:
             raise ValueError("a run with a failed case did not pass")
         executor_run = self.purpose is not RunPurpose.WORK

@@ -600,12 +600,12 @@ async def test_giving_back_hands_over_the_summary_and_fences_a_command_no_host_t
     await watched.watch.run_command(watched.person, watched.session_id, pending)
 
     back = await watched.watch.give_back(
-        watched.person, watched.session_id, "I fixed the gripper config by hand."
+        watched.person, watched.session_id, "I fixed the checkout config by hand."
     )
     assert back.park is None and back.status is not SessionStatus.PARKED
     steps = await watched.managers.steps.get_steps(watched.owner, watched.session_id, 0, 100)
     (summary,) = [s for s in steps.items if s.type is StepType.MESSAGE]
-    assert summary.as_text() == "I fixed the gripper config by hand."
+    assert summary.as_text() == "I fixed the checkout config by hand."
     assert isinstance(summary.header, InputHeader)
     assert summary.header.principal is not None
     assert summary.header.principal.id == watched.person.user_id

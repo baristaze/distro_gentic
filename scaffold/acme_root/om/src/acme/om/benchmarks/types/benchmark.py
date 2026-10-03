@@ -33,14 +33,14 @@ class Contender(Platform):
 
 class Trial(Platform):
     """One preserved run of the scenario: the arm it ran for, its session,
-    the station it ran on and when it started, the acceptance verdict that
+    the executor it ran on and when it started, the acceptance verdict that
     judged it, kept whole with the hidden suite's runs, and its cost in
     millionths of a dollar. Its score and whether it passed are the
     verdict's, never a caller's."""
 
     arm: Arm
     session_id: UUID
-    station: str = Field(min_length=1, max_length=200)
+    executor: str = Field(min_length=1, max_length=200)
     started_at: datetime
     verdict: AcceptanceVerdict
     cost_micros: int = Field(ge=0)

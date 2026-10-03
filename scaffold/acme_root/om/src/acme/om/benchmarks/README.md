@@ -10,7 +10,7 @@ made of](../../../../README.md).
 - **Contender**: what an arm's sessions run: the agent kind, its
   version, and the fill set, each model role's fill.
 - **Trial**: one preserved run of the scenario: its arm, its session, the
-  station it ran on, the acceptance verdict that judged it, kept whole
+  executor it ran on, the acceptance verdict that judged it, kept whole
   with the hidden suite's runs, and its cost. Its score is the verdict's.
 - **Benchmark**: one run of a scenario: the candidate, the baseline,
   every trial of both, each arm's score and cost, and whether the
@@ -25,9 +25,9 @@ made of](../../../../README.md).
 
 ## The rules
 
-- **The arms interleave on one station.** Trials run candidate,
+- **The arms interleave on one executor.** Trials run candidate,
   baseline, baseline, candidate, and again. A run whose arms ran in
-  blocks, on two stations, or in different counts is refused.
+  blocks, on two executors, or in different counts is refused.
 - **Every trial counts.** An arm's score is the mean of its trials'
   judged scores, and its cost their sum. None is dropped.
 - **A lower score is a regression.** A candidate that scores under its

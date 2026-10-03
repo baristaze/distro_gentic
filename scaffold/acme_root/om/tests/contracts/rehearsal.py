@@ -16,7 +16,7 @@ from acme.om.root import Managers, build_managers
 from acme.om.storage.root import StorageInterface
 from contracts.acceptance import DefectExecutor, EvidenceParts
 from contracts.doubles import SessionProjectsMemory
-from contracts.evidence import ARM, arm_policy
+from contracts.evidence import CHECKOUT, checkout_policy
 
 APP = AppContext(type=AppType.PORTAL, version="portal@test")
 
@@ -29,13 +29,13 @@ class World:
 
 
 async def world_over(storage: StorageInterface, tmp_path: Path) -> World:
-    """A tenant of its own, the `arm` project's policy written, and the
-    evidence over `storage`, where every session belongs to `arm`."""
+    """A tenant of its own, the `checkout` project's policy written, and the
+    evidence over `storage`, where every session belongs to `checkout`."""
     settings = InfraSettings.model_validate(
         {"environment": "local", "buckets_root": tmp_path / "buckets"}
     )
-    work, executor = WorkProductMemoryImpl(), DefectExecutor(name="station-1")
-    projects = SessionProjectsMemory(default=ARM)
+    work, executor = WorkProductMemoryImpl(), DefectExecutor(name="executor-1")
+    projects = SessionProjectsMemory(default=CHECKOUT)
     managers = build_managers(
         storage,
         InfraConfiguredImpl(settings),
@@ -51,7 +51,7 @@ async def world_over(storage: StorageInterface, tmp_path: Path) -> World:
         f"ann-{slug}@example.test",
         "Ann",
     )
-    await managers.evidence.write_policy(owner, arm_policy())
+    await managers.evidence.write_policy(owner, checkout_policy())
     gate = ResultGateEvidenceImpl(storage.get_evidence_storage(), work, projects)
     parts = EvidenceParts(managers.evidence, storage.get_evidence_storage(), work, executor, gate)
     return World(managers, parts, owner)

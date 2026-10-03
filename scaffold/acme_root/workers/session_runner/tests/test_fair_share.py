@@ -119,7 +119,7 @@ async def test_a_loop_over_its_tenants_share_goes_back_to_its_lane_with_no_attem
     lane = tier_lane(tier)
     enqueued = Enqueued(owner.org_id)
     container.infra.get_topics().subscribe(Topics.WORK_AVAILABLE, "case", enqueued.record)
-    for question in ("Why does it drop the object?", "Why does it stall?"):
+    for question in ("Why does checkout time out?", "Why does it stall?"):
         session = await managers.agents.start_session(
             owner, Start(id=new_id(), kind="assistant", title=question)
         )
