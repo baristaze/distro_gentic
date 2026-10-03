@@ -1,6 +1,7 @@
 """The platform's agents ship by default: a deployed process reads their
-corpus from the folder it names, and the image carries that folder's
-knowledge map and every document the map lists for tenant users."""
+corpus from the folder it names, and each image that ships them, the API's
+and the session runner's, carries that folder's knowledge map and every
+document the map lists for tenant users."""
 
 import re
 from pathlib import Path
@@ -36,9 +37,12 @@ def settings(corpus_root: Path | None) -> PlatformAgentsSettings:
     return PlatformAgentsSettings.model_validate({"_env_file": None, "corpus_root": corpus_root})
 
 
-def test_the_api_image_carries_the_map_and_every_document_it_lists_for_tenants() -> None:
+@pytest.mark.parametrize("image", ["api", "session-runner"])
+def test_each_image_that_ships_the_agents_carries_the_map_and_every_document_it_lists_for_tenants(
+    image: str,
+) -> None:
     root = repository_root()
-    sources = copied((root / "deployment/docker/api.Dockerfile").read_text())
+    sources = copied((root / f"deployment/docker/{image}.Dockerfile").read_text())
     listed = [
         entry.path for entry in rules.listed((root / KNOWLEDGE_MAP).read_text(), rules.TENANT_USERS)
     ]
@@ -49,7 +53,7 @@ def test_the_api_image_carries_the_map_and_every_document_it_lists_for_tenants()
         if not any(path == source or path.startswith(f"{source}/") for source in sources)
     ]
 
-    assert listed and not missing, f"the API image copies none of: {missing}"
+    assert listed and not missing, f"the {image} image copies none of: {missing}"
 
 
 def test_outside_local_a_process_that_names_no_corpus_is_refused() -> None:

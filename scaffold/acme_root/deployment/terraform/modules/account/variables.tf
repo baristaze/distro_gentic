@@ -21,7 +21,7 @@ variable "state_key_prefix" {
 variable "images" {
   description = "One registry per image under deployment/docker/."
   type        = list(string)
-  default     = ["acme-api", "acme-maintenance"]
+  default     = ["acme-api", "acme-maintenance", "acme-session-runner"]
 }
 
 variable "api_domain_name" {

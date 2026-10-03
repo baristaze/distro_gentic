@@ -12,12 +12,13 @@ module "environment" {
   environment = var.environment
 
   # What the deploy workflow passes per run.
-  api_image         = var.api_image
-  maintenance_image = var.maintenance_image
-  api_domain_name   = var.api_domain_name
-  app_domain_name   = var.app_domain_name
-  site_domain_name  = var.site_domain_name
-  cors_origins      = var.cors_origins
+  api_image            = var.api_image
+  maintenance_image    = var.maintenance_image
+  session_runner_image = var.session_runner_image
+  api_domain_name      = var.api_domain_name
+  app_domain_name      = var.app_domain_name
+  site_domain_name     = var.site_domain_name
+  cors_origins         = var.cors_origins
   # The Acme App application of this environment's WorkOS environment
   # (variables.tf). A client id is public; the application's own API key is
   # its secret.
@@ -29,7 +30,8 @@ module "environment" {
   # below is what differs from staging: the graph does not. The pool is
   # sized to the instance at the autoscaling ceilings, so the flip below is
   # safe: a db.t4g.small takes about 180 connections, and
-  # (2 x 3 API + 1 worker) x 2 pools x 10 + 8 for the one-off tasks is 148. The API task has half a
+  # (2 x 3 API + 1 worker) x 2 pools x 10, plus 2 runners x 2 pools x 5, plus
+  # 1 for the purge pool and 8 for the one-off tasks, is 169. The API task has half a
   # vCPU, and the 1 GB Fargate requires at that size: the collector sidecar
   # shares its CPU, and a page load's reads arrive together.
   vpc_cidr                     = "10.20.0.0/16"
@@ -46,14 +48,21 @@ module "environment" {
   maintenance_desired_count    = 1
   maintenance_cpu              = 256
   maintenance_memory           = 512
+  # The runner holds a few loops at once on pools of its own size, and git
+  # makes a session's bundles in its memory.
+  session_runner_desired_count      = 1
+  session_runner_cpu                = 512
+  session_runner_memory             = 1024
+  session_runner_database_pool_size = 5
 
   # Operations. `autoscaling_enabled` is the one flip: every lever below it
   # is on, so true scales the whole environment, and the flip is a pull
   # request a person reads. Off by default because an unattended scale-out
   # is a bill nobody approved. Each lever's floor is the desired count above.
-  alarm_email             = var.alarm_email
-  autoscaling_enabled     = false
-  api_autoscaling         = { max = 3 }
-  maintenance_autoscaling = { max = 1 }
-  destroyable             = var.destroyable
+  alarm_email                = var.alarm_email
+  autoscaling_enabled        = false
+  api_autoscaling            = { max = 3 }
+  maintenance_autoscaling    = { max = 1 }
+  session_runner_autoscaling = { max = 2 }
+  destroyable                = var.destroyable
 }
