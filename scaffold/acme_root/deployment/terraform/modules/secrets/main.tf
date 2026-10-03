@@ -1,7 +1,8 @@
 # Three kinds of secret live under one environment. The platform's own
 # credentials (the five database URLs, the TOTP encryption key, the edge
-# secret, the Sentry DSN, the WorkOS application key and webhook secret) are
-# declared here and injected into tasks by the execution role.
+# secret, the Sentry DSN, the WorkOS application key and webhook secret, the
+# platform's model keys) are declared here and injected into tasks by the
+# execution role.
 # Application-managed secrets, the ones SecretsInterface reads at runtime,
 # live under "<prefix>app/", which is the value of ACME_SECRETS_NAME_PREFIX,
 # so a process can never reach its own bootstrap credentials through the
@@ -239,6 +240,60 @@ resource "aws_secretsmanager_secret_version" "workos_webhook_secret" {
   lifecycle {
     ignore_changes = [secret_string]
   }
+}
+
+# The platform's own model keys, one per provider: process credentials of
+# the session runner alone, injected as ACME_ANTHROPIC_API_KEY and
+# ACME_OPENAI_API_KEY, and named outside the application prefix, like the
+# WorkOS key. Terraform creates each as "off", which the runner reads as no
+# platform key: a model call then runs only on a tenant's own key, and
+# without one fails as a missing credential, so nothing is spent on the
+# platform's account until a person writes a key. It never writes them
+# again: set a value once with
+#   aws secretsmanager put-secret-value --secret-id <prefix>anthropic_api_key --secret-string <key>
+# and roll the runner so its tasks start with it.
+locals {
+  model_keys = toset(["anthropic_api_key", "openai_api_key"])
+}
+
+resource "aws_secretsmanager_secret" "model_key" {
+  for_each = local.model_keys
+
+  name                    = "${var.prefix}${each.key}"
+  recovery_window_in_days = local.recovery_window_in_days
+  tags                    = local.tags
+}
+
+resource "aws_secretsmanager_secret_version" "model_key" {
+  for_each = local.model_keys
+
+  secret_id     = aws_secretsmanager_secret.model_key[each.key].id
+  secret_string = "off"
+
+  lifecycle {
+    ignore_changes = [secret_string]
+  }
+}
+
+# What the session runner reads at runtime: a tenant's own secrets, under
+# org/<org_id>/ in the application prefix, and nothing it may write. Every
+# write there is a person's, through the API, and every delete the
+# maintenance worker's purge, so the process that runs a model's tool calls
+# can neither plant a tenant's secret nor remove one.
+data "aws_iam_policy_document" "runner" {
+  statement {
+    actions = [
+      "secretsmanager:GetSecretValue",
+      "secretsmanager:DescribeSecret",
+    ]
+    resources = ["${local.secret_arn_prefix}${local.application_prefix}org/*"]
+  }
+}
+
+resource "aws_iam_policy" "runner" {
+  name   = "acme-${var.environment}-secrets-runner"
+  policy = data.aws_iam_policy_document.runner.json
+  tags   = local.tags
 }
 
 data "aws_iam_policy_document" "application" {

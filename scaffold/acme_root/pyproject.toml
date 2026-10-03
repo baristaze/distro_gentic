@@ -154,6 +154,14 @@ path = "om/src/acme/om/watch/__init__.py"
 adr = "docs/adr/2007-a-live-view-reads-a-session-by-a-scoped-handle.md"
 reason = "the watch keeps no rows: its buffers are a cache, and its records are the relay's items and the event stream"
 
+# The host's check boots a Linux machine with systemd as its first process,
+# as root, to install the host there; no deployment builds it (ADR 2026).
+[[tool.arch-check.exception]]
+rule = "DEL-10"
+path = "deployment/host/check/check.Dockerfile"
+adr = "docs/adr/2026-the-runner-is-a-cloud-service-with-no-workspace-and-a-host-installs-as-a-user-of-its-own.md"
+reason = "a test machine with systemd first, run as root to install the host; never an image a deployment ships"
+
 # The storage methods that take no tenant, the same list
 # om/tests/unit/test_storage_exceptions.py holds.
 [tool.arch-check.options.CTX-12]
