@@ -1,4 +1,5 @@
-"""The project storage contract: a project, written once; a session's
+"""The project storage contract: a project, created once, renamed in
+place, and deleted only while no session's row names it; a session's
 project row, written once and never moved, its first write standing; and
 the purges. The cases named in `CROSS_TENANT_CASES` are the tenant fence's
 evidence: each one presents another tenant's identifier and asserts that
@@ -18,10 +19,13 @@ CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
         "bind_session",
         "create_project",
+        "delete_project",
         "purge_session",
         "purge_tenant",
         "read_binding",
         "read_project",
+        "read_projects",
+        "write_project",
     }
 )
 """Every method of `ProjectStorageInterface` that takes a tenant has a case
@@ -72,6 +76,37 @@ class ProjectStorageContract:
         assert await storage.read_project(org, project.id) == project
         assert await storage.read_project(org, new_id()) is None
 
+    async def test_a_project_is_renamed_in_place_and_listed_by_id(
+        self, storage: ProjectStorageInterface
+    ) -> None:
+        org = new_id()
+        first, second = make_project(), make_project("octo/ledger")
+        for project in (first, second):
+            await storage.create_project(org, project, ())
+        renamed = first.model_copy(update={"name": "renamed"})
+        assert await storage.write_project(org, renamed, ())
+        assert await storage.read_project(org, first.id) == renamed
+        ordered = sorted((renamed, second), key=lambda p: p.id)
+        assert await storage.read_projects(org, None, 10) == ordered
+        assert await storage.read_projects(org, ordered[0].id, 10) == ordered[1:]
+        assert await storage.read_projects(org, None, 1) == ordered[:1]
+
+    async def test_a_project_goes_only_while_no_sessions_row_names_it(
+        self, storage: ProjectStorageInterface
+    ) -> None:
+        org = new_id()
+        held, free = make_project(), make_project("octo/ledger")
+        for project in (held, free):
+            await storage.create_project(org, project, ())
+        await storage.bind_session(org, make_binding(new_id(), held.id))
+        assert not await storage.delete_project(org, held.id, ())
+        assert await storage.read_project(org, held.id) == held
+        assert await storage.delete_project(org, free.id, ())
+        assert await storage.read_project(org, free.id) is None
+        assert not await storage.delete_project(org, free.id, ())
+        assert not await storage.write_project(org, free, ())
+        assert await storage.read_project(org, free.id) is None
+
     async def test_a_sessions_project_is_written_once_and_never_moves(
         self, storage: ProjectStorageInterface
     ) -> None:
@@ -105,6 +140,14 @@ class ProjectStorageContract:
             await storage.bind_session(org_b, make_binding(session, new_id()))
         assert not await storage.purge_session(org_b, session)
         assert await storage.purge_tenant(org_b, 10) == 0
+        assert await storage.read_projects(org_b, None, 10) == []
+        assert not await storage.write_project(
+            org_b, project.model_copy(update={"name": "taken"}), ()
+        )
+        free = make_project("octo/ledger")
+        await storage.create_project(org_a, free, ())
+        assert not await storage.delete_project(org_b, free.id, ())
+        assert await storage.read_project(org_a, free.id) == free
         assert await storage.read_project(org_a, project.id) == project
         assert await storage.read_binding(org_a, session) == bound
 

@@ -15,9 +15,9 @@ project's narrowing never applies.
 
 ## Decision
 
-**A project is its tenant's and binds one repository.** It is written
-once by one who writes the tenant's configuration (`manage_members`).
-Its repository never moves, so the work product of a session already in
+**A project is its tenant's and binds one repository.** One who writes
+the tenant's configuration (`manage_members`) writes it, renames it, and
+removes it while no session belongs to it. Its repository never moves, so the work product of a session already in
 it stays where it was. A repository is a host and a path, kept in lower
 case, since the hosts compare names without case.
 

@@ -23,6 +23,10 @@ is made of](../../../../README.md).
 - **Create** an automation, by a person in person. A start names a
   project of the tenant; outside a local stack, one that names none is
   refused.
+- **Edit** an automation, by a person in person, held to the create's
+  checks. One that runs as its creator is edited by its creator alone.
+  One that runs as the automation principal takes its editor as its
+  creator, so the grant is held to the editor's role at each firing.
 - **Grant** the automation principal a role, by a person who manages the
   tenant's members, in person, never above their own role. A second
   grant changes the role and keeps the principal.

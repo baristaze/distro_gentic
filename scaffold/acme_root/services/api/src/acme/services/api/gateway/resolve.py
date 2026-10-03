@@ -18,15 +18,19 @@ from acme.services.api.services import (
     FleetServiceInterface,
     HostsServiceInterface,
     IntakeServiceInterface,
+    KnowledgeServiceInterface,
     LedgersServiceInterface,
     MatrixServiceInterface,
     MediaServiceInterface,
     NotificationsServiceInterface,
+    PlaybooksServiceInterface,
+    ProjectsServiceInterface,
     ProviderKeysServiceInterface,
     RealtimeServiceInterface,
     RelayServiceInterface,
     ServicesInterface,
     TenancyServiceInterface,
+    ToolsServiceInterface,
     WatchServiceInterface,
     WebhooksServiceInterface,
 )
@@ -119,6 +123,22 @@ def ledgers_service(connection: HTTPConnection) -> LedgersServiceInterface:
     return services_of(connection).get_ledgers_service()
 
 
+def projects_service(connection: HTTPConnection) -> ProjectsServiceInterface:
+    return services_of(connection).get_projects_service()
+
+
+def knowledge_service(connection: HTTPConnection) -> KnowledgeServiceInterface:
+    return services_of(connection).get_knowledge_service()
+
+
+def playbooks_service(connection: HTTPConnection) -> PlaybooksServiceInterface:
+    return services_of(connection).get_playbooks_service()
+
+
+def tools_service(connection: HTTPConnection) -> ToolsServiceInterface:
+    return services_of(connection).get_tools_service()
+
+
 TenancyService = Annotated[TenancyServiceInterface, Depends(tenancy_service)]
 AdminService = Annotated[AdminServiceInterface, Depends(admin_service)]
 EventsService = Annotated[EventsServiceInterface, Depends(events_service)]
@@ -138,3 +158,7 @@ MatrixService = Annotated[MatrixServiceInterface, Depends(matrix_service)]
 ProviderKeysService = Annotated[ProviderKeysServiceInterface, Depends(provider_keys_service)]
 BenchmarksService = Annotated[BenchmarksServiceInterface, Depends(benchmarks_service)]
 LedgersService = Annotated[LedgersServiceInterface, Depends(ledgers_service)]
+ProjectsService = Annotated[ProjectsServiceInterface, Depends(projects_service)]
+KnowledgeService = Annotated[KnowledgeServiceInterface, Depends(knowledge_service)]
+PlaybooksService = Annotated[PlaybooksServiceInterface, Depends(playbooks_service)]
+ToolsService = Annotated[ToolsServiceInterface, Depends(tools_service)]

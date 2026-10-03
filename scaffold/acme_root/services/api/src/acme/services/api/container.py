@@ -23,11 +23,13 @@ from acme.om.automations.root import build_automations
 from acme.om.base import new_id
 from acme.om.billing.root import build_billing, build_money_gate, refuse_open_money
 from acme.om.intake.root import build_intake
+from acme.om.knowledge.root import build_knowledge
 from acme.om.matrix.impl.resolver import MatrixOptions
 from acme.om.matrix.root import MatrixLayer
 from acme.om.notifications.root import build_notifications
 from acme.om.platform_agents.catalog import PlatformAgents
 from acme.om.platform_agents.settings import shipped_agents
+from acme.om.playbooks.root import PlaybooksLayer
 from acme.om.root import (
     LOCAL,
     Managers,
@@ -297,6 +299,10 @@ class AppContainer:
             trust=trust.trust,
             # The ledger the operators read; this process takes no payment.
             billing=build_billing(storage, managers, PaymentProviderAbsentImpl()),
+            # A person writes and reviews what sessions recall, and publishes
+            # the playbooks they follow; the runner recalls and invokes them.
+            knowledge=build_knowledge(storage, managers),
+            playbooks=PlaybooksLayer(storage).build(managers),
         )
         return cls(
             settings,
