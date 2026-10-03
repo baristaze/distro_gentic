@@ -10,6 +10,7 @@ from acme.infra.keys import KeyServiceInterface
 from acme.infra.outages import OutageSignalInterface
 from acme.infra.queues import QueuesInterface
 from acme.infra.secrets import SecretsInterface
+from acme.infra.streams import StreamsInterface
 from acme.infra.topics import TopicsInterface
 from acme.infra.transports import CredentialBrokerInterface, TransportInterface
 from acme.infra.workspaces import WorkspaceProviderInterface
@@ -38,6 +39,13 @@ class InfraInterface(ABC):
     def get_outages(self) -> OutageSignalInterface:
         """The outage signal, on the shared cache: in one process over the
         memory cache, shared by a fleet over Valkey."""
+        ...
+
+    @abstractmethod
+    def get_streams(self) -> StreamsInterface:
+        """The streams read live while they are written, on the shared cache:
+        one process's own over the memory cache, shared by a fleet over
+        Valkey."""
         ...
 
     @abstractmethod

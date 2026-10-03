@@ -43,6 +43,8 @@ from acme.om.tools.tool import ToolInterface
 from acme.om.trust.impl.keys import KeyProbeAbsentImpl
 from acme.om.trust.root import TrustLayer
 from acme.om.trust.types.identities import Executor, ExecutorKind
+from acme.om.watch.root import build_stream
+from acme.om.watch.stream import StreamServiceInterface
 from acme.workers.session_runner.settings import SessionRunnerSettings
 
 log = logging.getLogger(__name__)
@@ -56,12 +58,15 @@ class RunnerContainer:
         infra: InfraInterface,
         integrations: IntegrationsInterface,
         managers: Managers,
+        stream: StreamServiceInterface,
     ) -> None:
         self.settings = settings
         self.storage = storage
         self.infra = infra
         self.integrations = integrations
         self.managers = managers
+        # The loop's stream sink: what it streams, on the shared cache.
+        self.stream = stream
         # Where a session's acts through the platform's account are recorded;
         # whoever can clear a park its runs wrote is told, on their channels.
         self.intake: IntakeManagerInterface = build_intake(
@@ -187,6 +192,10 @@ class RunnerContainer:
             relayed = TransportRelayImpl(lambda: built[0].relay, stage)
             return TransportPlacedImpl(direct, relayed, placement)
 
+        # Every part the loop streams goes to the shared cache, where the API
+        # reads it live; a stream's opening and its completion are recorded,
+        # in the managers' event stream, and hinted.
+        stream = build_stream(infra, lambda: built[0].events)
         managers = build_managers(
             storage,
             infra,
@@ -208,6 +217,7 @@ class RunnerContainer:
             # A call of a session the tenant's automation principal started
             # runs on that principal's grant; every other on a member's place.
             principal_context=automation_principals(storage.get_automation_storage(), members),
+            stream_sink=stream,
         )
         built.append(managers)
         refuse_open_money(settings.environment, managers)
@@ -215,7 +225,7 @@ class RunnerContainer:
         matrix.build(managers)
         playbooks.build(managers)
         knowledge.build(managers)
-        container = cls(settings, storage, infra, integrations, managers)
+        container = cls(settings, storage, infra, integrations, managers, stream)
         held.append(container)
         return container
 
@@ -230,6 +240,7 @@ class RunnerContainer:
         )
 
     async def close(self) -> None:
+        await self.stream.close()
         await self.integrations.close()
         await self.infra.close()
         await self.storage.close()

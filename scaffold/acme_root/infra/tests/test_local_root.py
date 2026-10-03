@@ -6,6 +6,7 @@ from acme.infra.buckets import Buckets
 from acme.infra.cache import CacheScope
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.queues import Queues
+from acme.infra.streams import StreamBounds
 from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
 
 
@@ -28,5 +29,9 @@ async def test_every_capability_works_over_the_local_root(tmp_path: Path) -> Non
     assert await infra.get_transport().read_file(workspace, "a.txt", 10) == b"hi"
     org_key = await infra.get_keys().generate(org, new_id(), 1)
     assert len(org_key.plaintext) == 32
-    assert len(infra.describe()) == len(CacheScope) + 9
+    stream = new_id()
+    await infra.get_streams().append(org, stream, [(0, b"a"), (1, b"b")], StreamBounds())
+    (held,) = await infra.get_streams().read(org, {stream: 0}, StreamBounds())
+    assert (held.stream, held.first, held.entries) == (stream, 0, ((1, b"b"),))
+    assert len(infra.describe()) == len(CacheScope) + 10
     await infra.close()

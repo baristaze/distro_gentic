@@ -82,7 +82,7 @@ class WatchManagerImpl(WatchManagerInterface):
             raise LiveReadRefused("the handle is not one the platform signed")
         if self._clock() >= grant.expires_at:
             raise LiveReadRefused("the handle has expired; ask for a new one")
-        streams = self._stream.read(grant.session_id, seen[:MAX_SEEN])
+        streams = await self._stream.read(grant.session_id, seen[:MAX_SEEN])
         return LivePage(session_id=grant.session_id, streams=streams)
 
     # Take control, give back.

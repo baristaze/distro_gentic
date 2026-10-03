@@ -46,6 +46,9 @@ class IntegrationsSettings(BaseSettings):
     # once at boot, so a process the twin serves answers what a suite
     # scripted for it. None leaves every script empty.
     model_script: Path | None = None
+    # The time the scripted twin waits before each part it streams, so a
+    # suite can watch a stream while it is open. Zero streams at once.
+    model_script_pace_seconds: float = Field(default=0, ge=0)
     # The platform's own keys, process credentials injected at start. Empty
     # or "off" leaves the provider with no platform key: a call runs only on
     # a credential of its own, and without one fails as `credential`.

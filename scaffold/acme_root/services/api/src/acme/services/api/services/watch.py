@@ -27,8 +27,8 @@ class WatchServiceInterface(ABC):
         self, rctx: RequestContext, handle: str, after: Sequence[str]
     ) -> LivePageView:
         """The open streams of the handle's session. Each of `after` is
-        `<step_id>:<n>`, the last part read of one stream; one that is not is
-        refused."""
+        `<step_id>:<last>`, the `last` of the last part read of one stream;
+        one that is not is refused."""
         ...
 
     @abstractmethod

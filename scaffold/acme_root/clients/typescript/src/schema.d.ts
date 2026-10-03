@@ -1306,8 +1306,9 @@ export interface paths {
         /**
          * Read Live
          * @description The open streams of the handle's session, each after the last part
-         *     read (`after=<step_id>:<n>`, once a stream). The handle is the
-         *     authority: one that does not verify, or has expired, reads nothing.
+         *     read (`after=<step_id>:<last>`, once a stream, the `last` of that part).
+         *     The handle is the authority: one that does not verify, or has expired,
+         *     reads nothing.
          */
         get: operations["read_live_v1_live_get"];
         put?: never;
@@ -3484,9 +3485,11 @@ export interface components {
         };
         /**
          * LivePartView
-         * @description One part of a stream: its kind, its place, and its text. `index` is
-         *     the block of a model response it belongs to; a tool call's input names
-         *     the call, and a tool's output its channel.
+         * @description One part of a stream: its kind, its places, and its text. A part may
+         *     join a run of one block's parts: it holds the places from `n` to
+         *     `last`, and a reader resumes after `last`. `index` is the block of a
+         *     model response it belongs to; a tool call's input names the call, and a
+         *     tool's output its channel.
          */
         LivePartView: {
             /** Channel */
@@ -3494,6 +3497,8 @@ export interface components {
             /** Index */
             index?: number | null;
             kind: components["schemas"]["PartKind"];
+            /** Last */
+            last: number;
             /** N */
             n: number;
             /** Text */

@@ -59,11 +59,11 @@ every live read and says so at start.
   five minutes. A member removed from the tenant keeps reading for what
   is left of a handle they hold, and no longer.
 - A read costs no database: the signature is the authority, and the
-  buffer is in memory.
+  buffer is on the shared cache.
 - A rotated key ends every handle out; a viewer asks for a new one.
-- No root hands the loop a stream service as its sink yet: the
-  runner's loop emits into a null sink, and the API's stream service is
-  read by the watch alone. Until a carrier brings a runner's parts to
-  the API's service, a live read finds nothing open, and the steps hold
-  everything said. The hints for a stream opened or completed are not
-  on the channel yet.
+- The session runner hands the loop the stream service as its sink,
+  and the API's watch reads the same streams on the shared cache, so a
+  viewer reads a step from a process other than the one that runs it.
+  A stream opened or completed is an entry in the tenant's event stream
+  and a hint on the channel; a completed stream leaves the cache, and
+  its step holds what it said.

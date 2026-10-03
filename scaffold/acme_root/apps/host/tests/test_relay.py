@@ -45,7 +45,6 @@ from acme.om.relay.impl.transport import TransportRelayImpl
 from acme.om.relay.types.exec import ExecState, StopKind
 from acme.om.steps.types.header import ToolFailure
 from acme.om.tenancy.rules import permissions_of
-from acme.om.watch.impl.stream import StreamServiceMemoryImpl
 from acme.om.watch.root import build_watch
 from acme.om.watch.types.control import HandCommand
 from acme.services.api.services.impl import relay as relay_service
@@ -279,7 +278,7 @@ async def test_a_host_whose_owner_takes_no_persons_command_refuses_a_command_by_
     api = relayed.api
     session_id = relayed.workspace.id
     await api.container.managers.workspaces.pinned(api.owner, session_id, DIRECTORY)
-    watch = build_watch(api.container.managers, StreamServiceMemoryImpl())
+    watch = build_watch(api.container.managers, api.container.stream)
     person = _in_person(api.owner)
     await watch.take_control(person, session_id)
     command = HandCommand(key=new_id(), argv=("echo", "by hand"))
