@@ -68,15 +68,6 @@ class BudgetScopeKind(StrEnum):
     tenant = 'tenant'
 
 
-class CaseTallyBody(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    failed: Annotated[int | None, Field(ge=0, title='Failed')] = 0
-    passed: Annotated[int | None, Field(ge=0, title='Passed')] = 0
-    skipped: Annotated[int | None, Field(ge=0, title='Skipped')] = 0
-
-
 class ClaimRequest(BaseModel):
     """
     The version of `exec` work the host reads, and nothing else: what it
@@ -86,19 +77,6 @@ class ClaimRequest(BaseModel):
         extra='forbid',
     )
     exec_version: Annotated[int, Field(ge=1, title='Exec Version')]
-
-
-class ClaimedStationWorkView(BaseModel):
-    """
-    One item a daemon was handed, as `station` work of `wire_version`.
-    """
-    attempts: Annotated[int, Field(title='Attempts')]
-    id: Annotated[UUID, Field(title='Id')]
-    kind: Annotated[str, Field(title='Kind')]
-    lease_expires_at: Annotated[AwareDatetime | None, Field(title='Lease Expires At')]
-    payload: Annotated[dict[str, Any], Field(title='Payload')]
-    target_id: Annotated[UUID, Field(title='Target Id')]
-    wire_version: Annotated[int, Field(title='Wire Version')]
 
 
 class ClaimedWorkView(BaseModel):
@@ -113,18 +91,6 @@ class ClaimedWorkView(BaseModel):
     payload: Annotated[dict[str, Any], Field(title='Payload')]
     target_id: Annotated[UUID, Field(title='Target Id')]
     wire_version: Annotated[int, Field(title='Wire Version')]
-
-
-class CommandBody(BaseModel):
-    """
-    One operation for the station's adapter, with its parameters: data,
-    never code.
-    """
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    operation: Annotated[str, Field(pattern='^[a-z][a-z0-9_.-]{0,99}$', title='Operation')]
-    parameters: Annotated[dict[str, Any] | None, Field(title='Parameters')] = None
 
 
 class CommandPartView(BaseModel):
@@ -148,11 +114,6 @@ class CommandRequest(BaseModel):
     argv: Annotated[list[ArgvItem], Field(max_length=256, min_length=1, title='Argv')]
     cwd: Annotated[str | None, Field(max_length=4096, min_length=1, title='Cwd')] = '.'
     timeout_seconds: Annotated[int | None, Field(gt=0, le=3600, title='Timeout Seconds')] = 300
-
-
-class CommandView(BaseModel):
-    operation: Annotated[str, Field(title='Operation')]
-    parameters: Annotated[dict[str, Any], Field(title='Parameters')]
 
 
 class ConfirmTotpRequest(BaseModel):
@@ -226,13 +187,6 @@ class ControlView(BaseModel):
     kind: ControlKind
 
 
-class CreateLabRequest(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    name: Annotated[str, Field(max_length=64, min_length=1, title='Name')]
-
-
 class CreateOrgRequest(BaseModel):
     """
     An org with its owner, as `bootstrap` seeds one. The owner's identity
@@ -259,34 +213,6 @@ class CreatePoolRequest(BaseModel):
     labels: Annotated[list[Label] | None, Field(max_length=32, title='Labels')] = None
     name: Annotated[str, Field(max_length=64, min_length=1, title='Name')]
     region: Annotated[str, Field(pattern='^[a-z][a-z0-9-]{0,31}$', title='Region')]
-
-
-class CreateStationPoolRequest(BaseModel):
-    """
-    `job_seconds` is the declared length of one holding, which a place's
-    estimate reads.
-    """
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    job_seconds: Annotated[int | None, Field(ge=1, le=604800, title='Job Seconds')] = 600
-    name: Annotated[str, Field(max_length=64, min_length=1, title='Name')]
-
-
-class CreateStationRequest(BaseModel):
-    """
-    A station of a lab, in a pool. `hold_seconds` is how long a lease
-    outlives a job while its session is parked. No limit of the station's
-    travels here: they are its owner's, on its host.
-    """
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    capabilities: Annotated[list[Capability] | None, Field(max_length=32, title='Capabilities')] = None
-    hold_seconds: Annotated[int | None, Field(ge=1, le=86400, title='Hold Seconds')] = 300
-    lab_id: Annotated[UUID, Field(title='Lab Id')]
-    name: Annotated[str, Field(max_length=64, min_length=1, title='Name')]
-    pool_id: Annotated[UUID, Field(title='Pool Id')]
 
 
 class Slug(RootModel[str]):
@@ -569,17 +495,6 @@ class IsolationMode(StrEnum):
     directory = 'directory'
 
 
-class IssuedDaemonCredentialView(BaseModel):
-    """
-    The lab daemon's credential in the clear, once: it lives a day, for
-    its owner to install it, and the daemon rotates it from then on.
-    """
-    credential_id: Annotated[UUID, Field(title='Credential Id')]
-    expires_at: Annotated[AwareDatetime, Field(title='Expires At')]
-    lab_id: Annotated[UUID, Field(title='Lab Id')]
-    token: Annotated[str | None, Field(title='Token')]
-
-
 class IssuedDownloadView(BaseModel):
     """
     A link to the file's bytes that works until `expires_at`. A null `url`
@@ -627,82 +542,6 @@ class IssuedTotpSecretView(BaseModel):
     authenticator app reads. A replay carries none.
     """
     otpauth_uri: Annotated[str | None, Field(title='Otpauth Uri')]
-
-
-class Abort(RootModel[str]):
-    root: Annotated[str, Field(max_length=500, min_length=1, title='Abort')]
-
-
-class JoinLineRequest(BaseModel):
-    """
-    A session's ask: one station of the pool, or any that serves, with
-    the capabilities it needs; and what it binds, the candidate under test,
-    the procedure, and its version.
-    """
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    candidate: Annotated[str, Field(pattern='^\\S{1,200}$', title='Candidate')]
-    capabilities: Annotated[list[Capability] | None, Field(max_length=32, title='Capabilities')] = None
-    procedure: Annotated[str, Field(pattern='^[a-z][a-z0-9_.-]{0,99}$', title='Procedure')]
-    procedure_version: Annotated[str, Field(pattern='^\\S{1,200}$', title='Procedure Version')]
-    project: Annotated[str, Field(pattern='^[A-Za-z0-9][A-Za-z0-9_./-]{0,199}$', title='Project')]
-    session_id: Annotated[UUID, Field(title='Session Id')]
-    station_id: Annotated[UUID | None, Field(title='Station Id')] = None
-
-
-class LabView(BaseModel):
-    created_at: Annotated[AwareDatetime, Field(title='Created At')]
-    created_by: Annotated[UUID, Field(title='Created By')]
-    id: Annotated[UUID, Field(title='Id')]
-    name: Annotated[str, Field(title='Name')]
-
-
-class LeaseTimeView(BaseModel):
-    fencing_token: Annotated[int, Field(title='Fencing Token')]
-    lease_id: Annotated[UUID, Field(title='Lease Id')]
-    seconds: Annotated[float, Field(title='Seconds')]
-
-
-class LeaseView(BaseModel):
-    created_at: Annotated[AwareDatetime, Field(title='Created At')]
-    ended: Annotated[str | None, Field(title='Ended')]
-    ended_at: Annotated[AwareDatetime | None, Field(title='Ended At')]
-    expires_at: Annotated[AwareDatetime, Field(title='Expires At')]
-    fencing_token: Annotated[int, Field(title='Fencing Token')]
-    id: Annotated[UUID, Field(title='Id')]
-    lab_id: Annotated[UUID, Field(title='Lab Id')]
-    session_id: Annotated[UUID, Field(title='Session Id')]
-    station_id: Annotated[UUID, Field(title='Station Id')]
-
-
-class LeftLinesView(BaseModel):
-    left: Annotated[int, Field(title='Left')]
-    session_id: Annotated[UUID, Field(title='Session Id')]
-
-
-class LineEntryView(BaseModel):
-    candidate: Annotated[str, Field(title='Candidate')]
-    capabilities: Annotated[list[str], Field(title='Capabilities')]
-    created_at: Annotated[AwareDatetime, Field(title='Created At')]
-    id: Annotated[UUID, Field(title='Id')]
-    lease_id: Annotated[UUID | None, Field(title='Lease Id')]
-    pool_id: Annotated[UUID, Field(title='Pool Id')]
-    procedure: Annotated[str, Field(title='Procedure')]
-    procedure_version: Annotated[str, Field(title='Procedure Version')]
-    project: Annotated[str, Field(title='Project')]
-    session_id: Annotated[UUID, Field(title='Session Id')]
-    state: Annotated[str, Field(title='State')]
-    station_id: Annotated[UUID | None, Field(title='Station Id')]
-
-
-class LinePlaceView(BaseModel):
-    """
-    An entry, how many wait ahead of it, and the estimate of its wait.
-    """
-    entry: LineEntryView
-    estimate_seconds: Annotated[int, Field(title='Estimate Seconds')]
-    position: Annotated[int, Field(title='Position')]
 
 
 class LiveReadView(BaseModel):
@@ -941,44 +780,12 @@ class PurposeUsageView(BaseModel):
     size_bytes: Annotated[int, Field(title='Size Bytes')]
 
 
-class RefusalReason(StrEnum):
-    """
-    Why the daemon did not run a command.
-    """
-    fenced = 'fenced'
-    limit = 'limit'
-    unknown_operation = 'unknown_operation'
-    lease_ended = 'lease_ended'
-
-
-class ReorderRequest(BaseModel):
-    """
-    The waiting entry this one goes ahead of, or null for the end.
-    """
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    before: Annotated[UUID | None, Field(title='Before')]
-
-
-class RevokedDaemonView(BaseModel):
-    credentials_ended: Annotated[int, Field(title='Credentials Ended')]
-    lab_id: Annotated[UUID, Field(title='Lab Id')]
-
-
 class Role(StrEnum):
     owner = 'owner'
     admin = 'admin'
     member = 'member'
     viewer = 'viewer'
     service = 'service'
-
-
-class RunOutcome(StrEnum):
-    passed = 'passed'
-    failed = 'failed'
-    errored = 'errored'
-    aborted = 'aborted'
 
 
 class SecondFactorRequest(BaseModel):
@@ -1172,64 +979,6 @@ class StartUploadRequest(BaseModel):
     size_bytes: Annotated[int, Field(gt=0, title='Size Bytes')]
 
 
-class StationClaimRequest(BaseModel):
-    """
-    The version of `station` work the daemon reads, and nothing else:
-    what it is handed is its identity's to say.
-    """
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    station_version: Annotated[int, Field(ge=1, title='Station Version')]
-
-
-class StationJobView(BaseModel):
-    """
-    A job under a lease: its station and token are the lease's, and what
-    it runs the lease's ask bound.
-    """
-    candidate: Annotated[str, Field(title='Candidate')]
-    commands: Annotated[list[CommandView], Field(title='Commands')]
-    created_at: Annotated[AwareDatetime, Field(title='Created At')]
-    fencing_token: Annotated[int, Field(title='Fencing Token')]
-    finished_at: Annotated[AwareDatetime | None, Field(title='Finished At')]
-    id: Annotated[UUID, Field(title='Id')]
-    lab_id: Annotated[UUID, Field(title='Lab Id')]
-    lease_id: Annotated[UUID, Field(title='Lease Id')]
-    procedure: Annotated[str, Field(title='Procedure')]
-    procedure_version: Annotated[str, Field(title='Procedure Version')]
-    project: Annotated[str, Field(title='Project')]
-    run_id: Annotated[UUID | None, Field(title='Run Id')]
-    session_id: Annotated[UUID, Field(title='Session Id')]
-    state: Annotated[str, Field(title='State')]
-    station_id: Annotated[UUID, Field(title='Station Id')]
-
-
-class StationPoolView(BaseModel):
-    created_at: Annotated[AwareDatetime, Field(title='Created At')]
-    created_by: Annotated[UUID, Field(title='Created By')]
-    id: Annotated[UUID, Field(title='Id')]
-    job_seconds: Annotated[int, Field(title='Job Seconds')]
-    name: Annotated[str, Field(title='Name')]
-
-
-class StationView(BaseModel):
-    """
-    A station, with the highest fencing token granted on it and the
-    lease that holds it, while one does.
-    """
-    capabilities: Annotated[list[str], Field(title='Capabilities')]
-    created_at: Annotated[AwareDatetime, Field(title='Created At')]
-    fencing_token: Annotated[int, Field(title='Fencing Token')]
-    held_until: Annotated[AwareDatetime | None, Field(title='Held Until')]
-    hold_seconds: Annotated[int, Field(title='Hold Seconds')]
-    id: Annotated[UUID, Field(title='Id')]
-    lab_id: Annotated[UUID, Field(title='Lab Id')]
-    lease_id: Annotated[UUID | None, Field(title='Lease Id')]
-    name: Annotated[str, Field(title='Name')]
-    pool_id: Annotated[UUID, Field(title='Pool Id')]
-
-
 class StepType(StrEnum):
     """
     What a step records. The type answers questions, so no caller
@@ -1294,13 +1043,6 @@ class StreamTruncatedDetail(BaseModel):
     """
     floor: Annotated[int, Field(title='Floor')]
     head: Annotated[int, Field(title='Head')]
-
-
-class SubmitJobRequest(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    commands: Annotated[list[CommandBody], Field(max_length=100, min_length=1, title='Commands')]
 
 
 class ToolFailure(StrEnum):
@@ -1880,16 +1622,6 @@ class PlacementView(BaseModel):
     waiting: Annotated[bool, Field(title='Waiting')]
 
 
-class RefusalBody(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    detail: Annotated[str, Field(max_length=500, min_length=1, title='Detail')]
-    operation: Annotated[str, Field(max_length=100, min_length=1, title='Operation')]
-    reason: RefusalReason
-    refused_at: Annotated[AwareDatetime, Field(title='Refused At')]
-
-
 class ResultRequest(BaseModel):
     """
     How an item ended: the JSON of an exec result, in base64.
@@ -1919,18 +1651,6 @@ class SessionStandingView(BaseModel):
     session_id: Annotated[UUID, Field(title='Session Id')]
     share_set: Annotated[bool, Field(title='Share Set')]
     status: SessionStatus
-
-
-class StationClaimView(BaseModel):
-    """
-    What a claim answers: the item, the job it names, and how many
-    seconds the job's lease has left, which the daemon times on its own
-    monotonic clock. No item when nothing is ready; no job for an item that
-    names none.
-    """
-    item: ClaimedStationWorkView | None
-    job: StationJobView | None = None
-    lease_seconds: Annotated[float | None, Field(title='Lease Seconds')] = 0
 
 
 class StepShapeView(BaseModel):
@@ -2046,28 +1766,6 @@ class IssuedLoginView(BaseModel):
     expires_at: Annotated[AwareDatetime, Field(title='Expires At')]
     memberships: Annotated[list[MembershipChoiceView], Field(title='Memberships')]
     token: Annotated[str, Field(title='Token')]
-
-
-class JobReportRequest(BaseModel):
-    """
-    What the daemon says of a job it ran. `run_id` is the daemon's, so a
-    retried report lands once. A run a refusal ended is `aborted`, names
-    the refusal in `abort`, and lists every refused command.
-    """
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    abort: Annotated[Abort | None, Field(title='Abort')] = None
-    adapter: Annotated[str, Field(max_length=200, min_length=1, title='Adapter')]
-    cases: CaseTallyBody | None = None
-    commands_run: Annotated[int, Field(ge=0, le=100, title='Commands Run')]
-    daemon_version: Annotated[str, Field(pattern='^\\S{1,200}$', title='Daemon Version')]
-    finished_at: Annotated[AwareDatetime, Field(title='Finished At')]
-    outcome: RunOutcome
-    provenance: Provenance
-    refused: Annotated[list[RefusalBody] | None, Field(max_length=100, title='Refused')] = None
-    run_id: Annotated[UUID, Field(title='Run Id')]
-    started_at: Annotated[AwareDatetime, Field(title='Started At')]
 
 
 class LivePageView(BaseModel):

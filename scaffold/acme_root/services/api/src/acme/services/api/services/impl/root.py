@@ -21,7 +21,6 @@ from acme.services.api.services import (
     RealtimeServiceInterface,
     RelayServiceInterface,
     ServicesInterface,
-    StationsServiceInterface,
     TenancyServiceInterface,
     WatchServiceInterface,
     WebhooksServiceInterface,
@@ -40,7 +39,6 @@ from acme.services.api.services.impl.media import MediaServiceImpl
 from acme.services.api.services.impl.notifications import NotificationsServiceImpl
 from acme.services.api.services.impl.realtime import RealtimeServiceImpl
 from acme.services.api.services.impl.relay import RelayServiceImpl
-from acme.services.api.services.impl.stations import StationsServiceImpl
 from acme.services.api.services.impl.tenancy import TenancyServiceImpl
 from acme.services.api.services.impl.watch import WatchServiceImpl
 from acme.services.api.services.impl.webhooks import WebhooksServiceImpl
@@ -61,7 +59,6 @@ class ServicesImpl(ServicesInterface):
         hosts: HostsServiceInterface,
         fleet: FleetServiceInterface,
         relay: RelayServiceInterface,
-        stations: StationsServiceInterface,
         intake: IntakeServiceInterface,
         budgets: BudgetsServiceInterface,
         automations: AutomationsServiceInterface,
@@ -78,7 +75,6 @@ class ServicesImpl(ServicesInterface):
         self._hosts = hosts
         self._fleet = fleet
         self._relay = relay
-        self._stations = stations
         self._intake = intake
         self._budgets = budgets
         self._automations = automations
@@ -114,9 +110,6 @@ class ServicesImpl(ServicesInterface):
 
     def get_relay_service(self) -> RelayServiceInterface:
         return self._relay
-
-    def get_stations_service(self) -> StationsServiceInterface:
-        return self._stations
 
     def get_intake_service(self) -> IntakeServiceInterface:
         return self._intake
@@ -174,7 +167,6 @@ def build_services(
         hosts=HostsServiceImpl(managers.hosts),
         fleet=FleetServiceImpl(managers.placement_operator, trust_operator),
         relay=RelayServiceImpl(managers.relay, infra.get_topics()),
-        stations=StationsServiceImpl(managers.stations),
         intake=IntakeServiceImpl(intake),
         budgets=BudgetsServiceImpl(managers.budgets),
         automations=AutomationsServiceImpl(automations),
