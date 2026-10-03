@@ -580,6 +580,7 @@ class ToolsManagerImpl(ToolsManagerInterface):
         return ToolRuntime(
             self._transport,
             workspace,
+            session_id=request.session_id,
             seal=self._sealing(ctx, request),
             session_id=request.session_id,
             key=request.id,
