@@ -37,7 +37,6 @@ REFERENCE = "../_shared/ops-preamble.md"
 PLATFORM = {
     "ops-session-stuck": "supporter",
     "ops-host-idle": "supporter",
-    "ops-station-idle": "supporter",
     "ops-integration-silent": "investigator",
     "ops-provider-outage": "investigator",
     "audit-model-spend": "investigator",
@@ -1086,7 +1085,6 @@ def test_a_platform_skill_checks_its_profile_before_any_other_command(name: str)
 STANDING = {
     "ops-session-stuck": "orgs/<org_id>/sessions/<session_id>/standing",
     "ops-host-idle": "orgs/<org_id>/hosts/<host_id>/standing",
-    "ops-station-idle": "orgs/<org_id>/stations/<station_id>/standing",
 }
 
 
