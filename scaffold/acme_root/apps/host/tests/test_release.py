@@ -46,7 +46,7 @@ from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
 from acme.om.intake.types.link import Installation
 from acme.om.placement.types.work import WorkspaceOperation, WorkspacePayload
-from acme.om.root import Managers, PlatformPorts
+from acme.om.root import Managers, PlatformPorts, ProductKinds
 from acme.om.steps.types.header import ParkReason
 from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
 from acme.om.workspaces.impl.reader import RepositoryReaderGitImpl
@@ -212,8 +212,7 @@ async def placed(api: Stack, tmp_path: Path, remote: Path) -> Placed:
             scripted_model_providers(),
             {"forge": forge},
         ),
-        agent_kinds=(KIND,),
-        ports=PlatformPorts(workspace_projects=projects),
+        ports=PlatformPorts(workspace_projects=projects, kinds=ProductKinds(agents=(KIND,))),
     )
     managers, owner = runner.managers, api.owner
     await seed_platform(runner.storage, managers, owner, (KIND,))

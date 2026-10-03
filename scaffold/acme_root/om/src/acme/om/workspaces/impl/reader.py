@@ -21,7 +21,9 @@ repository on disk is read too.
 
 The tree a validation runs on is read the same way: the delivered commit
 and the protected source, each fetched alone, composed in an index of the
-platform's own, and handed on as a tar with no history in it. The tar is
+platform's own, and handed on as a tar with no history in it. A source of
+its own, a hidden suite's, is fetched the same way from its own repository,
+with that repository's credential. The tar is
 written from the composed tree's blobs as stored, so no `.gitattributes`
 in the tree leaves a file out of it or changes a file's bytes.
 
@@ -259,6 +261,8 @@ class RepositoryReaderGitImpl(RepositoryReaderInterface):
         source: str,
         protected: tuple[str, ...],
         credential: FetchCredential | None = None,
+        source_binding: RepositoryBinding | None = None,
+        source_credential: FetchCredential | None = None,
     ) -> bytes:
         for commit in (version, source):
             if not COMMIT.fullmatch(commit):
@@ -268,17 +272,24 @@ class RepositoryReaderGitImpl(RepositoryReaderInterface):
             env = _environment(Path(root))
             url = binding.repository
             remote = {**env, **await self._reached(url, credential)}
+            held, held_remote = url, remote
+            if source_binding is not None:
+                held = source_binding.repository
+                held_remote = {**env, **await self._reached(held, source_credential)}
             await self._git(env, None, "init", "-q", "--bare", str(repo))
-            for commit, ref in ((version, VERSION), (source, SOURCE)):
+            for commit, ref, fetched, reached in (
+                (version, VERSION, url, remote),
+                (source, SOURCE, held, held_remote),
+            ):
                 await self._git(
-                    remote,
+                    reached,
                     repo,
                     "fetch",
                     "-q",
                     "--depth",
                     "1",
                     "--no-tags",
-                    url,
+                    fetched,
                     f"+{commit}:{ref}",
                 )
             at = _entries(await self._run(env, repo, "ls-tree", "-r", "-z", "--full-tree", VERSION))

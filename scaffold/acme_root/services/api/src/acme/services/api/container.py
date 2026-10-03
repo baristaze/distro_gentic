@@ -18,7 +18,6 @@ from acme.infra.trust import install_trust_store
 from acme.integrations.impl.configured import IntegrationsConfiguredImpl, absent_integrations
 from acme.integrations.payments.absent import PaymentProviderAbsentImpl
 from acme.integrations.root import IntegrationsInterface
-from acme.om.agents.types.kind import AgentKind
 from acme.om.automations.root import build_automations
 from acme.om.base import new_id
 from acme.om.billing.root import build_billing, build_money_gate, refuse_open_money
@@ -30,6 +29,7 @@ from acme.om.notifications.root import build_notifications
 from acme.om.platform_agents.catalog import PlatformAgents
 from acme.om.platform_agents.settings import shipped_agents
 from acme.om.playbooks.root import PlaybooksLayer
+from acme.om.product_kinds import PRODUCT_KINDS
 from acme.om.root import (
     LOCAL,
     Managers,
@@ -196,6 +196,7 @@ class AppContainer:
             IntegrationsConfiguredImpl(
                 settings, settings.environment, settings.is_cloud_environment
             ),
+            ports=PlatformPorts(kinds=PRODUCT_KINDS),
             platform_agents=shipped_agents(settings, settings.environment),
         )
 
@@ -207,7 +208,6 @@ class AppContainer:
         settings: ApiSettings | None = None,
         integrations: IntegrationsInterface | None = None,
         *,
-        agent_kinds: tuple[AgentKind, ...] = (),
         ports: PlatformPorts | None = None,
     ) -> AppContainer:
         settings = settings or ApiSettings.model_validate(
@@ -219,9 +219,7 @@ class AppContainer:
         )
         # No identity provider unless the test hands one in.
         integrations = integrations or absent_integrations()
-        return cls.over(
-            settings, storage, infra, integrations, agent_kinds=agent_kinds, ports=ports
-        )
+        return cls.over(settings, storage, infra, integrations, ports=ports)
 
     @classmethod
     def over(
@@ -231,15 +229,15 @@ class AppContainer:
         infra: InfraInterface,
         integrations: IntegrationsInterface,
         *,
-        agent_kinds: tuple[AgentKind, ...] = (),
         ports: PlatformPorts | None = None,
         platform_agents: PlatformAgents | None = None,
     ) -> AppContainer:
         """Managers, then services, over whichever roots the caller chose.
-        `agent_kinds` are the product's: a session starts on one of them, and
-        the session runner runs its loop with the same kinds. `ports` are the
-        platform's ports the product sets, None each for the platform's own:
-        billing's money gate, and the evidence's result gate. Outside
+        `ports` are the platform's ports the product sets, None each for the
+        platform's own: billing's money gate, and the evidence's result gate.
+        Their `kinds` are the product's: a session starts on one of its agent
+        kinds, and the session runner runs its loop with the same kinds,
+        since each process's `build` hands its root `PRODUCT_KINDS`. Outside
         `local`, a quiet null for any of them, or a budget gate that is not
         the money gate, is refused at boot. `platform_agents` ships the
         platform's agents beside the product's kinds: a deployed process
@@ -252,7 +250,6 @@ class AppContainer:
             operator_options(settings),
             integrations,
             environment=settings.environment,
-            agent_kinds=agent_kinds,
             platform_agents=platform_agents,
             budget_gate=ports.budget_gate or build_money_gate(storage),
             result_gate=ports.result_gate,
@@ -274,7 +271,9 @@ class AppContainer:
         # The model matrix: its versions serve every model role the
         # product's kinds call, beside the platform's own.
         matrix = MatrixLayer(
-            storage, options=MatrixOptions(environment=settings.environment), kinds=agent_kinds
+            storage,
+            options=MatrixOptions(environment=settings.environment),
+            kinds=ports.kinds.agents,
         ).build(managers)
         # Where a tenant connects a system, and where a person reads and
         # clears what waits on them.

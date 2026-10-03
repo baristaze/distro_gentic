@@ -41,6 +41,7 @@ from acme.om.exceptions import NotFound, UnknownAgentKind
 from acme.om.matrix.types.matrix import MatrixStatus
 from acme.om.placement.kinds import platform_work_kinds
 from acme.om.placement.rules import DEFAULT_TIER
+from acme.om.root import PlatformPorts, ProductKinds
 from acme.om.steps.rules import message_step
 from acme.om.steps.types.content import Attachment, Children, DocumentBlock
 from acme.om.steps.types.content import TextBlock as KeptText
@@ -191,7 +192,7 @@ async def test_a_runner_that_lacks_the_kind_leaves_the_loop_to_a_retry(tmp_path:
         storage,
         infra,
         IntegrationsOverImpl(IdentityProviderAbsentImpl(), scripted_model_providers()),
-        agent_kinds=ABSENT,
+        ports=PlatformPorts(kinds=ProductKinds(agents=ABSENT)),
     )
     lacking = RunnerContainer.over(
         settings(),
@@ -307,7 +308,7 @@ def runner_over(tmp_path: Path) -> RunnerContainer:
         StorageMemoryImpl(),
         InfraLocalImpl(tmp_path),
         IntegrationsOverImpl(IdentityProviderAbsentImpl(), providers),
-        agent_kinds=ABSENT,
+        ports=PlatformPorts(kinds=ProductKinds(agents=ABSENT)),
     )
 
 
@@ -475,8 +476,7 @@ async def test_a_call_made_on_what_a_key_said_runs_no_higher_than_the_key(
         StorageMemoryImpl(),
         InfraLocalImpl(tmp_path),
         IntegrationsOverImpl(IdentityProviderAbsentImpl(), scripted_model_providers()),
-        agent_kinds=(ASKING,),
-        tool_catalog=(whoami,),
+        ports=PlatformPorts(kinds=ProductKinds(agents=(ASKING,), tools=lambda _: (whoami,))),
     )
     managers = container.managers
     rctx = RequestContext(request_id=new_id(), app=APP)
@@ -646,7 +646,8 @@ def test_a_runner_booted_through_main_reads_an_attachment_with_the_products_read
         lambda *_: IntegrationsOverImpl(IdentityProviderAbsentImpl(), providers),
     )
 
-    assert runner_main.main(["serve"], agent_kinds=(READING,), attachment_reader=reader) == 0
+    ports = PlatformPorts(kinds=ProductKinds(agents=(READING,)))
+    assert runner_main.main(["serve"], attachment_reader=reader, ports=ports) == 0
 
     (run,) = driven
     (answer,) = run.answered

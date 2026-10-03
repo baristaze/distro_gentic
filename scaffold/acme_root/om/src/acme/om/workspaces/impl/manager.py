@@ -311,13 +311,24 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         version: str,
         source: str,
         protected: tuple[str, ...],
+        source_project: UUID,
     ) -> bytes:
         ctx.require(Permission.READ)
         binding = await self._projects.binding_of(ctx, project_id)
         if binding is None:
             raise Unavailable(f"project {project_id} binds no repository to validate")
         credential = await self._fetch_credential(ctx, project_id)
-        return await self._reader.tree(binding, version, source, protected, credential)
+        if source_project == project_id:
+            return await self._reader.tree(binding, version, source, protected, credential)
+        # A source of its own: a hidden suite's repository, which no
+        # workspace of the project checks out.
+        held = await self._projects.binding_of(ctx, source_project)
+        if held is None:
+            raise Unavailable(f"project {source_project} binds no repository to read a source from")
+        held_credential = await self._fetch_credential(ctx, source_project)
+        return await self._reader.tree(
+            binding, version, source, protected, credential, held, held_credential
+        )
 
     # Egress, and what acts outward.
 
