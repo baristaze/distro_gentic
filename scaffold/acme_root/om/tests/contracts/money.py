@@ -9,6 +9,7 @@ from pathlib import Path
 
 from acme.integrations.payments.twin import PaymentProviderTwinImpl
 from acme.om.agents.impl.loop import LoopOptions
+from acme.om.agents.types.kind import AgentKind
 from acme.om.billing.impl.gate import MoneyCallGateImpl, MoneyGateImpl, MoneyGateOptions
 from acme.om.billing.impl.manager import BillingManagerImpl
 from acme.om.billing.impl.pager import OperatorPagerMemoryImpl
@@ -24,7 +25,7 @@ from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.windows.gate import CallGateInterface
-from contracts.loops import Clock, Loop, loop_over
+from contracts.loops import ASSISTANT, DELIVERY, Clock, Loop, loop_over
 
 
 @dataclass
@@ -69,10 +70,11 @@ def money_over(
     owner: TenantContext | None = None,
     models_layer: ModelsLayer | None = None,
     tools_layer: Callable[[ToolsManagerInterface], ToolsManagerInterface] | None = None,
+    kinds: tuple[AgentKind, ...] = (ASSISTANT, DELIVERY),
 ) -> Money:
     """`storage` None is the memory storage, and `owner` None a fresh
     tenant's owner; a suite over Postgres hands in both. The layers go to
-    the loop's root as they are."""
+    the loop's root as they are, and `kinds` to the loop."""
     storage = storage or StorageMemoryImpl()
     accounts = storage.get_account_storage()
     ledger = storage.get_money_ledger_storage()
@@ -98,6 +100,7 @@ def money_over(
             SessionProjectsBoundImpl(storage.get_project_storage()),
             version=None if models_layer is None else models_layer.version,
             tier=None if models_layer is None else models_layer.tier,
+            clock=clock,
         )
         built.append((gate, calls))
         return calls
@@ -110,6 +113,7 @@ def money_over(
         call_gate=gates,
         models_layer=models_layer,
         tools_layer=tools_layer,
+        kinds=kinds,
     )
     ((gate, calls),) = built
     payments = PaymentProviderTwinImpl()

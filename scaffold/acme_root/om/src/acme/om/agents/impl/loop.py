@@ -914,9 +914,11 @@ class LoopManagerImpl(LoopManagerInterface):
         """Starts a job its gate let run, by a deadline of its own never later
         than the tree's, and parks the loop on it. A job that spends passes
         the budget gate first, paid for by whoever its call was asked for: a
-        refusal parks on the budget, and nothing starts. A job that will not
-        start is answered with its failure, and its hold released only when
-        the start was refused before any work began."""
+        refusal parks on the budget, a gate that parks the job parks where it
+        says, and nobody to pay parks for a person, as a model call's gate
+        does; nothing starts. A job that will not start is answered with its
+        failure, and its hold released only when the start was refused before
+        any work began."""
         assert run.workspace is not None
         now = self._clock()
         deadline = job_deadline(now, tool.spec.timeout, run.deadline)
@@ -936,6 +938,11 @@ class LoopManagerImpl(LoopManagerInterface):
                 )
             except BudgetRefused as refused:
                 return _Settled(park=budget_park(refused.refusal, self._clock()))
+            except GateParked as parked:
+                return _Settled(park=parked.park)
+            except SpenderUnknown as unknown:
+                log.info("session %s: %s", run.session_id, unknown.message)
+                return _Settled(park=Park(reason=ParkReason.PERSON, unlock=rules.SPENDER_UNLOCK))
         try:
             started = await self._tools.start_job(
                 call_ctx,

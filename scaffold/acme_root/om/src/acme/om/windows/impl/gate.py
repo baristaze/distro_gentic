@@ -221,9 +221,12 @@ class CallGateBudgetImpl(CallGateInterface):
         deadline: datetime,
     ) -> UUID:
         session = await self._sessions.get_session(ctx, session_id)
+        project_id = await self._projects.project_of(ctx, session_id)
         request = HoldRequest(
             spender_id=spender.id,
-            scopes=scopes_of(ctx.org_id, session_id, session.root_id, spender),
+            scopes=scopes_of(
+                ctx.org_id, session_id, session.root_id, spender, project_id=project_id
+            ),
             exposure=job_exposure(rate_micros_per_hour, self._clock(), deadline),
             session_id=session_id,
             purpose=tool,

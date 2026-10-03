@@ -15,7 +15,7 @@ from uuid import UUID
 import pytest
 from contracts.benchmark_storage import operator
 from contracts.budget_storage import make_budget
-from contracts.loops import ASSISTANT, reply, said
+from contracts.loops import ASSISTANT, BUILDER, DELIVERY, call, reply, said
 from contracts.money import Money, money_over
 from contracts.project_storage import in_project
 
@@ -56,7 +56,9 @@ from acme.om.context import OperatorPermission, OperatorRole, TenantContext
 from acme.om.exceptions import BudgetRefused, GateParked, NotAuthorized, SpenderUnknown
 from acme.om.models.types.fill import MAIN, Eligibility
 from acme.om.projects.impl.policies import SessionProjectsBoundImpl
-from acme.om.steps.types.header import ParkReason
+from acme.om.steps.types.header import LoopOutcome, ParkReason
+from acme.om.steps.types.step import StepType
+from acme.om.tools.types.call import JobCompletion
 from acme.om.windows.gate import CallGateInterface
 from acme.om.windows.impl.gate import CallGateBudgetImpl
 from acme.om.windows.rules import call_shape
@@ -352,6 +354,124 @@ async def test_a_projects_budget_refuses_a_call_its_tenants_has_room_for(
         owner, loose, spender(owner), MAIN, fill, call, credential="platform"
     )
     await calls.settle(owner, held, None, billed=False)
+
+
+# A spending job passes the same gate.
+
+
+@pytest.mark.parametrize("gate", ["money", "engine"])
+async def test_a_projects_budget_refuses_a_job_its_tenants_has_room_for(
+    gate: str, tmp_path: Path
+) -> None:
+    """A job that spends is held on the scopes a model call is: past its
+    project's budget it is refused, with the project's line its one breach;
+    a session of no project is held, and a job refused before it began
+    releases its hold whole."""
+    money = money_over(tmp_path)
+    await money.open(plan="team")
+    loop, owner = money.loop, money.loop.owner
+    calls: CallGateInterface = money.calls
+    if gate == "engine":
+        calls = CallGateBudgetImpl(
+            loop.managers.budget_gate,
+            loop.managers.pricing,
+            loop.managers.agent_sessions,
+            SessionProjectsBoundImpl(loop.storage.get_project_storage()),
+            clock=loop.clock,
+        )
+    ours, loose = await loop.start(), await loop.start()
+    project = await in_project(loop.storage.get_project_storage(), owner.org_id, ours)
+    for kind, key, cap in (
+        (BudgetScopeKind.TENANT, str(owner.org_id), 1_000_000_000),
+        (BudgetScopeKind.PROJECT, str(project), 1),
+    ):
+        await loop.managers.budgets.create_budget(owner, make_budget(kind, key, cost_micros=cap))
+    deadline = loop.clock() + timedelta(hours=2)
+
+    with pytest.raises(BudgetRefused) as refused:
+        await calls.authorize_job(owner, ours, spender(owner), "compute", 3_600_000, deadline)
+    (breach,) = refused.value.refusal.breaches
+    assert breach.scope == BudgetScope(kind=BudgetScopeKind.PROJECT, key=str(project))
+
+    held = await calls.authorize_job(owner, loose, spender(owner), "compute", 3_600_000, deadline)
+    await calls.settle_job(owner, held, None, started=False)
+    if gate == "money":
+        settlement = (await entries_of(money, held))["Settlement"]
+        assert isinstance(settlement, Settlement) and settlement.spent.cost_micros == 0
+
+
+async def test_a_spending_job_is_held_settled_and_charged_in_the_one_ledger(
+    tmp_path: Path,
+) -> None:
+    """A loop's spending job is held in the one ledger at its rate until its
+    deadline, and its completion settles and charges it at the cost it
+    reported."""
+    money = money_over(tmp_path, kinds=(ASSISTANT, DELIVERY, BUILDER))
+    await money.open(plan="team")
+    loop, owner = money.loop, money.loop.owner
+    session_id = await loop.start("builder")
+    await loop.say(session_id, "Start it.")
+    loop.anthropic.add(reply(call("compute", q="everything")), reply(said("It is done.")))
+
+    parked = await loop.loops.run(owner, session_id)
+
+    assert parked.park is not None and parked.park.job is not None
+    hold_id = parked.park.job.hold_id
+    assert hold_id is not None
+    hold = await money.gate.read_hold(owner, hold_id)
+    assert hold.hold.purpose == "compute" and hold.priced is None
+    assert hold.hold.exposure.cost_micros is not None
+    assert hold.hold.exposure.cost_micros >= 7_200_000, "its rate until its deadline"
+    request = next(s for s in await loop.history(session_id) if s.type is StepType.TOOL_REQUEST)
+    await loop.loops.complete_job(
+        owner,
+        session_id,
+        JobCompletion(key=request.id, handle="compute-1", text="done", cost_micros=1_234),
+    )
+    done = await loop.loops.run(owner, session_id)
+
+    assert done.outcome is LoopOutcome.SUCCEEDED
+    found = await entries_of(money, hold_id)
+    assert sorted(found) == ["Charge", "FundedHold", "Settlement"]
+    settlement = found["Settlement"]
+    assert isinstance(settlement, Settlement)
+    assert settlement.spent.cost_micros == 1_234, "at the cost it reported"
+
+
+@pytest.mark.parametrize("refusal", ["funds", "payer"])
+async def test_a_spending_job_the_money_gate_parks_starts_nothing_and_holds_nothing(
+    refusal: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A job no bucket covers parks on the budget, and one nobody can be
+    named to pay for parks for a person, as a model call does: the job
+    never starts, and the ledger holds nothing for it."""
+    plans = PlanCatalog(
+        plans=(Plan(id="small", version=1, included_units=5_000, unit_price_micros=1_000),)
+    )
+    money = money_over(tmp_path, plans=plans, kinds=(ASSISTANT, DELIVERY, BUILDER))
+    await money.open(plan="small")
+    loop, owner = money.loop, money.loop.owner
+    if refusal == "payer":
+
+        async def nobody(*args: object) -> UUID:
+            raise SpenderUnknown("the job does not carry the tenant's own key")
+
+        monkeypatch.setattr(money.calls, "authorize_job", nobody)
+    session_id = await loop.start("builder")
+    await loop.say(session_id, "Start it.")
+    loop.anthropic.add(reply(call("compute", q="everything")))
+
+    parked = await loop.loops.run(owner, session_id)
+
+    assert parked.end is RunEnd.PARKED and parked.park is not None
+    if refusal == "funds":
+        assert parked.park.reason is ParkReason.BUDGET
+        assert parked.park.unlock in (FUNDS_UNLOCK, HELD_UNLOCK)
+    else:
+        assert parked.park.reason is ParkReason.PERSON and parked.park.unlock == SPENDER_UNLOCK
+    assert loop.jobs["compute"].started == {}, "no job started"
+    holds = await money.ledger.read_entries(owner.org_id, kind=EntryKind.HOLD, limit=10)
+    assert [h for h in holds if isinstance(h, FundedHold) and h.hold.purpose == "compute"] == []
 
 
 # Time zones.
