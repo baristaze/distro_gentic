@@ -160,12 +160,16 @@ class RepositoryReaderInterface(ABC):
         source: str,
         protected: tuple[str, ...],
         credential: FetchCredential | None = None,
+        source_binding: RepositoryBinding | None = None,
+        source_credential: FetchCredential | None = None,
     ) -> bytes:
         """The tree a validation runs on, as a tar: the bound repository at
         the commit `version`, with every path a `protected` pattern matches
         taken from the commit `source` instead, and left out where `source`
         holds none. Both commits are fetched by the repository's URL, with
-        the same `credential` as `delivered`, and nothing of git comes with
-        the tree: no history, no config, no hooks. `Unavailable` when either
-        commit cannot be read, or the tar is past its bound."""
+        the same `credential` as `delivered`; with `source_binding`, `source`
+        is fetched by that repository's URL instead, with
+        `source_credential`. Nothing of git comes with the tree: no history,
+        no config, no hooks. `Unavailable` when either commit cannot be
+        read, or the tar is past its bound."""
         ...

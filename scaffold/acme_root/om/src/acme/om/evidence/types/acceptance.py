@@ -41,12 +41,18 @@ class HiddenSuite(Platform):
     delivered, and their runs stay with the verdict, never with the
     session's evidence, which the agent reads.
 
-    It lives in a source of its own (`source`), never in the project's
-    repository: a protected path is write-denied, not read-denied, so a
-    suite in the tree the workspace checks out is one the agent can read
-    and fit its fix to. The executor fetches it only to run it."""
+    It lives in a source of its own, never in the project's repository: a
+    protected path is write-denied, not read-denied, so a suite in the tree
+    the workspace checks out is one the agent can read and fit its fix to.
+    Its source is the commit `source` of the repository `project` binds, a
+    project apart from the scenario's, and its files are the paths its
+    `paths` patterns match. The executor fetches it only to run it: in the
+    tree at the head, every path a pattern matches comes from `source`,
+    whatever the head holds there."""
 
+    project: str = Field(pattern=PROJECT)
     source: str = Field(pattern=VERSION)
+    paths: tuple[PATTERN, ...] = Field(min_length=1, max_length=50)
     checks: tuple[CheckDeclaration, ...] = Field(min_length=1, max_length=50)
     markers: tuple[str, ...] = Field(min_length=1, max_length=200)
 

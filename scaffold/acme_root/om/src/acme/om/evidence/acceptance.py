@@ -22,11 +22,16 @@ from acme.om.steps.types.header import LoopOutcome
 def scenario_refusal(scenario: Scenario) -> str | None:
     """Why a scenario measures nothing: an objective that names its root
     cause or its hidden suite, by the match a scan makes; a hidden suite
-    kept at the base, in the tree the agent's workspace checks out; or a
-    hidden check that shares a name with a visible one."""
+    kept in the scenario's project, or at its base, in the repository the
+    agent's workspace checks out; or a hidden check that shares a name with
+    a visible one."""
     told = named((*scenario.root_cause, *scenario.hidden.markers), scenario.objective)
     if told:
         return f"the objective names what it hides: {sorted(told)}"
+    if scenario.hidden.project == scenario.project:
+        return (
+            "the hidden suite's source is the project's, whose repository the workspace checks out"
+        )
     if scenario.hidden.source == scenario.base:
         return "the hidden suite's source is the base, which the agent's workspace checks out"
     shared = sorted({check.name for check in scenario.hidden.checks} & set(scenario.visible))
