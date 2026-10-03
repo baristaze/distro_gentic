@@ -14,7 +14,6 @@ from acme.infra.root import InfraInterface
 from acme.infra.transports import TransportInterface
 from acme.integrations.impl.configured import IntegrationsConfiguredImpl
 from acme.integrations.root import IntegrationsInterface
-from acme.om.agents.types.kind import AgentKind
 from acme.om.attribution.impl.manager import members_context
 from acme.om.attribution.types.principal import Principal
 from acme.om.automations.root import automation_principals
@@ -33,13 +32,13 @@ from acme.om.notifications.root import build_notifications
 from acme.om.platform_agents.catalog import PlatformAgents
 from acme.om.platform_agents.settings import shipped_agents
 from acme.om.playbooks.root import PlaybooksLayer
+from acme.om.product_kinds import PRODUCT_KINDS
 from acme.om.relay.impl.placement import PlacementRelayedImpl
 from acme.om.relay.impl.transport import TransportPlacedImpl, TransportRelayImpl
 from acme.om.root import Managers, PlatformPorts, build_managers
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.tools.manager import ToolsManagerInterface
-from acme.om.tools.tool import ToolInterface
 from acme.om.trust.impl.keys import KeyProbeAbsentImpl
 from acme.om.trust.root import TrustLayer
 from acme.om.trust.types.identities import Executor, ExecutorKind
@@ -82,18 +81,15 @@ class RunnerContainer:
         cls,
         settings: SessionRunnerSettings,
         *,
-        agent_kinds: tuple[AgentKind, ...] = (),
-        tool_catalog: tuple[ToolInterface, ...] = (),
-        domain_classes: tuple[str, ...] = (),
         ports: PlatformPorts | None = None,
     ) -> RunnerContainer:
         """Over the database, the infra, and the providers the settings
-        name. `agent_kinds`, `tool_catalog`, and `domain_classes` are the
-        product's, as every process that builds the managers passes them;
-        so are the platform's `ports`, among them the evidence's executor
-        and work product. The result gate every success passes is the
-        evidence's, over that work product: with none wired, no success
-        counts."""
+        name. `ports` are the product's, among them the evidence's executor
+        and work product; None hands the root `PRODUCT_KINDS` and the
+        platform's own ports, and a product that sets ports of its own sets
+        `kinds=PRODUCT_KINDS` among them, so every process knows the same
+        kinds. The result gate every success passes is the evidence's, over
+        that work product: with none wired, no success counts."""
         storage = StoragePostgresImpl(
             settings.role_urls(),
             settings.role_pools(),
@@ -108,10 +104,7 @@ class RunnerContainer:
             storage,
             infra,
             integrations,
-            agent_kinds=agent_kinds,
-            tool_catalog=tool_catalog,
-            domain_classes=domain_classes,
-            ports=ports,
+            ports=ports or PlatformPorts(kinds=PRODUCT_KINDS),
             platform_agents=shipped_agents(settings, settings.environment),
         )
 
@@ -123,9 +116,6 @@ class RunnerContainer:
         infra: InfraInterface,
         integrations: IntegrationsInterface,
         *,
-        agent_kinds: tuple[AgentKind, ...] = (),
-        tool_catalog: tuple[ToolInterface, ...] = (),
-        domain_classes: tuple[str, ...] = (),
         ports: PlatformPorts | None = None,
         platform_agents: PlatformAgents | None = None,
     ) -> RunnerContainer:
@@ -168,7 +158,7 @@ class RunnerContainer:
             storage,
             options=MatrixOptions(environment=settings.environment),
             clients=lambda: trust.managers.provider_clients,
-            kinds=agent_kinds,
+            kinds=ports.kinds.agents,
         )
         playbooks = PlaybooksLayer(storage)
         knowledge = KnowledgeLayer(storage)
@@ -211,9 +201,7 @@ class RunnerContainer:
             infra,
             integrations=integrations,
             environment=settings.environment,
-            agent_kinds=agent_kinds,
-            tool_catalog=(*tool_catalog, *acts),
-            domain_classes=domain_classes,
+            tool_catalog=acts,
             platform_agents=platform_agents,
             intake=lambda: held[0].intake,
             budget_gate=ports.budget_gate or build_money_gate(storage),

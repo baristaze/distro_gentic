@@ -40,6 +40,7 @@ from acme.om.exceptions import NotFound, UnknownAgentKind
 from acme.om.matrix.types.matrix import MatrixStatus
 from acme.om.placement.kinds import platform_work_kinds
 from acme.om.placement.rules import DEFAULT_TIER
+from acme.om.root import PlatformPorts, ProductKinds
 from acme.om.steps.rules import message_step
 from acme.om.steps.types.header import LoopOutcome
 from acme.om.steps.types.step import StepType
@@ -185,7 +186,7 @@ async def test_a_runner_that_lacks_the_kind_leaves_the_loop_to_a_retry(tmp_path:
         storage,
         infra,
         IntegrationsOverImpl(IdentityProviderAbsentImpl(), scripted_model_providers()),
-        agent_kinds=ABSENT,
+        ports=PlatformPorts(kinds=ProductKinds(agents=ABSENT)),
     )
     lacking = RunnerContainer.over(
         settings(),
@@ -301,7 +302,7 @@ def runner_over(tmp_path: Path) -> RunnerContainer:
         StorageMemoryImpl(),
         InfraLocalImpl(tmp_path),
         IntegrationsOverImpl(IdentityProviderAbsentImpl(), providers),
-        agent_kinds=ABSENT,
+        ports=PlatformPorts(kinds=ProductKinds(agents=ABSENT)),
     )
 
 
@@ -469,8 +470,7 @@ async def test_a_call_made_on_what_a_key_said_runs_no_higher_than_the_key(
         StorageMemoryImpl(),
         InfraLocalImpl(tmp_path),
         IntegrationsOverImpl(IdentityProviderAbsentImpl(), scripted_model_providers()),
-        agent_kinds=(ASKING,),
-        tool_catalog=(whoami,),
+        ports=PlatformPorts(kinds=ProductKinds(agents=(ASKING,), tools=lambda _: (whoami,))),
     )
     managers = container.managers
     rctx = RequestContext(request_id=new_id(), app=APP)

@@ -28,9 +28,7 @@ from acme.infra.observability import (
     name_process,
 )
 from acme.infra.trust import install_trust_store
-from acme.om.agents.types.kind import AgentKind
 from acme.om.root import PlatformPorts
-from acme.om.tools.tool import ToolInterface
 from acme.om.work.types.work_item import WorkKind
 from acme.workers.maintenance.health import Probe, WorkerHttpServer
 from acme.workers.maintenance.loop import LoopOptions, WorkerLoop
@@ -104,23 +102,10 @@ def boot(settings: SessionRunnerSettings) -> None:
     )
 
 
-async def serve(
-    lane: str | None,
-    *,
-    agent_kinds: tuple[AgentKind, ...] = (),
-    tool_catalog: tuple[ToolInterface, ...] = (),
-    domain_classes: tuple[str, ...] = (),
-    ports: PlatformPorts | None = None,
-) -> int:
+async def serve(lane: str | None, *, ports: PlatformPorts | None = None) -> int:
     settings = SessionRunnerSettings()
     boot(settings)
-    container = RunnerContainer.build(
-        settings,
-        agent_kinds=agent_kinds,
-        tool_catalog=tool_catalog,
-        domain_classes=domain_classes,
-        ports=ports,
-    )
+    container = RunnerContainer.build(settings, ports=ports)
     await container.start()
     runner = build_runner(container, lane)
     running = asyncio.get_running_loop()
@@ -163,17 +148,10 @@ def health(settings: SessionRunnerSettings) -> int:
     return 1
 
 
-def main(
-    argv: list[str] | None = None,
-    *,
-    agent_kinds: tuple[AgentKind, ...] = (),
-    tool_catalog: tuple[ToolInterface, ...] = (),
-    domain_classes: tuple[str, ...] = (),
-    ports: PlatformPorts | None = None,
-) -> int:
-    """`agent_kinds`, `tool_catalog`, `domain_classes`, and the platform's
-    `ports` are the product's: a product's own entry point passes them, as
-    its containers pass them to the managers."""
+def main(argv: list[str] | None = None, *, ports: PlatformPorts | None = None) -> int:
+    """`ports` are the platform's ports a product's own entry point sets,
+    `kinds=PRODUCT_KINDS` among them; None hands the root `PRODUCT_KINDS`
+    and the platform's own ports (`RunnerContainer.build`)."""
     parser = argparse.ArgumentParser(prog="acme-session-runner")
     sub = parser.add_subparsers(dest="command", required=True)
     p_serve = sub.add_parser("serve", help="claim the loops of agent sessions and run them")
@@ -182,15 +160,7 @@ def main(
     args = parser.parse_args(argv)
     if args.command == "health":
         return health(SessionRunnerSettings())
-    return asyncio.run(
-        serve(
-            args.lane,
-            agent_kinds=agent_kinds,
-            tool_catalog=tool_catalog,
-            domain_classes=domain_classes,
-            ports=ports,
-        )
-    )
+    return asyncio.run(serve(args.lane, ports=ports))
 
 
 if __name__ == "__main__":

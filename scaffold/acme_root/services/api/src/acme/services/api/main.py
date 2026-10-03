@@ -23,6 +23,7 @@ from acme.integrations.impl.configured import absent_integrations
 from acme.om.base import new_id
 from acme.om.context import AppContext, AppType, OperatorRole, RequestContext, Role
 from acme.om.exceptions import Conflict
+from acme.om.product_kinds import PRODUCT_KINDS
 from acme.om.storage import migrate
 from acme.om.trust.root import build_trust_operator
 from acme.services.api.app import create_app
@@ -249,8 +250,9 @@ def add_member(args: argparse.Namespace) -> int:
 
 def seed_platform_of(args: argparse.Namespace) -> int:
     """A local org made ready to run a session: its account on a plan, its
-    first project, its retention policy, and the published matrix. A no-op
-    for what is there already."""
+    first project, its retention policy, and the published matrix, which
+    serves the product's agent kinds beside the platform's. A no-op for
+    what is there already."""
 
     async def run() -> int:
         settings = ApiSettings()
@@ -265,7 +267,9 @@ def seed_platform_of(args: argparse.Namespace) -> int:
                 print(f"no org {args.slug}; bootstrap it first", file=sys.stderr)
                 return 1
             owner = await container.managers.tenancy.member_context(rctx, org.id, org.created_by)
-            seeded = await seed_platform(container.storage, container.managers, owner)
+            seeded = await seed_platform(
+                container.storage, container.managers, owner, PRODUCT_KINDS.agents
+            )
         finally:
             await container.close()
         project = "seeded before" if seeded.project is None else seeded.project.id

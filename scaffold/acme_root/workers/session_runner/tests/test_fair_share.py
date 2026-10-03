@@ -28,6 +28,7 @@ from acme.om.context import (
     RequestContext,
 )
 from acme.om.placement.rules import tier_lane
+from acme.om.root import PlatformPorts, ProductKinds
 from acme.om.steps.rules import message_step
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.impl.postgres import StoragePostgresImpl
@@ -105,7 +106,7 @@ async def test_a_loop_over_its_tenants_share_goes_back_to_its_lane_with_no_attem
         storage,
         InfraLocalImpl(tmp_path),
         IntegrationsOverImpl(IdentityProviderAbsentImpl(), scripted_model_providers()),
-        agent_kinds=ABSENT,
+        ports=PlatformPorts(kinds=ProductKinds(agents=ABSENT)),
     )
     managers = container.managers
     rctx = RequestContext(request_id=new_id(), app=APP)

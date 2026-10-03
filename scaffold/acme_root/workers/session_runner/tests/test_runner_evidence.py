@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 from contracts.ports import open_ports
-from runner_support import ABSENT
 
 from acme.infra.impl.local import InfraLocalImpl
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
@@ -45,7 +44,6 @@ def runner(
         storage or StorageMemoryImpl(),
         InfraLocalImpl(tmp_path),
         IntegrationsOverImpl(IdentityProviderAbsentImpl(), scripted_model_providers()),
-        agent_kinds=ABSENT,
         ports=ports or PlatformPorts(work_product=work_product),
     )
 
