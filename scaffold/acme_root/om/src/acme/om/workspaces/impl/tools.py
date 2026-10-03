@@ -161,6 +161,7 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         epoch: int,
         tree_deadline: datetime | None,
         on_output: OutputSink | None = None,
+        kept_as: Mapping[str, str] | None = None,
     ) -> Step:
         return await self._inner.execute(
             ctx,
@@ -171,6 +172,7 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
             epoch=epoch,
             tree_deadline=tree_deadline,
             on_output=on_output,
+            kept_as=kept_as,
         )
 
     async def recover(
@@ -184,6 +186,7 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         epoch: int,
         tree_deadline: datetime | None,
         on_output: OutputSink | None = None,
+        kept_as: Mapping[str, str] | None = None,
     ) -> Step:
         return await self._inner.recover(
             ctx,
@@ -194,6 +197,7 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
             epoch=epoch,
             tree_deadline=tree_deadline,
             on_output=on_output,
+            kept_as=kept_as,
         )
 
     async def start_job(
@@ -206,6 +210,7 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         *,
         epoch: int,
         tree_deadline: datetime | None,
+        kept_as: Mapping[str, str] | None = None,
     ) -> JobHandle | Step:
         return await self._inner.start_job(
             ctx,
@@ -215,6 +220,7 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
             workspace,
             epoch=epoch,
             tree_deadline=tree_deadline,
+            kept_as=kept_as,
         )
 
     async def cancel_job(self, ctx: TenantContext, registry: ToolRegistry, job: JobHandle) -> None:

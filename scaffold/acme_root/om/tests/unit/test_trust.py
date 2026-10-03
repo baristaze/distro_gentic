@@ -5,6 +5,7 @@ stream part, and no model, and a secret never crosses its session's wall;
 a tenant's key rotates by reference, so no client serves a rotated one."""
 
 import logging
+from collections.abc import Mapping
 from datetime import timedelta
 from pathlib import Path
 from uuid import UUID
@@ -13,11 +14,13 @@ import pytest
 from contracts.doubles import context
 from contracts.factories import make_org
 from contracts.loops import reply, said, use
-from contracts.project_storage import make_project
+from contracts.project_storage import make_binding, make_project
 from contracts.tools import INJECTED_TOKEN, echoing
 from contracts.trust import Trusted, trusted
 
+from acme.infra.transports import CommandSpec
 from acme.infra.transports.redaction import forms, marker
+from acme.infra.transports.twin import TwinReply
 from acme.integrations.model_providers.absent import ModelProviderAbsentImpl
 from acme.integrations.model_providers.types import ProviderName
 from acme.om.agents.loop_rules import PRINCIPAL_UNLOCK
@@ -41,7 +44,7 @@ from acme.om.trust.types.identities import (
     ExecutorKind,
 )
 from acme.om.trust.types.provider_key import KeyStatus, key_secret_name
-from acme.om.trust.types.secret import SecretDeclaration, SecretOwnerKind, SecretStore
+from acme.om.trust.types.secret import SecretDeclaration, SecretOwnerKind, SecretStore, kept_as
 
 SECRET = "ghs_4b1d9e7c2a6f80c3-deploy"
 
@@ -87,6 +90,41 @@ def declared(
         scope="call:records-api",
         store=store,
     )
+
+
+async def another_project(platform: Trusted) -> UUID:
+    """A second project of the owner's tenant."""
+    other = make_project("octo/ledger")
+    await platform.storage.get_project_storage().create_project(platform.owner.org_id, other, ())
+    return other.id
+
+
+async def of_project(platform: Trusted, project_id: UUID) -> UUID:
+    """A session of `project_id`, its row written once it stands."""
+    start = Start(id=new_id(), kind="steady", title="the ledger")
+    session = await platform.managers.agents.start_session(platform.owner, start)
+    binding = make_binding(session.id, project_id)
+    await platform.storage.get_project_storage().bind_session(platform.owner.org_id, binding)
+    return session.id
+
+
+def reading(platform: Trusted) -> list[str]:
+    """What each command finds in its token's variable, in order."""
+    seen: list[str] = []
+
+    async def handler(command: CommandSpec, env: Mapping[str, str]) -> TwinReply:
+        seen.append(env[INJECTED_TOKEN.env or ""])
+        return TwinReply(exit_code=0, stdout="read")
+
+    platform.transport.handler = handler
+    return seen
+
+
+async def call_the_api(platform: Trusted, session_id: UUID) -> None:
+    await platform.say(session_id, "Call the records API.")
+    platform.anthropic.add(reply(said("Calling."), call("call_api")), reply(said("Done.")))
+    run = await platform.loops.run(platform.owner, session_id)
+    assert run.outcome is LoopOutcome.SUCCEEDED
 
 
 # An audit entry names executor, principal, spender, and actor, and
@@ -244,7 +282,7 @@ async def test_a_secrets_value_reaches_no_step_no_log_no_stream_part_and_no_mode
     platform = trusted(tmp_path)
     project = await platform.owners_project()
     await platform.trust.trust.declare_secret(platform.owner, declared(project=project))
-    await platform.trust.trust.put_secret(platform.owner, INJECTED_TOKEN.name, SECRET)
+    await platform.trust.trust.put_secret(platform.owner, project, INJECTED_TOKEN.name, SECRET)
     platform.transport.handler = echoing("API_TOKEN")
     session_id = await platform.start(project=True)
     await platform.say(session_id, "Call the records API.")
@@ -285,7 +323,7 @@ async def test_a_cloud_secret_is_refused_for_a_session_inside_a_customers_wall(
     platform = trusted(tmp_path)
     project = await platform.owners_project()
     await platform.trust.trust.declare_secret(platform.owner, declared(project=project))
-    await platform.trust.trust.put_secret(platform.owner, INJECTED_TOKEN.name, SECRET)
+    await platform.trust.trust.put_secret(platform.owner, project, INJECTED_TOKEN.name, SECRET)
     platform.transport.handler = echoing("API_TOKEN")
     session_id = await platform.start(project=True)
     platform.placement.walled.add(session_id)
@@ -313,20 +351,20 @@ async def test_a_secret_crosses_no_wall_either_way_and_takes_no_value_from_the_c
     platform.placement.walled.add(walled)
     # Never declared: resolved from the platform's store, so a cloud secret.
     with pytest.raises(SecretCrossesWall):
-        await trust.refuse_crossing(platform.owner, walled, (INJECTED_TOKEN,))
-    await trust.refuse_crossing(platform.owner, cloud, (INJECTED_TOKEN,))
+        await trust.resolve_secrets(platform.owner, walled, (INJECTED_TOKEN,))
+    await trust.resolve_secrets(platform.owner, cloud, (INJECTED_TOKEN,))
     held_inside = await trust.declare_secret(
         platform.owner, declared(store=SecretStore.HOST, project=project)
     )
-    await trust.refuse_crossing(platform.owner, walled, (INJECTED_TOKEN,))
+    await trust.resolve_secrets(platform.owner, walled, (INJECTED_TOKEN,))
     with pytest.raises(SecretCrossesWall):
-        await trust.refuse_crossing(platform.owner, cloud, (INJECTED_TOKEN,))
+        await trust.resolve_secrets(platform.owner, cloud, (INJECTED_TOKEN,))
     with pytest.raises(SecretCrossesWall):
-        await trust.put_secret(platform.owner, held_inside.name, SECRET)
+        await trust.put_secret(platform.owner, project, held_inside.name, SECRET)
     assert not await platform.infra.get_secrets().has(platform.owner.org_id, held_inside.name)
     aimed_elsewhere = INJECTED_TOKEN.model_copy(update={"env": "OTHER_TOKEN"})
     with pytest.raises(SecretCrossesWall):
-        await trust.refuse_crossing(platform.owner, walled, (aimed_elsewhere,))
+        await trust.resolve_secrets(platform.owner, walled, (aimed_elsewhere,))
     with pytest.raises(ValueError):
         SecretDeclaration.model_validate(
             {
@@ -338,24 +376,46 @@ async def test_a_secret_crosses_no_wall_either_way_and_takes_no_value_from_the_c
         await trust.declare_secret(platform.member(), declared(name="another", project=project))
 
 
-async def test_a_projects_secret_reaches_its_own_projects_sessions_alone(
+async def test_each_project_keeps_its_own_value_of_one_name_and_its_sessions_read_it(
     tmp_path: Path,
 ) -> None:
     platform = trusted(tmp_path)
-    project = await platform.owners_project()
-    trust = platform.trust.trust
-    await trust.declare_secret(platform.owner, declared(project=project))
-    ours = await platform.start(project=True)
-    await trust.refuse_crossing(platform.owner, ours, (INJECTED_TOKEN,))
-    # A session of another project of the tenant, and one of no project.
-    loose = await platform.start()
-    other = make_project("octo/ledger")
-    await platform.storage.get_project_storage().create_project(platform.owner.org_id, other, ())
-    start = Start(id=new_id(), kind="steady", title="the ledger")
-    theirs = (await platform.managers.projects.start_session(platform.owner, other.id, start)).id
-    for session_id in (theirs, loose):
-        with pytest.raises(SecretCrossesWall, match="declared on another project"):
-            await trust.refuse_crossing(platform.owner, session_id, (INJECTED_TOKEN,))
+    trust, owner = platform.trust.trust, platform.owner
+    ours, theirs = await platform.owners_project(), await another_project(platform)
+    for project_id in (ours, theirs):
+        await trust.declare_secret(owner, declared(project=project_id))
+        await trust.put_secret(owner, project_id, INJECTED_TOKEN.name, f"value-{project_id}")
+    seen = reading(platform)
+    for session_id in (await platform.start(project=True), await of_project(platform, theirs)):
+        await call_the_api(platform, session_id)
+
+    assert seen == [f"value-{ours}", f"value-{theirs}"], "each session its own project's"
+    secrets = platform.infra.get_secrets()
+    assert not await secrets.has(owner.org_id, INJECTED_TOKEN.name), "no value is the tenant's"
+
+
+async def test_a_session_never_reaches_another_projects_secret_of_its_name(
+    tmp_path: Path,
+) -> None:
+    platform = trusted(tmp_path)
+    trust, owner = platform.trust.trust, platform.owner
+    ours, theirs = await platform.owners_project(), await another_project(platform)
+    await trust.declare_secret(owner, declared(project=theirs))
+    await trust.put_secret(owner, theirs, INJECTED_TOKEN.name, "value-theirs")
+    seen = reading(platform)
+    first, loose = await platform.start(project=True), await platform.start()
+    for session_id in (first, loose):
+        resolved = await trust.resolve_secrets(owner, session_id, (INJECTED_TOKEN,))
+        assert resolved == {}, "the name alone: the tenant's own, never theirs"
+
+    await call_the_api(platform, first)
+    assert seen == [], "the tenant holds no value of the name, and theirs is not read"
+    await platform.infra.get_secrets().put(owner.org_id, INJECTED_TOKEN.name, "value-tenant")
+    await call_the_api(platform, await platform.start(project=True))
+    await call_the_api(platform, loose)
+
+    assert seen == ["value-tenant", "value-tenant"]
+    assert ours != theirs
 
 
 async def test_a_declaration_on_a_project_the_tenant_does_not_hold_is_refused(
@@ -459,11 +519,13 @@ async def test_a_purged_tenants_values_leave_the_store_with_their_records(
     secrets = platform.infra.get_secrets()
     key = await trust.save_provider_key(owner, ProviderName.ANTHROPIC, "sk-first")
     await trust.declare_secret(owner, declared(project=project))
-    await trust.put_secret(owner, INJECTED_TOKEN.name, SECRET)
+    await trust.put_secret(owner, project, INJECTED_TOKEN.name, SECRET)
     await trust.declare_secret(
         owner, declared("held_inside", store=SecretStore.HOST, project=project)
     )
     assert await trust.purge_tenant(owner) == 0, "a living tenant keeps everything"
+    (cloud,) = [d for d in await trust.get_secrets(owner, None, 10) if d.store is SecretStore.CLOUD]
+    assert await secrets.has(owner.org_id, kept_as(cloud)), "kept under its project"
 
     async def expired(ctx: object) -> bool:
         return True
@@ -471,7 +533,7 @@ async def test_a_purged_tenants_values_leave_the_store_with_their_records(
     monkeypatch.setattr(platform.managers.tenancy, "tenant_expired", expired)
     assert await trust.purge_tenant(owner) == 3
     assert not await secrets.has(owner.org_id, key_secret_name(key.id))
-    assert not await secrets.has(owner.org_id, INJECTED_TOKEN.name), "the cloud secret's value"
+    assert not await secrets.has(owner.org_id, kept_as(cloud)), "the cloud secret's value"
     assert await trust.get_provider_keys(owner, 10) == ()
     assert await trust.get_secrets(owner, None, 10) == ()
     assert await trust.purge_tenant(owner) == 0

@@ -116,6 +116,7 @@ class ToolsManagerInterface(ABC):
         epoch: int,
         tree_deadline: datetime | None,
         on_output: OutputSink | None = None,
+        kept_as: Mapping[str, str] | None = None,
     ) -> Step:
         """Runs a call its gate let run, under the request's id as its key and
         the run's epoch, and answers it with its response step: a result, or
@@ -124,7 +125,8 @@ class ToolsManagerInterface(ABC):
         deadline, and its whole process tree ends then. A `transient` failure
         of a `read_only` or `idempotent` tool is run again once, after the
         options' wait, while that time allows. Each secret it uses is
-        audited by name before its command runs. `StaleWriter` when the
+        audited by name before its command runs, and its value is read under
+        the name `kept_as` gives it, else its own. `StaleWriter` when the
         transport refuses the run's epoch."""
         ...
 
@@ -140,6 +142,7 @@ class ToolsManagerInterface(ABC):
         epoch: int,
         tree_deadline: datetime | None,
         on_output: OutputSink | None = None,
+        kept_as: Mapping[str, str] | None = None,
     ) -> Step:
         """Settles a request a lost run left without a response, after its
         gate let it run. A `read_only` or `idempotent` call runs again under
@@ -161,6 +164,7 @@ class ToolsManagerInterface(ABC):
         *,
         epoch: int,
         tree_deadline: datetime | None,
+        kept_as: Mapping[str, str] | None = None,
     ) -> JobHandle | Step:
         """Starts a `job` call its gate let run, under the request's id, by a
         deadline of its own never later than the tree's, and answers the

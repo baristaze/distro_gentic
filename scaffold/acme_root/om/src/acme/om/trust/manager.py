@@ -5,8 +5,8 @@ It writes the audit entry of every tool call with its four answers apart:
 the machine that ran it, whom it ran under, who paid for the model call
 that chose it, and the agent that asked. It lets a person take over a
 steady session whose principal no longer holds, and wakes it. It keeps the
-tenant's secrets by name, where each is held, and refuses a call whose
-secrets would cross the session's wall. And it keeps the tenant's own
+tenant's secrets by name and owner, where each is held, and refuses a call
+whose secrets would cross the session's wall. And it keeps the tenant's own
 provider keys by reference, never shown."""
 
 from abc import ABC, abstractmethod
@@ -57,38 +57,47 @@ class TrustManagerInterface(ABC):
         configuration may (`manage_members`, ADR 2010): its variable, its scope, what it is declared on, and the store
         that holds it. A project it is declared on is one of the tenant's;
         another tenant's, or none, is `NotFound`, and nothing is written.
-        The same declaration made again is answered as stored; another under
-        a name taken is `Conflict`. No value is taken here."""
+        A name is its owner's: each project declares its own secret of a
+        name. The same declaration made again is answered as stored; another
+        under a name its owner took is `Conflict`. No value is taken here."""
         ...
 
     @abstractmethod
     async def get_secrets(
-        self, ctx: TenantContext, after: str | None, limit: int
+        self, ctx: TenantContext, after: tuple[str, UUID] | None, limit: int
     ) -> tuple[SecretDeclaration, ...]:
-        """The tenant's declarations by name, after `after`, at most `limit`:
-        names and where each is held, never a value."""
+        """The tenant's declarations by name, then id, after the (name, id)
+        `after`, at most `limit`: names, owners, and where each is held,
+        never a value."""
         ...
 
     @abstractmethod
-    async def put_secret(self, ctx: TenantContext, name: str, value: str) -> SecretDeclaration:
-        """Writes the value of a declared cloud secret into the platform's
-        store, as one who writes the tenant's configuration may. A secret held inside
-        a customer's wall never takes its value here
-        (`SecretCrossesWall`): its host's store holds it. `NotFound` for a
-        name never declared."""
+    async def put_secret(
+        self, ctx: TenantContext, project_id: UUID, name: str, value: str
+    ) -> SecretDeclaration:
+        """Writes the value of a cloud secret the project `project_id`
+        declared into the platform's store, under that project, as one who
+        writes the tenant's configuration may. A secret held inside a
+        customer's wall never takes its value here (`SecretCrossesWall`): its
+        host's store holds it. `NotFound` for a name the project never
+        declared."""
         ...
 
     @abstractmethod
-    async def refuse_crossing(
+    async def resolve_secrets(
         self, ctx: TenantContext, session_id: UUID, uses: Sequence[SecretUse]
-    ) -> None:
-        """Refuses (`SecretCrossesWall`) secrets that would be resolved on the
-        far side of the session's wall: a project's secret for a session of
-        another project, or of none, as the projects answer the session's
-        project; a cloud secret, or one never declared, for a session inside
-        a customer's wall; a secret held inside the wall for a session in the
-        cloud; an injected one aimed at a variable its declaration does not
-        name. Returns when every one may be used."""
+    ) -> dict[str, str]:
+        """The name the tenant's store keeps each of `uses` under, for the
+        session: a name means the declaration of the session's project
+        first, then the tenant's own, on no project, and never another
+        project's, as the projects answer the session's project. A declared
+        cloud secret is kept under its owner; one never declared is kept
+        under its own name, and is absent from the answer. Refuses
+        (`SecretCrossesWall`) secrets that would be resolved on the far side
+        of the session's wall: a cloud secret, or one never declared, for a
+        session inside a customer's wall; a secret held inside the wall for
+        a session in the cloud; an injected one aimed at a variable its
+        declaration does not name."""
         ...
 
     # The tenant's provider keys.
