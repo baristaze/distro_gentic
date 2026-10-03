@@ -38,6 +38,15 @@ in_box env ACME_ENROLLMENT_TOKEN=hen_check /src/deployment/host/install.sh \
 if in_box systemctl is-active --quiet acme-host; then
   fail "the host started with no ceilings"
 fi
+in_box systemctl start acme-host 2>/dev/null || true
+for _ in $(seq 10); do
+  in_box systemctl is-failed --quiet acme-host && break
+  sleep 1
+done
+in_box systemctl is-failed --quiet acme-host || fail "the unit starts with no ceilings to bind"
+in_box systemctl show -p ExecMainStatus acme-host
+in_box systemctl reset-failed acme-host
+echo "refused: starting the unit with no ceilings"
 
 echo "==> the platform's stub, a rootful engine's socket, and the owner's ceilings"
 in_box systemd-run --quiet --unit=stub-platform \

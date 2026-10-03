@@ -25,19 +25,21 @@ Environment=HOME=/var/lib/acme-host
 WorkingDirectory=/var/lib/acme-host
 ExecStart=/opt/acme-host/current/bin/acme-host run
 # 1 refused, 2 a setting or a file is wrong, 3 not enrolled, 5 a startup
-# probe failed: a person must act, so systemd does not spin on them. An
-# unreachable platform (4) and a crash restart.
+# probe failed, 226 its walls could not be set up (no ceilings to bind): a
+# person must act, so systemd does not spin on them. An unreachable platform
+# (4) and a crash restart.
 Restart=on-failure
 RestartSec=10
-RestartPreventExitStatus=1 2 3 5
+RestartPreventExitStatus=1 2 3 5 226
 TimeoutStopSec=60
 
 # Its state: the credential, the secret store, and the records, owner-only.
 StateDirectory=acme-host
 StateDirectoryMode=0700
 UMask=0077
-# The owner's ceilings, which the host reads and never writes.
-BindReadOnlyPaths=-/etc/acme-host/ceilings.toml:/var/lib/acme-host/ceilings.toml
+# The owner's ceilings, which the host reads and never writes. With none in
+# /etc/acme-host, the unit does not start.
+BindReadOnlyPaths=/etc/acme-host/ceilings.toml:/var/lib/acme-host/ceilings.toml
 
 # The rest of the machine is read-only or absent.
 ProtectSystem=strict
