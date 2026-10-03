@@ -29,18 +29,23 @@ sessions one outage parked wake in turn and never before the retry
 time. Other parks wake at their time: a tenant's own, such as a
 budget's, are bounded by its fair share.
 
-**A hold an hour open settles through its gate.** The maintenance
-worker's pass reads, across tenants, the holds opened an hour ago or
-more that no settlement closed, and settles each through the gate that
-holds it: at the bill the provider gives, else whole. Nothing but the
-provider's proof releases one. No provider answers for one call after
-the fact today, so the bill is unknown, and the hold counts whole: the
-worst case it reserved, never below what was billed. A run that holds
-its lease stops within half of it once the lease is lost, so an hour
-outlasts every call a live run can still settle. Each worker reads on
-from where its last pass stopped, one slice of opening times per read,
-and its first pass reads a day back. An index on the holds' opening
-time bounds each read.
+**A hold an hour past due settles through its gate.** A model call's
+hold falls due at its opening. A job's hold falls due at the job's
+deadline, which it names and lives to: the job works on after its run
+parks, and its completion settles the hold (ADR 1013). The maintenance
+worker's pass reads, across tenants, the holds that fell due an hour ago
+or more and that no settlement closed, and settles each through the gate
+that holds it: at the bill the provider gives, else whole. Nothing but
+the provider's proof releases one. No provider answers for one call
+after the fact today, so the bill is unknown, and the hold counts whole:
+the worst case it reserved, never below what was billed. A run that
+holds its lease stops within half of it once the lease is lost, so an
+hour outlasts every model call a live run can still settle. A job is
+over at its deadline, and the run its deadline wakes settles its hold,
+so an hour past the deadline outlasts that run too. Each worker reads on
+from where its last pass stopped, one slice of due times per read, and
+its first pass reads a day back. An index on the holds' opening time,
+and one on the jobs' deadlines, bound each read.
 
 **A session no run holds asks for its run again, once a write.** The
 pass reads, across tenants, the sessions pending with no write to their
@@ -63,6 +68,8 @@ at its gate.
   whole. Its own settlement answers that first one, so a spend past the
   worst case is lost to the count. The engine's worst case already
   bounds a call's spend.
+- A job's hold that nothing else settles reserves its lines until an hour
+  past the job's deadline.
 - A session whose loop waits in its lane longer than twenty minutes, in
   a backlog or while its runners are down, gets no second loop item: its
   queued item holds it. A run takes the next writer epoch before it

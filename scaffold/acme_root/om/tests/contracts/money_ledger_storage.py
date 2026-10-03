@@ -265,9 +265,46 @@ class MoneyLedgerStorageContract:
         await storage.close_hold(first, *closing(settled, 3))
         floor, cut = now - timedelta(days=1), now - timedelta(hours=1)
         found = await storage.read_open(floor, cut, 10)
-        assert [(org, hold.id) for org, hold in found] == [(second, older.id), (first, old.id)]
+        assert [(org, hold.id, due) for org, hold, due in found] == [
+            (second, older.id, older.created_at),
+            (first, old.id, old.created_at),
+        ]
         assert found[0][1] == older.hold
-        assert [hold.id for _, hold in await storage.read_open(floor, cut, 1)] == [older.id]
+        assert [hold.id for _, hold, _ in await storage.read_open(floor, cut, 1)] == [older.id]
+
+    async def test_read_open_reads_a_jobs_hold_by_its_deadline(
+        self, storage: MoneyLedgerStorageInterface
+    ) -> None:
+        """A job's hold falls due at its deadline, which it lives to: one whose
+        deadline falls in the slice is read at that deadline, in its order
+        among the model calls' holds, however long before it opened; one
+        opened in the slice whose deadline is still ahead is not read."""
+        org, now = new_id(), utcnow()
+
+        def held(opened: timedelta, deadline: timedelta | None) -> FundedHold:
+            funded = a_funded_hold(a_line(cost_micros=100_000), paid_by=funding(included=100))
+            return funded.model_copy(
+                update={
+                    "hold": funded.hold.model_copy(update={"created_at": now - opened}),
+                    "deadline": None if deadline is None else now - deadline,
+                }
+            )
+
+        call = held(timedelta(hours=2), None)
+        done = held(timedelta(hours=5), timedelta(hours=3))
+        working = held(timedelta(hours=2), -timedelta(hours=1))
+        for hold in (call, done, working):
+            assert isinstance(await storage.open_hold(org, hold), FundedHold)
+        floor, cut = now - timedelta(days=1), now - timedelta(hours=1)
+
+        found = await storage.read_open(floor, cut, 10)
+
+        assert [(hold.id, due) for of, hold, due in found if of == org] == [
+            (done.id, now - timedelta(hours=3)),
+            (call.id, call.created_at),
+        ]
+        stored = await storage.read_hold(org, working.id)
+        assert stored is not None and stored.deadline == now + timedelta(hours=1)
 
     async def test_a_spend_past_its_hold_is_charged_in_full(
         self, storage: MoneyLedgerStorageInterface

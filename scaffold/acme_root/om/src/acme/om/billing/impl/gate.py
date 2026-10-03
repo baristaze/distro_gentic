@@ -111,6 +111,7 @@ class MoneyGateImpl(MoneyGateInterface):
         priced: PricedAt | None,
         *,
         credential: str | None = None,
+        deadline: datetime | None = None,
     ) -> FundedHold | Refusal:
         ctx.require(Permission.WRITE)
         if request.spender_id is None:
@@ -124,7 +125,9 @@ class MoneyGateImpl(MoneyGateInterface):
         if len(found) > bound:
             # A line the gate does not read is spend outside it: refuse.
             raise ValidationFailed(f"more than {bound} budgets bind this call")
-        approval = await self._guard(ctx, request)
+        # A job's worst case is its declared rate to its deadline, which its
+        # budgets bound: no model call's norm judges it.
+        approval = None if deadline is not None else await self._guard(ctx, request)
         hold = FundedHold(
             hold=Hold(
                 id=new_id(),
@@ -140,6 +143,7 @@ class MoneyGateImpl(MoneyGateInterface):
             units=units_of(request.exposure.cost_micros, funding.micros_per_unit),
             priced=priced,
             approval_id=approval,
+            deadline=deadline,
         )
         answer = await self._ledger.open_hold(ctx.org_id, hold)
         if isinstance(answer, Turned):
@@ -191,7 +195,8 @@ class MoneyGateImpl(MoneyGateInterface):
         """The anomaly guard, before anything is held: a call whose expected
         cost is far above its session's norm pages the operator and parks
         for a person, unless a person approved it. Returns the approval it
-        rides on, if any."""
+        rides on, if any. The norm is the session's model calls': a job's
+        hold is no call, and counts in it not at all."""
         if request.session_id is None:
             return None
         guard = self._options.guard
@@ -207,6 +212,8 @@ class MoneyGateImpl(MoneyGateInterface):
             elif isinstance(entry, FundedHold):
                 if entry.approval_id is not None:
                     used.add(entry.approval_id)
+                    continue
+                if entry.deadline is not None:
                     continue
                 cost_of = entry.hold.exposure.cost_micros
                 if cost_of is not None and len(recent) < guard.recent:
@@ -262,7 +269,8 @@ class MoneyCallGateImpl(CallGateInterface):
     `none`. A spending job is held on the same scopes at its rate until its
     deadline (`budgets.rules.job_exposure`), with no row of the price
     table, and billed at the cost its runner reported, else whole; a job
-    refused before any work began releases its hold."""
+    refused before any work began releases its hold. Its hold names that
+    deadline and lives to it, and no session's norm judges it."""
 
     def __init__(
         self,
@@ -360,7 +368,7 @@ class MoneyCallGateImpl(CallGateInterface):
             session_id=session_id,
             purpose=tool,
         )
-        answer = await self._gate.authorize(ctx, request)
+        answer = await self._gate.authorize_priced(ctx, request, None, deadline=deadline)
         if isinstance(answer, Refusal):
             raise BudgetRefused(answer)
         return answer.id

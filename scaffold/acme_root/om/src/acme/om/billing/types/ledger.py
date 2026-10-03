@@ -91,10 +91,20 @@ class FundedHold(Platform):
     priced: PricedAt | None = None  # None for a job, which no price table prices
     draw: Draw = NO_DRAW  # filled by the ledger under its lock
     approval_id: UUID | None = None  # the approval that let it past its session's norm
+    # A job's deadline, which its hold lives to; None for a model call's,
+    # which its run settles within the sweep's margin of its opening.
+    deadline: datetime | None = None
 
     @property
     def id(self) -> UUID:
         return self.hold.id
+
+    @property
+    def due_at(self) -> datetime:
+        """When nothing but the sweep is left to settle it, a margin before
+        the sweep does: a job's hold at its deadline, a model call's at its
+        opening."""
+        return self.hold.created_at if self.deadline is None else self.deadline
 
     @property
     def created_at(self) -> datetime:

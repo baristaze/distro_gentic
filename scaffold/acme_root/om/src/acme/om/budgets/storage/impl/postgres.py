@@ -195,7 +195,7 @@ class LedgerStoragePostgresImpl(PgStorageBase, LedgerStorageInterface):
 
     async def read_open(
         self, after: datetime, before: datetime, limit: int
-    ) -> list[tuple[UUID, Hold]]:
+    ) -> list[tuple[UUID, Hold, datetime]]:
         # The holds of the slice by their time, each kept while no settlement
         # names it: the slice's index bounds the read, and the settlements'
         # unique index answers each probe.
@@ -216,7 +216,8 @@ class LedgerStoragePostgresImpl(PgStorageBase, LedgerStorageInterface):
         async with self._session_for(stmt, org_id=EMPTY_UUID) as session:
             await session.execute(PLAN_WITH_VALUES)
             return [
-                (row.org_id, to_model(row, Hold)) for row in (await session.execute(stmt)).scalars()
+                (row.org_id, to_model(row, Hold), row.created_at)
+                for row in (await session.execute(stmt)).scalars()
             ]
 
     async def count_tenant(self, org_id: UUID, limit: int) -> int:

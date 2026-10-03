@@ -15,7 +15,7 @@ from uuid import UUID
 import pytest
 from contracts.benchmark_storage import operator
 from contracts.budget_storage import make_budget
-from contracts.loops import ASSISTANT, BUILDER, DELIVERY, call, reply, said
+from contracts.loops import ASSISTANT, BUILDER, DELIVERY, call, reply, said, use
 from contracts.money import Money, money_over
 from contracts.project_storage import in_project
 
@@ -31,6 +31,7 @@ from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import new_id
 from acme.om.billing.impl.gate import MoneyCallGateImpl, MoneyGateOptions
 from acme.om.billing.impl.prices import PriceBookTableImpl
+from acme.om.billing.impl.sweep import HoldSweepImpl, HoldSweepOptions
 from acme.om.billing.rules import (
     ANOMALY_UNLOCK,
     FUNDS_UNLOCK,
@@ -42,6 +43,7 @@ from acme.om.billing.rules import (
     units_of,
     zoned_window,
 )
+from acme.om.billing.sweep import ProviderBillsUnknownImpl
 from acme.om.billing.types.account import Account, FundingMode, ZoneChange
 from acme.om.billing.types.ledger import Charge, EntryKind, FundedHold, PricedAt
 from acme.om.billing.types.plan import UNITS, Plan, PlanCatalog
@@ -52,12 +54,20 @@ from acme.om.budgets.types.amount import Spend
 from acme.om.budgets.types.breach import Refusal
 from acme.om.budgets.types.budget import BudgetScope, BudgetScopeKind, WindowKind
 from acme.om.budgets.types.hold import Billed, HoldRequest, Settlement
-from acme.om.context import OperatorPermission, OperatorRole, TenantContext
+from acme.om.context import (
+    AppContext,
+    AppType,
+    OperatorPermission,
+    OperatorRole,
+    RequestContext,
+    TenantContext,
+)
 from acme.om.exceptions import BudgetRefused, GateParked, NotAuthorized, SpenderUnknown
 from acme.om.models.types.fill import MAIN, Eligibility
 from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.steps.types.header import LoopOutcome, ParkReason
 from acme.om.steps.types.step import StepType
+from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tools.types.call import JobCompletion
 from acme.om.windows.gate import CallGateInterface
 from acme.om.windows.impl.gate import CallGateBudgetImpl
@@ -474,6 +484,103 @@ async def test_a_spending_job_the_money_gate_parks_starts_nothing_and_holds_noth
     assert [h for h in holds if isinstance(h, FundedHold) and h.hold.purpose == "compute"] == []
 
 
+class OneTenant(TenancyManagerInterface):
+    """The one question the hold sweep asks of tenancy, answered with the
+    case's owner; any other method fails loudly as unimplemented."""
+
+    def __init__(self, owner: TenantContext) -> None:
+        self._owner = owner
+
+    async def service_context(
+        self, rctx: RequestContext, org_id: UUID, user_id: UUID
+    ) -> TenantContext:
+        return self._owner
+
+
+OneTenant.__abstractmethods__ = frozenset()
+
+
+async def test_a_jobs_hold_lives_to_its_deadline_and_settles_at_its_reported_cost(
+    tmp_path: Path,
+) -> None:
+    """A job still working past the sweep's hour keeps its hold: the hold
+    falls due at the job's deadline, and the sweep leaves it until an hour
+    past that. Its completion settles it at the cost it reported."""
+    money = money_over(tmp_path, kinds=(ASSISTANT, DELIVERY, BUILDER))
+    await money.open(plan="team")
+    loop, owner = money.loop, money.loop.owner
+    session_id = await loop.start("builder")
+    await loop.say(session_id, "Start it.")
+    loop.anthropic.add(reply(call("compute", q="everything")), reply(said("It is done.")))
+    parked = await loop.loops.run(owner, session_id)
+    assert parked.park is not None and parked.park.job is not None
+    hold_id = parked.park.job.hold_id
+    assert hold_id is not None
+    held = await money.gate.read_hold(owner, hold_id)
+    assert held.deadline == loop.clock() + timedelta(hours=2), "the job's deadline"
+    sweep = HoldSweepImpl(
+        money.ledger,
+        money.gate,
+        OneTenant(owner),  # pyright: ignore[reportAbstractUsage] (a partial double)
+        ProviderBillsUnknownImpl(),
+        HoldSweepOptions(),
+        clock=loop.clock,
+    )
+    rctx = RequestContext(request_id=new_id(), app=AppContext(type=AppType.PORTAL, version="p@t"))
+
+    loop.clock.now += timedelta(minutes=90)
+    await sweep.settle_open(rctx)
+
+    assert "Settlement" not in await entries_of(money, hold_id), "the job still works"
+    loop.clock.now += timedelta(minutes=10)
+    request = next(s for s in await loop.history(session_id) if s.type is StepType.TOOL_REQUEST)
+    await loop.loops.complete_job(
+        owner,
+        session_id,
+        JobCompletion(key=request.id, handle="compute-1", text="done", cost_micros=1_234),
+    )
+    done = await loop.loops.run(owner, session_id)
+
+    assert done.outcome is LoopOutcome.SUCCEEDED
+    settlement = (await entries_of(money, hold_id))["Settlement"]
+    assert isinstance(settlement, Settlement)
+    assert settlement.bill.kind == "billed" and settlement.spent.cost_micros == 1_234
+
+
+async def test_a_job_no_run_settles_is_swept_whole_an_hour_past_its_deadline(
+    tmp_path: Path,
+) -> None:
+    """A job's hold that nothing settles is the sweep's once its deadline is
+    an hour past, and counts whole, as a lost model call's does."""
+    money = money_over(tmp_path, kinds=(ASSISTANT, DELIVERY, BUILDER))
+    await money.open(plan="team")
+    loop, owner = money.loop, money.loop.owner
+    session_id = await loop.start("builder")
+    await loop.say(session_id, "Start it.")
+    loop.anthropic.add(reply(call("compute", q="everything")))
+    parked = await loop.loops.run(owner, session_id)
+    assert parked.park is not None and parked.park.job is not None
+    hold_id = parked.park.job.hold_id
+    assert hold_id is not None
+    sweep = HoldSweepImpl(
+        money.ledger,
+        money.gate,
+        OneTenant(owner),  # pyright: ignore[reportAbstractUsage] (a partial double)
+        ProviderBillsUnknownImpl(),
+        HoldSweepOptions(),
+        clock=loop.clock,
+    )
+    rctx = RequestContext(request_id=new_id(), app=AppContext(type=AppType.PORTAL, version="p@t"))
+
+    loop.clock.now += timedelta(hours=3, minutes=1)
+    assert await sweep.settle_open(rctx) == 1
+
+    held = await money.gate.read_hold(owner, hold_id)
+    settlement = (await entries_of(money, hold_id))["Settlement"]
+    assert isinstance(settlement, Settlement) and settlement.bill.kind == "unknown"
+    assert settlement.spent.cost_micros == held.hold.exposure.cost_micros
+
+
 async def test_a_run_that_recovers_a_jobs_call_starts_it_once_under_one_hold(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -507,6 +614,29 @@ async def test_a_run_that_recovers_a_jobs_call_starts_it_once_under_one_hold(
     jobs = [h.id for h in holds if isinstance(h, FundedHold) and h.hold.purpose == "compute"]
     assert jobs == [parked.park.job.hold_id], "one job, one hold"
     assert len(loop.jobs["compute"].deadlines) == 1, "started once"
+
+
+async def test_a_spending_job_after_a_sessions_model_calls_is_judged_by_its_budget_alone(
+    tmp_path: Path,
+) -> None:
+    """A job's worst case is its rate to its deadline, far above any model
+    call's: after five calls it still starts, unparked and with no page,
+    since no model call's norm judges it."""
+    money = money_over(tmp_path, kinds=(ASSISTANT, DELIVERY, BUILDER))
+    await money.open(plan="team")
+    loop, owner = money.loop, money.loop.owner
+    session_id = await loop.start("builder")
+    await loop.say(session_id, "Look five things up, then start it.")
+    loop.anthropic.add(
+        *[reply(use("lookup", q=f"item {i}")) for i in range(5)],
+        reply(call("compute", q="everything")),
+    )
+
+    parked = await loop.loops.run(owner, session_id)
+
+    assert parked.park is not None and parked.park.reason is ParkReason.JOB
+    assert money.pager.pages == []
+    assert len(loop.jobs["compute"].deadlines) == 1
 
 
 # Time zones.

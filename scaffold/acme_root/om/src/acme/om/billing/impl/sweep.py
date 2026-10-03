@@ -1,7 +1,9 @@
 """The sweep's settlement of the holds nobody settled, through the gate that
-holds them. It reads the ledger the gate writes, one slice of opening times
-at a time, from where its last call stopped: a worker's first call reads a
-day back, so a hold the workers were all down for is still found."""
+holds them. It reads the ledger the gate writes, one slice of the times the
+holds fall due at a time, from where its last call stopped: a worker's first
+call reads a day back, so a hold the workers were all down for is still
+found. A model call's hold falls due at its opening, and a job's at its
+deadline, which it lives to."""
 
 import logging
 from collections.abc import Callable
@@ -24,17 +26,18 @@ log = logging.getLogger(__name__)
 
 
 class HoldSweepOptions(Platform):
-    # A hold open this long has no call left to settle it: a run renews its
-    # lease while its call streams, and a run that lost its lease is stopped
-    # within half of it. A call still streaming past this finds its hold
-    # settled whole, and its own settlement answers that first one.
+    # A hold due this long ago has no call left to settle it: a run renews
+    # its lease while its model call streams, and a run that lost its lease
+    # is stopped within half of it; a job is over at its deadline, and the
+    # run its deadline wakes settles it. A call still going past this finds
+    # its hold settled whole, and its own settlement answers that first one.
     settle_after: timedelta = timedelta(hours=1)
     # How far back past `settle_after` a worker's first call reads. Every
     # call after reads on from where the one before stopped.
     lookback: timedelta = timedelta(days=1)
-    # One read covers this much of the holds' opening times, so no read walks
-    # a day of settled holds to find the open ones; a call reads up to a
-    # day of slices, so a worker's first call reads its whole lookback.
+    # One read covers this much of the times the holds fall due, so no read
+    # walks a day of settled holds to find the open ones; a call reads up to
+    # a day of slices, so a worker's first call reads its whole lookback.
     slice: timedelta = timedelta(hours=1)
     slices: int = Field(default=24, gt=0)  # slices one call reads at most
     batch: int = Field(default=100, gt=0)  # holds one read takes at most
@@ -58,7 +61,7 @@ class HoldSweepImpl(HoldSweepInterface):
         self._bills = bills
         self._options = options
         self._clock = clock
-        # The opening time the next call reads on from; None until this
+        # The due time the next call reads on from; None until this
         # process has read once.
         self._read_to: datetime | None = None
 
@@ -76,16 +79,14 @@ class HoldSweepImpl(HoldSweepInterface):
             # A hold that did not settle holds the next call at its time, so
             # it is read again; the ones after it in the batch still settle.
             left = [
-                hold.created_at
-                for org_id, hold in found
-                if not await self._settle(rctx, org_id, hold)
+                due for org_id, hold, due in found if not await self._settle(rctx, org_id, hold)
             ]
             if left:
                 self._read_to = min(left)
                 return taken
             if len(found) >= options.batch:
                 # A whole batch: the slice may hold more, read from here on.
-                self._read_to = found[-1][1].created_at
+                self._read_to = found[-1][2]
                 return taken
             start = self._read_to = end
         return taken
