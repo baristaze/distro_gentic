@@ -240,9 +240,9 @@ class ProductKinds:
     catalog, which refuses a version declared twice, and its tools the
     platform's, where a registry refuses two of one name. Every other kind
     registers beside the platform's own, which go through the same registries,
-    and a name the platform holds is refused, so a product adds kinds and never changes one of the platform's. A product's work
-    kind names its claimant kind, since no worker of the platform's runs
-    it."""
+    and a name the platform holds is refused, so a product adds kinds and
+    never changes one of the platform's. A product's work kind names its
+    claimant kind, since no worker of the platform's runs it."""
 
     agents: tuple[AgentKind, ...] = ()
     tools: ProductTools = no_tools
