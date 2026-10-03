@@ -1,8 +1,8 @@
 """The business-layer root: constructs every manager in dependency order and
 hands back one frozen object with a field per manager."""
 
-from collections.abc import Callable
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
 from datetime import datetime
 from uuid import UUID
 
@@ -47,6 +47,7 @@ from acme.om.events.impl.manager import EventsManagerImpl, EventsOptions
 from acme.om.evidence import (
     EvidenceManagerInterface,
     ExecutorInterface,
+    Executors,
     WorkProductInterface,
 )
 from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
@@ -78,6 +79,12 @@ from acme.om.placement.impl.manager import PlacementManagerImpl, PlacementOption
 from acme.om.placement.impl.operator import (
     PlacementOperatorManagerImpl,
     PlacementOperatorOptions,
+)
+from acme.om.placement.kinds import (
+    ClaimantKinds,
+    ClaimantKindSpec,
+    platform_claimant_kinds,
+    platform_work_kinds,
 )
 from acme.om.platform_agents import PlatformAgentsManagerInterface
 from acme.om.platform_agents.catalog import PlatformAgents, refuse_reach, with_shipped
@@ -132,6 +139,8 @@ from acme.om.tools.impl.manager import ToolsManagerImpl, ToolsOptions
 from acme.om.tools.seal import RecordSealInterface
 from acme.om.tools.tool import ToolInterface
 from acme.om.tools.types.policy import PolicyLayer
+from acme.om.trust.owners import SecretOwnerInterface
+from acme.om.watch.kinds import StreamKind
 from acme.om.windows import WindowsManagerInterface
 from acme.om.windows.gate import CallGateInterface
 from acme.om.windows.hashes import PromptHashInterface
@@ -143,6 +152,7 @@ from acme.om.windows.types.policy import CompactionPolicy
 from acme.om.work import WorkManagerInterface, WorkOperatorManagerInterface
 from acme.om.work.impl.manager import WorkManagerImpl, WorkOptions
 from acme.om.work.impl.operator import WorkOperatorManagerImpl
+from acme.om.work.kinds import WorkKindSpec
 from acme.om.workspaces import WorkspacesManagerInterface
 from acme.om.workspaces import rules as workspace_rules
 from acme.om.workspaces.git import RepositoryReaderInterface, WorkspaceGitInterface
@@ -213,6 +223,25 @@ class PlatformPorts:
     work_product: WorkProductInterface | None = None
     session_projects: SessionProjectInterface | None = None
     workspace_projects: WorkspaceProjectsInterface | None = None
+
+
+@dataclass(frozen=True)
+class ProductKinds:
+    """What a product adds to the platform's kinds, handed to each of its
+    roots: its work kinds, each with its payload, its permission, its lane,
+    and its claimant kind; its claimant kinds; its secret owner kinds
+    (`TrustLayer`); its stream kinds, each with its bounds
+    (`watch.root.build_stream`); and its executors, by the validation
+    environment each runs. Each registers beside the platform's own, which
+    go through the same registries, and a name the platform holds is
+    refused, so a product adds kinds and never changes one of the
+    platform's."""
+
+    work: tuple[WorkKindSpec, ...] = ()
+    claimants: tuple[ClaimantKindSpec, ...] = ()
+    secret_owners: tuple[SecretOwnerInterface, ...] = ()
+    streams: tuple[StreamKind, ...] = ()
+    executors: Mapping[str, ExecutorInterface] = field(default_factory=lambda: {})
 
 
 LOCAL = "local"
@@ -383,6 +412,7 @@ def build_managers(
     executor_options: ExecutorOptions | None = None,
     work_product: WorkProductInterface | None = None,
     projects_options: ProjectsOptions | None = None,
+    product_kinds: ProductKinds | None = None,
 ) -> Managers:
     """`integrations` is the root of the hosted services the managers front:
     the identity provider, which the tenancy manager signs people in and
@@ -450,6 +480,12 @@ def build_managers(
     `tools_layer` wraps the tools manager before the loop and the root take
     it: a layer above the engine holds its own rules around every call, and
     sees each call the engine runs. None takes the tools manager as it is.
+
+    `product_kinds` is what a product adds to the platform's kinds: its work kinds
+    and claimant kinds, which the work queue and placement read beside the
+    platform's, and its executors, which run a check that names their
+    environment. A name the platform holds is refused at boot. None adds
+    nothing.
 
     `placement_options` is the fair share of a tenant no operator gave one,
     and the delay a loop over its share waits; None keeps the defaults.
@@ -547,12 +583,18 @@ def build_managers(
     events = EventsManagerImpl(
         storage.get_event_storage(), tenancy, events_options or EventsOptions()
     )
+    # The kinds every manager reads through: the platform's own, and the
+    # product's beside them.
+    product = product_kinds or ProductKinds()
+    work_kinds = platform_work_kinds().extended(product.work)
+    claimant_kinds = ClaimantKinds((*platform_claimant_kinds(), *product.claimants))
     work = WorkManagerImpl(
         storage.get_work_storage(),
         tenancy,
         events,
         infra.get_topics(),
         work_options or WorkOptions(),
+        work_kinds,
         # Every item goes to the lane where its environment is, which
         # placement answers. Placement claims through this manager, so it is
         # built below and the edge is bound at call time.
@@ -854,7 +896,7 @@ def build_managers(
         storage.get_evidence_storage(),
         tenancy,
         outbox,
-        executor or ExecutorAbsentImpl(),
+        Executors(executor or ExecutorAbsentImpl(), product.executors),
         products,
         session_policies,
         evidence_options or EvidenceOptions(),
@@ -875,6 +917,8 @@ def build_managers(
         work,
         tenancy,
         placement_options or PlacementOptions(),
+        work_kinds,
+        claimant_kinds,
     )
     # A host's credential, its claims through placement, and where each
     # session runs. An exec item a claim takes is started by the relay before
