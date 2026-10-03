@@ -37,6 +37,7 @@ class Settings:
     enrollment_token: str | None
     workspace_user: str | None
     workspace_image: str = DEFAULT_IMAGE
+    pull_timeout_seconds: float = 900.0
     max_clock_skew_seconds: float = 60.0
     beat_seconds: float = 30.0
 
@@ -60,6 +61,19 @@ class Settings:
         return self.home / RECORDS_FOLDER
 
 
+def _seconds(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        value = 0.0
+    if not value > 0:
+        raise BadSetting(f"{name} is a number of seconds above zero, not {raw!r}")
+    return value
+
+
 def settings_from_env() -> Settings:
     home = os.environ.get("ACME_HOST_HOME")
     return Settings(
@@ -69,6 +83,7 @@ def settings_from_env() -> Settings:
         enrollment_token=os.environ.get("ACME_ENROLLMENT_TOKEN") or None,
         workspace_user=os.environ.get("ACME_HOST_WORKSPACE_USER") or None,
         workspace_image=os.environ.get("ACME_HOST_WORKSPACE_IMAGE") or DEFAULT_IMAGE,
+        pull_timeout_seconds=_seconds("ACME_HOST_PULL_TIMEOUT_SECONDS", 900.0),
     )
 
 

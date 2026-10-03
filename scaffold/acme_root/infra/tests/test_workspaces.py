@@ -215,9 +215,16 @@ class LocalDocker:
     def __init__(self) -> None:
         self.labels: dict[str, str] | None = None  # the running container's, when one runs
         self.calls: list[tuple[str, ...]] = []
+        self.bounds: dict[str, timedelta] = {}  # the limit each command ran under
+        self.image_present = True
 
-    async def __call__(self, *args: str, **_: object) -> DockerReply:
+    async def __call__(self, *args: str, **kwargs: object) -> DockerReply:
         self.calls.append(args)
+        self.bounds[args[0]] = kwargs["bound"]  # type: ignore[assignment]
+        if args[:2] == ("image", "inspect") and not self.image_present:
+            return DockerReply(1, b"", b"Error: No such image")
+        if args[0] == "pull":
+            self.image_present = True
         if args[0] == "run":
             pairs = [args[i + 1] for i, arg in enumerate(args) if arg == "--label"]
             self.labels = dict(pair.split("=", 1) for pair in pairs)
@@ -253,10 +260,40 @@ async def test_a_running_container_is_reused_only_under_the_spec_it_was_started_
     assert [call[0] for call in docker.calls] == ["version", "inspect"], "the same spec reuses it"
     docker.calls.clear()
     await provider.prepare(org, workspace_id, closed)
-    assert [call[0] for call in docker.calls] == ["version", "inspect", "rm", "volume", "run"]
+    assert [call[0] for call in docker.calls] == [
+        "version",
+        "inspect",
+        "rm",
+        "image",
+        "volume",
+        "run",
+    ]
     run = docker.calls[-1]
     assert run[run.index("--network") + 1] == "none", "the new container holds the tighter spec"
     assert not any(call[:2] == ("volume", "rm") for call in docker.calls), "its files stay"
+
+
+async def test_an_absent_image_is_pulled_under_the_pull_limit_before_the_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A run's own limit is short, and a pull the run carried would be killed
+    on a slow link, with its layers discarded: the image is pulled first, on
+    a limit of its own, and only when it is absent."""
+    docker = LocalDocker()
+    docker.image_present = False
+    monkeypatch.setattr("acme.infra.workspaces.container.docker", docker)
+    provider = WorkspaceContainerImpl(
+        "python:3.14-slim", timedelta(seconds=5), timedelta(seconds=900)
+    )
+    await provider.prepare(new_id(), new_id(), spec(IsolationMode.CONTAINER, NONE))
+    names = [call[0] for call in docker.calls]
+    assert names.index("pull") < names.index("run")
+    assert ("pull", "python:3.14-slim") in docker.calls
+    assert docker.bounds["pull"] == timedelta(seconds=900)
+    assert docker.bounds["run"] == timedelta(seconds=5), "the run keeps its own limit"
+    docker.calls.clear()
+    await provider.prepare(new_id(), new_id(), spec(IsolationMode.CONTAINER, NONE))
+    assert "pull" not in [call[0] for call in docker.calls], "a present image is not pulled"
 
 
 async def test_a_container_purge_by_ids_removes_its_container_and_its_files(

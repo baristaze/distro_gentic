@@ -19,7 +19,7 @@ from host_support import Stack, probes
 
 from acme.apps.host.agent import BACKOFF_MAX_SECONDS, ExecutorInterface, HostAgent, NotEnrolled
 from acme.apps.host.ceilings import Ask, Ceilings
-from acme.apps.host.config import load_credential, settings_from_env
+from acme.apps.host.config import BadSetting, load_credential, settings_from_env
 from acme.client.client import ApiClient, ApiError
 from acme.client.types import ClaimedWorkView, IsolationMode
 from acme.infra.workspaces.container import DEFAULT_IMAGE
@@ -161,6 +161,19 @@ def test_a_container_workspace_runs_the_engines_default_image_unless_its_owner_n
     assert settings_from_env().workspace_image == DEFAULT_IMAGE
     monkeypatch.setenv("ACME_HOST_WORKSPACE_IMAGE", "registry.example.test/tools:1")
     assert settings_from_env().workspace_image == "registry.example.test/tools:1"
+
+
+def test_the_image_pull_has_a_limit_of_its_own_that_a_bad_value_refuses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("ACME_HOST_PULL_TIMEOUT_SECONDS", raising=False)
+    assert settings_from_env().pull_timeout_seconds == 900.0
+    monkeypatch.setenv("ACME_HOST_PULL_TIMEOUT_SECONDS", "1800")
+    assert settings_from_env().pull_timeout_seconds == 1800.0
+    for bad in ("soon", "0", "-5"):
+        monkeypatch.setenv("ACME_HOST_PULL_TIMEOUT_SECONDS", bad)
+        with pytest.raises(BadSetting):
+            settings_from_env()
 
 
 async def test_a_host_with_no_credential_and_no_token_does_not_start(

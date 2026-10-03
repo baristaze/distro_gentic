@@ -60,6 +60,7 @@ LOCAL_DEFAULT_SERVES_THE_CLOUD = {
     "workspaces_root": "the host and container workspace backends only",
     "workspace_image": "the container workspace backend only",
     "docker_timeout_seconds": "the container workspace backend only",
+    "docker_pull_timeout_seconds": "the container workspace backend only",
     "log_level": "INFO everywhere",
     "otel_endpoint": "traces go to the collector sidecar, wired in the task, not a knob",
     "aws_timeout_seconds": "the local default is the tuning",

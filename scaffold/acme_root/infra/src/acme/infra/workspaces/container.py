@@ -22,6 +22,12 @@ DEFAULT_IMAGE = "python:3.14"
 image holds what runs in the workspace: Python for its tools, and `git`,
 which checks out and pushes a session's repository inside it."""
 
+DEFAULT_PULL_TIMEOUT = timedelta(seconds=900)
+"""How long `docker pull` of the image may run. It is longer than any other
+command's limit: an image is hundreds of megabytes, and Docker discards the
+layers of a pull that is killed, so a limit too short for a slow link never
+lets the image arrive."""
+
 LIMIT_FLAGS = {"cpus": "--cpus", "memory_mb": "--memory", "processes": "--pids-limit"}
 
 
@@ -58,9 +64,12 @@ class WorkspaceContainerImpl(WorkspaceProviderInterface):
     keeps nothing of the engine's environment: its variables are the
     image's."""
 
-    def __init__(self, image: str, timeout: timedelta) -> None:
+    def __init__(
+        self, image: str, timeout: timedelta, pull_timeout: timedelta = DEFAULT_PULL_TIMEOUT
+    ) -> None:
         self._image = image
         self._timeout = timeout
+        self._pull_timeout = pull_timeout
 
     async def prepare(self, org_id: UUID, workspace_id: UUID, spec: IsolationSpec) -> Workspace:
         why = refusal(
@@ -87,6 +96,15 @@ class WorkspaceContainerImpl(WorkspaceProviderInterface):
             removed = await docker("rm", "-f", name, bound=self._timeout)
             if not removed.ok:
                 raise BackendFailed("docker", "rm", removed.reason())
+        present = await docker(
+            "image", "inspect", "--format", "{{.Id}}", self._image, bound=self._timeout
+        )
+        if not present.ok:
+            # Pulled on its own limit, so a prepare's run never carries the
+            # pull: a run killed mid-pull leaves no image behind.
+            pulled = await docker("pull", self._image, bound=self._pull_timeout)
+            if not pulled.ok:
+                raise BackendFailed("docker", "pull", pulled.reason())
         labels = ("--label", f"acme.workspace={workspace_id}", "--label", f"acme.org={org_id}")
         made = await docker("volume", "create", *labels, name, bound=self._timeout)
         if not made.ok:
