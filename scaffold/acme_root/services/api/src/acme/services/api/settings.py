@@ -9,6 +9,7 @@ from pydantic_settings import SettingsConfigDict
 
 from acme.infra.impl.settings import CLOUD_ENVIRONMENTS, InfraSettings
 from acme.integrations.settings import IntegrationsSettings
+from acme.om.platform_agents.settings import PlatformAgentsSettings
 from acme.om.storage.settings import StorageSettings
 
 DEV_SIGN_IN_ENVIRONMENTS = frozenset({"local", "test"})
@@ -16,7 +17,7 @@ DEV_SIGN_IN_ENVIRONMENTS = frozenset({"local", "test"})
 refused at boot, the way a local backend is."""
 
 
-class ApiSettings(StorageSettings, InfraSettings, IntegrationsSettings):
+class ApiSettings(StorageSettings, InfraSettings, IntegrationsSettings, PlatformAgentsSettings):
     model_config = SettingsConfigDict(env_prefix="ACME_", env_file=".env", extra="ignore")
 
     service_name: str = "api"

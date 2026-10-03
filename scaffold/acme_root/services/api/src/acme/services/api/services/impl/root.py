@@ -110,6 +110,8 @@ def build_services(
     head_max_age: timedelta,
     watch: WatchManagerInterface,
     trust_operator: TrustOperatorManagerInterface,
+    *,
+    project_required: bool,
 ) -> ServicesInterface:
     """In-process impls only: a Python caller outside the process reaches the
     same services through the typed client under `clients/python`."""
@@ -125,7 +127,12 @@ def build_services(
             integrations.get_identity_provider(), infra.get_queues(), integrations.get_integration
         ),
         agent_sessions=AgentSessionsServiceImpl(
-            managers.agent_sessions, managers.agents, managers.steps, managers.tools
+            managers.agent_sessions,
+            managers.agents,
+            managers.steps,
+            managers.tools,
+            managers.projects,
+            project_required=project_required,
         ),
         hosts=HostsServiceImpl(managers.hosts),
         fleet=FleetServiceImpl(managers.placement_operator, trust_operator),

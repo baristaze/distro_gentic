@@ -411,6 +411,10 @@ module "api" {
     # client, or, for a request through the portal's distribution, the edge;
     # the edge secret then names the client one hop further in.
     ACME_TRUSTED_PROXIES = jsonencode([var.vpc_cidr])
+    # The image carries the knowledge map and the documents it lists here.
+    # The API ships the platform's agents over them, and refuses to boot
+    # with no corpus.
+    ACME_CORPUS_ROOT = "/app"
   })
 
   health_check_command = [

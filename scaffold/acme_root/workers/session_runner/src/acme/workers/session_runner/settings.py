@@ -14,6 +14,7 @@ from pydantic_settings import SettingsConfigDict
 from acme.infra.impl.settings import InfraSettings
 from acme.integrations.settings import IntegrationsSettings
 from acme.om.placement.rules import DEFAULT_TIER, tier_lane
+from acme.om.platform_agents.settings import PlatformAgentsSettings
 from acme.om.storage.settings import StorageSettings
 
 
@@ -21,7 +22,9 @@ def default_runner_id() -> str:
     return f"session-runner-{socket.gethostname()}-{os.getpid()}"
 
 
-class SessionRunnerSettings(StorageSettings, InfraSettings, IntegrationsSettings):
+class SessionRunnerSettings(
+    StorageSettings, InfraSettings, IntegrationsSettings, PlatformAgentsSettings
+):
     model_config = SettingsConfigDict(env_prefix="ACME_", env_file=".env", extra="ignore")
 
     service_name: str = "session-runner"

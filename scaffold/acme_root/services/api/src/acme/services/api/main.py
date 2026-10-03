@@ -1,5 +1,6 @@
 """The service binary is also its own operations CLI: serve, migrate,
-bootstrap, add-member, grant-operator, and openapi are subcommands of one
+bootstrap, add-member, seed-platform, grant-operator, and openapi are
+subcommands of one
 entry point. Each one boots the same way before it does anything else, and
 logs to standard error, so standard output carries only what a command
 prints (the OpenAPI document, a local token)."""
@@ -31,6 +32,7 @@ from acme.services.api.realtime.timeouts import (
     SERVER_PING_INTERVAL_SECONDS,
     SERVER_PING_TIMEOUT_SECONDS,
 )
+from acme.services.api.seed import seed_platform
 from acme.services.api.settings import ApiSettings
 from acme.services.api.token_secrets import TOKEN_HOLDERS, put_token, token_secret_name
 
@@ -245,6 +247,36 @@ def add_member(args: argparse.Namespace) -> int:
     return asyncio.run(run())
 
 
+def seed_platform_of(args: argparse.Namespace) -> int:
+    """A local org made ready to run a session: its account on a plan, its
+    first project, its retention policy, and the published matrix. A no-op
+    for what is there already."""
+
+    async def run() -> int:
+        settings = ApiSettings()
+        boot(settings)
+        settings.refuse_remote()  # a development seed never reaches a shared database
+        container = AppContainer.build(settings)
+        await container.start()
+        try:
+            rctx = command_request(settings)
+            org = await container.storage.get_tenancy_storage().read_org_by_slug(args.slug)
+            if org is None:
+                print(f"no org {args.slug}; bootstrap it first", file=sys.stderr)
+                return 1
+            owner = await container.managers.tenancy.member_context(rctx, org.id, org.created_by)
+            seeded = await seed_platform(container.storage, container.managers, owner)
+        finally:
+            await container.close()
+        print(
+            f"seeded org {args.slug}: project {seeded.project.id}, "
+            f"matrix version {seeded.matrix_version}"
+        )
+        return 0
+
+    return asyncio.run(run())
+
+
 def openapi(args: argparse.Namespace) -> int:
     settings = ApiSettings.model_validate({"_env_file": None, "environment": "test"})
     boot(settings)
@@ -314,6 +346,13 @@ def main(argv: list[str] | None = None) -> int:
         choices=[r.value for r in Role if r not in (Role.OWNER, Role.SERVICE)],
     )
 
+    p_seed = sub.add_parser(
+        "seed-platform",
+        help="give a local org its account on a plan, its first project, its retention "
+        "policy, and the published matrix; a no-op for what exists",
+    )
+    p_seed.add_argument("--slug", required=True, help="the org, bootstrapped first")
+
     p_grant = sub.add_parser(
         "grant-operator",
         help="put an identity on the operator allowlist, disable its entry, mint the "
@@ -372,6 +411,8 @@ def main(argv: list[str] | None = None) -> int:
         return bootstrap(args)
     if args.command == "add-member":
         return add_member(args)
+    if args.command == "seed-platform":
+        return seed_platform_of(args)
     if args.command == "grant-operator":
         if args.expires_in is not None and not (args.mint_token or args.grant_content):
             parser.error("--expires-in goes with --mint-token or --grant-content")

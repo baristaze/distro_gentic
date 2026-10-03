@@ -6,7 +6,8 @@ from acme.om.agents import AgentsManagerInterface
 from acme.om.agents.types.request import Start
 from acme.om.base import utcnow
 from acme.om.context import TenantContext
-from acme.om.exceptions import NotFound
+from acme.om.exceptions import NotFound, ValidationFailed
+from acme.om.projects import ProjectsManagerInterface
 from acme.om.steps import StepsManagerInterface
 from acme.om.steps.rules import control_step, message_step
 from acme.om.steps.types.content import TextBlock
@@ -97,16 +98,28 @@ class AgentSessionsServiceImpl(AgentSessionsServiceInterface):
         agents: AgentsManagerInterface,
         steps: StepsManagerInterface,
         tools: ToolsManagerInterface,
+        projects: ProjectsManagerInterface,
+        *,
+        project_required: bool,
     ) -> None:
+        """`project_required` refuses a session started in no project: what
+        every stack but a local one sets, so no per-project policy is
+        skipped by a session that names none."""
         self._sessions = sessions
         self._agents = agents
         self._steps = steps
         self._tools = tools
+        self._projects = projects
+        self._project_required = project_required
 
     async def start_session(
         self, ctx: TenantContext, body: StartSessionRequest, session_id: UUID
     ) -> AgentSessionView:
         start = Start(id=session_id, kind=body.kind, title=body.title)
+        if body.project_id is not None:
+            return session_view(await self._projects.start_session(ctx, body.project_id, start))
+        if self._project_required:
+            raise ValidationFailed("a session starts in a project: name its project_id")
         return session_view(await self._agents.start_session(ctx, start))
 
     async def get_session(self, ctx: TenantContext, session_id: UUID) -> AgentSessionView:

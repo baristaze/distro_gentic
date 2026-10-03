@@ -4466,13 +4466,25 @@
       },
       "StartSessionRequest": {
         "additionalProperties": false,
-        "description": "A session to start on the latest version of a kind the product runs.",
+        "description": "A session to start on the latest version of a kind the product runs,\nin a project of the caller's tenant. Outside a local stack a session\nstarts in a project or not at all.",
         "properties": {
           "kind": {
             "maxLength": 200,
             "minLength": 1,
             "title": "Kind",
             "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
           },
           "title": {
             "maxLength": 200,

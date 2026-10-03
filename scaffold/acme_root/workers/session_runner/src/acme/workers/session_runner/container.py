@@ -20,6 +20,8 @@ from acme.om.attribution.types.principal import Principal
 from acme.om.automations.root import automation_principals
 from acme.om.base import new_id
 from acme.om.billing.root import build_money_gate, refuse_open_money
+from acme.om.platform_agents.catalog import PlatformAgents
+from acme.om.platform_agents.settings import shipped_agents
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
 from acme.om.hosts.impl.placement import PlacementHostsImpl
 from acme.om.intake.root import build_intake
@@ -98,6 +100,7 @@ class RunnerContainer:
             tool_catalog=tool_catalog,
             domain_classes=domain_classes,
             ports=ports,
+            platform_agents=shipped_agents(settings, settings.environment),
         )
 
     @classmethod
@@ -112,6 +115,7 @@ class RunnerContainer:
         tool_catalog: tuple[ToolInterface, ...] = (),
         domain_classes: tuple[str, ...] = (),
         ports: PlatformPorts | None = None,
+        platform_agents: PlatformAgents | None = None,
     ) -> RunnerContainer:
         """The managers over whichever roots the caller chose, every tool call
         held to the trust swimlane's rules: audited with its four answers,
@@ -127,7 +131,10 @@ class RunnerContainer:
         version and the tenant's plan tier its spend and tokens count
         under; a tenant on its own keys calls on them, through trust.
         Outside `local`, a quiet null for any of `ports`, or a budget gate
-        that is not the money gate, is refused at boot."""
+        that is not the money gate, is refused at boot. `platform_agents`
+        ships the platform's agents beside the product's kinds, as the API
+        does: a deployed runner reads them from its corpus root, and refuses
+        to boot with none."""
         ports = ports or PlatformPorts()
         runner = Executor(kind=ExecutorKind.CLOUD, credential_id=new_id(), label=settings.runner_id)
         placement = PlacementRelayedImpl(
@@ -178,6 +185,7 @@ class RunnerContainer:
             agent_kinds=agent_kinds,
             tool_catalog=tool_catalog,
             domain_classes=domain_classes,
+            platform_agents=platform_agents,
             budget_gate=ports.budget_gate or build_money_gate(storage),
             result_gate=ports.result_gate,
             executor=ports.executor,
