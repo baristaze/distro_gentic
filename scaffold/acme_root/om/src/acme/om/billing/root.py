@@ -19,8 +19,10 @@ from acme.om.billing.gate import MoneyGateInterface
 from acme.om.billing.impl.gate import MoneyGateImpl, MoneyGateOptions
 from acme.om.billing.impl.manager import BillingManagerImpl
 from acme.om.billing.impl.pager import OperatorPagerLogImpl
+from acme.om.billing.impl.purge import BillingPurgeImpl, BillingPurgeOptions
 from acme.om.billing.manager import BillingManagerInterface
 from acme.om.billing.pager import OperatorPagerInterface
+from acme.om.billing.purge import BillingPurgeInterface
 from acme.om.billing.types.plan import PLANS, UNITS, PlanCatalog, UnitScale
 from acme.om.exceptions import UnsafeConfiguration
 from acme.om.root import LOCAL, Managers
@@ -71,6 +73,19 @@ def build_billing(
         managers.outbox,
         plans,
         units,
+    )
+
+
+def build_billing_purge(
+    storage: StorageInterface, managers: Managers, *, purge_batch: int
+) -> BillingPurgeInterface:
+    """Billing's part of a deleted tenant's purge, for the maintenance
+    worker: the account goes, and the ledger is counted."""
+    return BillingPurgeImpl(
+        storage.get_account_storage(),
+        storage.get_money_ledger_storage(),
+        managers.tenancy,
+        BillingPurgeOptions(purge_batch=purge_batch),
     )
 
 

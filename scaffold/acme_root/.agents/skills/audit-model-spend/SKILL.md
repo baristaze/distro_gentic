@@ -76,18 +76,21 @@ block below does. Never print a token.
    A `spend` line is millionths of a dollar; divide by 1,000,000. A
    query that answers nothing is written as "none in the window", never
    read again with a wider window.
-3. Compute, per matrix version: the hit rate, `cache_read / (input + cache_read +
-   cache_write)`; the share of the prompt written to a cache,
+3. Compute, for each (matrix version, plan tier) pair on its own: the
+   hit rate, `cache_read / (input + cache_read + cache_write)`; the
+   share of the prompt written to a cache,
    `cache_write / (input + cache_read + cache_write)`; and the spend's
    share of the whole. The price of a cache write against an uncached
    token is the price table's, in `om/src/acme/om/budgets/` (read it
    with `Read`), so the cost of rebuilt caches is the cache writes at
-   the write rate's premium over the input rate, per matrix version, as
-   an estimate the report labels so.
-4. Judge each matrix version: a hit rate under half, or cache writes
-   above a tenth of the prompt, is a finding; so is a version whose
-   spend share is far above its share of tokens. `none` is every call
-   whose session no matrix pinned, judged the same way.
+   the write rate's premium over the input rate, per pair, as an
+   estimate the report labels so. Each version's total across its tiers
+   is reported beside its pairs.
+4. Judge each (matrix version, plan tier) pair: a hit rate under half,
+   or cache writes above a tenth of the prompt, is a finding; so is a
+   pair whose spend share is far above its share of tokens. `none` is
+   every call whose session no matrix pinned, judged the same way, tier
+   by tier.
 5. Write the report, with each finding's proposed ticket: what to
    change (a prompt's stable prefix, a cache breakpoint, a fill), the
    evidence, and the effort. The audit proposes; it never fixes.
