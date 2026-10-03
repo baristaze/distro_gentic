@@ -18,12 +18,18 @@ export interface RouteOutcome {
 // and the email in `me`, so a user push refreshes both. A revoked session is
 // nobody's query: this session's own revocation arrives as a 4401 close, not
 // as a push. No screen reads an orchestration's record; a screen that does
-// keys its queries under the entity and drops its line here.
+// keys its queries under the entity and drops its line here. A session's
+// stream opened or completed, a hand-over taken or given back, and a command
+// run by hand each change what a session's page reads: its history, its
+// status, its commands.
 const CARRIED_BY: Readonly<Record<string, readonly QueryKey[]>> = {
   membership: [keys.me, keys.myMemberships.all, keys.memberships.all],
   user: [keys.users.all, keys.me],
   session: [],
   orchestration: [],
+  stream: [keys.agentSessions.all],
+  control: [keys.agentSessions.all],
+  command: [keys.agentSessions.all],
 };
 
 function targetsOf(entity: string): readonly QueryKey[] {
@@ -33,12 +39,16 @@ function targetsOf(entity: string): readonly QueryKey[] {
 // Every entity the server pushes on the channel. The router test holds it to
 // the kinds the service sends.
 export const PUSHED_ENTITIES = [
+  "agent_session",
   "api_key",
+  "command",
+  "control",
   "file",
   "invitation",
   "membership",
   "orchestration",
   "session",
+  "stream",
   "user",
 ] as const;
 

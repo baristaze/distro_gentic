@@ -1204,3 +1204,57 @@ select.acme-field {
 .acme-palette-empty {
   color: var(--acme-muted);
 }
+
+/* A session's timeline: one step a row, its body under it. */
+.acme-timeline {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.acme-timeline > li {
+  display: grid;
+  gap: 8px;
+  padding: 0 0 12px 12px;
+  border-left: 2px solid var(--acme-border);
+  border-bottom: 1px solid var(--acme-border);
+}
+
+.acme-timeline > li[data-tone="danger"] {
+  border-left-color: var(--acme-danger);
+}
+
+.acme-timeline > li[data-tone="accent"] {
+  border-left-color: var(--acme-accent);
+}
+
+.acme-timeline-seq {
+  min-width: 24px;
+  color: var(--acme-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.acme-timeline-body {
+  min-width: 0;
+  max-height: 480px;
+  overflow: auto;
+}
+
+/* Facts as a two-column list: the name, then what it is. */
+.acme-facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 8px 16px;
+  margin: 0;
+}
+
+.acme-facts dt {
+  color: var(--acme-muted);
+}
+
+.acme-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}

@@ -38,4 +38,15 @@ export const keys = {
     all: ["invitation"] as const,
     list: (limit: number) => ["invitation", "list", limit] as const,
   },
+  // A tenant's agent sessions and every read of one. An
+  // `agent_sessions.agent_session.*` push reaches them by convention; a
+  // stream, a hand-over, and a command run by hand are carried by the
+  // router's table, since each changes what a session's page reads.
+  agentSessions: {
+    all: ["agent_session"] as const,
+    list: (status: string, limit: number) => ["agent_session", "list", status, limit] as const,
+    one: (id: string) => ["agent_session", id] as const,
+    read: (id: string, part: string) => ["agent_session", id, part] as const,
+    command: (id: string, key: string) => ["agent_session", id, "command", key] as const,
+  },
 };

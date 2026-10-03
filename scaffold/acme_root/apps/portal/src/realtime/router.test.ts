@@ -29,6 +29,9 @@ function pushOf(kind: string, extra: Record<string, unknown> = {}) {
 
 /** Every kind the service pushes on the entity_changed topic. */
 const SERVER_KINDS = [
+  "agent_sessions.agent_session.created",
+  "agent_sessions.agent_session.updated",
+  "agent_sessions.agent_session.deleted",
   "media.file.created",
   "media.file.updated",
   "media.file.deleted",
@@ -43,6 +46,11 @@ const SERVER_KINDS = [
   "tenancy.user.created",
   "tenancy.user.updated",
   "tenancy.user.deleted",
+  "watch.command.sent",
+  "watch.control.given_back",
+  "watch.control.taken",
+  "watch.stream.completed",
+  "watch.stream.opened",
 ];
 
 /** Every key some query reads under, with one sample argument per factory. */
@@ -111,6 +119,14 @@ describe("routeEnvelope", () => {
       const { queryClient, seen } = recording();
       expect(routeEnvelope(queryClient, pushOf(kind))).toEqual({ invalidated: [] });
       expect(seen).toEqual([]);
+    }
+  });
+
+  it("refreshes every read of the tenant's sessions when a session, its stream, its hand-over, or a command changes", () => {
+    for (const kind of ["agent_sessions.agent_session.updated", "watch.stream.completed", "watch.control.taken", "watch.command.sent"]) {
+      const { queryClient, seen } = recording();
+      expect(routeEnvelope(queryClient, pushOf(kind))).toEqual({ invalidated: [keys.agentSessions.all] });
+      expect(seen.every((key) => isPrefixOf(key, keys.agentSessions.read("s1", "steps")))).toBe(true);
     }
   });
 
