@@ -52,7 +52,6 @@ class ToolRuntime:
         transport: TransportInterface,
         workspace: Workspace,
         *,
-        session_id: UUID,
         seal: RecordSeal,
         session_id: UUID,
         key: UUID,
@@ -66,7 +65,6 @@ class ToolRuntime:
         answer_chars: int = 50_000,
     ) -> None:
         self._answer_chars = answer_chars  # the bound of what the model reads of an answer
-        self.session_id = session_id
         self._transport = transport
         self._workspace = workspace
         self._seal = seal
