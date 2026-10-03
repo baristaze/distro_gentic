@@ -2202,8 +2202,7 @@ export interface components {
              * @default false
              */
             own_events: boolean;
-            /** @default creator */
-            runs_as: components["schemas"]["RunsAs"];
+            runs_as?: components["schemas"]["RunsAs"] | null;
             trigger: components["schemas"]["TriggerBody"];
         };
         /**
@@ -3387,12 +3386,8 @@ export interface components {
              * @default 3
              */
             hop_limit: number;
-            /**
-             * Period
-             * Format: duration
-             * @default P1D
-             */
-            period: string;
+            /** Period */
+            period?: string | null;
             /**
              * Queue
              * @default false

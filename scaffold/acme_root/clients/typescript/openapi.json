@@ -608,8 +608,14 @@
             "type": "boolean"
           },
           "runs_as": {
-            "$ref": "#/components/schemas/RunsAs",
-            "default": "creator"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunsAs"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "trigger": {
             "$ref": "#/components/schemas/TriggerBody"
@@ -2962,10 +2968,16 @@
             "type": "integer"
           },
           "period": {
-            "default": "P1D",
-            "format": "duration",
-            "title": "Period",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "duration",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period"
           },
           "queue": {
             "default": false,

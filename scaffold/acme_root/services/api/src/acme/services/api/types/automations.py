@@ -70,7 +70,7 @@ class LimitsBody(RequestBody):
 
     cost_cap_micros: int = Field(gt=0)
     run_cap_micros: int = Field(gt=0)
-    period: timedelta = Field(default=timedelta(days=1), gt=timedelta(0))
+    period: timedelta | None = Field(default=None, gt=timedelta(0))  # a day when left out
     rate: int = Field(gt=0)
     concurrency: int = Field(gt=0)
     queue: bool = False
@@ -96,7 +96,7 @@ class AutomationRequest(RequestBody):
     trigger: TriggerBody
     action: ActionBody
     limits: LimitsBody
-    runs_as: RunsAs = RunsAs.CREATOR
+    runs_as: RunsAs | None = None  # its creator when left out
     own_events: bool = False
     enabled: bool = True
 

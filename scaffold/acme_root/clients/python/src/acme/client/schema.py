@@ -687,7 +687,7 @@ class LimitsBody(BaseModel):
     concurrency: Annotated[int, Field(gt=0, title='Concurrency')]
     cost_cap_micros: Annotated[int, Field(gt=0, title='Cost Cap Micros')]
     hop_limit: Annotated[int | None, Field(ge=1, title='Hop Limit')] = 3
-    period: Annotated[timedelta | None, Field(title='Period')] = 'P1D'
+    period: Annotated[timedelta | None, Field(title='Period')] = None
     queue: Annotated[bool | None, Field(title='Queue')] = False
     queue_depth: Annotated[int | None, Field(ge=1, title='Queue Depth')] = 50
     rate: Annotated[int, Field(gt=0, title='Rate')]
@@ -2141,7 +2141,7 @@ class AutomationRequest(BaseModel):
     limits: LimitsBody
     name: Annotated[str, Field(max_length=200, min_length=1, title='Name')]
     own_events: Annotated[bool | None, Field(title='Own Events')] = False
-    runs_as: RunsAs | None = 'creator'
+    runs_as: RunsAs | None = None
     trigger: TriggerBody
 
 

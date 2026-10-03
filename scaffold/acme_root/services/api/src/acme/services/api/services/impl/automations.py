@@ -59,13 +59,14 @@ class AutomationsServiceImpl(AutomationsServiceInterface):
     def _built(
         self, ctx: TenantContext, body: AutomationRequest, automation_id: UUID
     ) -> Automation:
-        """The automation as the body writes it. Its provenance is the
-        manager's: the create sets it, and an edit keeps the stored one."""
+        """The automation as the body writes it; a field it leaves out takes
+        the object model's default. Its provenance is the manager's: the
+        create sets it, and an edit keeps the stored one."""
         now = self._clock()
         return built(
             Automation,
             {
-                **body.model_dump(),
+                **body.model_dump(exclude_none=True),
                 "id": automation_id,
                 "created_at": now,
                 "updated_at": now,
