@@ -17,7 +17,7 @@ import httpx
 import pytest
 from contracts.agent_session_storage import make_session
 from contracts.project_storage import make_binding, make_project
-from host_support import Stack, probes
+from host_support import Stack, Widened, probes
 
 from acme.apps.host import main as host_main
 from acme.apps.host.agent import HostAgent
@@ -250,6 +250,24 @@ async def test_an_item_past_the_hosts_ceilings_is_refused_at_once(relayed: Relay
     with pytest.raises(Exception, match="egress beyond this host's allowlist") as refused:
         await waiting
     assert getattr(refused.value, "code", None) == "refused_by_host"
+
+
+async def test_an_item_whose_spec_opens_egress_its_fields_close_is_refused_and_nothing_run(
+    api: Stack, tmp_path: Path
+) -> None:
+    # The host's owner lets nothing leave, and the item's fields say nothing
+    # does; its spec, as the wire hands its detail over, opens egress.
+    wire = Widened(api.transport)
+    relayed = await relay_to(api, tmp_path, wire=wire)
+    marker = tmp_path / "workspace" / "ran"
+    spec = command(relayed.epoch, "touch", str(marker))
+    waiting = asyncio.ensure_future(relayed.runner.run(relayed.workspace, spec, seal=NO_SEAL))
+    assert len(await claims(relayed.host, waiting)) == 1
+    with pytest.raises(Exception, match="its spec and its fields differ on egress") as refused:
+        await waiting
+    assert getattr(refused.value, "code", None) == "refused_by_host"
+    assert wire.widened >= 1
+    assert not marker.exists()
 
 
 @pytest.mark.parametrize("served", [True, False])

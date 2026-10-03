@@ -1,11 +1,13 @@
 """What a host runs: a workspace its pool asked it to prepare, and an
-`exec` item it claimed, each once its owner's ceilings let it through. A
-prepare makes the workspace through the host's own provider for the
-session's isolation and answers where it is, which binds the session to
-this host. An `exec` item runs through its own local transport, in the
-workspace it holds. The
-output streams back a part at a time and the result is pushed once, each
-with the hash the host declares of the bytes it sends. While the item runs
+`exec` item it claimed, each once its owner's ceilings let it through. The
+ceilings hold an item's fields and the host builds from its spec, so an
+item whose spec asks other than its fields say is refused, with nothing
+made or run. A prepare makes the workspace through the host's own provider
+for the session's isolation and answers where it is, which binds the
+session to this host. An `exec` item runs through its own local transport,
+in the workspace it holds. The output streams back a part at a time and the
+result is pushed once, each with the hash the host declares of the bytes it
+sends. While the item runs
 the host renews its lease, and a stop from the control stream ends the
 command at once: the transport ends its whole process tree.
 
@@ -30,9 +32,11 @@ from acme.apps.host.agent import ExecutorInterface
 from acme.apps.host.ceilings import Ask
 from acme.client.client import WIRE_FAILURES, ApiClient, ApiError
 from acme.client.types import ClaimedWorkView, ExecDetailView, OutputStream
+from acme.client.types import IsolationMode as HostIsolation
 from acme.infra.exceptions import InfraException
 from acme.infra.transports import CommandSpec, RecordSeal, TransportInterface
 from acme.infra.workspaces import (
+    EgressMode,
     IsolationMode,
     IsolationSpec,
     Workspace,
@@ -47,6 +51,42 @@ STOPS = frozenset({"cancel", "interrupt", "deadline", "revoke"})
 """The control messages that end an item. Each but `revoke` is answered
 with how far the item got; a revoked lease is no longer the host's to
 answer for."""
+
+HOST_MODES: dict[IsolationMode, HostIsolation] = {
+    IsolationMode.VM: HostIsolation.vm,
+    IsolationMode.CONTAINER: HostIsolation.container,
+    IsolationMode.HOST: HostIsolation.directory,
+}
+"""The engine's isolation modes a host runs, by the names its ceilings give
+them. Any other mode names none."""
+
+
+def unlike(ask: Ask, spec: IsolationSpec, reads: tuple[str, ...]) -> str | None:
+    """Why the workspace the host would build differs from what its item
+    asked, or None when it does not. The owner's ceilings held the item's
+    fields; the host builds from its spec. So the spec is read as an ask, as
+    the platform writes the fields from it: its isolation, its egress, and
+    `reads`, the paths on the host its result reads. A spec that differs is
+    refused, so no payload widens what the host does past its ceilings."""
+    match spec.egress.mode:
+        case EgressMode.NONE:
+            egress: frozenset[str] | None = frozenset()
+        case EgressMode.ALLOWLIST:
+            egress = frozenset(spec.egress.hosts)
+        case EgressMode.OPEN:
+            egress = None
+    differs = [
+        name
+        for name, same in (
+            ("isolation", HOST_MODES.get(spec.mode) == ask.isolation),
+            ("egress", egress == ask.egress),
+            ("reads", frozenset(reads) == frozenset(ask.reads)),
+        )
+        if not same
+    ]
+    if not differs:
+        return None
+    return f"its spec and its fields differ on {' and '.join(differs)}"
 
 
 async def _kept_nowhere(data: bytes) -> bytes | None:
@@ -113,7 +153,7 @@ class ExecutorRelayImpl(ExecutorInterface):
 
     async def run(self, item: ClaimedWorkView, ask: Ask) -> None:
         if item.kind == WORKSPACE:
-            await self._workspace(item)
+            await self._workspace(item, ask)
             return
         if item.kind != EXEC:
             log.warning("item %s (%s) has no executor on this host yet", item.id, item.kind)
@@ -122,7 +162,7 @@ class ExecutorRelayImpl(ExecutorInterface):
         running = Running(held_until=time.monotonic() + self._lease_seconds)
         self._running[item_id] = running
         try:
-            await self._run(item_id, running)
+            await self._run(item_id, running, ask)
         except ApiError as error:
             # The platform settled it meanwhile, or took the lease back: the
             # first settlement stands, and the host claims on.
@@ -157,10 +197,17 @@ class ExecutorRelayImpl(ExecutorInterface):
             running.operation.cancel()
         return True
 
-    async def _run(self, item_id: UUID, running: Running) -> None:
+    async def _run(self, item_id: UUID, running: Running, ask: Ask) -> None:
         async with self._client() as client:
             detail = await client.exec_detail(item_id)
         spec = IsolationSpec.model_validate(detail.spec)
+        reads = (detail.location,) if spec.mode is IsolationMode.HOST else ()
+        differs = unlike(ask, spec, reads)
+        if differs is not None:
+            why = "this host refused it: " + differs
+            refused = _result(refused=("refused_by_host", 403), detail=why)
+            await self._push(item_id, refused, running.held_until)
+            return
         transport = self._transports.get(spec.mode)
         if transport is None:
             why = f"this host runs no {spec.mode.value} workspace"
@@ -194,10 +241,12 @@ class ExecutorRelayImpl(ExecutorInterface):
             )
         await self._push(item_id, result, running.held_until)
 
-    async def _workspace(self, item: ClaimedWorkView) -> None:
+    async def _workspace(self, item: ClaimedWorkView, ask: Ask) -> None:
         """A prepare: the workspace made to the session's spec by this host's
-        provider for its mode, and where it is answered. One this host
-        cannot make is answered as refused, so another host of the pool may.
+        provider for its mode, and where it is answered. One whose spec
+        differs from what it asked, or one this host cannot make, is answered
+        as refused, so another host of the pool may. Where the workspace is
+        made is the host's to choose, so a prepare reads no path of its own.
         When another host holds the session's workspace already, this one's
         goes. A release or a purge has no executor here yet."""
         payload = item.payload
@@ -211,6 +260,10 @@ class ExecutorRelayImpl(ExecutorInterface):
             session_id = UUID(str(payload["session_id"]))
         except KeyError, ValueError, ValidationError:
             await self._answer(item.id, refused="the prepare names no session or spec")
+            return
+        differs = unlike(ask, spec, ())
+        if differs is not None:
+            await self._answer(item.id, refused="this host refused it: " + differs)
             return
         org_id = item.org_id
         provider = self._workspaces.get(spec.mode)

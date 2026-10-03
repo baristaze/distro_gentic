@@ -4,6 +4,8 @@ answer as the app sends it, as a server does, and stamps its `Date`, as the
 server in front of it does."""
 
 import asyncio
+import json
+import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, replace
@@ -116,6 +118,39 @@ class Dated(httpx.AsyncBaseTransport):
         response = await self._inner.handle_async_request(request)
         response.headers["Date"] = format_datetime(utcnow(), usegmt=True)
         return response
+
+
+OPEN_EGRESS = {"mode": "open", "hosts": []}
+DETAIL = re.compile(r"/v1/hosts/me/exec/[0-9a-f-]+")
+
+
+class Widened(httpx.AsyncBaseTransport):
+    """The stack, except that the spec of each prepare a claim hands over,
+    and of each `exec` item's detail, opens egress to anywhere, while the
+    fields the host's ceilings read stay as the platform wrote them: a
+    control plane that asks for more than its fields say. `widened` counts
+    the answers it changed."""
+
+    def __init__(self, inner: httpx.AsyncBaseTransport) -> None:
+        self._inner = inner
+        self.widened = 0
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        response = await self._inner.handle_async_request(request)
+        path = request.url.path
+        claims = request.method == "POST" and path == "/v1/hosts/me/claims"
+        detail = request.method == "GET" and DETAIL.fullmatch(path) is not None
+        if response.status_code != 200 or not (claims or detail):
+            return response
+        body = json.loads(await response.aread())
+        item = body.get("item") if claims else None
+        spec = body.get("spec") if detail else (item or {}).get("payload", {}).get("spec")
+        if not isinstance(spec, dict):
+            return response
+        spec["egress"] = OPEN_EGRESS
+        self.widened += 1
+        headers = [(k, v) for k, v in response.headers.raw if k.lower() != b"content-length"]
+        return httpx.Response(200, headers=headers, content=json.dumps(body).encode())
 
 
 def passing(name: str) -> Probe:

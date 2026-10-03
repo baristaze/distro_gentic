@@ -3,14 +3,16 @@ against the live app, in process. The ask waits once on the pool's lane,
 however often the loop asks. The first host's answer binds the session to
 it; a second host that made one too lets its own go. A host that cannot
 make it hands the work back to its pool, and a host answers only a prepare
-it holds."""
+it holds. One whose spec asks more than its fields say is refused, and
+nothing is made."""
 
+from dataclasses import replace
 from pathlib import Path
 from uuid import UUID
 
 import pytest
 from contracts.agent_session_storage import make_session
-from host_support import Stack, directory_host
+from host_support import Stack, Widened, directory_host
 
 from acme.apps.host.ceilings import Ceilings
 from acme.client.client import ApiError
@@ -20,6 +22,7 @@ from acme.om.base import new_id
 from acme.om.work.types.work_item import WorkKind
 
 DIRECTORY = IsolationSpec(mode=IsolationMode.HOST, egress=EgressPolicy(mode=EgressMode.OPEN))
+SEALED = IsolationSpec(mode=IsolationMode.HOST, egress=EgressPolicy(mode=EgressMode.NONE))
 
 
 def made_in(location: str, root: Path) -> bool:
@@ -80,6 +83,30 @@ async def test_a_host_that_cannot_make_it_hands_the_prepare_back_to_its_pool(
     # Back on the pool's lane after a wait, for a host that can give it.
     assert await api.container.managers.work.has_open(api.owner, WorkKind.WORKSPACE, session_id)
     assert await host.claim_once() is None
+
+
+async def test_a_prepare_whose_spec_opens_egress_its_fields_close_is_refused_and_nothing_made(
+    api: Stack, tmp_path: Path
+) -> None:
+    relay = api.container.managers.relay
+    pool = await api.pool()
+    session_id = await a_pinned_session(api, pool.id)
+    await relay.ask_prepare(api.owner, session_id, SEALED)
+    # Its owner lets nothing leave, and the prepare's fields say nothing
+    # does; its spec, as the wire hands it over, opens egress to anywhere.
+    wire = Widened(api.transport)
+    closed = Ceilings(projects=None, min_isolation=HostMode.directory, egress=frozenset())
+    host, root = await directory_host(
+        replace(api, transport=wire), pool.id, tmp_path, ceilings=closed
+    )
+
+    handled = await host.claim_once()
+    assert handled is not None and handled.refused == []  # its fields fit the ceilings
+    await host.idle()
+    assert wire.widened == 1
+    assert await relay.binding_of(api.owner, session_id) is None
+    assert not root.exists()
+    assert await api.container.managers.work.has_open(api.owner, WorkKind.WORKSPACE, session_id)
 
 
 async def test_a_host_answers_only_a_prepare_it_holds(api: Stack, tmp_path: Path) -> None:
