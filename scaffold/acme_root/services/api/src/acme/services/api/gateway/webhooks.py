@@ -18,3 +18,13 @@ async def identity_delivery(
 
 
 IdentityDelivery = Annotated[SignedDelivery, Depends(identity_delivery)]
+
+
+async def integration_delivery(request: Request) -> SignedDelivery:
+    """An integration's delivery: its body, and every header it carried, since
+    each integration signs in a header of its own."""
+    headers = {name.lower(): value for name, value in request.headers.items()}
+    return SignedDelivery(payload=await request.body(), signature=None, headers=headers)
+
+
+IntegrationDelivery = Annotated[SignedDelivery, Depends(integration_delivery)]

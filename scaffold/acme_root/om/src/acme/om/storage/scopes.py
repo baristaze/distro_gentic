@@ -98,6 +98,9 @@ TABLE_SCOPES: dict[str, TableScope] = {
     "matrix_versions": TableScope(ScopeKind.SYSTEM),
     "benchmark_results": TableScope(ScopeKind.SYSTEM),
     "model_retirements": TableScope(ScopeKind.SYSTEM),
+    # What the benchmark job showed of a candidate against its baseline: the
+    # platform's own record, no tenant's.
+    "benchmarks": TableScope(ScopeKind.SYSTEM),
     # A tenant's own rows. An org's `org_id` is its own id.
     "orgs": TableScope(ScopeKind.ORG),
     "invitations": TableScope(ScopeKind.ORG),
@@ -143,6 +146,8 @@ TABLE_SCOPES: dict[str, TableScope] = {
     "platform_acts": TableScope(ScopeKind.ORG),
     "automations": TableScope(ScopeKind.ORG),
     "automation_runs": TableScope(ScopeKind.ORG),
+    "automation_principals": TableScope(ScopeKind.ORG),
+    "notifications": TableScope(ScopeKind.ORG),
     "playbooks": TableScope(ScopeKind.ORG),
     "playbook_invocations": TableScope(ScopeKind.ORG),
     "knowledge_entries": TableScope(ScopeKind.ORG),

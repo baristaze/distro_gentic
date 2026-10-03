@@ -6,6 +6,7 @@ from acme.om.agent_sessions.storage import AgentSessionStorageInterface
 from acme.om.agents.storage import AgentStorageInterface
 from acme.om.attribution.storage import AttributionStorageInterface
 from acme.om.automations.storage import AutomationStorageInterface
+from acme.om.benchmarks.storage import BenchmarkStorageInterface
 from acme.om.billing.storage import AccountStorageInterface, MoneyLedgerStorageInterface
 from acme.om.budgets.storage import BudgetStorageInterface, LedgerStorageInterface
 from acme.om.events.storage import EventStorageInterface
@@ -17,6 +18,7 @@ from acme.om.knowledge.storage import KnowledgeStorageInterface
 from acme.om.matrix.storage import MatrixStorageInterface, MatrixTenantStorageInterface
 from acme.om.media.storage import MediaStorageInterface
 from acme.om.models.storage import FillSetStorageInterface
+from acme.om.notifications.storage import NotificationStorageInterface
 from acme.om.orchestrations.storage import OrchestrationsStorageInterface
 from acme.om.outbox.storage import OutboxStorageInterface
 from acme.om.placement.storage import PlacementStorageInterface
@@ -116,6 +118,9 @@ class StorageInterface(ABC):
     def get_intake_storage(self) -> IntakeStorageInterface: ...
 
     @abstractmethod
+    def get_notification_storage(self) -> NotificationStorageInterface: ...
+
+    @abstractmethod
     def get_automation_storage(self) -> AutomationStorageInterface: ...
 
     @abstractmethod
@@ -126,6 +131,9 @@ class StorageInterface(ABC):
 
     @abstractmethod
     def get_platform_agents_storage(self) -> PlatformAgentsStorageInterface: ...
+
+    @abstractmethod
+    def get_benchmark_storage(self) -> BenchmarkStorageInterface: ...
 
     @abstractmethod
     def get_relay_storage(self) -> RelayStorageInterface: ...

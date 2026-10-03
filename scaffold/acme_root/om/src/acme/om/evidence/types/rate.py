@@ -12,10 +12,13 @@ from acme.om.evidence.types.record import NAME, VERSION
 
 class Bound(StrEnum):
     """How a one-sided upper bound on a rate is computed. There is no normal
-    approximation: at zero failures it collapses to zero."""
+    approximation: at zero failures it collapses to zero. An exact or a
+    Wilson bound holds after a count of trials fixed before them; the
+    sequential one holds wherever its test stops, so it may stop early."""
 
     EXACT = "exact"  # Clopper-Pearson
     WILSON = "wilson"  # the Wilson score interval
+    SEQUENTIAL = "sequential"  # a likelihood-ratio test valid under optional stopping
 
 
 class AbortRule(StrEnum):
@@ -29,13 +32,27 @@ class RateRule(Platform):
     """A rate a check's failures must stay under, declared before its
     trials: the most failures it may show as a rate, the confidence of the
     bound, how the bound is computed, the trials to run, and the rule for a
-    trial a safety stop ended."""
+    trial a safety stop ended. An exact or a Wilson bound runs `trials`
+    trials, every one of them. A sequential test runs at most `trials`, and
+    stops at the first trial where its bound falls under `max_rate`, or
+    where no trial left could bring it there; `alternative` is the rate it
+    is built to tell apart from `max_rate`, the lower the longer it runs."""
 
     max_rate: float = Field(gt=0, lt=1)
     confidence: float = Field(ge=0.5, lt=1)
     bound: Bound = Bound.EXACT
     trials: int = Field(ge=1, le=100_000)
     aborted: AbortRule = AbortRule.FAILURE
+    alternative: float | None = Field(default=None, gt=0, lt=1)
+
+    @model_validator(mode="after")
+    def _a_test_names_its_alternative(self) -> Self:
+        sequential = self.bound is Bound.SEQUENTIAL
+        if sequential != (self.alternative is not None):
+            raise ValueError("a sequential test names its alternative rate, and only one")
+        if self.alternative is not None and self.alternative >= self.max_rate:
+            raise ValueError("a sequential test's alternative rate lies under its max_rate")
+        return self
 
 
 class RateClaim(Platform):

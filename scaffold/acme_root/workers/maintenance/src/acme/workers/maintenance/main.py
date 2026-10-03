@@ -79,6 +79,10 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
     return WorkerLoop(
         work=managers.work,
         outbox=managers.outbox,
+        # Per tenant, once a pass, what its time sets going: each schedule of
+        # its automations fires once for the slot it is in, whichever
+        # worker's sweep comes first.
+        ticks={"automations": container.automations.tick},
         # Per tenant, what only a tenant deleted past its retention has: every
         # row of it goes. Any other tenant costs these nothing.
         purges={
@@ -119,11 +123,13 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             # store, and its operators' content grants.
             "trust": container.trust.trust.purge_tenant,
             # Its account links and work bindings, its automations and their
-            # runs, its playbooks and their invocations, and its knowledge.
+            # runs, its playbooks and their invocations, its knowledge, and
+            # who was told what waited on them.
             "intake": container.intake.purge_tenant,
             "automations": container.automations.purge_tenant,
             "playbooks": container.playbooks.purge_tenant,
             "knowledge": container.knowledge.purge_tenant,
+            "notifications": container.notifications.purge_tenant,
             # Deletes nothing: what a call held and spent stays, so a
             # tenant whose ledger remains is never marked purged.
             "ledger": managers.budgets.purge_ledger,

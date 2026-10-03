@@ -17,7 +17,9 @@ of](../../../../README.md).
 - **Review.** A person keeps or rejects a suggestion, in person.
 - **Recall.** The reviewed entries whose every trigger word appears in
   what a session is about arrive in it, once each, at its next model
-  call.
+  call. A session recalls as it starts: when its first loop prepares the
+  workspace, its title and what its principals said so far are what it
+  is about, and its first model call reads what they trigger.
 
 ## The rules
 
@@ -25,4 +27,13 @@ of](../../../../README.md).
   so one session cannot plant instructions for the next.
 - **Recalled knowledge is data.** It arrives as an event the agent reads
   quoted, whoever wrote it.
+- **A session does not rediscover its environment.** What its subject
+  triggers is there before its first model call.
 - **Every row belongs to one org,** and goes with the org.
+
+<!-- agents-only
+The recall at start is the tools layer `root.KnowledgeLayer`, around
+`prepare_workspace`, for a session with no model request yet
+(`AgentSession.speaker` is None). A root that runs loops wraps its tools
+in it.
+-->

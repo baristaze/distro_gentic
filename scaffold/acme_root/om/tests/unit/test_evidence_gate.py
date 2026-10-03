@@ -31,7 +31,7 @@ from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
 from acme.om.evidence.impl.ports import WorkProductAbsentImpl
 from acme.om.evidence.types.policy import Grade, Requirement
 from acme.om.evidence.types.provenance import Dependency, Provenance
-from acme.om.evidence.types.rate import AbortRule, RateRule
+from acme.om.evidence.types.rate import AbortRule, Bound, RateRule
 from acme.om.evidence.types.record import RunPurpose
 from acme.om.exceptions import PreconditionFailed, UnsafeConfiguration
 from acme.om.root import build_managers
@@ -335,6 +335,70 @@ async def test_fewer_trials_than_declared_are_refused() -> None:
     moved = tuple(run.model_copy(update={"check": "trials"}) for run in runs)
     assert await storage.create_validation(org, validation, moved)
     assert refused(await case.submit(), "trials ran 3 of the 300 trials declared")
+
+
+# The sequential test stops where its rule says; a fixed count never early.
+
+
+def sequential(most: int = 200) -> Requirement:
+    rule = RateRule(
+        max_rate=0.1, confidence=0.95, bound=Bound.SEQUENTIAL, trials=most, alternative=0.02
+    )
+    return Requirement(check="trials", paths=("src/**",), rate=rule)
+
+
+async def test_a_sequential_test_stops_at_its_boundary_and_its_claim_counts() -> None:
+    case = await Case.start(ScriptedExecutor(), sequential())
+    await case.validate()
+    (request,) = case.evidence.executor.requests
+    assert request.trials == (200,) and request.rates == (sequential().rate,)
+    runs = (await case.evidence.manager.get_runs(case.ctx, case.session, None, 200)).items
+    # Clean trials bound the rate under 10% at the 36th, and the executor
+    # stopped there.
+    assert len([run for run in runs if run.check == "trials"]) == 36
+    assert succeeded(await case.submit())
+
+
+async def test_a_sequential_test_stopped_anywhere_else_is_refused() -> None:
+    for count, words in (
+        (20, ("ran 20 trials", "had not stopped")),
+        (50, ("ran 50 trials, on past trial 36", "where its sequential test stopped")),
+    ):
+        case = await Case.start(ScriptedExecutor(), sequential())
+        validation, runs = make_validation(case.session, count)
+        moved = tuple(run.model_copy(update={"check": "trials"}) for run in runs)
+        assert await case.evidence.storage.create_validation(case.ctx.org_id, validation, moved)
+        assert refused(await case.submit(), *words)
+
+
+async def test_a_sequential_test_that_cannot_bound_the_rate_stops_and_is_refused() -> None:
+    flaky = ScriptedExecutor(outcome=lambda check, trial: "failed" if trial == 0 else "passed")
+    case = await Case.start(flaky, sequential(most=40))
+    await case.validate()
+    runs = (await case.evidence.manager.get_runs(case.ctx, case.session, None, 200)).items
+    # One failure first: no 39 clean trials could bound it, so it stops.
+    assert len([run for run in runs if run.check == "trials"]) == 1
+    assert refused(await case.submit(), "1 failures in 1 trials", "sequential bound")
+
+
+async def test_a_fixed_count_claim_runs_every_trial_and_refuses_to_stop_early() -> None:
+    case = await Case.start(ScriptedExecutor(), trials(50, max_rate=0.1))
+    await case.validate()
+    runs = (await case.evidence.manager.get_runs(case.ctx, case.session, None, 200)).items
+    # Where a sequential test would have stopped at 36, the count runs on.
+    assert len([run for run in runs if run.check == "trials"]) == 50
+    assert succeeded(await case.submit())
+    stopped = await Case.start(ScriptedExecutor(), trials(50, max_rate=0.1))
+    validation, early = make_validation(stopped.session, 36)
+    moved = tuple(run.model_copy(update={"check": "trials"}) for run in early)
+    assert await stopped.evidence.storage.create_validation(stopped.ctx.org_id, validation, moved)
+    assert refused(await stopped.submit(), "trials ran 36 of the 50 trials declared")
+
+
+def test_a_sequential_test_is_its_checks_one_rate() -> None:
+    fixed = trials(300)
+    with pytest.raises(ValueError, match="sequential test declares no other rate"):
+        arm_policy(sequential(), fixed)
 
 
 # A run that passed no case is no passing run.

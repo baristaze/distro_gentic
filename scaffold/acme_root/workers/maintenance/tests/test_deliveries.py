@@ -28,6 +28,7 @@ from acme.om.automations.types.automation import (
 from acme.om.base import new_id, utcnow
 from acme.om.context import TenantContext
 from acme.om.events.types.event import Event
+from acme.om.evidence.types.provenance import Provenance
 from acme.om.intake.impl.manager import ROUTED
 from acme.om.intake.rules import described
 from acme.om.intake.types.event import (
@@ -212,6 +213,7 @@ async def test_an_event_from_outside_is_routed_and_fires_automations_once(
     event = FeedbackEvent(
         id=new_id(),
         integration="forge",
+        provenance=Provenance.TWIN,
         arrival=Arrival.CHECK,
         author=Author(kind=AuthorKind.BOT, external_id="ci", name="ci"),
         names=WorkNames(branch="main"),
@@ -252,6 +254,7 @@ async def test_an_event_at_the_text_cap_is_routed_and_fires_once(tmp_path: Path)
     event = FeedbackEvent(
         id=new_id(),
         integration="forge",
+        provenance=Provenance.TWIN,
         arrival=Arrival.CHECK,
         author=Author(kind=AuthorKind.BOT, external_id="ci", name="ci"),
         names=WorkNames(branch="main"),

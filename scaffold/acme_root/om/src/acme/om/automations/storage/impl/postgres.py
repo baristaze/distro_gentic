@@ -6,9 +6,16 @@ from sqlalchemy.dialects.postgresql import insert
 
 from acme.om.automations.rules import admitted, period_start, tally
 from acme.om.automations.storage import AutomationStorageInterface
+from acme.om.automations.storage.tables.automation_principals import AutomationPrincipals
 from acme.om.automations.storage.tables.automation_runs import AutomationRuns
 from acme.om.automations.storage.tables.automations import Automations
-from acme.om.automations.types.automation import Automation, AutomationRun, Limits, RunStatus
+from acme.om.automations.types.automation import (
+    Automation,
+    AutomationPrincipal,
+    AutomationRun,
+    Limits,
+    RunStatus,
+)
 from acme.om.outbox.types.row import OutboxRow
 from acme.om.storage.impl.pg_base import PgStorageBase, delete_batch, deleted
 from acme.om.storage.utils.translation import to_model, to_values
@@ -108,6 +115,39 @@ class AutomationStoragePostgresImpl(PgStorageBase, AutomationStorageInterface):
             await session.execute(stmt)
             await session.commit()
 
+    async def read_run(self, org_id: UUID, run_id: UUID) -> AutomationRun | None:
+        stmt = select(AutomationRuns).where(
+            AutomationRuns.org_id == org_id, AutomationRuns.id == run_id
+        )
+        found = await self._runs(org_id, stmt)
+        return found[0] if found else None
+
+    async def write_principal(
+        self, org_id: UUID, principal: AutomationPrincipal
+    ) -> AutomationPrincipal:
+        values = to_values(principal, AutomationPrincipals)
+        # One row a tenant: a grant over a standing one keeps its id.
+        stmt = (
+            insert(AutomationPrincipals)
+            .values(**values, org_id=org_id)
+            .on_conflict_do_update(
+                index_elements=[AutomationPrincipals.org_id],
+                set_={"role": values["role"], "granted_by": values["granted_by"]},
+            )
+            .returning(AutomationPrincipals)
+        )
+        async with self._session_for(AutomationPrincipals, org_id=org_id) as session:
+            row = (await session.execute(stmt)).scalar_one()
+            stored = to_model(row, AutomationPrincipal)
+            await session.commit()
+            return stored
+
+    async def read_principal(self, org_id: UUID) -> AutomationPrincipal | None:
+        stmt = select(AutomationPrincipals).where(AutomationPrincipals.org_id == org_id)
+        async with self._session_for(stmt, org_id=org_id) as session:
+            row = (await session.execute(stmt)).scalar_one_or_none()
+            return None if row is None else to_model(row, AutomationPrincipal)
+
     async def read_runs(self, org_id: UUID, automation_id: UUID, limit: int) -> list[AutomationRun]:
         stmt = (
             select(AutomationRuns)
@@ -169,7 +209,7 @@ class AutomationStoragePostgresImpl(PgStorageBase, AutomationStorageInterface):
 
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:
         gone = 0
-        for table in (AutomationRuns, Automations):
+        for table in (AutomationRuns, Automations, AutomationPrincipals):
             stmt = delete_batch(table, table.org_id == org_id, limit=limit)
             async with self._session_for(stmt, org_id=org_id) as session:
                 gone += deleted(await session.execute(stmt))

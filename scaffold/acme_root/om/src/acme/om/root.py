@@ -30,6 +30,8 @@ from acme.om.attribution.impl.manager import (
     members_context,
 )
 from acme.om.base import utcnow
+from acme.om.benchmarks import BenchmarksManagerInterface
+from acme.om.benchmarks.impl.manager import BenchmarksManagerImpl
 from acme.om.budgets import BudgetGateInterface, BudgetsManagerInterface
 from acme.om.budgets.impl.gate import BudgetGateImpl, BudgetGateOptions
 from acme.om.budgets.impl.manager import BudgetsManagerImpl, BudgetsOptions
@@ -174,6 +176,7 @@ class Managers:
     relay: RelayManagerInterface
     platform_agents: PlatformAgentsManagerInterface
     projects: ProjectsManagerInterface
+    benchmarks: BenchmarksManagerInterface
     stations: StationsManagerInterface
 
 
@@ -840,6 +843,7 @@ def build_managers(
         ),
         platform_agents=platform,
         projects=projects,
+        benchmarks=BenchmarksManagerImpl(storage.get_benchmark_storage()),
         # The line a session waits in for a station, the lease a grant gives,
         # and a lab daemon's calls: its claims through placement, its
         # renewals, and its runs' records through evidence; a validation

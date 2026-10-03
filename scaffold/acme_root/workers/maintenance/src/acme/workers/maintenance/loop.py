@@ -4,8 +4,9 @@ request that caused the work, raises a span linked to that request's trace,
 renews its lease and cancels itself when the lease is lost or renewal keeps
 failing, beat liveness in memory and publish it to the cache as best
 effort, sweep on a timer (the expired leases and the outbox relay across
-tenants, then the purge of a tenant past its retention per tenant, then
-every namespace's purge of its rows past their retention across tenants,
+tenants, then per tenant its ticks, such as the schedules of its
+automations, and the purge of a tenant past its retention, then every
+namespace's purge of its rows past their retention across tenants,
 then the purges of done outbox rows and settled work items, within a time
 budget, then the tally of the platform's size when it is due, then the four
 gauges of the queue and the outbox; a worker that purges nothing sweeps the
@@ -55,6 +56,9 @@ CAUSED_BY_ATTRIBUTE = "acme.caused_by_request_id"
 WORK_ITEM_ATTRIBUTE = "acme.work_item_id"
 
 PurgeStep = Callable[[TenantContext], Awaitable[int]]
+TickStep = Callable[[TenantContext], Awaitable[object]]
+"""What a tenant's time sets going, once a pass: a schedule that is due. A
+tick is idempotent across workers, since every worker's sweep runs it."""
 """A manager's `purge_tenant(ctx)`: the hard delete of every row of a tenant
 deleted longer ago than the retention, a batch per statement, and nothing
 for any other tenant; it returns how many rows went, and a count of a whole
@@ -120,6 +124,7 @@ class WorkerLoop:
         outbox: OutboxRelayInterface,
         purges: Mapping[str, PurgeStep],
         handlers: Mapping[WorkKind, WorkHandlerInterface],
+        ticks: Mapping[str, TickStep] | None = None,
         across: Mapping[str, AcrossStep] | None = None,
         across_batches: Mapping[str, int] | None = None,
         tally: TallyStep | None = None,
@@ -130,6 +135,7 @@ class WorkerLoop:
         self._work = work
         self._outbox = outbox
         self._purges = purges
+        self._ticks = dict(ticks or {})
         self._across = dict(across or {})
         # A purge across tenants whose batch is not the loop's `purge_batch`,
         # by name: what it returns is held against its own batch.
@@ -658,11 +664,17 @@ class WorkerLoop:
         return ordered[at:] + ordered[:at]
 
     async def _sweep_tenant(self, ctx: TenantContext, deadline: float) -> None:
-        """Every purge of one tenant once, then the purges whose batch came back
-        full, round after round, while the budget lasts. A deleted tenant past
-        its retention for which nothing was left is marked purged, and the
-        sweep leaves it out from then on; its rows that have a retention of
-        their own go across tenants, visited or not."""
+        """Every tick of one tenant once, then every purge of it once, then the
+        purges whose batch came back full, round after round, while the
+        budget lasts. A deleted tenant past its retention for which nothing
+        was left is marked purged, and the sweep leaves it out from then on;
+        its rows that have a retention of their own go across tenants,
+        visited or not."""
+        for name, tick in self._ticks.items():
+            try:
+                await tick(ctx)
+            except Exception:
+                log.exception("sweep: tick %s failed for tenant %s", name, ctx.org_id)
         settled = True
         full: list[tuple[str, PurgeStep]] = []
         for name, purge in self._purges.items():

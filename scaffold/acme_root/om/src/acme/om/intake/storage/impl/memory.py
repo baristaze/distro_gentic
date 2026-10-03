@@ -27,6 +27,18 @@ class IntakeStorageMemoryImpl(MemoryStorageBase, IntakeStorageInterface):
     ) -> AccountLink | None:
         return self._link(org_id, integration, external_id)
 
+    async def read_user_links(self, org_id: UUID, user_id: UUID, limit: int) -> list[AccountLink]:
+        rows = [link for link in self._rows(self._links, org_id) if link.user_id == user_id]
+        return sorted(rows, key=lambda link: (link.integration, link.external_id))[:limit]
+
+    async def delete_link(self, org_id: UUID, integration: str, external_id: str) -> bool:
+        async with self._lock:
+            held = self._link(org_id, integration, external_id)
+            if held is None:
+                return False
+            del self._links[held.id]
+            return True
+
     def _link(self, org_id: UUID, integration: str, external_id: str) -> AccountLink | None:
         found = [
             link

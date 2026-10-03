@@ -11,15 +11,17 @@ completes its item; any other thing not found, such as a kind this
 process does not declare, fails it, so it is retried and, past its
 attempts, dead-lettered where an operator requeues it. Every other end
 completes the item: an ended or parked loop, a session another run
-holds, and one with nothing to run."""
+holds, and one with nothing to run. A run that parks on what only a
+person clears tells whoever can clear it before the item completes."""
 
 import logging
+from collections.abc import Awaitable, Callable
 from datetime import timedelta
 from typing import ClassVar
 
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agents import LoopManagerInterface
-from acme.om.agents.types.run import RunEnd
+from acme.om.agents.types.run import LoopRun, RunEnd
 from acme.om.context import Permission, TenantContext
 from acme.om.exceptions import NotFound
 from acme.om.work.types.handler import WorkHandlerInterface, WorkParked
@@ -38,9 +40,15 @@ class LoopHandlerImpl(WorkHandlerInterface):
     nothing reads the session; each tool call asks its principal's own
     permissions again."""
 
-    def __init__(self, loop: LoopManagerInterface, sessions: AgentSessionsManagerInterface) -> None:
+    def __init__(
+        self,
+        loop: LoopManagerInterface,
+        sessions: AgentSessionsManagerInterface,
+        notify: Callable[[TenantContext, LoopRun], Awaitable[object]] | None = None,
+    ) -> None:
         self._loop = loop
         self._sessions = sessions
+        self._notify = notify
 
     async def handle(self, ctx: TenantContext, item: WorkItem) -> None:
         try:
@@ -60,6 +68,9 @@ class LoopHandlerImpl(WorkHandlerInterface):
         )
         if run.end is RunEnd.YIELDED:
             raise WorkParked("the run's time is up; the next run goes on", timedelta(0))
+        if run.end is RunEnd.PARKED and self._notify is not None:
+            # Told once a park: a retry of the item tells nobody twice.
+            await self._notify(ctx, run)
 
     async def _gone(self, ctx: TenantContext, item: WorkItem) -> bool:
         """Whether the session itself is gone: what the run did not find is

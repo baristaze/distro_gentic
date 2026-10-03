@@ -13,5 +13,6 @@ class Automations(IdentifiableMixin, NamedMixin, TrackableMixin, Base):
     trigger: Mapped[dict[str, Any]]
     action: Mapped[dict[str, Any]]
     limits: Mapped[dict[str, Any]]
+    runs_as: Mapped[str]
     own_events: Mapped[bool]
     enabled: Mapped[bool]

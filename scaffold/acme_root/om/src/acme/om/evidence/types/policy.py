@@ -10,7 +10,7 @@ from pydantic import Field, model_validator
 from acme.om.base import Identifiable, Platform, Trackable
 from acme.om.evidence.types.contract import SCHEMAS, CheckDeclaration
 from acme.om.evidence.types.provenance import Provenance
-from acme.om.evidence.types.rate import RateRule
+from acme.om.evidence.types.rate import Bound, RateRule
 from acme.om.evidence.types.record import NAME, PROJECT
 
 PATTERN = Annotated[str, Field(min_length=1, max_length=300, pattern=r"^[^\s\\]+$")]
@@ -71,6 +71,13 @@ class ValidationPolicy(Identifiable, Trackable):
         unread = sorted(check.name for check in self.checks if check.schema_version not in SCHEMAS)
         if unread:
             raise ValueError(f"checks write a results schema no collector reads: {unread}")
+        rated = [req for req in self.requirements if req.rate is not None]
+        tested = sorted(
+            {req.check for req in rated if req.rate and req.rate.bound is Bound.SEQUENTIAL}
+        )
+        shared = [name for name in tested if sum(req.check == name for req in rated) > 1]
+        if shared:
+            raise ValueError(f"a check with a sequential test declares no other rate: {shared}")
         return self
 
     def declared(self, name: str) -> CheckDeclaration:
