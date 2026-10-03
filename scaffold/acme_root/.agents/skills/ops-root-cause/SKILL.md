@@ -79,8 +79,8 @@ stop, and name the refresh the preamble gives.
 
 ## Procedure
 
-The processes are `api` and `maintenance`, as `deployment/README.md`
-lists them.
+The processes are `api`, `maintenance`, and `session-runner`, as
+`deployment/README.md` lists them.
 
 Steps 4 to 8 are one pass, for one request id, and each id gets one
 pass. A pass reads each signal once: a signal that answers nothing is
@@ -269,7 +269,7 @@ runs once, before the passes. It is not a pass.
 
    ```bash
    aws logs start-query --profile acme-<env>-investigate \
-     --log-group-names /acme/<env>/api /acme/<env>/maintenance \
+     --log-group-names /acme/<env>/api /acme/<env>/maintenance /acme/<env>/session-runner \
      --start-time <start> --end-time <end> \
      --query-string 'fields @timestamp, level, @message | filter request_id = "<id>" or caused_by_request_id = "<id>" | sort @timestamp asc'
    aws logs get-query-results --query-id <id> --profile acme-<env>-investigate

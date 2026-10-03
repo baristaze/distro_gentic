@@ -62,8 +62,19 @@ output "application_prefix" {
 }
 
 output "policy_arn" {
-  description = "Attached to every task role; reads the application prefix, and writes a tenant's own secrets under its org/ part alone."
+  description = "Attached to the task roles of the API and the maintenance worker; reads the application prefix, and writes a tenant's own secrets under its org/ part alone."
   value       = aws_iam_policy.application.arn
+}
+
+output "runner_policy_arn" {
+  description = "Attached to the session runner's task role in place of policy_arn: reads a tenant's own secrets under the application prefix's org/ part, and writes nothing."
+  value       = aws_iam_policy.runner.arn
+}
+
+output "model_key_secret_arns" {
+  description = "The platform's model keys by provider (anthropic, openai), injected into the session runner alone; \"off\" until set, which leaves a model call on a tenant's own key or none."
+  value       = { for name, secret in aws_secretsmanager_secret.model_key : trimsuffix(name, "_api_key") => secret.arn }
+  depends_on  = [aws_secretsmanager_secret_version.model_key]
 }
 
 output "sentry_dsn_secret_arn" {
