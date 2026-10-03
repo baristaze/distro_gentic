@@ -3,11 +3,16 @@
     knowledge = build_knowledge(storage, managers)
 
 A root that runs loops wraps its tools in the layer, so a session recalls
-what its subject triggers as its first loop starts:
+what its subject triggers as its first loop starts, and hands the agents'
+knowledge tools its manager, which answers once it is built:
 
     layer = KnowledgeLayer(storage)
-    managers = build_managers(storage, infra, ..., tools_layer=layer.tools)
-    knowledge = layer.build(managers)"""
+    managers = build_managers(
+        storage, infra, ..., tools_layer=layer.tools, knowledge=layer.manager
+    )
+    knowledge = layer.build(managers)
+
+A session's project is read from the projects' rows."""
 
 from collections.abc import Callable
 from datetime import datetime
@@ -16,6 +21,7 @@ from acme.om.base import utcnow
 from acme.om.knowledge.impl.manager import KnowledgeManagerImpl, KnowledgeOptions
 from acme.om.knowledge.impl.tools import ToolsManagerRecallImpl
 from acme.om.knowledge.manager import KnowledgeManagerInterface
+from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.root import Managers
 from acme.om.storage.root import StorageInterface
 from acme.om.tools.manager import ToolsManagerInterface
@@ -31,6 +37,7 @@ def build_knowledge(
     return KnowledgeManagerImpl(
         storage.get_knowledge_storage(),
         managers.agent_sessions,
+        SessionProjectsBoundImpl(storage.get_project_storage()),
         managers.tenancy,
         managers.outbox,
         options or KnowledgeOptions(),
@@ -69,6 +76,11 @@ class KnowledgeLayer:
             )
             self._built = (knowledge, managers)
         return self._built[0]
+
+    def manager(self) -> KnowledgeManagerInterface:
+        """The knowledge manager, once `build` has built it: what the agents'
+        knowledge tools call."""
+        return self._managers()[0]
 
     def _managers(self) -> tuple[KnowledgeManagerInterface, Managers]:
         if self._built is None:
