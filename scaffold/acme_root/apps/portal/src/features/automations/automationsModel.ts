@@ -64,7 +64,7 @@ export function triggerLine(trigger: AutomationView["trigger"]): string {
 export function actionLine(action: AutomationView["action"], projects: readonly Pick<ProjectView, "id" | "name">[]): string {
   if (action.kind === "message_session") return `message the session ${action.session_id ?? ""}`.trim();
   const project = action.project_id ? (projects.find((each) => each.id === action.project_id)?.name ?? "a project") : null;
-  return `start a ${action.agent_kind ?? ""} session${project ? ` in ${project}` : ""}`;
+  return `start a session of the kind ${action.agent_kind ?? ""}${project ? ` in ${project}` : ""}`;
 }
 
 export function limitsLine(limits: AutomationView["limits"]): string {
