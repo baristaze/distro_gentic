@@ -98,10 +98,13 @@ class InfraSettings(BaseSettings):
     # under the root, run as processes of this host, which a deployed
     # environment refuses; `container` a container per workspace on the
     # local Docker, from the image. The root also holds each transport's
-    # records of how commands ended, beside the workspaces.
+    # records of how commands ended, beside the workspaces. Each container
+    # carries the deployment's name, and a runner holds only those that
+    # carry its own.
     workspace_backend: Literal["none", "host", "container"] = "none"
     workspaces_root: Path = Path(".local/workspaces")
     workspace_image: str = DEFAULT_IMAGE
+    workspace_deployment: str = Field(default="acme-local", min_length=1)
 
     aws_region: str = "us-east-1"
 

@@ -127,6 +127,7 @@ def host_workspaces(settings: Settings) -> dict[IsolationMode, WorkspaceProvider
         IsolationMode.CONTAINER: WorkspaceContainerImpl(
             settings.workspace_image,
             timedelta(seconds=30),
+            f"host-{settings.name}",
             timedelta(seconds=settings.pull_timeout_seconds),
         )
     }

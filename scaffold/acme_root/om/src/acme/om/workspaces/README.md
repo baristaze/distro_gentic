@@ -93,7 +93,10 @@ rebuilt from.
   methods.
 - **A workspace is a cache of durable state.** What a loop leaves is
   pushed before its instance goes, and a vanished branch is rebuilt only
-  when its fate is known.
+  when its fate is known. An instance a dead run left is released the
+  same way by its host's
+  [runner sweep](../../../../../workers/session_runner/README.md), past a
+  grace.
 - **The agent never holds a repository's credential**
   ([ADR 2022](../../../../../docs/adr/2022-a-repositorys-credentials-are-the-platforms-and-the-agent-never-holds-one.md)).
   The fetch credential reaches only the platform's own read, and the

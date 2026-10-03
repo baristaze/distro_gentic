@@ -339,7 +339,7 @@ async def test_a_bound_sessions_stopped_container_is_prepared_again_and_its_call
         ran = await run_on(host, api, session_id, sealed, "ls")
         assert (ran.exit_code, ran.stdout) == (0, "kept\n")  # a new instance, over its files
     finally:
-        provider = WorkspaceContainerImpl(DEFAULT_IMAGE, timedelta(seconds=30))
+        provider = WorkspaceContainerImpl(DEFAULT_IMAGE, timedelta(seconds=30), "purge")
         await provider.purge(api.owner.org_id, session_id)
 
 

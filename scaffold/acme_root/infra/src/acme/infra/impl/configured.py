@@ -211,6 +211,7 @@ class InfraConfiguredImpl(InfraInterface):
                 WorkspaceContainerImpl(
                     settings.workspace_image,
                     timeout,
+                    settings.workspace_deployment,
                     timedelta(seconds=settings.docker_pull_timeout_seconds),
                 ),
                 TransportContainerImpl(records, self._secrets, broker, timeout),

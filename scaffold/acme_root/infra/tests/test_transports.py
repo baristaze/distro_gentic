@@ -412,7 +412,7 @@ def docker_runs() -> bool:
 class TestTransportContainer(TransportContract):
     @pytest.fixture
     async def provided(self) -> AsyncIterator[tuple[WorkspaceProviderInterface, Workspace]]:
-        provider = WorkspaceContainerImpl("python:3.14-slim", timedelta(seconds=300))
+        provider = WorkspaceContainerImpl("python:3.14-slim", timedelta(seconds=300), "transports")
         spec = IsolationSpec(
             mode=IsolationMode.CONTAINER,
             egress=EgressPolicy(mode=EgressMode.NONE),
@@ -483,7 +483,7 @@ async def test_the_default_image_holds_git_for_a_sessions_checkout(tmp_path: Pat
     it. The host's own default is the same image."""
     image = InfraSettings.model_fields["workspace_image"].default
     assert image == DEFAULT_IMAGE
-    provider = WorkspaceContainerImpl(image, timedelta(seconds=300))
+    provider = WorkspaceContainerImpl(image, timedelta(seconds=300), "transports")
     spec = IsolationSpec(mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode=EgressMode.NONE))
     workspace = await provider.prepare(new_id(), new_id(), spec)
     transport = TransportContainerImpl(

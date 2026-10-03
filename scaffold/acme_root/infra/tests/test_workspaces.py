@@ -9,6 +9,7 @@ import contextlib
 import os
 import re
 import signal
+import subprocess
 from datetime import timedelta
 from pathlib import Path
 
@@ -16,12 +17,14 @@ import pytest
 
 from acme.infra.base import new_id
 from acme.infra.docker import DockerReply
+from acme.infra.docker import docker as docker_cli
 from acme.infra.exceptions import BackendFailed
 from acme.infra.impl.configured import InfraConfiguredImpl
 from acme.infra.impl.settings import InfraSettings
 from acme.infra.workspaces import (
     EgressMode,
     EgressPolicy,
+    HeldInstance,
     IsolationMode,
     IsolationRefused,
     IsolationSpec,
@@ -32,6 +35,9 @@ from acme.infra.workspaces import (
 from acme.infra.workspaces.container import WorkspaceContainerImpl, container_name
 from acme.infra.workspaces.host import WorkspaceHostImpl
 from acme.infra.workspaces.twin import WorkspaceNullImpl, WorkspaceTwinImpl
+
+DEPLOYMENT = "acme-test"
+"""The deployment the providers of these cases start their containers for."""
 
 NONE = EgressPolicy(mode=EgressMode.NONE)
 OPEN = EgressPolicy(mode=EgressMode.OPEN)
@@ -201,7 +207,7 @@ async def test_a_container_provider_refuses_what_it_cannot_hold_before_it_reache
         raise AssertionError("a refused spec reaches no docker")
 
     monkeypatch.setattr("acme.infra.workspaces.container.docker", docker)
-    provider = WorkspaceContainerImpl("python:3.14-slim", timedelta(seconds=5))
+    provider = WorkspaceContainerImpl("python:3.14-slim", timedelta(seconds=5), DEPLOYMENT)
     with pytest.raises(IsolationRefused):
         await provider.prepare(new_id(), new_id(), asked)
     assert calls == []
@@ -252,7 +258,7 @@ async def test_a_running_container_is_reused_only_under_the_spec_it_was_started_
     opened, closed = spec(IsolationMode.CONTAINER, OPEN), spec(IsolationMode.CONTAINER, NONE)
     docker = LocalDocker()
     monkeypatch.setattr("acme.infra.workspaces.container.docker", docker)
-    provider = WorkspaceContainerImpl("python:3.14-slim", timedelta(seconds=5))
+    provider = WorkspaceContainerImpl("python:3.14-slim", timedelta(seconds=5), DEPLOYMENT)
     org, workspace_id = new_id(), new_id()
     await provider.prepare(org, workspace_id, opened)
     docker.calls.clear()
@@ -271,6 +277,24 @@ async def test_a_running_container_is_reused_only_under_the_spec_it_was_started_
     run = docker.calls[-1]
     assert run[run.index("--network") + 1] == "none", "the new container holds the tighter spec"
     assert not any(call[:2] == ("volume", "rm") for call in docker.calls), "its files stay"
+    assert docker.labels is not None and docker.labels["acme.deployment"] == DEPLOYMENT
+
+    # One started without this deployment's label, as before it was
+    # written, is replaced too, and the new one carries it.
+    del docker.labels["acme.deployment"]
+    docker.calls.clear()
+    await provider.prepare(org, workspace_id, closed)
+    assert [call[0] for call in docker.calls] == [
+        "version",
+        "inspect",
+        "rm",
+        "image",
+        "volume",
+        "run",
+    ]
+    assert docker.labels["acme.deployment"] == DEPLOYMENT
+    volume = docker.calls[-2]
+    assert f"acme.deployment={DEPLOYMENT}" in volume, "its volume carries it as well"
 
 
 async def test_an_absent_image_is_pulled_under_the_pull_limit_before_the_run(
@@ -283,7 +307,7 @@ async def test_an_absent_image_is_pulled_under_the_pull_limit_before_the_run(
     docker.image_present = False
     monkeypatch.setattr("acme.infra.workspaces.container.docker", docker)
     provider = WorkspaceContainerImpl(
-        "python:3.14-slim", timedelta(seconds=5), timedelta(seconds=900)
+        "python:3.14-slim", timedelta(seconds=5), DEPLOYMENT, timedelta(seconds=900)
     )
     await provider.prepare(new_id(), new_id(), spec(IsolationMode.CONTAINER, NONE))
     names = [call[0] for call in docker.calls]
@@ -304,7 +328,7 @@ async def test_a_container_purge_by_ids_removes_its_container_and_its_files(
     purge, so nothing is left behind as if it went."""
     docker = LocalDocker()
     monkeypatch.setattr("acme.infra.workspaces.container.docker", docker)
-    provider = WorkspaceContainerImpl("python:3.14-slim", timedelta(seconds=5))
+    provider = WorkspaceContainerImpl("python:3.14-slim", timedelta(seconds=5), DEPLOYMENT)
     workspace_id = new_id()
     name = container_name(workspace_id)
     await provider.purge(new_id(), workspace_id)
@@ -316,6 +340,137 @@ async def test_a_container_purge_by_ids_removes_its_container_and_its_files(
     monkeypatch.setattr("acme.infra.workspaces.container.docker", unreachable)
     with pytest.raises(BackendFailed):
         await provider.purge(new_id(), workspace_id)
+
+
+# What each provider holds: an instance prepared and not let go since,
+# whichever process prepared it, and nothing it did not make.
+
+
+async def test_a_host_holds_each_directory_from_its_prepare_to_its_release(
+    tmp_path: Path,
+) -> None:
+    """The directory outlives its release, so a mark beside it, never in
+    it, says it is held. Nothing else under the root is named: not the
+    transport's records, and not a name that is no prepare's."""
+    root = tmp_path / "workspaces"
+    provider = WorkspaceHostImpl(root)
+    org = new_id()
+    first, second = [
+        await provider.prepare(org, new_id(), spec(IsolationMode.HOST)) for _ in range(2)
+    ]
+    (root / ".records").mkdir()
+    (root / org.hex / "not-an-id.held").touch()
+    (root / org.hex / f"{new_id()}.held").touch()  # an id, though not as a prepare names it
+    assert sorted(await provider.held(), key=lambda held: held.location) == sorted(
+        (
+            HeldInstance(id=place.id, org_id=org, location=place.location)
+            for place in (first, second)
+        ),
+        key=lambda held: held.location,
+    )
+    assert await asyncio.to_thread(os.listdir, first.location) == [], "no mark in it"
+
+    await provider.release(first)
+    assert [held.id for held in await provider.held()] == [second.id]
+    assert await asyncio.to_thread(Path(first.location).is_dir), "its files outlive the release"
+    await provider.prepare(org, first.id, first.spec)
+    await provider.purge(org, first.id)
+    await provider.purge(org, second.id)
+    assert await provider.held() == []
+
+
+async def test_a_container_provider_holds_the_running_containers_it_started_alone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Docker lists the running containers that carry the workspace label;
+    of those, only one named for the workspace its label names is held."""
+    ours, org = new_id(), new_id()
+    listing = "\n".join(
+        (
+            f"{container_name(ours)} {ours} {org}",
+            f"labelled-by-hand {new_id()} {org}",
+            f"{container_name(ours)} not-an-id {org}",
+            f"{container_name(new_id())}  ",
+        )
+    )
+    calls: list[tuple[str, ...]] = []
+
+    async def listed(*args: str, **_: object) -> DockerReply:
+        calls.append(args)
+        return DockerReply(0, f"{listing}\n".encode(), b"")
+
+    monkeypatch.setattr("acme.infra.workspaces.container.docker", listed)
+    provider = WorkspaceContainerImpl("python:3.14-slim", timedelta(seconds=5), DEPLOYMENT)
+    assert await provider.held() == [
+        HeldInstance(id=ours, org_id=org, location=container_name(ours))
+    ]
+    (call,) = calls
+    assert call[:3] == ("ps", "--filter", "label=acme.workspace"), "labelled ones alone"
+    assert call[3:5] == ("--filter", f"label=acme.deployment={DEPLOYMENT}"), "its own deployment's"
+    assert "-a" not in call and "--all" not in call, "running ones alone"
+
+    async def unreachable(*args: str, **_: object) -> DockerReply:
+        return DockerReply(1, b"", b"Cannot connect to the Docker daemon")
+
+    monkeypatch.setattr("acme.infra.workspaces.container.docker", unreachable)
+    with pytest.raises(BackendFailed):
+        await provider.held()
+
+
+def docker_runs() -> bool:
+    try:
+        reply = subprocess.run(["docker", "version"], capture_output=True, timeout=20)
+    except FileNotFoundError, subprocess.TimeoutExpired:
+        return False
+    return reply.returncode == 0
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(not docker_runs(), reason="needs a local Docker")
+async def test_a_container_provider_never_holds_a_container_it_did_not_start() -> None:
+    """On the local Docker: the container a prepare started is held until
+    its release. A container started without the labels, and one another
+    deployment started on the same Docker, are never held, and still run
+    after the release."""
+    bound = timedelta(seconds=300)
+    provider = WorkspaceContainerImpl("python:3.14-slim", bound, f"ours-{new_id().hex}")
+    theirs = WorkspaceContainerImpl("python:3.14-slim", bound, f"theirs-{new_id().hex}")
+    org, other = new_id(), new_id()
+    workspace = await provider.prepare(org, new_id(), spec(IsolationMode.CONTAINER, NONE))
+    elsewhere = await theirs.prepare(other, new_id(), spec(IsolationMode.CONTAINER, NONE))
+    bare = f"bare-{new_id().hex}"
+    started = await docker_cli(
+        "run", "--detach", "--name", bare, "python:3.14-slim", "sleep", "infinity", bound=bound
+    )
+    try:
+        assert started.ok, started.reason()
+        held = await provider.held()
+        assert HeldInstance(id=workspace.id, org_id=org, location=workspace.location) in held
+        assert bare not in {instance.location for instance in held}
+        assert elsewhere.id not in {instance.id for instance in held}, "another deployment's"
+        assert [instance.id for instance in await theirs.held()] == [elsewhere.id]
+        await provider.release(workspace)
+        assert workspace.id not in {instance.id for instance in await provider.held()}
+        for name in (bare, elsewhere.location):
+            running = await docker_cli(
+                "inspect", "--format", "{{.State.Running}}", name, bound=bound
+            )
+            assert running.stdout.strip() == b"true", f"{name} is left alone"
+    finally:
+        await docker_cli("rm", "-f", bare, bound=bound)
+        await provider.purge(org, workspace.id)
+        await theirs.purge(other, elsewhere.id)
+
+
+async def test_the_twin_holds_what_it_prepared_until_it_is_let_go() -> None:
+    twin = WorkspaceTwinImpl()
+    org = new_id()
+    kept, let_go = [
+        await twin.prepare(org, new_id(), spec(IsolationMode.TWIN, NONE)) for _ in range(2)
+    ]
+    await twin.release(let_go)
+    assert await twin.held() == [HeldInstance(id=kept.id, org_id=org, location=kept.location)]
+    assert await WorkspaceNullImpl().held() == []
 
 
 async def test_a_container_spec_with_no_docker_is_refused_and_never_swapped_for_a_directory(
