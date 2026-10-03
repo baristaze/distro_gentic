@@ -108,7 +108,9 @@ STORAGE_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         # through is found among every tenant's, which finds the tenant.
         ("IntakeStorageInterface", "read_installation_org"),
         # The sweep's read of running exec items whose lease ended, each named
-        # with its tenant, whose service context the sweep settles it under.
+        # with its tenant, whose service context the sweep settles it under,
+        # and of the workspaces hosts hold, the same way.
+        ("RelayStorageInterface", "read_bindings"),
         ("RelayStorageInterface", "read_expired"),
         # And a station daemon's, by its credential's digest, the same way.
         ("StationsStorageInterface", "read_daemon_credential_by_digest"),
@@ -261,6 +263,9 @@ MANAGER_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         # The sweep's gauges of the queue, read across tenants like the purge.
         ("WorkManagerInterface", "oldest_ready_age"),
         ("WorkManagerInterface", "failed_within"),
+        # The runner sweep's read of the workspaces hosts hold, across
+        # tenants, each named with its tenant.
+        ("RelayManagerInterface", "bindings"),
         # The platform's gauges, read across every tenant like the queue's.
         ("PlacementOperatorManagerInterface", "fleet_counts"),
         # And the sweep's tally of the platform's size, counted across tenants
@@ -333,8 +338,10 @@ REQUEST_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
         ("RelayManagerInterface", "push_result"),
         ("RelayManagerInterface", "extend"),
         ("RelayManagerInterface", "controls"),
-        # And its answer to a prepare it claimed, which binds the session.
+        # And its answers to a prepare it claimed, which binds the session,
+        # and to a release.
         ("RelayManagerInterface", "prepared"),
+        ("RelayManagerInterface", "released"),
         # And the sweep's settlement of the items whose lease ended, across
         # tenants, each under its tenant's service context.
         ("RelayManagerInterface", "settle_expired"),
