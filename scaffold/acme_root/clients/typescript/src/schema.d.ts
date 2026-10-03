@@ -2178,9 +2178,13 @@ export interface components {
         };
         /**
          * DeliveryReceivedView
-         * @description The delivery checked out and is queued; the provider stops retrying.
+         * @description The delivery checked out and is queued, or, for the system's check of
+         *     this address, answered with the challenge it sent; the provider stops
+         *     retrying.
          */
         DeliveryReceivedView: {
+            /** Challenge */
+            challenge?: string | null;
             /** Received */
             received: boolean;
         };

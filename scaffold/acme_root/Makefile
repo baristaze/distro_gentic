@@ -231,7 +231,9 @@ test-integration: ## Integration tests over the compose stack
 
 # A session's loop on a live model provider, once, by hand: it spends, within
 # a budget the case sets, so no gate runs it. Needs a migrated stack and
-# ANTHROPIC_API_KEY (or ACME_ANTHROPIC_API_KEY) in the shell.
+# ANTHROPIC_API_KEY (or ACME_ANTHROPIC_API_KEY) in the shell. The forge's
+# and the chat's clients against GitHub and Slack run with it, each skipped
+# without its settings.
 test-live: ## One loop end to end on a live model provider; spends, so run by hand
 	uv run pytest -q -s -m live
 

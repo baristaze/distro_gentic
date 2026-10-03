@@ -293,8 +293,11 @@ class DeleteOrgRequest(BaseModel):
 
 class DeliveryReceivedView(BaseModel):
     """
-    The delivery checked out and is queued; the provider stops retrying.
+    The delivery checked out and is queued, or, for the system's check of
+    this address, answered with the challenge it sent; the provider stops
+    retrying.
     """
+    challenge: Annotated[str | None, Field(title='Challenge')] = None
     received: Annotated[bool, Field(title='Received')]
 
 
