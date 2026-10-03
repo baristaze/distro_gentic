@@ -174,8 +174,10 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
             # project's fetch credential, and the checkout takes a bundle:
             # no credential enters the workspace.
             # A branch the repository never held may live on in its last
-            # snapshot alone, which the cut then starts from.
-            last = None if seen else held.snapshot_ref
+            # snapshot alone, which the cut then starts from. A loop not yet
+            # told of the snapshot is told to restore its work from there,
+            # so it comes in then too, whatever the branch.
+            last = held.snapshot_ref if not seen or held.notices else None
             incoming = await self._reader.incoming(
                 binding,
                 held.branch,

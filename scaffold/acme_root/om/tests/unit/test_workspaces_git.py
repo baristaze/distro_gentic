@@ -519,6 +519,27 @@ async def test_a_persons_push_between_loops_is_in_the_next_loops_checkout(
     assert (here / "fix.txt").read_text() == "a person's fix\n"
 
 
+async def test_a_tracked_branchs_fresh_checkout_holds_the_snapshot_its_loop_is_told_of(
+    checkout: Checkout,
+) -> None:
+    session_id = await checkout.session()
+    branch = session_branch(session_id)
+    workspace = await checkout.prepare(session_id)
+    here = Path(workspace.location)
+    (here / "total.py").write_text("TOTAL = 3\n")
+    await open_it(checkout, session_id, commit(here, "total"))
+    (here / "notes.txt").write_text("half done\n")
+    await checkout.release(workspace)
+    (ref,) = checkout.snapshots(branch)
+    shutil.rmtree(here)
+
+    again = await checkout.prepare(session_id)
+
+    there = Path(again.location)
+    assert again.changed is not None and ref in again.changed
+    assert git(there, "show", f"{ref}:notes.txt") == "half done", "restorable from there"
+
+
 async def test_a_branch_that_moved_here_and_on_its_repository_fails_loudly(
     checkout: Checkout, tmp_path: Path
 ) -> None:
