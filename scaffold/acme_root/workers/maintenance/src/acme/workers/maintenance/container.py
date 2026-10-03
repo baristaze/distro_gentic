@@ -41,7 +41,7 @@ from acme.om.playbooks.root import PlaybooksLayer
 from acme.om.projects.impl.manager import ProjectsOptions
 from acme.om.relay.impl.manager import RelayOptions
 from acme.om.retention.impl.manager import RetentionOptions
-from acme.om.root import Managers, PlatformPorts, build_managers
+from acme.om.root import LOCAL, Managers, PlatformPorts, build_managers
 from acme.om.stations.impl.manager import StationsOptions
 from acme.om.steps.impl.manager import StepsOptions
 from acme.om.storage.impl.postgres import StoragePostgresImpl
@@ -192,8 +192,13 @@ class WorkerContainer:
         # playbooks, knowledge, and notifications, for their purges.
         batch = settings.worker_purge_batch
         self.intake = build_intake(storage, managers, options=IntakeOptions(purge_batch=batch))
+        # Outside a local stack, an automation's session starts in a project:
+        # a start that names none fires nothing.
         self.automations = build_automations(
-            storage, managers, options=AutomationsOptions(purge_batch=batch)
+            storage,
+            managers,
+            project_required=settings.environment != LOCAL,
+            options=AutomationsOptions(purge_batch=batch),
         )
         self.playbooks = PlaybooksLayer(storage, options=PlaybooksOptions(purge_batch=batch)).build(
             managers

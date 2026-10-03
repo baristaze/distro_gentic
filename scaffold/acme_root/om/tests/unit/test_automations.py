@@ -10,10 +10,14 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
+from contracts.budget_storage import make_budget
+from contracts.evidence_storage import make_policy
 from contracts.intake import ACTING, WORKER, Wired, wired
-from contracts.loops import reply, said, use
+from contracts.loops import ASSISTANT, reply, said, use
+from contracts.project_storage import in_project, make_project
 from pydantic import ValidationError
 
+from acme.integrations.model_providers.calls import ModelCall
 from acme.om.agents.types.request import Start
 from acme.om.agents.types.run import RunEnd
 from acme.om.attribution.types.principal import Principal, PrincipalKind
@@ -31,11 +35,12 @@ from acme.om.automations.types.automation import (
     Trigger,
     TriggerKind,
 )
-from acme.om.base import Platform, new_id, utcnow
-from acme.om.budgets.types.budget import BudgetScopeKind, WindowKind
+from acme.om.base import Platform, derived_id, new_id, utcnow
+from acme.om.budgets.types.budget import BudgetScope, BudgetScopeKind, WindowKind
 from acme.om.context import RequestContext, Role, TenantContext
+from acme.om.evidence.rules import policy_key
 from acme.om.evidence.types.provenance import Provenance
-from acme.om.exceptions import NotAuthorized
+from acme.om.exceptions import BudgetRefused, NotAuthorized, NotFound, ValidationFailed
 from acme.om.intake.rules import described
 from acme.om.intake.tools import COMMENT
 from acme.om.intake.types.event import (
@@ -47,6 +52,8 @@ from acme.om.intake.types.event import (
     WorkNames,
 )
 from acme.om.intake.types.link import HandleKind
+from acme.om.models.types.fill import MAIN, Eligibility
+from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.steps.rules import message_step
 from acme.om.steps.types.content import ToolUseBlock
 from acme.om.steps.types.header import InputHeader, ParkReason
@@ -54,6 +61,7 @@ from acme.om.steps.types.step import Actor, StepType
 from acme.om.tenancy.rules import permissions_of
 from acme.om.tools.tool import ToolRuntime
 from acme.om.tools.types.tool import ToolInput
+from acme.om.windows.impl.gate import CallGateBudgetImpl
 
 DOLLAR = 1_000_000  # micros
 
@@ -269,6 +277,100 @@ async def test_an_action_the_engine_refuses_is_a_refused_run_that_holds_nothing(
         Refusal.ACTION,
         0,
     )
+
+
+# A session an automation starts is in the project its action names.
+
+
+def started_in(project_id: UUID | None) -> Action:
+    return automation().action.model_copy(update={"project_id": project_id})
+
+
+async def test_an_automations_session_starts_in_its_project_under_its_budget_and_policy(
+    tmp_path: Path,
+) -> None:
+    """The session is its project's from its first moment, so the project's
+    policy protects its paths, and the project's budget holds its calls:
+    the call gate the loop asks refuses a call past it, on the project's
+    line alone, though the tenant and the run's own budget have room."""
+    platform = wired(tmp_path, project_required=True)
+    creator = platform.person(Role.ADMIN)
+    project = (await platform.managers.projects.create_project(creator, make_project())).id
+    await platform.managers.evidence.write_policy(creator, make_policy(policy_key(project)))
+    budget = make_budget(BudgetScopeKind.PROJECT, str(project), cost_micros=1)
+    await platform.managers.budgets.create_budget(creator, budget)
+    await made(platform, creator, action=started_in(project))
+    (run,) = await fired(platform, comment())
+    assert run.status is RunStatus.STARTED and run.session_id is not None
+    placed = await platform.managers.projects.project_of(platform.owner, run.session_id)
+    assert placed is not None and placed.id == project
+    target = await platform.managers.evidence.protection(
+        platform.owner, run.session_id, ["tests/test_grip.py"]
+    )
+    assert target.attributes["protected"] is True
+    calls = CallGateBudgetImpl(
+        platform.managers.budget_gate,
+        platform.managers.pricing,
+        platform.managers.agent_sessions,
+        SessionProjectsBoundImpl(platform.storage.get_project_storage()),
+    )
+    fills = await platform.managers.models.resolve_fill_set(
+        platform.owner, run.session_id, ASSISTANT.roles, Eligibility()
+    )
+    fill = fills.fill_for(MAIN)
+    assert fill is not None
+    call = ModelCall(model=fill.model, messages=(), max_output_tokens=4_000)
+    spender = Principal(kind=PrincipalKind.PERSON, id=creator.user_id)
+    with pytest.raises(BudgetRefused) as refused:
+        await calls.authorize(
+            creator, run.session_id, spender, MAIN, fill, call, credential="platform"
+        )
+    (breach,) = refused.value.refusal.breaches
+    assert breach.scope == BudgetScope(kind=BudgetScopeKind.PROJECT, key=str(project))
+
+
+async def test_outside_local_a_start_in_no_project_or_another_tenants_is_refused_when_saved(
+    tmp_path: Path,
+) -> None:
+    platform = wired(tmp_path, project_required=True)
+    creator = platform.person(Role.ADMIN)
+    with pytest.raises(ValidationFailed):
+        await made(platform, creator)
+    theirs = await in_project(platform.storage.get_project_storage(), new_id())
+    with pytest.raises(NotFound):
+        await made(platform, creator, action=started_in(theirs))
+    # Neither was saved: the event fires nothing.
+    assert await fired(platform, comment()) == []
+
+
+@pytest.mark.parametrize("trigger", ["event", "schedule"])
+async def test_outside_local_a_stored_start_in_no_project_starts_nothing_when_it_fires(
+    trigger: str, tmp_path: Path
+) -> None:
+    """One saved before a project was required: its firing is a run refused
+    for its project, which starts no session and reserves nothing."""
+    platform = wired(tmp_path, project_required=True)
+    creator = platform.person(Role.ADMIN)
+    at = platform.clock.now
+    stored = (scheduled(creator) if trigger == "schedule" else automation()).model_copy(
+        update={"created_by": creator.user_id, "created_at": at, "updated_at": at}
+    )
+    automations = platform.storage.get_automation_storage()
+    assert await automations.create_automation(creator.org_id, stored, ())
+    if trigger == "schedule":
+        (run,) = await platform.automations.tick(platform.service)
+    else:
+        (run,) = await fired(platform, comment())
+    assert (run.status, run.refusal, run.session_id, run.reserved_micros) == (
+        RunStatus.REFUSED,
+        Refusal.PROJECT,
+        None,
+        0,
+    )
+    with pytest.raises(NotFound):
+        session_id = derived_id(run.id, run.created_at, "session")
+        await platform.managers.agent_sessions.get_session(platform.owner, session_id)
+    assert platform.anthropic.calls == []
 
 
 async def finish(platform: Wired, run: AutomationRun) -> None:
