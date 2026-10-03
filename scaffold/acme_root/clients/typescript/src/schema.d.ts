@@ -4,6 +4,170 @@
  */
 
 export interface paths {
+    "/v1/admin/benchmarks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Trend
+         * @description The scenario's runs, the newest first: each arm's score and cost, and
+         *     whether the candidate regressed.
+         */
+        get: operations["get_trend_v1_admin_benchmarks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/benchmarks/{benchmark_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Benchmark */
+        get: operations["get_benchmark_v1_admin_benchmarks__benchmark_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/matrix/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record Result
+         * @description What a benchmark run showed of a model for a model role. The latest
+         *     result for the two decides whether a version that serves the role with
+         *     the model may be published.
+         */
+        post: operations["record_result_v1_admin_matrix_results_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/matrix/retirements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retire
+         * @description A model its provider retired: no session resolves to it again, each
+         *     session on it switches at its next loop, and no version that names it
+         *     is published. A model retired already answers its first record.
+         */
+        post: operations["retire_v1_admin_matrix_retirements_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/matrix/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stage
+         * @description A new pending version, numbered after the last. Its shape is checked
+         *     here, its fills when it is published.
+         */
+        post: operations["stage_v1_admin_matrix_versions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/matrix/versions/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Current
+         * @description The latest version published: the matrix.
+         */
+        get: operations["get_current_v1_admin_matrix_versions_current_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/matrix/versions/{number}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Version */
+        get: operations["get_version_v1_admin_matrix_versions__number__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/matrix/versions/{number}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publish
+         * @description The pending version, published: every session resolved from now on
+         *     is pinned to it, and a running one keeps the version it holds.
+         *     `validation_failed` names every reason it may not be: no row matches
+         *     every question, or a fill is unpriced, unqualified for a model role its
+         *     row serves, or retired.
+         */
+        post: operations["publish_v1_admin_matrix_versions__number__publish_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/me": {
         parameters: {
             query?: never;
@@ -186,6 +350,28 @@ export interface paths {
          *     reads, against the floor and what is ready on its lanes.
          */
         get: operations["host_standing_v1_admin_orgs__org_id__hosts__host_id__standing_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/orgs/{org_id}/ledger": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Ledger
+         * @description The tenant's entries, the newest first, narrowed to one kind, one
+         *     hold (its hold, settlement, and charge), or one session (its holds and
+         *     approvals) when named. `has_more` says the read was cut at its limit.
+         */
+        get: operations["get_ledger_v1_admin_orgs__org_id__ledger_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1635,6 +1821,69 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/matrix/choices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Choices */
+        get: operations["get_choices_v1_matrix_choices_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/matrix/choices/{role}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Choose
+         * @description The tenant's fill for `role` from its next session on, one of the
+         *     role's options; it replaces the last. Requires managing the org.
+         */
+        put: operations["choose_v1_matrix_choices__role__put"];
+        post?: never;
+        /**
+         * Drop Choice
+         * @description The matrix answers `role` again. Requires managing the org.
+         */
+        delete: operations["drop_choice_v1_matrix_choices__role__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/matrix/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Options
+         * @description For each model role of the published matrix, the fills the tenant
+         *     may choose: none unless it pays its providers on its own keys.
+         */
+        get: operations["get_options_v1_matrix_options_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me": {
         parameters: {
             query?: never;
@@ -2069,6 +2318,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/provider-keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Keys
+         * @description The tenant's keys, the newest first, a rotated or refused one among
+         *     them; never a value.
+         */
+        get: operations["get_keys_v1_provider_keys_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/provider-keys/{provider}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Save Key
+         * @description The tenant's live key to `provider`, the one before it rotated out.
+         *     Requires managing the org. `key_refused` when the provider does not take
+         *     it, and 503 when no probe can ask.
+         */
+        put: operations["save_key_v1_provider_keys__provider__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/realtime/tickets": {
         parameters: {
             query?: never;
@@ -2488,6 +2780,26 @@ export interface components {
             roles: components["schemas"]["Role"][];
         };
         /**
+         * Arm
+         * @enum {string}
+         */
+        Arm: "candidate" | "baseline";
+        /**
+         * ArmResultView
+         * @description One arm's result: its trials, how many passed, the mean of their
+         *     scores, and the sum of their costs.
+         */
+        ArmResultView: {
+            /** Cost Micros */
+            cost_micros: number;
+            /** Passed */
+            passed: number;
+            /** Score */
+            score: number;
+            /** Trials */
+            trials: number;
+        };
+        /**
          * AutomationPrincipalView
          * @description The tenant's automation principal: its id, the role it holds, and who
          *     granted it.
@@ -2574,6 +2886,120 @@ export interface components {
             updated_by: string;
         };
         /**
+         * BenchmarkResultRequest
+         * @description What a benchmark run showed of a model for a model role: whether it
+         *     passed, and where its evidence is (`run`, such as the run's id or its
+         *     report's address). The latest result for the model and the role decides
+         *     whether a version that serves the role with the model may be
+         *     published.
+         */
+        BenchmarkResultRequest: {
+            /** Benchmark */
+            benchmark: string;
+            /** Model */
+            model: string;
+            /** Passed */
+            passed: boolean;
+            provider: components["schemas"]["ProviderName"];
+            /** Role */
+            role: string;
+            /** Run */
+            run: string;
+        };
+        /**
+         * BenchmarkResultView
+         * @description A recorded result, written once.
+         */
+        BenchmarkResultView: {
+            /** Benchmark */
+            benchmark: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Model */
+            model: string;
+            /** Passed */
+            passed: boolean;
+            provider: components["schemas"]["ProviderName"];
+            /**
+             * Recorded By
+             * Format: uuid
+             */
+            recorded_by: string;
+            /** Role */
+            role: string;
+            /** Run */
+            run: string;
+        };
+        /**
+         * BenchmarkSummaryView
+         * @description One run of a scenario, without its trials: a point of the scenario's
+         *     trend.
+         */
+        BenchmarkSummaryView: {
+            baseline: components["schemas"]["ContenderView"];
+            baseline_result: components["schemas"]["ArmResultView"];
+            candidate: components["schemas"]["ContenderView"];
+            candidate_result: components["schemas"]["ArmResultView"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Recorded By
+             * Format: uuid
+             */
+            recorded_by: string;
+            /** Regressed */
+            regressed: boolean;
+            /** Scenario */
+            scenario: string;
+        };
+        /**
+         * BenchmarkView
+         * @description One run of a scenario, with every trial of both arms.
+         */
+        BenchmarkView: {
+            baseline: components["schemas"]["ContenderView"];
+            baseline_result: components["schemas"]["ArmResultView"];
+            candidate: components["schemas"]["ContenderView"];
+            candidate_result: components["schemas"]["ArmResultView"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Recorded By
+             * Format: uuid
+             */
+            recorded_by: string;
+            /** Regressed */
+            regressed: boolean;
+            /** Scenario */
+            scenario: string;
+            /** Trials */
+            trials: components["schemas"]["TrialView"][];
+        };
+        /**
          * BoundsView
          * @description The bounds a session runs under: its kind's loop limits, the deadline
          *     its kind gives a tree it roots, and its tree's record.
@@ -2647,6 +3073,14 @@ export interface components {
             passed: number;
             /** Skipped */
             skipped: number;
+        };
+        /**
+         * ChooseRequest
+         * @description The fill a tenant chooses for a model role: one of that role's
+         *     options.
+         */
+        ChooseRequest: {
+            fill: components["schemas"]["FillBody"];
         };
         /**
          * ClaimRequest
@@ -2773,6 +3207,19 @@ export interface components {
         ConnectInstallationRequest: {
             /** Grant */
             grant: string;
+        };
+        /**
+         * ContenderView
+         * @description What an arm's sessions ran: the agent kind, its version, and each model
+         *     role's fill.
+         */
+        ContenderView: {
+            /** Fills */
+            fills: components["schemas"]["RoleFillView"][];
+            /** Kind */
+            kind: string;
+            /** Kind Version */
+            kind_version: number;
         };
         /**
          * ContentState
@@ -3007,6 +3454,33 @@ export interface components {
          */
         Effect: "read_only" | "idempotent" | "unsafe";
         /**
+         * Effort
+         * @description How hard a model works on a call. A provider that has no such level
+         *     for a model leaves it out and names what it dropped.
+         * @enum {string}
+         */
+        Effort: "none" | "low" | "medium" | "high" | "xhigh" | "max";
+        /**
+         * EligibilityBody
+         * @description What a fill offers: zero data retention, a region.
+         */
+        EligibilityBody: {
+            /** Region */
+            region?: string | null;
+            /**
+             * Zero Retention
+             * @default false
+             */
+            zero_retention: boolean;
+        };
+        /** EligibilityView */
+        EligibilityView: {
+            /** Region */
+            region: string | null;
+            /** Zero Retention */
+            zero_retention: boolean;
+        };
+        /**
          * EnrollRequest
          * @description A host's name and its report, beside its enrollment token. The pool
          *     is the token's.
@@ -3048,6 +3522,11 @@ export interface components {
             /** Revoked At */
             revoked_at: string | null;
         };
+        /**
+         * EntryKind
+         * @enum {string}
+         */
+        EntryKind: "hold" | "settlement" | "charge" | "credit" | "grant" | "raise" | "approval";
         /** ErrorBody */
         ErrorBody: {
             /** Code */
@@ -3329,6 +3808,71 @@ export interface components {
             subject_id: string | null;
         };
         /**
+         * FillBody
+         * @description A fill: a provider's model, how hard it works, its output bound and
+         *     shape, its context window, and what it offers. The output bound fits
+         *     inside the window, and a schema is named exactly when the output is one.
+         *     An output left out is text, and an eligibility left out offers
+         *     nothing.
+         */
+        FillBody: {
+            /** Context Window */
+            context_window: number;
+            effort?: components["schemas"]["Effort"] | null;
+            eligibility?: components["schemas"]["EligibilityBody"] | null;
+            /** Max Output Tokens */
+            max_output_tokens: number;
+            /** Model */
+            model: string;
+            output?: components["schemas"]["OutputShape"] | null;
+            provider: components["schemas"]["ProviderName"];
+            /** Schema Name */
+            schema_name?: string | null;
+            /** Thinking Budget */
+            thinking_budget?: number | null;
+        };
+        /**
+         * FillChoiceView
+         * @description The tenant's choice for one model role, from its next session on.
+         */
+        FillChoiceView: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            fill: components["schemas"]["FillView"];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Role */
+            role: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Updated By
+             * Format: uuid
+             */
+            updated_by: string;
+        };
+        /**
+         * FillOptionsView
+         * @description What a tenant on its own keys may choose for one model role: the fills
+         *     the published matrix qualified for it, from a provider it holds a live
+         *     key for.
+         */
+        FillOptionsView: {
+            /** Fills */
+            fills: components["schemas"]["FillView"][];
+            /** Role */
+            role: string;
+        };
+        /**
          * FillUsageView
          * @description What one model, at its provider, used in the session's calls: the
          *     calls that answered, and their tokens by class, no token counted
@@ -3349,6 +3893,23 @@ export interface components {
             output: number;
             /** Thinking */
             thinking: number;
+        };
+        /** FillView */
+        FillView: {
+            /** Context Window */
+            context_window: number;
+            effort: components["schemas"]["Effort"] | null;
+            eligibility: components["schemas"]["EligibilityView"];
+            /** Max Output Tokens */
+            max_output_tokens: number;
+            /** Model */
+            model: string;
+            output: components["schemas"]["OutputShape"];
+            provider: components["schemas"]["ProviderName"];
+            /** Schema Name */
+            schema_name: string | null;
+            /** Thinking Budget */
+            thinking_budget: number | null;
         };
         /**
          * GateBody
@@ -3782,6 +4343,11 @@ export interface components {
             url: string | null;
         };
         /**
+         * KeyStatus
+         * @enum {string}
+         */
+        KeyStatus: "live" | "rotated" | "refused";
+        /**
          * KnowledgeRequest
          * @description An entry: its title, the words that trigger it, all of which must
          *     appear in what a session is about, and what it says. A trigger word
@@ -3852,6 +4418,66 @@ export interface components {
         LastOwnerDetail: {
             /** Orgs */
             orgs: components["schemas"]["OwnedOrgRef"][];
+        };
+        /**
+         * LedgerEntryView
+         * @description One entry, written once. A field a kind does not carry is null:
+         *
+         *     - `hold`: `session_id`, `units` (the worst case, null when no price
+         *       applies), and `cost_micros` (the exposure).
+         *     - `settlement`: `hold_id`, `cost_micros` and `tokens` (what it spent).
+         *     - `charge`: `hold_id`, `units`, and `amount_micros` (what the money
+         *       buckets paid).
+         *     - `credit`: `amount_micros` and `reference` (the payment's).
+         *     - `grant`: `units`, `reason`, and `by` (the operator).
+         *     - `raise`: `budget_id`, `cost_micros`, `tokens`, and `by`.
+         *     - `approval`: `session_id`, `amount_micros` (the cost it allows), and
+         *       `by`.
+         */
+        LedgerEntryView: {
+            /** Amount Micros */
+            amount_micros?: number | null;
+            /** Budget Id */
+            budget_id?: string | null;
+            /** By */
+            by?: string | null;
+            /** Cost Micros */
+            cost_micros?: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Hold Id */
+            hold_id?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            kind: components["schemas"]["EntryKind"];
+            /** Reason */
+            reason?: string | null;
+            /** Reference */
+            reference?: string | null;
+            /** Session Id */
+            session_id?: string | null;
+            /** Tokens */
+            tokens?: number | null;
+            /** Units */
+            units?: number | null;
+        };
+        /**
+         * LedgerPageView
+         * @description One read of a tenant's ledger, the newest first. `has_more` says the
+         *     read was cut at its limit and older entries match it too: narrow it by
+         *     kind, hold, or session to reach them.
+         */
+        LedgerPageView: {
+            /** Has More */
+            has_more: boolean;
+            /** Items */
+            items: components["schemas"]["LedgerEntryView"][];
         };
         /**
          * LimitsBody
@@ -4048,6 +4674,95 @@ export interface components {
             /** Running Ahead */
             running_ahead: number;
             status: components["schemas"]["WorkStatus"];
+        };
+        /**
+         * MatrixKeyBody
+         * @description What a row answers: each key it names must equal the question's, and a
+         *     key left out matches every value. The row that names none matches every
+         *     question.
+         */
+        MatrixKeyBody: {
+            /** Environment */
+            environment?: string | null;
+            /** Kind */
+            kind?: string | null;
+            /** Plan Tier */
+            plan_tier?: string | null;
+            /** Role */
+            role?: string | null;
+            /** Workload */
+            workload?: string | null;
+        };
+        /** MatrixKeyView */
+        MatrixKeyView: {
+            /** Environment */
+            environment: string | null;
+            /** Kind */
+            kind: string | null;
+            /** Plan Tier */
+            plan_tier: string | null;
+            /** Role */
+            role: string | null;
+            /** Workload */
+            workload: string | null;
+        };
+        /**
+         * MatrixRowBody
+         * @description A row: the questions it matches, and its fills, the first the fill and
+         *     the rest the fallbacks, each named once. A row that names no match
+         *     matches every question.
+         */
+        MatrixRowBody: {
+            /** Fills */
+            fills: components["schemas"]["FillBody"][];
+            matches?: components["schemas"]["MatrixKeyBody"] | null;
+        };
+        /**
+         * MatrixRowView
+         * @description A row: the questions it matches, the row's key, and its fills.
+         */
+        MatrixRowView: {
+            /** Fills */
+            fills: components["schemas"]["FillView"][];
+            matches: components["schemas"]["MatrixKeyView"];
+        };
+        /**
+         * MatrixStatus
+         * @enum {string}
+         */
+        MatrixStatus: "pending" | "published";
+        /**
+         * MatrixVersionView
+         * @description A version: pending until an operator publishes it, and the matrix from
+         *     then until the next is published. Its rows never change.
+         */
+        MatrixVersionView: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Number */
+            number: number;
+            /** Published At */
+            published_at: string | null;
+            /** Published By */
+            published_by: string | null;
+            /** Roles */
+            roles: string[];
+            /** Rows */
+            rows: components["schemas"]["MatrixRowView"][];
+            status: components["schemas"]["MatrixStatus"];
         };
         /** MeView */
         MeView: {
@@ -4356,6 +5071,11 @@ export interface components {
          */
         Origin: "portal" | "cli" | "api" | "integration" | "automation" | "parent" | "engine";
         /**
+         * OutputShape
+         * @enum {string}
+         */
+        OutputShape: "text" | "schema";
+        /**
          * OutputStream
          * @enum {string}
          */
@@ -4613,6 +5333,37 @@ export interface components {
          */
         Provenance: "real" | "twin" | "double" | "unavailable";
         /**
+         * ProviderKeyView
+         * @description What the tenant sees of a key: its reference, who added it and when,
+         *     its state, and when it was last used. Never its value.
+         */
+        ProviderKeyView: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Last Used At */
+            last_used_at: string | null;
+            provider: components["schemas"]["ProviderName"];
+            status: components["schemas"]["KeyStatus"];
+        };
+        /**
+         * ProviderName
+         * @enum {string}
+         */
+        ProviderName: "anthropic" | "openai";
+        /**
          * PublishRequest
          * @description The next version of a playbook's name: its description, its body, and
          *     its gates.
@@ -4713,6 +5464,40 @@ export interface components {
             data: string;
         };
         /**
+         * RetireRequest
+         * @description A model its provider retired, by name, as a fill names it.
+         */
+        RetireRequest: {
+            /** Model */
+            model: string;
+            provider: components["schemas"]["ProviderName"];
+        };
+        /**
+         * RetirementView
+         * @description A retired model: no session resolves to it again, and a version that
+         *     names it is not published. Recorded once a model.
+         */
+        RetirementView: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Model */
+            model: string;
+            provider: components["schemas"]["ProviderName"];
+            /**
+             * Recorded By
+             * Format: uuid
+             */
+            recorded_by: string;
+        };
+        /**
          * ReviewRequest
          * @description Keep a suggestion, so any session may recall it, or reject it.
          */
@@ -4725,6 +5510,14 @@ export interface components {
          * @enum {string}
          */
         Role: "owner" | "admin" | "member" | "viewer" | "service";
+        /** RoleFillView */
+        RoleFillView: {
+            /** Fallbacks */
+            fallbacks: components["schemas"]["FillView"][];
+            fill: components["schemas"]["FillView"];
+            /** Role */
+            role: string;
+        };
         /**
          * RunOutcome
          * @enum {string}
@@ -4743,6 +5536,18 @@ export interface components {
          * @enum {string}
          */
         RunsAs: "creator" | "automation_principal";
+        /**
+         * SaveKeyRequest
+         * @description A key's value. It is written once, under a new reference, and no
+         *     response, log, or error ever carries it.
+         */
+        SaveKeyRequest: {
+            /**
+             * Value
+             * Format: password
+             */
+            value: string;
+        };
         /**
          * SecondFactorRequest
          * @description The code from an authenticator, presented with a sign-in credential.
@@ -5007,6 +5812,17 @@ export interface components {
         SsoLinkView: {
             /** Url */
             url: string;
+        };
+        /**
+         * StageRequest
+         * @description A new version of the matrix: the model roles it serves and its rows,
+         *     one a key. It is checked whole when it is published.
+         */
+        StageRequest: {
+            /** Roles */
+            roles: string[];
+            /** Rows */
+            rows: components["schemas"]["MatrixRowBody"][];
         };
         /**
          * StartSessionRequest
@@ -5308,6 +6124,39 @@ export interface components {
             size: number;
         };
         /**
+         * TrialView
+         * @description One trial: its arm, its session, where and when it ran, its cost, and
+         *     what its acceptance verdict found.
+         */
+        TrialView: {
+            arm: components["schemas"]["Arm"];
+            /** Broken */
+            broken: string[];
+            /** Cost Micros */
+            cost_micros: number;
+            /** Executor */
+            executor: string;
+            /** Passed */
+            passed: boolean;
+            /** Score */
+            score: number;
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /**
+             * Verdict Id
+             * Format: uuid
+             */
+            verdict_id: string;
+        };
+        /**
          * TriggerBody
          * @description An event that passes every filter set (one left empty matches any),
          *     or a schedule, every `every` seconds, a minute at least.
@@ -5496,6 +6345,294 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    get_trend_v1_admin_benchmarks_get: {
+        parameters: {
+            query: {
+                scenario: string;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchmarkSummaryView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_benchmark_v1_admin_benchmarks__benchmark_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                benchmark_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchmarkView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    record_result_v1_admin_matrix_results_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                "idempotency-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BenchmarkResultRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchmarkResultView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retire_v1_admin_matrix_retirements_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                "idempotency-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetireRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetirementView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stage_v1_admin_matrix_versions_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                "idempotency-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StageRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatrixVersionView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_current_v1_admin_matrix_versions_current_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatrixVersionView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_version_v1_admin_matrix_versions__number__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                number: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatrixVersionView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    publish_v1_admin_matrix_versions__number__publish_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                number: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatrixVersionView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     operator_me_v1_admin_me_get: {
         parameters: {
             query?: never;
@@ -5912,6 +7049,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HostStandingView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ledger_v1_admin_orgs__org_id__ledger_get: {
+        parameters: {
+            query?: {
+                kind?: components["schemas"]["EntryKind"] | null;
+                hold_id?: string | null;
+                session_id?: string | null;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedgerPageView"];
                 };
             };
             /** @description Validation Error */
@@ -9009,6 +10186,144 @@ export interface operations {
             };
         };
     };
+    get_choices_v1_matrix_choices_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FillChoiceView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    choose_v1_matrix_choices__role__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                role: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChooseRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FillChoiceView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    drop_choice_v1_matrix_choices__role__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                role: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_options_v1_matrix_options_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FillOptionsView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     me_v1_me_get: {
         parameters: {
             query?: never;
@@ -10189,6 +11504,80 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FetchCredentialView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_keys_v1_provider_keys_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderKeyView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_key_v1_provider_keys__provider__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                provider: components["schemas"]["ProviderName"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveKeyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderKeyView"];
                 };
             };
             /** @description Validation Error */

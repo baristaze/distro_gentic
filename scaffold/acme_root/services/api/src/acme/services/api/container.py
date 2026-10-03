@@ -16,12 +16,16 @@ from acme.infra.observability import (
 from acme.infra.root import InfraInterface
 from acme.infra.trust import install_trust_store
 from acme.integrations.impl.configured import IntegrationsConfiguredImpl, absent_integrations
+from acme.integrations.payments.absent import PaymentProviderAbsentImpl
 from acme.integrations.root import IntegrationsInterface
 from acme.om.agents.types.kind import AgentKind
 from acme.om.automations.root import build_automations
-from acme.om.billing.root import build_money_gate, refuse_open_money
+from acme.om.base import new_id
+from acme.om.billing.root import build_billing, build_money_gate, refuse_open_money
 from acme.om.intake.root import build_intake
 from acme.om.knowledge.root import build_knowledge
+from acme.om.matrix.impl.resolver import MatrixOptions
+from acme.om.matrix.root import MatrixLayer
 from acme.om.notifications.root import build_notifications
 from acme.om.platform_agents.catalog import PlatformAgents
 from acme.om.platform_agents.settings import shipped_agents
@@ -37,7 +41,11 @@ from acme.om.root import (
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
-from acme.om.trust.root import build_trust_operator
+from acme.om.trust import KeyProbeInterface
+from acme.om.trust.impl.keys import KeyProbeAbsentImpl, KeyProbeTwinImpl
+from acme.om.trust.impl.placement import PlacementCloudImpl
+from acme.om.trust.root import TrustLayer
+from acme.om.trust.types.identities import Executor, ExecutorKind
 from acme.om.watch.impl.manager import WatchOptions
 from acme.om.watch.root import build_stream, build_watch
 from acme.om.watch.stream import StreamServiceInterface
@@ -125,6 +133,17 @@ def rate_limit_options(settings: ApiSettings) -> RateLimitOptions:
             window=timedelta(seconds=settings.failed_authentication_window_seconds),
         ),
     )
+
+
+def key_probe(settings: ApiSettings) -> KeyProbeInterface:
+    """What asks a provider whether it takes a tenant's key before the key is
+    saved. Beside the scripted providers, which stand in for every model and
+    are refused outside a local stack, the probe's twin takes every key; with
+    no probe configured, the absent one refuses every save, so no key is ever
+    saved unasked."""
+    if settings.model_providers == "scripted":
+        return KeyProbeTwinImpl()
+    return KeyProbeAbsentImpl()
 
 
 def postgres_storage(settings: ApiSettings) -> StorageInterface:
@@ -244,6 +263,18 @@ class AppContainer:
             workspace_projects=ports.workspace_projects,
         )
         refuse_open_money(settings.environment, managers)
+        # A tenant's own provider keys, saved and listed here and never read
+        # back. This process runs no session's calls, so its placement names
+        # it and is asked nothing.
+        api = Executor(kind=ExecutorKind.CLOUD, credential_id=new_id(), label=settings.service_name)
+        trust = TrustLayer(
+            storage, infra, placement=PlacementCloudImpl(api), probe=key_probe(settings)
+        ).build(managers)
+        # The model matrix: its versions serve every model role the
+        # product's kinds call, beside the platform's own.
+        matrix = MatrixLayer(
+            storage, options=MatrixOptions(environment=settings.environment), kinds=agent_kinds
+        ).build(managers)
         # Where a tenant connects a system, and where a person reads and
         # clears what waits on them.
         intake = build_intake(storage, managers, integrations=integrations)
@@ -256,7 +287,7 @@ class AppContainer:
             integrations,
             timedelta(seconds=settings.realtime_head_max_age_seconds),
             watch,
-            build_trust_operator(storage, infra),
+            trust.trust_operator,
             # Outside a local stack, a session starts in a project.
             project_required=settings.environment != LOCAL,
             intake=intake,
@@ -264,6 +295,10 @@ class AppContainer:
                 storage, managers, project_required=settings.environment != LOCAL
             ),
             notifications=build_notifications(storage, managers, integrations, intake),
+            matrix=matrix,
+            trust=trust.trust,
+            # The ledger the operators read; this process takes no payment.
+            billing=build_billing(storage, managers, PaymentProviderAbsentImpl()),
             # A person writes and reviews what sessions recall, and publishes
             # the playbooks they follow; the runner recalls and invokes them.
             knowledge=build_knowledge(storage, managers),
