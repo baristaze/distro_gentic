@@ -6,6 +6,7 @@ from acme.infra.docker import docker
 from acme.infra.exceptions import BackendFailed
 from acme.infra.workspaces import (
     EgressMode,
+    HeldInstance,
     IsolationMode,
     IsolationRefused,
     IsolationSpec,
@@ -20,8 +21,18 @@ MOUNT = "/workspace"
 LIMIT_FLAGS = {"cpus": "--cpus", "memory_mb": "--memory", "processes": "--pids-limit"}
 
 
+WORKSPACE_LABEL = "acme.workspace"
+"""The label that names the workspace a container, and its volume, hold."""
+
+ORG_LABEL = "acme.org"
+"""The label that names the tenant of that workspace."""
+
 SPEC_LABEL = "acme.spec"
 """The label that names the spec a container was started to."""
+
+HELD_AS = '{{.Names}} {{.Label "' + WORKSPACE_LABEL + '"}} {{.Label "' + ORG_LABEL + '"}}'
+"""What a listing answers of each running container: its name, and the
+workspace and the tenant its labels name."""
 
 STARTED_TO = '{{.State.Running}} {{index .Config.Labels "' + SPEC_LABEL + '"}}'
 """What an inspect answers of a container: whether it runs, and the spec it
@@ -82,7 +93,12 @@ class WorkspaceContainerImpl(WorkspaceProviderInterface):
             removed = await docker("rm", "-f", name, bound=self._timeout)
             if not removed.ok:
                 raise BackendFailed("docker", "rm", removed.reason())
-        labels = ("--label", f"acme.workspace={workspace_id}", "--label", f"acme.org={org_id}")
+        labels = (
+            "--label",
+            f"{WORKSPACE_LABEL}={workspace_id}",
+            "--label",
+            f"{ORG_LABEL}={org_id}",
+        )
         made = await docker("volume", "create", *labels, name, bound=self._timeout)
         if not made.ok:
             raise BackendFailed("docker", "volume create", made.reason())
@@ -124,6 +140,18 @@ class WorkspaceContainerImpl(WorkspaceProviderInterface):
             if not removed.ok:
                 raise BackendFailed("docker", " ".join(removal[:-2]), removed.reason())
 
+    async def held(self) -> list[HeldInstance]:
+        """The running containers this provider started: labelled with a
+        workspace and a tenant, and named for that workspace. A stopped one
+        holds nothing that runs, and its next prepare replaces it."""
+        listed = await docker(
+            "ps", "--filter", f"label={WORKSPACE_LABEL}", "--format", HELD_AS, bound=self._timeout
+        )
+        if not listed.ok:
+            raise BackendFailed("docker", "ps", listed.reason())
+        found = (_held(line) for line in listed.stdout.decode(errors="replace").splitlines())
+        return [instance for instance in found if instance is not None]
+
     def describe(self) -> str:
         return f"workspaces=container({self._image})"
 
@@ -132,6 +160,23 @@ class WorkspaceContainerImpl(WorkspaceProviderInterface):
 
     async def close(self) -> None:
         return None
+
+
+def _held(line: str) -> HeldInstance | None:
+    """A container's line of the listing, when it is one this provider
+    started; None for any other, such as one labelled by hand under
+    another name."""
+    words = line.split()
+    if len(words) != 3:
+        return None
+    name, workspace, org = words
+    try:
+        workspace_id, org_id = UUID(workspace), UUID(org)
+    except ValueError:
+        return None
+    if name != container_name(workspace_id):
+        return None
+    return HeldInstance(id=workspace_id, org_id=org_id, location=name)
 
 
 def _network(spec: IsolationSpec) -> tuple[str, ...]:
