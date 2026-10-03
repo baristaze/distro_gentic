@@ -65,8 +65,10 @@ from acme.om.workspaces.rules import COMMIT
 MAX_PATH = 1024
 MAX_READ = 200_000  # bytes one read takes at most
 MAX_EDIT = MAX_READ  # bytes of a file one edit reads and writes back, at most
-MAX_MATCHES = 200  # the most matches one search of the code answers
-MAX_MATCH_TEXT = 300  # characters of a matched line a match carries
+# The most matches one search of the code answers, each cut at its width:
+# the whole answer stays inside what the model reads of one output.
+MAX_MATCHES = 100
+MAX_MATCH_TEXT = 200
 MAX_SEARCH_OUTPUT = 400_000  # characters of the search's output it reads, at most
 NO_NUL = r"^[^\x00]*$"
 
@@ -336,7 +338,7 @@ class SearchCodeImpl(NativeToolImpl):
         description=(
             "Searches the text files under a path of the workspace, the whole of it by "
             "default, for an extended regular expression. Answers each matching line with "
-            "its file and its line number, at most limit of them, each cut at 300 "
+            "its file and its line number, at most limit of them, each cut at 200 "
             "characters, and whether more were left out: narrow the pattern or the path "
             "when they were."
         ),
