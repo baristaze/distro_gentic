@@ -3,9 +3,9 @@ is pinned when the session is created and never changes: the level, the
 limits, and the egress its project allowed then. The rest is what the cache
 knows of the durable state it is rebuilt from: the session's branch, whether
 the remote has held it, the last snapshot of its work, and what the next
-loop must be told."""
+loop must be told of every instance let go since."""
 
-from typing import ClassVar
+from typing import Annotated, ClassVar
 from uuid import UUID
 
 from pydantic import Field
@@ -27,7 +27,7 @@ class SessionWorkspace(Identifiable, Trackable):
     MANAGER_OWNED_FIELDS: ClassVar[tuple[str, ...]] = (
         "branch_seen",
         "snapshot_ref",
-        "notice",
+        "notices",
         "version",
     )
 
@@ -45,8 +45,10 @@ class SessionWorkspace(Identifiable, Trackable):
     # it vanished.
     branch_seen: bool = False
     snapshot_ref: str | None = Field(default=None, max_length=255)
-    # What the next loop is told before its first call; cleared once told.
-    notice: str | None = Field(default=None, max_length=2000)
+    # What the next loop is told before its first call, one entry an
+    # instance let go since a loop was last told: never written over, and
+    # each cleared once told.
+    notices: tuple[Annotated[str, Field(max_length=2000)], ...] = ()
     version: int = Field(default=1, ge=1)
 
     def spec(self) -> IsolationSpec:

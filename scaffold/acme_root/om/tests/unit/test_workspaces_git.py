@@ -195,11 +195,11 @@ async def test_a_clean_checkout_the_remote_holds_pushes_nothing(checkout: Checko
 
     assert checkout.snapshots(branch) == []
     held = await checkout.managers.workspaces.get_workspace(checkout.ctx, session_id)
-    assert held.branch_seen and held.notice is None
+    assert held.branch_seen and held.notices == ()
 
 
-# A release of an instance older than the work the next loop has not been
-# told of keeps that notice.
+# Every instance let go is told of: a release adds its notice beside any the
+# next loop has not read, and an attach clears only the notices it read.
 
 
 async def a_dead_run_then_a_parked_loop(
@@ -238,42 +238,105 @@ def snapshot_of(checkout: Checkout, branch: str, notes: str) -> str:
     return ref
 
 
-@pytest.mark.parametrize("restarted", [True, False], ids=["restarted", "same-runner"])
-async def test_a_dead_runs_instance_released_after_a_park_leaves_the_parked_loops_notice(
-    checkout: Checkout, tmp_path: Path, restarted: bool
-) -> None:
-    session_id, host_a, on_a, host_b, on_b = await a_dead_run_then_a_parked_loop(checkout, tmp_path)
+async def told_both(checkout: Checkout, host: Managers, session_id: UUID) -> None:
+    """Both instances' notices wait, and the next loop is told of both, and
+    then of neither again."""
     branch = session_branch(session_id)
-    await host_b.tools.release_workspace(checkout.ctx, on_b)  # the loop parks
-
-    # The sweep on host A, in a runner that restarted or the one the run
-    # died in, lets the dead run's instance go.
-    await sweep(checkout, checkout.host(tmp_path / "a") if restarted else host_a, on_a)
-
     parked = snapshot_of(checkout, branch, "the parked loop's draft")
     dead = snapshot_of(checkout, branch, "the dead run's draft")
     held = await checkout.managers.workspaces.get_workspace(checkout.ctx, session_id)
-    assert held.snapshot_ref == parked and held.notice is not None and parked in held.notice
-    await host_b.steps.begin_run(checkout.ctx, session_id)
-    following = await host_b.tools.prepare_workspace(checkout.ctx, session_id, DIRECTORY)
-    assert following.changed is not None and parked in following.changed
-    assert dead not in following.changed, "told of the newer work alone"
+    assert len(held.notices) == 2, "neither notice is written over"
+    assert all(any(ref in told for told in held.notices) for ref in (parked, dead))
+    assert all("let go at" in told for told in held.notices), "each says when it was let go"
+    await host.steps.begin_run(checkout.ctx, session_id)
+    following = await host.tools.prepare_workspace(checkout.ctx, session_id, DIRECTORY)
+    assert following.changed is not None
+    assert parked in following.changed and dead in following.changed, "told of both"
+    held = await checkout.managers.workspaces.get_workspace(checkout.ctx, session_id)
+    assert held.notices == (), "told once"
 
 
-async def test_a_parked_loops_release_replaces_what_a_dead_runs_instance_left(
-    checkout: Checkout, tmp_path: Path
+@pytest.mark.parametrize("swept", ["after", "before"])
+async def test_a_dead_runs_instance_released_beside_a_park_is_told_with_the_parked_loops(
+    checkout: Checkout, tmp_path: Path, swept: str
 ) -> None:
     session_id, _, on_a, host_b, on_b = await a_dead_run_then_a_parked_loop(checkout, tmp_path)
-    branch = session_branch(session_id)
-    await sweep(checkout, checkout.host(tmp_path / "a"), on_a)
+    if swept == "before":
+        await sweep(checkout, checkout.host(tmp_path / "a"), on_a)
+    await host_b.tools.release_workspace(checkout.ctx, on_b)  # the loop parks
+    if swept == "after":
+        await sweep(checkout, checkout.host(tmp_path / "a"), on_a)
+
+    await told_both(checkout, host_b, session_id)
+
+
+async def test_a_stale_run_that_attaches_after_the_next_run_began_loses_no_notice(
+    checkout: Checkout, tmp_path: Path
+) -> None:
+    """A's run lost the session to B's before it attached, then attached;
+    B parks, and A's runner, never restarted, lets A's instance go."""
+    session_id = await checkout.session()
+    host_a, host_b = checkout.host(tmp_path / "a"), checkout.host(tmp_path / "b")
+    await host_a.steps.begin_run(checkout.ctx, session_id)
+    await host_b.steps.begin_run(checkout.ctx, session_id)
+    on_a = await host_a.tools.prepare_workspace(checkout.ctx, session_id, DIRECTORY)
+    (Path(on_a.location) / "notes.txt").write_text("the dead run's draft\n")
+    on_b = await host_b.tools.prepare_workspace(checkout.ctx, session_id, DIRECTORY)
+    (Path(on_b.location) / "notes.txt").write_text("the parked loop's draft\n")
 
     await host_b.tools.release_workspace(checkout.ctx, on_b)  # the loop parks
+    await sweep(checkout, host_a, on_a)
 
-    parked = snapshot_of(checkout, branch, "the parked loop's draft")
-    dead = snapshot_of(checkout, branch, "the dead run's draft")
+    await told_both(checkout, host_b, session_id)
+
+
+async def test_the_newest_instance_released_by_a_runner_that_never_attached_it_is_told(
+    checkout: Checkout, tmp_path: Path
+) -> None:
+    """Both instances wait on the sweep, and each goes in a runner that
+    restarted since it attached: the newest one's work is told too."""
+    session_id, _, on_a, _, on_b = await a_dead_run_then_a_parked_loop(checkout, tmp_path)
+
+    await sweep(checkout, checkout.host(tmp_path / "a"), on_a)
+    await sweep(checkout, checkout.host(tmp_path / "b"), on_b)
+
+    await told_both(checkout, checkout.host(tmp_path / "c"), session_id)
+
+
+async def test_a_notice_written_while_an_attach_syncs_outlives_that_attach(
+    checkout: Checkout, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A late run's release lands while the next run's attach brings its
+    checkout up: that attach told only what it read, and the late run's
+    notice waits for the loop after."""
+    session_id = await checkout.session()
+    branch = session_branch(session_id)
+    host_a, host_b = checkout.host(tmp_path / "a"), checkout.host(tmp_path / "b")
+    await host_a.steps.begin_run(checkout.ctx, session_id)
+    on_a = await host_a.tools.prepare_workspace(checkout.ctx, session_id, DIRECTORY)
+    git(Path(on_a.location), "push", "-q", "origin", branch)
+    (Path(on_a.location) / "notes.txt").write_text("the late run's draft\n")
+    await host_b.steps.begin_run(checkout.ctx, session_id)
+    git_b = host_b.workspaces._git  # type: ignore[attr-defined]
+    synced = git_b.sync
+
+    async def sync_while_a_release_lands(*args: object, **kwargs: object) -> object:
+        state = await synced(*args, **kwargs)
+        await host_a.tools.release_workspace(checkout.ctx, on_a)
+        return state
+
+    monkeypatch.setattr(git_b, "sync", sync_while_a_release_lands)
+    on_b = await host_b.tools.prepare_workspace(checkout.ctx, session_id, DIRECTORY)
+    monkeypatch.undo()
+
+    late = snapshot_of(checkout, branch, "the late run's draft")
+    assert on_b.changed is None, "nothing was waiting when it read"
     held = await checkout.managers.workspaces.get_workspace(checkout.ctx, session_id)
-    assert held.snapshot_ref == parked and held.notice is not None
-    assert parked in held.notice and dead not in held.notice
+    assert len(held.notices) == 1 and late in held.notices[0], "the late notice survives"
+    await host_b.tools.release_workspace(checkout.ctx, on_b)
+    await host_b.steps.begin_run(checkout.ctx, session_id)
+    following = await host_b.tools.prepare_workspace(checkout.ctx, session_id, DIRECTORY)
+    assert following.changed is not None and late in following.changed, "the next loop is told"
 
 
 # Check 2: a vanished branch with no known reason fails loudly.

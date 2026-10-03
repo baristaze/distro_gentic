@@ -237,11 +237,13 @@ def told_of_rebuild(branch: str, fate: PullRequestFate, base: str | None) -> str
     )
 
 
-def told_of_snapshot(ref: str, commit: str) -> str:
+def told_of_snapshot(ref: str, commit: str, at: datetime) -> str:
+    """One instance's work, marked with when it was let go: the next loop
+    may be told of several, an older instance's beside a newer one's."""
     return (
-        f"When this workspace was last let go, the work not yet committed was "
-        f"committed as {commit} and pushed to {ref}. If it is missing here, "
-        f"restore it from there."
+        f"When an instance of this workspace was let go at {at:%Y-%m-%d %H:%M:%S} UTC, "
+        f"the work not yet committed was committed as {commit} and pushed to {ref}. "
+        f"If it is missing here, restore it from there."
     )
 
 

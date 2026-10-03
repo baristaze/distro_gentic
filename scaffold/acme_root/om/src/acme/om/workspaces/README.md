@@ -51,10 +51,7 @@ rebuilt from.
   remote lacks is committed to a snapshot ref beside the session's
   branch, never on it, and pushed. The branch, the index, and the files
   stay as they were. A push that does not land lets nothing go: the
-  instance and its work stay. The next loop is told where the work is,
-  and only of the newest: a release of an older instance, such as one a
-  run that died left, never replaces what the next loop has not yet been
-  told, and its snapshot is logged.
+  instance and its work stay. The next loop is told where the work is.
 - **Egress.** The egress proxy asks for each connection. A metadata
   endpoint, the host itself, the platform's internal network, and a
   station's network are never reached, under any egress, by name or by

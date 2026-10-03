@@ -21,7 +21,6 @@ from acme.om.exceptions import (
 )
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import OutboxRow, versioned_row
-from acme.om.steps import StepsManagerInterface
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.workspaces import rules
 from acme.om.workspaces.git import RepositoryReaderInterface, WorkspaceGitInterface
@@ -61,7 +60,6 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         pull_requests: PullRequestsInterface,
         git: WorkspaceGitInterface,
         reader: RepositoryReaderInterface,
-        steps: StepsManagerInterface,
         options: WorkspacesOptions,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
@@ -73,16 +71,11 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         self._pull_requests = pull_requests
         self._git = git
         self._reader = reader
-        self._steps = steps
         self._options = options
         self._clock = clock
         self._internal = rules.networks(options.internal_networks) + rules.networks(
             options.station_networks
         )
-        # The epoch of the run whose attach prepared each instance this
-        # process holds, by session: what tells its release's work from an
-        # older instance's (`_newest`).
-        self._attached: dict[UUID, int] = {}
 
     # The pin.
 
@@ -146,7 +139,7 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         held = await self._storage.read_workspace(ctx.org_id, workspace.id)
         if held is None:
             return workspace
-        told = [] if held.notice is None else [held.notice]
+        told = list(held.notices)
         seen = held.branch_seen
         kept: str | None = None
         binding = await self._binding(ctx, held)
@@ -173,11 +166,12 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
             if plan in (BranchPlan.CUT, BranchPlan.REBUILD):
                 # What the checkout holds is kept before it is cut over: a
                 # push that does not land raises, and nothing is cut.
-                ref = rules.snapshot_ref(held.branch, self._clock())
+                at = self._clock()
+                ref = rules.snapshot_ref(held.branch, at)
                 snapshot = await self._git.snapshot(ctx, workspace, binding, held.branch, ref)
                 if snapshot.commit is not None:
                     kept = snapshot.ref
-                    told.append(rules.told_of_snapshot(snapshot.ref, snapshot.commit))
+                    told.append(rules.told_of_snapshot(snapshot.ref, snapshot.commit, at))
                 await self._git.cut(ctx, workspace, binding, held.branch)
             if plan is BranchPlan.REBUILD and fate is not None:
                 told.append(rules.told_of_rebuild(held.branch, fate, binding.default_branch))
@@ -189,9 +183,10 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
                     fate.value,
                 )
             seen = state.remote
-            self._attached[workspace.id] = (await self._steps.get_cursor(ctx, workspace.id)).epoch
-        if held.notice is not None or seen != held.branch_seen or kept is not None:
-            await self._update(ctx, workspace.id, notice=None, branch_seen=seen, snapshot_ref=kept)
+        if held.notices or seen != held.branch_seen or kept is not None:
+            await self._update(
+                ctx, workspace.id, branch_seen=seen, snapshot_ref=kept, told=held.notices
+            )
         return workspace.model_copy(update={"changed": "\n\n".join(told) or None})
 
     async def detach(self, ctx: TenantContext, workspace: Workspace) -> None:
@@ -202,13 +197,13 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         binding = await self._binding(ctx, held)
         if binding is None:
             return
-        ref = rules.snapshot_ref(held.branch, self._clock())
+        at = self._clock()
+        ref = rules.snapshot_ref(held.branch, at)
         snapshot = await self._git.snapshot(ctx, workspace, binding, held.branch, ref)
         seen = held.branch_seen or snapshot.remote_branch
         if snapshot.commit is None:
             if seen != held.branch_seen:
-                await self._update(ctx, workspace.id, notice=None, branch_seen=seen, replaces=False)
-            self._attached.pop(workspace.id, None)
+                await self._update(ctx, workspace.id, branch_seen=seen)
             return
         log.info(
             "session %s of org %s: the work its loop left is %s on %s",
@@ -217,24 +212,13 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
             snapshot.commit,
             snapshot.ref,
         )
-        notice = rules.told_of_snapshot(snapshot.ref, snapshot.commit)
-        kept = await self._update(
+        await self._update(
             ctx,
             workspace.id,
-            notice=notice,
             branch_seen=seen,
             snapshot_ref=snapshot.ref,
-            replaces=await self._newest(ctx, workspace.id),
+            adds=rules.told_of_snapshot(snapshot.ref, snapshot.commit, at),
         )
-        if kept:
-            log.warning(
-                "session %s of org %s: %s on %s is older than the work the next loop is told of",
-                workspace.id,
-                ctx.org_id,
-                snapshot.commit,
-                snapshot.ref,
-            )
-        self._attached.pop(workspace.id, None)
 
     async def delivery(self, ctx: TenantContext, workspace: Workspace) -> Delivery:
         ctx.require(Permission.READ)
@@ -392,55 +376,43 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
             return None
         return await self._projects.binding_of(ctx, held.project_id)
 
-    async def _newest(self, ctx: TenantContext, session_id: UUID) -> bool:
-        """Whether the instance being let go holds the session's newest work:
-        this process attached it under the epoch of the run that holds the
-        session still. One a run attached before a later run took the
-        session, or one this process never attached, such as the instance of
-        a run that died, holds older work."""
-        attached = self._attached.get(session_id)
-        if attached is None:
-            return False
-        return attached == (await self._steps.get_cursor(ctx, session_id)).epoch
-
     async def _update(
         self,
         ctx: TenantContext,
         session_id: UUID,
         *,
-        notice: str | None,
         branch_seen: bool,
         snapshot_ref: str | None = None,
-        replaces: bool = True,
-    ) -> bool:
+        told: tuple[str, ...] = (),
+        adds: str | None = None,
+    ) -> None:
         """The cache's state, written over the stored row and read again when
-        a writer landed first. Unless it `replaces`, a write keeps a notice
-        the next loop has not read, and the snapshot it names, as stored.
-        Answers whether it kept one in place of `notice`."""
+        a writer landed first. Its notices are never written over: those an
+        attach `told` leave, compared against the row as stored, so one a
+        release wrote meanwhile stays for the next loop; the one a release
+        `adds` joins any not yet told."""
         for attempt in range(self._options.write_tries):
             stored = await self._storage.read_workspace(ctx.org_id, session_id)
             if stored is None:
-                return False
+                return
+            notices = tuple(n for n in stored.notices if n not in told)
             changes: dict[str, object] = {
                 "branch_seen": branch_seen,
+                "notices": notices if adds is None else (*notices, adds),
                 "version": stored.version + 1,
                 "updated_at": self._clock(),
                 "updated_by": ctx.user_id,
             }
-            kept = not replaces and stored.notice is not None
-            if not kept:
-                changes["notice"] = notice
-                if snapshot_ref is not None:
-                    changes["snapshot_ref"] = snapshot_ref
+            if snapshot_ref is not None:
+                changes["snapshot_ref"] = snapshot_ref
             try:
                 await self._storage.write_workspace(
                     ctx.org_id, stored.model_copy(update=changes), stored.version
                 )
-                return kept
+                return
             except PreconditionFailed:
                 if attempt + 1 == self._options.write_tries:
                     raise
-        return False
 
     def _recorded(self, ctx: TenantContext, allowlist: EgressAllowlist) -> None:
         if allowlist.open:
