@@ -43,7 +43,9 @@ uses it runs."""
 class ToolRuntime:
     """One call's way into its workspace. A preflight's is read-only. Its
     command goes with the seal its record keeps the output under: its
-    session's."""
+    session's. `session_id` is the session the call was made in, read from
+    its request: a tool that reads the session's own records reads this
+    one, never one its input names."""
 
     def __init__(
         self,
