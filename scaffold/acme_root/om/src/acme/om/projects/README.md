@@ -67,3 +67,5 @@ session through the [agents](../agents/README.md). A namespace that keys
 a policy by project reads `project_of`, and
 [retention](../retention/README.md) takes a new session's project from
 here; one that judges an outward write reads `work_repository`.
+[Automations](../automations/README.md) start their sessions through the
+projects' start, in the project an automation's action names.

@@ -51,11 +51,20 @@ row and takes its tenant's policies alone: `project_of` answers None,
 never another project, and `work_repository` none, so no write of it is
 work product.
 
+**An automation's session starts through the projects' start,** in the
+project its action names, which is read as the tenant's when the
+automation is saved. Outside a local stack, an automation whose start
+names none is refused when it is saved, and one stored with none starts
+nothing when it fires
+([ADR 2017](2017-a-schedule-fires-once-a-slot-and-an-automations-principal-is-a-grant.md)).
+
 ## Consequences
 
 - Each namespace that keys a policy by project reads it through
   `ProjectsManagerInterface`, and its own stand-in for a session's
   project is wired to it.
+- A session an automation starts is held by its project's budget and
+  policies from its first moment.
 - A start that fails after its row is written leaves the row. A retry
   under the same id and project goes on from it; any other use of the
   id is refused.
