@@ -92,7 +92,7 @@ async def test_a_pinned_session_waits_with_no_call_then_runs_its_tool_on_its_poo
     await seed_platform(runner.storage, managers, owner, (KIND,))
     model = runner.integrations.get_model_providers().get(ProviderName.ANTHROPIC)
     assert isinstance(model, ModelProviderScriptedImpl)
-    pool = await api.pool()
+    pool = await api.pool("pool-a")
     session = await managers.agents.start_session(
         owner, Start(id=new_id(), kind=KIND.name, title="where it runs")
     )
