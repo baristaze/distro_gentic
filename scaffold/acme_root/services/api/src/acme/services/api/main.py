@@ -13,6 +13,7 @@ import tempfile
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 import uvicorn
 
@@ -22,6 +23,7 @@ from acme.om.base import new_id
 from acme.om.context import AppContext, AppType, OperatorRole, RequestContext, Role
 from acme.om.exceptions import Conflict
 from acme.om.storage import migrate
+from acme.om.trust.root import build_trust_operator
 from acme.services.api.app import create_app
 from acme.services.api.container import AppContainer, boot, memory_storage, postgres_storage
 from acme.services.api.gateway.observability import TargetRedactor
@@ -135,8 +137,9 @@ def bootstrap(args: argparse.Namespace) -> int:
 def grant_operator(args: argparse.Namespace) -> int:
     """The grant job's command, run as a one-off task on the deployed image,
     and locally the same way. It puts an identity on the operator allowlist
-    or disables its entry, or mints the operator token of the provisioner or
-    the smoke identity. The task holds the database URLs and nothing else:
+    or disables its entry, mints the operator token of the provisioner or
+    the smoke identity, or grants or revokes an operator's opening of one
+    tenant's session content (ADR 2010). The task holds the database URLs and nothing else:
     no queue, bucket, or application secret. So its managers run over the
     database and over the local twins of the rest, which a grant reaches
     only to publish its audit row on an in-process bus nobody listens to."""
@@ -163,6 +166,29 @@ def grant_operator(args: argparse.Namespace) -> int:
 async def granted(container: AppContainer, settings: ApiSettings, args: argparse.Namespace) -> int:
     tenancy = container.managers.tenancy
     rctx = command_request(settings)
+    if args.grant_content or args.revoke_content:
+        # An operator by the email, on the allowlist; the grant is theirs in
+        # one tenant, and the tenant's stream holds it and its end.
+        identity = await tenancy.operator_identity(rctx, args.email)
+        trust = build_trust_operator(container.storage, container.infra)
+        if args.grant_content:
+            expires_in = None if args.expires_in is None else timedelta(seconds=args.expires_in)
+            grant = await trust.grant_content(rctx, identity.id, args.grant_content, expires_in)
+            log.info(
+                "identity %s opens org %s's session content until %s",
+                identity.id,
+                args.grant_content,
+                grant.expires_at,
+            )
+            return 0
+        ended = await trust.revoke_content(rctx, identity.id, args.revoke_content)
+        log.info(
+            "identity %s %s org %s's session content",
+            identity.id,
+            "no longer opens" if ended else "held no grant to open",
+            args.revoke_content,
+        )
+        return 0
     if args.mint_token:
         # The smoke test and the local read operator read and never write,
         # whatever the entry grants; the provisioner's token carries the
@@ -290,8 +316,9 @@ def main(argv: list[str] | None = None) -> int:
 
     p_grant = sub.add_parser(
         "grant-operator",
-        help="put an identity on the operator allowlist, disable its entry, or mint the "
-        "provisioner's, the smoke identity's, or the local read operator's operator token",
+        help="put an identity on the operator allowlist, disable its entry, mint the "
+        "provisioner's, the smoke identity's, or the local read operator's operator token, "
+        "or grant or revoke an operator's opening of one org's session content",
     )
     what = p_grant.add_mutually_exclusive_group(required=True)
     what.add_argument(
@@ -307,6 +334,19 @@ def main(argv: list[str] | None = None) -> int:
         "(acme-<env>-<holder>-token); printed only on a local database, and the "
         "local read operator's (operator) only there",
     )
+    what.add_argument(
+        "--grant-content",
+        type=UUID,
+        metavar="ORG_ID",
+        help="with --email: the operator opens that org's session content, for an hour or "
+        "--expires-in, at most eight; the org's stream holds the grant",
+    )
+    what.add_argument(
+        "--revoke-content",
+        type=UUID,
+        metavar="ORG_ID",
+        help="with --email: end the operator's grant in that org at once",
+    )
     p_grant.add_argument(
         "--email",
         required=True,
@@ -314,7 +354,10 @@ def main(argv: list[str] | None = None) -> int:
         "(@platform.acme.invalid), which the first grant makes",
     )
     p_grant.add_argument(
-        "--expires-in", type=int, help="with --mint-token: seconds, 3600 when absent and at most"
+        "--expires-in",
+        type=int,
+        help="with --mint-token: seconds, 3600 when absent and at most; with --grant-content: "
+        "seconds, 3600 when absent, 28800 at most",
     )
 
     p_openapi = sub.add_parser("openapi", help="emit the OpenAPI document")
@@ -330,8 +373,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "add-member":
         return add_member(args)
     if args.command == "grant-operator":
-        if args.expires_in is not None and not args.mint_token:
-            parser.error("--expires-in goes with --mint-token")
+        if args.expires_in is not None and not (args.mint_token or args.grant_content):
+            parser.error("--expires-in goes with --mint-token or --grant-content")
         return grant_operator(args)
     return openapi(args)
 

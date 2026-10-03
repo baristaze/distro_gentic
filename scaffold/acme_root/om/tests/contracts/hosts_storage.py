@@ -132,6 +132,38 @@ class HostsStorageContract:
         await storage.enroll_host(org, host, credential, ())
         return host, credential
 
+    async def test_count_hosts_answers_every_tenants_unrevoked_hosts_by_state(
+        self, storage: HostsStorageInterface
+    ) -> None:
+        """The platform's gauge of hosts: every tenant's hosts not revoked,
+        by whether they called since the cut and read at or above the floor.
+        The read spans every tenant, so the case reads what its own rows add."""
+        now = utcnow()
+        cut = now - timedelta(minutes=2)
+        before = await storage.count_hosts(cut, 2)
+        first, second = new_id(), new_id()
+        rows = (
+            (first, make_host(new_id()).model_copy(update={"exec_version": 2})),
+            (second, make_host(new_id()).model_copy(update={"exec_version": 3})),
+            (
+                first,
+                make_host(new_id()).model_copy(
+                    update={"exec_version": 2, "last_seen_at": now - timedelta(minutes=5)}
+                ),
+            ),
+            (second, make_host(new_id())),
+            (first, make_host(new_id()).model_copy(update={"revoked_at": now})),
+        )
+        for org, host in rows:
+            await storage.enroll_host(org, host, make_credential(host.id), ())
+        after = await storage.count_hosts(cut, 2)
+        added = {key: after.get(key, 0) - before.get(key, 0) for key in after}
+        assert {key: n for key, n in added.items() if n} == {
+            (True, True): 2,
+            (False, True): 1,
+            (True, False): 1,
+        }
+
     # Pools.
 
     async def test_a_pool_round_trips(self, storage: HostsStorageInterface) -> None:

@@ -19,10 +19,12 @@ LEASE = timedelta(seconds=30)
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
         "count_claimed_ahead",
+        "count_ready_on_lanes",
         "create_item",
         "has_open_item",
         "read_item",
         "read_item_by_key",
+        "read_latest_for_target",
         "write_item_if_failed",
         "write_item_if_held",
     }
@@ -532,6 +534,92 @@ class WorkStorageContract:
         assert await storage.oldest_ready_at(utcnow()) == oldest.available_at
         # The parked item's time is the one that comes next.
         assert await storage.oldest_ready_at(utcnow() - 3 * hour) is None
+
+    async def test_the_lanes_depth_counts_what_is_ready_on_each_lane_under_a_prefix(
+        self, storage: WorkStorageInterface, lane: str
+    ) -> None:
+        """The depth gauge's read: every tenant's ready items, by lane, on the
+        lanes that start with the prefix; an item not yet ready, a claimed
+        one, and a lane outside the prefix are not counted."""
+        org, other = new_id(), new_id()
+        hour = timedelta(hours=1)
+        for owner, item in (
+            (org, make_item(lane=f"{lane}:a")),
+            (other, make_item(lane=f"{lane}:a")),
+            (org, make_item(lane=f"{lane}:b", available_in=-hour)),
+            (org, make_item(lane=f"{lane}:b", available_in=hour)),
+            (org, make_item(lane=f"x{lane}:a")),
+            (
+                org,
+                make_item(lane=f"{lane}:b").model_copy(
+                    update={"status": WorkStatus.CLAIMED, "lease_expires_at": utcnow() + LEASE}
+                ),
+            ),
+        ):
+            await storage.create_item(owner, item)
+        depth = await storage.count_ready_by_lane(f"{lane}:", utcnow())
+        assert depth == {f"{lane}:a": 2, f"{lane}:b": 1}
+        assert await storage.count_ready_by_lane(f"{lane}%", utcnow()) == {}
+
+    async def test_the_ready_items_ahead_are_counted_in_the_claim_order_of_one_lane(
+        self, storage: WorkStorageInterface, lane: str
+    ) -> None:
+        """An item's place in line counts every tenant's ready items before
+        it on its lane, and nothing after it, on another lane, or not ready."""
+        org, other = new_id(), new_id()
+        hour = timedelta(hours=1)
+        first = make_item(lane=lane, available_in=-2 * hour)
+        second = make_item(lane=lane, available_in=-hour)
+        mine = make_item(lane=lane, available_in=-hour / 2)
+        await storage.create_item(other, first)
+        await storage.create_item(org, second)
+        await storage.create_item(org, mine)
+        await storage.create_item(org, make_item(lane=lane))
+        await storage.create_item(org, make_item(lane=f"{lane}-b", available_in=-3 * hour))
+        assert await storage.count_ready_ahead(mine, utcnow()) == 2
+        assert await storage.count_ready_ahead(first, utcnow()) == 0
+
+    async def test_the_ready_items_on_a_tenants_lanes_are_counted_by_lane_and_kind(
+        self, storage: WorkStorageInterface, lane: str
+    ) -> None:
+        org = new_id()
+        loop = make_item(lane=lane).model_copy(update={"kind": WorkKind.LOOP})
+        await storage.create_item(org, loop)
+        await storage.create_item(org, make_item(lane=lane))
+        await storage.create_item(org, make_item(lane=lane))
+        await storage.create_item(org, make_item(lane=f"{lane}-b", available_in=timedelta(hours=1)))
+        found = await storage.count_ready_on_lanes(org, [lane, f"{lane}-b"], utcnow())
+        assert found == {(lane, WorkKind.NOOP): 2, (lane, WorkKind.LOOP): 1}
+        assert await storage.count_ready_on_lanes(org, [], utcnow()) == {}
+
+    async def test_count_ready_on_lanes_of_another_tenant_finds_nothing(
+        self, storage: WorkStorageInterface, lane: str
+    ) -> None:
+        await storage.create_item(new_id(), make_item(lane=lane))
+        assert await storage.count_ready_on_lanes(new_id(), [lane], utcnow()) == {}
+
+    async def test_the_latest_item_for_a_target_is_the_one_made_last(
+        self, storage: WorkStorageInterface, lane: str
+    ) -> None:
+        org, target = new_id(), new_id()
+        hour = timedelta(hours=1)
+        older = make_item(lane=lane).model_copy(
+            update={"target_id": target, "created_at": utcnow() - hour, "kind": WorkKind.LOOP}
+        )
+        newer = make_item(lane=lane).model_copy(update={"target_id": target, "kind": WorkKind.LOOP})
+        other_kind = make_item(lane=lane).model_copy(update={"target_id": target})
+        for item in (older, newer, other_kind):
+            await storage.create_item(org, item)
+        assert await storage.read_latest_for_target(org, WorkKind.LOOP, target) == newer
+        assert await storage.read_latest_for_target(org, WorkKind.LOOP, new_id()) is None
+
+    async def test_read_latest_for_target_of_another_tenant_finds_nothing(
+        self, storage: WorkStorageInterface, lane: str
+    ) -> None:
+        target = new_id()
+        item = make_item(lane=lane).model_copy(update={"target_id": target})
+        await storage.create_item(new_id(), item)
+        assert await storage.read_latest_for_target(new_id(), WorkKind.NOOP, target) is None
 
     async def test_failed_items_are_counted_from_when_they_failed_in_every_tenant(
         self, storage: WorkStorageInterface, lane: str

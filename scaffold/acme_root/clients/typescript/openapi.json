@@ -697,6 +697,16 @@
         "title": "ConfirmTotpRequest",
         "type": "object"
       },
+      "ContentState": {
+        "description": "Where what a step says is. The state answers, so no caller compares\nstrings.",
+        "enum": [
+          "plain",
+          "sealed",
+          "absent"
+        ],
+        "title": "ContentState",
+        "type": "string"
+      },
       "ControlCommand": {
         "description": "What a `control` step records: a command that travels out of band.",
         "enum": [
@@ -1687,6 +1697,74 @@
         "title": "HeartbeatRequest",
         "type": "object"
       },
+      "HostStandingView": {
+        "description": "Why a host takes no work: its state, what it advertised, the version\nof `exec` work it reads against the floor, when it last called, and what\nis ready on its pool's lane and its own.",
+        "properties": {
+          "advertisement": {
+            "$ref": "#/components/schemas/AdvertisementView"
+          },
+          "exec_floor": {
+            "title": "Exec Floor",
+            "type": "integer"
+          },
+          "exec_version": {
+            "title": "Exec Version",
+            "type": "integer"
+          },
+          "host_id": {
+            "format": "uuid",
+            "title": "Host Id",
+            "type": "string"
+          },
+          "lanes": {
+            "items": {
+              "$ref": "#/components/schemas/LaneLoadView"
+            },
+            "title": "Lanes",
+            "type": "array"
+          },
+          "last_seen_at": {
+            "format": "date-time",
+            "title": "Last Seen At",
+            "type": "string"
+          },
+          "pool_id": {
+            "format": "uuid",
+            "title": "Pool Id",
+            "type": "string"
+          },
+          "revoked": {
+            "title": "Revoked",
+            "type": "boolean"
+          },
+          "state": {
+            "$ref": "#/components/schemas/HostState"
+          }
+        },
+        "required": [
+          "host_id",
+          "pool_id",
+          "state",
+          "revoked",
+          "advertisement",
+          "exec_version",
+          "exec_floor",
+          "last_seen_at",
+          "lanes"
+        ],
+        "title": "HostStandingView",
+        "type": "object"
+      },
+      "HostState": {
+        "description": "A host as the platform's gauge counts it: the label is bounded, and a\nhost's own view is an operator-plane read.",
+        "enum": [
+          "online",
+          "offline",
+          "below_floor"
+        ],
+        "title": "HostState",
+        "type": "string"
+      },
       "HostView": {
         "description": "A host as its owner reads it: online while it called within the\nwindow and reads a version of `exec` work the platform still hands.",
         "properties": {
@@ -2419,6 +2497,28 @@
         "title": "LabView",
         "type": "object"
       },
+      "LaneLoadView": {
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/WorkKind"
+          },
+          "lane": {
+            "title": "Lane",
+            "type": "string"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "lane",
+          "kind",
+          "ready"
+        ],
+        "title": "LaneLoadView",
+        "type": "object"
+      },
       "LastOwnerDetail": {
         "description": "What a `last_owner` refusal carries: every team org the person is the\nlast owner of, which they hand on or delete before their account goes.",
         "properties": {
@@ -2847,6 +2947,81 @@
         ],
         "title": "LoopOutcome",
         "type": "string"
+      },
+      "LoopStandingView": {
+        "description": "The session's loop item made last, and its place in line:\n`ready_ahead` items of any tenant are ready before it on its lane, and\n`running_ahead` of its tenant's loops run ahead of it, which the claim\ncounts against the share.",
+        "properties": {
+          "attempts": {
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "available_at": {
+            "format": "date-time",
+            "title": "Available At",
+            "type": "string"
+          },
+          "claimed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claimed By"
+          },
+          "item_id": {
+            "format": "uuid",
+            "title": "Item Id",
+            "type": "string"
+          },
+          "lane": {
+            "title": "Lane",
+            "type": "string"
+          },
+          "lease_expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lease Expires At"
+          },
+          "max_attempts": {
+            "title": "Max Attempts",
+            "type": "integer"
+          },
+          "ready_ahead": {
+            "title": "Ready Ahead",
+            "type": "integer"
+          },
+          "running_ahead": {
+            "title": "Running Ahead",
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/WorkStatus"
+          }
+        },
+        "required": [
+          "item_id",
+          "status",
+          "lane",
+          "attempts",
+          "max_attempts",
+          "available_at",
+          "claimed_by",
+          "lease_expires_at",
+          "ready_ahead",
+          "running_ahead"
+        ],
+        "title": "LoopStandingView",
+        "type": "object"
       },
       "MeView": {
         "properties": {
@@ -3850,6 +4025,103 @@
         "title": "SessionControl",
         "type": "string"
       },
+      "SessionStandingView": {
+        "description": "Why a session is or is not moving. `changed_at` is its last change:\nwhen it parked, for a parked one. `pool_id` null is the cloud, where\n`hosts_online` is null; `share_set` false is the default share.",
+        "properties": {
+          "changed_at": {
+            "format": "date-time",
+            "title": "Changed At",
+            "type": "string"
+          },
+          "concurrency": {
+            "title": "Concurrency",
+            "type": "integer"
+          },
+          "hosts_online": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hosts Online"
+          },
+          "loop": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LoopStandingView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "own_lane": {
+            "title": "Own Lane",
+            "type": "boolean"
+          },
+          "park": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ParkView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pending_input": {
+            "title": "Pending Input",
+            "type": "boolean"
+          },
+          "plan_tier": {
+            "title": "Plan Tier",
+            "type": "string"
+          },
+          "pool_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pool Id"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "share_set": {
+            "title": "Share Set",
+            "type": "boolean"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SessionStatus"
+          }
+        },
+        "required": [
+          "session_id",
+          "status",
+          "park",
+          "changed_at",
+          "pending_input",
+          "plan_tier",
+          "own_lane",
+          "concurrency",
+          "share_set",
+          "pool_id",
+          "hosts_online",
+          "loop"
+        ],
+        "title": "SessionStandingView",
+        "type": "object"
+      },
       "SessionStatus": {
         "enum": [
           "pending",
@@ -3902,6 +4174,103 @@
           "revoked_at"
         ],
         "title": "SessionView",
+        "type": "object"
+      },
+      "SetShareRequest": {
+        "additionalProperties": false,
+        "description": "A tenant's fair share: the plan tier whose lane its loops run in,\nwhether they run in a lane of their own instead, and how many of them\nrun at once.",
+        "properties": {
+          "concurrency": {
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Concurrency",
+            "type": "integer"
+          },
+          "own_lane": {
+            "default": false,
+            "title": "Own Lane",
+            "type": "boolean"
+          },
+          "plan_tier": {
+            "pattern": "^[a-z][a-z0-9-]{0,31}$",
+            "title": "Plan Tier",
+            "type": "string"
+          }
+        },
+        "required": [
+          "plan_tier",
+          "concurrency"
+        ],
+        "title": "SetShareRequest",
+        "type": "object"
+      },
+      "ShapePageView": {
+        "description": "One page of a session's shape, after the seq the request named.",
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/StepShapeView"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "has_more"
+        ],
+        "title": "ShapePageView",
+        "type": "object"
+      },
+      "ShareView": {
+        "description": "A tenant's fair share as the operator wrote it, at its version.",
+        "properties": {
+          "concurrency": {
+            "title": "Concurrency",
+            "type": "integer"
+          },
+          "org_id": {
+            "format": "uuid",
+            "title": "Org Id",
+            "type": "string"
+          },
+          "own_lane": {
+            "title": "Own Lane",
+            "type": "boolean"
+          },
+          "plan_tier": {
+            "title": "Plan Tier",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "updated_by": {
+            "format": "uuid",
+            "title": "Updated By",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "org_id",
+          "plan_tier",
+          "own_lane",
+          "concurrency",
+          "version",
+          "updated_at",
+          "updated_by"
+        ],
+        "title": "ShareView",
         "type": "object"
       },
       "SignInCallbackRequest": {
@@ -4447,6 +4816,123 @@
           "has_more"
         ],
         "title": "StepPageView",
+        "type": "object"
+      },
+      "StepShapeView": {
+        "description": "One step as an operator's `read` sees it: what it is, who wrote it,\nand the fields of its header a reader acts on, never what it says.\n`content` says whether what it says is kept.",
+        "properties": {
+          "actor": {
+            "$ref": "#/components/schemas/Actor"
+          },
+          "command": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ControlCommand"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "content": {
+            "$ref": "#/components/schemas/ContentState"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ToolFailure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "loop_id": {
+            "format": "uuid",
+            "title": "Loop Id",
+            "type": "string"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/Origin"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LoopOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "park": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ParkView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "responds_to": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Responds To"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "tool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool"
+          },
+          "type": {
+            "$ref": "#/components/schemas/StepType"
+          }
+        },
+        "required": [
+          "id",
+          "seq",
+          "loop_id",
+          "type",
+          "actor",
+          "origin",
+          "responds_to",
+          "created_at",
+          "content",
+          "tool",
+          "failure",
+          "command",
+          "park",
+          "outcome"
+        ],
+        "title": "StepShapeView",
         "type": "object"
       },
       "StepType": {
@@ -5997,6 +6483,108 @@
         ]
       }
     },
+    "/v1/admin/orgs/{org_id}/hosts/{host_id}/standing": {
+      "get": {
+        "description": "Why the host takes no work: what it advertised and the version it\nreads, against the floor and what is ready on its lanes.",
+        "operationId": "host_standing_v1_admin_orgs__org_id__hosts__host_id__standing_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "host_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Host Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostStandingView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Host Standing",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/v1/admin/orgs/{org_id}/members": {
       "get": {
         "operationId": "list_members_v1_admin_orgs__org_id__members_get",
@@ -6226,6 +6814,456 @@
           }
         },
         "summary": "Add Member",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/orgs/{org_id}/sessions/{session_id}/content": {
+      "get": {
+        "description": "The session's steps past `after_seq`, opened: only under a live\ncontent grant of the operator in that tenant, and each opening is an\nentry in the tenant's stream.",
+        "operationId": "session_content_v1_admin_orgs__org_id__sessions__session_id__content_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_seq",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "After Seq",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StepPageView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Session Content",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/orgs/{org_id}/sessions/{session_id}/shape": {
+      "get": {
+        "description": "The session's steps past `after_seq` as `read` sees them: what each\nis and who wrote it, never what it says.",
+        "operationId": "session_shape_v1_admin_orgs__org_id__sessions__session_id__shape_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_seq",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "After Seq",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShapePageView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Session Shape",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/orgs/{org_id}/sessions/{session_id}/standing": {
+      "get": {
+        "description": "Why the session is or is not moving: its park, its loop's lease and\nlane, its place in line, its tenant's share, and where it runs.",
+        "operationId": "session_standing_v1_admin_orgs__org_id__sessions__session_id__standing_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionStandingView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Session Standing",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/orgs/{org_id}/share": {
+      "put": {
+        "description": "Writes the org's fair share, a new version, with an entry in the\norg's stream that names the operator. Its loops enqueued from then on go\nto the lane it names. Requires the write permission.",
+        "operationId": "set_share_v1_admin_orgs__org_id__share_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetShareRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Share",
         "tags": [
           "admin"
         ]

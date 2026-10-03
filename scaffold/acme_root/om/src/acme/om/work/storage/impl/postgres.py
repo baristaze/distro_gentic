@@ -249,6 +249,73 @@ class WorkStoragePostgresImpl(PgStorageBase, WorkStorageInterface):
         async with self._session_for(stmt, org_id=EMPTY_UUID) as session:
             return (await session.execute(stmt)).scalar_one()
 
+    async def count_ready_by_lane(self, prefix: str, now: datetime) -> dict[str, int]:
+        # The status is a literal for the partial index of queued items, as
+        # in `oldest_ready_at`.
+        queued = literal_column(f"'{WorkStatus.QUEUED.value}'")
+        stmt = (
+            select(WorkItems.lane, func.count())
+            .where(
+                WorkItems.status == queued,
+                WorkItems.available_at <= now,
+                WorkItems.lane.startswith(prefix, autoescape=True),
+            )
+            .group_by(WorkItems.lane)
+        )
+        async with self._session_for(stmt, org_id=EMPTY_UUID) as session:
+            return {lane: count for lane, count in (await session.execute(stmt)).all()}
+
+    async def count_ready_ahead(self, item: WorkItem, now: datetime) -> int:
+        queued = literal_column(f"'{WorkStatus.QUEUED.value}'")
+        stmt = select(func.count()).where(
+            WorkItems.status == queued,
+            WorkItems.available_at <= now,
+            WorkItems.lane == item.lane,
+            WorkItems.id != item.id,
+            or_(
+                WorkItems.available_at < item.available_at,
+                and_(WorkItems.available_at == item.available_at, WorkItems.id < item.id),
+            ),
+        )
+        # A lane is shared by its tier's tenants, so the system scope.
+        async with self._session_for(stmt, org_id=EMPTY_UUID) as session:
+            return (await session.execute(stmt)).scalar_one()
+
+    async def count_ready_on_lanes(
+        self, org_id: UUID, lanes: Sequence[str], now: datetime
+    ) -> dict[tuple[str, WorkKind], int]:
+        if not lanes:
+            return {}
+        queued = literal_column(f"'{WorkStatus.QUEUED.value}'")
+        stmt = (
+            select(WorkItems.lane, WorkItems.kind, func.count())
+            .where(
+                WorkItems.org_id == org_id,
+                WorkItems.status == queued,
+                WorkItems.available_at <= now,
+                WorkItems.lane.in_(list(lanes)),
+            )
+            .group_by(WorkItems.lane, WorkItems.kind)
+        )
+        async with self._session_for(stmt, org_id=org_id) as session:
+            rows = (await session.execute(stmt)).all()
+        return {(lane, WorkKind(kind)): count for lane, kind, count in rows}
+
+    async def read_latest_for_target(
+        self, org_id: UUID, kind: WorkKind, target_id: UUID
+    ) -> WorkItem | None:
+        stmt = (
+            select(WorkItems)
+            .where(
+                WorkItems.org_id == org_id,
+                WorkItems.kind == kind.value,
+                WorkItems.target_id == target_id,
+            )
+            .order_by(WorkItems.created_at.desc(), WorkItems.id.desc())
+            .limit(1)
+        )
+        return await self._one(stmt, org_id)
+
     async def read_item(self, org_id: UUID, item_id: UUID) -> WorkItem | None:
         stmt = select(WorkItems).where(WorkItems.org_id == org_id, WorkItems.id == item_id)
         return await self._one(stmt, org_id)

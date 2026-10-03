@@ -173,6 +173,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/orgs/{org_id}/hosts/{host_id}/standing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Host Standing
+         * @description Why the host takes no work: what it advertised and the version it
+         *     reads, against the floor and what is ready on its lanes.
+         */
+        get: operations["host_standing_v1_admin_orgs__org_id__hosts__host_id__standing_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/orgs/{org_id}/members": {
         parameters: {
             query?: never;
@@ -185,6 +206,92 @@ export interface paths {
         put?: never;
         /** Add Member */
         post: operations["add_member_v1_admin_orgs__org_id__members_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/orgs/{org_id}/sessions/{session_id}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Session Content
+         * @description The session's steps past `after_seq`, opened: only under a live
+         *     content grant of the operator in that tenant, and each opening is an
+         *     entry in the tenant's stream.
+         */
+        get: operations["session_content_v1_admin_orgs__org_id__sessions__session_id__content_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/orgs/{org_id}/sessions/{session_id}/shape": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Session Shape
+         * @description The session's steps past `after_seq` as `read` sees them: what each
+         *     is and who wrote it, never what it says.
+         */
+        get: operations["session_shape_v1_admin_orgs__org_id__sessions__session_id__shape_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/orgs/{org_id}/sessions/{session_id}/standing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Session Standing
+         * @description Why the session is or is not moving: its park, its loop's lease and
+         *     lane, its place in line, its tenant's share, and where it runs.
+         */
+        get: operations["session_standing_v1_admin_orgs__org_id__sessions__session_id__standing_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/orgs/{org_id}/share": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Share
+         * @description Writes the org's fair share, a new version, with an entry in the
+         *     org's stream that names the operator. Its loops enqueued from then on go
+         *     to the lane it names. Requires the write permission.
+         */
+        put: operations["set_share_v1_admin_orgs__org_id__share_put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2081,6 +2188,13 @@ export interface components {
             totp_code: string;
         };
         /**
+         * ContentState
+         * @description Where what a step says is. The state answers, so no caller compares
+         *     strings.
+         * @enum {string}
+         */
+        ContentState: "plain" | "sealed" | "absent";
+        /**
          * ControlCommand
          * @description What a `control` step records: a command that travels out of band.
          * @enum {string}
@@ -2586,6 +2700,46 @@ export interface components {
             exec_version: number;
         };
         /**
+         * HostStandingView
+         * @description Why a host takes no work: its state, what it advertised, the version
+         *     of `exec` work it reads against the floor, when it last called, and what
+         *     is ready on its pool's lane and its own.
+         */
+        HostStandingView: {
+            advertisement: components["schemas"]["AdvertisementView"];
+            /** Exec Floor */
+            exec_floor: number;
+            /** Exec Version */
+            exec_version: number;
+            /**
+             * Host Id
+             * Format: uuid
+             */
+            host_id: string;
+            /** Lanes */
+            lanes: components["schemas"]["LaneLoadView"][];
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
+            /**
+             * Pool Id
+             * Format: uuid
+             */
+            pool_id: string;
+            /** Revoked */
+            revoked: boolean;
+            state: components["schemas"]["HostState"];
+        };
+        /**
+         * HostState
+         * @description A host as the platform's gauge counts it: the label is bounded, and a
+         *     host's own view is an operator-plane read.
+         * @enum {string}
+         */
+        HostState: "online" | "offline" | "below_floor";
+        /**
          * HostView
          * @description A host as its owner reads it: online while it called within the
          *     window and reads a version of `exec` work the platform still hands.
@@ -2969,6 +3123,14 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** LaneLoadView */
+        LaneLoadView: {
+            kind: components["schemas"]["WorkKind"];
+            /** Lane */
+            lane: string;
+            /** Ready */
+            ready: number;
+        };
         /**
          * LastOwnerDetail
          * @description What a `last_owner` refusal carries: every team org the person is the
@@ -3174,6 +3336,40 @@ export interface components {
          * @enum {string}
          */
         LoopOutcome: "succeeded" | "failed" | "inconclusive" | "cancelled" | "errored";
+        /**
+         * LoopStandingView
+         * @description The session's loop item made last, and its place in line:
+         *     `ready_ahead` items of any tenant are ready before it on its lane, and
+         *     `running_ahead` of its tenant's loops run ahead of it, which the claim
+         *     counts against the share.
+         */
+        LoopStandingView: {
+            /** Attempts */
+            attempts: number;
+            /**
+             * Available At
+             * Format: date-time
+             */
+            available_at: string;
+            /** Claimed By */
+            claimed_by: string | null;
+            /**
+             * Item Id
+             * Format: uuid
+             */
+            item_id: string;
+            /** Lane */
+            lane: string;
+            /** Lease Expires At */
+            lease_expires_at: string | null;
+            /** Max Attempts */
+            max_attempts: number;
+            /** Ready Ahead */
+            ready_ahead: number;
+            /** Running Ahead */
+            running_ahead: number;
+            status: components["schemas"]["WorkStatus"];
+        };
         /** MeView */
         MeView: {
             /** App */
@@ -3673,6 +3869,41 @@ export interface components {
          */
         SessionControl: "pause" | "resume" | "cancel" | "interrupt" | "compact" | "unlock";
         /**
+         * SessionStandingView
+         * @description Why a session is or is not moving. `changed_at` is its last change:
+         *     when it parked, for a parked one. `pool_id` null is the cloud, where
+         *     `hosts_online` is null; `share_set` false is the default share.
+         */
+        SessionStandingView: {
+            /**
+             * Changed At
+             * Format: date-time
+             */
+            changed_at: string;
+            /** Concurrency */
+            concurrency: number;
+            /** Hosts Online */
+            hosts_online: number | null;
+            loop: components["schemas"]["LoopStandingView"] | null;
+            /** Own Lane */
+            own_lane: boolean;
+            park: components["schemas"]["ParkView"] | null;
+            /** Pending Input */
+            pending_input: boolean;
+            /** Plan Tier */
+            plan_tier: string;
+            /** Pool Id */
+            pool_id: string | null;
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+            /** Share Set */
+            share_set: boolean;
+            status: components["schemas"]["SessionStatus"];
+        };
+        /**
          * SessionStatus
          * @enum {string}
          */
@@ -3700,6 +3931,62 @@ export interface components {
             id: string;
             /** Revoked At */
             revoked_at: string | null;
+        };
+        /**
+         * SetShareRequest
+         * @description A tenant's fair share: the plan tier whose lane its loops run in,
+         *     whether they run in a lane of their own instead, and how many of them
+         *     run at once.
+         */
+        SetShareRequest: {
+            /** Concurrency */
+            concurrency: number;
+            /**
+             * Own Lane
+             * @default false
+             */
+            own_lane: boolean;
+            /** Plan Tier */
+            plan_tier: string;
+        };
+        /**
+         * ShapePageView
+         * @description One page of a session's shape, after the seq the request named.
+         */
+        ShapePageView: {
+            /** Has More */
+            has_more: boolean;
+            /** Items */
+            items: components["schemas"]["StepShapeView"][];
+        };
+        /**
+         * ShareView
+         * @description A tenant's fair share as the operator wrote it, at its version.
+         */
+        ShareView: {
+            /** Concurrency */
+            concurrency: number;
+            /**
+             * Org Id
+             * Format: uuid
+             */
+            org_id: string;
+            /** Own Lane */
+            own_lane: boolean;
+            /** Plan Tier */
+            plan_tier: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Updated By
+             * Format: uuid
+             */
+            updated_by: string;
+            /** Version */
+            version: number;
         };
         /**
          * SignInCallbackRequest
@@ -3982,6 +4269,43 @@ export interface components {
             has_more: boolean;
             /** Items */
             items: components["schemas"]["StepView"][];
+        };
+        /**
+         * StepShapeView
+         * @description One step as an operator's `read` sees it: what it is, who wrote it,
+         *     and the fields of its header a reader acts on, never what it says.
+         *     `content` says whether what it says is kept.
+         */
+        StepShapeView: {
+            actor: components["schemas"]["Actor"];
+            command: components["schemas"]["ControlCommand"] | null;
+            content: components["schemas"]["ContentState"];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            failure: components["schemas"]["ToolFailure"] | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Loop Id
+             * Format: uuid
+             */
+            loop_id: string;
+            origin: components["schemas"]["Origin"];
+            outcome: components["schemas"]["LoopOutcome"] | null;
+            park: components["schemas"]["ParkView"] | null;
+            /** Responds To */
+            responds_to: string | null;
+            /** Seq */
+            seq: number;
+            /** Tool */
+            tool: string | null;
+            type: components["schemas"]["StepType"];
         };
         /**
          * StepType
@@ -4588,6 +4912,42 @@ export interface operations {
             };
         };
     };
+    host_standing_v1_admin_orgs__org_id__hosts__host_id__standing_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                org_id: string;
+                host_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostStandingView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_members_v1_admin_orgs__org_id__members_get: {
         parameters: {
             query?: {
@@ -4653,6 +5013,159 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    session_content_v1_admin_orgs__org_id__sessions__session_id__content_get: {
+        parameters: {
+            query?: {
+                after_seq?: number;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                org_id: string;
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StepPageView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    session_shape_v1_admin_orgs__org_id__sessions__session_id__shape_get: {
+        parameters: {
+            query?: {
+                after_seq?: number;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                org_id: string;
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShapePageView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    session_standing_v1_admin_orgs__org_id__sessions__session_id__standing_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                org_id: string;
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionStandingView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_share_v1_admin_orgs__org_id__share_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetShareRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareView"];
                 };
             };
             /** @description Validation Error */

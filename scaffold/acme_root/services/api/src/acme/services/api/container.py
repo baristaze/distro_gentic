@@ -22,6 +22,7 @@ from acme.om.root import Managers, TenancyOperatorOptions, TenancyOptions, build
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
+from acme.om.trust.root import build_trust_operator
 from acme.om.watch.impl.manager import WatchOptions
 from acme.om.watch.impl.stream import StreamServiceMemoryImpl
 from acme.om.watch.root import build_watch
@@ -214,6 +215,7 @@ class AppContainer:
             integrations,
             timedelta(seconds=settings.realtime_head_max_age_seconds),
             watch,
+            build_trust_operator(storage, infra),
         )
         return cls(
             settings,

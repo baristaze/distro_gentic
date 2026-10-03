@@ -258,7 +258,17 @@ async def test_a_sign_out_ends_the_sign_in_or_the_token_presented(
 
 def grant_args(**given: object) -> argparse.Namespace:
     return argparse.Namespace(
-        **({"permission": None, "disable": False, "mint_token": None, "expires_in": None} | given)
+        **(
+            {
+                "permission": None,
+                "disable": False,
+                "mint_token": None,
+                "grant_content": None,
+                "revoke_content": None,
+                "expires_in": None,
+            }
+            | given
+        )
     )
 
 

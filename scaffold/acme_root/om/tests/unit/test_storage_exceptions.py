@@ -141,6 +141,11 @@ STORAGE_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         # The sweep's gauges: one read each across every tenant's rows.
         ("WorkStorageInterface", "oldest_ready_at"),
         ("WorkStorageInterface", "count_failed_since"),
+        ("AgentSessionStorageInterface", "count_parked"),
+        ("HostsStorageInterface", "count_hosts"),
+        ("WorkStorageInterface", "count_ready_by_lane"),
+        # An item's place in line on a lane its tier's tenants share: a count.
+        ("WorkStorageInterface", "count_ready_ahead"),
         ("OutboxStorageInterface", "claim_pending"),
         ("OutboxStorageInterface", "purge_done"),
         ("OutboxStorageInterface", "oldest_pending_at"),
@@ -252,6 +257,8 @@ MANAGER_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         # The sweep's gauges of the queue, read across tenants like the purge.
         ("WorkManagerInterface", "oldest_ready_age"),
         ("WorkManagerInterface", "failed_within"),
+        # The platform's gauges, read across every tenant like the queue's.
+        ("PlacementOperatorManagerInterface", "fleet_counts"),
         # And the sweep's tally of the platform's size, counted across tenants
         # for the operator plane's read: it counts for no tenant.
         ("TenancyOperatorManagerInterface", "tally_size"),
@@ -282,6 +289,7 @@ REQUEST_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
         ("TenancyManagerInterface", "member_context"),
         ("TenancyManagerInterface", "grant_operator"),
         ("TenancyManagerInterface", "disable_operator"),
+        ("TenancyManagerInterface", "operator_identity"),
         ("TenancyManagerInterface", "grant_operator_token"),
         # The grant job's content grant, which no route writes, beside the
         # operator allowlist's.

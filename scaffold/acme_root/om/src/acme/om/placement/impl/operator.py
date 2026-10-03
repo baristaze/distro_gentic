@@ -1,20 +1,42 @@
 import logging
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from pydantic import ValidationError
 
 from acme.infra.topics import EntityChangedPayload, Topics, TopicsInterface
-from acme.om.base import new_id, utcnow
+from acme.om.agent_sessions.storage import AgentSessionStorageInterface
+from acme.om.base import Platform, new_id, utcnow
 from acme.om.context import OperatorContext, OperatorPermission
 from acme.om.events.storage import EventStorageInterface
 from acme.om.events.types.event import Event
 from acme.om.exceptions import NotFound, PreconditionFailed, UniqueKeyTaken, ValidationFailed
+from acme.om.hosts.rules import WIRE_FLOOR, HostState, WireType, host_state, online
+from acme.om.hosts.storage import HostsStorageInterface
 from acme.om.placement.manager import PlacementOperatorManagerInterface
+from acme.om.placement.rules import (
+    LOOP_LANE_PREFIX,
+    PARK_AGES,
+    host_lane,
+    park_age_label,
+    pool_lane,
+    tier_label,
+)
 from acme.om.placement.storage import PlacementStorageInterface
 from acme.om.placement.types.share import FairShare
+from acme.om.placement.types.standing import (
+    Count,
+    FleetCounts,
+    HostStanding,
+    LaneLoad,
+    LoopStanding,
+    SessionStanding,
+)
+from acme.om.steps.types.header import ParkReason
 from acme.om.tenancy.storage import TenancyStorageInterface
+from acme.om.work.storage import WorkStorageInterface
+from acme.om.work.types.work_item import WorkKind
 
 log = logging.getLogger(__name__)
 
@@ -22,10 +44,22 @@ SHARE_SET_KIND = "placement.share.set"
 """The audit event an operator's write of a share leaves in the tenant's stream."""
 
 
+class PlacementOperatorOptions(Platform):
+    """What a standing reads beside the rows: the share of a tenant no
+    operator gave one, as placement's options set it, and how long a host
+    counts as online, as the hosts' options set it. The root builds it from
+    both, so neither is said twice."""
+
+    default_tier: str
+    default_concurrency: int
+    online_window: timedelta
+
+
 class PlacementOperatorManagerImpl(PlacementOperatorManagerInterface):
-    """Writes one named org's share through the placement storage and reads
-    the org through the tenancy storage, as the other operator planes do:
-    no `TenantContext` exists on this plane, so no tenant manager is asked."""
+    """Writes one named org's share through the placement storage, and reads
+    the org, its sessions, its work, and its hosts through their storages,
+    as the other operator planes do: no `TenantContext` exists on this
+    plane, so no tenant manager is asked."""
 
     def __init__(
         self,
@@ -33,12 +67,20 @@ class PlacementOperatorManagerImpl(PlacementOperatorManagerInterface):
         tenancy: TenancyStorageInterface,
         events: EventStorageInterface,
         topics: TopicsInterface,
+        sessions: AgentSessionStorageInterface,
+        work: WorkStorageInterface,
+        hosts: HostsStorageInterface,
+        options: PlacementOperatorOptions,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._storage = storage
         self._tenancy = tenancy
         self._events = events
         self._topics = topics
+        self._sessions = sessions
+        self._work = work
+        self._hosts = hosts
+        self._options = options
         self._clock = clock
 
     async def set_share(
@@ -101,6 +143,127 @@ class PlacementOperatorManagerImpl(PlacementOperatorManagerInterface):
         )
         await self._audit(admin, org_id, share)
         return share
+
+    async def get_session_standing(
+        self, admin: OperatorContext, org_id: UUID, session_id: UUID
+    ) -> SessionStanding:
+        admin.require(OperatorPermission.READ)
+        session = await self._sessions.read_session(org_id, session_id)
+        if session is None:
+            raise NotFound(f"agent session {session_id} is not in {org_id}")
+        self._trail(admin, org_id, "a session's standing")
+        now = self._clock()
+        stored = await self._storage.read_share(org_id)
+        tier = self._options.default_tier if stored is None else stored.plan_tier
+        placement = await self._hosts.read_placement(org_id, session_id)
+        pool_id = None if placement is None else placement.pool_id
+        hosts_online = None
+        if pool_id is not None:
+            hosts = await self._hosts.read_hosts(org_id, pool_id, 1000)
+            hosts_online = sum(
+                1 for host in hosts if online(host, now, self._options.online_window)
+            )
+        item = await self._work.read_latest_for_target(org_id, WorkKind.LOOP, session_id)
+        loop = None
+        if item is not None:
+            loop = LoopStanding(
+                item_id=item.id,
+                status=item.status,
+                lane=item.lane,
+                attempts=item.attempts,
+                max_attempts=item.max_attempts,
+                available_at=item.available_at,
+                claimed_by=item.claimed_by,
+                lease_expires_at=item.lease_expires_at,
+                ready_ahead=await self._work.count_ready_ahead(item, now),
+                running_ahead=await self._work.count_claimed_ahead(org_id, item, now),
+            )
+        return SessionStanding(
+            session_id=session.id,
+            status=session.status,
+            park=session.park,
+            changed_at=session.updated_at,
+            pending_input=session.pending_input is not None,
+            plan_tier=tier,
+            own_lane=False if stored is None else stored.own_lane,
+            concurrency=(
+                self._options.default_concurrency if stored is None else stored.concurrency
+            ),
+            share_set=stored is not None,
+            pool_id=pool_id,
+            hosts_online=hosts_online,
+            loop=loop,
+        )
+
+    async def get_host_standing(
+        self, admin: OperatorContext, org_id: UUID, host_id: UUID
+    ) -> HostStanding:
+        admin.require(OperatorPermission.READ)
+        host = await self._hosts.read_host(org_id, host_id)
+        if host is None:
+            raise NotFound(f"host {host_id} is not in {org_id}")
+        self._trail(admin, org_id, "a host's standing")
+        now = self._clock()
+        lanes = (pool_lane(host.pool_id), host_lane(host.id))
+        ready = await self._work.count_ready_on_lanes(org_id, lanes, now)
+        floor = WIRE_FLOOR[WireType.EXEC]
+        return HostStanding(
+            host_id=host.id,
+            pool_id=host.pool_id,
+            state=host_state(
+                host.last_seen_at > now - self._options.online_window, host.exec_version >= floor
+            ),
+            revoked=host.revoked_at is not None,
+            advertisement=host.advertisement,
+            exec_version=host.exec_version,
+            exec_floor=floor,
+            last_seen_at=host.last_seen_at,
+            lanes=tuple(
+                LaneLoad(lane=lane, kind=kind, ready=count)
+                for (lane, kind), count in sorted(ready.items())
+            ),
+        )
+
+    async def fleet_counts(self) -> FleetCounts:
+        now = self._clock()
+        parked = await self._sessions.count_parked(tuple(now - cut for _, cut in PARK_AGES))
+        ages = range(len(PARK_AGES) + 1)
+        depth: dict[str, int] = {}
+        for lane, count in (await self._work.count_ready_by_lane(LOOP_LANE_PREFIX, now)).items():
+            label = tier_label(lane)
+            if label is not None:
+                depth[label] = depth.get(label, 0) + count
+        hosts: dict[HostState, int] = dict.fromkeys(HostState, 0)
+        seen_since = now - self._options.online_window
+        for (seen, at_floor), count in (
+            await self._hosts.count_hosts(seen_since, WIRE_FLOOR[WireType.EXEC])
+        ).items():
+            hosts[host_state(seen, at_floor)] += count
+        # Every reason and age is a series, zero included, so a park that
+        # ends reads as a fall to zero and never as a line that stops.
+        return FleetCounts(
+            parked=tuple(
+                Count(
+                    labels=(reason.value, park_age_label(age)),
+                    value=parked.get((reason, age), 0),
+                )
+                for reason in ParkReason
+                for age in ages
+            ),
+            loops_ready=tuple(
+                Count(labels=(label,), value=count) for label, count in sorted(depth.items())
+            ),
+            hosts=tuple(Count(labels=(state.value,), value=n) for state, n in hosts.items()),
+        )
+
+    @staticmethod
+    def _trail(admin: OperatorContext, org_id: UUID, what: str) -> None:
+        """Every operator read of a tenant's rows is recorded, naming both."""
+        log.info(
+            "operator read of %s",
+            what,
+            extra={"org_id": str(org_id), "operator": str(admin.identity_id)},
+        )
 
     async def _audit(self, admin: OperatorContext, org_id: UUID, share: FairShare) -> None:
         """The event that names the write and who made it, with the terms it
