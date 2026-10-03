@@ -18,6 +18,7 @@ from contracts.doubles import context
 from contracts.workspaces import ProjectsTwin, PullRequestsTwin
 
 from acme.infra.impl.local import InfraLocalImpl
+from acme.infra.keys import KeyServiceInterface
 from acme.infra.transports import TransportInterface
 from acme.infra.transports.local import DEFAULT_PATH, TransportLocalImpl
 from acme.infra.workspaces import (
@@ -61,10 +62,12 @@ def git(where: Path, *args: str) -> str:
 
 class HostInfra(InfraLocalImpl):
     """The local root with a directory on this host for each workspace, and
-    the transport that runs commands in it, git on its search path."""
+    the transport that runs commands in it, git on its search path. The
+    hosts of one deployment share its key service."""
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, keys: KeyServiceInterface | None = None) -> None:
         super().__init__(root)
+        self._shared_keys = keys or super().get_keys()
         assert GIT is not None
         found = f"{Path(GIT).parent}:{Path(sys.executable).parent}"
         self._host = WorkspaceHostImpl(root / "workspaces")
@@ -81,6 +84,9 @@ class HostInfra(InfraLocalImpl):
     def get_transport(self) -> TransportInterface:
         return self._local
 
+    def get_keys(self) -> KeyServiceInterface:
+        return self._shared_keys
+
 
 class Checkout:
     def __init__(self, tmp_path: Path) -> None:
@@ -96,14 +102,24 @@ class Checkout:
         git(seed, "push", "-q", str(self.remote), "main")
         self.main = git(self.remote, "rev-parse", "main")
         self.pull_requests = PullRequestsTwin()
-        self.managers: Managers = build_managers(
-            StorageMemoryImpl(),
-            HostInfra(tmp_path),
+        self.projects = ProjectsTwin(repository=str(self.remote))
+        self.storage = StorageMemoryImpl()
+        self.keys: KeyServiceInterface | None = None
+        self.managers: Managers = self.host(tmp_path)
+        self.ctx: TenantContext = context(Role.MEMBER)
+
+    def host(self, root: Path) -> Managers:
+        """A root on a host of its own over the one storage, as a runner on
+        another host, or one that restarted, builds it."""
+        infra = HostInfra(root, self.keys)
+        self.keys = infra.get_keys()
+        return build_managers(
+            self.storage,
+            infra,
             agent_kinds=(WORKER,),
-            workspace_projects=ProjectsTwin(repository=str(self.remote)),
+            workspace_projects=self.projects,
             pull_requests=self.pull_requests,
         )
-        self.ctx: TenantContext = context(Role.MEMBER)
 
     async def session(self) -> UUID:
         made = make_session().model_copy(update={"kind": WORKER.name, "tools": ()})
@@ -180,6 +196,84 @@ async def test_a_clean_checkout_the_remote_holds_pushes_nothing(checkout: Checko
     assert checkout.snapshots(branch) == []
     held = await checkout.managers.workspaces.get_workspace(checkout.ctx, session_id)
     assert held.branch_seen and held.notice is None
+
+
+# A release of an instance older than the work the next loop has not been
+# told of keeps that notice.
+
+
+async def a_dead_run_then_a_parked_loop(
+    checkout: Checkout, tmp_path: Path
+) -> tuple[UUID, Managers, Workspace, Managers, Workspace]:
+    """A run on host A that left a draft in its checkout and died, then the
+    run that took the session over on host B, its own draft in its checkout,
+    not yet released."""
+    session_id = await checkout.session()
+    host_a, host_b = checkout.host(tmp_path / "a"), checkout.host(tmp_path / "b")
+    await host_a.steps.begin_run(checkout.ctx, session_id)
+    on_a = await host_a.tools.prepare_workspace(checkout.ctx, session_id, DIRECTORY)
+    (Path(on_a.location) / "notes.txt").write_text("the dead run's draft\n")
+    await host_b.steps.begin_run(checkout.ctx, session_id)
+    on_b = await host_b.tools.prepare_workspace(checkout.ctx, session_id, DIRECTORY)
+    (Path(on_b.location) / "notes.txt").write_text("the parked loop's draft\n")
+    return session_id, host_a, on_a, host_b, on_b
+
+
+async def sweep(checkout: Checkout, host: Managers, instance: Workspace) -> None:
+    """The release of an instance no run accounts for, as the sweep makes
+    it: a workspace named by where its host holds it, never by the run that
+    prepared it."""
+    workspace = Workspace(
+        id=instance.id, org_id=instance.org_id, spec=instance.spec, location=instance.location
+    )
+    await host.tools.release_workspace(checkout.ctx, workspace)
+
+
+def snapshot_of(checkout: Checkout, branch: str, notes: str) -> str:
+    (ref,) = [
+        ref
+        for ref in checkout.snapshots(branch)
+        if git(checkout.remote, "show", f"{ref}:notes.txt") == notes
+    ]
+    return ref
+
+
+@pytest.mark.parametrize("restarted", [True, False], ids=["restarted", "same-runner"])
+async def test_a_dead_runs_instance_released_after_a_park_leaves_the_parked_loops_notice(
+    checkout: Checkout, tmp_path: Path, restarted: bool
+) -> None:
+    session_id, host_a, on_a, host_b, on_b = await a_dead_run_then_a_parked_loop(checkout, tmp_path)
+    branch = session_branch(session_id)
+    await host_b.tools.release_workspace(checkout.ctx, on_b)  # the loop parks
+
+    # The sweep on host A, in a runner that restarted or the one the run
+    # died in, lets the dead run's instance go.
+    await sweep(checkout, checkout.host(tmp_path / "a") if restarted else host_a, on_a)
+
+    parked = snapshot_of(checkout, branch, "the parked loop's draft")
+    dead = snapshot_of(checkout, branch, "the dead run's draft")
+    held = await checkout.managers.workspaces.get_workspace(checkout.ctx, session_id)
+    assert held.snapshot_ref == parked and held.notice is not None and parked in held.notice
+    await host_b.steps.begin_run(checkout.ctx, session_id)
+    following = await host_b.tools.prepare_workspace(checkout.ctx, session_id, DIRECTORY)
+    assert following.changed is not None and parked in following.changed
+    assert dead not in following.changed, "told of the newer work alone"
+
+
+async def test_a_parked_loops_release_replaces_what_a_dead_runs_instance_left(
+    checkout: Checkout, tmp_path: Path
+) -> None:
+    session_id, _, on_a, host_b, on_b = await a_dead_run_then_a_parked_loop(checkout, tmp_path)
+    branch = session_branch(session_id)
+    await sweep(checkout, checkout.host(tmp_path / "a"), on_a)
+
+    await host_b.tools.release_workspace(checkout.ctx, on_b)  # the loop parks
+
+    parked = snapshot_of(checkout, branch, "the parked loop's draft")
+    dead = snapshot_of(checkout, branch, "the dead run's draft")
+    held = await checkout.managers.workspaces.get_workspace(checkout.ctx, session_id)
+    assert held.snapshot_ref == parked and held.notice is not None
+    assert parked in held.notice and dead not in held.notice
 
 
 # Check 2: a vanished branch with no known reason fails loudly.

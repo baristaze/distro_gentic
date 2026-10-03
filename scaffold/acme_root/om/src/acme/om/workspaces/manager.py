@@ -68,8 +68,12 @@ class WorkspacesManagerInterface(ABC):
     async def detach(self, ctx: TenantContext, workspace: Workspace) -> None:
         """Before the workspace's instance goes: what its checkout holds that
         the remote lacks is committed and pushed to a snapshot ref, and the
-        next loop will be told. Raises when it is not pushed, so the caller
-        lets nothing go that is not kept."""
+        next loop will be told. A notice the next loop has not read is
+        replaced only by the newest work: a release of the instance the run
+        that holds the session attached. An older instance's release, such
+        as the one a run that died left, keeps the notice, and its snapshot
+        is logged. Raises when it is not pushed, so the caller lets nothing
+        go that is not kept."""
         ...
 
     @abstractmethod

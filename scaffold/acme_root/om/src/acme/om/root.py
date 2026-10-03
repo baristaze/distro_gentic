@@ -580,6 +580,7 @@ def build_managers(
         workspace_git
         or WorkspaceGitTransportImpl(infra.get_transport(), steps, records, GitOptions()),
         workspace_reader or RepositoryReaderGitImpl(),
+        steps,
         workspaces_options or WorkspacesOptions(),
     )
     engine_sessions = AgentSessionsManagerImpl(
