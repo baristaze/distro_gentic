@@ -113,7 +113,9 @@ class GitTwin(WorkspaceGitInterface):
         self.calls.append("outgoing")
         return f"bundle of {head}".encode()
 
-    async def landed(self, ctx: TenantContext, workspace: Workspace, branch: str, head: str) -> None:
+    async def landed(
+        self, ctx: TenantContext, workspace: Workspace, branch: str, head: str
+    ) -> None:
         self.calls.append("landed")
         self.remote.add(branch)
 

@@ -103,7 +103,8 @@ fi
 held when it was last brought in; leaves `$size` at 0 when that is
 nothing."""
 
-SNAPSHOT = """set -eu
+SNAPSHOT = (
+    """set -eu
 if [ ! -d .git ]; then echo "snapshot - no 0"; exit 0; fi
 remote=no
 if git rev-parse -q --verify "refs/remotes/origin/$BRANCH" >/dev/null; then remote=yes; fi
@@ -127,18 +128,25 @@ else
   echo "snapshot - $remote 0"
   exit 0
 fi
-""" + BUNDLE_OUT + """echo "snapshot $commit $remote $size"
 """
+    + BUNDLE_OUT
+    + """echo "snapshot $commit $remote $size"
+"""
+)
 """Commits what the checkout holds uncommitted in an index of its own, or
 takes HEAD when only commits the remote lacks are new, and bundles it for
 the platform to push to the snapshot ref; prints the commit, or `-` when
 nothing was new, whether the remote held the branch when it was last
 brought in, and the bundle's size."""
 
-OUTGOING_SCRIPT = """set -eu
+OUTGOING_SCRIPT = (
+    """set -eu
 commit="$(git rev-parse -q --verify "$COMMIT^{commit}")"
-""" + BUNDLE_OUT + """echo "outgoing $size"
 """
+    + BUNDLE_OUT
+    + """echo "outgoing $size"
+"""
+)
 """Bundles the commit the platform names for source control to push, and
 prints the bundle's size, 0 when the remote held all of it."""
 
@@ -257,7 +265,9 @@ class WorkspaceGitTransportImpl(WorkspaceGitInterface):
             raise Unavailable(f"the checkout of session {workspace.id} bundled nothing")
         return await self._bundle(workspace, int(words[1]))
 
-    async def landed(self, ctx: TenantContext, workspace: Workspace, branch: str, head: str) -> None:
+    async def landed(
+        self, ctx: TenantContext, workspace: Workspace, branch: str, head: str
+    ) -> None:
         await self._run(ctx, workspace, "landed", LANDED, {"BRANCH": branch, "COMMIT": head})
 
     async def _bundle(self, workspace: Workspace, size: int) -> bytes:

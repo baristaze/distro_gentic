@@ -285,7 +285,9 @@ class ValidateImpl(NativeToolImpl):
         description=(
             "Runs the project's checks on a fresh executor, apart from your workspace: at "
             "your committed head, or at the base with baseline set. Answers the ids of the "
-            "runs it wrote, which submit_result cites. Commit first: a dirty tree is refused."
+            "runs it wrote, which submit_result cites. Commit, and open your pull request "
+            "first: validation runs at the head on your branch, and a tree that holds work "
+            "the branch does not is refused."
         ),
         input_model=ValidateInput,
         output_model=Validated,

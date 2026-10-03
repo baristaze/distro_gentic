@@ -83,7 +83,9 @@ class WorkspaceGitInterface(ABC):
         ...
 
     @abstractmethod
-    async def landed(self, ctx: TenantContext, workspace: Workspace, branch: str, head: str) -> None:
+    async def landed(
+        self, ctx: TenantContext, workspace: Workspace, branch: str, head: str
+    ) -> None:
         """Tells the checkout that the remote's `branch` is at `head` now, once
         source control pushed it, so a release keeps no snapshot of work the
         branch holds."""

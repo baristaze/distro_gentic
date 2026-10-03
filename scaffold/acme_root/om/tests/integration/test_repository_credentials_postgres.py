@@ -87,6 +87,23 @@ def grep(where: Path, *patterns: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def fetches(where: Path) -> bool:
+    """Whether the checkout at `where` fetches its `origin` with what it
+    holds, and nothing of this host's git configuration."""
+    done = subprocess.run(
+        ["git", "-C", str(where), "fetch", "-q", "origin"],
+        env={
+            "PATH": str(Path(GIT or "git").parent),
+            "HOME": str(where),
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_TERMINAL_PROMPT": "0",
+        },
+        capture_output=True,
+        check=False,
+    )
+    return done.returncode == 0
+
+
 class PrivateGit(ThreadingHTTPServer):
     """Git's HTTP backend over the repositories under `root`, answering a read
     that carries `USER` and `PASSWORD`, and a read or a push that carries
@@ -97,9 +114,7 @@ class PrivateGit(ThreadingHTTPServer):
         super().__init__(("127.0.0.1", 0), PrivateGitHandler)
         self.root = root
         self.expected = "Basic " + base64.b64encode(f"{USER}:{PASSWORD}".encode()).decode()
-        self.writer = (
-            "Basic " + base64.b64encode(f"{WRITER}:{WRITER_PASSWORD}".encode()).decode()
-        )
+        self.writer = "Basic " + base64.b64encode(f"{WRITER}:{WRITER_PASSWORD}".encode()).decode()
         self.authorized = 0
         self.refused = 0
 
@@ -371,13 +386,7 @@ async def test_a_session_works_a_private_repository_with_no_credential_in_its_wo
     ]
     found = grep(here, PASSWORD, WRITER_PASSWORD, *headers)
     assert found.returncode == 1 and found.stdout == "", found.stdout
-    alone = subprocess.run(
-        ["git", "-C", str(here), "fetch", "-q", "origin"],
-        env={"PATH": str(Path(GIT or "git").parent), "GIT_TERMINAL_PROMPT": "0"},
-        capture_output=True,
-        check=False,
-    )
-    assert alone.returncode != 0, "the workspace cannot read the repository itself"
+    assert not fetches(here), "the workspace cannot read the repository itself"
 
     # Work left uncommitted is kept on a snapshot as the instance goes.
     (here / "draft.txt").write_text("unfinished\n")
