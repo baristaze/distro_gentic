@@ -66,4 +66,7 @@ installs it, and the installer refuses root.
   runs as the person who owns the file.
 - `make host-check` installs the host in a container with systemd and
   holds its user, its capabilities, what it can write, and its unit's
-  exposure; CI runs it.
+  exposure; CI runs it. Its machine is an image outside
+  `deployment/docker/`, with systemd as its first process and run as
+  root, which no deployment builds: an exception to the image rules, by
+  its path.
