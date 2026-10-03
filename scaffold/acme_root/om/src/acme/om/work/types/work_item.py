@@ -26,6 +26,9 @@ class WorkKind(StrEnum):
     WAKE_SESSION = "WAKE_SESSION"  # a parked session's retry time has come
     WAKE_SESSIONS = "WAKE_SESSIONS"  # the reason an org's sessions parked for is gone
     LOOP = "LOOP"  # a session's loop, for the session runner to run
+    # The platform's own: a validation session's check, run on a fresh
+    # executor by the platform's worker, with no agent and no model call.
+    VALIDATION = "VALIDATION"
     # The platform's: work a session produces where its environment is,
     # claimed by a host or a daemon through the gateway.
     EXEC = "EXEC"  # a command or a file operation, for the host that holds the workspace
@@ -94,6 +97,11 @@ class WorkItem(Identifiable, Trackable):
 
 class NoopPayload(Platform):
     """The NOOP kind carries nothing."""
+
+
+class ValidationPayload(Platform):
+    """The VALIDATION kind carries nothing: its target is the validation
+    session, which holds what it runs."""
 
 
 class ScheduledPayload(Platform):
@@ -174,6 +182,7 @@ WORK_PAYLOADS: dict[WorkKind, type[Platform]] = {
     WorkKind.WAKE_SESSION: WakeSessionPayload,
     WorkKind.WAKE_SESSIONS: WakeSessionsPayload,
     WorkKind.LOOP: LoopPayload,
+    WorkKind.VALIDATION: ValidationPayload,
     WorkKind.EXEC: ExecPayload,
     WorkKind.WORKSPACE: WorkspacePayload,
     WorkKind.STATION: StationPayload,
@@ -200,6 +209,10 @@ WORK_ENQUEUE_PERMISSIONS: dict[WorkKind, Permission] = {
     # the run appends steps and projects the status, which WRITE covers, and
     # each tool call asks its principal's own permissions again.
     WorkKind.LOOP: Permission.WRITE,
+    # A validation session's start asks for it, relayed from its own commit;
+    # the run writes the session's validation and finishes the session,
+    # which WRITE covers.
+    WorkKind.VALIDATION: Permission.WRITE,
     # A session's run asks for these, relayed from its own commit; what each
     # runs was asked for by a call its principal's own permissions allowed.
     WorkKind.EXEC: Permission.WRITE,

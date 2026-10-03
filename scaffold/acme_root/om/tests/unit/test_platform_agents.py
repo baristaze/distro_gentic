@@ -1,9 +1,9 @@
 """The agents a platform ships, over memory: each kind is a profile over the
-one loop; the platform assistant holds no workspace, repository, shell, or
-station tool, and a call to one is refused; it drafts configuration and a
+one loop; the platform assistant holds no workspace, repository, or shell
+tool, and a call to one is refused; it drafts configuration and a
 person applies it; its corpus is what the knowledge map lists for the
-tenant's users and nothing else; and a validation session runs on the
-queue with no model call."""
+tenant's users and nothing else; and a validation session is platform
+work on the queue, run on a fresh executor with no model call."""
 
 import json
 from datetime import timedelta
@@ -37,10 +37,9 @@ from acme.om.context import (
 )
 from acme.om.evidence.impl.ports import WorkProductMemoryImpl
 from acme.om.evidence.rules import policy_key
+from acme.om.evidence.types.record import RunPurpose
 from acme.om.evidence.types.validation import Delivery
 from acme.om.exceptions import NotAuthorized, NotFound, PreconditionFailed, UnsafeConfiguration
-from acme.om.placement.rules import lab_lane
-from acme.om.placement.types.claimant import Claimant, ClaimantKind
 from acme.om.platform_agents import kinds, rules
 from acme.om.platform_agents.catalog import (
     PlatformAgents,
@@ -556,25 +555,28 @@ def test_a_listed_link_that_leads_out_of_the_repository_is_refused(tmp_path: Pat
         read_corpus(root)
 
 
-# Check 4: a validation session runs with no model call.
+# Check 4: a validation session is platform work on the queue, run on a
+# fresh executor with no model call.
+
+HEAD = "c" * 40
+BASE = "b" * 40
 
 
-async def test_a_validation_session_runs_on_the_queue_with_no_model_call(
+async def test_a_validation_session_is_platform_work_that_finishes_with_its_record(
     tmp_path: Path,
 ) -> None:
-    platform = platform_over(tmp_path)
+    executor = ScriptedExecutor(capabilities=frozenset())
+    platform = platform_over(tmp_path, executor=executor)
     # The claim hands work only of a tenant that is there.
     platform.owner, _ = await platform.managers.tenancy.bootstrap(
         RequestContext(request_id=new_id(), app=APP), "Ajax", "ajax", "ann@ajax.test", "Ann"
     )
+    project_id = new_id()
+    policy = make_policy(policy_key(project_id))
+    await platform.managers.evidence.write_policy(platform.owner, policy)
     validations = platform.managers.platform_agents
-    lab = new_id()
     start = ValidationStart(
-        id=new_id(),
-        lab_id=lab,
-        check_name="report.totals",
-        check_version="v1.4.0",
-        parameters={"trials": 30},
+        id=new_id(), project_id=project_id, check_name="unit", head=HEAD, base=BASE
     )
 
     session = await validations.start_validation(platform.owner, start)
@@ -582,30 +584,73 @@ async def test_a_validation_session_runs_on_the_queue_with_no_model_call(
     assert await validations.start_validation(platform.owner, start) == session
     assert session.status is ValidationStatus.QUEUED
     assert [(i.kind, i.lane, i.target_id) for i in items_of(platform)] == [
-        (WorkKind.STATION, lab_lane(lab), session.id)
-    ], "one station item on its lab's lane, and no loop"
-    # The lab's daemon claims it through the control plane and runs the
-    # check; its run is recorded as the execution record every run is.
-    daemon = Claimant(
-        kind=ClaimantKind.DAEMON, id=new_id(), org_id=platform.owner.org_id, lab_id=lab
-    )
-    claimed = await platform.managers.placement.claim_for(
-        RequestContext(request_id=new_id(), app=WORKER), daemon, timedelta(seconds=30)
+        (WorkKind.VALIDATION, "default", session.id)
+    ], "one item on the platform's own lane, and no loop"
+    # The platform's worker claims it, as it claims any of its own work, and
+    # the check runs on the executor.
+    claimed = await platform.managers.work.claim(
+        RequestContext(request_id=new_id(), app=WORKER),
+        "default",
+        (WorkKind.VALIDATION,),
+        "maintenance-1",
+        timedelta(seconds=30),
     )
     assert claimed is not None
     ctx, item = claimed
-    run_id = new_id()
-    finished = await validations.finish_validation(ctx, session.id, run_id)
+    finished = await validations.run_validation(ctx, item.target_id)
     await platform.managers.work.complete(ctx, item)
 
-    assert (finished.status, finished.run_id) == (ValidationStatus.FINISHED, run_id)
-    assert [(i.kind, i.status) for i in items_of(platform)] == [(WorkKind.STATION, WorkStatus.DONE)]
+    (asked,) = executor.requests
+    assert (asked.session_id, asked.version, asked.source) == (session.id, HEAD, BASE)
+    assert ([c.name for c in asked.checks], asked.protected) == (["unit"], policy.protected)
+    (validation,) = await platform.managers.evidence.get_validations(ctx, session.id, 10)
+    (record,) = (await platform.managers.evidence.get_runs(ctx, session.id, None, 10)).items
+    assert (finished.status, finished.run_id) == (ValidationStatus.FINISHED, record.id)
+    assert validation.records == (record.id,)
+    assert (record.executor, record.version, record.purpose) == (
+        executor.name,
+        HEAD,
+        RunPurpose.VALIDATION,
+    ), "the same execution record an agent's validation writes"
+    assert [(i.kind, i.status) for i in items_of(platform)] == [
+        (WorkKind.VALIDATION, WorkStatus.DONE)
+    ]
     assert platform.model_calls() == 0, "no model was called"
-    # It runs its check once: the same run again answers it, another is
-    # refused.
-    assert await validations.finish_validation(ctx, session.id, run_id) == finished
+    # It runs its check once: run again, it runs nothing; finished with
+    # another run, it is refused.
+    assert await validations.run_validation(ctx, session.id) == finished
+    assert len(executor.requests) == 1
     with pytest.raises(PreconditionFailed):
         await validations.finish_validation(ctx, session.id, new_id())
+
+
+async def test_a_validation_session_whose_run_was_kept_finishes_without_running_again(
+    tmp_path: Path,
+) -> None:
+    executor = ScriptedExecutor(capabilities=frozenset())
+    platform = platform_over(tmp_path, executor=executor)
+    project_id = new_id()
+    await platform.managers.evidence.write_policy(
+        platform.owner, make_policy(policy_key(project_id))
+    )
+    validations = platform.managers.platform_agents
+    start = ValidationStart(
+        id=new_id(), project_id=project_id, check_name="unit", head=HEAD, base=BASE
+    )
+    session = await validations.start_validation(platform.owner, start)
+    # A worker that kept the run and died before it finished the session.
+    kept = await platform.managers.evidence.run_check(
+        platform.owner, session.id, project_id, "unit", HEAD, BASE
+    )
+
+    finished = await validations.run_validation(platform.owner, session.id)
+
+    assert finished.run_id == kept.records[0]
+    assert len(executor.requests) == 1, "the retry ran nothing"
+    with pytest.raises(PreconditionFailed, match="declares no check"):
+        await platform.managers.evidence.run_check(
+            platform.owner, new_id(), project_id, "lint", HEAD, BASE
+        )
 
 
 async def test_a_validation_session_is_its_tenants_and_a_reader_starts_none(
@@ -613,7 +658,9 @@ async def test_a_validation_session_is_its_tenants_and_a_reader_starts_none(
 ) -> None:
     platform = platform_over(tmp_path)
     validations = platform.managers.platform_agents
-    start = ValidationStart(id=new_id(), lab_id=new_id(), check_name="smoke", check_version="a1")
+    start = ValidationStart(
+        id=new_id(), project_id=new_id(), check_name="smoke", head=HEAD, base=BASE
+    )
     session = await validations.start_validation(platform.owner, start)
 
     other = platform_over(tmp_path / "other", storage=platform.storage)
