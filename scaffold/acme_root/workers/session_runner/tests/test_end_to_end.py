@@ -720,12 +720,20 @@ async def test_a_step_the_runner_streams_is_read_live_through_the_api_by_its_han
     assert (response["id"], response["text"]) == (live["step_id"], ANSWER)
     after = await stack.client.get("/v1/live", params={"handle": handle})
     assert after.json()["streams"] == []
-    events = await stack.container.managers.events.get_events(person.ctx, 0, 500)
-    changes = [
-        (event.kind, str(event.target_id), event.payload["step_id"])
-        for event in events
-        if event.kind.startswith("watch.stream.")
-    ]
+    # The stream leaves the cache before its completion is written as an
+    # event, so the events are read once both have landed.
+    changes: list[tuple[str, str, Any]] = []
+    deadline = asyncio.get_running_loop().time() + SETTLE_SECONDS
+    while asyncio.get_running_loop().time() < deadline:
+        events = await stack.container.managers.events.get_events(person.ctx, 0, 500)
+        changes = [
+            (event.kind, str(event.target_id), event.payload["step_id"])
+            for event in events
+            if event.kind.startswith("watch.stream.")
+        ]
+        if ("watch.stream.completed", session_id, live["step_id"]) in changes:
+            break
+        await asyncio.sleep(0.05)
     assert changes == [
         ("watch.stream.opened", session_id, live["step_id"]),
         ("watch.stream.completed", session_id, live["step_id"]),
