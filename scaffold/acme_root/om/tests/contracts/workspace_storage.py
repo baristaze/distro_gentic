@@ -1,5 +1,6 @@
-"""The workspace storage contract: each session's pinned workspace and each
-project's egress allowlist. The cases named in `CROSS_TENANT_CASES` are the
+"""The workspace storage contract: each session's pinned workspace, each
+project's egress allowlist, and the record of a project's fetch
+credential. The cases named in `CROSS_TENANT_CASES` are the
 tenant fence's evidence: each one presents another tenant's identifier and
 asserts that nothing is found and nothing changes."""
 
@@ -12,17 +13,23 @@ from acme.om.base import new_id, utcnow
 from acme.om.exceptions import PreconditionFailed, UniqueKeyTaken
 from acme.om.outbox.types.row import OutboxRow
 from acme.om.workspaces.storage import WorkspaceStorageInterface
+from acme.om.workspaces.types.credential import RepositoryCredential
 from acme.om.workspaces.types.egress import EgressAllowlist, EgressMethod, EgressRule
 from acme.om.workspaces.types.workspace import SessionWorkspace
 
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
         "create_allowlist",
+        "create_credential",
         "create_workspace",
+        "purge_credentials",
         "purge_tenant",
         "read_allowlist",
+        "read_credential",
+        "read_credentials",
         "read_workspace",
         "write_allowlist",
+        "write_credential",
         "write_workspace",
     }
 )
@@ -123,6 +130,8 @@ class WorkspaceStorageContract:
                 "branch_seen": True,
                 "snapshot_ref": f"refs/snapshots/{workspace.branch}/1",
                 "notice": "told",
+                "push_digest": "d" * 64,
+                "push_expires_at": utcnow(),
                 "version": 2,
             }
         )
@@ -232,3 +241,90 @@ class WorkspaceStorageContract:
         assert await storage.purge_tenant(gone, 10) == 0
         assert await storage.read_workspace(kept, stays.id) == stays
         assert await storage.read_allowlist(kept, listed.project_id) == listed
+
+
+def make_credential(project_id: UUID | None = None) -> RepositoryCredential:
+    now, actor = utcnow(), new_id()
+    return RepositoryCredential(
+        id=project_id or new_id(),
+        created_at=now,
+        updated_at=now,
+        created_by=actor,
+        updated_by=actor,
+    )
+
+
+class RepositoryCredentialContract:
+    """The record of a project's fetch credential: one a project, under the
+    project's id, and the tenant's alone."""
+
+    @pytest.fixture
+    def storage(self) -> WorkspaceStorageInterface:
+        raise NotImplementedError("the concrete test class provides the storage")
+
+    async def test_a_credential_round_trips_once(self, storage: WorkspaceStorageInterface) -> None:
+        org = new_id()
+        record = make_credential()
+        assert await storage.read_credential(org, record.id) is None
+        assert await storage.create_credential(org, record)
+        assert not await storage.create_credential(org, record.model_copy(update={"version": 5}))
+        assert await storage.read_credential(org, record.id) == record
+        assert await storage.read_credentials(org, 10) == [record]
+
+    async def test_create_credential_under_another_tenant_is_not_read_here(
+        self, storage: WorkspaceStorageInterface
+    ) -> None:
+        org_a, org_b = new_id(), new_id()
+        record = make_credential()
+        assert await storage.create_credential(org_a, record)
+        assert not await storage.create_credential(org_b, record)
+        assert await storage.read_credential(org_b, record.id) is None
+
+    async def test_read_credential_of_another_tenant_finds_nothing(
+        self, storage: WorkspaceStorageInterface
+    ) -> None:
+        record = make_credential()
+        assert await storage.create_credential(new_id(), record)
+        assert await storage.read_credential(new_id(), record.id) is None
+
+    async def test_read_credentials_of_another_tenant_finds_nothing(
+        self, storage: WorkspaceStorageInterface
+    ) -> None:
+        assert await storage.create_credential(new_id(), make_credential())
+        assert await storage.read_credentials(new_id(), 10) == []
+
+    async def test_write_credential_is_a_compare_and_set(
+        self, storage: WorkspaceStorageInterface
+    ) -> None:
+        org = new_id()
+        record = make_credential()
+        assert await storage.create_credential(org, record)
+        rotated = record.model_copy(update={"version": 2, "updated_by": new_id()})
+        await storage.write_credential(org, rotated, 1)
+        assert await storage.read_credential(org, record.id) == rotated
+        with pytest.raises(PreconditionFailed):
+            await storage.write_credential(org, rotated.model_copy(update={"version": 3}), 1)
+        assert await storage.read_credential(org, record.id) == rotated
+
+    async def test_write_credential_of_another_tenant_changes_nothing(
+        self, storage: WorkspaceStorageInterface
+    ) -> None:
+        org_a, org_b = new_id(), new_id()
+        record = make_credential()
+        assert await storage.create_credential(org_a, record)
+        with pytest.raises(PreconditionFailed):
+            await storage.write_credential(org_b, record.model_copy(update={"version": 2}), 1)
+        assert await storage.read_credential(org_a, record.id) == record
+
+    async def test_purge_credentials_takes_the_named_records_of_the_tenant_alone(
+        self, storage: WorkspaceStorageInterface
+    ) -> None:
+        gone, kept = new_id(), new_id()
+        first, second, theirs = make_credential(), make_credential(), make_credential()
+        assert await storage.create_credential(gone, first)
+        assert await storage.create_credential(gone, second)
+        assert await storage.create_credential(kept, theirs)
+        assert await storage.purge_credentials(gone, [first.id, theirs.id]) == 1
+        assert await storage.purge_credentials(gone, []) == 0
+        assert await storage.read_credentials(gone, 10) == [second], "only the records named"
+        assert await storage.read_credential(kept, theirs.id) == theirs
