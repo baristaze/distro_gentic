@@ -43,6 +43,51 @@ export const keys = {
   projects: {
     all: ["project"] as const,
     list: (limit: number) => ["project", "list", limit] as const,
+    one: (id: string) => ["project", id] as const,
+  },
+  // The records below are named by no push, so each is read on its own
+  // clock and again after a write of the screen's own.
+  // The tenant's own provider keys: records only, never a value.
+  providerKeys: {
+    all: ["provider_key"] as const,
+    list: (limit: number) => ["provider_key", "list", limit] as const,
+  },
+  // The tenant's part of the model matrix: what it may choose, and what it chose.
+  matrix: {
+    all: ["fill_choice"] as const,
+    options: ["fill_choice", "options"] as const,
+    choices: ["fill_choice", "list"] as const,
+  },
+  automations: {
+    all: ["automation"] as const,
+    list: (limit: number) => ["automation", "list", limit] as const,
+    one: (id: string) => ["automation", id] as const,
+    principal: ["automation", "principal"] as const,
+  },
+  // A playbook is read by its name, at its latest version.
+  playbooks: {
+    all: ["playbook"] as const,
+    one: (name: string) => ["playbook", name] as const,
+  },
+  knowledge: {
+    all: ["knowledge"] as const,
+    list: (status: string, limit: number) => ["knowledge", "list", status, limit] as const,
+    one: (id: string) => ["knowledge", id] as const,
+  },
+  // The calls held for a person across the org's sessions.
+  approvals: {
+    all: ["approval"] as const,
+    list: (limit: number) => ["approval", "list", limit] as const,
+  },
+  // The org's events, oldest first, as the audit reads them.
+  audit: {
+    all: ["audit"] as const,
+    list: (limit: number) => ["audit", "list", limit] as const,
+  },
+  // Each budget with what its current window holds and spent.
+  usage: {
+    all: ["usage"] as const,
+    list: (limit: number) => ["usage", "list", limit] as const,
   },
   // A tenant's agent sessions and every read of one. A push that names a
   // session (its record, its stream, a hand-over) reaches that session's

@@ -45,7 +45,7 @@ const path = (id: string) => `/v1/agent-sessions/${encodeURIComponent(id)}`;
 /** Follows the pages to the end, as the member list does: a page that
  * failed is not asked for again on its own, and the next invalidation
  * starts the walk over. */
-function useWalk(query: {
+export function useWalk(query: {
   hasNextPage: boolean;
   isFetchingNextPage: boolean;
   isFetchNextPageError: boolean;
@@ -72,6 +72,22 @@ export function useAgentSessions(status: SessionStatus | null) {
     },
   });
   return { ...query, data: query.data?.pages.flatMap((page) => page.items) };
+}
+
+/** Every parked session of the org, page after page: a page may hold none
+ * parked for a reason a reader counts while later pages do. */
+export function useParkedSessions() {
+  const query = useInfiniteQuery({
+    queryKey: keys.agentSessions.list("parked", WHOLE_PAGE_SIZE),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last: AgentSessionPageView) => last.next_cursor,
+    queryFn: ({ pageParam, signal }) => {
+      const cursor = pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : "";
+      return api.get<AgentSessionPageView>(`/v1/agent-sessions?status=parked&limit=${WHOLE_PAGE_SIZE}${cursor}`, { signal });
+    },
+  });
+  const walking = useWalk(query);
+  return { ...query, data: query.data?.pages.flatMap((page) => page.items), isPending: query.isPending || walking };
 }
 
 export function useAgentSession(id: string) {
