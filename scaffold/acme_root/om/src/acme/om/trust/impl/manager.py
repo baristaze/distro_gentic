@@ -19,7 +19,6 @@ from acme.om.events.manager import audit_event
 from acme.om.exceptions import Conflict, NotFound, UniqueKeyTaken, ValidationFailed
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import OutboxRow, versioned_row
-from acme.om.projects.policies import SessionProjectsInterface
 from acme.om.steps import StepsManagerInterface
 from acme.om.steps.types.header import ParkReason, ToolRequestHeader
 from acme.om.steps.types.step import Step
@@ -27,14 +26,15 @@ from acme.om.tenancy import TenancyManagerInterface
 from acme.om.trust.exceptions import SecretCrossesWall
 from acme.om.trust.keys import KeyProbeInterface
 from acme.om.trust.manager import TrustManagerInterface
+from acme.om.trust.owners import SecretOwners
 from acme.om.trust.placement import PlacementInterface
 from acme.om.trust.rules import call_audit, first_crossing
 from acme.om.trust.storage import TrustStorageInterface
 from acme.om.trust.types.identities import CallAudit
 from acme.om.trust.types.provider_key import KeyStatus, ProviderKey, key_secret_name
 from acme.om.trust.types.secret import (
+    PROJECT,
     SecretDeclaration,
-    SecretOwnerKind,
     SecretStore,
     kept_as,
 )
@@ -73,7 +73,7 @@ class TrustManagerImpl(TrustManagerInterface):
         relay: OutboxRelayInterface,
         secrets: SecretsInterface,
         placement: PlacementInterface,
-        projects: SessionProjectsInterface,
+        owners: SecretOwners,
         probe: KeyProbeInterface,
         options: TrustOptions,
         clock: Callable[[], datetime] = utcnow,
@@ -87,7 +87,7 @@ class TrustManagerImpl(TrustManagerInterface):
         self._relay = relay
         self._secrets = secrets
         self._placement = placement
-        self._projects = projects
+        self._owners = owners
         self._probe = probe
         self._options = options
         self._clock = clock
@@ -136,10 +136,11 @@ class TrustManagerImpl(TrustManagerInterface):
         self, ctx: TenantContext, declaration: SecretDeclaration
     ) -> SecretDeclaration:
         ctx.require(Permission.MANAGE_MEMBERS)
-        if declaration.owner_kind is SecretOwnerKind.PROJECT and not await self._projects.holds(
-            ctx, declaration.owner_id
-        ):
-            raise NotFound(f"no project {declaration.owner_id} of this tenant")
+        # A secret is declared on an owner of a registered kind the tenant
+        # holds; a kind nobody registered owns nothing.
+        owner = self._owners.get(declaration.owner_kind)
+        if owner is None or not await owner.holds(ctx, declaration.owner_id):
+            raise NotFound(f"no {declaration.owner_kind} {declaration.owner_id} of this tenant")
         now = self._clock()
         made = SecretDeclaration.model_validate(
             {
@@ -174,14 +175,18 @@ class TrustManagerImpl(TrustManagerInterface):
         return tuple(await self._storage.read_declarations(ctx.org_id, after, bounded))
 
     async def put_secret(
-        self, ctx: TenantContext, project_id: UUID, name: str, value: str
+        self,
+        ctx: TenantContext,
+        project_id: UUID,
+        name: str,
+        value: str,
+        *,
+        owner_kind: str = PROJECT,
     ) -> SecretDeclaration:
         ctx.require(Permission.MANAGE_MEMBERS)
-        declaration = await self._storage.read_declaration(
-            ctx.org_id, SecretOwnerKind.PROJECT, project_id, name
-        )
+        declaration = await self._storage.read_declaration(ctx.org_id, owner_kind, project_id, name)
         if declaration is None:
-            raise NotFound(f"no secret named {name} is declared on project {project_id}")
+            raise NotFound(f"no secret named {name} is declared on {owner_kind} {project_id}")
         if declaration.store is not SecretStore.CLOUD:
             raise SecretCrossesWall(
                 f"{name} is held inside a customer's wall; its host's store takes its value"
@@ -196,13 +201,18 @@ class TrustManagerImpl(TrustManagerInterface):
         if not uses:
             return {}
         inside = await self._placement.inside_wall(ctx.org_id, session_id)
-        project_id = await self._projects.project_of(ctx, session_id)
+        # A name means what the first owner the session is placed on declares
+        # it as, in the registry's order: never what an owner it is not
+        # placed on declares.
+        placed = await self._owners.placed(ctx, session_id)
         declared: dict[str, SecretDeclaration] = {}
         for use in uses:
-            found = await self._storage.resolve_declaration(ctx.org_id, use.name, project_id)
-            if found is not None:
-                declared[use.name] = found
-        refusal = first_crossing(uses, declared, inside_wall=inside, project_id=project_id)
+            for kind, owner_id in placed.items():
+                found = await self._storage.read_declaration(ctx.org_id, kind, owner_id, use.name)
+                if found is not None:
+                    declared[use.name] = found
+                    break
+        refusal = first_crossing(uses, declared, inside_wall=inside, placed=placed)
         if refusal is not None:
             raise SecretCrossesWall(refusal)
         # A secret held on a host is resolved there, by its name.
