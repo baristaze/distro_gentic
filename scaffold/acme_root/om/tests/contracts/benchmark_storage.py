@@ -64,7 +64,7 @@ def make_trials(
     candidate: Sequence[int],
     baseline: Sequence[int],
     *,
-    station: str = "station-1",
+    executor: str = "executor-1",
     order: Sequence[Arm] | None = None,
     cost_micros: int = 120_000,
 ) -> BenchmarkTrials:
@@ -80,7 +80,7 @@ def make_trials(
             Trial(
                 arm=arm,
                 session_id=session,
-                station=station,
+                executor=executor,
                 started_at=start + timedelta(minutes=at),
                 verdict=judged(session, broken[arm].pop(0)),
                 cost_micros=cost_micros,

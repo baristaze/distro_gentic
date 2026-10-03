@@ -202,7 +202,7 @@ async def whole(run: ScriptedRun, *changed: str) -> Result:
 
 
 async def judged_trials(parts: EvidenceParts, ctx: TenantContext, pairs: int) -> tuple[Trial, ...]:
-    """Trials of both arms on one station, in the schedule's order: each a
+    """Trials of both arms on one executor, in the schedule's order: each a
     scripted session whose chain is whole, judged by the harness. Scripted
     sessions spend nothing, so each trial costs nothing."""
     trials: list[Trial] = []
@@ -213,7 +213,7 @@ async def judged_trials(parts: EvidenceParts, ctx: TenantContext, pairs: int) ->
             Trial(
                 arm=arm,
                 session_id=run.session,
-                station=parts.executor.name,
+                executor=parts.executor.name,
                 started_at=verdict.created_at,
                 verdict=verdict,
                 cost_micros=0,
