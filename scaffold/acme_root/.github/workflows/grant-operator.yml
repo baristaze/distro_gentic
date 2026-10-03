@@ -20,6 +20,12 @@
 # `uv run acme-ops token --env <env> --identity provisioner` copies the
 # provisioner's into its own file, `<env>.provisioner.env` beside the env file.
 #
+# `content` grants or revokes an operator's opening of one org's session
+# content, by the org's id in `content_org` (ADR 2010): `read` reads a
+# session's shape in every org, and its content in none without a grant. A
+# grant lasts an hour, and the org's own stream holds it, its end, and every
+# opening.
+#
 # The email is masked in the log before any step can print it: a public
 # repository's logs are public. The task definition's name is the root's
 # `grant_task_definition_arn` output, and scripts/cloud_grant.sh runs it.
@@ -58,6 +64,18 @@ on:
         type: choice
         options: [none, provisioner, smoke]
         default: none
+      content:
+        description: >-
+          Grant or revoke the identity's opening of one org's session content,
+          the org `content_org` names. A grant lasts an hour.
+        required: true
+        type: choice
+        options: [none, grant, revoke]
+        default: none
+      content_org:
+        description: The id of the org whose session content `content` names.
+        required: false
+        default: ""
 
 permissions:
   id-token: write
@@ -92,6 +110,8 @@ jobs:
           PERMISSION: ${{ inputs.permission }}
           DISABLE: ${{ inputs.disable }}
           MINT_TOKEN: ${{ inputs.mint_token }}
+          CONTENT: ${{ inputs.content }}
+          CONTENT_ORG: ${{ inputs.content_org }}
         run: |
           case "$ENVIRONMENT:$REF" in
             staging:refs/heads/main|production:refs/heads/release) ;;
@@ -101,8 +121,17 @@ jobs:
             echo "::error::disable takes the entry off; it goes with neither a permission nor a mint"
             exit 1
           fi
-          if [ "$DISABLE" != "true" ] && [ "$PERMISSION" = "none" ] && [ "$MINT_TOKEN" = "none" ]; then
-            echo "::error::nothing asked: name a permission, disable, or a token to mint"
+          if [ "$CONTENT" != "none" ]; then
+            if [ "$DISABLE" = "true" ] || [ "$PERMISSION" != "none" ] || [ "$MINT_TOKEN" != "none" ]; then
+              echo "::error::a content grant or revoke goes alone, with neither a permission, a disable, nor a mint"
+              exit 1
+            fi
+            if ! printf '%s' "$CONTENT_ORG" | grep -Eq '^[0-9a-fA-F-]{32,36}$'; then
+              echo "::error::content names the org by its id in content_org"
+              exit 1
+            fi
+          elif [ "$DISABLE" != "true" ] && [ "$PERMISSION" = "none" ] && [ "$MINT_TOKEN" = "none" ]; then
+            echo "::error::nothing asked: name a permission, disable, a token to mint, or a content grant"
             exit 1
           fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -157,3 +186,14 @@ jobs:
         run: |
           scripts/cloud_grant.sh "$ROOT" --email "$EMAIL" --mint-token "$MINT_TOKEN"
           echo "A \`$MINT_TOKEN\` token is in \`acme-$ENVIRONMENT-$MINT_TOKEN-token\`; it expires within the hour." >> "$GITHUB_STEP_SUMMARY"
+      - name: grant or revoke an operator's opening of an org's session content
+        if: inputs.content != 'none'
+        env:
+          ROOT: ${{ steps.root.outputs.dir }}
+          EMAIL: ${{ inputs.email }}
+          CONTENT: ${{ inputs.content }}
+          CONTENT_ORG: ${{ inputs.content_org }}
+          ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          scripts/cloud_grant.sh "$ROOT" --email "$EMAIL" "--$CONTENT-content" "$CONTENT_ORG"
+          echo "An operator's content grant in an org of \`$ENVIRONMENT\`: $CONTENT. The org's own stream holds it." >> "$GITHUB_STEP_SUMMARY"

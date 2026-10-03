@@ -3,7 +3,8 @@
 # scripts/dev.sh arrive by remote write from the collector
 # (otel-collector/collector.yml), under the same job names with
 # runs_in: host. Whichever of the two is not running shows as down
-# (up == 0), which is expected.
+# (up == 0), which is expected. The session runner has no container, so
+# its job, session_runner, is the collector's alone.
 global:
   scrape_interval: 15s
   evaluation_interval: 15s

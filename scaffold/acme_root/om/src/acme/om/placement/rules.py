@@ -1,8 +1,10 @@
 """Pure rules of the placement namespace: the lane each kind of work goes
 to, the lanes and kinds a claimant's identity claims, and the fair share's
-guard. Values in, values out; no clock, no storage, no settings."""
+guard, and the bounded labels of the platform's gauges. Values in, values
+out; no clock, no storage, no settings."""
 
 from collections.abc import Mapping
+from datetime import timedelta
 from uuid import UUID
 
 from acme.om.placement.types.claimant import Claimant, ClaimantKind
@@ -39,6 +41,36 @@ def own_lane(org_id: UUID) -> str:
 
 def loop_lane(org_id: UUID, share: FairShare) -> str:
     return own_lane(org_id) if share.own_lane else tier_lane(share.plan_tier)
+
+
+OWN_LANES = "(own)"
+"""The label the depth gauge gives every tenant's own lane together: a lane
+of one tenant is that tenant's view, an operator-plane read, never a label.
+No plan tier is spelled so."""
+
+
+def tier_label(lane: str) -> str | None:
+    """The plan tier a loop lane's depth is labelled with: the tier of a
+    tier's lane, and `OWN_LANES` for a tenant's own; None for a lane that is
+    no loop lane."""
+    if not lane.startswith(LOOP_LANE_PREFIX):
+        return None
+    rest = lane.removeprefix(LOOP_LANE_PREFIX)
+    return OWN_LANES if rest.startswith("org:") else rest
+
+
+PARK_AGES: tuple[tuple[str, timedelta], ...] = (
+    ("under_1h", timedelta(hours=1)),
+    ("under_1d", timedelta(days=1)),
+)
+"""The age labels of the parks gauge, by how long ago a parked session last
+changed, and the cut each one ends at; past the last cut, `PARK_OLDEST`."""
+PARK_OLDEST = "over_1d"
+
+
+def park_age_label(passed: int) -> str:
+    """The label of a session that is past `passed` of the cuts."""
+    return PARK_AGES[passed][0] if passed < len(PARK_AGES) else PARK_OLDEST
 
 
 def host_lane(host_id: UUID) -> str:

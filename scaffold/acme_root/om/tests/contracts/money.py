@@ -90,7 +90,12 @@ def money_over(
             options or MoneyGateOptions(),
             clock,
         )
-        calls = MoneyCallGateImpl(gate, book, managers.agent_sessions)
+        calls = MoneyCallGateImpl(
+            gate,
+            book,
+            managers.agent_sessions,
+            version=None if models_layer is None else models_layer.version,
+        )
         built.append((gate, calls))
         return calls
 

@@ -179,6 +179,20 @@ app, and `main.py` is the `acme-api` command: `serve`, `migrate`,
   lists their own live tokens and revokes one by its id, refused from its
   next request; another operator's is `404` (`GET /v1/admin/me/tokens`,
   `DELETE /v1/admin/me/tokens/{token_id}`, ADR 0068).
+- **The platform's operator routes.** Beside the plane's own, each
+  naming the tenant: an operator who may write sets a tenant's fair
+  share, its plan tier, its own lane, and how many of its loops run at
+  once, a new version each time, on the tenant's own record
+  (`PUT /v1/admin/orgs/{org_id}/share`). An operator who may read reads
+  why a session is or is not moving, and why a host takes no work, as
+  ids, counts, times, and states
+  (`/v1/admin/orgs/{org_id}/sessions/{session_id}/standing`,
+  `/v1/admin/orgs/{org_id}/hosts/{host_id}/standing`), and a session's
+  shape, never what it says (`.../sessions/{session_id}/shape`). Its
+  content opens only under a grant the grant job wrote in that tenant,
+  `403 content_not_granted` otherwise, and the tenant's stream names the
+  operator at every opening (`.../sessions/{session_id}/content`,
+  ADR 2010).
 - **Operational.** Liveness (`/healthz`, the process alone),
   readiness (`/readyz`, asks the database under a deadline shorter
   than the probe's interval), metrics (`/metrics`), and the OpenAPI
@@ -283,7 +297,7 @@ container the server does.
 | `serve` | Runs the process. |
 | `migrate` | Applies every role's migration chain (`--all`) or one role's. Idempotent per revision. `migrate ensure-logins` makes the database logins, as the master. |
 | `bootstrap` | Seeds a fresh local environment with one org and its owner; `--operator` puts the owner on the operator allowlist with write. Local only, like every seed. |
-| `grant-operator` | The grant job: `--email <e> --permission read\|write` puts an identity on the operator allowlist, `--email <e> --disable` takes it off, and `--email <e> --mint-token provisioner\|smoke [--expires-in N]` mints that identity's operator token into the secret store as `acme-<env>-<holder>-token`, never printed in the cloud. On a local database it prints the token instead, and `--mint-token operator` mints the local read operator's `read` token, which `make seed` writes into `~/.config/acme/ops/local.env`; a cloud refuses it. An operator signs up first; the platform's own identities (`@platform.acme.invalid`) are made by their first grant. |
+| `grant-operator` | The grant job: `--email <e> --permission read\|write` puts an identity on the operator allowlist, `--email <e> --disable` takes it off, `--email <e> --grant-content <org_id> [--expires-in N]` opens that org's session content to the operator for an hour or less, at most eight, and `--email <e> --revoke-content <org_id>` ends it, each on the org's own record; and `--email <e> --mint-token provisioner\|smoke [--expires-in N]` mints that identity's operator token into the secret store as `acme-<env>-<holder>-token`, never printed in the cloud. On a local database it prints the token instead, and `--mint-token operator` mints the local read operator's `read` token, which `make seed` writes into `~/.config/acme/ops/local.env`; a cloud refuses it. An operator signs up first; the platform's own identities (`@platform.acme.invalid`) are made by their first grant. |
 | `add-member` | Seeds a person into an existing org; a no-op for a member. |
 | `openapi` | Emits the OpenAPI document the clients are generated from. |
 

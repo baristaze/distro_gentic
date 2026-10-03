@@ -152,6 +152,14 @@ class TenancyManagerInterface(ABC):
         ...
 
     @abstractmethod
+    async def operator_identity(self, rctx: RequestContext, email: str) -> Identity:
+        """Platform-internal: the grant job's. The identity that holds the
+        email, read and never written, for a grant that names an operator by
+        it. NotFound when no identity holds it or it is off the allowlist, so
+        a grant never reaches someone the plane does not admit."""
+        ...
+
+    @abstractmethod
     async def disable_operator(self, rctx: RequestContext, email: str) -> Identity:
         """Platform-internal: the grant job's. Takes the identity off the
         allowlist, audited, and ends every operator token and every sign-in

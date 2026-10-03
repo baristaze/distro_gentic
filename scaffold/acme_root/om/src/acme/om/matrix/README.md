@@ -48,6 +48,10 @@ of](../../../../README.md).
   the session that met it.
 - **Choose.** A tenant on its own keys chooses a fill for a model role,
   or drops its choice.
+- **Count.** Each settled model call counts its tokens and its spend
+  under the version its session is pinned to, a published one, so the
+  operator's dashboard reads spend by version; a session pinned to none
+  counts under `none`.
 
 ## The rules
 

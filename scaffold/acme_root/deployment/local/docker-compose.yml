@@ -158,12 +158,12 @@ services:
       - "127.0.0.1:${ACME_PROMETHEUS_PORT:-59090}:9090"
 
   # The host processes' collector, as the cloud's sidecar: it scrapes the api
-  # (ACME_COLLECTOR_SCRAPE_PORT, 8000 unless a run says otherwise) and the
-  # worker (9464) that scripts/dev.sh binds to 127.0.0.1, and remote-writes
-  # into Prometheus. These settings place it on the compose network; on Linux
-  # docker-compose.linux.yml moves it onto the host's network, the one place a
-  # loopback listener answers (the Makefile adds that file there). It
-  # publishes no port.
+  # (ACME_COLLECTOR_SCRAPE_PORT, 8000 unless a run says otherwise), the
+  # worker (9464), and the session runner (9465) that scripts/dev.sh binds
+  # to 127.0.0.1, and remote-writes into Prometheus. These settings place it
+  # on the compose network; on Linux docker-compose.linux.yml moves it onto
+  # the host's network, the one place a loopback listener answers (the
+  # Makefile adds that file there). It publishes no port.
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.161.0
     profiles: [devx]

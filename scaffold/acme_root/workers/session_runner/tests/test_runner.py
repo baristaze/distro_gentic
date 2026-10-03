@@ -11,6 +11,7 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
+from prometheus_client import REGISTRY
 from runner_support import ABSENT, SONNET, answers
 
 from acme.infra.impl.local import InfraLocalImpl
@@ -62,6 +63,7 @@ from acme.workers.session_runner.runs import LoopHandlerImpl
 from acme.workers.session_runner.settings import SessionRunnerSettings
 
 ENV_EXAMPLE = Path(__file__).resolve().parents[3] / ".env.example"
+COLLECTOR = ENV_EXAMPLE.parent / "deployment" / "local" / "otel-collector" / "collector.yml"
 APP = AppContext(type=AppType.PORTAL, version="portal@test")
 
 
@@ -264,6 +266,19 @@ def test_every_knob_of_the_runner_is_in_the_example_env() -> None:
         assert re.search(rf"^#?ACME_{name.upper()}=", text, re.MULTILINE), name
 
 
+def test_the_local_collector_scrapes_the_runner_on_its_metrics_port() -> None:
+    """The runner runs only as a host process, and what it exports (each
+    model call's tokens and spend, each outage report) reaches a dashboard
+    only through the collector's job for it."""
+    port = SessionRunnerSettings.model_fields["runner_metrics_port"].default
+    job = re.search(
+        r"- job_name: session_runner\n(?:\s+.*\n)*?\s+- targets: \[\"([^\"]+)\"\]",
+        COLLECTOR.read_text(),
+    )
+    assert job is not None, "the collector has no session_runner job"
+    assert job[1] == f"${{env:ACME_COLLECTOR_SCRAPE_HOST}}:{port}", job[1]
+
+
 def runner_over(tmp_path: Path) -> RunnerContainer:
     providers = scripted_model_providers()
     return RunnerContainer.over(
@@ -322,6 +337,45 @@ async def test_the_runner_claims_a_woken_sessions_loop_and_runs_it_to_its_end(
         StepType.LOOP_ENDED,
     ]
     assert page.items[-1].header.outcome is LoopOutcome.SUCCEEDED  # pyright: ignore[reportAttributeAccessIssue]
+
+
+def counted(name: str, **labels: str) -> float:
+    return REGISTRY.get_sample_value(name, labels) or 0.0
+
+
+async def test_a_call_the_runner_settles_counts_its_tokens_and_its_spend(tmp_path: Path) -> None:
+    """The runner's root wires the budgets' gate, the one every call settles
+    through, and that settle counts the call: its tokens by kind and its
+    spend, under `none`, since no matrix pins a session of this root."""
+    container, owner = await signed_in(tmp_path)
+    twin = container.integrations.get_model_providers().get(ProviderName.ANTHROPIC)
+    twin.add(answers("It drops it when the grip is released early."))  # pyright: ignore[reportAttributeAccessIssue]
+    before = (
+        counted("acme_model_tokens_total", matrix_version="none", kind="input"),
+        counted("acme_model_tokens_total", matrix_version="none", kind="output"),
+        counted("acme_model_spend_micros_total", matrix_version="none"),
+    )
+    session = await container.managers.agents.start_session(
+        owner, Start(id=new_id(), kind="assistant", title="the dropped object")
+    )
+    said = message_step(new_id(), utcnow(), session.id, owner, "Why does it drop the object?")
+    await container.managers.agent_sessions.receive(owner, session.id, [said])
+    runner = build_runner(container)
+    running = asyncio.create_task(runner.run())
+    try:
+        assert (await settled(container, owner, session.id)).status is SessionStatus.IDLE
+    finally:
+        runner.stop()
+        await running
+
+    tokens_in, tokens_out, spend = before
+    assert (
+        counted("acme_model_tokens_total", matrix_version="none", kind="input") == tokens_in + 160
+    )
+    assert (
+        counted("acme_model_tokens_total", matrix_version="none", kind="output") == tokens_out + 20
+    )
+    assert counted("acme_model_spend_micros_total", matrix_version="none") > spend
 
 
 class Nothing(ToolInput):

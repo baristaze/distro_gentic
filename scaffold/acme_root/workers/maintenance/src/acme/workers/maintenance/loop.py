@@ -24,9 +24,12 @@ from opentelemetry.trace import Span, SpanKind, Status, StatusCode
 
 from acme.infra.cache import CacheInterface
 from acme.infra.observability import (
+    HOSTS,
+    LOOPS_READY,
     OUTBOX_FAILED_RECENTLY,
     OUTBOX_OLDEST_PENDING_SECONDS,
     OUTCOMES,
+    SESSIONS_PARKED,
     SWEEP_SECONDS,
     WORK_FAILED_RECENTLY,
     WORK_OLDEST_READY_SECONDS,
@@ -42,6 +45,7 @@ from acme.om.base import EMPTY_UUID, Platform, new_id
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
 from acme.om.exceptions import LeaseLost, NotFound
 from acme.om.outbox import OutboxRelayInterface
+from acme.om.placement.types.standing import FleetCounts
 from acme.om.work import WorkManagerInterface
 from acme.om.work.types.handler import WorkHandlerInterface, WorkParked, WorkRefused
 from acme.om.work.types.work_item import WorkItem, WorkKind
@@ -74,6 +78,12 @@ TallyStep = Callable[[], Awaitable[object]]
 """The count of the platform's size across every tenant, kept as the tally the
 operator plane reads (`TenancyOperatorManagerInterface.tally_size`); it runs
 once every `LoopOptions.tally_interval`, not every pass."""
+
+
+FleetStep = Callable[[], Awaitable[FleetCounts]]
+"""The read of the platform's signals across every tenant, each by bounded
+labels (`PlacementOperatorManagerInterface.fleet_counts`): the gauges the
+operator dashboard draws, set once a pass."""
 
 
 class LoopOptions(Platform):
@@ -128,6 +138,7 @@ class WorkerLoop:
         across: Mapping[str, AcrossStep] | None = None,
         across_batches: Mapping[str, int] | None = None,
         tally: TallyStep | None = None,
+        fleet: FleetStep | None = None,
         topics: TopicsInterface,
         liveness: CacheInterface,
         options: LoopOptions,
@@ -141,6 +152,7 @@ class WorkerLoop:
         # by name: what it returns is held against its own batch.
         self._across_batches = dict(across_batches or {})
         self._tally_step = tally
+        self._fleet_step = fleet
         self._handlers = handlers
         self._topics = topics
         self._liveness = liveness
@@ -573,6 +585,7 @@ class WorkerLoop:
             log.exception("sweep: work item purge failed")
         await self._tally()
         gauges = await self._gauges()
+        await self._fleet()
         self.sweeps += 1
         seconds = clock() - started
         SWEEP_SECONDS.observe(seconds)
@@ -640,6 +653,27 @@ class WorkerLoop:
             gauge.set(value)
             found[name] = value
         return found
+
+    async def _fleet(self) -> None:
+        """The platform's gauges, one read across every tenant: each is
+        cleared and set whole, so a plan tier no loop waits on leaves the
+        dashboard. A read that fails leaves every gauge as it was."""
+        if self._fleet_step is None:
+            return
+        try:
+            counts = await self._fleet_step()
+        except Exception:
+            log.exception("sweep: the read of the platform's signals failed")
+            return
+        series = (
+            (SESSIONS_PARKED, counts.parked),
+            (LOOPS_READY, counts.loops_ready),
+            (HOSTS, counts.hosts),
+        )
+        for gauge, found in series:
+            gauge.clear()
+            for count in found:
+                gauge.labels(*count.labels).set(count.value)
 
     async def _oldest_ready(self) -> int:
         return int((await self._work.oldest_ready_age()).total_seconds())
