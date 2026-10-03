@@ -139,6 +139,34 @@ class ClaimRequest(BaseModel):
     exec_version: Annotated[int, Field(ge=1, title='Exec Version')]
 
 
+class ClaimantEnrollRequest(BaseModel):
+    """
+    A claimant's name, beside its enrollment token. The kind and the pool
+    are the token's.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    name: Annotated[str, Field(max_length=64, min_length=1, title='Name')]
+
+
+class Error(RootModel[str]):
+    root: Annotated[str, Field(max_length=500, min_length=1, title='Error')]
+
+
+class ClaimantView(BaseModel):
+    """
+    A claimant as its owner reads it.
+    """
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    id: Annotated[UUID, Field(title='Id')]
+    kind: Annotated[str, Field(title='Kind')]
+    last_seen_at: Annotated[AwareDatetime, Field(title='Last Seen At')]
+    name: Annotated[str, Field(title='Name')]
+    pool_id: Annotated[UUID, Field(title='Pool Id')]
+    revoked_at: Annotated[AwareDatetime | None, Field(title='Revoked At')]
+
+
 class ClaimedWorkView(BaseModel):
     """
     One item a host was handed, under a lease, as `exec` work of
@@ -461,6 +489,7 @@ class EnrollmentTokenView(BaseModel):
     created_by: Annotated[UUID, Field(title='Created By')]
     expires_at: Annotated[AwareDatetime, Field(title='Expires At')]
     id: Annotated[UUID, Field(title='Id')]
+    kind: Annotated[str, Field(title='Kind')]
     pool_id: Annotated[UUID, Field(title='Pool Id')]
     revoked_at: Annotated[AwareDatetime | None, Field(title='Revoked At')]
 
@@ -525,6 +554,16 @@ class ExecState(StrEnum):
     running = 'running'
     done = 'done'
     interrupted = 'interrupted'
+
+
+class ExtendLeaseRequest(BaseModel):
+    """
+    The claim token of the item whose lease the claimant renews.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    claim_token: Annotated[UUID, Field(title='Claim Token')]
 
 
 class FetchCredentialRequest(BaseModel):
@@ -700,6 +739,31 @@ class IsolationMode(StrEnum):
     directory = 'directory'
 
 
+class IssueEnrollmentTokenRequest(BaseModel):
+    """
+    The claimant kind the token enrolls: a host unless it names a kind a
+    product registered.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Annotated[str | None, Field(pattern='^[a-z][a-z0-9_]{0,31}$', title='Kind')] = 'host'
+
+
+class IssuedClaimantCredentialView(BaseModel):
+    """
+    The claimant's own credential in the clear, once, under its kind's
+    prefix, and the identity it carries. It lives an hour; the claimant
+    rotates it before then.
+    """
+    claimant_id: Annotated[UUID, Field(title='Claimant Id')]
+    credential_id: Annotated[UUID, Field(title='Credential Id')]
+    expires_at: Annotated[AwareDatetime, Field(title='Expires At')]
+    kind: Annotated[str, Field(title='Kind')]
+    pool_id: Annotated[UUID, Field(title='Pool Id')]
+    token: Annotated[str | None, Field(title='Token')]
+
+
 class IssuedDownloadView(BaseModel):
     """
     A link to the file's bytes that works until `expires_at`. A null `url`
@@ -712,9 +776,9 @@ class IssuedDownloadView(BaseModel):
 
 class IssuedEnrollmentTokenView(BaseModel):
     """
-    The token in the clear, once: it enrolls hosts into its pool until
-    it expires or is revoked. It is minted on every call, so a retry mints
-    another, and the one never read expires on its own.
+    The token in the clear, once: it enrolls claimants of its kind into
+    its pool until it expires or is revoked. It is minted on every call, so
+    a retry mints another, and the one never read expires on its own.
     """
     enrollment: EnrollmentTokenView
     token: Annotated[str | None, Field(title='Token')]
@@ -1279,6 +1343,11 @@ class RenameProjectRequest(BaseModel):
         extra='forbid',
     )
     name: Annotated[str, Field(max_length=200, min_length=1, title='Name')]
+
+
+class ReportOutcome(StrEnum):
+    done = 'done'
+    failed = 'failed'
 
 
 class ReportView(BaseModel):
@@ -2044,6 +2113,40 @@ class ClaimView(BaseModel):
     item: ClaimedWorkView | None
 
 
+class ClaimantReportRequest(BaseModel):
+    """
+    A claimant's answer for an item it holds: done, or failed with why,
+    under its claim token. It is held to the report's shape before anything
+    reads it: a failure names its reason, within bounds, and a success
+    names none.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    claim_token: Annotated[UUID, Field(title='Claim Token')]
+    error: Annotated[Error | None, Field(title='Error')] = None
+    outcome: ReportOutcome
+
+
+class ClaimantWorkView(BaseModel):
+    """
+    One item a claimant holds, under a lease and the claim token its
+    claim was handed, which its read, its renewal, and its report carry;
+    none once its report handed it back. `payload` is the item's, as its
+    kind fixes it. `org_id` is the tenant whose work it is, the claimant's
+    own.
+    """
+    attempts: Annotated[int, Field(title='Attempts')]
+    claim_token: Annotated[UUID | None, Field(title='Claim Token')]
+    id: Annotated[UUID, Field(title='Id')]
+    kind: Annotated[str, Field(title='Kind')]
+    lease_expires_at: Annotated[AwareDatetime | None, Field(title='Lease Expires At')]
+    org_id: Annotated[UUID, Field(title='Org Id')]
+    payload: Annotated[dict[str, Any], Field(title='Payload')]
+    status: WorkStatus
+    target_id: Annotated[UUID, Field(title='Target Id')]
+
+
 class CommandProgressView(BaseModel):
     """
     How a command stands: its state, its output after the last part read,
@@ -2797,6 +2900,13 @@ class ChooseRequest(BaseModel):
         extra='forbid',
     )
     fill: FillBody
+
+
+class ClaimantClaimView(BaseModel):
+    """
+    What a claim answers: the item, or none when nothing is ready.
+    """
+    item: ClaimantWorkView | None
 
 
 class ContenderView(BaseModel):

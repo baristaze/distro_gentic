@@ -1,7 +1,8 @@
-"""A workspace host inside a tenant's wall, as the platform knows it: the
-pool its enrollment named, what it advertised, the version of the work it
-reads, and when it last called. Its credential is a row of its own
-(`credential.py`); the host itself holds nothing of the platform's."""
+"""A claimant enrolled inside a tenant's wall, as the platform knows it: its
+kind, the pool its enrollment named, and when it last called. A workspace
+host is the platform's kind, and adds what it advertised and the version of
+the work it reads. Its credential is a row of its own (`credential.py`);
+the claimant itself holds nothing of the platform's."""
 
 from datetime import datetime
 from enum import StrEnum
@@ -46,6 +47,14 @@ class HostReport(Platform):
     exec_version: int = Field(ge=1)
 
 
+class ClaimantEnrollment(Platform):
+    """What a claimant of a product's kind presents beside its enrollment
+    token, once: its name. Its kind and its pool are the token's, never the
+    claimant's to name."""
+
+    name: HostName
+
+
 class Enrollment(HostReport):
     """What a host presents beside its enrollment token, once: its name, and
     its report. The pool is the token's, never the host's to name."""
@@ -53,13 +62,30 @@ class Enrollment(HostReport):
     name: HostName
 
 
-class Host(Identifiable, Trackable):
-    """One enrolled host. `created_by` is the person who issued the token it
-    enrolled with: the host is no person and acts for nobody."""
+class EnrolledClaimant(Identifiable, Trackable):
+    """One enrolled claimant, of the kind its enrollment token named: a host,
+    or a product's own (`placement.kinds`). `created_by` is the person who
+    issued the token it enrolled with: a claimant is no person and acts for
+    nobody."""
 
+    kind: str = Field(pattern=r"^[a-z][a-z0-9_]{0,31}$")
     pool_id: UUID
     name: HostName
     enrolled_with: UUID  # the enrollment token it presented, once
+    last_seen_at: datetime
+    revoked_at: datetime | None = None
+    revoked_by: UUID | None = None
+
+
+class Host(Identifiable, Trackable):
+    """One enrolled workspace host: the claimant of the host kind, with what
+    it advertised and the version of `exec` work it reads. Its row is an
+    `EnrolledClaimant`'s with those two beside it."""
+
+    kind: str = Field(pattern=r"^[a-z][a-z0-9_]{0,31}$")
+    pool_id: UUID
+    name: HostName
+    enrolled_with: UUID
     advertisement: Advertisement
     exec_version: int = Field(ge=1)  # the version of `exec` work it reads
     last_seen_at: datetime
@@ -67,16 +93,27 @@ class Host(Identifiable, Trackable):
     revoked_by: UUID | None = None
 
 
-class HostIdentity(Platform):
-    """Who a host is, read off its credential at the gateway and nowhere
-    else: the host, the tenant whose wall it sits in, its pool, and the
-    credential it called with. Nothing in a host's call adds to it."""
+class ClaimantIdentity(Platform):
+    """Who a claimant is, read off its credential at the gateway and nowhere
+    else: its kind, its id, the tenant whose wall it sits in, its pool, and
+    the credential it called with. Nothing in a claimant's call adds to
+    it."""
 
-    host_id: UUID
+    kind: str
+    id: UUID
     org_id: UUID
     pool_id: UUID
     credential_id: UUID
     expires_at: datetime
+
+
+class HostIdentity(ClaimantIdentity):
+    """Who a host is: a claimant identity of the host kind, which the hosts
+    manager builds only for a host's credential."""
+
+    @property
+    def host_id(self) -> UUID:
+        return self.id
 
 
 class HostStatus(Platform):

@@ -18,7 +18,6 @@ from acme.om.hosts.exceptions import VersionBelowFloor
 from acme.om.hosts.manager import HostsManagerInterface
 from acme.om.hosts.rules import (
     ENROLLMENT_PREFIX,
-    HOST_CREDENTIAL_PREFIX,
     WIRE_FLOOR,
     WireType,
     at_or_above_floor,
@@ -29,18 +28,27 @@ from acme.om.hosts.storage import HostsStorageInterface
 from acme.om.hosts.types.credential import (
     EnrollmentToken,
     HostCredential,
+    IssuedCredential,
     IssuedEnrollmentToken,
-    IssuedHostCredential,
     Rotation,
 )
-from acme.om.hosts.types.host import Enrollment, Host, HostIdentity, HostReport, HostStatus
+from acme.om.hosts.types.host import (
+    ClaimantEnrollment,
+    ClaimantIdentity,
+    EnrolledClaimant,
+    Enrollment,
+    Host,
+    HostIdentity,
+    HostReport,
+    HostStatus,
+)
 from acme.om.hosts.types.placement import PlacementState, SessionPlacement
 from acme.om.hosts.types.pool import HostPool
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import OutboxRow, outbox_row, versioned_row
 from acme.om.placement import PlacementManagerInterface
-from acme.om.placement.kinds import HOST
-from acme.om.placement.types.claimant import Claimant
+from acme.om.placement.kinds import HOST, HOST_PREFIX, ClaimantKinds
+from acme.om.placement.types.claimant import Claimant, ClaimantReport
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tenancy.rules import hash_token
 from acme.om.work.types.work_item import WorkItem
@@ -72,7 +80,7 @@ class HostsOptions(Platform):
     # How long a host holds what it claimed before the sweep takes it back.
     claim_lease: timedelta = timedelta(seconds=60)
     max_pools: int = 200
-    max_hosts: int = 1000  # the most hosts of one pool read at once
+    max_hosts: int = 1000  # the most hosts, or claimants, of one pool read at once
     purge_batch: int = 1000
 
 
@@ -104,7 +112,20 @@ def mint(prefix: str) -> tuple[str, str]:
     return secret, hash_token(secret)
 
 
+def claimant_of(identity: ClaimantIdentity) -> Claimant:
+    """The claimant placement claims for: the identity the credential
+    resolved to, its kind, its id, the tenant whose wall it sits in, and the
+    pool its enrollment named."""
+    return Claimant(
+        kind=identity.kind, id=identity.id, org_id=identity.org_id, pool_id=identity.pool_id
+    )
+
+
 class HostsManagerImpl(HostsManagerInterface):
+    """`claimants` is the one registry of claimant kinds the root built: the
+    kind an enrollment token may name, and the prefix each kind's
+    credential carries."""
+
     def __init__(
         self,
         storage: HostsStorageInterface,
@@ -113,8 +134,10 @@ class HostsManagerImpl(HostsManagerInterface):
         tenancy: TenancyManagerInterface,
         relay: OutboxRelayInterface,
         options: HostsOptions,
+        claimants: ClaimantKinds,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
+        self._claimants = claimants
         self._storage = storage
         self._placement = placement
         self._sessions = sessions
@@ -159,10 +182,21 @@ class HostsManagerImpl(HostsManagerInterface):
             for host in await self._storage.read_hosts(ctx.org_id, pool_id, self._options.max_hosts)
         )
 
-    async def issue_enrollment_token(
+    async def get_claimants(
         self, ctx: TenantContext, pool_id: UUID
+    ) -> tuple[EnrolledClaimant, ...]:
+        ctx.require(Permission.READ)
+        await self._pool(ctx, pool_id)
+        return tuple(
+            await self._storage.read_claimants(ctx.org_id, pool_id, self._options.max_hosts)
+        )
+
+    async def issue_enrollment_token(
+        self, ctx: TenantContext, pool_id: UUID, kind: str = HOST
     ) -> IssuedEnrollmentToken:
         ctx.require(Permission.MANAGE_MEMBERS)
+        if kind not in self._claimants:
+            raise ValidationFailed(f"claimant kind {kind} is not registered")
         await self._pool(ctx, pool_id)
         secret, digest = mint(ENROLLMENT_PREFIX)
         now = self._clock()
@@ -173,10 +207,13 @@ class HostsManagerImpl(HostsManagerInterface):
             created_by=ctx.user_id,
             updated_by=ctx.user_id,
             pool_id=pool_id,
+            kind=kind,
             digest=digest,
             expires_at=now + self._options.enrollment_ttl,
         )
-        rows = (outbox_row(ctx, TOKEN_ISSUED_KIND, token.id, {"pool_id": str(pool_id)}),)
+        rows = (
+            outbox_row(ctx, TOKEN_ISSUED_KIND, token.id, {"pool_id": str(pool_id), "kind": kind}),
+        )
         await self._storage.create_enrollment_token(ctx.org_id, token, rows)
         await self._relay.relay_all(ctx.org_id, rows)
         return IssuedEnrollmentToken(token=secret, enrollment=token)
@@ -194,12 +231,22 @@ class HostsManagerImpl(HostsManagerInterface):
 
     async def revoke_host(self, ctx: TenantContext, host_id: UUID) -> Host:
         ctx.require(Permission.MANAGE_MEMBERS)
-        rows = (outbox_row(ctx, HOST_REVOKED_KIND, host_id, {}),)
-        revoked = await self._storage.revoke_host(
-            ctx.org_id, host_id, self._clock(), ctx.user_id, rows
-        )
+        if await self._storage.read_host(ctx.org_id, host_id) is None:
+            raise NotFound(f"host {host_id} not found")
+        await self.revoke_claimant(ctx, host_id)
+        revoked = await self._storage.read_host(ctx.org_id, host_id)
         if revoked is None:
             raise NotFound(f"host {host_id} not found")
+        return revoked
+
+    async def revoke_claimant(self, ctx: TenantContext, claimant_id: UUID) -> EnrolledClaimant:
+        ctx.require(Permission.MANAGE_MEMBERS)
+        rows = (outbox_row(ctx, HOST_REVOKED_KIND, claimant_id, {}),)
+        revoked = await self._storage.revoke_claimant(
+            ctx.org_id, claimant_id, self._clock(), ctx.user_id, rows
+        )
+        if revoked is None:
+            raise NotFound(f"claimant {claimant_id} not found")
         await self._relay.relay_all(ctx.org_id, rows)
         return revoked
 
@@ -272,27 +319,23 @@ class HostsManagerImpl(HostsManagerInterface):
             return 0
         return await self._storage.purge_tenant(ctx.org_id, self._options.purge_batch)
 
-    # A host's side.
+    # A claimant's side: a host's, and a product's kind's.
 
     async def enroll(
         self, rctx: RequestContext, token: str, enrollment: Enrollment
-    ) -> IssuedHostCredential:
-        if not token.startswith(ENROLLMENT_PREFIX):
-            raise InvalidCredential("a host enrolls with an enrollment token")
-        found = await self._storage.read_enrollment_token_by_digest(hash_token(token))
-        if found is None:
-            raise InvalidCredential("unknown enrollment token")
-        org_id, enrollment_token = found
-        now = self._clock()
-        if enrollment_token.revoked_at is not None or enrollment_token.expires_at <= now:
-            raise CredentialExpired("enrollment token expired or revoked")
+    ) -> IssuedCredential:
+        org_id, enrollment_token = await self._redeem(token)
+        if enrollment_token.kind != HOST:
+            raise InvalidCredential(f"this enrollment token enrolls a {enrollment_token.kind}")
         self._at_or_above_floor(enrollment.exec_version)
+        now = self._clock()
         host = Host(
             id=new_id(),
             created_at=now,
             updated_at=now,
             created_by=enrollment_token.created_by,
             updated_by=enrollment_token.created_by,
+            kind=HOST,
             pool_id=enrollment_token.pool_id,
             name=enrollment.name,
             enrolled_with=enrollment_token.id,
@@ -300,88 +343,115 @@ class HostsManagerImpl(HostsManagerInterface):
             exec_version=enrollment.exec_version,
             last_seen_at=now,
         )
-        secret, credential = self._credential(host.id, now)
-        rows: tuple[OutboxRow, ...] = (
-            outbox_row(
-                provenance(rctx, org_id, enrollment_token.created_by),
-                HOST_ENROLLED_KIND,
-                host.id,
-                {"pool_id": str(host.pool_id), "enrolled_with": str(enrollment_token.id)},
-            ),
+        return await self._admit(rctx, org_id, host)
+
+    async def enroll_claimant(
+        self, rctx: RequestContext, token: str, enrollment: ClaimantEnrollment
+    ) -> IssuedCredential:
+        org_id, enrollment_token = await self._redeem(token)
+        if enrollment_token.kind == HOST:
+            raise InvalidCredential("a host enrolls with what it probed")
+        now = self._clock()
+        claimant = EnrolledClaimant(
+            id=new_id(),
+            created_at=now,
+            updated_at=now,
+            created_by=enrollment_token.created_by,
+            updated_by=enrollment_token.created_by,
+            kind=enrollment_token.kind,
+            pool_id=enrollment_token.pool_id,
+            name=enrollment.name,
+            enrolled_with=enrollment_token.id,
+            last_seen_at=now,
         )
-        await self._storage.enroll_host(org_id, host, credential, rows)
-        await self._relay.relay_all(org_id, rows)
-        OUTCOMES.labels(subsystem="hosts", outcome="enrolled").inc()
-        return self._issued(secret, credential, host)
+        return await self._admit(rctx, org_id, claimant)
 
     async def authenticate(self, rctx: RequestContext, credential: str) -> HostIdentity:
-        if not credential.startswith(HOST_CREDENTIAL_PREFIX):
+        if not credential.startswith(HOST_PREFIX):
             raise InvalidCredential("a host calls with its own credential")
-        found = await self._storage.read_host_by_credential_digest(hash_token(credential))
-        if found is None:
-            raise InvalidCredential("unknown host credential")
-        org_id, held, host = found
-        now = self._clock()
-        if host.revoked_at is not None:
-            raise CredentialExpired("host revoked")
-        if held.expires_at <= now:
-            if held.rotated_at is not None:
-                # A rotated credential past its grace: the machine that
-                # rotated it holds the next one, so whoever presents this
-                # one is a second machine, or the first is.
-                await self._reused(rctx, org_id, host, now)
-                raise CredentialExpired(
-                    "host credential rotated already; the host and its credentials are revoked"
-                )
-            raise CredentialExpired("host credential expired")
-        return HostIdentity(
-            host_id=host.id,
-            org_id=org_id,
-            pool_id=host.pool_id,
-            credential_id=held.id,
-            expires_at=held.expires_at,
-        )
+        return HostIdentity.model_validate((await self._identify(rctx, credential)).model_dump())
 
-    async def rotate(self, rctx: RequestContext, host: HostIdentity) -> IssuedHostCredential:
-        stored = await self._live(host)
+    async def authenticate_claimant(
+        self, rctx: RequestContext, credential: str
+    ) -> ClaimantIdentity:
+        if credential.startswith(HOST_PREFIX):
+            raise InvalidCredential("a host claims with the version of exec work it reads")
+        return await self._identify(rctx, credential)
+
+    async def rotate(self, rctx: RequestContext, claimant: ClaimantIdentity) -> IssuedCredential:
+        stored = await self._live(claimant)
         now = self._clock()
-        secret, minted = self._credential(host.host_id, now)
-        retire_at = retired_at(host.expires_at, now, self._options.rotation_grace)
+        secret, minted = self._credential(stored, now)
+        retire_at = retired_at(claimant.expires_at, now, self._options.rotation_grace)
         rotation = await self._storage.rotate_credential(
-            host.org_id, host.credential_id, now, retire_at, minted
+            claimant.org_id, claimant.credential_id, now, retire_at, minted
         )
         if rotation is Rotation.REUSED:
-            await self._reused(rctx, host.org_id, stored, now)
+            await self._reused(rctx, claimant.org_id, stored, now)
             raise CredentialExpired(
-                "host credential rotated already; the host and its credentials are revoked"
+                f"{claimant.kind} credential rotated already; "
+                f"the {claimant.kind} and its credentials are revoked"
             )
         if rotation is Rotation.MISSING:
-            raise CredentialExpired("host credential expired, rotated, or revoked")
-        return IssuedHostCredential(
-            credential=secret,
-            credential_id=minted.id,
-            host_id=host.host_id,
-            pool_id=host.pool_id,
-            expires_at=minted.expires_at,
-        )
+            raise CredentialExpired(f"{claimant.kind} credential expired, rotated, or revoked")
+        return self._issued(secret, minted, stored)
 
     async def heartbeat(self, rctx: RequestContext, host: HostIdentity, report: HostReport) -> Host:
-        await self._live(host)
+        await self._live_host(host)
         await self._seen(host, report)
-        return await self._live(host)
+        return await self._live_host(host)
 
     async def claim(
         self, rctx: RequestContext, host: HostIdentity, exec_version: int
     ) -> tuple[TenantContext, WorkItem] | None:
         self._at_or_above_floor(exec_version)
-        stored = await self._live(host)
+        stored = await self._live_host(host)
         await self._seen(
             host, HostReport(advertisement=stored.advertisement, exec_version=exec_version)
         )
-        # The claimant is the identity the credential resolved to: the host,
-        # the tenant whose wall it sits in, and the pool its enrollment named.
-        claimant = Claimant(kind=HOST, id=host.host_id, org_id=host.org_id, pool_id=host.pool_id)
-        return await self._placement.claim_for(rctx, claimant, self._options.claim_lease)
+        return await self._placement.claim_for(rctx, claimant_of(host), self._options.claim_lease)
+
+    async def claim_as(
+        self, rctx: RequestContext, claimant: ClaimantIdentity
+    ) -> tuple[TenantContext, WorkItem] | None:
+        self._not_a_host(claimant)
+        await self._live(claimant)
+        await self._seen(claimant)
+        return await self._placement.claim_for(
+            rctx, claimant_of(claimant), self._options.claim_lease
+        )
+
+    async def held_as(
+        self, rctx: RequestContext, claimant: ClaimantIdentity, item_id: UUID, claim_token: UUID
+    ) -> WorkItem:
+        self._not_a_host(claimant)
+        await self._live(claimant)
+        return await self._placement.held_for(
+            rctx, claimant_of(claimant), claimant.org_id, item_id, claim_token
+        )
+
+    async def extend_as(
+        self, rctx: RequestContext, claimant: ClaimantIdentity, item_id: UUID, claim_token: UUID
+    ) -> WorkItem:
+        self._not_a_host(claimant)
+        await self._live(claimant)
+        return await self._placement.extend_for(
+            rctx,
+            claimant_of(claimant),
+            claimant.org_id,
+            item_id,
+            claim_token,
+            self._options.claim_lease,
+        )
+
+    async def report_as(
+        self, rctx: RequestContext, claimant: ClaimantIdentity, report: ClaimantReport
+    ) -> WorkItem:
+        self._not_a_host(claimant)
+        await self._live(claimant)
+        return await self._placement.report_for(
+            rctx, claimant_of(claimant), claimant.org_id, report
+        )
 
     # Helpers.
 
@@ -391,59 +461,159 @@ class HostsManagerImpl(HostsManagerInterface):
             raise NotFound(f"pool {pool_id} not found")
         return pool
 
-    async def _live(self, host: HostIdentity) -> Host:
-        """The host behind an identity, refused once it is revoked: a call
-        that resolved its credential a moment before the revoke is handed
-        nothing after it."""
-        stored = await self._storage.read_host(host.org_id, host.host_id)
+    async def _redeem(self, token: str) -> tuple[UUID, EnrollmentToken]:
+        """The live enrollment token behind `token`, and its tenant."""
+        if not token.startswith(ENROLLMENT_PREFIX):
+            raise InvalidCredential("a claimant enrolls with an enrollment token")
+        found = await self._storage.read_enrollment_token_by_digest(hash_token(token))
+        if found is None:
+            raise InvalidCredential("unknown enrollment token")
+        org_id, enrollment_token = found
+        if enrollment_token.revoked_at is not None or enrollment_token.expires_at <= self._clock():
+            raise CredentialExpired("enrollment token expired or revoked")
+        return org_id, enrollment_token
+
+    async def _admit(
+        self, rctx: RequestContext, org_id: UUID, claimant: EnrolledClaimant | Host
+    ) -> IssuedCredential:
+        """The claimant and its first credential, under its kind's prefix.
+        The person who issued the token answers for the enrollment."""
+        secret, credential = self._credential(claimant, claimant.created_at)
+        rows: tuple[OutboxRow, ...] = (
+            outbox_row(
+                provenance(rctx, org_id, claimant.created_by),
+                HOST_ENROLLED_KIND,
+                claimant.id,
+                {
+                    "kind": claimant.kind,
+                    "pool_id": str(claimant.pool_id),
+                    "enrolled_with": str(claimant.enrolled_with),
+                },
+            ),
+        )
+        await self._storage.enroll(org_id, claimant, credential, rows)
+        await self._relay.relay_all(org_id, rows)
+        OUTCOMES.labels(subsystem="hosts", outcome="enrolled").inc()
+        return self._issued(secret, credential, claimant)
+
+    async def _identify(self, rctx: RequestContext, credential: str) -> ClaimantIdentity:
+        """The claimant behind a credential of any registered kind: its kind
+        is its prefix's, and its tenant and its pool are its enrollment's.
+        Refuses an unknown credential, an expired one, and a revoked
+        claimant's. A rotated credential presented past its grace means two
+        machines hold the claimant's identity: it is refused, and the
+        claimant and every credential it holds are revoked."""
+        spec = self._claimants.of_credential(credential)
+        if spec is None:
+            raise InvalidCredential("a claimant calls with its own credential")
+        found = await self._storage.read_claimant_by_credential_digest(hash_token(credential))
+        if found is None or found[2].kind != spec.name:
+            raise InvalidCredential(f"unknown {spec.name} credential")
+        org_id, held, claimant = found
+        now = self._clock()
+        if claimant.revoked_at is not None:
+            raise CredentialExpired(f"{claimant.kind} revoked")
+        if held.expires_at <= now:
+            if held.rotated_at is not None:
+                # A rotated credential past its grace: the machine that
+                # rotated it holds the next one, so whoever presents this
+                # one is a second machine, or the first is.
+                await self._reused(rctx, org_id, claimant, now)
+                raise CredentialExpired(
+                    f"{claimant.kind} credential rotated already; "
+                    f"the {claimant.kind} and its credentials are revoked"
+                )
+            raise CredentialExpired(f"{claimant.kind} credential expired")
+        return ClaimantIdentity(
+            kind=claimant.kind,
+            id=claimant.id,
+            org_id=org_id,
+            pool_id=claimant.pool_id,
+            credential_id=held.id,
+            expires_at=held.expires_at,
+        )
+
+    async def _live(self, claimant: ClaimantIdentity) -> EnrolledClaimant:
+        """The claimant behind an identity, refused once it is revoked: a
+        call that resolved its credential a moment before the revoke is
+        handed nothing after it."""
+        stored = await self._storage.read_claimant(claimant.org_id, claimant.id)
+        if stored is None or stored.revoked_at is not None or stored.kind != claimant.kind:
+            raise CredentialExpired(f"{claimant.kind} revoked")
+        return stored
+
+    async def _live_host(self, host: HostIdentity) -> Host:
+        """The host behind an identity, with what it advertised, refused as
+        `_live` refuses."""
+        stored = await self._storage.read_host(host.org_id, host.id)
         if stored is None or stored.revoked_at is not None:
             raise CredentialExpired("host revoked")
         return stored
 
-    async def _reused(self, rctx: RequestContext, org_id: UUID, host: Host, at: datetime) -> None:
+    async def _reused(
+        self, rctx: RequestContext, org_id: UUID, claimant: EnrolledClaimant, at: datetime
+    ) -> None:
         """A credential that rotated already, presented to rotate again or
-        after its grace: two machines hold the host's identity, the host and
-        a copy. Neither can be told from the other, so the host and every
-        credential it holds end, and its owner reads it revoked and enrolls
-        it again. The person who let it in answers for the revocation, as
-        for every write of the host's."""
+        after its grace: two machines hold the claimant's identity, the
+        claimant and a copy. Neither can be told from the other, so the
+        claimant and every credential it holds end, and its owner reads it
+        revoked and enrolls it again. The person who let it in answers for
+        the revocation, as for every write of the claimant's."""
         rows = (
             outbox_row(
-                provenance(rctx, org_id, host.created_by),
+                provenance(rctx, org_id, claimant.created_by),
                 HOST_REVOKED_KIND,
-                host.id,
-                {"reason": "credential_reused"},
+                claimant.id,
+                {"kind": claimant.kind, "reason": "credential_reused"},
             ),
         )
-        await self._storage.revoke_host(org_id, host.id, at, host.created_by, rows)
+        await self._storage.revoke_claimant(org_id, claimant.id, at, claimant.created_by, rows)
         await self._relay.relay_all(org_id, rows)
         OUTCOMES.labels(subsystem="hosts", outcome="credential_reused").inc()
-        log.warning("host %s: a rotated credential was presented again; revoked", host.id)
+        log.warning(
+            "%s %s: a rotated credential was presented again; revoked", claimant.kind, claimant.id
+        )
 
-    async def _seen(self, host: HostIdentity, report: HostReport) -> None:
-        if not await self._storage.mark_seen(host.org_id, host.host_id, self._clock(), report):
-            raise CredentialExpired("host revoked")
+    async def _seen(self, claimant: ClaimantIdentity, report: HostReport | None = None) -> None:
+        if not await self._storage.mark_seen(claimant.org_id, claimant.id, self._clock(), report):
+            raise CredentialExpired(f"{claimant.kind} revoked")
 
-    def _credential(self, host_id: UUID, now: datetime) -> tuple[str, HostCredential]:
-        secret, digest = mint(HOST_CREDENTIAL_PREFIX)
+    def _credential(
+        self, claimant: EnrolledClaimant | Host, now: datetime
+    ) -> tuple[str, HostCredential]:
+        """A fresh credential of the claimant, under its kind's prefix."""
+        spec = self._claimants.get(claimant.kind)
+        if spec is None:
+            raise InvalidCredential(f"claimant kind {claimant.kind} is not registered")
+        secret, digest = mint(spec.prefix)
         credential = HostCredential(
             id=new_id(),
             created_at=now,
-            host_id=host_id,
+            host_id=claimant.id,
             digest=digest,
             expires_at=now + self._options.credential_ttl,
         )
         return secret, credential
 
     @staticmethod
-    def _issued(secret: str, credential: HostCredential, host: Host) -> IssuedHostCredential:
-        return IssuedHostCredential(
+    def _issued(
+        secret: str, credential: HostCredential, claimant: EnrolledClaimant | Host
+    ) -> IssuedCredential:
+        return IssuedCredential(
             credential=secret,
             credential_id=credential.id,
-            host_id=host.id,
-            pool_id=host.pool_id,
+            kind=claimant.kind,
+            claimant_id=claimant.id,
+            pool_id=claimant.pool_id,
             expires_at=credential.expires_at,
         )
+
+    @staticmethod
+    def _not_a_host(claimant: ClaimantIdentity) -> None:
+        """A host claims and answers on its own path, which holds the version
+        of `exec` work it reads and the relay's record of what it runs."""
+        if claimant.kind == HOST:
+            raise InvalidCredential("a host claims with the version of exec work it reads")
 
     @staticmethod
     def _at_or_above_floor(exec_version: int) -> None:
