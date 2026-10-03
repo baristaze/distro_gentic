@@ -20,6 +20,11 @@ one of the kinds of thing [Acme is made of](../../../../README.md).
 
 - **Create a project.** The tenant's owners and admins create it, with
   its repository. The repository never moves.
+- **Rename or remove a project.** The owners and the admins rename it,
+  and remove it while no session belongs to it. A project with sessions
+  stays: they read their policies and their work product through it.
+  Its repository's fetch credential goes with it
+  ([workspaces](../workspaces/README.md)).
 - **Start a session under a project.** A session started here belongs
   to its project from its first moment. A project of another tenant is
   not found, and nothing is started. The API's start names the

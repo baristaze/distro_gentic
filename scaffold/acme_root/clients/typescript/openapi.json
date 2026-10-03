@@ -27,6 +27,152 @@
         "title": "AccountDeletedView",
         "type": "object"
       },
+      "ActionBody": {
+        "additionalProperties": false,
+        "description": "Start a session of `agent_kind` titled `title` in the tenant's project\n`project_id`, or send the brief to the standing session `session_id`.\nThe brief is the creator's word.",
+        "properties": {
+          "agent_kind": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Kind"
+          },
+          "brief": {
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Brief",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ActionKind"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "kind",
+          "brief"
+        ],
+        "title": "ActionBody",
+        "type": "object"
+      },
+      "ActionKind": {
+        "enum": [
+          "start_session",
+          "message_session"
+        ],
+        "title": "ActionKind",
+        "type": "string"
+      },
+      "ActionView": {
+        "properties": {
+          "agent_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Kind"
+          },
+          "brief": {
+            "title": "Brief",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ActionKind"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "kind",
+          "brief",
+          "agent_kind",
+          "title",
+          "project_id",
+          "session_id"
+        ],
+        "title": "ActionView",
+        "type": "object"
+      },
       "Actor": {
         "description": "Who produced a step.",
         "enum": [
@@ -489,6 +635,53 @@
         "title": "ApprovalView",
         "type": "object"
       },
+      "ApproverRuleBody": {
+        "additionalProperties": false,
+        "description": "Who may approve a call of one class: people's roles, never a service.",
+        "properties": {
+          "authorization_class": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "title": "Authorization Class",
+            "type": "string"
+          },
+          "roles": {
+            "items": {
+              "$ref": "#/components/schemas/Role"
+            },
+            "maxItems": 5,
+            "minItems": 1,
+            "title": "Roles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "authorization_class",
+          "roles"
+        ],
+        "title": "ApproverRuleBody",
+        "type": "object"
+      },
+      "ApproverRuleView": {
+        "properties": {
+          "authorization_class": {
+            "title": "Authorization Class",
+            "type": "string"
+          },
+          "roles": {
+            "items": {
+              "$ref": "#/components/schemas/Role"
+            },
+            "title": "Roles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "authorization_class",
+          "roles"
+        ],
+        "title": "ApproverRuleView",
+        "type": "object"
+      },
       "AutomationPrincipalView": {
         "description": "The tenant's automation principal: its id, the role it holds, and who\ngranted it.",
         "properties": {
@@ -518,6 +711,125 @@
           "created_at"
         ],
         "title": "AutomationPrincipalView",
+        "type": "object"
+      },
+      "AutomationRequest": {
+        "additionalProperties": false,
+        "description": "An automation whole, as made or as edited.",
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/ActionBody"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/LimitsBody"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "own_events": {
+            "default": false,
+            "title": "Own Events",
+            "type": "boolean"
+          },
+          "runs_as": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunsAs"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "trigger": {
+            "$ref": "#/components/schemas/TriggerBody"
+          }
+        },
+        "required": [
+          "name",
+          "trigger",
+          "action",
+          "limits"
+        ],
+        "title": "AutomationRequest",
+        "type": "object"
+      },
+      "AutomationView": {
+        "description": "An automation, whom it runs as, and who made and last edited it.",
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/ActionView"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "format": "uuid",
+            "title": "Created By",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/LimitsView"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "own_events": {
+            "title": "Own Events",
+            "type": "boolean"
+          },
+          "runs_as": {
+            "$ref": "#/components/schemas/RunsAs"
+          },
+          "trigger": {
+            "$ref": "#/components/schemas/TriggerView"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "updated_by": {
+            "format": "uuid",
+            "title": "Updated By",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "trigger",
+          "action",
+          "limits",
+          "runs_as",
+          "own_events",
+          "enabled",
+          "created_at",
+          "created_by",
+          "updated_at",
+          "updated_by"
+        ],
+        "title": "AutomationView",
         "type": "object"
       },
       "BoundsView": {
@@ -1146,6 +1458,27 @@
         "title": "CreatePoolRequest",
         "type": "object"
       },
+      "CreateProjectRequest": {
+        "additionalProperties": false,
+        "description": "A project and the one repository it binds, which never moves.",
+        "properties": {
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "repository": {
+            "$ref": "#/components/schemas/RepositoryBody"
+          }
+        },
+        "required": [
+          "name",
+          "repository"
+        ],
+        "title": "CreateProjectRequest",
+        "type": "object"
+      },
       "CreateTeamOrgRequest": {
         "additionalProperties": false,
         "description": "A team org the caller makes and owns. `slug` is lower-case letters and\ndigits joined by hyphens; left out, one is made from the name. A taken\nslug is 409.",
@@ -1223,6 +1556,16 @@
           "result"
         ],
         "title": "CrossingKind",
+        "type": "string"
+      },
+      "Decision": {
+        "description": "From the least strict to the most.",
+        "enum": [
+          "allow",
+          "approve",
+          "deny"
+        ],
+        "title": "Decision",
         "type": "string"
       },
       "DecisionRequest": {
@@ -1443,6 +1786,16 @@
         ],
         "title": "DeviceTokenRequest",
         "type": "object"
+      },
+      "Effect": {
+        "description": "What a repeat of a call may do.",
+        "enum": [
+          "read_only",
+          "idempotent",
+          "unsafe"
+        ],
+        "title": "Effect",
+        "type": "string"
       },
       "EnrollRequest": {
         "additionalProperties": false,
@@ -1883,6 +2236,65 @@
         "title": "ExecutionView",
         "type": "object"
       },
+      "FetchCredentialRequest": {
+        "additionalProperties": false,
+        "description": "A read-only credential of the project's repository, as source control\ntakes it over HTTPS. It goes to the tenant's store and is never read\nback.",
+        "properties": {
+          "password": {
+            "format": "password",
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string",
+            "writeOnly": true
+          },
+          "username": {
+            "maxLength": 200,
+            "minLength": 1,
+            "pattern": "^[^:\\s]+$",
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "FetchCredentialRequest",
+        "type": "object"
+      },
+      "FetchCredentialView": {
+        "description": "That the project's repository has a fetch credential, and who gave it\nwhen. Never its value.",
+        "properties": {
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "updated_by": {
+            "format": "uuid",
+            "title": "Updated By",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "project_id",
+          "version",
+          "updated_at",
+          "updated_by"
+        ],
+        "title": "FetchCredentialView",
+        "type": "object"
+      },
       "FilePageView": {
         "description": "One page of the org's stored files, oldest first. `next_cursor` fetches\nthe next page and is null on the last one.",
         "properties": {
@@ -2051,6 +2463,80 @@
           "thinking"
         ],
         "title": "FillUsageView",
+        "type": "object"
+      },
+      "GateBody": {
+        "additionalProperties": false,
+        "description": "The calls a gate selects, by tool or by class, and what they need: a\nperson's approval, or a denial. A gate never allows.",
+        "properties": {
+          "authorization_class": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization Class"
+          },
+          "decision": {
+            "$ref": "#/components/schemas/Decision"
+          },
+          "tool": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool"
+          }
+        },
+        "required": [
+          "decision"
+        ],
+        "title": "GateBody",
+        "type": "object"
+      },
+      "GateView": {
+        "properties": {
+          "authorization_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization Class"
+          },
+          "decision": {
+            "$ref": "#/components/schemas/Decision"
+          },
+          "tool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool"
+          }
+        },
+        "required": [
+          "tool",
+          "authorization_class",
+          "decision"
+        ],
+        "title": "GateView",
         "type": "object"
       },
       "GiveBackRequest": {
@@ -2797,6 +3283,129 @@
         "title": "IssuedUploadView",
         "type": "object"
       },
+      "KnowledgeRequest": {
+        "additionalProperties": false,
+        "description": "An entry: its title, the words that trigger it, all of which must\nappear in what a session is about, and what it says. A trigger word\nwith none of a-z, 0-9, `_`, `.` or `-` is refused: recall reads nothing\nin it, so it would match every session.",
+        "properties": {
+          "text": {
+            "maxLength": 10000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "trigger": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Trigger",
+            "type": "array"
+          }
+        },
+        "required": [
+          "title",
+          "trigger",
+          "text"
+        ],
+        "title": "KnowledgeRequest",
+        "type": "object"
+      },
+      "KnowledgeStatus": {
+        "enum": [
+          "suggested",
+          "reviewed",
+          "rejected"
+        ],
+        "title": "KnowledgeStatus",
+        "type": "string"
+      },
+      "KnowledgeView": {
+        "description": "An entry, its state, who suggested and who reviewed it, and the\nversion an edit names in `If-Match`.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "reviewed_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By"
+          },
+          "status": {
+            "$ref": "#/components/schemas/KnowledgeStatus"
+          },
+          "suggested_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggested By"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "trigger": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Trigger",
+            "type": "array"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "trigger",
+          "text",
+          "status",
+          "suggested_by",
+          "reviewed_by",
+          "version",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "KnowledgeView",
+        "type": "object"
+      },
       "LaneLoadView": {
         "properties": {
           "kind": {
@@ -2834,6 +3443,118 @@
           "orgs"
         ],
         "title": "LastOwnerDetail",
+        "type": "object"
+      },
+      "LimitsBody": {
+        "additionalProperties": false,
+        "description": "The most its runs spend in a period, in millionths at list price, and\nthe share one run may take; the most firings a period; the most runs at\nwork at once; whether a stopped firing waits, and how many may; and the\nlongest chain of automations a firing extends.",
+        "properties": {
+          "concurrency": {
+            "exclusiveMinimum": 0.0,
+            "title": "Concurrency",
+            "type": "integer"
+          },
+          "cost_cap_micros": {
+            "exclusiveMinimum": 0.0,
+            "title": "Cost Cap Micros",
+            "type": "integer"
+          },
+          "hop_limit": {
+            "default": 3,
+            "minimum": 1.0,
+            "title": "Hop Limit",
+            "type": "integer"
+          },
+          "period": {
+            "anyOf": [
+              {
+                "format": "duration",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period"
+          },
+          "queue": {
+            "default": false,
+            "title": "Queue",
+            "type": "boolean"
+          },
+          "queue_depth": {
+            "default": 50,
+            "minimum": 1.0,
+            "title": "Queue Depth",
+            "type": "integer"
+          },
+          "rate": {
+            "exclusiveMinimum": 0.0,
+            "title": "Rate",
+            "type": "integer"
+          },
+          "run_cap_micros": {
+            "exclusiveMinimum": 0.0,
+            "title": "Run Cap Micros",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cost_cap_micros",
+          "run_cap_micros",
+          "rate",
+          "concurrency"
+        ],
+        "title": "LimitsBody",
+        "type": "object"
+      },
+      "LimitsView": {
+        "properties": {
+          "concurrency": {
+            "title": "Concurrency",
+            "type": "integer"
+          },
+          "cost_cap_micros": {
+            "title": "Cost Cap Micros",
+            "type": "integer"
+          },
+          "hop_limit": {
+            "title": "Hop Limit",
+            "type": "integer"
+          },
+          "period": {
+            "format": "duration",
+            "title": "Period",
+            "type": "string"
+          },
+          "queue": {
+            "title": "Queue",
+            "type": "boolean"
+          },
+          "queue_depth": {
+            "title": "Queue Depth",
+            "type": "integer"
+          },
+          "rate": {
+            "title": "Rate",
+            "type": "integer"
+          },
+          "run_cap_micros": {
+            "title": "Run Cap Micros",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cost_cap_micros",
+          "run_cap_micros",
+          "period",
+          "rate",
+          "concurrency",
+          "queue",
+          "queue_depth",
+          "hop_limit"
+        ],
+        "title": "LimitsView",
         "type": "object"
       },
       "LivePageView": {
@@ -3964,6 +4685,204 @@
         "title": "PlatformSizeView",
         "type": "object"
       },
+      "PlaybookView": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "gates": {
+            "items": {
+              "$ref": "#/components/schemas/GateView"
+            },
+            "title": "Gates",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "published_by": {
+            "format": "uuid",
+            "title": "Published By",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "version",
+          "description",
+          "body",
+          "gates",
+          "published_by",
+          "created_at"
+        ],
+        "title": "PlaybookView",
+        "type": "object"
+      },
+      "PolicyRuleBody": {
+        "additionalProperties": false,
+        "description": "What a rule matches and what it decides. A selector left unset matches\nany call; every target attribute it names must equal the target's.",
+        "properties": {
+          "authorization_class": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization Class"
+          },
+          "decision": {
+            "$ref": "#/components/schemas/Decision"
+          },
+          "effect": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Effect"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "target": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            },
+            "maxProperties": 20,
+            "title": "Target",
+            "type": "object"
+          },
+          "target_kind": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Kind"
+          },
+          "tool": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool"
+          }
+        },
+        "required": [
+          "decision"
+        ],
+        "title": "PolicyRuleBody",
+        "type": "object"
+      },
+      "PolicyRuleView": {
+        "properties": {
+          "authorization_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization Class"
+          },
+          "decision": {
+            "$ref": "#/components/schemas/Decision"
+          },
+          "effect": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Effect"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "target": {
+            "additionalProperties": true,
+            "title": "Target",
+            "type": "object"
+          },
+          "target_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Kind"
+          },
+          "tool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool"
+          }
+        },
+        "required": [
+          "tool",
+          "authorization_class",
+          "effect",
+          "target_kind",
+          "target",
+          "decision"
+        ],
+        "title": "PolicyRuleView",
+        "type": "object"
+      },
       "PoolView": {
         "properties": {
           "created_at": {
@@ -4056,6 +4975,53 @@
         "title": "PreparedView",
         "type": "object"
       },
+      "ProjectView": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "format": "uuid",
+            "title": "Created By",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "repository": {
+            "$ref": "#/components/schemas/RepositoryView"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "updated_by": {
+            "format": "uuid",
+            "title": "Updated By",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "repository",
+          "created_at",
+          "created_by",
+          "updated_at",
+          "updated_by"
+        ],
+        "title": "ProjectView",
+        "type": "object"
+      },
       "Provenance": {
         "description": "From the strongest to the weakest.",
         "enum": [
@@ -4066,6 +5032,46 @@
         ],
         "title": "Provenance",
         "type": "string"
+      },
+      "PublishRequest": {
+        "additionalProperties": false,
+        "description": "The next version of a playbook's name: its description, its body, and\nits gates.",
+        "properties": {
+          "body": {
+            "maxLength": 50000,
+            "minLength": 1,
+            "title": "Body",
+            "type": "string"
+          },
+          "description": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "gates": {
+            "items": {
+              "$ref": "#/components/schemas/GateBody"
+            },
+            "maxItems": 50,
+            "title": "Gates",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "body"
+        ],
+        "title": "PublishRequest",
+        "type": "object"
       },
       "PurposeUsageView": {
         "properties": {
@@ -4130,6 +5136,22 @@
         "title": "QuestionView",
         "type": "object"
       },
+      "RenameProjectRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "RenameProjectRequest",
+        "type": "object"
+      },
       "ReportView": {
         "description": "The result the session submitted and the gate accepted: the outcome\nits loop ended with, whether a gate that knows the evidence judged it,\nand the step that answered it.",
         "properties": {
@@ -4159,6 +5181,48 @@
         "title": "ReportView",
         "type": "object"
       },
+      "RepositoryBody": {
+        "additionalProperties": false,
+        "description": "A repository by its host's domain and its path there, such as\n`github.com` and `octo/reports`. Both are compared without case.",
+        "properties": {
+          "host": {
+            "maxLength": 253,
+            "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$",
+            "title": "Host",
+            "type": "string"
+          },
+          "path": {
+            "maxLength": 255,
+            "pattern": "^[a-z0-9_][a-z0-9_.-]*(/[a-z0-9_][a-z0-9_.-]*)+$",
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "host",
+          "path"
+        ],
+        "title": "RepositoryBody",
+        "type": "object"
+      },
+      "RepositoryView": {
+        "properties": {
+          "host": {
+            "title": "Host",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "host",
+          "path"
+        ],
+        "title": "RepositoryView",
+        "type": "object"
+      },
       "ResultRequest": {
         "additionalProperties": false,
         "description": "How an item ended: the JSON of an exec result, in base64.",
@@ -4177,6 +5241,21 @@
           "crossing"
         ],
         "title": "ResultRequest",
+        "type": "object"
+      },
+      "ReviewRequest": {
+        "additionalProperties": false,
+        "description": "Keep a suggestion, so any session may recall it, or reject it.",
+        "properties": {
+          "keep": {
+            "title": "Keep",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "keep"
+        ],
+        "title": "ReviewRequest",
         "type": "object"
       },
       "Role": {
@@ -4208,6 +5287,15 @@
           "validation"
         ],
         "title": "RunPurpose",
+        "type": "string"
+      },
+      "RunsAs": {
+        "description": "Whose authority an automation's action runs on.",
+        "enum": [
+          "creator",
+          "automation_principal"
+        ],
+        "title": "RunsAs",
         "type": "string"
       },
       "SecondFactorRequest": {
@@ -5309,6 +6397,72 @@
         "title": "ToolFailure",
         "type": "string"
       },
+      "ToolPolicyRequest": {
+        "additionalProperties": false,
+        "description": "The tenant's whole layer, written over the version `If-Match` names.",
+        "properties": {
+          "approvers": {
+            "items": {
+              "$ref": "#/components/schemas/ApproverRuleBody"
+            },
+            "maxItems": 200,
+            "title": "Approvers",
+            "type": "array"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/PolicyRuleBody"
+            },
+            "maxItems": 200,
+            "title": "Rules",
+            "type": "array"
+          }
+        },
+        "title": "ToolPolicyRequest",
+        "type": "object"
+      },
+      "ToolPolicyView": {
+        "description": "The tenant's layer; version 1 and empty until its first write.",
+        "properties": {
+          "approvers": {
+            "items": {
+              "$ref": "#/components/schemas/ApproverRuleView"
+            },
+            "title": "Approvers",
+            "type": "array"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/PolicyRuleView"
+            },
+            "title": "Rules",
+            "type": "array"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "updated_by": {
+            "format": "uuid",
+            "title": "Updated By",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "rules",
+          "approvers",
+          "version",
+          "updated_at",
+          "updated_by"
+        ],
+        "title": "ToolPolicyView",
+        "type": "object"
+      },
       "TotpConfirmedView": {
         "description": "The second factor is enrolled: from now on the operator plane admits\nthis identity only on a sign-in that verified a code, so the next\nrequest signs in again with one.",
         "properties": {
@@ -5383,6 +6537,113 @@
           "size"
         ],
         "title": "TreeBoundsView",
+        "type": "object"
+      },
+      "TriggerBody": {
+        "additionalProperties": false,
+        "description": "An event that passes every filter set (one left empty matches any),\nor a schedule, every `every` seconds, a minute at least.",
+        "properties": {
+          "arrivals": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Arrivals",
+            "type": "array"
+          },
+          "effects": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Effects",
+            "type": "array"
+          },
+          "every": {
+            "anyOf": [
+              {
+                "format": "duration",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Every"
+          },
+          "integrations": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Integrations",
+            "type": "array"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/TriggerKind"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "TriggerBody",
+        "type": "object"
+      },
+      "TriggerKind": {
+        "enum": [
+          "event",
+          "schedule"
+        ],
+        "title": "TriggerKind",
+        "type": "string"
+      },
+      "TriggerView": {
+        "properties": {
+          "arrivals": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Arrivals",
+            "type": "array"
+          },
+          "effects": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Effects",
+            "type": "array"
+          },
+          "every": {
+            "anyOf": [
+              {
+                "format": "duration",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Every"
+          },
+          "integrations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Integrations",
+            "type": "array"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/TriggerKind"
+          }
+        },
+        "required": [
+          "kind",
+          "integrations",
+          "arrivals",
+          "effects",
+          "every"
+        ],
+        "title": "TriggerView",
         "type": "object"
       },
       "UpdateIdentityRequest": {
@@ -11620,6 +12881,227 @@
         ]
       }
     },
+    "/v1/automations": {
+      "get": {
+        "description": "The tenant's automations by id, after the id `after` names.",
+        "operationId": "list_automations_v1_automations_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AutomationView"
+                  },
+                  "title": "Response List Automations V1 Automations Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Automations",
+        "tags": [
+          "automations"
+        ]
+      },
+      "post": {
+        "description": "An automation that runs as its maker, or as the automation principal.",
+        "operationId": "create_automation_v1_automations_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutomationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutomationView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Automation",
+        "tags": [
+          "automations"
+        ]
+      }
+    },
     "/v1/automations/principal": {
       "get": {
         "operationId": "get_principal_v1_automations_principal_get",
@@ -11786,6 +13268,197 @@
           }
         },
         "summary": "Grant Principal",
+        "tags": [
+          "automations"
+        ]
+      }
+    },
+    "/v1/automations/{automation_id}": {
+      "get": {
+        "operationId": "get_automation_v1_automations__automation_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "automation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Automation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutomationView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Automation",
+        "tags": [
+          "automations"
+        ]
+      },
+      "put": {
+        "description": "The automation as edited. One that runs as its creator is edited by\nits creator alone; one that runs as the automation principal takes its\neditor as its creator.",
+        "operationId": "update_automation_v1_automations__automation_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "automation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Automation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutomationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutomationView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Automation",
         "tags": [
           "automations"
         ]
@@ -14215,6 +15888,547 @@
         ]
       }
     },
+    "/v1/knowledge": {
+      "get": {
+        "description": "The entries in a state by id, after the id `after` names.",
+        "operationId": "list_entries_v1_knowledge_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/KnowledgeStatus",
+              "default": "reviewed"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/KnowledgeView"
+                  },
+                  "title": "Response List Entries V1 Knowledge Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Entries",
+        "tags": [
+          "knowledge"
+        ]
+      },
+      "post": {
+        "description": "An entry a person writes, reviewed as it is written.",
+        "operationId": "write_entry_v1_knowledge_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Write Entry",
+        "tags": [
+          "knowledge"
+        ]
+      }
+    },
+    "/v1/knowledge/{entry_id}": {
+      "get": {
+        "operationId": "get_entry_v1_knowledge__entry_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Entry Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Entry",
+        "tags": [
+          "knowledge"
+        ]
+      },
+      "put": {
+        "description": "The entry as edited, on the version `If-Match` names.",
+        "operationId": "edit_entry_v1_knowledge__entry_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Entry Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "description": "The version the caller read, as an entity tag: `\"3\"`. 412 `precondition_failed` when the record changed since.",
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The version the caller read, as an entity tag: `\"3\"`. 412 `precondition_failed` when the record changed since.",
+              "title": "If-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Edit Entry",
+        "tags": [
+          "knowledge"
+        ]
+      }
+    },
+    "/v1/knowledge/{entry_id}/review": {
+      "post": {
+        "description": "A suggestion kept, so sessions recall it, or rejected.",
+        "operationId": "review_entry_v1_knowledge__entry_id__review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Entry Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Review Entry",
+        "tags": [
+          "knowledge"
+        ]
+      }
+    },
     "/v1/live": {
       "get": {
         "description": "The open streams of the handle's session, each after the last part\nread (`after=<step_id>:<last>`, once a stream, the `last` of that part).\nThe handle is the authority: one that does not verify, or has expired,\nreads nothing.",
@@ -16600,6 +18814,812 @@
         ]
       }
     },
+    "/v1/playbooks": {
+      "post": {
+        "description": "The next version of the name.",
+        "operationId": "publish_v1_playbooks_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybookView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Publish",
+        "tags": [
+          "playbooks"
+        ]
+      }
+    },
+    "/v1/playbooks/{name}": {
+      "get": {
+        "description": "The latest version of the name.",
+        "operationId": "get_playbook_v1_playbooks__name__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlaybookView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Playbook",
+        "tags": [
+          "playbooks"
+        ]
+      }
+    },
+    "/v1/projects": {
+      "get": {
+        "description": "The tenant's projects by id, after the id `after` names.",
+        "operationId": "list_projects_v1_projects_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProjectView"
+                  },
+                  "title": "Response List Projects V1 Projects Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Projects",
+        "tags": [
+          "projects"
+        ]
+      },
+      "post": {
+        "description": "A project bound to its repository, which never moves.",
+        "operationId": "create_project_v1_projects_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProjectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Project",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/v1/projects/{project_id}": {
+      "delete": {
+        "description": "The project as it stood, with its fetch credential gone. 409\n`project_in_use` while a session belongs to it.",
+        "operationId": "remove_project_v1_projects__project_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Project",
+        "tags": [
+          "projects"
+        ]
+      },
+      "get": {
+        "operationId": "get_project_v1_projects__project_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Project",
+        "tags": [
+          "projects"
+        ]
+      },
+      "patch": {
+        "operationId": "rename_project_v1_projects__project_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameProjectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rename Project",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/v1/projects/{project_id}/credential": {
+      "put": {
+        "description": "A read-only credential of the project's repository; a later one\nreplaces it. The answer says who gave it when, never its value.",
+        "operationId": "put_fetch_credential_v1_projects__project_id__credential_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FetchCredentialRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FetchCredentialView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Fetch Credential",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
     "/v1/realtime/tickets": {
       "post": {
         "operationId": "mint_ticket_v1_realtime_tickets_post",
@@ -16864,6 +19884,195 @@
         "summary": "Revoke Session",
         "tags": [
           "tenancy"
+        ]
+      }
+    },
+    "/v1/tools/policy": {
+      "get": {
+        "operationId": "get_policy_v1_tools_policy_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolPolicyView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Policy",
+        "tags": [
+          "tools"
+        ]
+      },
+      "put": {
+        "description": "The layer as written, on the version `If-Match` names.",
+        "operationId": "write_policy_v1_tools_policy_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "description": "The version the caller read, as an entity tag: `\"3\"`. 412 `precondition_failed` when the record changed since.",
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The version the caller read, as an entity tag: `\"3\"`. 412 `precondition_failed` when the record changed since.",
+              "title": "If-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ToolPolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolPolicyView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Write Policy",
+        "tags": [
+          "tools"
         ]
       }
     },
