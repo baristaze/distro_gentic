@@ -176,6 +176,9 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
         # The platform's size, counted across tenants once an interval and
         # kept as the tally the operator plane reads instead of counting.
         tally=managers.tenancy_operator.tally_size,
+        # The platform's signals across every tenant, by bounded labels: the
+        # gauges the operator dashboard draws, set once a pass.
+        fleet=managers.placement_operator.fleet_counts,
         handlers={
             WorkKind.NOOP: NoopHandlerImpl(),
             WorkKind.ORCHESTRATION: OrchestrationHandlerImpl(

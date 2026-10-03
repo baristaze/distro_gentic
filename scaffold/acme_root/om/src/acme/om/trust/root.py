@@ -46,6 +46,28 @@ def absent_client(provider: ProviderName, value: str) -> ModelProviderInterface:
     return ModelProviderAbsentImpl(provider, "no client is built on a tenant's own key")
 
 
+def build_trust_operator(
+    storage: StorageInterface,
+    infra: InfraInterface,
+    options: TrustOptions | None = None,
+    clock: Callable[[], datetime] = utcnow,
+) -> TrustOperatorManagerInterface:
+    """The operator plane of trust alone, over storage and the keys: what the
+    API serves an operator, and what the grant job writes grants with. An
+    operator's shape is read from the history at rest, never opened; content
+    is opened as the engine opens it, by each session's key."""
+    keys = SessionKeysImpl(storage.get_privacy_storage(), infra.get_keys())
+    return TrustOperatorManagerImpl(
+        storage.get_trust_storage(),
+        storage.get_agent_session_storage(),
+        storage.get_step_storage(),
+        private_history(storage, keys, StepStorageMemoryImpl()),
+        storage.get_event_storage(),
+        options or TrustOptions(),
+        clock,
+    )
+
+
 class TrustLayer:
     """`placement` answers where each session runs and on which machine
     credential; `probe` asks a provider about a key before it is saved; and
@@ -94,18 +116,7 @@ class TrustLayer:
             self.options,
             self._clock,
         )
-        # An operator's shape is read from the history at rest, never opened;
-        # content is opened as the engine opens it, by each session's key.
-        keys = SessionKeysImpl(storage.get_privacy_storage(), self._infra.get_keys())
-        operator = TrustOperatorManagerImpl(
-            storage.get_trust_storage(),
-            storage.get_agent_session_storage(),
-            storage.get_step_storage(),
-            private_history(storage, keys, StepStorageMemoryImpl()),
-            storage.get_event_storage(),
-            self.options,
-            self._clock,
-        )
+        operator = build_trust_operator(storage, self._infra, self.options, self._clock)
         clients = ProviderClientsCachedImpl(
             storage.get_trust_storage(),
             self._infra.get_secrets(),

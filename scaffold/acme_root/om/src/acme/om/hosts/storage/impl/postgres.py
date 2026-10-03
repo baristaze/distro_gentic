@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 
 from acme.om.base import EMPTY_UUID
@@ -122,6 +122,19 @@ class HostsStoragePostgresImpl(PgStorageBase, HostsStorageInterface):
         async with self._session_for(stmt, org_id=org_id) as session:
             rows = (await session.execute(stmt)).scalars().all()
             return [to_model(row, Host) for row in rows]
+
+    async def count_hosts(self, seen_since: datetime, floor: int) -> dict[tuple[bool, bool], int]:
+        seen = Hosts.last_seen_at > seen_since
+        at_floor = Hosts.exec_version >= floor
+        stmt = (
+            select(seen, at_floor, func.count())
+            .where(Hosts.revoked_at.is_(None))
+            .group_by(seen, at_floor)
+        )
+        # Every tenant's hosts, so the system scope, spelled here.
+        async with self._session_for(stmt, org_id=EMPTY_UUID) as session:
+            rows = (await session.execute(stmt)).all()
+        return {(bool(s), bool(f)): n for s, f, n in rows}
 
     async def read_host_by_credential_digest(
         self, digest: str

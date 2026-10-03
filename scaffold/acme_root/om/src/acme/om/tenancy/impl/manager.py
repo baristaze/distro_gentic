@@ -384,6 +384,12 @@ class TenancyManagerImpl(TenancyManagerInterface):
             return identity
         return await self._write_entry(rctx, identity, operator_role)
 
+    async def operator_identity(self, rctx: RequestContext, email: str) -> Identity:
+        identity = await self._storage.read_identity_by_email_digest(email_digest(email))
+        if identity is None or identity.operator_role is None:
+            raise NotFound("no identity on the operator allowlist holds that email")
+        return identity
+
     async def disable_operator(self, rctx: RequestContext, email: str) -> Identity:
         identity = await self._storage.read_identity_by_email_digest(email_digest(email))
         if identity is None:

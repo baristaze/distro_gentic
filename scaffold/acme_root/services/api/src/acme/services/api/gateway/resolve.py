@@ -12,6 +12,7 @@ from acme.services.api.services import (
     AdminServiceInterface,
     AgentSessionsServiceInterface,
     EventsServiceInterface,
+    FleetServiceInterface,
     HostsServiceInterface,
     MediaServiceInterface,
     RealtimeServiceInterface,
@@ -40,6 +41,10 @@ def tenancy_service(connection: HTTPConnection) -> TenancyServiceInterface:
 
 def admin_service(connection: HTTPConnection) -> AdminServiceInterface:
     return services_of(connection).get_admin_service()
+
+
+def fleet_service(connection: HTTPConnection) -> FleetServiceInterface:
+    return services_of(connection).get_fleet_service()
 
 
 def events_service(connection: HTTPConnection) -> EventsServiceInterface:
@@ -82,5 +87,6 @@ RealtimeService = Annotated[RealtimeServiceInterface, Depends(realtime_service)]
 WebhooksService = Annotated[WebhooksServiceInterface, Depends(webhooks_service)]
 AgentSessionsService = Annotated[AgentSessionsServiceInterface, Depends(agent_sessions_service)]
 HostsService = Annotated[HostsServiceInterface, Depends(hosts_service)]
+FleetService = Annotated[FleetServiceInterface, Depends(fleet_service)]
 RelayService = Annotated[RelayServiceInterface, Depends(relay_service)]
 StationsService = Annotated[StationsServiceInterface, Depends(stations_service)]

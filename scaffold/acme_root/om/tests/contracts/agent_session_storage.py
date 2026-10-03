@@ -216,6 +216,41 @@ class AgentSessionStorageContract:
         assert {(org, session.id): session for org, session in found} == due
         assert len(await storage.read_purgeable(now - timedelta(days=30), 2)) == 2
 
+    async def test_count_parked_answers_every_tenants_parks_by_reason_and_age(
+        self, storage: AgentSessionStorageInterface
+    ) -> None:
+        """The platform's gauge of parks: every tenant's parked sessions by
+        the park's reason and how many cuts their last change is at or
+        before; never one not parked, nor one marked deleted. The read spans
+        every tenant, so the case reads what its own rows add."""
+        now = utcnow()
+        cuts = (now - timedelta(hours=1), now - timedelta(days=1))
+        before = await storage.count_parked(cuts)
+        first, second = new_id(), new_id()
+        fresh, stale, old, idle, gone = (make_session() for _ in range(5))
+        for org, session in ((first, fresh), (first, stale), (second, old), (first, idle)):
+            assert await storage.create_session(org, session, ())
+        assert await storage.create_session(second, gone, ())
+        await storage.write_session(first, parked(fresh, 2), 1, ())
+        hours_ago = now - timedelta(hours=3)
+        await storage.write_session(
+            first, parked(stale, 2).model_copy(update={"updated_at": hours_ago}), 1, ()
+        )
+        days_ago = now - timedelta(days=3)
+        await storage.write_session(
+            second, parked(old, 2).model_copy(update={"updated_at": days_ago}), 1, ()
+        )
+        await storage.write_session(
+            second, marked(parked(gone, 2), 3, now - timedelta(days=2)), 1, ()
+        )
+        after = await storage.count_parked(cuts)
+        added = {key: after.get(key, 0) - before.get(key, 0) for key in after}
+        assert {key: n for key, n in added.items() if n} == {
+            (ParkReason.BUDGET, 0): 1,
+            (ParkReason.BUDGET, 1): 1,
+            (ParkReason.BUDGET, 2): 1,
+        }
+
     async def test_read_stalled_answers_pending_sessions_of_the_slice_oldest_first(
         self, storage: AgentSessionStorageInterface
     ) -> None:

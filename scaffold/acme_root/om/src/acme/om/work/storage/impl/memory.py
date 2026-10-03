@@ -169,6 +169,46 @@ class WorkStorageMemoryImpl(MemoryStorageBase, WorkStorageInterface):
             if item.status is WorkStatus.FAILED and item.updated_at > since
         )
 
+    async def count_ready_by_lane(self, prefix: str, now: datetime) -> dict[str, int]:
+        depth: dict[str, int] = {}
+        for _, item in self._rows_across_tenants(self._items):
+            if self._ready(item, now) and item.lane.startswith(prefix):
+                depth[item.lane] = depth.get(item.lane, 0) + 1
+        return depth
+
+    async def count_ready_ahead(self, item: WorkItem, now: datetime) -> int:
+        return sum(
+            1
+            for _, other in self._rows_across_tenants(self._items)
+            if self._ready(other, now)
+            and other.lane == item.lane
+            and other.id != item.id
+            and (other.available_at, other.id) < (item.available_at, item.id)
+        )
+
+    async def count_ready_on_lanes(
+        self, org_id: UUID, lanes: Sequence[str], now: datetime
+    ) -> dict[tuple[str, WorkKind], int]:
+        found: dict[tuple[str, WorkKind], int] = {}
+        for item in self._rows(self._items, org_id):
+            if self._ready(item, now) and item.lane in lanes:
+                found[(item.lane, item.kind)] = found.get((item.lane, item.kind), 0) + 1
+        return found
+
+    async def read_latest_for_target(
+        self, org_id: UUID, kind: WorkKind, target_id: UUID
+    ) -> WorkItem | None:
+        mine = [
+            item
+            for item in self._rows(self._items, org_id)
+            if item.kind is kind and item.target_id == target_id
+        ]
+        return max(mine, key=lambda item: (item.created_at, item.id), default=None)
+
+    @staticmethod
+    def _ready(item: WorkItem, now: datetime) -> bool:
+        return item.status is WorkStatus.QUEUED and item.available_at <= now
+
     async def read_item(self, org_id: UUID, item_id: UUID) -> WorkItem | None:
         return self._get(self._items, org_id, item_id)
 
