@@ -858,7 +858,7 @@ def build_managers(
         outbox,
         hosts_options or HostsOptions(),
     )
-    # The validation sessions: station work on the queue, with no agent.
+    # The validation sessions: platform work on the queue, with no agent.
     platform = PlatformAgentsManagerImpl(
         storage.get_platform_agents_storage(),
         tenancy,

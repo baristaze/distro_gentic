@@ -39,8 +39,8 @@ class TrustStorageInterface(ABC):
         self, org_id: UUID, name: str, project_id: UUID | None
     ) -> SecretDeclaration | None:
         """What `name` means to a session of the project `project_id`: that
-        project's declaration, else the tenant's own, one on no project (the
-        first by id), and never another project's. None when neither is."""
+        project's declaration, never another project's. None when it has
+        none, or the session has no project."""
         ...
 
     @abstractmethod
