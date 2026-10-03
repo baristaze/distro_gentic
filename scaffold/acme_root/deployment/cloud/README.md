@@ -37,15 +37,19 @@ $75 that every environment pays whatever its size (the NAT gateway, the
 load balancer, public addresses, telemetry). Re-price in the AWS Pricing
 Calculator before a change of size.
 
-| Size | API tasks | Worker tasks | Postgres | Valkey | Pool | Ceilings | About a month |
-|------|-----------|--------------|----------|--------|------|----------|---------------|
-| **XS** | 1 × 0.5 vCPU, 1 GB | 1 × 0.25, 0.5 | `db.t4g.micro`, one zone | 1 × `cache.t4g.micro` | 6 | 2, 1 | $124 |
-| **S** | 1 × 0.5, 1 | 1 × 0.25, 0.5 | `db.t4g.small`, one zone | 1 × `cache.t4g.micro` | 10 | 3, 1 | $139 |
-| **M** | 2 × 0.5, 1 | 1 × 0.25, 0.5 | `db.t4g.medium`, two zones | 2 × `cache.t4g.small` | 12 | 4, 2 | $260 |
-| **L** | 2 × 0.5, 1 | 2 × 0.5, 1 | `db.m6g.large`, two zones | 2 × `cache.m6g.large` | 12 | 6, 2 | $560 |
-| **XL** | 4 × 1, 2 | 2 × 1, 2 | `db.m6g.xlarge`, two zones, 100 GB | 2 × `cache.m6g.xlarge` | 12 | 12, 4 | $1,125 |
+| Size | API tasks | Worker tasks | Runner tasks | Postgres | Valkey | Pools | Ceilings | About a month |
+|------|-----------|--------------|--------------|----------|--------|-------|----------|---------------|
+| **XS** | 1 × 0.5 vCPU, 1 GB | 1 × 0.25, 0.5 | 1 × 0.5, 1 | `db.t4g.micro`, one zone | 1 × `cache.t4g.micro` | 6, 4 | 2, 1, 1 | $142 |
+| **S** | 1 × 0.5, 1 | 1 × 0.25, 0.5 | 1 × 0.5, 1 | `db.t4g.small`, one zone | 1 × `cache.t4g.micro` | 10, 5 | 3, 1, 2 | $157 |
+| **M** | 2 × 0.5, 1 | 1 × 0.25, 0.5 | 1 × 0.5, 1 | `db.t4g.medium`, two zones | 2 × `cache.t4g.small` | 12, 6 | 4, 2, 2 | $278 |
+| **L** | 2 × 0.5, 1 | 2 × 0.5, 1 | 2 × 0.5, 1 | `db.m6g.large`, two zones | 2 × `cache.m6g.large` | 12, 6 | 6, 2, 4 | $596 |
+| **XL** | 4 × 1, 2 | 2 × 1, 2 | 2 × 1, 2 | `db.m6g.xlarge`, two zones, 100 GB | 2 × `cache.m6g.xlarge` | 12, 6 | 12, 4, 4 | $1,197 |
 
-The ceilings are the autoscaling maximums, the API's first. XS proves a
+The pools are the serving processes' size and the runner's own. The
+ceilings are the autoscaling maximums: the API's, the worker's, and the
+runner's. The runner's count is what the environment spends on loops'
+tasks; what a tenant spends on models is held by the money gate before
+each call, never by a size. XS proves a
 deploy works. S is one of everything and survives a task restart. M
 keeps a standby in a second zone for the first real load. L leaves the
 burstable classes. XL is growth: grow only the tier the dashboard shows
@@ -84,10 +88,12 @@ a third, the purge login's, of one connection. The two one-off tasks,
 migrate and grant, hold at most 8 together. The rule every size keeps:
 (twice the API's ceiling, since a rollout may double it, plus the
 worker's ceiling) × 2 pools × the pool size, plus the worker's ceiling
-for the purge pools, plus 8, stays under the instance's
-`max_connections` (about 80 for `db.t4g.micro`, 180 for `db.t4g.small`,
-400 for `db.t4g.medium`, 850 for `db.m6g.large`, 1,700 for
-`db.m6g.xlarge`). At XS that is 5 × 2 × 6 + 1 + 8 = 69. Because the rule holds at the ceilings, turning autoscaling on is one
+for the purge pools, plus the runner's ceiling × 2 pools × its own pool
+size, since it rolls one task at a time, plus 8, stays under the
+instance's `max_connections` (about 80 for `db.t4g.micro`, 180 for
+`db.t4g.small`, 400 for `db.t4g.medium`, 850 for `db.m6g.large`, 1,700
+for `db.m6g.xlarge`). At XS that is 5 × 2 × 6 + 1 + 1 × 2 × 4 + 8 = 77,
+and at S 7 × 2 × 10 + 1 + 2 × 2 × 5 + 8 = 169. Because the rule holds at the ceilings, turning autoscaling on is one
 line ([../../docs/runbooks/scale.md](../../docs/runbooks/scale.md)).
 Raise a ceiling, and the pool is the line to check in the same change.
 

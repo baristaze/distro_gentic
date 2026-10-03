@@ -47,7 +47,7 @@ SCRAPE_PORT ?= $(ACME_COLLECTOR_SCRAPE_PORT)
 # `make arch-check ARCH_CHECK="python3 ../swe_guidelines/checkers/arch_check.py"`.
 ARCH_CHECK ?= uvx --python "$(shell cat .python-version)" --from "git+https://github.com/baristaze/swe_guidelines@v0.48.0\#subdirectory=checkers" arch-check
 
-.PHONY: help setup up down reset urls infra-up buckets devx-up stack-up infra-down infra-reset collector-scrape migrate seed migrate-check benchmark-boot check lint format-check typecheck arch-check agentic-check distro-check test-unit test-integration test-telemetry test-live benchmark traffic openapi
+.PHONY: help setup up down reset urls infra-up buckets devx-up stack-up infra-down infra-reset collector-scrape migrate seed migrate-check benchmark-boot check lint format-check typecheck arch-check agentic-check distro-check test-unit test-integration test-telemetry host-check test-live benchmark traffic openapi
 
 # This Makefile alone, never $(MAKEFILE_LIST): the includes above put
 # .env.example and .env in that list, and grep prefixes every match with the
@@ -251,6 +251,11 @@ benchmark: ## Judge the acceptance scenarios and record each run as a benchmark;
 # failure, which is how CI runs it.
 test-telemetry: ## The telemetry round trip over the devx profile
 	uv run pytest -q -m telemetry
+
+# The workspace host's installer on a Linux machine with systemd, a container:
+# the host starts under its unit as its own user, and the unit's exposure holds.
+host-check: ## Install and start the workspace host under its unit in a container
+	deployment/host/check/check.sh
 
 # The gate's sanity run: the light profile for thirty seconds over the seeded
 # org, against the API on ACME_PORT. Proves the wiring, says nothing about capacity.

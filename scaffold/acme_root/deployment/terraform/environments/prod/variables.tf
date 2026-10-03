@@ -25,6 +25,11 @@ variable "maintenance_image" {
   type        = string
 }
 
+variable "session_runner_image" {
+  description = "The session runner image by digest; the deploy workflows pass it."
+  type        = string
+}
+
 variable "api_domain_name" {
   description = "The API's public name, from deployment/cloud/environments.json; its hosted zone is the bootstrap root's."
   type        = string
