@@ -200,7 +200,10 @@ class InfraConfiguredImpl(InfraInterface):
     ) -> tuple[WorkspaceProviderInterface, TransportInterface]:
         """The provider and the transport that runs in what it prepares, as a
         pair. Both take this process's proxy and CA file, which a command
-        sees under open egress alone."""
+        sees under open egress alone; a CA file it cannot read stops the
+        process here, as it starts."""
+        if settings.workspace_backend == "none":
+            return WorkspaceNullImpl(), TransportNullImpl()
         records = settings.workspaces_root / ".records"
         broker = self._broker
         network = HostNetwork.of(os.environ)
@@ -209,19 +212,17 @@ class InfraConfiguredImpl(InfraInterface):
                 WorkspaceHostImpl(settings.workspaces_root),
                 TransportLocalImpl(records, self._secrets, broker, network=network),
             )
-        if settings.workspace_backend == "container":
-            timeout = timedelta(seconds=settings.docker_timeout_seconds)
-            return (
-                WorkspaceContainerImpl(
-                    settings.workspace_image,
-                    timeout,
-                    settings.workspace_deployment,
-                    timedelta(seconds=settings.docker_pull_timeout_seconds),
-                    network,
-                ),
-                TransportContainerImpl(records, self._secrets, broker, timeout, network),
-            )
-        return WorkspaceNullImpl(), TransportNullImpl()
+        timeout = timedelta(seconds=settings.docker_timeout_seconds)
+        return (
+            WorkspaceContainerImpl(
+                settings.workspace_image,
+                timeout,
+                settings.workspace_deployment,
+                timedelta(seconds=settings.docker_pull_timeout_seconds),
+                network,
+            ),
+            TransportContainerImpl(records, self._secrets, broker, timeout, network),
+        )
 
     def _build_cache(self, scope: CacheScope) -> CacheInterface:
         """Only the out-of-process impl is wrapped. The memory impl is a dict

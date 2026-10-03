@@ -16,6 +16,7 @@ where they do."""
 import asyncio
 import base64
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -28,6 +29,7 @@ import pytest
 
 from acme.infra.base import new_id, utcnow
 from acme.infra.docker import DOCKER_VARIABLES
+from acme.infra.docker import docker as docker_cli
 from acme.infra.exceptions import InfraNotFound
 from acme.infra.impl.settings import InfraSettings
 from acme.infra.secrets.local import SecretsLocalImpl
@@ -54,7 +56,7 @@ from acme.infra.workspaces import (
     Workspace,
     WorkspaceProviderInterface,
 )
-from acme.infra.workspaces.container import CA_MOUNT, DEFAULT_IMAGE, WorkspaceContainerImpl
+from acme.infra.workspaces.container import CA_PATH, DEFAULT_IMAGE, WorkspaceContainerImpl
 from acme.infra.workspaces.host import WorkspaceHostImpl
 from acme.infra.workspaces.network import CA_VARIABLES, HOST_NETWORK_VARIABLES, HostNetwork
 
@@ -596,9 +598,9 @@ class TestTransportContainer(TransportContract):
 async def test_a_container_with_open_egress_holds_the_hosts_ca_read_only(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The container reads the host's CA file where its variables name it,
-    and cannot write it; one with no egress holds neither the file nor the
-    variables."""
+    """The container reads its copy of the host's CA file where its
+    variables name it, and cannot write it; one with no egress holds
+    neither the file nor the variables."""
     network, _ = host_network(tmp_path, monkeypatch)
     provider = WorkspaceContainerImpl(
         "python:3.14-slim", timedelta(seconds=300), "transports", network=network
@@ -616,23 +618,74 @@ async def test_a_container_with_open_egress_holds_the_hosts_ca_read_only(
         workspace = await provider.prepare(new_id(), new_id(), spec)
         try:
             seen[egress], read = await seen_by(transport, workspace, "python3")
-            listed = await transport.run(workspace, command("ls", CA_MOUNT), seal=SEAL)
+            listed = await transport.run(workspace, command("ls", CA_PATH), seal=SEAL)
             written = await transport.run(
-                workspace, command("sh", "-c", f"echo more >> {CA_MOUNT}"), seal=SEAL
+                workspace, command("sh", "-c", f"echo more >> {CA_PATH}"), seal=SEAL
             )
         finally:
             await provider.purge(workspace.org_id, workspace.id)
         if egress is EgressMode.OPEN:
             assert read == CA_TEXT
-            assert written.exit_code != 0 and "Read-only" in written.stderr
+            assert written.exit_code != 0 and "Permission denied" in written.stderr
         else:
             assert listed.exit_code != 0, "no egress, no file of the host's"
     opened = seen[EgressMode.OPEN]
     assert {name: opened[name] for name in HOST_NETWORK_VARIABLES & set(opened)} == (
-        what_the_host_hands(CA_MOUNT)
+        what_the_host_hands(CA_PATH)
     )
     assert not {"HOST_ONLY", ENGINE_CREDENTIAL} & set(opened)
     assert not HOST_NETWORK_VARIABLES & set(seen[EgressMode.NONE])
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(not docker_runs(), reason="needs a local Docker")
+async def test_a_container_command_sees_no_proxy_of_dockers_own_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The `docker` command line copies the proxies its own config names,
+    credentials included, into every container it starts, under no egress
+    too. None reaches a command: under no egress it sees no proxy at all,
+    and under open egress only the host's, without its credential."""
+    context = await docker_cli(
+        "context", "inspect", "--format", "{{.Endpoints.docker.Host}}", bound=timedelta(seconds=20)
+    )
+    assert context.ok, context.reason()
+    endpoint = context.stdout.decode().strip()
+    config = tmp_path / "docker-config"
+    config.mkdir()
+    proxy = "http://owner:hunter2@config-proxy.internal:3128"
+    named = {"httpProxy": proxy, "httpsProxy": proxy, "ftpProxy": proxy, "allProxy": proxy}
+    (config / "config.json").write_text(
+        json.dumps({"proxies": {"default": {**named, "noProxy": "config.internal"}}})
+    )
+    monkeypatch.setenv("DOCKER_HOST", os.environ.get("DOCKER_HOST") or endpoint)
+    monkeypatch.setenv("DOCKER_CONFIG", str(config))
+    network, _ = host_network(tmp_path, monkeypatch)
+    provider = WorkspaceContainerImpl(
+        "python:3.14-slim", timedelta(seconds=300), "transports", network=network
+    )
+    transport = TransportContainerImpl(
+        tmp_path / "records",
+        secrets_for(new_id()),
+        BrokerNullImpl(),
+        timedelta(seconds=60),
+        network,
+    )
+    proxies: dict[EgressMode, dict[str, str]] = {}
+    for egress in (EgressMode.NONE, EgressMode.OPEN):
+        spec = IsolationSpec(mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode=egress))
+        workspace = await provider.prepare(new_id(), new_id(), spec)
+        try:
+            seen, _ = await seen_by(transport, workspace, "python3")
+        finally:
+            await provider.purge(workspace.org_id, workspace.id)
+        assert "hunter2" not in json.dumps(seen) and "config.internal" not in json.dumps(seen)
+        proxies[egress] = {name: value for name, value in seen.items() if "proxy" in name.lower()}
+    assert proxies[EgressMode.NONE] == {}, "no egress, no proxy"
+    handed = what_the_host_hands(CA_PATH)
+    assert proxies[EgressMode.OPEN] == {
+        name: value for name, value in handed.items() if "proxy" in name.lower()
+    }
 
 
 @pytest.mark.integration
@@ -737,9 +790,63 @@ async def test_a_container_command_takes_the_hosts_network_under_open_egress_alo
     flags = dict(argv[i + 1].split("=", 1) for i, flag in enumerate(argv) if flag == "--env")
     handed = {name: value for name, value in flags.items() if name in HOST_NETWORK_VARIABLES}
     if egress is EgressMode.OPEN:
-        assert handed == what_the_host_hands(CA_MOUNT)
+        assert handed == what_the_host_hands(CA_PATH)
     else:
         assert handed == dict(own), "the command's own, and nothing of the host's"
     line_env = seen["env"]
     assert isinstance(line_env, dict) and not HOST_NETWORK_VARIABLES & set(line_env)
     assert "hunter2" not in " ".join(argv)
+
+
+LOOPBACK_PROXIES = {
+    "HTTPS_PROXY": "http://127.0.0.1:3128",
+    "http_proxy": "http://localhost:3128",
+    "ALL_PROXY": "socks5://[::1]:1080",
+}
+
+
+async def test_a_loopback_proxy_reaches_a_local_command_and_no_container_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """On the host's loopback a proxy is the host's own, so a local command
+    goes through it. Inside a container that address is the container's
+    own, so a container command goes without it, and its transport says so
+    as it starts. A proxy off the loopback reaches both."""
+    network = HostNetwork.of({**LOOPBACK_PROXIES, "HTTP_PROXY": "http://proxy.internal:3128"})
+    opened = EgressPolicy(mode=EgressMode.OPEN)
+    workspace = await WorkspaceHostImpl(tmp_path / "workspaces").prepare(
+        new_id(), new_id(), IsolationSpec(mode=IsolationMode.HOST, egress=opened)
+    )
+    search_path = f"{Path(sys.executable).parent}:{DEFAULT_PATH}"
+    secrets = secrets_for(workspace.org_id)
+    local = TransportLocalImpl(
+        tmp_path / "records", secrets, BrokerTwinImpl(), search_path, network
+    )
+    seen, _ = await seen_by(local, workspace, "python3")
+    assert {name: seen.get(name) for name in LOOPBACK_PROXIES} == LOOPBACK_PROXIES
+    assert seen["HTTP_PROXY"] == "http://proxy.internal:3128"
+
+    handed: dict[str, list[str]] = {}
+
+    async def spawned(argv: list[str], cwd: Path, env: dict[str, str]) -> object:
+        handed["argv"] = argv
+        raise RuntimeError("seen")
+
+    monkeypatch.setattr("acme.infra.transports.container.spawn", spawned)
+    with caplog.at_level(logging.WARNING, logger="acme.infra.transports.container"):
+        container = TransportContainerImpl(
+            tmp_path / "records", secrets, BrokerTwinImpl(), timedelta(seconds=5), network
+        )
+    assert all(name in caplog.text for name in LOOPBACK_PROXIES) and "loopback" in caplog.text
+    inside = workspace.model_copy(
+        update={
+            "spec": IsolationSpec(mode=IsolationMode.CONTAINER, egress=opened),
+            "location": "acme-ws-test",
+        }
+    )
+    with pytest.raises(RuntimeError, match="seen"):
+        await container.run(inside, command("true"), seal=SEAL)
+    argv = handed["argv"]
+    flags = dict(argv[i + 1].split("=", 1) for i, flag in enumerate(argv) if flag == "--env")
+    proxies = {name: value for name, value in flags.items() if "proxy" in name.lower()}
+    assert proxies == {"HTTP_PROXY": "http://proxy.internal:3128"}

@@ -7,10 +7,12 @@ what its commands left running there."""
 
 import asyncio
 import contextlib
+import io
 import os
 import re
 import signal
 import subprocess
+import tarfile
 from datetime import timedelta
 from pathlib import Path
 
@@ -33,9 +35,14 @@ from acme.infra.workspaces import (
     Workspace,
     WorkspaceProviderInterface,
 )
-from acme.infra.workspaces.container import CA_MOUNT, WorkspaceContainerImpl, container_name
+from acme.infra.workspaces.container import (
+    CA_PATH,
+    DOCKER_PROXIES,
+    WorkspaceContainerImpl,
+    container_name,
+)
 from acme.infra.workspaces.host import WorkspaceHostImpl
-from acme.infra.workspaces.network import HostNetwork
+from acme.infra.workspaces.network import CAFileUnreadable, HostNetwork
 from acme.infra.workspaces.twin import WorkspaceNullImpl, WorkspaceTwinImpl
 
 DEPLOYMENT = "acme-test"
@@ -216,24 +223,27 @@ async def test_a_container_provider_refuses_what_it_cannot_hold_before_it_reache
 
 
 class LocalDocker:
-    """Docker, faked for one container: `run` starts it with the labels it
-    names, `rm` removes it, and `inspect` renders its format over it as
-    Docker does. It keeps every command it is given."""
+    """Docker, faked for one container: `create` makes it with the labels
+    it names, `rm` removes it, and `inspect` renders its format over it as
+    Docker does. It keeps every command it is given, and what each was fed
+    on its input."""
 
     def __init__(self) -> None:
         self.labels: dict[str, str] | None = None  # the running container's, when one runs
         self.calls: list[tuple[str, ...]] = []
         self.bounds: dict[str, timedelta] = {}  # the limit each command ran under
+        self.fed: dict[str, object] = {}  # the input each command was given
         self.image_present = True
 
     async def __call__(self, *args: str, **kwargs: object) -> DockerReply:
         self.calls.append(args)
         self.bounds[args[0]] = kwargs["bound"]  # type: ignore[assignment]
+        self.fed[args[0]] = kwargs.get("stdin")
         if args[:2] == ("image", "inspect") and not self.image_present:
             return DockerReply(1, b"", b"Error: No such image")
         if args[0] == "pull":
             self.image_present = True
-        if args[0] == "run":
+        if args[0] == "create":
             pairs = [args[i + 1] for i, arg in enumerate(args) if arg == "--label"]
             self.labels = dict(pair.split("=", 1) for pair in pairs)
         elif args[0] == "rm":
@@ -249,6 +259,11 @@ class LocalDocker:
             )
             return DockerReply(0, f"{rendered}\n".encode(), b"")
         return DockerReply(0, b"", b"")
+
+
+STARTED_AGAIN = ["version", "inspect", "rm", "image", "volume", "create", "start"]
+"""What a prepare runs when the container it finds is not the one its spec
+asks for, and the host has no CA file to copy in."""
 
 
 async def test_a_running_container_is_reused_only_under_the_spec_it_was_started_to(
@@ -268,16 +283,9 @@ async def test_a_running_container_is_reused_only_under_the_spec_it_was_started_
     assert [call[0] for call in docker.calls] == ["version", "inspect"], "the same spec reuses it"
     docker.calls.clear()
     await provider.prepare(org, workspace_id, closed)
-    assert [call[0] for call in docker.calls] == [
-        "version",
-        "inspect",
-        "rm",
-        "image",
-        "volume",
-        "run",
-    ]
-    run = docker.calls[-1]
-    assert run[run.index("--network") + 1] == "none", "the new container holds the tighter spec"
+    assert [call[0] for call in docker.calls] == STARTED_AGAIN
+    created = docker.calls[-2]
+    assert created[created.index("--network") + 1] == "none", "it holds the tighter spec"
     assert not any(call[:2] == ("volume", "rm") for call in docker.calls), "its files stay"
     assert docker.labels is not None and docker.labels["acme.deployment"] == DEPLOYMENT
 
@@ -286,28 +294,27 @@ async def test_a_running_container_is_reused_only_under_the_spec_it_was_started_
     del docker.labels["acme.deployment"]
     docker.calls.clear()
     await provider.prepare(org, workspace_id, closed)
-    assert [call[0] for call in docker.calls] == [
-        "version",
-        "inspect",
-        "rm",
-        "image",
-        "volume",
-        "run",
-    ]
+    assert [call[0] for call in docker.calls] == STARTED_AGAIN
     assert docker.labels["acme.deployment"] == DEPLOYMENT
-    volume = docker.calls[-2]
+    volume = docker.calls[-3]
     assert f"acme.deployment={DEPLOYMENT}" in volume, "its volume carries it as well"
 
 
-async def test_a_container_holds_the_hosts_ca_read_only_under_open_egress_alone(
+async def test_a_container_holds_a_copy_of_the_hosts_ca_under_open_egress_alone(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A container with open egress mounts the host's CA file read-only,
-    and one with no egress mounts nothing of the host's. One started
-    without the file, as before the host named one, is replaced, its files
+    """A container with open egress is given a copy of the host's CA file,
+    as the host read it when it started, before it starts; one with no
+    egress holds nothing of the host's. Docker is never asked to reach the
+    host's path, so a path its daemon cannot see costs no prepare, and a
+    file gone since the host started costs none either. One started
+    without the CA, as before the host named one, is replaced, its files
     kept, so no command is pointed at a file its container lacks."""
-    ca = tmp_path / "host-ca.pem"
-    ca.write_text("the host's own")
+    real = tmp_path / "certs" / "host-ca.pem"
+    real.parent.mkdir()
+    real.write_bytes(b"the host's own")
+    ca = tmp_path / "linked-ca.pem"
+    ca.symlink_to(real)
     docker = LocalDocker()
     monkeypatch.setattr("acme.infra.workspaces.container.docker", docker)
     bare = WorkspaceContainerImpl("python:3.14-slim", timedelta(seconds=5), DEPLOYMENT)
@@ -317,21 +324,23 @@ async def test_a_container_holds_the_hosts_ca_read_only_under_open_egress_alone(
         DEPLOYMENT,
         network=HostNetwork.of({"SSL_CERT_FILE": str(ca)}),
     )
+    real.unlink()
     org, workspace_id = new_id(), new_id()
     await bare.prepare(org, workspace_id, spec(IsolationMode.CONTAINER, OPEN))
     docker.calls.clear()
     await networked.prepare(org, workspace_id, spec(IsolationMode.CONTAINER, OPEN))
-    assert [call[0] for call in docker.calls] == [
-        "version",
-        "inspect",
-        "rm",
-        "image",
-        "volume",
-        "run",
-    ]
-    run = docker.calls[-1]
-    mounts = [run[i + 1] for i, flag in enumerate(run) if flag == "--mount"]
-    assert mounts == [f"type=bind,source={ca},target={CA_MOUNT},readonly"]
+    name = container_name(workspace_id)
+    assert [call[0] for call in docker.calls] == [*STARTED_AGAIN[:-1], "cp", "start"]
+    assert docker.calls[-2] == ("cp", "-", f"{name}:/")
+    fed = docker.fed["cp"]
+    assert isinstance(fed, bytes)
+    with tarfile.open(fileobj=io.BytesIO(fed)) as archive:
+        (entry,) = archive.getmembers()
+        copied = archive.extractfile(entry)
+        assert copied is not None and copied.read() == b"the host's own"
+    assert "/" + entry.name == CA_PATH and entry.mode == 0o444, "readable by all, written by none"
+    created = docker.calls[-3]
+    assert "--mount" not in created and str(ca) not in " ".join(created)
     assert not any(call[:2] == ("volume", "rm") for call in docker.calls), "its files stay"
 
     docker.calls.clear()
@@ -340,8 +349,32 @@ async def test_a_container_holds_the_hosts_ca_read_only_under_open_egress_alone(
 
     docker.calls.clear()
     await networked.prepare(org, workspace_id, spec(IsolationMode.CONTAINER, NONE))
-    run = docker.calls[-1]
-    assert run[0] == "run" and "--mount" not in run
+    assert [call[0] for call in docker.calls] == STARTED_AGAIN, "no egress, no copy"
+
+
+@pytest.mark.parametrize("egress", [OPEN, NONE])
+async def test_a_container_is_started_with_every_proxy_dockers_config_fills_left_unset(
+    egress: EgressPolicy, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The `docker` command line copies the proxies its config file names
+    into every container it starts, credentials included, unless each is
+    named: each is, with no value, so each is left unset."""
+    docker = LocalDocker()
+    monkeypatch.setattr("acme.infra.workspaces.container.docker", docker)
+    provider = WorkspaceContainerImpl("python:3.14-slim", timedelta(seconds=5), DEPLOYMENT)
+    await provider.prepare(new_id(), new_id(), spec(IsolationMode.CONTAINER, egress))
+    (created,) = (call for call in docker.calls if call[0] == "create")
+    named = [created[i + 1] for i, flag in enumerate(created) if flag == "--env"]
+    assert sorted(named) == sorted(DOCKER_PROXIES)
+    assert {"HTTPS_PROXY", "https_proxy", "NO_PROXY", "ALL_PROXY", "FTP_PROXY"} <= set(named)
+
+
+def test_a_ca_file_the_host_cannot_read_stops_it_as_it_starts(tmp_path: Path) -> None:
+    """The CA file is read once, as the host starts: one it cannot read
+    stops it there, never at a session's prepare."""
+    for unreadable in (tmp_path / "absent.pem", tmp_path):
+        with pytest.raises(CAFileUnreadable):
+            HostNetwork.of({"SSL_CERT_FILE": str(unreadable)})
 
 
 async def test_an_absent_image_is_pulled_under_the_pull_limit_before_the_run(
@@ -358,10 +391,10 @@ async def test_an_absent_image_is_pulled_under_the_pull_limit_before_the_run(
     )
     await provider.prepare(new_id(), new_id(), spec(IsolationMode.CONTAINER, NONE))
     names = [call[0] for call in docker.calls]
-    assert names.index("pull") < names.index("run")
+    assert names.index("pull") < names.index("create")
     assert ("pull", "python:3.14-slim") in docker.calls
     assert docker.bounds["pull"] == timedelta(seconds=900)
-    assert docker.bounds["run"] == timedelta(seconds=5), "the run keeps its own limit"
+    assert docker.bounds["create"] == timedelta(seconds=5), "the create keeps its own limit"
     docker.calls.clear()
     await provider.prepare(new_id(), new_id(), spec(IsolationMode.CONTAINER, NONE))
     assert "pull" not in [call[0] for call in docker.calls], "a present image is not pulled"

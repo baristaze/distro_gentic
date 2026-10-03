@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from collections.abc import Mapping, Sequence
 from datetime import timedelta
 from pathlib import Path
@@ -23,8 +24,10 @@ from acme.infra.transports.injection import BASE_LANG, injected
 from acme.infra.transports.processes import drive, end_tree, spawn
 from acme.infra.transports.records import RecordBook, opened_result, sealed_record
 from acme.infra.workspaces import IsolationMode, Workspace
-from acme.infra.workspaces.container import CA_MOUNT, MOUNT
+from acme.infra.workspaces.container import CA_PATH, MOUNT
 from acme.infra.workspaces.network import NO_HOST_NETWORK, HostNetwork
+
+log = logging.getLogger(__name__)
 
 LAUNCHER = 'echo $$ > "$1"; shift; exec "$@"'
 """Writes the command's own pid where the end of its tree finds it, then
@@ -84,9 +87,12 @@ class TransportContainerImpl(TransportInterface):
     command's environment inside is the image's, the workspace as its home,
     a locale, its own variables, its injected secrets (`exec_argv`), and,
     under open egress, the host's proxy and CA file, which the container
-    holds at `CA_MOUNT` (`HostNetwork`), laid over its own. At the deadline the command's tree inside the container
-    ends, and the command line with it. Records and the epoch fence are
-    kept on this host, beside the workspaces."""
+    holds at `CA_PATH` (`HostNetwork`), laid over its own. A proxy on the
+    host's loopback is left out, and the transport says so when it starts:
+    inside the container that address is the container's own. At the
+    deadline the command's tree inside the container ends, and the command
+    line with it. Records and the epoch fence are kept on this host, beside
+    the workspaces."""
 
     def __init__(
         self,
@@ -100,7 +106,13 @@ class TransportContainerImpl(TransportInterface):
         self._secrets = secrets
         self._broker = broker
         self._timeout = timeout
-        self._network = network
+        self._network = network.in_container()
+        if network.loopback:
+            log.warning(
+                "%s names a proxy on this host's loopback: a command in a container goes"
+                " without it",
+                ", ".join(network.loopback),
+            )
 
     async def run(
         self,
@@ -122,7 +134,7 @@ class TransportContainerImpl(TransportInterface):
                     "HOME": MOUNT,
                     "LANG": BASE_LANG,
                     **dict(command.env),
-                    **self._network.variables(workspace.spec.egress.mode, CA_MOUNT),
+                    **self._network.variables(workspace.spec.egress.mode, CA_PATH),
                 }
                 process = await spawn(
                     exec_argv(name, workdir, plain, tuple(injection.env), pidfile, command.argv),
