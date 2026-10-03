@@ -81,7 +81,9 @@ def approvals_of(session: AgentSession, history: Sequence[Step]) -> list[Approva
 
 def tool_calls_of(history: Sequence[Step], now: datetime) -> list[ToolCallView]:
     """Every tool request in order, each with the latest decision a person
-    made on it and the response that answered it."""
+    made on it and the response that answered it. A decision reads as of
+    its call's response when the call has one: an approval that let a
+    call run stays approved once its lifetime passes."""
     decisions: dict[UUID, ControlHeader] = {}
     responses: dict[UUID, Step] = {}
     for step in history:
@@ -99,6 +101,7 @@ def tool_calls_of(history: Sequence[Step], now: datetime) -> list[ToolCallView]:
         call = None if decided is None else decided.call
         answered = responses.get(step.id)
         answer = None if answered is None else answered.header
+        as_of = now if answered is None else answered.created_at
         calls.append(
             ToolCallView(
                 seq=step.seq,
@@ -107,7 +110,7 @@ def tool_calls_of(history: Sequence[Step], now: datetime) -> list[ToolCallView]:
                 tool=header.tool,
                 authorization_class=header.authorization_class,
                 principal_id=header.principal.id,
-                decision=None if decided is None else verdict_of(decided, now),
+                decision=None if decided is None else verdict_of(decided, as_of),
                 decided_by=None if call is None else call.decided_by,
                 response_seq=None if answered is None else answered.seq,
                 responded_at=None if answered is None else answered.created_at,

@@ -9,6 +9,7 @@ that exists, answered as an unknown id is. No runner works behind the API
 here, so a case writes a loop's steps, its runs, and its bound work
 itself, the way a run writes them."""
 
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
@@ -39,14 +40,19 @@ from acme.om.context import Role, TenantContext
 from acme.om.intake.types.link import HandleKind
 from acme.om.steps.types.header import (
     AcceptedResult,
+    ControlCommand,
+    ControlHeader,
+    DecidedCall,
     LoopOutcome,
     ModelResponseHeader,
     Park,
     ParkReason,
+    ToolRequestHeader,
     ToolResponseHeader,
 )
-from acme.om.steps.types.step import Step
+from acme.om.steps.types.step import Actor, Origin, Step, StepType
 from acme.services.api.container import AppContainer
+from acme.services.api.services.impl.session_reads import tool_calls_of
 
 ASSISTANT = AgentKind(
     name="assistant",
@@ -214,6 +220,24 @@ async def test_a_sessions_children_are_listed_with_their_parent(
     assert rest.json()["next_cursor"] is None
 
 
+async def test_a_deleted_child_leaves_its_parents_children_until_it_is_restored(
+    client: httpx.AsyncClient, owner: dict[str, str], container: AppContainer
+) -> None:
+    parent = await start(client, owner, "the parent")
+    kept, gone = sorted([await spawn(container, owner, parent["id"]) for _ in range(2)])
+    children = f"/v1/agent-sessions/{parent['id']}/children"
+
+    deleted = await client.delete(f"/v1/agent-sessions/{gone}", headers=owner)
+    without = await client.get(children, headers=owner)
+    restored = await client.post(f"/v1/agent-sessions/{gone}/restore", headers=owner)
+    back = await client.get(children, headers=owner)
+
+    assert deleted.status_code == 200, deleted.text
+    assert [child["id"] for child in without.json()["items"]] == [kept]
+    assert restored.status_code == 200, restored.text
+    assert [child["id"] for child in back.json()["items"]] == [kept, gone]
+
+
 async def test_a_member_archives_deletes_and_restores_a_session_and_a_viewer_does_not(
     client: httpx.AsyncClient, owner: dict[str, str], container: AppContainer
 ) -> None:
@@ -319,6 +343,47 @@ async def test_a_sessions_tool_calls_carry_their_decision_and_answer_and_its_usa
     assert usage.status_code == 200, usage.text
     assert (usage.json()["calls"], usage.json()["input"], usage.json()["output"]) == (1, 100, 20)
     assert [f["fill"] for f in usage.json()["fills"]] == ["anthropic/claude-sonnet-5-5"]
+
+
+def test_an_approved_call_that_ran_stays_approved_once_its_approval_lapses() -> None:
+    """A decision reads as of the call's response: the approval let the
+    call run, and its lifetime passing later changes nothing."""
+    sid, loop_id = new_id(), new_id()
+    request = make_request(sid, loop_id, (new_id(),))
+    response = make_response(sid, loop_id, request.id)
+    call = make_tool_request(sid, loop_id, response.id)
+    header = call.header
+    assert isinstance(header, ToolRequestHeader)
+    now = utcnow()
+    decision = Step(
+        id=new_id(),
+        created_at=now,
+        session_id=sid,
+        loop_id=loop_id,
+        type=StepType.CONTROL,
+        actor=Actor.PERSON,
+        origin=Origin.API,
+        refs=(call.id,),
+        header=ControlHeader(
+            command=ControlCommand.APPROVE,
+            call=DecidedCall(
+                tool=header.tool,
+                input_hash=header.input_hash,
+                decided_by=uuid4(),
+                role=Role.MEMBER,
+                expires_at=now + timedelta(hours=1),
+            ),
+        ),
+    )
+    ran = make_tool_response(sid, loop_id, call.id)
+    history = [request, response, call, decision, ran]
+
+    (soon,) = tool_calls_of(history, now + timedelta(seconds=1))
+    (later,) = tool_calls_of(history, now + timedelta(hours=2))
+    (waiting,) = tool_calls_of(history[:-1], now + timedelta(hours=2))
+
+    assert (soon.decision, later.decision) == ("approved", "approved")
+    assert waiting.decision == "expired", "a call that never ran outlives its approval"
 
 
 async def test_a_sessions_bounds_are_its_kinds_loop_limits_and_its_trees(
