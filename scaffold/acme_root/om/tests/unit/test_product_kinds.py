@@ -88,9 +88,13 @@ def _render_lane(payload: RenderPayload) -> str:
 
 
 RENDER_KIND = WorkKindSpec(RENDER, RenderPayload, Permission.WRITE, _render_lane, claimant=BATCH)
-BATCH_CLAIMANT = ClaimantKindSpec(BATCH, lambda node: ((batch_lane(node.pool_id), (RENDER,)),))
+BATCH_CLAIMANT = ClaimantKindSpec(
+    BATCH, lambda node: ((batch_lane(node.pool_id), (RENDER,)),), prefix="bat_"
+)
 # A claimant kind that names a kind which does not name it back.
-GREEDY = ClaimantKindSpec("greedy", lambda node: ((batch_lane(node.pool_id), (RENDER,)),))
+GREEDY = ClaimantKindSpec(
+    "greedy", lambda node: ((batch_lane(node.pool_id), (RENDER,)),), prefix="grd_"
+)
 PRODUCT = ProductKinds(work=(RENDER_KIND,), claimants=(BATCH_CLAIMANT, GREEDY))
 
 
@@ -308,8 +312,14 @@ async def test_an_unregistered_kind_or_a_payload_off_its_shape_is_refused(
     # work to a claimant kind nobody registered.
     takeovers = (
         ProductKinds(work=(replace(RENDER_KIND, name=WorkKind.EXEC),), claimants=(BATCH_CLAIMANT,)),
-        ProductKinds(claimants=(ClaimantKindSpec(HOST, lambda _: ()),)),
+        ProductKinds(claimants=(ClaimantKindSpec(HOST, lambda _: (), prefix="hsx_"),)),
         ProductKinds(work=(RENDER_KIND,)),
+        # Nor a prefix another credential carries: a host's, a person's, or
+        # an enrollment token's, so a credential names one kind.
+        *(
+            ProductKinds(claimants=(replace(BATCH_CLAIMANT, prefix=taken),))
+            for taken in ("hst_", "key_", "ses_", "hen_", "spt_")
+        ),
     )
     for product in takeovers:
         with pytest.raises(ValueError):

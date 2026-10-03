@@ -27,11 +27,11 @@ from acme.om.hosts import rules
 from acme.om.hosts.exceptions import PinnedToHosts, VersionBelowFloor
 from acme.om.hosts.impl.manager import HostsManagerImpl, HostsOptions
 from acme.om.hosts.impl.placement import PlacementHostsImpl
-from acme.om.hosts.rules import ENROLLMENT_PREFIX, HOST_CREDENTIAL_PREFIX, WireType
-from acme.om.hosts.types.credential import IssuedHostCredential
+from acme.om.hosts.rules import ENROLLMENT_PREFIX, WireType
+from acme.om.hosts.types.credential import IssuedCredential
 from acme.om.hosts.types.host import Advertisement, Enrollment, HostReport, IsolationMode
 from acme.om.hosts.types.pool import HostPool
-from acme.om.placement.kinds import HOST
+from acme.om.placement.kinds import HOST, HOST_PREFIX, platform_claimant_kinds
 from acme.om.placement.rules import host_lane, pool_lane
 from acme.om.placement.types.claimant import Claimant
 from acme.om.placement.types.work import WorkspaceOperation
@@ -93,6 +93,7 @@ def hosts(managers: Managers, storage: StorageMemoryImpl, clock: Clock) -> Hosts
         managers.tenancy,
         managers.outbox,
         HostsOptions(),
+        platform_claimant_kinds(),
         clock=clock,
     )
 
@@ -147,7 +148,7 @@ def prepare_in(pool: UUID) -> dict[str, object]:
 
 async def enrolled(
     hosts: HostsManagerImpl, owner: TenantContext, pool: HostPool, name: str = "host-1"
-) -> IssuedHostCredential:
+) -> IssuedCredential:
     issued = await hosts.issue_enrollment_token(owner, pool.id)
     return await hosts.enroll(
         request(), issued.token, Enrollment(name=name, advertisement=PROBED, exec_version=1)
@@ -169,7 +170,7 @@ async def test_a_host_enrolls_into_its_tokens_pool_with_a_credential_of_its_own(
     credential = await hosts.enroll(
         request(), issued.token, Enrollment(name="host-1", advertisement=PROBED, exec_version=1)
     )
-    assert credential.credential.startswith(HOST_CREDENTIAL_PREFIX)
+    assert credential.credential.startswith(HOST_PREFIX)
     assert credential.pool_id == pool.id
     assert credential.expires_at == clock.now + HostsOptions().credential_ttl
     # A kind of its own: no prefix a person's or an agent's credential takes.
@@ -177,7 +178,7 @@ async def test_a_host_enrolls_into_its_tokens_pool_with_a_credential_of_its_own(
     assert credential_kind_of(credential.credential) is None
     host = await hosts.authenticate(request(), credential.credential)
     assert (host.host_id, host.org_id, host.pool_id) == (
-        credential.host_id,
+        credential.claimant_id,
         owner.org_id,
         pool.id,
     )
@@ -223,7 +224,7 @@ async def test_a_host_credential_is_no_platform_credential_and_no_other_is_a_hos
         await managers.tenancy.authenticate(request(APP), host.credential)
     # And the host's refuses every credential but its own kind.
     key = await managers.tenancy.credentials.create_api_key(owner, "ci", Role.MEMBER)
-    for credential in (key.key, token.token, HOST_CREDENTIAL_PREFIX + "forged"):
+    for credential in (key.key, token.token, HOST_PREFIX + "forged"):
         with pytest.raises(InvalidCredential):
             await hosts.authenticate(request(), credential)
 
@@ -237,7 +238,7 @@ async def test_a_credential_lives_an_hour_and_the_host_rotates_it(
     clock.advance(timedelta(minutes=30))
     identity = await hosts.authenticate(request(), first.credential)
     second = await hosts.rotate(request(), identity)
-    assert second.credential != first.credential and second.host_id == first.host_id
+    assert second.credential != first.credential and second.claimant_id == first.claimant_id
     assert second.expires_at == clock.now + HostsOptions().credential_ttl
     # The one it replaced works for the grace, so a call in flight with it
     # lands; past it, the host calls with the next one.
@@ -328,7 +329,7 @@ async def test_a_revoked_host_is_refused_and_handed_nothing(
     host = await enrolled(hosts, owner, pool)
     identity = await hosts.authenticate(request(), host.credential)
     await managers.work.enqueue(owner, an_item(owner, WorkKind.WORKSPACE, prepare_in(pool.id)))
-    await hosts.revoke_host(owner, host.host_id)
+    await hosts.revoke_host(owner, host.claimant_id)
     with pytest.raises(CredentialExpired):
         await hosts.authenticate(request(), host.credential)
     # A call that resolved its credential before the revoke is handed nothing.
@@ -354,12 +355,12 @@ async def test_only_an_owner_or_an_admin_lets_hosts_in(
         await hosts.issue_enrollment_token(member, pool.id)
     host = await enrolled(hosts, owner, pool)
     with pytest.raises(NotAuthorized):
-        await hosts.revoke_host(member, host.host_id)
+        await hosts.revoke_host(member, host.claimant_id)
     other = await an_owner(managers, "fabrikam")
     with pytest.raises(NotFound):
         await hosts.issue_enrollment_token(other, pool.id)
     with pytest.raises(NotFound):
-        await hosts.revoke_host(other, host.host_id)
+        await hosts.revoke_host(other, host.claimant_id)
 
 
 # A host is handed only the work pinned to its pool, by its identity, and
@@ -385,17 +386,17 @@ async def test_a_host_is_handed_only_the_work_pinned_to_its_pool(
         owner, an_item(owner, WorkKind.WORKSPACE, prepare_in(theirs.id))
     )
     on_their_host = await managers.work.enqueue(
-        owner, an_item(owner, WorkKind.EXEC, exec_on(theirs_host.host_id))
+        owner, an_item(owner, WorkKind.EXEC, exec_on(theirs_host.claimant_id))
     )
     from_another_tenant = await managers.work.enqueue(
         other, an_item(other, WorkKind.WORKSPACE, prepare_in(foreign.id))
     )
     assert (mine.lane, pinned_elsewhere.lane) == (pool_lane(ours.id), pool_lane(theirs.id))
-    assert on_their_host.lane == host_lane(theirs_host.host_id)
+    assert on_their_host.lane == host_lane(theirs_host.claimant_id)
     identity = await hosts.authenticate(request(), ours_host.credential)
     claimed = await hosts.claim(request(), identity, 1)
     assert claimed is not None and claimed[1].id == mine.id
-    assert claimed[1].claimed_by == f"host:{ours_host.host_id}"
+    assert claimed[1].claimed_by == f"host:{ours_host.claimant_id}"
     assert await hosts.claim(request(), identity, 1) is None
     # What was pinned elsewhere waits there, unclaimed, for its own hosts.
     theirs_identity = await hosts.authenticate(request(), theirs_host.credential)

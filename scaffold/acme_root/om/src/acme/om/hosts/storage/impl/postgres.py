@@ -13,16 +13,23 @@ from acme.om.hosts.storage.tables.host_pools import HostPools
 from acme.om.hosts.storage.tables.hosts import Hosts
 from acme.om.hosts.storage.tables.session_placements import SessionPlacements
 from acme.om.hosts.types.credential import EnrollmentToken, HostCredential, Rotation
-from acme.om.hosts.types.host import Host, HostReport
+from acme.om.hosts.types.host import EnrolledClaimant, Host, HostReport
 from acme.om.hosts.types.placement import SessionPlacement
 from acme.om.hosts.types.pool import HostPool
 from acme.om.outbox.storage.tables.outbox_rows import OutboxRows
 from acme.om.outbox.types.row import OutboxRow
+from acme.om.placement.kinds import HOST
 from acme.om.storage.impl.pg_base import PgStorageBase, delete_batch, deleted, violated_constraint
 from acme.om.storage.utils.translation import to_model, to_row, to_values
 
 PURGED_IN_ORDER = (HostCredentials, Hosts, HostEnrollmentTokens, HostPools, SessionPlacements)
 """A deleted tenant's tables, each purged a batch at a time."""
+
+
+def claimant_of(row: Hosts) -> EnrolledClaimant:
+    """The claimant a row holds: a host with what it advertised, any other
+    kind without."""
+    return to_model(row, Host) if row.kind == HOST else to_model(row, EnrolledClaimant)
 
 
 class HostsStoragePostgresImpl(PgStorageBase, HostsStorageInterface):
@@ -86,15 +93,15 @@ class HostsStoragePostgresImpl(PgStorageBase, HostsStorageInterface):
             await session.commit()
             return token
 
-    async def enroll_host(
+    async def enroll(
         self,
         org_id: UUID,
-        host: Host,
+        claimant: EnrolledClaimant,
         credential: HostCredential,
         outbox_rows: tuple[OutboxRow, ...],
     ) -> None:
         async with self._session_for(Hosts, org_id=org_id) as session:
-            session.add(to_row(host, Hosts, org_id=org_id))
+            session.add(to_row(claimant, Hosts, org_id=org_id))
             session.add(to_row(credential, HostCredentials, org_id=org_id))
             for outbox_row in outbox_rows:
                 session.add(to_row(outbox_row, OutboxRows, org_id=org_id))
@@ -103,19 +110,25 @@ class HostsStoragePostgresImpl(PgStorageBase, HostsStorageInterface):
             except IntegrityError as error:
                 await session.rollback()
                 raise UniqueKeyTaken(
-                    f"hosts {host.id}: {violated_constraint(error) or 'a unique key'} is taken"
+                    f"hosts {claimant.id}: {violated_constraint(error) or 'a unique key'} is taken"
                 ) from error
 
     async def read_host(self, org_id: UUID, host_id: UUID) -> Host | None:
-        stmt = select(Hosts).where(Hosts.org_id == org_id, Hosts.id == host_id)
+        stmt = select(Hosts).where(Hosts.org_id == org_id, Hosts.id == host_id, Hosts.kind == HOST)
         async with self._session_for(stmt, org_id=org_id) as session:
             row = (await session.execute(stmt)).scalar_one_or_none()
             return None if row is None else to_model(row, Host)
 
+    async def read_claimant(self, org_id: UUID, claimant_id: UUID) -> EnrolledClaimant | None:
+        stmt = select(Hosts).where(Hosts.org_id == org_id, Hosts.id == claimant_id)
+        async with self._session_for(stmt, org_id=org_id) as session:
+            row = (await session.execute(stmt)).scalar_one_or_none()
+            return None if row is None else claimant_of(row)
+
     async def read_hosts(self, org_id: UUID, pool_id: UUID, limit: int) -> list[Host]:
         stmt = (
             select(Hosts)
-            .where(Hosts.org_id == org_id, Hosts.pool_id == pool_id)
+            .where(Hosts.org_id == org_id, Hosts.pool_id == pool_id, Hosts.kind == HOST)
             .order_by(Hosts.id)
             .limit(limit)
         )
@@ -128,7 +141,7 @@ class HostsStoragePostgresImpl(PgStorageBase, HostsStorageInterface):
         at_floor = Hosts.exec_version >= floor
         stmt = (
             select(seen, at_floor, func.count())
-            .where(Hosts.revoked_at.is_(None))
+            .where(Hosts.revoked_at.is_(None), Hosts.kind == HOST)
             .group_by(seen, at_floor)
         )
         # Every tenant's hosts, so the system scope, spelled here.
@@ -136,9 +149,9 @@ class HostsStoragePostgresImpl(PgStorageBase, HostsStorageInterface):
             rows = (await session.execute(stmt)).all()
         return {(bool(s), bool(f)): n for s, f, n in rows}
 
-    async def read_host_by_credential_digest(
+    async def read_claimant_by_credential_digest(
         self, digest: str
-    ) -> tuple[UUID, HostCredential, Host] | None:
+    ) -> tuple[UUID, HostCredential, EnrolledClaimant] | None:
         stmt = (
             select(HostCredentials, Hosts)
             .join(
@@ -151,11 +164,11 @@ class HostsStoragePostgresImpl(PgStorageBase, HostsStorageInterface):
             found = (await session.execute(stmt)).one_or_none()
             if found is None:
                 return None
-            credential, host = found
+            credential, claimant = found
             return (
                 credential.org_id,
                 to_model(credential, HostCredential),
-                to_model(host, Host),
+                claimant_of(claimant),
             )
 
     async def rotate_credential(
@@ -209,16 +222,19 @@ class HostsStoragePostgresImpl(PgStorageBase, HostsStorageInterface):
             return Rotation.ROTATED
 
     async def mark_seen(
-        self, org_id: UUID, host_id: UUID, at: datetime, report: HostReport
+        self, org_id: UUID, claimant_id: UUID, at: datetime, report: HostReport | None = None
     ) -> bool:
+        stated: dict[str, object] = {"last_seen_at": at}
+        if report is not None:
+            # What a host stated; a claimant of another kind states none.
+            stated |= {
+                "advertisement": report.advertisement.model_dump(mode="json"),
+                "exec_version": report.exec_version,
+            }
         stmt = (
             update(Hosts)
-            .where(Hosts.org_id == org_id, Hosts.id == host_id)
-            .values(
-                last_seen_at=at,
-                advertisement=report.advertisement.model_dump(mode="json"),
-                exec_version=report.exec_version,
-            )
+            .where(Hosts.org_id == org_id, Hosts.id == claimant_id)
+            .values(stated)
             .returning(Hosts.id)
         )
         async with self._session_for(stmt, org_id=org_id) as session:
@@ -226,15 +242,17 @@ class HostsStoragePostgresImpl(PgStorageBase, HostsStorageInterface):
             await session.commit()
             return seen
 
-    async def revoke_host(
+    async def revoke_claimant(
         self,
         org_id: UUID,
-        host_id: UUID,
+        claimant_id: UUID,
         at: datetime,
         by: UUID,
         outbox_rows: tuple[OutboxRow, ...],
-    ) -> Host | None:
-        stmt = select(Hosts).where(Hosts.org_id == org_id, Hosts.id == host_id).with_for_update()
+    ) -> EnrolledClaimant | None:
+        stmt = (
+            select(Hosts).where(Hosts.org_id == org_id, Hosts.id == claimant_id).with_for_update()
+        )
         async with self._session_for(stmt, org_id=org_id) as session:
             row = (await session.execute(stmt)).scalar_one_or_none()
             if row is None:
@@ -248,16 +266,16 @@ class HostsStoragePostgresImpl(PgStorageBase, HostsStorageInterface):
                     update(HostCredentials)
                     .where(
                         HostCredentials.org_id == org_id,
-                        HostCredentials.host_id == host_id,
+                        HostCredentials.host_id == claimant_id,
                         HostCredentials.expires_at > at,
                     )
                     .values(expires_at=at)
                 )
                 for outbox_row in outbox_rows:
                     session.add(to_row(outbox_row, OutboxRows, org_id=org_id))
-            host = to_model(row, Host)
+            claimant = claimant_of(row)
             await session.commit()
-            return host
+            return claimant
 
     async def read_placement(self, org_id: UUID, session_id: UUID) -> SessionPlacement | None:
         stmt = select(SessionPlacements).where(

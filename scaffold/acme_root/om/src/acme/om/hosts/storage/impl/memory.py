@@ -4,7 +4,7 @@ from uuid import UUID
 from acme.om.exceptions import PreconditionFailed, UniqueKeyTaken
 from acme.om.hosts.storage import HostsStorageInterface
 from acme.om.hosts.types.credential import EnrollmentToken, HostCredential, Rotation
-from acme.om.hosts.types.host import Host, HostReport
+from acme.om.hosts.types.host import EnrolledClaimant, Host, HostReport
 from acme.om.hosts.types.placement import SessionPlacement
 from acme.om.hosts.types.pool import HostPool
 from acme.om.outbox.storage import OutboxLandingInterface
@@ -17,7 +17,7 @@ class HostsStorageMemoryImpl(MemoryStorageBase, HostsStorageInterface):
         super().__init__(outbox)
         self._pools: MemoryTable[HostPool] = {}
         self._tokens: MemoryTable[EnrollmentToken] = {}
-        self._hosts: MemoryTable[Host] = {}
+        self._hosts: MemoryTable[EnrolledClaimant] = {}
         self._credentials: MemoryTable[HostCredential] = {}
         self._placements: MemoryTable[SessionPlacement] = {}
 
@@ -69,43 +69,51 @@ class HostsStorageMemoryImpl(MemoryStorageBase, HostsStorageInterface):
             self._put(self._tokens, org_id, revoked, outbox_rows)
             return revoked
 
-    async def enroll_host(
+    async def enroll(
         self,
         org_id: UUID,
-        host: Host,
+        claimant: EnrolledClaimant,
         credential: HostCredential,
         outbox_rows: tuple[OutboxRow, ...],
     ) -> None:
         async with self._lock:
-            if host.id in self._hosts or credential.id in self._credentials:
-                raise UniqueKeyTaken(f"hosts {host.id}: the id is taken")
+            if claimant.id in self._hosts or credential.id in self._credentials:
+                raise UniqueKeyTaken(f"hosts {claimant.id}: the id is taken")
             if any(held.digest == credential.digest for held in self._every(self._credentials)):
                 raise UniqueKeyTaken(f"host_credentials {credential.id}: the digest is taken")
-            self._insert(self._hosts, org_id, host, outbox_rows)
+            self._insert(self._hosts, org_id, claimant, outbox_rows)
             self._insert(self._credentials, org_id, credential)
 
     async def read_host(self, org_id: UUID, host_id: UUID) -> Host | None:
-        return self._get(self._hosts, org_id, host_id)
+        found = self._get(self._hosts, org_id, host_id)
+        return found if isinstance(found, Host) else None
+
+    async def read_claimant(self, org_id: UUID, claimant_id: UUID) -> EnrolledClaimant | None:
+        return self._get(self._hosts, org_id, claimant_id)
 
     async def read_hosts(self, org_id: UUID, pool_id: UUID, limit: int) -> list[Host]:
-        hosts = [host for host in self._rows(self._hosts, org_id) if host.pool_id == pool_id]
+        hosts = [
+            host
+            for host in self._rows(self._hosts, org_id)
+            if isinstance(host, Host) and host.pool_id == pool_id
+        ]
         return hosts[:limit]
 
     async def count_hosts(self, seen_since: datetime, floor: int) -> dict[tuple[bool, bool], int]:
         found: dict[tuple[bool, bool], int] = {}
         for _, host in self._rows_across_tenants(self._hosts):
-            if host.revoked_at is None:
+            if isinstance(host, Host) and host.revoked_at is None:
                 key = (host.last_seen_at > seen_since, host.exec_version >= floor)
                 found[key] = found.get(key, 0) + 1
         return found
 
-    async def read_host_by_credential_digest(
+    async def read_claimant_by_credential_digest(
         self, digest: str
-    ) -> tuple[UUID, HostCredential, Host] | None:
+    ) -> tuple[UUID, HostCredential, EnrolledClaimant] | None:
         for org_id, credential in self._rows_across_tenants(self._credentials):
             if credential.digest == digest:
-                host = self._get(self._hosts, org_id, credential.host_id)
-                return None if host is None else (org_id, credential, host)
+                claimant = self._get(self._hosts, org_id, credential.host_id)
+                return None if claimant is None else (org_id, credential, claimant)
         return None
 
     async def rotate_credential(
@@ -141,40 +149,39 @@ class HostsStorageMemoryImpl(MemoryStorageBase, HostsStorageInterface):
             return Rotation.ROTATED
 
     async def mark_seen(
-        self, org_id: UUID, host_id: UUID, at: datetime, report: HostReport
+        self, org_id: UUID, claimant_id: UUID, at: datetime, report: HostReport | None = None
     ) -> bool:
         async with self._lock:
-            host = self._get(self._hosts, org_id, host_id)
-            if host is None:
+            claimant = self._get(self._hosts, org_id, claimant_id)
+            if claimant is None:
                 return False
-            seen = host.model_copy(
-                update={
-                    "last_seen_at": at,
+            stated: dict[str, object] = {"last_seen_at": at}
+            if report is not None and isinstance(claimant, Host):
+                stated |= {
                     "advertisement": report.advertisement,
                     "exec_version": report.exec_version,
                 }
-            )
-            self._put(self._hosts, org_id, seen)
+            self._put(self._hosts, org_id, claimant.model_copy(update=stated))
             return True
 
-    async def revoke_host(
+    async def revoke_claimant(
         self,
         org_id: UUID,
-        host_id: UUID,
+        claimant_id: UUID,
         at: datetime,
         by: UUID,
         outbox_rows: tuple[OutboxRow, ...],
-    ) -> Host | None:
+    ) -> EnrolledClaimant | None:
         async with self._lock:
-            host = self._get(self._hosts, org_id, host_id)
-            if host is None or host.revoked_at is not None:
-                return host
-            revoked = host.model_copy(
+            claimant = self._get(self._hosts, org_id, claimant_id)
+            if claimant is None or claimant.revoked_at is not None:
+                return claimant
+            revoked = claimant.model_copy(
                 update={"revoked_at": at, "revoked_by": by, "updated_at": at, "updated_by": by}
             )
             self._put(self._hosts, org_id, revoked, outbox_rows)
             for credential in self._rows(self._credentials, org_id):
-                if credential.host_id == host_id and credential.expires_at > at:
+                if credential.host_id == claimant_id and credential.expires_at > at:
                     ended = credential.model_copy(update={"expires_at": at})
                     self._put(self._credentials, org_id, ended)
             return revoked

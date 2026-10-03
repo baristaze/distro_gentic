@@ -1,6 +1,6 @@
 """Storage of the hosts swimlane: a tenant's host pools, the tokens that
-enroll hosts into them, the hosts with their credentials, and where each
-placed session runs. Every operation takes org_id first, except the two
+enroll claimants into them, the enrolled claimants with their credentials
+(a host is one kind of claimant), and where each placed session runs. Every operation takes org_id first, except the two
 lookups by a credential's digest, which find the tenant. A tenant's write
 lands its outbox rows in the same commit."""
 
@@ -9,7 +9,7 @@ from datetime import datetime
 from uuid import UUID
 
 from acme.om.hosts.types.credential import EnrollmentToken, HostCredential, Rotation
-from acme.om.hosts.types.host import Host, HostReport
+from acme.om.hosts.types.host import EnrolledClaimant, Host, HostReport
 from acme.om.hosts.types.placement import SessionPlacement
 from acme.om.hosts.types.pool import HostPool
 from acme.om.outbox.types.row import OutboxRow
@@ -60,39 +60,48 @@ class HostsStorageInterface(ABC):
         ...
 
     @abstractmethod
-    async def enroll_host(
+    async def enroll(
         self,
         org_id: UUID,
-        host: Host,
+        claimant: EnrolledClaimant,
         credential: HostCredential,
         outbox_rows: tuple[OutboxRow, ...],
     ) -> None:
-        """The host and its first credential, in one commit."""
+        """The claimant and its first credential, in one commit; a host with
+        what it advertised and the version it reads."""
         ...
 
     @abstractmethod
-    async def read_host(self, org_id: UUID, host_id: UUID) -> Host | None: ...
+    async def read_host(self, org_id: UUID, host_id: UUID) -> Host | None:
+        """The host; None for a claimant of another kind."""
+        ...
+
+    @abstractmethod
+    async def read_claimant(self, org_id: UUID, claimant_id: UUID) -> EnrolledClaimant | None:
+        """The claimant of any kind; a host reads as a `Host`."""
+        ...
 
     @abstractmethod
     async def read_hosts(self, org_id: UUID, pool_id: UUID, limit: int) -> list[Host]:
         """The pool's hosts in id order, revoked ones included, at most
-        `limit`."""
+        `limit`; a claimant of another kind is none of them."""
         ...
 
     @abstractmethod
     async def count_hosts(self, seen_since: datetime, floor: int) -> dict[tuple[bool, bool], int]:
         """Cross-tenant, for the platform's gauge of hosts, in the system
-        scope: the hosts not revoked, by whether they called since
+        scope: the hosts not revoked, of the host kind alone, by whether they called since
         `seen_since` and whether they read `exec` work at or above `floor`.
         A count, never a host."""
         ...
 
     @abstractmethod
-    async def read_host_by_credential_digest(
+    async def read_claimant_by_credential_digest(
         self, digest: str
-    ) -> tuple[UUID, HostCredential, Host] | None:
-        """Cross-tenant: a host's call names no tenant, so its credential's
-        digest finds the tenant with the credential and its host."""
+    ) -> tuple[UUID, HostCredential, EnrolledClaimant] | None:
+        """Cross-tenant: a claimant's call names no tenant, so its
+        credential's digest finds the tenant with the credential and its
+        claimant, a host as a `Host`."""
         ...
 
     @abstractmethod
@@ -109,29 +118,29 @@ class HostsStorageInterface(ABC):
         sooner, every other live credential of the host ends at `at`, and
         `minted` lands. `REUSED`, with nothing landed, when the retiring
         credential rotated already; `MISSING` when the tenant holds no
-        retiring credential of that host."""
+        retiring credential of that claimant."""
         ...
 
     @abstractmethod
     async def mark_seen(
-        self, org_id: UUID, host_id: UUID, at: datetime, report: HostReport
+        self, org_id: UUID, claimant_id: UUID, at: datetime, report: HostReport | None = None
     ) -> bool:
-        """The host's last call, and what it stated then. False when the
-        tenant holds no such host."""
+        """The claimant's last call, and, for a host, what it stated then.
+        False when the tenant holds no such claimant."""
         ...
 
     @abstractmethod
-    async def revoke_host(
+    async def revoke_claimant(
         self,
         org_id: UUID,
-        host_id: UUID,
+        claimant_id: UUID,
         at: datetime,
         by: UUID,
         outbox_rows: tuple[OutboxRow, ...],
-    ) -> Host | None:
-        """Ends the host and, with it, every credential it holds; one revoked
-        already answers as stored and lands nothing. None when the tenant
-        holds no such host."""
+    ) -> EnrolledClaimant | None:
+        """Ends the claimant of any kind and, with it, every credential it
+        holds; one revoked already answers as stored and lands nothing. None
+        when the tenant holds no such claimant."""
         ...
 
     @abstractmethod

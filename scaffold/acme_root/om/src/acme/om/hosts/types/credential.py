@@ -1,21 +1,27 @@
-"""The two credentials of a host's life, each of a kind and a prefix of its
-own, kept as digests. The enrollment token is a tenant's: it names one
-pool and lets a host in. The host credential is the host's: short-lived,
-rotated by the host before it ends, and the executor identity of every
-call the host makes."""
+"""The two credentials of a claimant's life, each of a kind and a prefix of
+its own, kept as digests. The enrollment token is a tenant's: it names one
+pool and one claimant kind, and lets a claimant of that kind in. The
+claimant's credential is its own, under its kind's prefix: short-lived,
+rotated by the claimant before it ends, and the executor identity of every
+call it makes. A host is one claimant kind; a product registers others."""
 
 from datetime import datetime
 from enum import StrEnum
 from uuid import UUID
 
+from pydantic import Field
+
 from acme.om.base import Created, Identifiable, Platform, Trackable
 
 
 class EnrollmentToken(Identifiable, Trackable):
-    """A token an owner or an admin issued for one pool. Every host that
-    presents it before it expires or is revoked enrolls into that pool."""
+    """A token an owner or an admin issued for one pool and one claimant
+    kind. Every claimant that presents it before it expires or is revoked
+    enrolls into that pool, as that kind: the kind, the pool, and the tenant
+    are the token's, never the claimant's to name."""
 
     pool_id: UUID
+    kind: str = Field(pattern=r"^[a-z][a-z0-9_]{0,31}$")
     digest: str
     expires_at: datetime
     revoked_at: datetime | None = None
@@ -23,10 +29,11 @@ class EnrollmentToken(Identifiable, Trackable):
 
 
 class HostCredential(Identifiable, Created):
-    """One credential of one host. It rotates once: the rotation mints the
+    """One credential of one enrolled claimant, a host or a product's;
+    `host_id` is the claimant's id. It rotates once: the rotation mints the
     next, marks this one rotated, and moves its end to a short grace, so a
     call in flight with it still lands. A second rotation of it means two
-    machines hold it, and ends the host."""
+    machines hold it, and ends the claimant."""
 
     host_id: UUID
     digest: str
@@ -49,11 +56,13 @@ class IssuedEnrollmentToken(Platform):
     enrollment: EnrollmentToken
 
 
-class IssuedHostCredential(Platform):
-    """A host credential in the clear, once, with the identity it carries."""
+class IssuedCredential(Platform):
+    """A claimant's credential in the clear, once, with the identity it
+    carries: its kind, its id, and its pool."""
 
     credential: str
     credential_id: UUID
-    host_id: UUID
+    kind: str
+    claimant_id: UUID
     pool_id: UUID
     expires_at: datetime

@@ -58,6 +58,7 @@ from acme.om.exceptions import Unavailable, UnsafeConfiguration
 from acme.om.hosts import HostsManagerInterface
 from acme.om.hosts.impl.manager import HostsManagerImpl, HostsOptions
 from acme.om.hosts.impl.placement import inside_wall
+from acme.om.hosts.rules import ENROLLMENT_PREFIX
 from acme.om.idempotency import IdempotencyManagerInterface
 from acme.om.idempotency.impl.manager import IdempotencyManagerImpl, IdempotencyOptions
 from acme.om.intake import IntakeManagerInterface
@@ -133,6 +134,7 @@ from acme.om.tenancy.impl.members import TenancyMembersManagerImpl
 from acme.om.tenancy.impl.operator import TenancyOperatorManagerImpl, TenancyOperatorOptions
 from acme.om.tenancy.impl.org import TenancyOrgManagerImpl
 from acme.om.tenancy.impl.sign_in import TenancySignInManagerImpl
+from acme.om.tenancy.rules import CREDENTIAL_PREFIXES
 from acme.om.tenancy.storage import TenancyStorageInterface
 from acme.om.tools import ToolsManagerInterface
 from acme.om.tools.impl.manager import ToolsManagerImpl, ToolsOptions
@@ -252,6 +254,11 @@ class PlatformPorts:
     workspace_projects: WorkspaceProjectsInterface | None = None
     kinds: ProductKinds = field(default_factory=ProductKinds)
 
+
+PLATFORM_PREFIXES = (*CREDENTIAL_PREFIXES, ENROLLMENT_PREFIX, workspace_rules.PUSH_TOKEN_PREFIX)
+"""The prefixes of the platform's credentials that are no claimant's: a
+person's and an operator's, an enrollment token's, and a push token's. A
+claimant kind's prefix is none of them, so a prefix names one kind."""
 
 LOCAL = "local"
 """The one environment a root accepts a quiet null budget gate, ledger,
@@ -596,7 +603,9 @@ def build_managers(
     # product's beside them.
     product = product_kinds or ProductKinds()
     work_kinds = platform_work_kinds().extended(product.work)
-    claimant_kinds = ClaimantKinds((*platform_claimant_kinds(), *product.claimants))
+    claimant_kinds = ClaimantKinds(
+        (*platform_claimant_kinds(), *product.claimants), reserved=PLATFORM_PREFIXES
+    )
     work = WorkManagerImpl(
         storage.get_work_storage(),
         tenancy,
@@ -940,6 +949,7 @@ def build_managers(
         tenancy,
         outbox,
         hosts_options or HostsOptions(),
+        claimant_kinds,
     )
     # The validation sessions: platform work on the queue, with no agent.
     platform = PlatformAgentsManagerImpl(

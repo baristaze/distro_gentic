@@ -1,5 +1,6 @@
-"""The hosts storage contract: pools, enrollment tokens, hosts with their
-credentials, and session placements. The cases named in
+"""The hosts storage contract: pools, enrollment tokens, enrolled claimants
+(a host, or a product's kind) with their credentials, and session
+placements. The cases named in
 `CROSS_TENANT_CASES` are the tenant fence's evidence: each one presents
 another tenant's identifier and asserts that nothing is found and nothing
 changes."""
@@ -13,9 +14,19 @@ from acme.om.base import new_id, utcnow
 from acme.om.exceptions import PreconditionFailed, UniqueKeyTaken
 from acme.om.hosts.storage import HostsStorageInterface
 from acme.om.hosts.types.credential import EnrollmentToken, HostCredential, Rotation
-from acme.om.hosts.types.host import Advertisement, Host, HostReport, IsolationMode
+from acme.om.hosts.types.host import (
+    Advertisement,
+    EnrolledClaimant,
+    Host,
+    HostReport,
+    IsolationMode,
+)
 from acme.om.hosts.types.placement import SessionPlacement
 from acme.om.hosts.types.pool import HostPool
+from acme.om.placement.kinds import HOST
+
+PRODUCT_KIND = "batch"
+"""A product's claimant kind, which the storage keeps by name alone."""
 
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
@@ -24,12 +35,13 @@ CROSS_TENANT_CASES: frozenset[str] = frozenset(
         "read_pools",
         "create_enrollment_token",
         "revoke_enrollment_token",
-        "enroll_host",
+        "enroll",
         "read_host",
+        "read_claimant",
         "read_hosts",
         "rotate_credential",
         "mark_seen",
-        "revoke_host",
+        "revoke_claimant",
         "read_placement",
         "write_placement",
         "purge_tenant",
@@ -71,6 +83,7 @@ def make_token(pool_id: UUID) -> EnrollmentToken:
         created_by=actor,
         updated_by=actor,
         pool_id=pool_id,
+        kind=HOST,
         digest=f"digest-{new_id()}",
         expires_at=now + timedelta(days=1),
     )
@@ -85,11 +98,31 @@ def make_host(pool_id: UUID) -> Host:
         updated_at=now,
         created_by=actor,
         updated_by=actor,
+        kind=HOST,
         pool_id=pool_id,
         name="host-7",
         enrolled_with=new_id(),
         advertisement=ADVERTISED,
         exec_version=1,
+        last_seen_at=now,
+    )
+
+
+def make_claimant(pool_id: UUID) -> EnrolledClaimant:
+    """A claimant of a product's kind: it advertises nothing and reads no
+    `exec` work."""
+    now = utcnow()
+    actor = new_id()
+    return EnrolledClaimant(
+        id=new_id(),
+        created_at=now,
+        updated_at=now,
+        created_by=actor,
+        updated_by=actor,
+        kind=PRODUCT_KIND,
+        pool_id=pool_id,
+        name="node-3",
+        enrolled_with=new_id(),
         last_seen_at=now,
     )
 
@@ -129,7 +162,7 @@ class HostsStorageContract:
     ) -> tuple[Host, HostCredential]:
         host = make_host(new_id())
         credential = make_credential(host.id)
-        await storage.enroll_host(org, host, credential, ())
+        await storage.enroll(org, host, credential, ())
         return host, credential
 
     async def test_count_hosts_answers_every_tenants_unrevoked_hosts_by_state(
@@ -155,7 +188,7 @@ class HostsStorageContract:
             (first, make_host(new_id()).model_copy(update={"revoked_at": now})),
         )
         for org, host in rows:
-            await storage.enroll_host(org, host, make_credential(host.id), ())
+            await storage.enroll(org, host, make_credential(host.id), ())
         after = await storage.count_hosts(cut, 2)
         added = {key: after.get(key, 0) - before.get(key, 0) for key in after}
         assert {key: n for key, n in added.items() if n} == {
@@ -261,9 +294,9 @@ class HostsStorageContract:
         assert await storage.read_host(org, host.id) == host
         assert await storage.read_hosts(org, host.pool_id, 10) == [host]
         assert await storage.read_hosts(org, new_id(), 10) == []
-        found = await storage.read_host_by_credential_digest(credential.digest)
+        found = await storage.read_claimant_by_credential_digest(credential.digest)
         assert found == (org, credential, host)
-        assert await storage.read_host_by_credential_digest("digest-unknown") is None
+        assert await storage.read_claimant_by_credential_digest("digest-unknown") is None
 
     async def test_a_credentials_digest_is_unique_across_tenants(
         self, storage: HostsStorageInterface
@@ -272,7 +305,7 @@ class HostsStorageContract:
         host = make_host(new_id())
         twin = make_credential(host.id).model_copy(update={"digest": credential.digest})
         with pytest.raises(UniqueKeyTaken):
-            await storage.enroll_host(new_id(), host, twin, ())
+            await storage.enroll(new_id(), host, twin, ())
         assert await storage.read_host(new_id(), host.id) is None
 
     async def test_enroll_host_under_another_tenant_is_not_read_here(
@@ -282,7 +315,7 @@ class HostsStorageContract:
         host, credential = await self.enrolled(storage, org_a)
         assert await storage.read_host(org_b, host.id) is None
         assert await storage.read_hosts(org_b, host.pool_id, 10) == []
-        found = await storage.read_host_by_credential_digest(credential.digest)
+        found = await storage.read_claimant_by_credential_digest(credential.digest)
         assert found is not None and found[0] == org_a
 
     async def test_rotate_credential_mints_the_next_and_ends_the_last(
@@ -295,9 +328,13 @@ class HostsStorageContract:
         grace_end = now + timedelta(minutes=1)
         rotated = await storage.rotate_credential(org, credential.id, now, grace_end, minted)
         assert rotated is Rotation.ROTATED
-        old = await storage.read_host_by_credential_digest(credential.digest)
+        old = await storage.read_claimant_by_credential_digest(credential.digest)
         assert old is not None and (old[1].expires_at, old[1].rotated_at) == (grace_end, now)
-        assert await storage.read_host_by_credential_digest(minted.digest) == (org, minted, host)
+        assert await storage.read_claimant_by_credential_digest(minted.digest) == (
+            org,
+            minted,
+            host,
+        )
         # The next rotation, inside the last one's grace, ends that one at
         # once, and a later end never stretches a sooner one.
         at = now + timedelta(seconds=30)
@@ -306,12 +343,12 @@ class HostsStorageContract:
             org, minted.id, at, at + timedelta(hours=5), third
         )
         assert rotated is Rotation.ROTATED
-        first = await storage.read_host_by_credential_digest(credential.digest)
+        first = await storage.read_claimant_by_credential_digest(credential.digest)
         assert first is not None and first[1].expires_at == at
-        second = await storage.read_host_by_credential_digest(minted.digest)
+        second = await storage.read_claimant_by_credential_digest(minted.digest)
         assert second is not None
         assert (second[1].expires_at, second[1].rotated_at) == (minted.expires_at, at)
-        assert await storage.read_host_by_credential_digest(third.digest) == (org, third, host)
+        assert await storage.read_claimant_by_credential_digest(third.digest) == (org, third, host)
 
     async def test_a_credential_rotates_once(self, storage: HostsStorageInterface) -> None:
         org = new_id()
@@ -325,7 +362,7 @@ class HostsStorageContract:
         copy = make_credential(host.id)
         again = await storage.rotate_credential(org, credential.id, now, grace_end, copy)
         assert again is Rotation.REUSED
-        assert await storage.read_host_by_credential_digest(copy.digest) is None
+        assert await storage.read_claimant_by_credential_digest(copy.digest) is None
 
     async def test_rotate_credential_of_another_tenant_or_host_changes_nothing(
         self, storage: HostsStorageInterface
@@ -339,9 +376,9 @@ class HostsStorageContract:
         stranger = make_credential(new_id())
         missing = await storage.rotate_credential(org, credential.id, now, now, stranger)
         assert missing is Rotation.MISSING
-        assert await storage.read_host_by_credential_digest(minted.digest) is None
-        assert await storage.read_host_by_credential_digest(stranger.digest) is None
-        found = await storage.read_host_by_credential_digest(credential.digest)
+        assert await storage.read_claimant_by_credential_digest(minted.digest) is None
+        assert await storage.read_claimant_by_credential_digest(stranger.digest) is None
+        found = await storage.read_claimant_by_credential_digest(credential.digest)
         assert found == (org, credential, host)
 
     async def test_mark_seen_keeps_what_the_host_stated(
@@ -377,11 +414,11 @@ class HostsStorageContract:
         org, by = new_id(), new_id()
         host, credential = await self.enrolled(storage, org)
         at = utcnow()
-        revoked = await storage.revoke_host(org, host.id, at, by, ())
+        revoked = await storage.revoke_claimant(org, host.id, at, by, ())
         assert revoked is not None and (revoked.revoked_at, revoked.revoked_by) == (at, by)
-        found = await storage.read_host_by_credential_digest(credential.digest)
+        found = await storage.read_claimant_by_credential_digest(credential.digest)
         assert found is not None and found[1].expires_at == at and found[2] == revoked
-        again = await storage.revoke_host(org, host.id, at + timedelta(1), new_id(), ())
+        again = await storage.revoke_claimant(org, host.id, at + timedelta(1), new_id(), ())
         assert again == revoked
 
     async def test_revoke_host_of_another_tenant_changes_nothing(
@@ -389,12 +426,56 @@ class HostsStorageContract:
     ) -> None:
         org = new_id()
         host, credential = await self.enrolled(storage, org)
-        assert await storage.revoke_host(new_id(), host.id, utcnow(), new_id(), ()) is None
-        assert await storage.read_host_by_credential_digest(credential.digest) == (
+        assert await storage.revoke_claimant(new_id(), host.id, utcnow(), new_id(), ()) is None
+        assert await storage.read_claimant_by_credential_digest(credential.digest) == (
             org,
             credential,
             host,
         )
+
+    async def test_a_claimant_of_another_kind_is_no_host(
+        self, storage: HostsStorageInterface
+    ) -> None:
+        """A product's claimant shares a pool with a host and is none of the
+        pool's hosts: it is not read as one, not counted online, and states
+        nothing a host states. Its own reads find it, of its kind."""
+        org, pool_id = new_id(), new_id()
+        cut = utcnow() - timedelta(minutes=2)
+        before = await storage.count_hosts(cut, 1)
+        host = make_host(pool_id)
+        await storage.enroll(org, host, make_credential(host.id), ())
+        claimant = make_claimant(pool_id)
+        credential = make_credential(claimant.id)
+        await storage.enroll(org, claimant, credential, ())
+        assert await storage.read_hosts(org, pool_id, 10) == [host]
+        assert await storage.read_host(org, claimant.id) is None
+        assert await storage.read_claimant(org, claimant.id) == claimant
+        assert await storage.read_claimant(org, host.id) == host
+        assert await storage.read_claimant_by_credential_digest(credential.digest) == (
+            org,
+            credential,
+            claimant,
+        )
+        after = await storage.count_hosts(cut, 1)
+        assert after.get((True, True), 0) - before.get((True, True), 0) == 1
+        seen = utcnow()
+        assert await storage.mark_seen(org, claimant.id, seen)
+        found = await storage.read_claimant(org, claimant.id)
+        assert found == claimant.model_copy(update={"last_seen_at": seen})
+        revoked = await storage.revoke_claimant(org, claimant.id, seen, new_id(), ())
+        assert revoked is not None and revoked.kind == PRODUCT_KIND and revoked.revoked_at == seen
+        ended = await storage.read_claimant_by_credential_digest(credential.digest)
+        assert ended is not None and ended[1].expires_at == seen
+        assert await storage.read_hosts(org, pool_id, 10) == [host]
+
+    async def test_read_claimant_of_another_tenant_finds_nothing(
+        self, storage: HostsStorageInterface
+    ) -> None:
+        org = new_id()
+        claimant = make_claimant(new_id())
+        await storage.enroll(org, claimant, make_credential(claimant.id), ())
+        assert await storage.read_claimant(new_id(), claimant.id) is None
+        assert await storage.read_claimant(org, claimant.id) == claimant
 
     # Placements.
 
