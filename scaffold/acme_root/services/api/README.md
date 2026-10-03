@@ -126,14 +126,15 @@ app, and `main.py` is the `acme-api` command: `serve`, `migrate`,
   admin writes it whole on the version `If-Match` names.
   (`/v1/tools/policy`)
 - **Hosts.** An owner or an admin makes a host pool, under an
-  Idempotency-Key, and issues a token that enrolls hosts into it,
-  shown once; lists a pool's hosts with whether each is online; and
-  revokes a token or a host. A principal reads and sets where a
+  Idempotency-Key, and issues a token that enrolls hosts into it, or a
+  product's claimant kind the body names, shown once; lists a pool's
+  hosts with whether each is online; and revokes a token, a host, or a
+  product's claimant. A principal reads and sets where a
   session runs: the cloud, or one of the org's pools; a pinned session
   with no host online reads `waiting`. (`/v1/host-pools`,
   `/v1/host-pools/{pool_id}/hosts`, `.../enrollment-tokens`,
   `/v1/host-enrollment-tokens/{token_id}`, `/v1/hosts/{host_id}`,
-  `/v1/agent-sessions/{session_id}/placement`)
+  `/v1/claimants/{claimant_id}`, `/v1/agent-sessions/{session_id}/placement`)
 - **A host's own calls.** A workspace host enrolls once, with an
   enrollment token as its bearer, and gets a credential of its own kind
   (`hst_`), which no tenant route accepts and which every other host
@@ -142,6 +143,15 @@ app, and `main.py` is the `acme-api` command: `serve`, `migrate`,
   version_below_floor`, and what it is handed is read off the host's
   identity. (`/v1/hosts/enrollments`, `/v1/hosts/me/credentials`,
   `/v1/hosts/me/heartbeats`, `/v1/hosts/me/claims`, ADR 2003)
+- **A product's claimant's own calls.** A claimant of a product's kind
+  enrolls once with a token of its kind, and gets a credential under its
+  kind's prefix, which no tenant route and no host route accepts. With
+  it alone it rotates the credential, claims its kind's next item, and
+  reads, renews, and reports the item it holds under the claim token its
+  claim was handed (a `Claim-Token` header on the read); any other item
+  is `404`. (`/v1/claimants/enrollments`, `/v1/claimants/me/credentials`,
+  `/v1/claimants/me/claims`, `/v1/claimants/me/items/{item_id}`,
+  `.../lease`, `.../report`, ADR 2029)
 - **The exec work a host holds.** With its own credential alone, a host
   reads what an item it holds runs, pushes its output a part at a time
   and how it ended, and renews its lease. Each push carries the bytes as

@@ -89,11 +89,13 @@ When a root already passes ports of the product's, `kinds=` joins them.
    asks for it holds (`Permission.WRITE` unless the ask says otherwise),
    the lane, and `claimant=` the claimant kind. `ProductKinds` refuses a
    kind with no claimant.
-4. The `ClaimantKindSpec`: the claimant kind's name, and `claims`, the
+4. The `ClaimantKindSpec`: the claimant kind's name; `claims`, the
    lanes its identity serves and the kinds it takes from each, read off
    the `Claimant` alone (its `id`, `org_id`, and `pool_id`), never off
-   anything it sends. A kind it names is taken only when the kind names
-   it back.
+   anything it sends; and `prefix`, its credential's, a few lower-case
+   letters and an underscore that no registered kind and no credential
+   of the platform's carries (`root.PLATFORM_PREFIXES`). A kind it names
+   is taken only when the kind names it back.
 5. With `--stream`: a `StreamKind` with its entries, its bytes, and its
    open streams of one group, each the most one stream of the kind may
    hold. The open streams of every group and the idle time are the
@@ -121,13 +123,15 @@ When a root already passes ports of the product's, `kinds=` joins them.
      `test_a_write_that_asks_for_a_products_kind_lands_it_on_its_lane`;
    - with `--stream`, the kind is held to its bounds and the cache's:
      `test_a_products_stream_kind_is_held_to_its_bounds`.
-7. A claimant reaches the gateway with a credential of its own, which
-   the product's own route resolves to a `Claimant` before it calls
-   `claim_for`, then `held_for`, `extend_for`, and `report_for` on
-   placement under the claim token `claim_for` handed it, as the hosts'
-   routes resolve a host's. The credential and the route
-   are not this skill's: name them in the output as what the product
-   still needs.
+7. A claimant reaches the gateway as a host does: an owner issues a
+   token of its kind for a pool (`/v1/host-pools/{pool_id}/enrollment-tokens`
+   with the kind), the claimant enrolls with it at
+   `/v1/claimants/enrollments`, and its credential, under its prefix,
+   claims, reads, renews, and reports at `/v1/claimants/me/...` (ADR
+   2029). The platform issues the credential and serves the routes, so
+   the skill adds neither. The program that runs on the claimant is not
+   this skill's: name it in the output as what the product still
+   needs.
 
 Then the gate, `make check`, as After writing in the conventions runs
 it.
