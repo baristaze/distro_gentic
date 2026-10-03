@@ -57,12 +57,17 @@ def builds_a_worker_loop(path: Path) -> bool:
 
 
 def test_the_maintenance_sweep_carries_the_platforms_duties(tmp_path: Path) -> None:
-    loop = build_loop(build_container(tmp_path))
-    duties = set(loop._across)  # pyright: ignore[reportPrivateUsage]
+    container = build_container(tmp_path)
+    loop = build_loop(container)
+    duties = loop._across  # pyright: ignore[reportPrivateUsage]
     # The holds nobody settled, the sessions pending with no loop, and the
     # keys and shape past their retention, beside every purge; the expired
     # leases, loops among them, open every pass of every worker.
-    assert {"holds", "stalled_sessions", "retention"} <= duties
+    assert {"holds", "stalled_sessions", "retention"} <= set(duties)
+    # The relay's exec leases that ran out, and the stations whose lease
+    # lapsed while a session waits in their line.
+    assert duties["relay"] == container.managers.relay.settle_expired
+    assert duties["stations"] == container.managers.stations.offer_lapsed
     assert not loop._options.recovery_only  # pyright: ignore[reportPrivateUsage]
 
 

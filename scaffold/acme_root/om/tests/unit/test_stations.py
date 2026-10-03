@@ -638,6 +638,41 @@ async def test_a_held_lease_lasts_the_hold_time_while_its_session_waits(
     assert expired is not None and expired.ended is LeaseEnd.EXPIRED
 
 
+async def test_a_lapsed_lease_goes_to_the_first_that_waits_at_the_sweep_and_once(
+    managers: Managers, stations: StationsManagerImpl, clock: Clock
+) -> None:
+    """A lease its session never let go runs out at its hold time. With
+    nobody joining after, the sweep grants the station to the first in its
+    line who waits, under a greater token, in every tenant. The grant ends
+    the lapsed lease, so a second pass grants nothing."""
+    tenants: list[tuple[TenantContext, Lab1, StationLease, UUID, UUID]] = []
+    for slug in ("ajax", "brio"):
+        owner = await an_owner(managers, slug)
+        lab = await a_lab(stations, owner)
+        holder, first, second = [await a_waiting_session(managers, owner) for _ in range(3)]
+        for session in (holder, first, second):
+            await join(stations, owner, session, lab.pool, lab.first)
+        lapsing = await held_by(stations, owner, lab.first)
+        assert lapsing is not None and lapsing.session_id == holder
+        tenants.append((owner, lab, lapsing, first, second))
+    assert await stations.offer_lapsed(request()) == 0, "a live lease is no lapsed one"
+
+    clock.advance(timedelta(seconds=300) + StationsOptions().skew_margin)
+    assert await stations.offer_lapsed(request()) == 2
+    assert await stations.offer_lapsed(request()) == 0, "two passes grant once"
+
+    for owner, lab, lapsed, first, second in tenants:
+        granted = await held_by(stations, owner, lab.first)
+        assert granted is not None and granted.session_id == first
+        assert granted.token == lapsed.token + 1
+        ended = await stations._storage.read_lease(owner.org_id, lapsed.id)  # pyright: ignore[reportPrivateUsage]
+        assert ended is not None and ended.ended is LeaseEnd.EXPIRED
+        woken = await managers.agent_sessions.get_session(owner, first)
+        assert woken.status is SessionStatus.PENDING and woken.park is None
+        (place,) = await stations.get_line(owner, lab.pool.id)
+        assert place.entry.session_id == second, "the next one keeps its place"
+
+
 async def test_a_running_job_claimed_again_is_settled_with_no_verdict_and_never_run_twice(
     managers: Managers, stations: StationsManagerImpl, storage: StorageMemoryImpl
 ) -> None:

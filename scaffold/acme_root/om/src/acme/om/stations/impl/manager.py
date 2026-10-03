@@ -9,7 +9,7 @@ from acme.infra.observability import OUTCOMES
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.rules import unlock_step
 from acme.om.attribution.rules import principal_of
-from acme.om.base import Platform, new_id, utcnow
+from acme.om.base import EMPTY_UUID, Platform, new_id, utcnow
 from acme.om.context import Permission, RequestContext, TenantContext
 from acme.om.evidence import EvidenceManagerInterface
 from acme.om.evidence.types.provenance import Dependency, Provenance
@@ -112,6 +112,7 @@ class StationsOptions(Platform):
     grant_attempts: int = 3  # a grant lost to another writer is tried again this often
     max_line: int = 500  # the most entries of one pool's line read at once
     max_stations: int = 200  # the most stations of one pool read at once
+    sweep_batch: int = 100  # the most free stations, across tenants, one sweep call offers
     purge_batch: int = 1000
 
 
@@ -316,6 +317,31 @@ class StationsManagerImpl(StationsManagerInterface):
                 if lease is not None and lease.session_id == session_id:
                     return lease
         return None
+
+    async def offer_lapsed(self, rctx: RequestContext) -> int:
+        lapsed = await self._storage.read_lapsed(
+            self._clock(), self._options.skew_margin, self._options.sweep_batch
+        )
+        contexts: dict[UUID, TenantContext | None] = {}
+        granted = 0
+        for org_id, station_id in lapsed:
+            if org_id not in contexts:
+                try:
+                    # The platform grants it, as no person: the system user.
+                    contexts[org_id] = await self._tenancy.service_context(rctx, org_id, EMPTY_UUID)
+                except InvalidCredential:
+                    contexts[org_id] = None  # a tenant that is gone: its purge takes its stations
+            ctx = contexts[org_id]
+            if ctx is None:
+                continue
+            try:
+                lease = await self._offer(ctx, station_id)
+            except Exception:
+                log.exception("station %s of org %s waits for the next pass", station_id, org_id)
+                continue
+            if lease is not None:
+                granted += 1
+        return granted
 
     async def leave(self, ctx: TenantContext, session_id: UUID) -> int:
         ctx.require(Permission.WRITE)

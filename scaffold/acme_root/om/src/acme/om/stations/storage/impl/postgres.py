@@ -348,6 +348,35 @@ class StationsStoragePostgresImpl(PgStorageBase, StationsStorageInterface):
                 return False
             return True
 
+    async def read_lapsed(
+        self, now: datetime, margin: timedelta, limit: int
+    ) -> list[tuple[UUID, UUID]]:
+        # The grant's own condition on the row, and an entry it serves.
+        asked = (
+            select(StationLineEntries.id)
+            .where(
+                StationLineEntries.org_id == Stations.org_id,
+                StationLineEntries.pool_id == Stations.pool_id,
+                StationLineEntries.state == WAITING,
+                or_(
+                    StationLineEntries.station_id.is_(None),
+                    StationLineEntries.station_id == Stations.id,
+                ),
+                Stations.capabilities.op("@>")(StationLineEntries.capabilities),
+            )
+            .exists()
+        )
+        stmt = (
+            select(Stations.org_id, Stations.id)
+            .where(or_(Stations.held_until.is_(None), Stations.held_until <= now - margin), asked)
+            .order_by(Stations.held_until.asc().nulls_first(), Stations.id)
+            .limit(limit)
+        )
+        # Every tenant's stations, so the system scope, spelled here.
+        async with self._session_for(stmt, org_id=EMPTY_UUID) as session:
+            rows = (await session.execute(stmt)).all()
+            return [(row.org_id, row.id) for row in rows]
+
     async def read_lease(self, org_id: UUID, lease_id: UUID) -> StationLease | None:
         stmt = select(StationLeases).where(
             StationLeases.org_id == org_id, StationLeases.id == lease_id

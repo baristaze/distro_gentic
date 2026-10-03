@@ -161,6 +161,17 @@ class StationsStorageInterface(ABC):
         ...
 
     @abstractmethod
+    async def read_lapsed(
+        self, now: datetime, margin: timedelta, limit: int
+    ) -> list[tuple[UUID, UUID]]:
+        """Cross-tenant, for the sweep: each station no live lease holds at
+        `now` (`rules.free`), its last one lapsed or ended, that a waiting
+        entry asks for (`rules.serves`), as its tenant and its id, the one
+        free longest first, at most `limit`. The index over the waiting
+        entries, which are few, bounds the read."""
+        ...
+
+    @abstractmethod
     async def read_lease(self, org_id: UUID, lease_id: UUID) -> StationLease | None: ...
 
     @abstractmethod
