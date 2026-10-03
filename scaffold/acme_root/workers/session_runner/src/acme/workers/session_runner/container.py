@@ -136,7 +136,7 @@ class RunnerContainer:
         its sub-agents with it: none of their calls runs on this runner. Its
         workspace is prepared by a host of its pool, which holds it from
         then on; until one does, its loop waits on the resource before any
-        model call. Each call travels as exec
+        model call. Each call, its checkout's included, travels as exec
         work to that host, its executor.
 
         Every model call passes billing's money gate, which asks who pays

@@ -437,11 +437,11 @@ def build_managers(
     counts as online, and its claim's lease; None keeps the defaults.
     `relay_options` is the lease a host renews on an `exec` item and the
     bounds of its output; None keeps the defaults. `transport_layer` wraps
-    the transport infra chose before the tools take it: the session runner
-    puts the relay behind it for a session inside its tenant's wall, whose
-    workspace is then the one a host of its pool prepared and holds. None
-    takes infra's transport as it is, and makes every workspace on this
-    machine.
+    the transport infra chose before the tools and the checkout take it:
+    the session runner puts the relay behind it for a session inside its
+    tenant's wall, whose workspace is then the one a host of its pool
+    prepared and holds. None takes infra's transport as it is, and makes
+    every workspace on this machine.
     `stations_options` is the lives of a daemon's credentials, the margin a
     lease that ran out waits before its station is granted again, and how
     long a renewal holds a station; None keeps the defaults.
@@ -476,7 +476,8 @@ def build_managers(
     gone; None reads the projects' rows for the one,
     and knows no pull request, so a branch gone for any reason fails
     loudly. `workspace_git` runs the checkout; None runs it in the
-    workspace through the transport. `workspace_reader` reads what a
+    workspace through the transport the tools take, so a workspace inside
+    a tenant's wall is checked out there. `workspace_reader` reads what a
     session delivered from its repository; None fetches it into a fresh
     repository of this process's own. `workspaces_options` names the
     networks no workspace reaches, and the sweep's batch."""
@@ -569,14 +570,14 @@ def build_managers(
     bound = workspace_projects or WorkspaceProjectsBoundImpl(storage.get_project_storage())
     narrowed = session_projects or SessionProjectBoundImpl(storage.get_project_storage())
     refuse_quiet_nulls(environment, bound, narrowed)
-    # The transport infra chose, and the one the tools take: for a session
-    # inside its tenant's wall, the relay to its host.
+    # The transport infra chose, and the one the tools and the checkout
+    # take: for a session inside its tenant's wall, the relay to its host.
     transport = infra.get_transport()
     placed = transport if transport_layer is None else transport_layer(transport)
     # Each session's workspace, pinned as the session is created: a
     # decorator below pins it before the session is written. Its checkout
-    # runs in the workspace through the transport, under the session's
-    # epoch.
+    # runs in the workspace through the transport the tools take, under the
+    # session's epoch.
     workspaces = WorkspacesManagerImpl(
         storage.get_workspace_storage(),
         tenancy,
@@ -584,8 +585,7 @@ def build_managers(
         kinds,
         bound,
         pull_requests or PullRequestsNullImpl(),
-        workspace_git
-        or WorkspaceGitTransportImpl(infra.get_transport(), steps, records, GitOptions()),
+        workspace_git or WorkspaceGitTransportImpl(placed, steps, records, GitOptions()),
         workspace_reader or RepositoryReaderGitImpl(),
         workspaces_options or WorkspacesOptions(),
     )
