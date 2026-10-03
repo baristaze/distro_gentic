@@ -15,7 +15,7 @@ from acme.om.placement.types.share import PlanTier
 from acme.om.steps.types.content import ContentState
 from acme.om.steps.types.header import ControlCommand, LoopOutcome, ToolFailure
 from acme.om.steps.types.step import Actor, Origin, StepType
-from acme.om.work.types.work_item import WorkKind, WorkStatus
+from acme.om.work.types.work_item import WorkStatus
 from acme.services.api.types.agent_sessions import ParkView
 from acme.services.api.types.common import RequestBody, View
 from acme.services.api.types.hosts import AdvertisementView
@@ -82,7 +82,7 @@ class SessionStandingView(View):
 
 class LaneLoadView(View):
     lane: str
-    kind: WorkKind
+    kind: str  # a work kind, the platform's or a product's
     ready: int
 
 

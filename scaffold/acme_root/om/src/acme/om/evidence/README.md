@@ -28,8 +28,9 @@ of](../../../../README.md).
   runtime starts.
 - **Validation**: one pass of the policy's checks on a fresh executor,
   from the delivered commit, with the checks, fixtures, and runner taken
-  from the version the work started from. A **baseline** is the same pass
-  at that starting version, before any change.
+  from the version the work started from. Checks of two environments
+  take one validation each, on each one's executor. A **baseline** is
+  the same pass at that starting version, before any change.
 - **Rate claim**: what repeated trials show of a failure rate: never the
   rate, only a bound under it at a declared confidence. The trials are a
   count fixed before them, or a **sequential test** that may stop early,

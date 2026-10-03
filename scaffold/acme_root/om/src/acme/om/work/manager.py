@@ -8,7 +8,7 @@ from uuid import UUID
 
 from acme.om.context import OperatorContext, RequestContext, TenantContext
 from acme.om.outbox.types.row import OutboxRow
-from acme.om.work.types.work_item import WorkItem, WorkKind
+from acme.om.work.types.work_item import WorkItem
 
 
 class WorkManagerInterface(ABC):
@@ -22,9 +22,9 @@ class WorkManagerInterface(ABC):
         retried enqueue never resets a claim, and so does a reused idempotency
         key: the insert reports which key collided and the manager reads the
         row back by it. Raises NotAuthorized when the context lacks the
-        permission WORK_ENQUEUE_PERMISSIONS names for the kind, or the table
-        names none, and ValidationFailed when the payload is not the shape
-        WORK_PAYLOADS fixes for the kind."""
+        permission the kind is registered with, or the kinds' registry
+        holds no such kind, and ValidationFailed when the payload is not the
+        shape the kind fixes."""
         ...
 
     @abstractmethod
@@ -38,7 +38,7 @@ class WorkManagerInterface(ABC):
         `idempotency_key`, the same on every run of the relay, so a relay that
         runs twice and a caller that retries meet one row under one key. Raises
         ValidationFailed when the row names a kind this build does not know or
-        carries a payload outside the shape WORK_PAYLOADS fixes for it."""
+        carries a payload outside the shape its kind fixes."""
         ...
 
     @abstractmethod
@@ -46,7 +46,7 @@ class WorkManagerInterface(ABC):
         self,
         rctx: RequestContext,
         lane: str,
-        kinds: Sequence[WorkKind],
+        kinds: Sequence[str],
         worker_id: str,
         lease: timedelta,
     ) -> tuple[TenantContext, WorkItem] | None:
@@ -116,7 +116,7 @@ class WorkManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def has_open(self, ctx: TenantContext, kind: WorkKind, target_id: UUID) -> bool:
+    async def has_open(self, ctx: TenantContext, kind: str, target_id: UUID) -> bool:
         """Whether an item of `kind` on `target_id` waits for a worker or
         runs: one of the tenant's, queued or claimed. An item handed back
         until later is queued."""
@@ -124,7 +124,7 @@ class WorkManagerInterface(ABC):
 
     @abstractmethod
     async def latest_for_target(
-        self, ctx: TenantContext, kind: WorkKind, target_id: UUID
+        self, ctx: TenantContext, kind: str, target_id: UUID
     ) -> WorkItem | None:
         """The tenant's item of `kind` on `target_id` made last, whatever its
         status; None when there is none."""

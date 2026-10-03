@@ -162,7 +162,13 @@ class RunnerContainer:
             ),
             storage.get_relay_storage(),
         )
-        trust = TrustLayer(storage, infra, placement=placement, probe=KeyProbeAbsentImpl())
+        trust = TrustLayer(
+            storage,
+            infra,
+            placement=placement,
+            probe=KeyProbeAbsentImpl(),
+            product_kinds=ports.kinds,
+        )
         matrix = MatrixLayer(
             storage,
             options=MatrixOptions(environment=settings.environment),
@@ -204,7 +210,7 @@ class RunnerContainer:
         # Every part the loop streams goes to the shared cache, where the API
         # reads it live; a stream's opening and its completion are recorded,
         # in the managers' event stream, and hinted.
-        stream = build_stream(infra, lambda: built[0].events)
+        stream = build_stream(infra, lambda: built[0].events, product_kinds=ports.kinds)
         managers = build_managers(
             storage,
             infra,
@@ -224,6 +230,7 @@ class RunnerContainer:
             work_product=ports.work_product,
             session_projects=ports.session_projects,
             workspace_projects=ports.workspace_projects,
+            product_kinds=ports.kinds,
             models_layer=matrix.layer,
             tools_layer=layers,
             transport_layer=placed,

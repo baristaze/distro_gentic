@@ -14,6 +14,10 @@ does; a chat message counts as a person's only as
 - **A live-read handle**: one session's open streams, readable until
   the handle expires. It is signed, the way a presigned URL is, so a
   read needs no session of its own and no database.
+- **Stream kinds**: one registry (`kinds.py`) of the kinds of live
+  stream, each with the bounds every stream of it is held to. The step's
+  parts are the platform's kind; a product registers its own, which it
+  writes and reads in groups of their own.
 - **The stream service's buffers**: the parts of each open stream, a
   bounded buffer per stream on the shared cache. A stream is the parts of
   one step. Nothing else: the step each adds up to is the record. The
@@ -55,7 +59,8 @@ the record that it is theirs is an entry in the tenant's event stream.
 - **A handle reads one session, and not for long.** A handle that does
   not verify, or has expired, reads nothing.
 - **A live part is a cache.** Each buffer is bounded, and losing it
-  loses nothing the history does not hold.
+  loses nothing the history does not hold. A kind nobody registered has
+  no bound, so nothing streams it.
 - **The agent never fights a person.** While it is handed over, the
   agent appends nothing, sends nothing into the workspace, and nothing
   of its own still runs there; nothing of the person's runs once it is

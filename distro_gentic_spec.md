@@ -190,6 +190,10 @@ outside the cloud claims through the gateway, and the control
 plane claims the row on its behalf. A tool call to a cloud workspace
 needs no item: the runner reaches it by the direct transport.
 
+A product built on the platform adds kinds of its own, each with its
+lane and the claimant that takes it through the gateway. The platform's
+kinds are registered the same way, and a claimant takes only its own.
+
 ### Fair Share
 
 Loops are long and expensive, so the platform shares them by the
@@ -933,8 +937,8 @@ story; the rest is its planned shape:
   review per lens group and a full review, `distro-explain`,
   `distro-deviate`, `distro-upgrade-scaffold` for a product built on the
   platform, and scaffolds for a session runner, a workspace host, a
-  workspace provider, an integration with its twin, an agent kind, and an
-  automation trigger.
+  workspace provider, an integration with its twin, an agent kind, an
+  automation trigger, and a product's own kind of work.
 - **A scaffold**, with the operational skills of
   [Operations](#operations) in its `.agents/skills/`.
 

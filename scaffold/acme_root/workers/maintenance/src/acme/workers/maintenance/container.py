@@ -157,6 +157,7 @@ def worker_managers(
         work_product=ports.work_product,
         session_projects=ports.session_projects,
         workspace_projects=ports.workspace_projects,
+        product_kinds=ports.kinds,
     )
     refuse_open_money(settings.environment, managers)
     return managers

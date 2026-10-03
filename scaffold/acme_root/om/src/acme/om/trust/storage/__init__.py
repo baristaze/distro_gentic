@@ -12,7 +12,7 @@ from acme.integrations.model_providers.types import ProviderName
 from acme.om.outbox.types.row import OutboxRow
 from acme.om.trust.types.grant import ContentGrant
 from acme.om.trust.types.provider_key import ProviderKey
-from acme.om.trust.types.secret import SecretDeclaration, SecretOwnerKind
+from acme.om.trust.types.secret import SecretDeclaration
 
 
 class TrustStorageInterface(ABC):
@@ -29,18 +29,9 @@ class TrustStorageInterface(ABC):
 
     @abstractmethod
     async def read_declaration(
-        self, org_id: UUID, owner_kind: SecretOwnerKind, owner_id: UUID, name: str
+        self, org_id: UUID, owner_kind: str, owner_id: UUID, name: str
     ) -> SecretDeclaration | None:
         """The one declaration of `name` on that owner."""
-        ...
-
-    @abstractmethod
-    async def resolve_declaration(
-        self, org_id: UUID, name: str, project_id: UUID | None
-    ) -> SecretDeclaration | None:
-        """What `name` means to a session of the project `project_id`: that
-        project's declaration, never another project's. None when it has
-        none, or the session has no project."""
         ...
 
     @abstractmethod

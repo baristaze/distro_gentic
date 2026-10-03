@@ -15,6 +15,7 @@ from acme.om.context import TenantContext
 from acme.om.events import EventsManagerInterface
 from acme.om.events.manager import audit_event
 from acme.om.steps.types.stream import StreamPart
+from acme.om.watch.kinds import STEP, StreamKind, StreamKinds
 from acme.om.watch.stream import StreamServiceInterface
 from acme.om.watch.types.live import LiveStream, Seen
 
@@ -60,6 +61,14 @@ class StreamOptions(Platform):
         )
 
 
+def step_kinds(options: StreamOptions, *kinds: StreamKind) -> StreamKinds:
+    """The step kind under the bounds `options` set, the platform's own, and
+    a product's `kinds` beside it, all under the cache's bounds `options`
+    sets: the open streams of every group, and the idle time."""
+    step = StreamKind(STEP, options.max_parts, options.max_bytes, options.max_streams)
+    return StreamKinds((step, *kinds), open=options.max_open, idle=options.idle)
+
+
 @dataclass(frozen=True)
 class _Change:
     """A stream opened or completed, under the run's context."""
@@ -90,7 +99,8 @@ class StreamServiceImpl(StreamServiceInterface):
     stream's parts are joined for its window first, so the cache sees a
     write a window, not a write a part. `events` is read when a change is
     written, so a root can build this before the managers whose loop it is
-    the sink of."""
+    the sink of. Its bounds are the step kind's, as the stream kinds'
+    registry holds them (`step_kinds`)."""
 
     def __init__(
         self,
@@ -98,12 +108,16 @@ class StreamServiceImpl(StreamServiceInterface):
         topics: TopicsInterface,
         events: Callable[[], EventsManagerInterface],
         options: StreamOptions | None = None,
+        kinds: StreamKinds | None = None,
     ) -> None:
         self._streams = streams
         self._topics = topics
         self._events = events
         self._options = options or StreamOptions()
-        self._bounds = self._options.bounds()
+        step = (kinds or step_kinds(self._options)).bounds(STEP)
+        if step is None:
+            raise ValueError("the stream service writes the step kind, which is not registered")
+        self._bounds = step
         self._queue: deque[StreamPart | _Change] = deque(maxlen=self._options.max_queued)
         self._writer: asyncio.Task[None] | None = None
         self._overflowed = False

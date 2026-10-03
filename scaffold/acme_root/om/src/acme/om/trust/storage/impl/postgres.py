@@ -18,7 +18,7 @@ from acme.om.trust.storage.tables.provider_keys import ProviderKeys
 from acme.om.trust.storage.tables.secret_declarations import SecretDeclarations
 from acme.om.trust.types.grant import ContentGrant
 from acme.om.trust.types.provider_key import KeyStatus, ProviderKey
-from acme.om.trust.types.secret import SecretDeclaration, SecretOwnerKind
+from acme.om.trust.types.secret import SecretDeclaration
 
 
 class TrustStoragePostgresImpl(PgStorageBase, TrustStorageInterface):
@@ -30,24 +30,17 @@ class TrustStoragePostgresImpl(PgStorageBase, TrustStorageInterface):
         return await self._insert(SecretDeclarations, org_id, declaration, outbox_rows)
 
     async def read_declaration(
-        self, org_id: UUID, owner_kind: SecretOwnerKind, owner_id: UUID, name: str
+        self, org_id: UUID, owner_kind: str, owner_id: UUID, name: str
     ) -> SecretDeclaration | None:
         stmt = select(SecretDeclarations).where(
             SecretDeclarations.org_id == org_id,
             SecretDeclarations.name == name,
-            SecretDeclarations.owner_kind == owner_kind.value,
+            SecretDeclarations.owner_kind == owner_kind,
             SecretDeclarations.owner_id == owner_id,
         )
         async with self._session_for(stmt, org_id=org_id) as session:
             row = (await session.execute(stmt)).scalar_one_or_none()
             return None if row is None else to_model(row, SecretDeclaration)
-
-    async def resolve_declaration(
-        self, org_id: UUID, name: str, project_id: UUID | None
-    ) -> SecretDeclaration | None:
-        if project_id is None:
-            return None
-        return await self.read_declaration(org_id, SecretOwnerKind.PROJECT, project_id, name)
 
     async def read_declarations(
         self, org_id: UUID, after: tuple[str, UUID] | None, limit: int

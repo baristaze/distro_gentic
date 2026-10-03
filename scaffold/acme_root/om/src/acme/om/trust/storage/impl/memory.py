@@ -10,7 +10,7 @@ from acme.om.storage.impl.memory_base import MemoryStorageBase, MemoryTable
 from acme.om.trust.storage import TrustStorageInterface
 from acme.om.trust.types.grant import ContentGrant
 from acme.om.trust.types.provider_key import KeyStatus, ProviderKey
-from acme.om.trust.types.secret import SecretDeclaration, SecretOwnerKind
+from acme.om.trust.types.secret import SecretDeclaration
 
 
 class TrustStorageMemoryImpl(MemoryStorageBase, TrustStorageInterface):
@@ -38,16 +38,9 @@ class TrustStorageMemoryImpl(MemoryStorageBase, TrustStorageInterface):
             return self._insert(self._declarations, org_id, declaration, outbox_rows)
 
     async def read_declaration(
-        self, org_id: UUID, owner_kind: SecretOwnerKind, owner_id: UUID, name: str
+        self, org_id: UUID, owner_kind: str, owner_id: UUID, name: str
     ) -> SecretDeclaration | None:
         return self._owned(org_id, owner_kind, owner_id, name)
-
-    async def resolve_declaration(
-        self, org_id: UUID, name: str, project_id: UUID | None
-    ) -> SecretDeclaration | None:
-        if project_id is None:
-            return None
-        return self._owned(org_id, SecretOwnerKind.PROJECT, project_id, name)
 
     async def read_declarations(
         self, org_id: UUID, after: tuple[str, UUID] | None, limit: int
@@ -56,12 +49,12 @@ class TrustStorageMemoryImpl(MemoryStorageBase, TrustStorageInterface):
         return [d for d in rows if after is None or (d.name, d.id) > after][:limit]
 
     def _owned(
-        self, org_id: UUID, owner_kind: SecretOwnerKind, owner_id: UUID, name: str
+        self, org_id: UUID, owner_kind: str, owner_id: UUID, name: str
     ) -> SecretDeclaration | None:
         found = [
             d
             for d in self._rows(self._declarations, org_id)
-            if d.name == name and d.owner_kind is owner_kind and d.owner_id == owner_id
+            if d.name == name and d.owner_kind == owner_kind and d.owner_id == owner_id
         ]
         return found[0] if found else None
 

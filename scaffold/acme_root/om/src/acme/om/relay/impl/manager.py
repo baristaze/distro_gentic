@@ -21,7 +21,8 @@ from acme.om.hosts import HostsManagerInterface
 from acme.om.hosts.types.host import HostIdentity
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import outbox_row, versioned_row
-from acme.om.placement.types.claimant import Claimant, ClaimantKind
+from acme.om.placement.kinds import HOST
+from acme.om.placement.types.claimant import Claimant
 from acme.om.placement.types.work import (
     ExecOperation,
     ExecPayload,
@@ -96,9 +97,7 @@ class RelayOptions(Platform):
 
 def worker_of(host: HostIdentity) -> str:
     """The name the host's claims carry, as placement spells it."""
-    return Claimant(
-        kind=ClaimantKind.HOST, id=host.host_id, org_id=host.org_id, pool_id=host.pool_id
-    ).worker_id
+    return Claimant(kind=HOST, id=host.host_id, org_id=host.org_id, pool_id=host.pool_id).worker_id
 
 
 def _copy(item: ExecItem, now: datetime, **update: Any) -> ExecItem:
@@ -784,7 +783,7 @@ class RelayManagerImpl(RelayManagerInterface):
             row = None
         held = (
             row is not None
-            and row.kind is WorkKind.WORKSPACE
+            and row.kind == WorkKind.WORKSPACE
             and _operation(row) in operations
             and row.status is WorkStatus.CLAIMED
             and row.claimed_by == worker_of(host)

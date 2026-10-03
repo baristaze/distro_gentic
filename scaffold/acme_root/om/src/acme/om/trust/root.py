@@ -20,7 +20,7 @@ from acme.integrations.model_providers.types import ProviderName
 from acme.om.base import utcnow
 from acme.om.privacy.impl.keys import SessionKeysImpl
 from acme.om.projects.impl.policies import SessionProjectsBoundImpl
-from acme.om.root import Managers, private_history
+from acme.om.root import Managers, ProductKinds, private_history
 from acme.om.steps.storage.impl.memory import StepStorageMemoryImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.tools.manager import ToolsManagerInterface
@@ -31,6 +31,7 @@ from acme.om.trust.impl.tools import ToolsManagerTrustedImpl
 from acme.om.trust.keys import ClientFactory, KeyProbeInterface, ProviderClientsInterface
 from acme.om.trust.manager import TrustManagerInterface
 from acme.om.trust.operator import TrustOperatorManagerInterface
+from acme.om.trust.owners import ProjectOwnerImpl, SecretOwners
 from acme.om.trust.placement import PlacementInterface
 
 
@@ -74,7 +75,8 @@ class TrustLayer:
     credential; `probe` asks a provider about a key before it is saved; and
     `clients` builds a provider's client on a tenant's key. A session's
     project, which keeps a project's secrets to it, is read from the
-    projects' rows."""
+    projects' rows. `product_kinds` is what a product adds: its secret owner kinds,
+    resolved after the project, as the project is."""
 
     def __init__(
         self,
@@ -85,8 +87,10 @@ class TrustLayer:
         probe: KeyProbeInterface,
         clients: ClientFactory = absent_client,
         options: TrustOptions | None = None,
+        product_kinds: ProductKinds | None = None,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
+        self._kinds = product_kinds or ProductKinds()
         self._storage = storage
         self._infra = infra
         self._placement = placement
@@ -115,7 +119,12 @@ class TrustLayer:
             managers.outbox,
             self._infra.get_secrets(),
             self._placement,
-            SessionProjectsBoundImpl(storage.get_project_storage()),
+            SecretOwners(
+                (
+                    ProjectOwnerImpl(SessionProjectsBoundImpl(storage.get_project_storage())),
+                    *self._kinds.secret_owners,
+                )
+            ),
             self._probe,
             self.options,
             self._clock,

@@ -44,7 +44,7 @@ from acme.om.trust.types.identities import (
     ExecutorKind,
 )
 from acme.om.trust.types.provider_key import KeyStatus, key_secret_name
-from acme.om.trust.types.secret import SecretDeclaration, SecretOwnerKind, SecretStore, kept_as
+from acme.om.trust.types.secret import PROJECT, SecretDeclaration, SecretStore, kept_as
 
 SECRET = "ghs_4b1d9e7c2a6f80c3-deploy"
 
@@ -85,7 +85,7 @@ def declared(
         updated_by=new_id(),
         name=name,
         variable=INJECTED_TOKEN.env or "",
-        owner_kind=SecretOwnerKind.PROJECT,
+        owner_kind=PROJECT,
         owner_id=project,
         scope="call:records-api",
         store=store,

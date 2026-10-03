@@ -111,7 +111,7 @@ async def test_a_delivery_is_judged_by_its_sessions_project_whatever_it_names() 
         return await evidence.gate.check(ctx, session_id, result)
 
     assert refused(await submit(ours), "no validation ran at the head c0ffee")
-    validation = await evidence.manager.validate(ctx, ours, RunPurpose.VALIDATION)
+    (validation,) = await evidence.manager.validate(ctx, ours, RunPurpose.VALIDATION)
     assert validation.project == CHECKOUT_KEY, "validated under the session's project"
     assert [check.name for check in evidence.executor.requests[0].checks] == ["unit"]
     assert succeeded(await submit(ours))
