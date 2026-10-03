@@ -3,6 +3,7 @@ provider held, so a call names its provider and gets an adapter, never a
 missing one."""
 
 from collections.abc import Mapping, Sequence
+from datetime import timedelta
 
 from acme.integrations.model_providers import ModelProviderInterface, ModelProvidersInterface
 from acme.integrations.model_providers.absent import ModelProviderAbsentImpl
@@ -44,10 +45,12 @@ def absent_model_providers(
 
 def scripted_model_providers(
     script: Mapping[ProviderName, Sequence[Turn]] | None = None,
+    *,
+    pace: timedelta = timedelta(0),
 ) -> ModelProvidersInterface:
     """A scripted twin for every provider, each with its turns of `script`,
-    or none."""
+    or none, waiting `pace` before each part it streams."""
     turns = script or {}
     return ModelProvidersOverImpl(
-        {p: ModelProviderScriptedImpl(p, turns.get(p, ())) for p in ProviderName}
+        {p: ModelProviderScriptedImpl(p, turns.get(p, ()), pace=pace) for p in ProviderName}
     )

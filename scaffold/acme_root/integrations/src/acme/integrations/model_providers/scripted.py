@@ -7,9 +7,11 @@ twice, and a session's recorded replies can drive it again.
 It stands in for one provider at a time, by name, and is refused at boot
 in a deployed environment, like every twin."""
 
+import asyncio
 import json
 from collections import deque
 from collections.abc import AsyncIterator, Sequence
+from datetime import timedelta
 from pathlib import Path
 
 from pydantic import Field, SecretStr, TypeAdapter
@@ -136,10 +138,17 @@ def parts_of(reply: ModelReply) -> list[StreamPart]:
 
 class ModelProviderScriptedImpl(ModelProviderInterface):
     def __init__(
-        self, provider: ProviderName, script: Sequence[ModelReply | ScriptedFailure] = ()
+        self,
+        provider: ProviderName,
+        script: Sequence[ModelReply | ScriptedFailure] = (),
+        *,
+        pace: timedelta = timedelta(0),
     ) -> None:
         self._provider = provider
         self._script: deque[ModelReply | ScriptedFailure] = deque(script)
+        # The wait before each part, so a stream stays open long enough to
+        # watch; zero streams at once.
+        self._pace = pace.total_seconds()
         self.calls: list[ModelCall] = []
         """Every call it was asked, in order, for a test to read."""
 
@@ -175,6 +184,8 @@ class ModelProviderScriptedImpl(ModelProviderInterface):
             )
         turn = filled(turn, call)
         for part in parts_of(turn):
+            if self._pace:
+                await asyncio.sleep(self._pace)
             yield part
         yield Finished(reply=turn)
 

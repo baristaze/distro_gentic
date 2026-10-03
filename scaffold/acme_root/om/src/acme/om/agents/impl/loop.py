@@ -477,28 +477,33 @@ class LoopManagerImpl(LoopManagerInterface):
             await self._gate.settle(ctx, hold, None, billed=False)
             raise
         response_id = new_id()
+        self._tell(run, self._sink.opened, response_id)
         try:
-            reply = await self._stream(run, used.client, rendered.call, response_id)
-        except ModelCallFailed as failed:
-            # Nothing streamed back: the call was refused before it was
-            # processed, and the hold is released. A stream that broke is
-            # usually billed, so it counts whole, and what arrived is kept.
-            await self._gate.settle(ctx, hold, None, billed=failed.partial is not None)
-            closing = (
-                rules.abandoned_step(response_id, self._clock(), request)
-                if failed.partial is None
-                else rules.response_step(response_id, self._clock(), request, failed.partial)
-            )
-            await self._steps.append_steps(ctx, session_id, run.epoch, [closing])
-            raise
-        except BaseException:
-            with contextlib.suppress(Exception):
-                await self._gate.settle(ctx, hold, None, billed=True)
-            raise
-        await self._gate.settle(ctx, hold, reply.usage, billed=True)
-        stored = rules.response_step(response_id, self._clock(), request, reply)
-        (stored,) = await self._steps.append_steps(ctx, session_id, run.epoch, [stored])
-        return stored
+            try:
+                reply = await self._stream(run, used.client, rendered.call, response_id)
+            except ModelCallFailed as failed:
+                # Nothing streamed back: the call was refused before it was
+                # processed, and the hold is released. A stream that broke is
+                # usually billed, so it counts whole, and what arrived is kept.
+                await self._gate.settle(ctx, hold, None, billed=failed.partial is not None)
+                closing = (
+                    rules.abandoned_step(response_id, self._clock(), request)
+                    if failed.partial is None
+                    else rules.response_step(response_id, self._clock(), request, failed.partial)
+                )
+                await self._steps.append_steps(ctx, session_id, run.epoch, [closing])
+                raise
+            except BaseException:
+                with contextlib.suppress(Exception):
+                    await self._gate.settle(ctx, hold, None, billed=True)
+                raise
+            await self._gate.settle(ctx, hold, reply.usage, billed=True)
+            stored = rules.response_step(response_id, self._clock(), request, reply)
+            (stored,) = await self._steps.append_steps(ctx, session_id, run.epoch, [stored])
+            return stored
+        finally:
+            # Over, whichever way: its step is stored, or its call failed.
+            self._tell(run, self._sink.completed, response_id)
 
     async def _stream(
         self, run: _Run, client: ModelProviderInterface, call: ModelCall, response_id: UUID
@@ -520,9 +525,22 @@ class LoopManagerImpl(LoopManagerInterface):
         try:
             self._sink.emit(part)
         except Exception:
-            if not run.sink_failed:
-                run.sink_failed = True
-                log.warning("session %s: the stream sink failed", run.session_id, exc_info=True)
+            self._sink_failed(run)
+
+    def _tell(
+        self, run: _Run, tell: Callable[[TenantContext, UUID, UUID], None], step_id: UUID
+    ) -> None:
+        """Tells the sink a stream opened or completed, as `_emit` hands it a
+        part: a sink that fails costs the live view alone."""
+        try:
+            tell(run.ctx, run.session_id, step_id)
+        except Exception:
+            self._sink_failed(run)
+
+    def _sink_failed(self, run: _Run) -> None:
+        if not run.sink_failed:
+            run.sink_failed = True
+            log.warning("session %s: the stream sink failed", run.session_id, exc_info=True)
 
     async def _failed(
         self,
@@ -756,29 +774,38 @@ class LoopManagerImpl(LoopManagerInterface):
         # The call runs under the live context of the principal attribution
         # answered for it, asked again for this call.
         call_ctx = gate.authority.context
+        # The call's output streams as the response it adds up to: the stream
+        # opens before the call runs, and completes once that step is stored.
+        step_id = response_id(request, run.epoch)
         on_output = self._output(run, request)
+        self._tell(run, self._sink.opened, step_id)
         try:
-            if fresh:
-                ran = await self._execute(run, call_ctx, tool, request, use.input, on_output)
-            else:
-                ran = await self._tools.recover(
-                    call_ctx,
-                    run.registry,
-                    request,
-                    use.input,
-                    run.workspace,
-                    epoch=run.epoch,
-                    tree_deadline=run.deadline,
-                    on_output=on_output,
-                )
-        except NotAuthorized as refused:
-            ran = self._stopped(request, refused.message, ToolFailure.DENIED)
-        if isinstance(ran, ControlCommand):
-            text = f"stopped by a principal's {ran.value} before it answered"
-            await self._answer(run, request, self._stopped(request, text, ToolFailure.INTERRUPTED))
-            return _Settled(cancelled=ran is ControlCommand.CANCEL)
-        await self._answer(run, request, ran)
-        return _Settled()
+            try:
+                if fresh:
+                    ran = await self._execute(run, call_ctx, tool, request, use.input, on_output)
+                else:
+                    ran = await self._tools.recover(
+                        call_ctx,
+                        run.registry,
+                        request,
+                        use.input,
+                        run.workspace,
+                        epoch=run.epoch,
+                        tree_deadline=run.deadline,
+                        on_output=on_output,
+                    )
+            except NotAuthorized as refused:
+                ran = self._stopped(request, refused.message, ToolFailure.DENIED)
+            if isinstance(ran, ControlCommand):
+                text = f"stopped by a principal's {ran.value} before it answered"
+                stopped = self._stopped(request, text, ToolFailure.INTERRUPTED)
+                await self._answer(run, request, stopped)
+                return _Settled(cancelled=ran is ControlCommand.CANCEL)
+            await self._answer(run, request, ran)
+            return _Settled()
+        finally:
+            # Over, whichever way: its step is stored, or the call failed.
+            self._tell(run, self._sink.completed, step_id)
 
     async def _execute(
         self,
