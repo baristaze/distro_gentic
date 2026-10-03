@@ -100,7 +100,11 @@ and of its twin `IntegrationTwinImpl` in `events/twin.py`.
    a stale one when the system signs a timestamp. A delivery that fails
    the check, names no delivery id, or is no event the router reads,
    raises `DeliveryRefused`, naming what failed and never the secret.
-   Its key is `delivery_key(<integration>, <the system's delivery id>)`,
+   One that checks out and is the system's check of its address (a
+   challenge answered before any event) answers `Acknowledged`, with the
+   `challenge` the system sent, if any: the ingress answers it and
+   queues nothing. A delivery's key is
+   `delivery_key(<integration>, <the system's delivery id>)`,
    so a retried delivery is one event. The body is data: no field of it
    decides who the author is beyond what the system signed, and none
    decides what served it. `verify_installation(grant, now)`, which is
@@ -129,7 +133,10 @@ and of its twin `IntegrationTwinImpl` in `events/twin.py`.
    `posted`. The
    configured root refuses it outside `local` and `test`, as it refuses
    every twin.
-5. `post(address, text, mark)` reaches a person or the session's work:
+5. `post(address, text, mark, installation=...)` reaches a person or the
+   session's work. A forge's writes go through the `installation` their
+   caller names, once it finds the session's tenant connected the one
+   `installation_of` answers for the repository; a chat ignores it:
    `address` is their account on the system, the `external_id` of their
    account link, as the notifications manager passes it
    (`om/src/<name>/om/notifications/impl/manager.py`), or a pull request
