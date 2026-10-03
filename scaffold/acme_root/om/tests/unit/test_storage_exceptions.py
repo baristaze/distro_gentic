@@ -99,10 +99,10 @@ STORAGE_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         ("TenancyStorageInterface", "read_api_key_by_digest"),
         ("TenancyStorageInterface", "redeem_socket_ticket"),
         ("WorkStorageInterface", "claim_next"),
-        # A host's call names no tenant: its enrollment token or its
+        # A claimant's call names no tenant: its enrollment token or its
         # credential is found by digest, which finds the tenant with it.
         ("HostsStorageInterface", "read_enrollment_token_by_digest"),
-        ("HostsStorageInterface", "read_host_by_credential_digest"),
+        ("HostsStorageInterface", "read_claimant_by_credential_digest"),
         # A system's delivery names no tenant: the installation it came
         # through is found among every tenant's, which finds the tenant.
         ("IntakeStorageInterface", "read_installation_org"),
@@ -319,6 +319,15 @@ REQUEST_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
         ("HostsManagerInterface", "rotate"),
         ("HostsManagerInterface", "heartbeat"),
         ("HostsManagerInterface", "claim"),
+        # A product's claimant calls as a host does: its enrollment, its
+        # credential, its claim, and its answers run from the request stage,
+        # and placement rebuilds the tenant's context from the item.
+        ("HostsManagerInterface", "enroll_claimant"),
+        ("HostsManagerInterface", "authenticate_claimant"),
+        ("HostsManagerInterface", "claim_as"),
+        ("HostsManagerInterface", "held_as"),
+        ("HostsManagerInterface", "extend_as"),
+        ("HostsManagerInterface", "report_as"),
         # A system's delivery names no tenant until its installation is
         # found: the ingress reads the tenant that connected it from the
         # request stage, and queues the event under that tenant.

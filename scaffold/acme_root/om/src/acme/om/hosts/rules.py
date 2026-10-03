@@ -1,8 +1,7 @@
-"""Pure rules of the hosts namespace: the prefixes of a host's two
-credentials, the versions of the wire types a host reads and their
-floors, when a host counts as online, and how a rotation ends the
-credential it replaces. Values in, values out; no clock, no storage, no
-settings."""
+"""Pure rules of the hosts namespace: the enrollment token's prefix, the
+versions of the wire types a host reads and their floors, when a host
+counts as online, and how a rotation ends the credential it replaces.
+Values in, values out; no clock, no storage, no settings."""
 
 from datetime import datetime, timedelta
 from enum import StrEnum
@@ -10,12 +9,10 @@ from enum import StrEnum
 from acme.om.hosts.types.host import Host
 
 ENROLLMENT_PREFIX = "hen_"
-"""An enrollment token's prefix. It enrolls a host and does nothing else."""
-
-HOST_CREDENTIAL_PREFIX = "hst_"
-"""A host credential's prefix, a kind of its own: the gateway's tenant
-transitions know no such prefix and refuse it, and the host routes refuse
-every other."""
+"""An enrollment token's prefix, whatever claimant kind it enrolls. It
+enrolls a claimant of the kind it names into its pool and does nothing
+else. A claimant's own credential carries its kind's prefix
+(`placement.kinds.ClaimantKindSpec.prefix`)."""
 
 
 class WireType(StrEnum):

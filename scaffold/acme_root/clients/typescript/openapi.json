@@ -1316,6 +1316,205 @@
         "title": "ClaimView",
         "type": "object"
       },
+      "ClaimantClaimView": {
+        "description": "What a claim answers: the item, or none when nothing is ready.",
+        "properties": {
+          "item": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClaimantWorkView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "item"
+        ],
+        "title": "ClaimantClaimView",
+        "type": "object"
+      },
+      "ClaimantEnrollRequest": {
+        "additionalProperties": false,
+        "description": "A claimant's name, beside its enrollment token. The kind and the pool\nare the token's.",
+        "properties": {
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ClaimantEnrollRequest",
+        "type": "object"
+      },
+      "ClaimantReportRequest": {
+        "additionalProperties": false,
+        "description": "A claimant's answer for an item it holds: done, or failed with why,\nunder its claim token. It is held to the report's shape before anything\nreads it: a failure names its reason, within bounds, and a success\nnames none.",
+        "properties": {
+          "claim_token": {
+            "format": "uuid",
+            "title": "Claim Token",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/ReportOutcome"
+          }
+        },
+        "required": [
+          "claim_token",
+          "outcome"
+        ],
+        "title": "ClaimantReportRequest",
+        "type": "object"
+      },
+      "ClaimantView": {
+        "description": "A claimant as its owner reads it.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "last_seen_at": {
+            "format": "date-time",
+            "title": "Last Seen At",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "pool_id": {
+            "format": "uuid",
+            "title": "Pool Id",
+            "type": "string"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "pool_id",
+          "name",
+          "last_seen_at",
+          "revoked_at",
+          "created_at"
+        ],
+        "title": "ClaimantView",
+        "type": "object"
+      },
+      "ClaimantWorkView": {
+        "description": "One item a claimant holds, under a lease and the claim token its\nclaim was handed, which its read, its renewal, and its report carry;\nnone once its report handed it back. `payload` is the item's, as its\nkind fixes it. `org_id` is the tenant whose work it is, the claimant's\nown.",
+        "properties": {
+          "attempts": {
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "claim_token": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claim Token"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "lease_expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lease Expires At"
+          },
+          "org_id": {
+            "format": "uuid",
+            "title": "Org Id",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "status": {
+            "$ref": "#/components/schemas/WorkStatus"
+          },
+          "target_id": {
+            "format": "uuid",
+            "title": "Target Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "org_id",
+          "kind",
+          "status",
+          "target_id",
+          "payload",
+          "lease_expires_at",
+          "attempts",
+          "claim_token"
+        ],
+        "title": "ClaimantWorkView",
+        "type": "object"
+      },
       "ClaimedWorkView": {
         "description": "One item a host was handed, under a lease, as `exec` work of\n`wire_version`. `payload` is the item's, as its kind fixes it.\n`org_id` is the tenant whose work it is, the host's own.",
         "properties": {
@@ -2214,6 +2413,10 @@
             "title": "Id",
             "type": "string"
           },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
           "pool_id": {
             "format": "uuid",
             "title": "Pool Id",
@@ -2235,6 +2438,7 @@
         "required": [
           "id",
           "pool_id",
+          "kind",
           "expires_at",
           "revoked_at",
           "created_at",
@@ -2615,6 +2819,22 @@
           "abort"
         ],
         "title": "ExecutionView",
+        "type": "object"
+      },
+      "ExtendLeaseRequest": {
+        "additionalProperties": false,
+        "description": "The claim token of the item whose lease the claimant renews.",
+        "properties": {
+          "claim_token": {
+            "format": "uuid",
+            "title": "Claim Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "claim_token"
+        ],
+        "title": "ExtendLeaseRequest",
         "type": "object"
       },
       "FetchCredentialRequest": {
@@ -3593,6 +3813,20 @@
         "title": "IsolationMode",
         "type": "string"
       },
+      "IssueEnrollmentTokenRequest": {
+        "additionalProperties": false,
+        "description": "The claimant kind the token enrolls: a host unless it names a kind a\nproduct registered.",
+        "properties": {
+          "kind": {
+            "default": "host",
+            "pattern": "^[a-z][a-z0-9_]{0,31}$",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "title": "IssueEnrollmentTokenRequest",
+        "type": "object"
+      },
       "IssuedApiKeyView": {
         "description": "The key in the clear is present on the first response only: the stored\noutcome of the create carries no secret, so a replay under the same\nIdempotency-Key answers with `key` null and `Idempotent-Replayed: true`. A\nclient that lost the first response revokes the key and issues another.",
         "properties": {
@@ -3616,6 +3850,56 @@
           "api_key"
         ],
         "title": "IssuedApiKeyView",
+        "type": "object"
+      },
+      "IssuedClaimantCredentialView": {
+        "description": "The claimant's own credential in the clear, once, under its kind's\nprefix, and the identity it carries. It lives an hour; the claimant\nrotates it before then.",
+        "properties": {
+          "claimant_id": {
+            "format": "uuid",
+            "title": "Claimant Id",
+            "type": "string"
+          },
+          "credential_id": {
+            "format": "uuid",
+            "title": "Credential Id",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "pool_id": {
+            "format": "uuid",
+            "title": "Pool Id",
+            "type": "string"
+          },
+          "token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token"
+          }
+        },
+        "required": [
+          "token",
+          "credential_id",
+          "kind",
+          "claimant_id",
+          "pool_id",
+          "expires_at"
+        ],
+        "title": "IssuedClaimantCredentialView",
         "type": "object"
       },
       "IssuedDownloadView": {
@@ -3646,7 +3930,7 @@
         "type": "object"
       },
       "IssuedEnrollmentTokenView": {
-        "description": "The token in the clear, once: it enrolls hosts into its pool until\nit expires or is revoked. It is minted on every call, so a retry mints\nanother, and the one never read expires on its own.",
+        "description": "The token in the clear, once: it enrolls claimants of its kind into\nits pool until it expires or is revoked. It is minted on every call, so\na retry mints another, and the one never read expires on its own.",
         "properties": {
           "enrollment": {
             "$ref": "#/components/schemas/EnrollmentTokenView"
@@ -6264,6 +6548,14 @@
         ],
         "title": "RenameProjectRequest",
         "type": "object"
+      },
+      "ReportOutcome": {
+        "enum": [
+          "done",
+          "failed"
+        ],
+        "title": "ReportOutcome",
+        "type": "string"
       },
       "ReportView": {
         "description": "The result the session submitted and the gate accepted: the outcome\nits loop ended with, whether a gate that knows the evidence judged it,\nand the step that answered it.",
@@ -15906,6 +16198,660 @@
         ]
       }
     },
+    "/v1/claimants/enrollments": {
+      "post": {
+        "description": "A claimant enrolls once, with its tenant's enrollment token of its\nkind as its bearer, and gets a credential under its kind's prefix. A\nretry enrolls another claimant, so it takes no Idempotency-Key. A host\nenrolls at `/hosts/enrollments`, with what it probed.",
+        "operationId": "enroll_claimant_v1_claimants_enrollments_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimantEnrollRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedClaimantCredentialView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enroll Claimant",
+        "tags": [
+          "claimants"
+        ]
+      }
+    },
+    "/v1/claimants/me/claims": {
+      "post": {
+        "description": "The next item of the claimant's kind on the lanes its identity names,\nor none. The call names nothing: what it is handed is its credential's\nto say.",
+        "operationId": "claim_v1_claimants_me_claims_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimantClaimView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Claim",
+        "tags": [
+          "claimants"
+        ]
+      }
+    },
+    "/v1/claimants/me/credentials": {
+      "post": {
+        "description": "The claimant's next credential; the one it called with ends after a\nshort grace.",
+        "operationId": "rotate_claimant_v1_claimants_me_credentials_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedClaimantCredentialView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rotate Claimant",
+        "tags": [
+          "claimants"
+        ]
+      }
+    },
+    "/v1/claimants/me/items/{item_id}": {
+      "get": {
+        "description": "The item the claimant holds, under the claim token its claim was\nhanded (the `Claim-Token` header). Any other is not found.",
+        "operationId": "held_v1_claimants_me_items__item_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "claim-token",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Claim-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimantWorkView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Held",
+        "tags": [
+          "claimants"
+        ]
+      }
+    },
+    "/v1/claimants/me/items/{item_id}/lease": {
+      "post": {
+        "description": "Renews the lease on the item the claimant holds.",
+        "operationId": "extend_v1_claimants_me_items__item_id__lease_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtendLeaseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimantWorkView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Extend",
+        "tags": [
+          "claimants"
+        ]
+      }
+    },
+    "/v1/claimants/me/items/{item_id}/report": {
+      "post": {
+        "description": "The claimant's answer for the item it holds: done, or failed with\nwhy. A failure is retried until its attempts are spent.",
+        "operationId": "report_v1_claimants_me_items__item_id__report_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimantReportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimantWorkView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Report",
+        "tags": [
+          "claimants"
+        ]
+      }
+    },
+    "/v1/claimants/{claimant_id}": {
+      "delete": {
+        "description": "Ends the claimant and its credentials at once; it is handed no more\nwork. An owner's or an admin's.",
+        "operationId": "revoke_claimant_v1_claimants__claimant_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "claimant_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Claimant Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimantView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Claimant",
+        "tags": [
+          "claimants"
+        ]
+      }
+    },
     "/v1/events": {
       "get": {
         "operationId": "list_events_v1_events_get",
@@ -16296,9 +17242,105 @@
         ]
       }
     },
+    "/v1/host-pools/{pool_id}/claimants": {
+      "get": {
+        "description": "The pool's claimants of every kind, a host among them, revoked ones\nincluded, each with its kind and when it was last seen: the id its\nowner revokes one by.",
+        "operationId": "get_claimants_v1_host_pools__pool_id__claimants_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pool_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Pool Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ClaimantView"
+                  },
+                  "title": "Response Get Claimants V1 Host Pools  Pool Id  Claimants Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Claimants",
+        "tags": [
+          "claimants"
+        ]
+      }
+    },
     "/v1/host-pools/{pool_id}/enrollment-tokens": {
       "post": {
-        "description": "A token that enrolls hosts into the pool, in the clear once. A retry\nmints another, so it takes no Idempotency-Key; the one never read\nexpires on its own.",
+        "description": "A token that enrolls claimants of a kind into the pool, in the clear\nonce: hosts, unless the body names a product's kind. A retry mints\nanother, so it takes no Idempotency-Key; the one never read expires on\nits own.",
         "operationId": "issue_enrollment_token_v1_host_pools__pool_id__enrollment_tokens_post",
         "parameters": [
           {
@@ -16360,6 +17402,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/IssueEnrollmentTokenRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {
