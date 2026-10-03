@@ -65,5 +65,6 @@ async def update_automation(
     ctx: Ctx, automations: AutomationsService, automation_id: UUID, body: AutomationRequest
 ) -> AutomationView:
     """The automation as edited. One that runs as its creator is edited by
-    its creator alone."""
+    its creator alone; one that runs as the automation principal takes its
+    editor as its creator."""
     return await automations.update_automation(ctx, automation_id, body)

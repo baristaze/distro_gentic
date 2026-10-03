@@ -40,11 +40,14 @@ class AutomationsManagerInterface(ABC):
     ) -> Automation:
         """The tenant's automation as edited, announced, by a person in person,
         held to the create's checks: its trigger, its action, its limits,
-        whom it runs as, and whether it is enabled all change; its id, its
-        creator, and its creation stay. One that runs as its creator after the
-        edit is edited by its creator alone, since its brief is the creator's
-        word and it runs on the creator's authority: anyone else is
-        `NotAuthorized`. Another tenant's is `NotFound`."""
+        whom it runs as, and whether it is enabled all change; its id and its
+        creation stay. One that runs as its creator after the edit is edited
+        by its creator alone, since its brief is the creator's word and it
+        runs on the creator's authority: anyone else is `NotAuthorized`. One
+        that runs as the automation principal after the edit takes its editor
+        as its creator, whose role was held to the grant, since every firing
+        holds the grant to its creator's role. Another tenant's is
+        `NotFound`."""
         ...
 
     @abstractmethod

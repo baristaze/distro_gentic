@@ -79,7 +79,8 @@ async def test_only_its_creator_edits_one_that_runs_as_its_creator(
     taken = await client.put(url, headers=ajax.owner, json={**body, "name": "the owner's now"})
     refused(taken, 403, "not_authorized")
     # Running as the principal is a grant's authority, not the creator's: an
-    # owner whose role holds the grant edits it, and no member may turn it back.
+    # owner whose role holds the grant edits it and is its creator from then
+    # on, so the member who made it no longer turns it back.
     grant = await client.put(
         "/v1/automations/principal", headers=ajax.owner, json={"role": "member"}
     )
@@ -87,9 +88,10 @@ async def test_only_its_creator_edits_one_that_runs_as_its_creator(
     principal = {**body, "runs_as": "automation_principal"}
     moved = await client.put(url, headers=ajax.owner, json=principal)
     assert moved.status_code == 200, moved.text
+    assert moved.json()["created_by"] != made["created_by"]
     viewer = await person(client, container, ajax.org_id, Role.VIEWER)
     refused(await client.put(url, headers=viewer, json=principal), 403, "not_authorized")
-    back = await client.put(url, headers=ajax.owner, json=body)
+    back = await client.put(url, headers=member, json=body)
     refused(back, 403, "not_authorized")
     assert (await client.get(url, headers=member)).json()["runs_as"] == "automation_principal"
 

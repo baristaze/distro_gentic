@@ -835,7 +835,8 @@ export interface paths {
         /**
          * Update Automation
          * @description The automation as edited. One that runs as its creator is edited by
-         *     its creator alone.
+         *     its creator alone; one that runs as the automation principal takes its
+         *     editor as its creator.
          */
         put: operations["update_automation_v1_automations__automation_id__put"];
         post?: never;

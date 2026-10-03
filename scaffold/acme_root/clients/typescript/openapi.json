@@ -10983,7 +10983,7 @@
         ]
       },
       "put": {
-        "description": "The automation as edited. One that runs as its creator is edited by\nits creator alone.",
+        "description": "The automation as edited. One that runs as its creator is edited by\nits creator alone; one that runs as the automation principal takes its\neditor as its creator.",
         "operationId": "update_automation_v1_automations__automation_id__put",
         "parameters": [
           {

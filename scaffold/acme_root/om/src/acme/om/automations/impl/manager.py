@@ -126,12 +126,16 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
             )
         await self._check_principal(ctx, automation)
         await self._check_project(ctx, automation)
+        # The editor is its creator from here on: one that runs as its
+        # creator is its creator's to edit, and one that runs as the
+        # principal fires on its creator's role, which is the editor's that
+        # `_check_principal` held to the grant.
         edited = Automation.model_validate(
             {
                 **automation.model_dump(),
                 "id": stored.id,
                 "created_at": stored.created_at,
-                "created_by": stored.created_by,
+                "created_by": ctx.user_id,
                 "updated_at": self._clock(),
                 "updated_by": ctx.user_id,
             }

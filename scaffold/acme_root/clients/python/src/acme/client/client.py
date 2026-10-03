@@ -789,7 +789,8 @@ class ApiClient:
         self, automation_id: UUID, automation: AutomationRequest
     ) -> AutomationView:
         """The automation whole, as edited; one that runs as its creator is
-        edited by its creator alone."""
+        edited by its creator alone, and one that runs as the automation
+        principal takes its editor as its creator."""
         edited = await self.request(
             "PUT",
             f"/v1/automations/{automation_id}",
