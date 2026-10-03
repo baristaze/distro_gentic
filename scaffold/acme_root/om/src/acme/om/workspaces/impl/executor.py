@@ -24,7 +24,7 @@ from uuid import UUID
 
 from pydantic import Field
 
-from acme.infra.exceptions import InfraNotFound
+from acme.infra.exceptions import InfraException
 from acme.infra.transports import CommandResult, CommandSpec, RecordSeal, TransportInterface
 from acme.infra.workspaces import (
     EgressMode,
@@ -58,6 +58,8 @@ Tree = Callable[[TenantContext, UUID, str, str, tuple[str, ...]], Awaitable[byte
 """The tree a validation of a project runs on, as a tar, by the project, the
 commit, the protected source, and the protected patterns: the workspaces'
 (`WorkspacesManagerInterface.checks_tree`)."""
+MISSING = 404
+"""The status a transport answers for a file the instance does not hold."""
 SPOKEN = 10_000
 """The most of a command's own output kept: a check writes its results to
 `{out}`, never to its output."""
@@ -179,7 +181,9 @@ class ExecutorWorkspacesImpl(ExecutorInterface):
         left = self._options.max_results_bytes - read
         try:
             stream = await self._transport.read_file(workspace, path, left + 1)
-        except InfraNotFound:
+        except InfraException as failed:
+            if failed.http_status != MISSING:
+                raise
             raise ValidationFailed(f"{check.name} wrote no results stream") from None
         if len(stream) > left:
             raise ValidationFailed(
