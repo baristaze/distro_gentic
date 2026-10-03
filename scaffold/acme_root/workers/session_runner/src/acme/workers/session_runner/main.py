@@ -5,9 +5,10 @@ The runner claims one kind of work, `LOOP`, from one loop lane, with the
 maintenance worker's claim loop: a lease it renews while the loop runs, a
 fence that cancels a run whose lease is lost, a liveness beat, and a drain
 on stop. A claimed loop over its tenant's fair share goes back to its lane
-before it runs. Its sweep
-takes back the expired leases and relays the outbox a crash left, and
-purges nothing."""
+before it runs. Its sweep takes back the expired leases, relays the outbox
+a crash left, and lets go of each workspace instance this host holds that
+no run accounts for (`workspaces.HeldWorkspacesSweep`). It purges no
+rows."""
 
 import argparse
 import asyncio
@@ -36,6 +37,7 @@ from acme.workers.session_runner.container import RunnerContainer
 from acme.workers.session_runner.fair_share import FairShareGuardImpl
 from acme.workers.session_runner.runs import LoopHandlerImpl
 from acme.workers.session_runner.settings import SessionRunnerSettings
+from acme.workers.session_runner.workspaces import HeldOptions, HeldWorkspacesSweep
 
 log = logging.getLogger(__name__)
 
@@ -55,16 +57,27 @@ def loop_options(settings: SessionRunnerSettings, lane: str | None = None) -> Lo
 
 def build_runner(container: RunnerContainer, lane: str | None = None) -> WorkerLoop:
     """The claim loop over one handler, `LOOP`'s, which calls the loop's one
-    operation once its tenant's fair share admits it. It purges nothing, so
-    it has no purge of its own."""
+    operation once its tenant's fair share admits it. It purges no rows, so
+    it has no purge of its own; its one duty is to the instances its host
+    holds."""
     managers = container.managers
     loop = LoopHandlerImpl(
         managers.loop, managers.agent_sessions, container.notifications.notify_park
+    )
+    held = HeldWorkspacesSweep(
+        container.infra.get_workspaces(),
+        managers.tools,
+        managers.workspaces,
+        managers.steps,
+        managers.work,
+        managers.tenancy,
+        HeldOptions(grace=timedelta(seconds=container.settings.runner_workspace_grace_seconds)),
     )
     return WorkerLoop(
         work=managers.work,
         outbox=managers.outbox,
         purges={},
+        across={"workspaces": held},
         handlers={WorkKind.LOOP: FairShareGuardImpl(loop, managers.placement)},
         topics=container.infra.get_topics(),
         liveness=container.infra.get_cache(CacheScope.WORKER_LIVENESS),

@@ -78,7 +78,10 @@ rebuilt from.
   methods.
 - **A workspace is a cache of durable state.** What a loop leaves is
   pushed before its instance goes, and a vanished branch is rebuilt only
-  when its fate is known.
+  when its fate is known. An instance a dead run left is released the
+  same way by its host's
+  [runner sweep](../../../../../workers/session_runner/README.md), past a
+  grace.
 - **Egress is an allowlist of destinations and methods.** Open egress is
   a recorded choice, and what is never reached is never reached.
 
