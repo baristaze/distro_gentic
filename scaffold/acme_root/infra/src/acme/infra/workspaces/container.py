@@ -181,7 +181,7 @@ class WorkspaceContainerImpl(WorkspaceProviderInterface):
         return [instance for instance in found if instance is not None]
 
     def describe(self) -> str:
-        return f"workspaces=container({self._image}, {self._deployment})"
+        return f"workspaces=container({self._image})"
 
     async def start(self) -> None:
         return None
