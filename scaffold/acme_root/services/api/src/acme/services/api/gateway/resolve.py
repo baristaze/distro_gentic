@@ -22,7 +22,6 @@ from acme.services.api.services import (
     RealtimeServiceInterface,
     RelayServiceInterface,
     ServicesInterface,
-    StationsServiceInterface,
     TenancyServiceInterface,
     WatchServiceInterface,
     WebhooksServiceInterface,
@@ -84,10 +83,6 @@ def watch_service(connection: HTTPConnection) -> WatchServiceInterface:
     return services_of(connection).get_watch_service()
 
 
-def stations_service(connection: HTTPConnection) -> StationsServiceInterface:
-    return services_of(connection).get_stations_service()
-
-
 def automations_service(connection: HTTPConnection) -> AutomationsServiceInterface:
     return services_of(connection).get_automations_service()
 
@@ -115,7 +110,6 @@ HostsService = Annotated[HostsServiceInterface, Depends(hosts_service)]
 FleetService = Annotated[FleetServiceInterface, Depends(fleet_service)]
 RelayService = Annotated[RelayServiceInterface, Depends(relay_service)]
 WatchService = Annotated[WatchServiceInterface, Depends(watch_service)]
-StationsService = Annotated[StationsServiceInterface, Depends(stations_service)]
 AutomationsService = Annotated[AutomationsServiceInterface, Depends(automations_service)]
 BudgetsService = Annotated[BudgetsServiceInterface, Depends(budgets_service)]
 IntakeService = Annotated[IntakeServiceInterface, Depends(intake_service)]

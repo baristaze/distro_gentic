@@ -79,13 +79,6 @@ TABLE_ROLES: dict[str, DatabaseRole] = {
     "exec_parts": DatabaseRole.CORE,
     "exec_controls": DatabaseRole.CORE,
     "workspace_bindings": DatabaseRole.CORE,
-    "labs": DatabaseRole.CORE,
-    "station_pools": DatabaseRole.CORE,
-    "stations": DatabaseRole.CORE,
-    "daemon_credentials": DatabaseRole.CORE,
-    "station_line_entries": DatabaseRole.CORE,
-    "station_leases": DatabaseRole.CORE,
-    "station_jobs": DatabaseRole.CORE,
     "session_workspaces": DatabaseRole.CORE,
     "egress_allowlists": DatabaseRole.CORE,
     "repository_credentials": DatabaseRole.CORE,
@@ -138,7 +131,15 @@ else, granted by the migrations that admit it and again by the login
 command, and the tenant fence admits it within the tenant its transaction
 names and never under the system scope (ADR 1010)."""
 
-DROPPED_TABLE_ROLES: dict[str, DatabaseRole] = {}
+DROPPED_TABLE_ROLES: dict[str, DatabaseRole] = {
+    "labs": DatabaseRole.CORE,
+    "station_pools": DatabaseRole.CORE,
+    "stations": DatabaseRole.CORE,
+    "daemon_credentials": DatabaseRole.CORE,
+    "station_line_entries": DatabaseRole.CORE,
+    "station_leases": DatabaseRole.CORE,
+    "station_jobs": DatabaseRole.CORE,
+}
 """Tables the migration chain made and later dropped. No process reaches
 them, so `role_for` does not know them; only the chain names them, and its
 role check reads this map beside the live one."""

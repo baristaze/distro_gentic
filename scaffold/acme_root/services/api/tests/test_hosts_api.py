@@ -51,7 +51,7 @@ def bearer(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}", **HOST_APP}
 
 
-async def a_pool(client: httpx.AsyncClient, owner: dict[str, str], name: str = "lab") -> str:
+async def a_pool(client: httpx.AsyncClient, owner: dict[str, str], name: str = "build") -> str:
     answered = await client.post(
         "/v1/host-pools", headers=created(owner), json={"name": name, "region": "eu-west"}
     )

@@ -46,7 +46,7 @@ ADVERTISED = Advertisement(
 )
 
 
-def make_pool(name: str = "lab") -> HostPool:
+def make_pool(name: str = "build") -> HostPool:
     now = utcnow()
     actor = new_id()
     return HostPool(

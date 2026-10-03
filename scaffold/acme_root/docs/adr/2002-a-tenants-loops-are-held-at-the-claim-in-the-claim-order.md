@@ -5,11 +5,11 @@
 ## Context
 
 A session makes several kinds of work, and each must run where its
-environment is: a loop on the platform's runners, a command on the host
-that holds its workspace, station work beside the station. The
-guideline's work queue already has lanes, and a lane for a tenant whose
-bulk work starves its neighbours. Loops are long and they are the cost,
-so each tenant also has a limit on how many run at once.
+environment is: a loop on the platform's runners, and a command on the
+host that holds its workspace. The guideline's work queue already has
+lanes, and a lane for a tenant whose bulk work starves its neighbours.
+Loops are long and they are the cost, so each tenant also has a limit
+on how many run at once.
 
 The engine enqueues every item on the lane its producer names, and a
 relayed item on the default lane. Its claim takes the oldest item of a
@@ -27,10 +27,10 @@ freed by every way a run ends, a lost runner's included.
 **The lane is placement's answer, at every enqueue.** The work manager
 asks placement for the lane of each item it enqueues, direct or
 relayed. A loop goes to its tenant's lane: its plan tier's, or one of
-its own when an operator gave it one. A kind a host or a daemon runs
-goes to the lane its payload names. No producer picks a lane.
+its own when an operator gave it one. A kind a host runs goes to the
+lane its payload names. No producer picks a lane.
 
-**A host or a daemon is claimed for by its identity.** The control
+**A host is claimed for by its identity.** The control
 plane claims on its behalf, from the lanes and kinds its identity
 names, and never from what its call asks for.
 

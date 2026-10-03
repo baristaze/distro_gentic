@@ -22,7 +22,6 @@ class ExecutorKind(StrEnum):
 
     CLOUD = "cloud"  # a machine of the platform's own pool, in its cloud
     HOST = "host"  # a workspace host inside a customer's wall
-    DAEMON = "daemon"  # a station's daemon
 
 
 class Executor(Platform):

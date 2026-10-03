@@ -20,8 +20,8 @@ describe("the short name", () => {
   });
 
   it("is what the server accepts", () => {
-    expect(isSlug("ajax-labs")).toBe(true);
-    expect(isSlug("ajax--labs")).toBe(false);
+    expect(isSlug("ajax-tools")).toBe(true);
+    expect(isSlug("ajax--tools")).toBe(false);
     expect(isSlug("-ajax")).toBe(false);
     expect(isSlug("a".repeat(49))).toBe(false);
   });

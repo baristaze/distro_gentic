@@ -123,13 +123,6 @@ def test_a_metadata_endpoint_is_never_reached_whatever_the_internal_networks(
     assert not rules.egress_decision(EgressMode.OPEN, (), asked, ()).allowed
 
 
-def test_a_stations_network_is_never_reached() -> None:
-    stations = rules.networks(("203.0.113.0/24",))
-    asked = request(address="203.0.113.9")
-    assert rules.egress_decision(EgressMode.OPEN, (), asked, INTERNAL).allowed
-    assert not rules.egress_decision(EgressMode.OPEN, (), asked, INTERNAL + stations).allowed
-
-
 # The egress a session pins.
 
 
