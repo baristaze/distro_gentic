@@ -32,6 +32,7 @@ from acme.om.steps.rules import message_step
 from acme.om.steps.types.header import LoopOutcome, ParkReason
 from acme.om.steps.types.step import StepType
 from acme.om.storage.impl.postgres import StoragePostgresImpl
+from acme.om.storage.settings import MigrationSettings
 from acme.om.work.types.work_item import WorkKind
 from acme.services.api.seed import seed_platform
 from acme.workers.session_runner.container import RunnerContainer
@@ -48,8 +49,11 @@ SETTINGS = SessionRunnerSettings.model_validate(
 
 
 def postgres() -> StoragePostgresImpl:
+    """A storage root over the database the integration suites read."""
+    settings = MigrationSettings()
+    settings.refuse_remote()
     return StoragePostgresImpl(
-        SETTINGS.role_urls(), SETTINGS.role_pools(), system_urls=SETTINGS.system_role_urls()
+        settings.role_urls(), settings.role_pools(), system_urls=settings.system_role_urls()
     )
 
 
