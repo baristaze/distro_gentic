@@ -12,6 +12,7 @@ import threading
 from collections.abc import AsyncIterator, Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import cast
 
 import pytest
 from contracts.workspaces import GitTwin, ProjectsTwin
@@ -93,8 +94,6 @@ class PrivateGit(ThreadingHTTPServer):
 
 
 class PrivateGitHandler(BaseHTTPRequestHandler):
-    server: PrivateGit
-
     def do_GET(self) -> None:
         self._serve()
 
@@ -105,19 +104,20 @@ class PrivateGitHandler(BaseHTTPRequestHandler):
         return None
 
     def _serve(self) -> None:
-        if self.headers.get("Authorization") != self.server.expected:
-            self.server.refused += 1
+        served = cast(PrivateGit, self.server)
+        if self.headers.get("Authorization") != served.expected:
+            served.refused += 1
             self.send_response(401)
             self.send_header("WWW-Authenticate", 'Basic realm="git"')
             self.send_header("Content-Length", "0")
             self.end_headers()
             return
-        self.server.authorized += 1
+        served.authorized += 1
         path, _, query = self.path.partition("?")
         body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
         env = {
             "PATH": str(Path(GIT or "git").parent),
-            "GIT_PROJECT_ROOT": str(self.server.root),
+            "GIT_PROJECT_ROOT": str(served.root),
             "GIT_HTTP_EXPORT_ALL": "1",
             "REQUEST_METHOD": self.command,
             "PATH_INFO": path,
