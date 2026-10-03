@@ -69,6 +69,7 @@ export function useSessionVm(id: string) {
   const command = useCommandProgress(id, commandKey);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shown, setShown] = useState<number | null>(null);
+  const [commandProblem, setCommandProblem] = useState<string | null>(null);
 
   const may = session.data ? allowed(session.data, me.data?.permissions.includes("write") ?? false) : null;
   const fail = useCallback((what: string) => (caught: unknown) => notify(errorMessage(caught, what), { tone: "problem" }), [notify]);
@@ -84,11 +85,16 @@ export function useSessionVm(id: string) {
   const decide = (seq: number, approve: boolean, note: string) =>
     actions.decide.mutate({ seq, approve, ...(note.trim() ? { note: note.trim() } : {}) }, { onError: fail("The decision was not sent.") });
   const takeControl = () => actions.takeControl.mutate(undefined, { onError: fail("Control was not taken.") });
+  /** A line the shell would read otherwise is never sent: its reason shows instead. */
   const runCommand = (line: string, done: () => void) => {
-    const argv = splitCommand(line);
-    if (argv.length === 0) return;
+    const split = splitCommand(line);
+    if ("problem" in split) {
+      setCommandProblem(split.problem);
+      return;
+    }
+    setCommandProblem(null);
     actions.runCommand.mutate(
-      { argv },
+      { argv: split.argv },
       {
         onSuccess: (run) => {
           setCommandKey(run.command_key);
@@ -155,6 +161,7 @@ export function useSessionVm(id: string) {
     decide,
     takeControl,
     runCommand,
+    commandProblem,
     giveBack,
     sending: actions.message.isPending,
     commands,

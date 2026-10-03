@@ -414,6 +414,7 @@ export function LivePart({ vm }: { vm: SessionVm }) {
                 Run
               </Button>
             </form>
+            {vm.commandProblem ? <ErrorText>{vm.commandProblem}</ErrorText> : null}
             {vm.command ? (
               <>
                 <Muted style={small}>

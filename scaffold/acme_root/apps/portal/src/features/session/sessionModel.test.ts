@@ -216,8 +216,23 @@ describe("what a person may do", () => {
   });
 
   it("splits a typed command at spaces and keeps a quoted run whole", () => {
-    expect(splitCommand(`git commit -m "a message" ''`)).toEqual(["git", "commit", "-m", "a message", ""]);
-    expect(splitCommand("  ls   -la ")).toEqual(["ls", "-la"]);
+    expect(splitCommand(`git commit -m "a message"`)).toEqual({ argv: ["git", "commit", "-m", "a message"] });
+    expect(splitCommand("  ls   -la ")).toEqual({ argv: ["ls", "-la"] });
+    expect(splitCommand(`echo 'it''s' "x"y`)).toEqual({ argv: ["echo", "its", "xy"] });
+  });
+
+  it("honours a backslash as the shell does: outside quotes and in double quotes, never in single ones", () => {
+    expect(splitCommand("rm notes\\ v2.txt")).toEqual({ argv: ["rm", "notes v2.txt"] });
+    expect(splitCommand(`git commit -m "say \\"hi\\""`)).toEqual({ argv: ["git", "commit", "-m", 'say "hi"'] });
+    expect(splitCommand(`echo "a\\b" 'c\\d' \\'`)).toEqual({ argv: ["echo", "a\\b", "c\\d", "'"] });
+  });
+
+  it("refuses an open quote, a trailing backslash, and an empty argument, with the reason", () => {
+    expect(splitCommand(`echo "unterminated`)).toEqual({ problem: "A double quote is not closed." });
+    expect(splitCommand(`echo 'unterminated`)).toEqual({ problem: "A single quote is not closed." });
+    expect(splitCommand("ls \\")).toEqual({ problem: "The line ends with a backslash that escapes nothing." });
+    expect(splitCommand("git commit -m ''")).toEqual({ problem: `An empty argument ('' or "") is not sent: the API refuses one.` });
+    expect(splitCommand("   ")).toEqual({ problem: "Type a command." });
   });
 });
 

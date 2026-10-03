@@ -324,28 +324,67 @@ export function allowed(session: AgentSessionView, mayWrite: boolean): Allowed {
   };
 }
 
-/** The words a command line is typed in, split as a shell splits them:
- * at spaces, with a quoted run kept whole. */
-export function splitCommand(line: string): string[] {
+/** A command line's words, or why it is not sent. */
+export type SplitCommand = { argv: string[] } | { problem: string };
+
+/** What a backslash escapes inside double quotes; before any other
+ * character it stays, as the shell keeps it. */
+const ESCAPED_IN_DOUBLE = new Set(["$", "`", '"', "\\", "\n"]);
+
+/** The words a command line is typed in, split as a POSIX shell splits them:
+ * at blanks, with a quoted run kept whole. A backslash keeps the character
+ * after it as it is outside quotes, and only `$`, a backquote, `"`, and `\`
+ * inside double quotes; inside single quotes nothing is escaped. A line with
+ * a quote left open, a backslash at its end, or an empty word (`''`) is
+ * refused with the reason: the API refuses an empty argument, and a line the
+ * shell would read otherwise is never sent. */
+export function splitCommand(line: string): SplitCommand {
   const argv: string[] = [];
   let current = "";
-  let quote: string | null = null;
+  let quote: "'" | '"' | null = null;
   let started = false;
+  let escaping = false;
+  const end = (): string | null => {
+    if (!started) return null;
+    if (current === "") return "An empty argument ('' or \"\") is not sent: the API refuses one.";
+    argv.push(current);
+    current = "";
+    started = false;
+    return null;
+  };
   for (const char of line) {
-    if (quote) {
-      if (char === quote) quote = null;
+    if (escaping) {
+      escaping = false;
+      // A backslash before a newline joins the lines, as the shell does.
+      if (char === "\n") continue;
+      if (quote === '"' && !ESCAPED_IN_DOUBLE.has(char)) current += "\\";
+      current += char;
+      started = true;
+    } else if (quote === "'") {
+      if (char === "'") quote = null;
+      else current += char;
+    } else if (char === "\\") {
+      escaping = true;
+    } else if (quote === '"') {
+      if (char === '"') quote = null;
       else current += char;
     } else if (char === '"' || char === "'") {
       quote = char;
       started = true;
     } else if (/\s/.test(char)) {
-      if (started || current) argv.push(current);
-      current = "";
-      started = false;
-    } else current += char;
+      const problem = end();
+      if (problem) return { problem };
+    } else {
+      current += char;
+      started = true;
+    }
   }
-  if (started || current) argv.push(current);
-  return argv;
+  if (quote) return { problem: `A ${quote === '"' ? "double" : "single"} quote is not closed.` };
+  if (escaping) return { problem: "The line ends with a backslash that escapes nothing." };
+  const problem = end();
+  if (problem) return { problem };
+  if (argv.length === 0) return { problem: "Type a command." };
+  return { argv };
 }
 
 export type SessionTab = "thread" | "timeline" | "tools" | "evidence" | "changes" | "children" | "live";
