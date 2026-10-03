@@ -1,6 +1,11 @@
 """The automations swimlane over the engine's managers, as a root builds it.
 
-    automations = build_automations(storage, managers)
+    automations = build_automations(storage, managers, project_required=True)
+
+`project_required` refuses a start that names no project, when it is
+saved and when it fires: every stack but a local one sets it, so a
+session an automation starts is held by its project's budget and
+policies.
 
 `principal_context` is the transition that gives an automation's creator
 their live context at each firing; None takes the tenancy manager's
@@ -54,6 +59,7 @@ def build_automations(
     storage: StorageInterface,
     managers: Managers,
     *,
+    project_required: bool,
     principal_context: PrincipalContext | None = None,
     options: AutomationsOptions | None = None,
     clock: Callable[[], datetime] = utcnow,
@@ -67,7 +73,9 @@ def build_automations(
         managers.tenancy,
         managers.outbox,
         managers.events,
+        managers.projects,
         automation_principals(held, principal_context or members_context(managers.tenancy)),
         options or AutomationsOptions(),
         clock,
+        project_required=project_required,
     )
