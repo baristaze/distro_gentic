@@ -155,7 +155,12 @@ class ReaderTwin(RepositoryReaderInterface):
     """The tar a validation's tree reads, by its version and source."""
 
     async def delivered(
-        self, binding: RepositoryBinding, branch: str, credential: FetchCredential | None = None
+        self,
+        binding: RepositoryBinding,
+        branch: str,
+        credential: FetchCredential | None = None,
+        *,
+        cut: str | None = None,
     ) -> Delivered:
         self.credentials.append(credential)
         return Delivered(base=BASE, head=self.head, changed=self.changed)

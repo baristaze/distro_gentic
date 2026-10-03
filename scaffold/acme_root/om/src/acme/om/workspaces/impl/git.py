@@ -163,11 +163,16 @@ head=-
 if git rev-parse -q --verify HEAD >/dev/null; then head="$(git rev-parse HEAD)"; fi
 dirty=no
 if [ -n "$(git status --porcelain --untracked-files=all)" ]; then dirty=yes; fi
-echo "checkout $head $dirty"
+base=-
+if [ "$head" != - ] && git rev-parse -q --verify refs/remotes/origin/HEAD >/dev/null; then
+  base="$(git merge-base HEAD refs/remotes/origin/HEAD || echo -)"
+fi
+echo "checkout $head $dirty $base"
 """
-"""Prints the checkout's HEAD, `-` before its first commit, and whether it
-holds uncommitted work: what the checkout says of itself, which tells only
-what was not delivered."""
+"""Prints the checkout's HEAD, `-` before its first commit, whether it
+holds uncommitted work, and where HEAD meets the default branch as last
+brought in, `-` where they do not: what the checkout says of itself, which
+tells only what was not delivered."""
 
 
 class GitOptions(Platform):
@@ -232,9 +237,13 @@ class WorkspaceGitTransportImpl(WorkspaceGitInterface):
 
     async def checkout(self, ctx: TenantContext, workspace: Workspace, *, epoch: int) -> Checkout:
         words = await self._run(ctx, workspace, epoch, "checkout", CHECKOUT, {})
-        if len(words) != 3 or words[0] != "checkout":
+        if len(words) != 4 or words[0] != "checkout":
             raise Unavailable(f"the checkout of session {workspace.id} answered no state")
-        return Checkout(head=None if words[1] == "-" else words[1], dirty=words[2] == "yes")
+        return Checkout(
+            head=None if words[1] == "-" else words[1],
+            dirty=words[2] == "yes",
+            base=None if words[3] == "-" else words[3],
+        )
 
     async def snapshot(
         self,

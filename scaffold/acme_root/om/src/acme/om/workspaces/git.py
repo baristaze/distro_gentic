@@ -114,15 +114,23 @@ class RepositoryReaderInterface(ABC):
 
     @abstractmethod
     async def delivered(
-        self, binding: RepositoryBinding, branch: str, credential: FetchCredential | None = None
+        self,
+        binding: RepositoryBinding,
+        branch: str,
+        credential: FetchCredential | None = None,
+        *,
+        cut: str | None = None,
     ) -> Delivered:
         """The bound repository's default branch and the session's `branch`
         there, fetched by the repository's URL: where the branch meets the
         default branch, its head, and every path changed between them, a
-        moved file by both its paths. A private repository is read with the
-        project's fetch `credential`, which reaches only the read's own git
-        and the repository's URL. `Unavailable` when the repository cannot be
-        read."""
+        moved file by both its paths. A branch the repository does not hold
+        delivered nothing, from where it was `cut`: the commit the checkout
+        says its branch meets the default branch at, when the default
+        branch's history holds it, and the default branch's tip otherwise.
+        A private repository is read with the project's fetch `credential`,
+        which reaches only the read's own git and the repository's URL.
+        `Unavailable` when the repository cannot be read."""
         ...
 
     @abstractmethod

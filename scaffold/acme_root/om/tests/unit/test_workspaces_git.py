@@ -525,6 +525,32 @@ async def test_what_a_session_delivered_is_read_from_its_repository(checkout: Ch
     assert ahead.head == pushed and ahead.dirty, "a commit not pushed is not delivered"
 
 
+async def test_an_undelivered_branchs_base_is_where_it_was_cut_not_the_default_branchs_tip(
+    checkout: Checkout, tmp_path: Path
+) -> None:
+    session_id = await checkout.session()
+    workspace = await checkout.prepare(session_id)
+    here = Path(workspace.location)
+    (here / "feature.txt").write_text("the feature\n")
+    commit(here, "not pushed yet")
+    moved = checkout.push_as_a_person(tmp_path, "main", "moved")
+    git(here, "fetch", "-q", "origin", "main:refs/remotes/origin/main")  # it knows the move
+
+    delivered = await checkout.managers.workspaces.delivery(checkout.ctx, workspace)
+
+    assert moved != checkout.main
+    assert (delivered.base, delivered.head) == (checkout.main, checkout.main), (
+        "a baseline runs where the branch was cut, never where the default moved since"
+    )
+    assert delivered.dirty and delivered.changed == ()
+
+    # A base the checkout makes up is held to the default branch's history.
+    (here / "more.txt").write_text("more\n")
+    git(here, "update-ref", "refs/remotes/origin/HEAD", commit(here, "made up"))
+    made_up = await checkout.managers.workspaces.delivery(checkout.ctx, workspace)
+    assert made_up.base == moved, "a commit the default never held is not a base"
+
+
 async def test_an_agent_that_moves_its_default_branch_still_delivers_the_protected_edit(
     checkout: Checkout,
 ) -> None:

@@ -265,10 +265,13 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         # What was delivered is read from the repository, outside the
         # workspace; the checkout tells only what was not: work uncommitted,
         # or committed and not pushed.
-        delivered = await self._reader.delivered(
-            binding, held.branch, await self._fetch_credential(ctx, binding.project_id)
-        )
         local = await self._git.checkout(ctx, workspace, epoch=self._epoch(workspace.id))
+        delivered = await self._reader.delivered(
+            binding,
+            held.branch,
+            await self._fetch_credential(ctx, binding.project_id),
+            cut=local.base,
+        )
         try:
             return Delivery(
                 project=rules.project_key(binding),

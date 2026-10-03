@@ -76,11 +76,14 @@ class Snapshot(Platform):
 
 class Checkout(Platform):
     """What the checkout holds now, as it says itself: its HEAD, None before
-    its first commit, and whether it holds uncommitted work. It tells the
-    work the session has not delivered, never what it delivered."""
+    its first commit, whether it holds uncommitted work, and where its HEAD
+    meets the default branch as last brought in, None where they do not
+    meet. It tells the work the session has not delivered, never what it
+    delivered."""
 
     head: str | None = None
     dirty: bool = False
+    base: str | None = None
 
 
 class Delivered(Platform):
