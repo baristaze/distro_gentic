@@ -38,6 +38,7 @@ from acme.om.relay.impl.transport import TransportPlacedImpl, TransportRelayImpl
 from acme.om.root import Managers, PlatformPorts, build_managers
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
+from acme.om.tools.attachments import AttachmentReaderInterface
 from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.tools.tool import ToolInterface
 from acme.om.trust.impl.keys import KeyProbeAbsentImpl
@@ -84,14 +85,16 @@ class RunnerContainer:
         *,
         agent_kinds: tuple[AgentKind, ...] = (),
         tool_catalog: tuple[ToolInterface, ...] = (),
+        attachment_reader: AttachmentReaderInterface | None = None,
         domain_classes: tuple[str, ...] = (),
         ports: PlatformPorts | None = None,
     ) -> RunnerContainer:
         """Over the database, the infra, and the providers the settings
-        name. `agent_kinds`, `tool_catalog`, and `domain_classes` are the
-        product's, as every process that builds the managers passes them;
-        so are the platform's `ports`, among them the evidence's executor
-        and work product. The result gate every success passes is the
+        name. `agent_kinds`, `tool_catalog`, `attachment_reader`, and
+        `domain_classes` are the product's, as every process that builds the
+        managers passes them, and None for the reader refuses every read; so
+        are the platform's `ports`, among them the evidence's executor and
+        work product. The result gate every success passes is the
         evidence's, over that work product: with none wired, no success
         counts."""
         storage = StoragePostgresImpl(
@@ -110,6 +113,7 @@ class RunnerContainer:
             integrations,
             agent_kinds=agent_kinds,
             tool_catalog=tool_catalog,
+            attachment_reader=attachment_reader,
             domain_classes=domain_classes,
             ports=ports,
             platform_agents=shipped_agents(settings, settings.environment),
@@ -125,6 +129,7 @@ class RunnerContainer:
         *,
         agent_kinds: tuple[AgentKind, ...] = (),
         tool_catalog: tuple[ToolInterface, ...] = (),
+        attachment_reader: AttachmentReaderInterface | None = None,
         domain_classes: tuple[str, ...] = (),
         ports: PlatformPorts | None = None,
         platform_agents: PlatformAgents | None = None,
@@ -207,6 +212,7 @@ class RunnerContainer:
             environment=settings.environment,
             agent_kinds=agent_kinds,
             tool_catalog=(*tool_catalog, *acts),
+            attachment_reader=attachment_reader,
             domain_classes=domain_classes,
             platform_agents=platform_agents,
             intake=lambda: held[0].intake,

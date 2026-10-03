@@ -50,7 +50,7 @@ from acme.om.notifications.root import build_notifications
 from acme.om.playbooks.manager import PlaybooksManagerInterface
 from acme.om.playbooks.root import PlaybooksLayer
 from acme.om.projects.impl.policies import SessionProjectsBoundImpl
-from acme.om.root import Managers, build_managers
+from acme.om.root import Managers, build_managers, engine_tools
 from acme.om.steps.types.step import Step
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
@@ -58,7 +58,9 @@ from acme.om.tenancy.rules import permissions_of
 from acme.om.tenancy.types.identity import Identity
 from acme.om.tenancy.types.membership import Membership
 from acme.om.tenancy.types.user import User
+from acme.om.tools.impl.attachments import AttachmentReaderNullImpl
 from acme.om.tools.manager import ToolsManagerInterface
+from acme.om.tools.native.ask_person import ASK_PERSON
 from acme.om.tools.tool import ToolInterface
 from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule
 from acme.om.tools.types.tool import ToolClass
@@ -87,6 +89,10 @@ ACTING = STEADY.model_copy(
 )
 """A steady kind that also comments on the forge as the platform's
 account."""
+
+ASKING = STEADY.model_copy(update={"name": "asking", "tools": (*STEADY.tools, ASK_PERSON)})
+"""A steady kind that also asks its person what it cannot find."""
+KINDS = (STEADY, ACTING, ASKING)
 
 
 @dataclass
@@ -282,7 +288,7 @@ def wired(
         storage,
         infra,
         integrations=integrations,
-        agent_kinds=(STEADY, ACTING),
+        agent_kinds=KINDS,
         principal_context=principals,
         tool_catalog=catalog,
         tools_layer=layers,
@@ -297,7 +303,7 @@ def wired(
         managers.steps,
         managers.agent_sessions,
         managers.agents,
-        AgentKindCatalog(kinds=(STEADY, ACTING)),
+        AgentKindCatalog(kinds=KINDS),
         managers.attribution,
         managers.models,
         managers.windows,
@@ -311,7 +317,7 @@ def wired(
         CallCredentialsPlatformImpl(providers),
         infra.get_outages(),
         StreamSinkMemoryImpl(),
-        catalog,
+        engine_tools(managers.steps, AttachmentReaderNullImpl()) + catalog,
         LoopOptions(control_poll=timedelta(milliseconds=1)),
         clock,
         sleep,

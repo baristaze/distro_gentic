@@ -21,7 +21,8 @@ of thing [Acme is made of](../../../../README.md).
   | A budget a person must raise | Raise the budget | The members who set budgets |
   | The account's funds | Top up | The members who set budgets |
   | A call far above its session's norm | Approve the call | The members who approve such calls |
-  | Any other park on a person | Answer the session | Its requester, or the members who manage the tenant when the requester holds no place |
+  | A question the agent asks its person | Answer it with a message | Its requester, or the members who manage the tenant when the requester holds no place |
+  | Any other park on a person | Answer the session | The same people |
 
   Each is told on every channel of theirs: the platform's own list, and
   each account of theirs an integration holds
@@ -36,9 +37,13 @@ of thing [Acme is made of](../../../../README.md).
   and nobody who can clear it is left out.
 - **One action, one link.** A notification names the one action that
   clears its park and links to its route in the API: the call's
-  decision, the session's controls, or the budget's amount. Topping up
-  and approving a call past its norm have no route yet: their
-  notifications name the park and carry no link.
+  decision, the session's messages, the session's controls, or the
+  budget's amount. Topping up and approving a call past its norm have no
+  route yet: their notifications name the park and carry no link.
+- **A question is quoted, never a link in it.** A question's
+  notification quotes it on one line, cut short and escaped. One that
+  holds a URL, an image, or an element that loads one is not quoted: the
+  person reads it in the session.
 - **Once a park.** A park tells each person once on each channel, however
   often it is asked.
 - **A channel that is down leaves the list.** A post an integration

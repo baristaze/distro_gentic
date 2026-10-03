@@ -128,8 +128,13 @@ from acme.om.tenancy.impl.operator import TenancyOperatorManagerImpl, TenancyOpe
 from acme.om.tenancy.impl.org import TenancyOrgManagerImpl
 from acme.om.tenancy.impl.sign_in import TenancySignInManagerImpl
 from acme.om.tenancy.storage import TenancyStorageInterface
-from acme.om.tools import ToolsManagerInterface
+from acme.om.tools import ToolRegistry, ToolsManagerInterface
+from acme.om.tools.attachments import AttachmentReaderInterface
+from acme.om.tools.impl.attachments import AttachmentReaderNullImpl
 from acme.om.tools.impl.manager import ToolsManagerImpl, ToolsOptions
+from acme.om.tools.native.ask_person import AskPersonToolImpl
+from acme.om.tools.native.read_attachment import ReadAttachmentToolImpl
+from acme.om.tools.native.write_plan import WritePlanToolImpl
 from acme.om.tools.seal import RecordSealInterface
 from acme.om.tools.tool import ToolInterface
 from acme.om.tools.types.policy import PolicyLayer
@@ -365,6 +370,7 @@ def build_managers(
     budget_gate: BudgetGateInterface | None = None,
     stream_sink: StreamSinkInterface | None = None,
     tool_catalog: tuple[ToolInterface, ...] = (),
+    attachment_reader: AttachmentReaderInterface | None = None,
     domain_classes: tuple[str, ...] = (),
     loop_options: LoopOptions | None = None,
     placement_options: PlacementOptions | None = None,
@@ -436,11 +442,15 @@ def build_managers(
     quiet null result gate or work product is refused at boot
     (`UnsafeConfiguration`).
 
-    The loop takes the rest: `tool_catalog`, the adopter's tools, of which a
-    session's registry holds those its kind names, with `domain_classes`,
-    the classes the adopter declares; `stream_sink`, the carrier its parts
-    go to, None the quiet null, which drops them; and `loop_options`. Its
-    outage signal is infra's, and its model providers the integrations'.
+    The loop takes the rest: `tool_catalog`, the adopter's tools, after the
+    engine's own (`engine_tools`), of which a session's registry holds those
+    its kind names; a tool of the adopter's that takes an engine tool's name
+    is refused. `attachment_reader` is what reads an attachment's text for
+    the engine's read tool, None the null that refuses. Then
+    `domain_classes`, the classes the adopter declares; `stream_sink`, the
+    carrier its parts go to, None the quiet null, which drops them; and
+    `loop_options`. Its outage signal is infra's, and its model providers
+    the integrations'.
 
     The evidence takes the platform's two ports: `executor`, the fresh
     executor validation runs on, and `work_product`, which reads what a
@@ -744,6 +754,8 @@ def build_managers(
         storage.get_evidence_storage(), products, session_policies
     )
     refuse_quiet_nulls(environment, results, products)
+    catalog = engine_tools(steps, attachment_reader or AttachmentReaderNullImpl()) + tool_catalog
+    ToolRegistry(catalog, domain_classes)  # refuses two tools of one name at boot
     agents = AgentsManagerImpl(
         storage.get_agent_storage(),
         agent_sessions,
@@ -754,7 +766,7 @@ def build_managers(
         tenancy,
         outbox,
         agents_options or AgentsOptions(),
-        tool_classes={tool.spec.name: tool.spec.authorization_class for tool in tool_catalog},
+        tool_classes={tool.spec.name: tool.spec.authorization_class for tool in catalog},
     )
     # What a model request reads: rendered from the history, compacted by
     # the summarizer through the model providers, behind the gate, paid for
@@ -805,7 +817,7 @@ def build_managers(
     if PROTECTED_CEILING not in tool_options.ceilings.rules:
         ceilings = PolicyLayer(rules=(*tool_options.ceilings.rules, PROTECTED_CEILING))
         tool_options = tool_options.model_copy(update={"ceilings": ceilings})
-    engine_tools = ToolsManagerImpl(
+    engine_tools_manager = ToolsManagerImpl(
         storage.get_tool_storage(),
         steps,
         tenancy,
@@ -822,7 +834,7 @@ def build_managers(
     # it cannot give it, brought up to the session's branch, kept before it
     # goes, and let go by the run that holds it alone.
     tools: ToolsManagerInterface = ToolsManagerWorkspacesImpl(
-        engine_tools,
+        engine_tools_manager,
         workspaces,
         steps,
         workspace_host or HostOffer(),
@@ -962,7 +974,7 @@ def build_managers(
             credentials,
             infra.get_outages(),
             stream_sink or StreamSinkNullImpl(),
-            tool_catalog,
+            catalog,
             loop_options or LoopOptions(),
             domain_classes=domain_classes,
         ),
@@ -1003,3 +1015,12 @@ def build_managers(
         benchmarks=BenchmarksManagerImpl(storage.get_benchmark_storage()),
     )
     return managers
+
+
+def engine_tools(
+    steps: StepsManagerInterface, attachments: AttachmentReaderInterface
+) -> tuple[ToolInterface, ...]:
+    """The tools the engine ships, offered to a session only when its kind
+    names them: asking its person or standing down, writing its plan, and
+    reading an attachment by range."""
+    return (AskPersonToolImpl(), WritePlanToolImpl(), ReadAttachmentToolImpl(steps, attachments))
