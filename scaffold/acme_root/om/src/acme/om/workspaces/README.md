@@ -87,7 +87,9 @@ rebuilt from.
 - **Mint a push token, and write with it.** A token is minted for the
   session's branch on its project's repository. It writes that branch,
   its snapshots, and its pull request, and nothing else, through source
-  control, which writes with the integration's own credential. It ends
+  control, which writes with the integration's own credential, through
+  the installation of the forge that holds the repository, and only when
+  the session's own tenant connected it. It ends
   when its lifetime passes, when the loop's workspace is prepared again
   or released, or when a newer one is minted.
 - **Run a delivery's checks.** The platform's executor

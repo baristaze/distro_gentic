@@ -73,7 +73,7 @@ from acme.om.work.types.work_item import WorkKind, WorkStatus
 from acme.om.workspaces.types.source import RepositoryBinding
 from acme.services.api.app import create_app
 from acme.services.api.container import AppContainer, postgres_storage
-from acme.services.api.seed import CONTENT_LIFETIME, REPOSITORY, seed_platform
+from acme.services.api.seed import CONTENT_LIFETIME, first_repository, seed_platform
 from acme.services.api.settings import ApiSettings
 
 pytestmark = [pytest.mark.integration, pytest.mark.slow]
@@ -92,6 +92,9 @@ runner's lease (3 seconds here), a sweep (1), the requeue's stagger (5 at
 most), and a poll (1), then two model turns."""
 
 LEASE_SECONDS = 3
+
+REPOSITORY = first_repository("ajax")
+"""The repository the seeded org's first project binds."""
 
 
 def free_port() -> int:

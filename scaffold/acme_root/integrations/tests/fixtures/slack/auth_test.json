@@ -1,0 +1,10 @@
+{
+  "ok": true,
+  "url": "https://octo-org.slack.com/",
+  "team": "Octo Org",
+  "user": "acme",
+  "team_id": "T0TEAM001",
+  "user_id": "U0PLATFRM",
+  "bot_id": "B0BOTACME",
+  "is_enterprise_install": false
+}

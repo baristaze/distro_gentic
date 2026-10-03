@@ -1,0 +1,11 @@
+{
+  "ok": true,
+  "access_token": "test-only-workspace-token",
+  "token_type": "bot",
+  "scope": "chat:write,channels:history,im:history",
+  "bot_user_id": "U0PLATFRM",
+  "app_id": "A0APP0001",
+  "team": {"name": "Octo Org", "id": "T0TEAM001"},
+  "enterprise": null,
+  "authed_user": {"id": "U0PERSON1"}
+}

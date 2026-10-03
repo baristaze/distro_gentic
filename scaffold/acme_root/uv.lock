@@ -134,6 +134,7 @@ version = "0.1.0"
 source = { editable = "integrations" }
 dependencies = [
     { name = "acme-infra" },
+    { name = "cryptography" },
     { name = "httpx" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -143,6 +144,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "acme-infra", editable = "infra" },
+    { name = "cryptography", specifier = ">=50.0" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "pydantic", specifier = ">=2.13" },
     { name = "pydantic-settings", specifier = ">=2.15" },

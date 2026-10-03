@@ -2129,8 +2129,19 @@
         "type": "object"
       },
       "DeliveryReceivedView": {
-        "description": "The delivery checked out and is queued; the provider stops retrying.",
+        "description": "The delivery checked out and is queued, or, for the system's check of\nthis address, answered with the challenge it sent; the provider stops\nretrying.",
         "properties": {
+          "challenge": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Challenge"
+          },
           "received": {
             "title": "Received",
             "type": "boolean"

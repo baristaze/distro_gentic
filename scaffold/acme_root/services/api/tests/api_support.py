@@ -111,7 +111,7 @@ async def sign_in(client: httpx.AsyncClient, container: AppContainer) -> dict[st
     )
     # Written below the manager, so it announces nothing: a case that counts
     # the org's stream counts what it did itself.
-    project = first_project(ctx).model_copy(update={"id": UUID(PROJECT_ID)})
+    project = first_project(ctx, org.slug).model_copy(update={"id": UUID(PROJECT_ID)})
     await container.storage.get_project_storage().create_project(org.id, project, ())
     return await sign_in_as(client, OWNER["email"], org.id)
 

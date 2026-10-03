@@ -1,0 +1,8 @@
+{
+  "action": "opened",
+  "number": 12,
+  "pull_request": {"id": 3012, "number": 12, "head": {"ref": "agent/fix-totals"}, "base": {"ref": "main"}},
+  "repository": {"id": 7001, "full_name": "octo-org/widgets"},
+  "sender": {"login": "acme-app[bot]", "id": 9100001, "type": "Bot"},
+  "installation": {"id": 71001}
+}

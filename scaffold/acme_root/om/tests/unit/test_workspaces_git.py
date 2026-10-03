@@ -144,6 +144,7 @@ class Checkout:
         self.transport_layer = transport_layer
         self.managers: Managers = self.host(tmp_path, infra)
         self.ctx: TenantContext = context(Role.MEMBER)
+        self.connected: UUID | None = None
 
     def host(self, root: Path, infra: InfraLocalImpl | None = None) -> Managers:
         """A root on a host of its own over the one storage, as a runner on
@@ -157,9 +158,14 @@ class Checkout:
             agent_kinds=(WORKER,),
             workspace_projects=self.projects,
             pull_requests=self.pull_requests,
-            source_control=SourceControlForgeImpl(lambda name: self.forge),
+            source_control=SourceControlForgeImpl(lambda name: self.forge, self.tenant_of),
             transport_layer=self.transport_layer,
         )
+
+    async def tenant_of(self, integration: str, installation: str) -> UUID | None:
+        """The tenant that connected the forge's installation: `connected`
+        when a case names one, else the checkout's own."""
+        return self.connected or self.ctx.org_id
 
     async def session(self) -> UUID:
         made = make_session().model_copy(update={"kind": WORKER.name, "tools": ()})
@@ -776,6 +782,7 @@ async def test_a_pinned_sessions_checkout_and_its_push_run_on_the_host_that_hold
     )
     managers = checkout.managers
     owner, _ = await managers.tenancy.bootstrap(request(), "Ajax", "ajax", "ann@ajax.test", "Ann")
+    checkout.connected = owner.org_id
     now = utcnow()
     pool = await managers.hosts.create_pool(
         owner,

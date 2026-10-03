@@ -62,7 +62,7 @@ async def ajax(client: httpx.AsyncClient, container: AppContainer) -> Tenant:
     ctx, org = await container.managers.tenancy.bootstrap(
         seed_request(), "Ajax", "ajax", "owner@ajax.test", "Owner"
     )
-    project = first_project(ctx).model_copy(update={"id": UUID(PROJECT_ID)})
+    project = first_project(ctx, org.slug).model_copy(update={"id": UUID(PROJECT_ID)})
     await container.storage.get_project_storage().create_project(org.id, project, ())
     headers = {Role.OWNER: await sign_in_as(client, "owner@ajax.test", org.id)}
     for role in (Role.ADMIN, Role.MEMBER, Role.VIEWER):
