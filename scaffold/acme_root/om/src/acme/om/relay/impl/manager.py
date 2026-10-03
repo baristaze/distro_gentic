@@ -690,17 +690,16 @@ class RelayManagerImpl(RelayManagerInterface):
         that waits on another pool's, as the session moved since, is ended,
         so no host of a pool it left makes it. One a host of that pool holds
         already is left to end: its host is no host of the session's pool,
-        so the session never runs there."""
+        so the session never runs there. A release that waits is ended too:
+        a prepare is asked only when no live host holds the workspace, so
+        none is left for it to let go."""
         latest = await self._work.latest_for_target(ctx, WorkKind.WORKSPACE, session_id)
-        if (
-            latest is None
-            or latest.status not in (WorkStatus.QUEUED, WorkStatus.CLAIMED)
-            or _operation(latest) is not WorkspaceOperation.PREPARE
-        ):
-            # A release waits on the lane of the host it lets go of, and is
-            # no prepare asked.
+        if latest is None or latest.status not in (WorkStatus.QUEUED, WorkStatus.CLAIMED):
             return False
-        asked_of = WorkspacePayload.model_validate(latest.payload).pool_id
+        try:
+            asked_of = WorkspacePayload.model_validate(latest.payload).pool_id
+        except ValidationError:
+            asked_of = None
         if asked_of == pool_id:
             return True
         if latest.status is WorkStatus.QUEUED:

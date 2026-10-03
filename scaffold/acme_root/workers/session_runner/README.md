@@ -46,7 +46,13 @@ inside the API ([ADR 1011](../../docs/adr/1011-a-sessions-loop-runs-in-a-worker-
   run releases it, its work pushed to a snapshot ref first. A push that
   does not land keeps it for the next pass. One whose tenant is deleted
   is purged. One whose tenant or session the database holds no record
-  of, as after a restore, is left alone and logged. The sweep purges no
+  of, as after a restore, is left alone and logged. Then it reads every
+  workspace a tenant's host holds, by the relay's bindings, and holds
+  each to the same proofs. Past the grace, its work is pushed to a
+  snapshot ref through the relay, and only then is its host asked to
+  let the instance go. One released since its session's last loop is not
+  asked again, one whose host is offline waits for a later pass, and a
+  deleted tenant's is left to the tenant's purge. The sweep purges no
   rows: the purges, and the purge login, are the maintenance worker's.
 
 The runner holds the model providers' keys and runs tools in the
