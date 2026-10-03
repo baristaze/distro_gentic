@@ -7,7 +7,10 @@ pushed to a snapshot ref, and the next loop is told. A workspace's egress
 is its project's allowlist of destinations and methods, and what it never
 reaches it never reaches; a session's own branch and pull request on its
 project's repository are its work product, and every other write acts
-outward."""
+outward. The platform reaches that repository with two credentials the
+agent never holds: the project's read-only fetch credential, where it reads
+what a session delivered, and a push token that writes the session's own
+branch and pull request, for one loop at most."""
 
 from abc import ABC, abstractmethod
 from uuid import UUID
@@ -16,8 +19,9 @@ from acme.infra.workspaces import IsolationSpec, Workspace
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.context import TenantContext
 from acme.om.evidence.types.validation import Delivery
+from acme.om.workspaces.types.credential import FetchCredential, PushToken, RepositoryCredential
 from acme.om.workspaces.types.egress import EgressAllowlist, EgressDecision, EgressRequest
-from acme.om.workspaces.types.source import RepositoryWrite
+from acme.om.workspaces.types.source import OpenedPullRequest, RepositoryWrite
 from acme.om.workspaces.types.workspace import SessionWorkspace
 
 
@@ -126,8 +130,46 @@ class WorkspacesManagerInterface(ABC):
         from this."""
         ...
 
+    # The repository's credentials, which the agent never holds.
+
+    @abstractmethod
+    async def put_fetch_credential(
+        self, ctx: TenantContext, project_id: UUID, credential: FetchCredential
+    ) -> RepositoryCredential:
+        """Gives the platform a read-only credential of the repository the
+        tenant's project binds, as one who manages the tenant's members may;
+        a later one replaces it. Its value goes to the tenant's store under
+        the project, and the record kept here says only who gave it and when.
+        The platform reads a session's work product with it (`delivery`),
+        and uses it nowhere else. `NotFound` for a project that binds no
+        repository of the tenant's."""
+        ...
+
+    @abstractmethod
+    async def mint_push_token(self, ctx: TenantContext, session_id: UUID) -> PushToken:
+        """A push token for the session's own branch on the repository its
+        project binds: it writes that branch, its snapshots, and its pull
+        request, and nothing else, until its lifetime passes or the loop's
+        workspace is prepared again or released, whichever is first. Only its
+        digest is kept, and a new one replaces the last. `NotFound` for a
+        session never pinned, `Unavailable` for one whose project binds no
+        repository."""
+        ...
+
+    @abstractmethod
+    async def open_pull_request(
+        self, ctx: TenantContext, session_id: UUID, token: str, head: str, title: str, body: str
+    ) -> OpenedPullRequest:
+        """Points the session's branch at the commit `head` and opens its pull
+        request onto the repository's default branch, through source control,
+        once the push token reaches both writes (`rules.push_refusal`):
+        `NotAuthorized`, naming why, when it does not. A refusal of source
+        control's is `ValidationFailed`, and its absence `Unavailable`."""
+        ...
+
     @abstractmethod
     async def purge_tenant(self, ctx: TenantContext) -> int:
-        """The sweep, for one tenant past its own retention: its workspaces
-        and its allowlists. Any other tenant returns 0 and reads nothing."""
+        """The sweep, for one tenant past its own retention: its workspaces,
+        its allowlists, and its fetch credentials, each value out of the store
+        before its record. Any other tenant returns 0 and reads nothing."""
         ...

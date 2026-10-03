@@ -1,6 +1,8 @@
 """The integrations whose events reach a session, and through which the
 platform tells a person what waits on them: a forge's comments, checks,
-pushes, and tickets, a chat's messages. One interface for each, a real
+pushes, and tickets, a chat's messages. The forge also takes a session's
+branch and opens its pull request, with the integration's own credential,
+which never leaves it. One interface for each, a real
 client or a twin, and a caller never knows which it holds.
 
 An integration checks the signature of each delivery its system sends and
@@ -79,6 +81,22 @@ class PostedMessage(BaseModel):
     mark: str | None = None
 
 
+class OpenedPullRequest(BaseModel):
+    """A pull request the platform opened through the integration, as the
+    integration recorded it, with what served it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    id: str
+    url: str
+    repository: str
+    head: str
+    base: str | None
+    title: str
+    body: str
+    provenance: Provenance
+
+
 class IntegrationInterface(ABC):
     @property
     @abstractmethod
@@ -124,6 +142,23 @@ class IntegrationInterface(ABC):
         ...
 
     @abstractmethod
+    async def push_branch(self, repository: str, branch: str, head: str) -> None:
+        """Points `branch` of `repository` at the commit `head`, with the
+        integration's own credential. `ProviderRefused` from an integration
+        that holds no repository; `ProviderUnavailable` when it cannot."""
+        ...
+
+    @abstractmethod
+    async def open_pull_request(
+        self, repository: str, head: str, base: str | None, title: str, body: str
+    ) -> OpenedPullRequest:
+        """Opens the pull request of branch `head` onto `base`, the
+        repository's default branch when None, or answers the one of `head`
+        open already, so a repeated call opens no second. Refused and
+        unavailable as `push_branch` is."""
+        ...
+
+    @abstractmethod
     def describe(self) -> str:
         """One line for the boot log."""
         ...
@@ -159,6 +194,14 @@ class IntegrationAbsentImpl(IntegrationInterface):
         raise ProviderUnavailable(f"no {self._name} integration is configured")
 
     async def post(self, address: str, text: str, mark: str | None = None) -> PostedMessage:
+        raise ProviderUnavailable(f"no {self._name} integration is configured")
+
+    async def push_branch(self, repository: str, branch: str, head: str) -> None:
+        raise ProviderUnavailable(f"no {self._name} integration is configured")
+
+    async def open_pull_request(
+        self, repository: str, head: str, base: str | None, title: str, body: str
+    ) -> OpenedPullRequest:
         raise ProviderUnavailable(f"no {self._name} integration is configured")
 
     def describe(self) -> str:

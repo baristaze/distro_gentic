@@ -203,7 +203,7 @@ async def test_a_workspaces_notices_move_to_the_one_notice_and_back_for_every_te
         held[org] = workspace.id
     core = migrated[DatabaseRole.CORE]
 
-    await downgrade(DatabaseRole.CORE, core, "202610034800")
+    await downgrade(DatabaseRole.CORE, core, "202610035400")
     await upgrade(DatabaseRole.CORE, core)
 
     for org, session_id in held.items():
