@@ -116,7 +116,8 @@ def read_delivery(
     except KeyError, TypeError, ValueError, AttributeError:
         raise DeliveryRefused("the body is not an event") from None
     if fields is None:
-        raise DeliveryRefused(f"the forge takes no {kind}.{body.get('action', '')} event")
+        action = body.get("action")
+        raise DeliveryRefused(f"the forge takes no {kind}{f'.{action}' if action else ''} event")
     delivery_id = "sha256:" + hashlib.sha256(payload).hexdigest()
     try:
         return ProvidedEvent.model_validate(
