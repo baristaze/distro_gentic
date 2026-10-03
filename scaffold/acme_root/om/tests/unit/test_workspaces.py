@@ -5,6 +5,8 @@ resource; its work pushed before its instance goes, the next loop told, and
 a vanished branch failing loudly; its egress its project's allowlist; and
 its own branch and pull request its work product."""
 
+import asyncio
+from dataclasses import dataclass, field
 from ipaddress import ip_address
 from pathlib import Path
 from typing import Any
@@ -27,6 +29,7 @@ from acme.infra.workspaces import (
     IsolationMode,
     IsolationRefused,
     IsolationSpec,
+    Workspace,
 )
 from acme.infra.workspaces.twin import WorkspaceTwinImpl
 from acme.om.agents import ResultGateInterface
@@ -34,7 +37,7 @@ from acme.om.agents.types.kind import AgentKind
 from acme.om.agents.types.request import Start
 from acme.om.agents.types.run import RunEnd
 from acme.om.base import new_id
-from acme.om.context import Role
+from acme.om.context import Role, TenantContext
 from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
 from acme.om.evidence.impl.ports import WorkProductAbsentImpl
 from acme.om.exceptions import NotAuthorized, NotFound, Unavailable
@@ -53,7 +56,13 @@ from acme.om.workspaces.types.egress import (
     EgressRequest,
     EgressRule,
 )
-from acme.om.workspaces.types.source import PullRequestFate, RepositoryWrite, WriteKind
+from acme.om.workspaces.types.source import (
+    PullRequestFate,
+    RepositoryBinding,
+    RepositoryWrite,
+    Snapshot,
+    WriteKind,
+)
 
 
 def kind(name: str, mode: IsolationMode, egress: EgressMode = EgressMode.OPEN) -> AgentKind:
@@ -455,7 +464,7 @@ async def test_what_a_session_delivered_is_read_from_the_workspace_this_host_hol
 
     with pytest.raises(Unavailable):
         await products.delivered(loop.owner, session_id)
-    held.hold(workspace)
+    held.hold(workspace, epoch=1)
     delivered = await products.delivered(loop.owner, session_id)
 
     assert delivered is not None and delivered.project == "git.example.com/ajax/app"
@@ -473,6 +482,108 @@ async def test_what_a_session_delivered_is_read_from_the_workspace_this_host_hol
     loose = await unbound.managers.tools.prepare_workspace(unbound.owner, other, TWINNED.isolation)
     with pytest.raises(Unavailable):
         await unbound.managers.workspaces.delivery(unbound.owner, loose)
+
+
+@dataclass
+class SlowPushGit(GitTwin):
+    """A checkout whose snapshot waits for its cue, so a release's push lands
+    as late as a test orders it."""
+
+    cue: asyncio.Event | None = None
+    waiting: asyncio.Event = field(default_factory=asyncio.Event)
+
+    async def snapshot(
+        self,
+        ctx: TenantContext,
+        workspace: Workspace,
+        binding: RepositoryBinding,
+        branch: str,
+        ref: str,
+    ) -> Snapshot:
+        if self.cue is not None:
+            self.waiting.set()
+            await self.cue.wait()
+        return await super().snapshot(ctx, workspace, binding, branch, ref)
+
+
+async def test_a_run_that_resumes_before_the_last_release_lands_keeps_its_workspace(
+    tmp_path: Path,
+) -> None:
+    git = SlowPushGit()
+    loop = loop_of(
+        tmp_path,
+        workspace_projects=ProjectsTwin(),
+        workspace_git=git,
+        workspace_reader=ReaderTwin(head="c" * 40, changed=("checks/test_guard.py",)),
+    )
+    tools, steps = loop.managers.tools, loop.managers.steps
+    products = loop.managers.evidence._work_product  # pyright: ignore[reportAttributeAccessIssue]
+    assert isinstance(products, WorkProductWorkspacesImpl)
+    session_id = await loop.start("twinned")
+    await steps.begin_run(loop.owner, session_id)
+    parked = await tools.prepare_workspace(loop.owner, session_id, TWINNED.isolation)
+    # The run parks, and its release pushes its work slowly.
+    git.cue, git.dirty = asyncio.Event(), True
+    releasing = asyncio.create_task(tools.release_workspace(loop.owner, parked))
+    await asyncio.wait_for(git.waiting.wait(), timeout=5)
+
+    # The session resumes first: the next run takes its epoch and the
+    # workspace, then the release lands.
+    await steps.begin_run(loop.owner, session_id)
+    resumed = await tools.prepare_workspace(loop.owner, session_id, TWINNED.isolation)
+    git.cue.set()
+    await releasing
+
+    assert git.pushed, "the parked run's work was kept"
+    assert session_id in provider(loop).live, "the instance is the resumed run's, and stays"
+    delivered = await products.delivered(loop.owner, session_id)
+    assert delivered is not None and delivered.head == "c" * 40, "its validate reads it"
+    await tools.release_workspace(loop.owner, resumed)
+    assert session_id not in provider(loop).live, "the resumed run lets its own go"
+    with pytest.raises(Unavailable):
+        await products.delivered(loop.owner, session_id)
+
+
+@pytest.mark.parametrize("prepares", [True, False], ids=["prepares", "never-prepares"])
+async def test_a_run_that_resumes_on_another_host_leaves_this_hosts_instance_to_go(
+    tmp_path: Path, prepares: bool
+) -> None:
+    git, projects = SlowPushGit(), ProjectsTwin()
+    reader = ReaderTwin(head="c" * 40, changed=("checks/test_guard.py",))
+    host_a = loop_of(
+        tmp_path, workspace_projects=projects, workspace_git=git, workspace_reader=reader
+    )
+    (tmp_path / "b").mkdir()
+    # Another runner host: its own provider, over the same storage.
+    host_b = loop_of(
+        tmp_path / "b",
+        storage=host_a.storage,
+        owner=host_a.owner,
+        workspace_projects=projects,
+        workspace_git=git,
+        workspace_reader=reader,
+    )
+    steps = host_a.managers.steps
+    session_id = await host_a.start("twinned")
+    await steps.begin_run(host_a.owner, session_id)
+    parked = await host_a.managers.tools.prepare_workspace(
+        host_a.owner, session_id, TWINNED.isolation
+    )
+    # The run parks on host A, and its release pushes its work slowly.
+    git.cue, git.dirty = asyncio.Event(), True
+    releasing = asyncio.create_task(host_a.managers.tools.release_workspace(host_a.owner, parked))
+    await asyncio.wait_for(git.waiting.wait(), timeout=5)
+
+    # The next run takes its epoch on host B, then host A's release lands.
+    await steps.begin_run(host_a.owner, session_id)
+    if prepares:
+        await host_b.managers.tools.prepare_workspace(host_a.owner, session_id, TWINNED.isolation)
+    git.cue.set()
+    await releasing
+
+    assert git.pushed, "the parked run's work was kept"
+    assert session_id not in provider(host_a).live, "host A's instance goes at once"
+    assert (session_id in provider(host_b).live) is prepares, "host B's is its own run's"
 
 
 # A session's project and its repository are the projects' rows.
