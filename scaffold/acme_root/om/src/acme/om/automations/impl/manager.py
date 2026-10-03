@@ -257,9 +257,8 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
             return await self._refuse(ctx, run, Refusal.PRINCIPAL)
         await self._close_finished(ctx, automation)
         landed = await self._storage.admit(ctx.org_id, run, automation.limits, self._clock())
-        if landed.status is not RunStatus.STARTED or (
-            landed.session_id is not None or landed.job_id is not None
-        ):
+        acted = landed.session_id is not None or landed.job_id is not None
+        if landed.status is not RunStatus.STARTED or acted:
             return landed
         try:
             return await self._act(ctx, creator, automation, landed)
