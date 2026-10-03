@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from uuid import UUID
 
+from acme.infra.workspaces import IsolationSpec
 from acme.om.context import RequestContext, TenantContext
 from acme.om.hosts.types.host import HostIdentity
 from acme.om.relay.types.exec import (
@@ -16,6 +17,7 @@ from acme.om.relay.types.exec import (
     ExecDetail,
     ExecItem,
     ExecProgress,
+    PrepareAnswer,
     StopKind,
     WorkspaceBinding,
 )
@@ -40,6 +42,29 @@ class RelayManagerInterface(ABC):
     @abstractmethod
     async def binding_of(self, ctx: TenantContext, session_id: UUID) -> WorkspaceBinding | None:
         """The host that holds the session's workspace; None when none does."""
+        ...
+
+    @abstractmethod
+    async def ask_prepare(self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec) -> bool:
+        """Platform-internal: asks a host of the session's pool to prepare its
+        workspace to `spec`, as `workspace` work on the pool's lane, which any
+        host of the pool may claim; nothing when a prepare asked of this
+        pool before still waits for a host or runs. One that waits on a pool
+        the session left is ended. Whether it asked now. `ValidationFailed`
+        for a session of the cloud."""
+        ...
+
+    @abstractmethod
+    async def prepared(
+        self, rctx: RequestContext, host: HostIdentity, item_id: UUID, answer: PrepareAnswer
+    ) -> WorkspaceBinding | None:
+        """Platform-internal: a host answers a prepare it claimed. A
+        workspace it made binds the session to it at the answer's location,
+        unless a live host of the pool holds the session's workspace
+        already, and the binding is answered; a refusal hands the work back
+        to the pool's lane after a wait, for a host that can give it, and
+        None is answered. `ItemNotHeld` for a prepare the host does not hold
+        under a live claim."""
         ...
 
     # The runner's side: its relay transport, which runs below any context,

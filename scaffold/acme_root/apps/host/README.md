@@ -38,6 +38,13 @@ uv run acme-host run          # every start after it
   before anything runs. An item that does not say what it needs is read
   as asking the most. Nothing the platform sends changes a ceiling, and
   a host with no ceilings file does not start.
+- **Prepares the workspaces of its pool.** A session pinned to its pool
+  asks a host of the pool to prepare its workspace. The host that claims
+  the ask makes it to the session's isolation, a container per session,
+  and answers where it is: from then on the session's calls come to this
+  host. One it cannot make is answered as refused, so another host of
+  the pool may. When another host holds the workspace already, this
+  host's goes.
 - **Runs a tool call once, and stops it at once.** An `exec` item it
   claims is a command or a file operation in a workspace it holds. It
   runs it through its own transport, a container per session, sends
@@ -65,8 +72,10 @@ items_at_once = 4
 <!-- agents-only
 What runs an item is the executor (`agent.ExecutorInterface`), the
 relay's in `relay.ExecutorRelayImpl`, over the engine's transports by
-isolation mode (`main.host_transports`). It runs `EXEC` items alone; a
-`WORKSPACE` item is logged and left to its lease. The fields a host reads
+isolation mode (`main.host_transports`). A `WORKSPACE` prepare is made by
+the provider of its spec's mode (`main.host_workspaces`) and answered
+through `ApiClient.answer_prepare`; a release or a purge is logged and left
+to its lease. The fields a host reads
 of an item are `project_id`, `isolation`, `egress`, `reads`, and
 `by_person` in its payload (`ceilings.ask_of`); a payload without them is
 refused. What the item runs it reads from the gateway while it holds it
@@ -83,6 +92,14 @@ refused. What the item runs it reads from the gateway while it holds it
   `ceilings.toml`, the host's own secret store, `secrets`, owner-only and
   keyed by tenant first, and `records/`, where its transport keeps how
   each command ended. `ACME_HOST_NAME` is the name it enrolls under.
+  `ACME_HOST_WORKSPACE_IMAGE` (default `python:3.14`) is the image a
+  container workspace runs. An image holds Python, for the session's tools,
+  and `git`, since a pinned session's repository is checked out and pushed
+  inside its workspace: an image without `git` fails a session with a
+  repository before its first model call.
+  `ACME_HOST_PULL_TIMEOUT_SECONDS` (default 900) is how long the pull of
+  that image may run when a prepare finds it absent; the image is large,
+  and a pull cut short leaves nothing.
   `ACME_HOST_WORKSPACE_USER` is the user a bare-directory workspace runs
   as.
 

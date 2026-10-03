@@ -178,10 +178,11 @@ class HostsServiceImpl(HostsServiceInterface):
         claimed = await self._hosts.claim(rctx, host, body.exec_version)
         if claimed is None:
             return ClaimView(item=None)
-        _, item = claimed
+        ctx, item = claimed
         return ClaimView(
             item=ClaimedWorkView(
                 id=item.id,
+                org_id=ctx.org_id,
                 kind=item.kind.value,
                 target_id=item.target_id,
                 payload=thaw_mapping(item.payload),

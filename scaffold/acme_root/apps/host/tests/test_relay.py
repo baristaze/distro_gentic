@@ -3,9 +3,13 @@ the runner relays runs once, on the host that holds the workspace, through
 its local transport: its output streams back a part at a time and its
 result lands under the call's key. A cancel or an interrupt the platform
 records reaches the host over the control stream it holds open, and ends
-the command at once. A host's routes take its own credential alone."""
+the command at once. A host's routes take its own credential alone. A
+workspace whose instance went since its host prepared it, as after a
+reboot or a Docker restart, is prepared again, and its call runs."""
 
 import asyncio
+import shutil
+import subprocess
 import time
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
@@ -17,7 +21,7 @@ import httpx
 import pytest
 from contracts.agent_session_storage import make_session
 from contracts.project_storage import make_binding, make_project
-from host_support import Stack, probes
+from host_support import Stack, Widened, container_host, directory_host, docker_runs, probes
 
 from acme.apps.host import main as host_main
 from acme.apps.host.agent import HostAgent
@@ -30,6 +34,7 @@ from acme.infra.transports import CommandResult, CommandSpec, RecordSeal
 from acme.infra.transports.broker import BrokerNullImpl
 from acme.infra.transports.local import TransportLocalImpl
 from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec, Workspace
+from acme.infra.workspaces.container import DEFAULT_IMAGE, WorkspaceContainerImpl
 from acme.om.base import new_id
 from acme.om.context import (
     AppContext,
@@ -134,14 +139,46 @@ async def relay_to(
     host_id = UUID(host.credential.host_id)
     await managers.relay.bind_workspace(api.owner, session.id, host_id, str(where))
     epoch = await managers.steps.begin_run(api.owner, session.id)
-    runner = TransportRelayImpl(
-        lambda: managers.relay,
+    workspace = Workspace(id=session.id, org_id=api.owner.org_id, spec=DIRECTORY, location="")
+    return Relayed(api, host, executor, runner_of(api), workspace, epoch, host_id)
+
+
+def runner_of(api: Stack) -> TransportRelayImpl:
+    """The runner's relay to the tenant's hosts."""
+    return TransportRelayImpl(
+        lambda: api.container.managers.relay,
         lambda: RequestContext(request_id=new_id(), app=RUNNER),
         first_poll=timedelta(milliseconds=5),
         last_poll=timedelta(milliseconds=20),
     )
-    workspace = Workspace(id=session.id, org_id=api.owner.org_id, spec=DIRECTORY, location="")
-    return Relayed(api, host, executor, runner, workspace, epoch, host_id)
+
+
+async def bound_on(host: HostAgent, api: Stack, spec: IsolationSpec) -> tuple[UUID, str]:
+    """A session of the host's pool whose workspace the host prepared and
+    holds: its id, and where the host made it."""
+    managers = api.container.managers
+    session = await managers.agent_sessions.create_session(api.owner, make_session())
+    await managers.hosts.place_session(api.owner, session.id, host_pool(host))
+    await managers.relay.ask_prepare(api.owner, session.id, spec)
+    assert await host.claim_once() is not None
+    await host.idle()
+    held = await managers.relay.binding_of(api.owner, session.id)
+    assert held is not None
+    return session.id, held.location
+
+
+async def run_on(
+    host: HostAgent, api: Stack, session_id: UUID, spec: IsolationSpec, *argv: str
+) -> CommandResult:
+    """A command of the session's next run, relayed to the host that holds
+    its workspace, while that host claims."""
+    epoch = await api.container.managers.steps.begin_run(api.owner, session_id)
+    workspace = Workspace(id=session_id, org_id=api.owner.org_id, spec=spec, location="")
+    waiting = asyncio.ensure_future(
+        runner_of(api).run(workspace, command(epoch, *argv), seal=NO_SEAL)
+    )
+    await claims(host, waiting)
+    return await waiting
 
 
 def command(epoch: int, *argv: str, seconds: float = 30) -> CommandSpec:
@@ -250,6 +287,60 @@ async def test_an_item_past_the_hosts_ceilings_is_refused_at_once(relayed: Relay
     with pytest.raises(Exception, match="egress beyond this host's allowlist") as refused:
         await waiting
     assert getattr(refused.value, "code", None) == "refused_by_host"
+
+
+async def test_an_item_whose_spec_opens_egress_its_fields_close_is_refused_and_nothing_run(
+    api: Stack, tmp_path: Path
+) -> None:
+    # The host's owner lets nothing leave, and the item's fields say nothing
+    # does; its spec, as the wire hands its detail over, opens egress.
+    wire = Widened(api.transport)
+    relayed = await relay_to(api, tmp_path, wire=wire)
+    marker = tmp_path / "workspace" / "ran"
+    spec = command(relayed.epoch, "touch", str(marker))
+    waiting = asyncio.ensure_future(relayed.runner.run(relayed.workspace, spec, seal=NO_SEAL))
+    assert len(await claims(relayed.host, waiting)) == 1
+    with pytest.raises(Exception, match="its spec and its fields differ on egress") as refused:
+        await waiting
+    assert getattr(refused.value, "code", None) == "refused_by_host"
+    assert wire.widened >= 1
+    assert not marker.exists()
+
+
+def real(location: str) -> str:
+    """The directory as a command run in it prints it."""
+    return str(Path(location).resolve())
+
+
+async def test_a_bound_workspace_whose_directory_went_is_made_again_and_its_call_runs(
+    api: Stack, tmp_path: Path
+) -> None:
+    opened = IsolationSpec(mode=IsolationMode.HOST, egress=EgressPolicy(mode=EgressMode.OPEN))
+    host, _ = await directory_host(api, (await api.pool("pool-a")).id, tmp_path)
+    session_id, location = await bound_on(host, api, opened)
+    shutil.rmtree(location)  # its host's disk lost it
+    ran = await run_on(host, api, session_id, opened, "pwd")
+    assert (ran.exit_code, ran.stdout) == (0, f"{real(location)}\n")
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(not docker_runs(), reason="needs a local Docker")
+async def test_a_bound_sessions_stopped_container_is_prepared_again_and_its_call_runs(
+    api: Stack, tmp_path: Path
+) -> None:
+    sealed = IsolationSpec(mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode=EgressMode.NONE))
+    host = await container_host(api, (await api.pool("pool-a")).id, tmp_path)
+    session_id, name = await bound_on(host, api, sealed)
+    try:
+        await run_on(host, api, session_id, sealed, "touch", "kept")
+        # Stopped, as a reboot or a Docker restart leaves it.
+        stop = ["docker", "stop", "-t", "0", name]
+        await asyncio.to_thread(subprocess.run, stop, check=True, capture_output=True)
+        ran = await run_on(host, api, session_id, sealed, "ls")
+        assert (ran.exit_code, ran.stdout) == (0, "kept\n")  # a new instance, over its files
+    finally:
+        provider = WorkspaceContainerImpl(DEFAULT_IMAGE, timedelta(seconds=30), "purge")
+        await provider.purge(api.owner.org_id, session_id)
 
 
 @pytest.mark.parametrize("served", [True, False])

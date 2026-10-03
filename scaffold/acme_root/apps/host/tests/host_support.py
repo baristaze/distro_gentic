@@ -4,9 +4,12 @@ answer as the app sends it, as a server does, and stamps its `Date`, as the
 server in front of it does."""
 
 import asyncio
-from collections.abc import AsyncIterator
+import json
+import re
+import subprocess
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from email.utils import format_datetime
 from pathlib import Path
 from uuid import UUID
@@ -15,13 +18,25 @@ import httpx
 from api_support import build_container, seed_request
 from fastapi import FastAPI
 
+from acme.apps.host.agent import HostAgent
+from acme.apps.host.ceilings import Ceilings
 from acme.apps.host.config import Settings
+from acme.apps.host.main import host_transports, host_workspaces
 from acme.apps.host.probe import Probe, Probes, platform_and_clock
+from acme.apps.host.relay import ExecutorRelayImpl
 from acme.client.client import ApiClient
 from acme.client.types import IsolationMode
+from acme.infra.secrets.local import SecretsLocalImpl
+from acme.infra.transports import TransportInterface
+from acme.infra.transports.broker import BrokerNullImpl
+from acme.infra.transports.local import TransportLocalImpl
+from acme.infra.workspaces import IsolationMode as ProviderMode
+from acme.infra.workspaces import WorkspaceProviderInterface
+from acme.infra.workspaces.host import WorkspaceHostImpl
 from acme.om.base import new_id, utcnow
 from acme.om.context import TenantContext
 from acme.om.hosts.types.pool import HostPool
+from acme.om.storage.root import StorageInterface
 from acme.services.api.app import create_app
 from acme.services.api.container import AppContainer
 
@@ -109,6 +124,39 @@ class Dated(httpx.AsyncBaseTransport):
         return response
 
 
+OPEN_EGRESS = {"mode": "open", "hosts": []}
+DETAIL = re.compile(r"/v1/hosts/me/exec/[0-9a-f-]+")
+
+
+class Widened(httpx.AsyncBaseTransport):
+    """The stack, except that the spec of each prepare a claim hands over,
+    and of each `exec` item's detail, opens egress to anywhere, while the
+    fields the host's ceilings read stay as the platform wrote them: a
+    control plane that asks for more than its fields say. `widened` counts
+    the answers it changed."""
+
+    def __init__(self, inner: httpx.AsyncBaseTransport) -> None:
+        self._inner = inner
+        self.widened = 0
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        response = await self._inner.handle_async_request(request)
+        path = request.url.path
+        claims = request.method == "POST" and path == "/v1/hosts/me/claims"
+        detail = request.method == "GET" and DETAIL.fullmatch(path) is not None
+        if response.status_code != 200 or not (claims or detail):
+            return response
+        body = json.loads(await response.aread())
+        item = body.get("item") if claims else None
+        spec = body.get("spec") if detail else (item or {}).get("payload", {}).get("spec")
+        if not isinstance(spec, dict):
+            return response
+        spec["egress"] = OPEN_EGRESS
+        self.widened += 1
+        headers = [(k, v) for k, v in response.headers.raw if k.lower() != b"content-length"]
+        return httpx.Response(200, headers=headers, content=json.dumps(body).encode())
+
+
 def passing(name: str) -> Probe:
     return Probe(name, True, "passed in the test")
 
@@ -171,12 +219,102 @@ class Stack:
 
 
 @asynccontextmanager
-async def stack(tmp_path: Path) -> AsyncIterator[Stack]:
-    container = build_container(tmp_path)
+async def stack(tmp_path: Path, storage: StorageInterface | None = None) -> AsyncIterator[Stack]:
+    """Over the memory storage, or over `storage`, where a tenant of its own
+    is bootstrapped under a fresh slug."""
+    container = build_container(tmp_path, storage)
     app: FastAPI = create_app(container)
     async with app.router.lifespan_context(app):
+        slug = "ajax" if storage is None else f"ajax-{new_id().hex[-8:]}"
+        email = "ann@example.test" if storage is None else f"ann-{slug}@example.test"
         owner, _ = await container.managers.tenancy.bootstrap(
-            seed_request(), "Ajax", "ajax", "ann@example.test", "Ann"
+            seed_request(), "Ajax", slug, email, "Ann"
         )
         transport = Dated(Streamed(app))
         yield Stack(container=container, transport=transport, owner=owner)
+
+
+async def directory_host(
+    api: Stack,
+    pool_id: UUID,
+    where: Path,
+    *,
+    name: str = "host-1",
+    ceilings: Ceilings | None = None,
+) -> tuple[HostAgent, Path]:
+    """A host of the pool, started, that makes a directory per workspace
+    under its root and runs commands there; its root is answered with it.
+    Its ceilings take any project and any egress, and read its root alone,
+    unless the case names its own."""
+    root = where / "workspaces"
+    transport = TransportLocalImpl(where / "records", SecretsLocalImpl(None), BrokerNullImpl())
+    host = await started_host(
+        api,
+        pool_id,
+        replace(api.settings(where / "home", None), name=name),
+        ceilings
+        or Ceilings(
+            projects=None,
+            min_isolation=IsolationMode.directory,
+            egress=None,
+            readable=(str(root),),
+        ),
+        IsolationMode.directory,
+        {ProviderMode.HOST: transport},
+        {ProviderMode.HOST: WorkspaceHostImpl(root)},
+    )
+    return host, root
+
+
+async def container_host(api: Stack, pool_id: UUID, where: Path) -> HostAgent:
+    """A host of the pool as the host's `main` wires one: a container per
+    workspace on the local Docker, of the default image. Its ceilings take
+    any project, and let nothing leave."""
+    settings = api.settings(where / "home", None)
+    return await started_host(
+        api,
+        pool_id,
+        settings,
+        Ceilings(projects=None, min_isolation=IsolationMode.container, egress=frozenset()),
+        IsolationMode.container,
+        host_transports(settings),
+        host_workspaces(settings),
+    )
+
+
+async def started_host(
+    api: Stack,
+    pool_id: UUID,
+    settings: Settings,
+    ceilings: Ceilings,
+    mode: IsolationMode,
+    transports: Mapping[ProviderMode, TransportInterface],
+    workspaces: Mapping[ProviderMode, WorkspaceProviderInterface],
+) -> HostAgent:
+    """A host of the pool, enrolled and started, that probes `mode` alone."""
+    agents: list[HostAgent] = []
+    executor = ExecutorRelayImpl(
+        lambda: agents[0].client(),
+        transports,
+        workspaces,
+        flush_seconds=0.0,
+        renew_seconds=0.2,
+    )
+    host = HostAgent(
+        replace(settings, enrollment_token=await api.token(pool_id)),
+        ceilings,
+        probes(mode),
+        api.client,
+        executor,
+    )
+    agents.append(host)
+    await host.start()
+    return host
+
+
+def docker_runs() -> bool:
+    try:
+        reply = subprocess.run(["docker", "version"], capture_output=True, timeout=20)
+    except FileNotFoundError, subprocess.TimeoutExpired:
+        return False
+    return reply.returncode == 0

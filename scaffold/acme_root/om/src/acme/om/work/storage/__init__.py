@@ -62,6 +62,14 @@ class WorkStorageInterface(ABC):
         ...
 
     @abstractmethod
+    async def write_item_if_queued(self, org_id: UUID, item: WorkItem) -> WorkItem | None:
+        """One conditional statement: writes `item` over its row only while the
+        row is queued, which no worker holds; returns None when it is not, or
+        is gone. Ending an item no worker took is the write it serves, and a
+        claim that lands first wins."""
+        ...
+
+    @abstractmethod
     async def claim_next(
         self, lane: str, kinds: Sequence[WorkKind], worker_id: str, lease: timedelta
     ) -> tuple[UUID, WorkItem] | None:

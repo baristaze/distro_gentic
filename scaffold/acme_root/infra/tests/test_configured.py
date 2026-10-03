@@ -10,6 +10,7 @@ from acme.infra.cache.breaker import CacheBreakerImpl
 from acme.infra.impl.configured import InfraConfiguredImpl, UnsafeConfiguration
 from acme.infra.impl.settings import InfraSettings
 from acme.infra.topics.breaker import TopicsBreakerImpl
+from acme.infra.workspaces.container import DEFAULT_IMAGE
 
 CLOUD_BACKENDS = {
     "secrets_backend": "aws",
@@ -209,7 +210,7 @@ def test_the_keys_root_comes_from_settings_and_refuses_another_shape(tmp_path: P
     ("backend", "lines"),
     [
         ("host", ["workspaces=host({root})", "transport=local"]),
-        ("container", ["workspaces=container(python:3.14-slim)", "transport=container"]),
+        ("container", [f"workspaces=container({DEFAULT_IMAGE})", "transport=container"]),
     ],
 )
 def test_a_workspace_backend_builds_its_provider_and_its_transport_together(

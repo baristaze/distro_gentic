@@ -24,9 +24,20 @@ platform's cloud. Each call crosses the wall as `exec`
   interrupt, a deadline cut, or a revoked lease.
 - **A workspace binding**: the host that holds a session's workspace,
   and where on it.
+- **A prepare**: `workspace` work on the lane of the session's pool,
+  asking any host of the pool to make the session's workspace to its
+  pinned isolation.
 
 ## What can happen
 
+- **Prepare.** A loop of a pinned session whose workspace no live host
+  holds asks its pool for one, and waits on the resource before any model
+  call. One ask waits at a time. The host that claims it makes the
+  workspace and answers where it is, which binds the session to it. A
+  host that answers second, while the first holds it, lets its own go.
+  One that cannot make it hands the ask back to the pool after a wait.
+  A session whose host is offline waits for it; one whose host was
+  revoked asks the pool again.
 - **Send.** The runner's transport sends each operation of a call. A new
   one goes on the lane of the host that holds the workspace. One the
   call sent before is met as it stands, so a run that resumes after a
@@ -78,4 +89,6 @@ The session runner puts the relay behind the engine's transport for a
 session inside a wall, and the engine sees one transport either way. The
 gateway serves the host's calls and its control stream. The maintenance
 worker settles items whose lease ran out and purges a tenant's rows. The
-host that prepares a session's workspace binds it with `bind_workspace`.
+runner's tools find a pinned session's workspace on its host
+(`impl/workspaces.PlacedWorkspacesRelayedImpl`), and the host's answer to a
+prepare binds it with `bind_workspace` (`prepared`).

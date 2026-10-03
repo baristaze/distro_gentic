@@ -27,7 +27,8 @@ from acme.infra.secrets.local import SecretsLocalImpl
 from acme.infra.transports import TransportInterface
 from acme.infra.transports.broker import BrokerNullImpl
 from acme.infra.transports.container import TransportContainerImpl
-from acme.infra.workspaces import IsolationMode
+from acme.infra.workspaces import IsolationMode, WorkspaceProviderInterface
+from acme.infra.workspaces.container import WorkspaceContainerImpl
 
 log = logging.getLogger(__name__)
 
@@ -89,7 +90,9 @@ def run() -> None:
 
     async def go() -> None:
         agents: list[HostAgent] = []
-        executor = ExecutorRelayImpl(lambda: agents[0].client(), host_transports(settings))
+        executor = ExecutorRelayImpl(
+            lambda: agents[0].client(), host_transports(settings), host_workspaces(settings)
+        )
         agent = HostAgent(
             settings,
             ceilings.load(settings.ceilings_path),
@@ -114,6 +117,20 @@ def host_transports(settings: Settings) -> dict[IsolationMode, TransportInterfac
         settings.records_path, secrets, BrokerNullImpl(), timedelta(seconds=30)
     )
     return {IsolationMode.CONTAINER: container}
+
+
+def host_workspaces(settings: Settings) -> dict[IsolationMode, WorkspaceProviderInterface]:
+    """What makes a workspace its pool asks this host to prepare, by the
+    mode its transport runs: a container per session, of the image its
+    owner names."""
+    return {
+        IsolationMode.CONTAINER: WorkspaceContainerImpl(
+            settings.workspace_image,
+            timedelta(seconds=30),
+            f"host-{settings.name}",
+            timedelta(seconds=settings.pull_timeout_seconds),
+        )
+    }
 
 
 async def serve(agent: HostAgent, settings: Settings) -> None:

@@ -40,6 +40,7 @@ HOST_ROUTES = {
     ("POST", "/v1/hosts/me/exec/{item_id}/parts"),
     ("POST", "/v1/hosts/me/exec/{item_id}/result"),
     ("POST", "/v1/hosts/me/exec/{item_id}/lease"),
+    ("POST", "/v1/hosts/me/workspaces/{item_id}"),
     ("GET", "/v1/hosts/me/control"),
 }
 """Every call a host makes once it is enrolled: each one a request it opens
