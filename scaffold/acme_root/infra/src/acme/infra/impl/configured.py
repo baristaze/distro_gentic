@@ -28,6 +28,10 @@ from acme.infra.root import InfraInterface
 from acme.infra.secrets import SecretsInterface
 from acme.infra.secrets.aws import SecretsAwsImpl
 from acme.infra.secrets.local import SecretsLocalImpl
+from acme.infra.streams import StreamsInterface
+from acme.infra.streams.breaker import StreamsBreakerImpl
+from acme.infra.streams.memory import StreamsMemoryImpl
+from acme.infra.streams.valkey import StreamsValkeyImpl
 from acme.infra.topics import TopicsInterface
 from acme.infra.topics.breaker import TopicsBreakerImpl
 from acme.infra.topics.memory import TopicsMemoryImpl
@@ -117,6 +121,15 @@ class InfraConfiguredImpl(InfraInterface):
         self._outages: OutageSignalInterface = OutageSignalCacheImpl(
             self._caches[CacheScope.OUTAGE]
         )
+        # The live streams follow the cache too, behind the same breaker.
+        if settings.cache_backend == "valkey":
+            assert self._valkey is not None
+            assert self._valkey_breaker is not None
+            self._streams: StreamsInterface = StreamsBreakerImpl(
+                StreamsValkeyImpl(self._valkey), self._valkey_breaker
+            )
+        else:
+            self._streams = StreamsMemoryImpl()
 
         if settings.buckets_backend == "s3":
             self._buckets: BucketsInterface = BucketsS3Impl(
@@ -232,6 +245,9 @@ class InfraConfiguredImpl(InfraInterface):
     def get_outages(self) -> OutageSignalInterface:
         return self._outages
 
+    def get_streams(self) -> StreamsInterface:
+        return self._streams
+
     def get_workspaces(self) -> WorkspaceProviderInterface:
         return self._workspaces
 
@@ -250,6 +266,7 @@ class InfraConfiguredImpl(InfraInterface):
             self._secrets.describe(),
             self._keys.describe(),
             self._outages.describe(),
+            self._streams.describe(),
             self._workspaces.describe(),
             self._transport.describe(),
             self._broker.describe(),
@@ -261,6 +278,7 @@ class InfraConfiguredImpl(InfraInterface):
         for capability in (self._topics, self._buckets, self._queues, self._secrets, self._keys):
             await capability.start()
         await self._outages.start()
+        await self._streams.start()
         for runtime in (self._broker, self._workspaces, self._transport):
             await runtime.start()
 
@@ -269,6 +287,7 @@ class InfraConfiguredImpl(InfraInterface):
         last, once nothing holds it."""
         for runtime in (self._transport, self._workspaces, self._broker):
             await runtime.close()
+        await self._streams.close()
         await self._outages.close()
         for cache in self._caches.values():
             await cache.close()

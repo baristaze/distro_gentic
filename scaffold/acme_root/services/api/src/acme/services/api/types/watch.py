@@ -32,12 +32,15 @@ class PartKind(StrEnum):
 
 
 class LivePartView(View):
-    """One part of a stream: its kind, its place, and its text. `index` is
-    the block of a model response it belongs to; a tool call's input names
-    the call, and a tool's output its channel."""
+    """One part of a stream: its kind, its places, and its text. A part may
+    join a run of one block's parts: it holds the places from `n` to
+    `last`, and a reader resumes after `last`. `index` is the block of a
+    model response it belongs to; a tool call's input names the call, and a
+    tool's output its channel."""
 
     kind: PartKind
     n: int
+    last: int
     text: str
     index: int | None = None
     tool_use_id: str | None = None

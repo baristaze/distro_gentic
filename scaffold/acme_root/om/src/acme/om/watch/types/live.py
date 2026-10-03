@@ -37,7 +37,8 @@ class Grant(Platform):
 
 
 class Seen(Platform):
-    """The last part of one stream a reader saw: it resumes after it."""
+    """The place of the last part of one stream a reader saw, the `last` of
+    a part that joins several: it resumes after it."""
 
     step_id: UUID
     n: int = Field(ge=0)

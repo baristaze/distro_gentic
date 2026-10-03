@@ -59,7 +59,9 @@ def model_providers_for(settings: IntegrationsSettings) -> ModelProvidersInterfa
     key still serves a call that carries its own credential."""
     if settings.model_providers == "scripted":
         script = None if settings.model_script is None else read_script(settings.model_script)
-        return scripted_model_providers(script)
+        return scripted_model_providers(
+            script, pace=timedelta(seconds=settings.model_script_pace_seconds)
+        )
     if settings.model_providers == "live":
         timeout = timedelta(seconds=settings.model_timeout_seconds)
         return ModelProvidersOverImpl(

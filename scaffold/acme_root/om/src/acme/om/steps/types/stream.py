@@ -6,12 +6,14 @@ call's input, a chunk of a tool's output), numbered within its stream, and
 carries the id of the step it adds up to. A part is never stored as a step
 or an event: the step is stored once, whole, when its stream ends, and a
 stream that breaks still ends in a step, marked truncated, holding what
-arrived. The parts of one step are one stream, numbered from 0."""
+arrived. The parts of one step are one stream, numbered from 0. A part may
+join a run of one block's parts: it holds their text, and the places from
+its own, `n`, to `last`."""
 
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Self
 from uuid import UUID
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from acme.om.base import Platform
 from acme.om.steps.types.content import MAX_NAME
@@ -21,6 +23,19 @@ class PartBase(Platform):
     session_id: UUID
     step_id: UUID  # the step the part adds up to
     n: int = Field(ge=0)  # its place in its stream
+    # The place of the last part it joins, when it joins several.
+    last: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def _ordered(self) -> Self:
+        if self.last is not None and self.last < self.n:
+            raise ValueError("a part's last place is at or after its first")
+        return self
+
+    @property
+    def end(self) -> int:
+        """The place of the last part it holds: a reader resumes after it."""
+        return self.n if self.last is None else self.last
 
 
 class TextPart(PartBase):
