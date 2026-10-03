@@ -122,5 +122,10 @@ class AgentSessionsInProjectImpl(AgentSessionsManagerInterface):
     async def purge_across_tenants(self) -> int:
         return await self._inner.purge_across_tenants()
 
+    async def pending_across_tenants(
+        self, after: datetime, before: datetime, limit: int
+    ) -> list[tuple[UUID, AgentSession]]:
+        return await self._inner.pending_across_tenants(after, before, limit)
+
     async def purge_tenant(self, ctx: TenantContext) -> int:
         return await self._inner.purge_tenant(ctx)

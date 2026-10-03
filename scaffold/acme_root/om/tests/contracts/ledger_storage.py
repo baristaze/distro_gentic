@@ -210,6 +210,35 @@ class LedgerStorageContract:
         tally = await held(storage, org, line)
         assert (tally.held_cost_micros, tally.spent_cost_micros) == (0, 600)
 
+    async def test_read_open_answers_the_slices_unsettled_holds_oldest_first(
+        self, storage: LedgerStorageInterface
+    ) -> None:
+        """The sweep's read across tenants: every hold opened in the slice
+        that no settlement closed, each with its tenant, oldest first, a batch
+        at most; never one settled, nor one opened outside the slice."""
+        first, second, now = new_id(), new_id(), utcnow()
+        line = a_line(cost_micros=100_000)
+
+        def opened(at: datetime) -> Hold:
+            return a_hold(line).model_copy(update={"created_at": at})
+
+        old, older, settled = (opened(now - timedelta(hours=h)) for h in (2, 3, 4))
+        recent, ancient = opened(now - timedelta(minutes=5)), opened(now - timedelta(days=2))
+        for org, hold in (
+            (first, old),
+            (second, older),
+            (first, settled),
+            (first, recent),
+            (second, ancient),
+        ):
+            assert await storage.open_hold(org, hold) is None
+        await storage.close_hold(first, settlement_of(settled, BillUnknown(), new_id(), now))
+        floor, cut = now - timedelta(days=1), now - timedelta(hours=1)
+        found = await storage.read_open(floor, cut, 10)
+        assert [(org, hold.id) for org, hold in found] == [(second, older.id), (first, old.id)]
+        assert found[0][1] == older
+        assert [hold.id for _, hold in await storage.read_open(floor, cut, 1)] == [older.id]
+
     async def test_close_hold_of_a_hold_never_opened_is_not_found(
         self, storage: LedgerStorageInterface
     ) -> None:

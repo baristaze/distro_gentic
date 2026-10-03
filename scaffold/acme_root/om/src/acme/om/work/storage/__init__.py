@@ -80,6 +80,13 @@ class WorkStorageInterface(ABC):
         ...
 
     @abstractmethod
+    async def has_open_item(self, org_id: UUID, kind: WorkKind, target_id: UUID) -> bool:
+        """Whether one of the tenant's items of `kind` on `target_id` is
+        queued or claimed. One read of the items in those passing statuses,
+        which the status index holds few of."""
+        ...
+
+    @abstractmethod
     async def requeue_stale(
         self, now: datetime, stagger: timedelta, limit: int
     ) -> list[tuple[UUID, WorkItem]]:

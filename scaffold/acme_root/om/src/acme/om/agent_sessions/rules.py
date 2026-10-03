@@ -32,9 +32,10 @@ the same steps (`attribution.rules.fold`): the speaker, which each model
 request records, and the untrusted mark, which the first data sets for
 good."""
 
+import hashlib
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -232,6 +233,33 @@ def wakes_at(before: AgentSession, after: AgentSession, steps: Sequence[Step]) -
     if any(step.type is StepType.PARKED and step.seq > before.status_seq for step in steps):
         return park
     return None
+
+
+STAGGERED = frozenset({ParkReason.PROVIDER})
+"""The parks whose wakes are staggered. One outage parks every session that
+meets it until one retry time, across every tenant, so waking them at that
+instant would meet the provider that just came back with all of them at
+once. A tenant's own parks, such as a budget's, are bounded by its fair
+share and wake at their time."""
+
+STAGGER_SCALE = 2**64
+"""The draws of a wake's share of the spread: eight bytes of a digest."""
+
+
+def wakes_after(session_id: UUID, park: Park, spread: timedelta) -> datetime | None:
+    """When a session parked with a retry time is woken: at the retry time,
+    or, for a park in `STAGGERED`, a share of `spread` after it. The share is
+    drawn from the session and the retry time, so the sessions one outage
+    parked wake spread across it, each never before the retry time, and a
+    session that projects its park twice asks for the same time. None for a
+    park only a person clears."""
+    if park.retry_at is None:
+        return None
+    if park.reason not in STAGGERED or spread <= timedelta(0):
+        return park.retry_at
+    seed = f"{session_id}:{park.retry_at.isoformat()}".encode()
+    draw = int.from_bytes(hashlib.sha256(seed).digest()[:8]) / STAGGER_SCALE
+    return park.retry_at + spread * draw
 
 
 def parked_step(step_id: UUID, session_id: UUID, loop_id: UUID, park: Park, now: datetime) -> Step:

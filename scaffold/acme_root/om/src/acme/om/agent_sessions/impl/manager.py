@@ -13,6 +13,7 @@ from acme.om.agent_sessions.rules import (
     purge_due,
     resumed_step,
     unlock_step,
+    wakes_after,
     wakes_at,
 )
 from acme.om.agent_sessions.storage import AgentSessionStorageInterface
@@ -55,6 +56,9 @@ class AgentSessionsOptions(Platform):
     # past it the sweep purges it (ADR 1010).
     retention: timedelta = timedelta(days=30)
     purge_sessions: int = 100  # sessions one purge across tenants takes up at most
+    # The wakes of the sessions one outage parked spread across this after
+    # its retry time, so the provider that came back meets them in turn.
+    wake_spread: timedelta = timedelta(seconds=60)
 
 
 class AgentSessionsManagerImpl(AgentSessionsManagerInterface):
@@ -161,7 +165,7 @@ class AgentSessionsManagerImpl(AgentSessionsManagerInterface):
                 rows = (versioned_row(ctx, UPDATED, after.id, after.version),)
             waiting = wakes_at(session, after, page.items)
             if waiting is not None:
-                rows += (wake_row(ctx, after, waiting),)
+                rows += (wake_row(ctx, after, waiting, self._options.wake_spread),)
             if asks_for_run(session, after):
                 rows += (loop_row(ctx, after),)
             try:
@@ -349,6 +353,11 @@ class AgentSessionsManagerImpl(AgentSessionsManagerInterface):
                 log.exception("agent session %s stays claimed: its purge failed", session_id)
         return len(found)
 
+    async def pending_across_tenants(
+        self, after: datetime, before: datetime, limit: int
+    ) -> list[tuple[UUID, AgentSession]]:
+        return await self._storage.read_stalled(after, before, limit)
+
     async def purge_tenant(self, ctx: TenantContext) -> int:
         ctx.require(Permission.WRITE)
         if not await self._tenancy.tenant_expired(ctx):
@@ -391,11 +400,15 @@ def loop_row(ctx: TenantContext, session: AgentSession) -> OutboxRow:
     )
 
 
-def wake_row(ctx: TenantContext, session: AgentSession, park: Park) -> OutboxRow:
-    """The work row that wakes a session at its park's retry time: the queue
-    holds it until then, and no timer does. It asks as the person who made
-    the session, whoever wrote the park, so the wake runs as them."""
-    payload = WakeSessionPayload(not_before=park.retry_at or session.updated_at, park=park)
+def wake_row(
+    ctx: TenantContext, session: AgentSession, park: Park, spread: timedelta = timedelta(0)
+) -> OutboxRow:
+    """The work row that wakes a session at its park's retry time, or a share
+    of `spread` after it for a park on a provider (`rules.wakes_after`): the
+    queue holds it until then, and no timer does. It asks as the person who
+    made the session, whoever wrote the park, so the wake runs as them."""
+    when = wakes_after(session.id, park, spread) or session.updated_at
+    payload = WakeSessionPayload(not_before=when, park=park)
     return outbox_row(
         ctx,
         work_row_kind(WorkKind.WAKE_SESSION),
