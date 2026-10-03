@@ -774,29 +774,38 @@ class LoopManagerImpl(LoopManagerInterface):
         # The call runs under the live context of the principal attribution
         # answered for it, asked again for this call.
         call_ctx = gate.authority.context
+        # The call's output streams as the response it adds up to: the stream
+        # opens before the call runs, and completes once that step is stored.
+        step_id = response_id(request, run.epoch)
         on_output = self._output(run, request)
+        self._tell(run, self._sink.opened, step_id)
         try:
-            if fresh:
-                ran = await self._execute(run, call_ctx, tool, request, use.input, on_output)
-            else:
-                ran = await self._tools.recover(
-                    call_ctx,
-                    run.registry,
-                    request,
-                    use.input,
-                    run.workspace,
-                    epoch=run.epoch,
-                    tree_deadline=run.deadline,
-                    on_output=on_output,
-                )
-        except NotAuthorized as refused:
-            ran = self._stopped(request, refused.message, ToolFailure.DENIED)
-        if isinstance(ran, ControlCommand):
-            text = f"stopped by a principal's {ran.value} before it answered"
-            await self._answer(run, request, self._stopped(request, text, ToolFailure.INTERRUPTED))
-            return _Settled(cancelled=ran is ControlCommand.CANCEL)
-        await self._answer(run, request, ran)
-        return _Settled()
+            try:
+                if fresh:
+                    ran = await self._execute(run, call_ctx, tool, request, use.input, on_output)
+                else:
+                    ran = await self._tools.recover(
+                        call_ctx,
+                        run.registry,
+                        request,
+                        use.input,
+                        run.workspace,
+                        epoch=run.epoch,
+                        tree_deadline=run.deadline,
+                        on_output=on_output,
+                    )
+            except NotAuthorized as refused:
+                ran = self._stopped(request, refused.message, ToolFailure.DENIED)
+            if isinstance(ran, ControlCommand):
+                text = f"stopped by a principal's {ran.value} before it answered"
+                stopped = self._stopped(request, text, ToolFailure.INTERRUPTED)
+                await self._answer(run, request, stopped)
+                return _Settled(cancelled=ran is ControlCommand.CANCEL)
+            await self._answer(run, request, ran)
+            return _Settled()
+        finally:
+            # Over, whichever way: its step is stored, or the call failed.
+            self._tell(run, self._sink.completed, step_id)
 
     async def _execute(
         self,

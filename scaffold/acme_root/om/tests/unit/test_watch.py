@@ -6,6 +6,7 @@ person runs is `exec` work on the host that holds the workspace, recorded
 as a run attributed to them."""
 
 import asyncio
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
@@ -13,13 +14,14 @@ from uuid import UUID
 
 import pytest
 from contracts.agent_session_storage import make_session
-from contracts.loops import Clock, loop_over, reply, said
+from contracts.loops import ASSISTANT, Clock, loop_over, reply, said, use
 from pydantic import SecretStr
 
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.streams.memory import StreamsMemoryImpl
 from acme.infra.topics.memory import TopicsMemoryImpl
 from acme.infra.transports import CommandSpec, RecordSeal, StaleCommand
+from acme.infra.transports.twin import TransportTwinImpl, TwinReply
 from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec, Workspace
 from acme.om.agent_sessions.types.agent_session import SessionStatus
 from acme.om.agents.impl.sink import StreamSinkMemoryImpl
@@ -290,21 +292,28 @@ async def test_each_open_stream_is_bounded_and_a_slow_reader_loses_the_oldest() 
 
 class Told(StreamSinkMemoryImpl):
     """A memory sink that also keeps when each stream opened and completed,
-    in order with the parts."""
+    in order with the parts, and hands each on to `then` when it is set."""
 
     def __init__(self) -> None:
         super().__init__()
         self.told: list[tuple[str, UUID]] = []
+        self.then: StreamServiceImpl | None = None
 
     def emit(self, part: StreamPart) -> None:
         super().emit(part)
         self.told.append(("part", part.step_id))
+        if self.then is not None:
+            self.then.emit(part)
 
     def opened(self, ctx: TenantContext, session_id: UUID, step_id: UUID) -> None:
         self.told.append((OPENED, step_id))
+        if self.then is not None:
+            self.then.opened(ctx, session_id, step_id)
 
     def completed(self, ctx: TenantContext, session_id: UUID, step_id: UUID) -> None:
         self.told.append((COMPLETED, step_id))
+        if self.then is not None:
+            self.then.completed(ctx, session_id, step_id)
 
 
 async def test_a_stream_holds_its_cap_and_once_it_is_gone_its_step_is_whole(
@@ -351,6 +360,55 @@ async def test_a_stream_holds_its_cap_and_once_it_is_gone_its_step_is_whole(
         (OPENED, session_id, str(response.id)),
         (COMPLETED, session_id, str(response.id)),
     ]
+
+
+async def test_a_tools_output_stream_opens_completes_and_is_gone_once_its_step_is_stored(
+    tmp_path: Path,
+) -> None:
+    told = Told()
+    worked = ASSISTANT.model_copy(
+        update={
+            "name": "worked",
+            "isolation": IsolationSpec(
+                mode=IsolationMode.TWIN, egress=EgressPolicy(mode=EgressMode.NONE)
+            ),
+        }
+    )
+    loop = loop_over(tmp_path, sink=told, kinds=(worked,))
+    told.then = stream = StreamServiceImpl(
+        StreamsMemoryImpl(), loop.infra.get_topics(), lambda: loop.managers.events
+    )
+    transport = loop.infra.get_transport()
+    assert isinstance(transport, TransportTwinImpl)
+
+    async def printing(command: CommandSpec, env: Mapping[str, str]) -> TwinReply:
+        return TwinReply(stdout="counted twelve\n")
+
+    transport.handler = printing
+    loop.tools["lookup"].argv = ("count",)
+    session_id = await loop.start("worked")
+    await loop.say(session_id, "How many are there?")
+    loop.anthropic.add(reply(use("lookup")))
+    loop.anthropic.add(reply(said("Twelve.")))
+    await loop.loops.run(loop.owner, session_id)
+    (answer,) = [s for s in await loop.history(session_id) if s.type is StepType.TOOL_RESPONSE]
+
+    # The call's output streams under its response: opened before it runs,
+    # completed after the response is stored.
+    assert [kind for kind, step_id in told.told if step_id == answer.id] == [
+        OPENED,
+        "part",
+        COMPLETED,
+    ]
+    await stream.flush()
+    assert await stream.read(session_id, ()) == (), "every stream of the run is gone"
+    events = await loop.managers.events.get_events(loop.owner, 0, 200)
+    hints = [
+        (e.kind, e.target_id)
+        for e in events
+        if e.kind.startswith("watch.stream.") and e.payload["step_id"] == str(answer.id)
+    ]
+    assert hints == [(OPENED, session_id), (COMPLETED, session_id)]
 
 
 # Check 4: under take control the agent writes nothing, and every command the
