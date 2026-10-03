@@ -21,7 +21,7 @@ from acme.om.steps.types.step import Step
 from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.tools.registry import ToolRegistry
 from acme.om.tools.rules import approver_roles, response, verdict
-from acme.om.tools.types.call import Gate, GateOutcome, JobHandle, Verdict
+from acme.om.tools.types.call import Gate, GateOutcome, JobHandle, JobNotStarted, Verdict
 from acme.om.tools.types.policy import Decision, PolicyLayer, ToolPolicy
 
 REFUSAL_CHARS = 2_000
@@ -149,9 +149,10 @@ class ToolsManagerPlaybooksImpl(ToolsManagerInterface):
         epoch: int,
         tree_deadline: datetime | None,
         kept_as: Mapping[str, str] | None = None,
-    ) -> JobHandle | Step:
+    ) -> JobHandle | JobNotStarted | Step:
         if await self._narrowed(ctx, request, Decision.ALLOW) is Decision.DENY:
-            return self._denied(request)
+            # Refused before its tool ran: nothing started.
+            return JobNotStarted(response=self._denied(request))
         return await self._inner.start_job(
             ctx,
             registry,
