@@ -38,6 +38,7 @@ from acme.infra.workspaces.host import WorkspaceHostImpl
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
 from acme.integrations.impl.configured import IntegrationsOverImpl
 from acme.integrations.model_providers.registry import scripted_model_providers
+from acme.om import root as platform_root
 from acme.om.agents.types.request import Start
 from acme.om.agents.types.result import Claim, Result
 from acme.om.base import new_id
@@ -53,6 +54,7 @@ from acme.om.placement.types.work import WorkspaceOperation, WorkspacePayload
 from acme.om.root import PlatformPorts
 from acme.om.storage.root import StorageInterface
 from acme.om.work.types.work_item import WorkKind, WorkStatus
+from acme.om.workspaces.impl.reader import RepositoryReaderGitImpl
 from acme.services.api.seed import seed_platform
 from acme.workers.session_runner.container import RunnerContainer
 from acme.workers.session_runner.settings import SessionRunnerSettings
@@ -226,6 +228,17 @@ def instance_of(executor: str) -> UUID:
 def gone(path: Path | str) -> bool:
     """Whether nothing is left at `path`, or under it."""
     return not Path(path).exists() or not any(Path(path).iterdir())
+
+
+@pytest.fixture(autouse=True)
+def reads_from_disk(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The reader the runner's root builds, allowed to read the project's
+    repository from a path, as a deployed one is not."""
+    monkeypatch.setattr(
+        platform_root,
+        "RepositoryReaderGitImpl",
+        lambda **options: RepositoryReaderGitImpl(**{**options, "on_disk": True}),
+    )
 
 
 # Check 1: a pinned project's delivery is validated on a host of its pool,

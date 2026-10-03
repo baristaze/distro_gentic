@@ -2,7 +2,8 @@
 to, which keys the allowlist it pins, and the one repository that project
 binds, where its branch and pull request are its work product. And the
 source control that holds that repository: what it says of a gone branch,
-and the writes that open a session's branch and its pull request.
+and the writes that carry a session's commits to its branch or a snapshot
+and open its pull request.
 
 The projects own both answers; a root reads them from the projects' rows
 (`acme.om.workspaces.impl.projects.WorkspaceProjectsBoundImpl`). The null
@@ -56,8 +57,11 @@ class SourceControlInterface(ABC):
     with none, every write is `Unavailable`."""
 
     @abstractmethod
-    async def push_branch(self, binding: RepositoryBinding, branch: str, head: str) -> None:
-        """Points `branch` of the bound repository at the commit `head`."""
+    async def push(self, binding: RepositoryBinding, ref: str, head: str, bundle: bytes) -> None:
+        """Points `ref` of the bound repository (a full name) at the commit
+        `head`, forward only, carrying the commits it needs from `bundle`,
+        the git bundle the platform made of them; nothing else in it is
+        written."""
         ...
 
     @abstractmethod

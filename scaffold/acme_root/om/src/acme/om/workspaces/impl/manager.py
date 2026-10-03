@@ -30,6 +30,7 @@ from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tenancy.rules import hash_token
 from acme.om.workspaces import rules
 from acme.om.workspaces.git import RepositoryReaderInterface, WorkspaceGitInterface
+from acme.om.workspaces.impl.tools import HeldWorkspaces
 from acme.om.workspaces.manager import WorkspacesManagerInterface
 from acme.om.workspaces.projects import (
     PullRequestsInterface,
@@ -83,6 +84,7 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         options: WorkspacesOptions,
         secrets_store: SecretsInterface,
         source_control: SourceControlInterface,
+        held: HeldWorkspaces,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._storage = storage
@@ -96,6 +98,7 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         self._options = options
         self._secrets = secrets_store
         self._source_control = source_control
+        self._held = held
         self._clock = clock
         self._internal = rules.networks(options.internal_networks)
 
@@ -166,7 +169,13 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         kept: str | None = None
         binding = await self._binding(ctx, held)
         if binding is not None:
-            state = await self._git.sync(ctx, workspace, binding, held.branch)
+            # The platform reads the repository on its own host, with the
+            # project's fetch credential, and the checkout takes a bundle:
+            # no credential enters the workspace.
+            incoming = await self._reader.incoming(
+                binding, held.branch, await self._fetch_credential(ctx, binding.project_id)
+            )
+            state = await self._git.sync(ctx, workspace, binding, held.branch, incoming)
             fate = None
             if not state.remote and seen:
                 fate = await self._pull_requests.fate_of(ctx, binding, held.branch)
@@ -448,7 +457,16 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
                     refusal,
                 )
                 raise NotAuthorized(refusal)
-        await self._source_control.push_branch(binding, held.branch, head)
+        workspace = self._held.get(session_id)
+        if workspace is None:
+            raise Unavailable(f"the workspace of session {session_id} is not held here")
+        # The session's commits go out as a bundle the platform makes, and
+        # source control pushes the one head to the session's branch alone.
+        bundle = await self._git.outgoing(ctx, workspace, head)
+        await self._source_control.push(binding, f"refs/heads/{held.branch}", head, bundle)
+        await self._git.landed(ctx, workspace, held.branch, head)
+        if not held.branch_seen:
+            await self._write(ctx, session_id, {"branch_seen": True})
         return await self._source_control.open_pull_request(binding, held.branch, title, body)
 
     async def purge_tenant(self, ctx: TenantContext) -> int:

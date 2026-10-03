@@ -43,6 +43,7 @@ from acme.om.root import Managers, build_managers
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.settings import MigrationSettings
 from acme.om.work.types.work_item import WorkKind
+from acme.om.workspaces.impl.reader import RepositoryReaderGitImpl
 
 
 def docker_runs() -> bool:
@@ -132,6 +133,7 @@ class Delivered:
             environment="production",
             work_product=self.work,
             workspace_projects=OnDisk(self.repository),
+            workspace_reader=RepositoryReaderGitImpl(on_disk=True),
         )
 
     async def session(self, files: dict[str, str]) -> tuple[TenantContext, UUID, str]:

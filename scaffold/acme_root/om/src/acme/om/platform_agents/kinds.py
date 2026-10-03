@@ -4,9 +4,9 @@ authority its calls run under, its workspace, and its layer of policy; the
 engine runs every one of them the same way.
 
 - The engineer takes an objective to a validated, reviewable change in a
-  workspace of its own: it validates its committed head on a fresh
-  executor, opens its pull request on its own branch, and ends through the
-  result gate, citing those runs.
+  workspace of its own: it opens its pull request on its own branch, so its
+  committed head is on the repository, validates that head on a fresh
+  executor, and ends through the result gate, citing those runs.
 - Analysis reads what a run produced in a workspace, changes nothing, and
   answers with findings.
 - The planner turns findings into tasks: it reads where sessions stand,
@@ -76,11 +76,12 @@ ENGINEER_KIND = AgentKind(
     prompts=(
         "You are an engineer. You take one objective to a validated, reviewable change "
         "in your workspace. Take a baseline with validate before you change anything. "
-        "Change what the objective needs and nothing else, commit it, and validate the "
-        "committed head. Open its pull request with open_pull_request, so a person can "
-        "review it. Submit the result with submit_result, citing the runs validate "
-        "answered: a success counts only when the validation at your head passed. A "
-        "failure you explain with those runs is a result too.",
+        "Change what the objective needs and nothing else, and commit it. Open its pull "
+        "request with open_pull_request, so your head is on your branch and a person can "
+        "review it, then validate that head. Your branch only moves forward: a fix is a new "
+        "commit on top, never an amend or a rebase. Submit the result with submit_result, citing "
+        "the runs validate answered: a success counts only when the validation at your "
+        "head passed. A failure you explain with those runs is a result too.",
     ),
     # Its pull request is its own work product, so it opens without asking.
     policy=allowing(ToolClass.READ, ToolClass.WRITE, ToolClass.EXECUTE, ToolClass.INTEGRATION),

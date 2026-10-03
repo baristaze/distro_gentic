@@ -6,6 +6,19 @@ replacement objects honoured. Nothing the agent can write takes part: not
 its checkout's config, its refs, its replacements, nor its hooks. The
 directory goes when the read ends.
 
+The same read brings a workspace its checkout (`incoming`): the default
+branch and the session's branch, with the tags in their history, fetched
+the same way and handed on as a bundle, so the workspace fetches nothing
+and holds no credential.
+
+The platform reads only where a workspace may reach. The repository is
+read over http or https, at a host whose every address lies outside the
+networks the platform walls off: a metadata endpoint, its own host, its
+internal network. The host is named by plain ASCII letters, digits, `-` and
+`.`, or by its address, so the name checked is the name git looks up. Git
+is held to the addresses checked, and follows no redirect. In `local`, the developer's own machine, a
+repository on disk is read too.
+
 The tree a validation runs on is read the same way: the delivered commit
 and the protected source, each fetched alone, composed in an index of the
 platform's own, and handed on as a tar with no history in it. The tar is
@@ -22,24 +35,40 @@ import base64
 import io
 import os
 import re
+import socket
 import tarfile
 import tempfile
 import time
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import timedelta
+from ipaddress import ip_address
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from pydantic import Field
 
 from acme.om.base import Platform
 from acme.om.evidence.rules import protected_paths
 from acme.om.exceptions import Unavailable
+from acme.om.workspaces import rules
 from acme.om.workspaces.git import RepositoryReaderInterface
 from acme.om.workspaces.types.credential import FetchCredential
-from acme.om.workspaces.types.source import Delivered, RepositoryBinding
+from acme.om.workspaces.types.source import Delivered, Incoming, RepositoryBinding
 
 BASE = "refs/delivery/base"
 HEAD = "refs/delivery/head"
+WALLED: tuple[rules.Network, ...] = rules.NEVER_REACHED + rules.networks(rules.PLATFORM_NETWORKS)
+"""What the platform reads no repository at unless its root says otherwise:
+what no workspace reaches, and every private range."""
+PLAIN_HOST = re.compile(r"[A-Za-z0-9.-]+")
+"""A host's name as curl looks it up, with nothing it decodes first."""
+PROTOCOLS = "http:https"
+"""The protocols git reads a repository by; `file` too where one on disk is
+read."""
+
+Resolver = Callable[[str, int], Awaitable[Sequence[str]]]
+"""A host's addresses at a port, as a resolver answers them."""
+
 VERSION = "refs/tree/version"
 SOURCE = "refs/tree/source"
 COMMIT = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
@@ -55,13 +84,29 @@ class ReaderOptions(Platform):
     timeout: timedelta = timedelta(minutes=2)
     # The most paths a delivery lists.
     max_paths: int = Field(default=10_000, gt=0)
+    # The most bytes a bundle brought into a workspace holds.
+    max_bundle: int = Field(default=512 * 2**20, gt=0)
+
     # The most bytes of a validation's tree, as a tar.
     max_tree: int = Field(default=256 * 1024 * 1024, gt=0)
 
 
 class RepositoryReaderGitImpl(RepositoryReaderInterface):
-    def __init__(self, options: ReaderOptions | None = None) -> None:
+    """Reads at no address inside `walled`, and a repository on disk only
+    `on_disk`."""
+
+    def __init__(
+        self,
+        options: ReaderOptions | None = None,
+        *,
+        walled: Sequence[rules.Network] = WALLED,
+        on_disk: bool = False,
+        resolve: Resolver | None = None,
+    ) -> None:
         self._options = options or ReaderOptions()
+        self._walled = tuple(walled)
+        self._on_disk = on_disk
+        self._resolve = resolve or _resolved
 
     async def delivered(
         self, binding: RepositoryBinding, branch: str, credential: FetchCredential | None = None
@@ -70,7 +115,7 @@ class RepositoryReaderGitImpl(RepositoryReaderInterface):
             repo = Path(root) / "repo"
             env = _environment(Path(root))
             url = binding.repository
-            remote = {**env, **_authorized(url, credential)}
+            remote = {**env, **await self._reached(url, credential)}
             await self._git(env, None, "init", "-q", "--bare", str(repo))
             await self._git(
                 remote, repo, "fetch", "-q", "--no-tags", url, f"+{binding.base_ref}:{BASE}"
@@ -100,6 +145,92 @@ class RepositoryReaderGitImpl(RepositoryReaderInterface):
             raise Unavailable(f"branch {branch} changes more than {self._options.max_paths} paths")
         return Delivered(base=base, head=head, changed=tuple(sorted(set(paths))))
 
+    async def incoming(
+        self, binding: RepositoryBinding, branch: str, credential: FetchCredential | None = None
+    ) -> Incoming:
+        with tempfile.TemporaryDirectory(prefix="incoming-") as root:
+            repo = Path(root) / "repo"
+            env = _environment(Path(root))
+            url = binding.repository
+            remote = {**env, **await self._reached(url, credential)}
+            await self._git(env, None, "init", "-q", "--bare", str(repo))
+            default = binding.default_branch or _default_of(
+                await self._git(remote, repo, "ls-remote", "--symref", url, "HEAD")
+            )
+            wanted = [f"+refs/heads/{default}:refs/heads/{default}"]
+            if (await self._git(remote, repo, "ls-remote", url, f"refs/heads/{branch}")).strip():
+                wanted.append(f"+refs/heads/{branch}:refs/heads/{branch}")
+            # The tags in the branches' history come along, as git follows
+            # them, so the checkout describes its commits as the repository
+            # does.
+            await self._git(remote, repo, "fetch", "-q", url, *wanted)
+            bundle = Path(root) / "incoming.bundle"
+            await self._git(
+                env, repo, "bundle", "create", "-q", str(bundle), "--branches", "--tags"
+            )
+            if bundle.stat().st_size > self._options.max_bundle:
+                raise Unavailable(
+                    f"the checkout of {branch} is past the {self._options.max_bundle} bytes "
+                    "a workspace is brought"
+                )
+            return Incoming(bundle=bundle.read_bytes(), default_branch=default)
+
+    async def _reached(self, url: str, credential: FetchCredential | None) -> dict[str, str]:
+        """What the commands that ask the repository at `url` add to their
+        environment: git held to the protocols the platform reads by and to
+        the addresses checked here, following no redirect, and the fetch
+        credential for `url` alone. `Unavailable`, before anything is
+        fetched, when the repository is where the platform reads nothing."""
+        protocols = f"{PROTOCOLS}:file" if self._on_disk else PROTOCOLS
+        config = [
+            ("http.followRedirects", "false"),
+            *await self._pinned(url),
+            *_authorized(url, credential),
+        ]
+        return {"GIT_ALLOW_PROTOCOL": protocols, **_configured(config)}
+
+    async def _pinned(self, url: str) -> list[tuple[str, str]]:
+        """The resolution git is held to for the host of `url`: every address
+        the host resolves to, each outside the walled networks. Nothing for
+        a host named by its address, which git does not resolve, nor for a
+        repository on disk where one is read. The URL is in no message: it
+        may carry a credential of its own."""
+        parts = urlsplit(url)
+        scheme = parts.scheme.lower()
+        if scheme not in ("http", "https"):
+            if self._on_disk and scheme in ("", "file"):
+                return []
+            raise Unavailable("the platform reads a repository over http or https alone")
+        try:
+            host, port = parts.hostname, parts.port or (443 if scheme == "https" else 80)
+        except ValueError:
+            host, port = None, 0
+        if not host:
+            raise Unavailable("the repository's URL names no host")
+        if not _plain(host):
+            # Curl decodes a percent-encoded name before it looks it up, so
+            # a name spelled otherwise would be checked as one host and
+            # reached as another.
+            raise Unavailable(
+                "the repository's host is named by more than letters, digits, '-' and '.'"
+            )
+        try:
+            addresses = tuple(await self._resolve(host, port))
+        except OSError:
+            addresses = ()
+        if not addresses:
+            raise Unavailable(f"the repository's host {host} does not resolve")
+        for address in addresses:
+            if rules.walled(address, self._walled):
+                raise Unavailable(
+                    f"the repository's host {host} is at {address}, where the platform "
+                    "reads nothing"
+                )
+        if _is_address(host):
+            return []
+        held = ",".join(f"[{address}]" if ":" in address else address for address in addresses)
+        return [("http.curloptResolve", f"{host}:{port}:{held}")]
+
     async def tree(
         self,
         binding: RepositoryBinding,
@@ -115,7 +246,7 @@ class RepositoryReaderGitImpl(RepositoryReaderInterface):
             repo = Path(root) / "repo"
             env = _environment(Path(root))
             url = binding.repository
-            remote = {**env, **_authorized(url, credential)}
+            remote = {**env, **await self._reached(url, credential)}
             await self._git(env, None, "init", "-q", "--bare", str(repo))
             for commit, ref in ((version, VERSION), (source, SOURCE)):
                 await self._git(
@@ -293,6 +424,35 @@ def _entries(listed: bytes) -> dict[str, bytes]:
     return entries
 
 
+async def _resolved(host: str, port: int) -> tuple[str, ...]:
+    found = await asyncio.get_running_loop().getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    return tuple(dict.fromkeys(str(info[4][0]) for info in found))
+
+
+def _is_address(host: str) -> bool:
+    try:
+        ip_address(host)
+    except ValueError:
+        return False
+    return True
+
+
+def _plain(host: str) -> bool:
+    """A name of plain ASCII letters, digits, `-` and `.`, or an address with
+    no zone."""
+    return PLAIN_HOST.fullmatch(host) is not None or ("%" not in host and _is_address(host))
+
+
+def _default_of(listed: str) -> str:
+    """The branch the repository's HEAD names, as `ls-remote --symref`
+    prints it: `ref: refs/heads/<name>` and a tab before `HEAD`."""
+    for line in listed.splitlines():
+        target, _, name = line.partition("\t")
+        if name == "HEAD" and target.startswith("ref: refs/heads/"):
+            return target.removeprefix("ref: refs/heads/")
+    raise Unavailable("the repository names no default branch")
+
+
 def _environment(home: Path) -> dict[str, str]:
     """An environment of the platform's own: its search path, and nothing of
     the system's or the user's git configuration, nor a prompt for a
@@ -308,15 +468,22 @@ def _environment(home: Path) -> dict[str, str]:
     }
 
 
-def _authorized(url: str, credential: FetchCredential | None) -> dict[str, str]:
-    """The environment that hands git the fetch credential: a basic
+def _authorized(url: str, credential: FetchCredential | None) -> list[tuple[str, str]]:
+    """The configuration that hands git the fetch credential: a basic
     authorization header for requests to `url` alone, so a redirect to
     anywhere else carries none. Nothing when there is no credential."""
     if credential is None:
-        return {}
+        return []
     pair = f"{credential.username}:{credential.password.get_secret_value()}"
-    return {
-        "GIT_CONFIG_COUNT": "1",
-        "GIT_CONFIG_KEY_0": f"http.{url}.extraHeader",
-        "GIT_CONFIG_VALUE_0": f"Authorization: Basic {base64.b64encode(pair.encode()).decode()}",
-    }
+    header = f"Authorization: Basic {base64.b64encode(pair.encode()).decode()}"
+    return [(f"http.{url}.extraHeader", header)]
+
+
+def _configured(config: Sequence[tuple[str, str]]) -> dict[str, str]:
+    """`config` as git reads it from its environment, never from its command
+    line or a file."""
+    env = {"GIT_CONFIG_COUNT": str(len(config))}
+    for index, (key, value) in enumerate(config):
+        env[f"GIT_CONFIG_KEY_{index}"] = key
+        env[f"GIT_CONFIG_VALUE_{index}"] = value
+    return env

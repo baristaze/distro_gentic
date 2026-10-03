@@ -65,8 +65,14 @@ class IntegrationsSettings(BaseSettings):
     # twins (local only, refused at boot anywhere else), or none, which
     # refuses every delivery and every post as unavailable.
     integrations: Literal["twin", "none"] = "none"
+    # The credential the forge's twin pushes with, for a repository behind
+    # basic authentication: a user and a password or token that may write
+    # to it. Local only, as the twin is, and refused at boot anywhere else.
+    # The password empty or "off" leaves the twin pushing with none.
+    forge_twin_username: str = ""
+    forge_twin_password: SecretStr | None = Field(default=None, repr=False)
 
-    @field_validator("workos_api_key", "anthropic_api_key", "openai_api_key")
+    @field_validator("workos_api_key", "anthropic_api_key", "openai_api_key", "forge_twin_password")
     @classmethod
     def _key_off_is_none(cls, value: SecretStr | None) -> SecretStr | None:
         if value is None or value.get_secret_value().strip().lower() in ("", "off"):

@@ -214,7 +214,7 @@ async def test_the_engineer_opens_its_branch_and_pull_request_with_a_token_it_ne
     failure, text = await platform.answer(session_id, "use_pr")
     branch = rules.session_branch(session_id)
     assert failure is None, text
-    assert platform.forge.branches == {(REPOSITORY, branch): HEAD}, "its own branch, at its head"
+    assert platform.forge.refs == {(REPOSITORY, f"refs/heads/{branch}"): HEAD}, "its own branch"
     (opened,) = platform.forge.pull_requests
     assert (opened.repository, opened.head, opened.title) == (REPOSITORY, branch, "Add the total")
     assert opened.url in text and branch in text
@@ -237,7 +237,7 @@ async def test_a_workspace_with_no_commit_opens_nothing(tmp_path: Path) -> None:
     await platform.loop.managers.loop.run(platform.loop.owner, session_id)
     failure, text = await platform.answer(session_id, "use_pr")
     assert failure is ToolFailure.PERMANENT and "commit first" in text
-    assert platform.forge.branches == {} and platform.forge.pull_requests == []
+    assert platform.forge.refs == {} and platform.forge.pull_requests == []
 
 
 # The engineer's branch and pull request are its session's work: a comment
@@ -421,7 +421,7 @@ async def test_a_push_token_cannot_push_another_sessions_branch_or_outlive_its_l
     await workspaces.mint_push_token(owner, other)
     with pytest.raises(NotAuthorized, match="live token"):
         await workspaces.open_pull_request(owner, other, value, HEAD, "t", "")
-    assert platform.forge.branches == {}, "another session's branch is never written"
+    assert platform.forge.refs == {}, "another session's branch is never written"
 
     # A prepare of the loop's workspace ends the token, and so does a release.
     workspace = await platform.loop.managers.tools.prepare_workspace(owner, one, TWIN)
@@ -432,14 +432,22 @@ async def test_a_push_token_cannot_push_another_sessions_branch_or_outlive_its_l
     assert (await platform.held(one)).push_digest is None
     with pytest.raises(NotAuthorized, match="live token"):
         await workspaces.open_pull_request(owner, one, again, HEAD, "t", "")
-    assert platform.forge.branches == {} and platform.forge.pull_requests == []
+    assert platform.forge.refs == {} and platform.forge.pull_requests == []
 
     live = (await workspaces.mint_push_token(owner, one)).token.get_secret_value()
     replaced = (await workspaces.mint_push_token(owner, one)).token.get_secret_value()
     with pytest.raises(NotAuthorized, match="live token"):
         await workspaces.open_pull_request(owner, one, live, HEAD, "t", "")
-    opened = await workspaces.open_pull_request(owner, one, replaced, HEAD, "t", "")
+    # The commits go out of the workspace this host holds, and of no other.
+    with pytest.raises(Unavailable, match="not held here"):
+        await workspaces.open_pull_request(owner, one, replaced, HEAD, "t", "")
+    await platform.loop.managers.tools.prepare_workspace(owner, one, TWIN)
+    newest = (await workspaces.mint_push_token(owner, one)).token.get_secret_value()
+    opened = await workspaces.open_pull_request(owner, one, newest, HEAD, "t", "")
     assert platform.forge.pull_requests[0].id == opened.id, "the newest token alone"
+    branch = f"refs/heads/{rules.session_branch(one)}"
+    assert platform.forge.refs == {(REPOSITORY, branch): HEAD}, "its own branch alone"
+    assert (await platform.held(one)).branch_seen, "the platform pushed it, so it knows it"
 
 
 # A fetch credential is the tenant's, kept under its project, and reaches
@@ -498,7 +506,7 @@ async def test_a_fetch_credential_whose_value_left_the_store_reads_nothing(
     )
 
     session_id = await platform.engineer()
-    workspace = await platform.loop.managers.tools.prepare_workspace(owner, session_id, TWIN)
     with pytest.raises(Unavailable, match="is gone"):
-        await workspaces.delivery(owner, workspace)
+        await platform.loop.managers.tools.prepare_workspace(owner, session_id, TWIN)
     assert platform.reader.credentials == [], "no read without the value"
+    assert platform.reader.brought == [], "and no checkout"
