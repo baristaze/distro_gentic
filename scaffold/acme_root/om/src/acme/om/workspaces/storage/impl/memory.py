@@ -100,6 +100,13 @@ class WorkspaceStorageMemoryImpl(MemoryStorageBase, WorkspaceStorageInterface):
                 del self._credentials[row_id]
             return len(gone)
 
+    async def purge_workspace(self, org_id: UUID, session_id: UUID) -> bool:
+        async with self._lock:
+            if self._get(self._workspaces, org_id, session_id) is None:
+                return False
+            del self._workspaces[session_id]
+            return True
+
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:
         async with self._lock:
             purged = self._purged(self._workspaces, org_id, limit)

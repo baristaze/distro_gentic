@@ -98,8 +98,9 @@ rebuilt from.
   wall, a host of its pool makes the instance instead, to the isolation
   the session is pinned to, and every step crosses the wall as `exec`
   work; no host of another pool or tenant takes it.
-- **Purge.** A tenant deleted past its retention loses its workspaces,
-  its allowlists, and its fetch credentials, each value out of the store
+- **Purge.** A session the sweep purges loses its workspace row with its
+  files. A tenant deleted past its retention loses its workspaces, its
+  allowlists, and its fetch credentials, each value out of the store
   before its record.
 
 ## The rules

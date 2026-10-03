@@ -190,6 +190,13 @@ class WorkspacesManagerInterface(ABC):
         ...
 
     @abstractmethod
+    async def purge_session(self, org_id: UUID, session_id: UUID) -> bool:
+        """Platform-internal: the workspace row of a session the sweep has
+        claimed for its purge goes with its history, in the tenant named;
+        for no principal. False when none was left."""
+        ...
+
+    @abstractmethod
     async def purge_tenant(self, ctx: TenantContext) -> int:
         """The sweep, for one tenant past its own retention: its workspaces,
         its allowlists, and its fetch credentials, each value out of the store

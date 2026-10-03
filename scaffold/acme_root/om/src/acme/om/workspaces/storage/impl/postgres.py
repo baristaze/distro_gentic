@@ -154,6 +154,15 @@ class WorkspaceStoragePostgresImpl(PgStorageBase, WorkspaceStorageInterface):
             await session.commit()
             return gone
 
+    async def purge_workspace(self, org_id: UUID, session_id: UUID) -> bool:
+        stmt = delete(SessionWorkspaces).where(
+            SessionWorkspaces.org_id == org_id, SessionWorkspaces.id == session_id
+        )
+        async with self._session_for(stmt, org_id=org_id) as session:
+            gone = deleted(await session.execute(stmt))
+            await session.commit()
+            return gone > 0
+
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:
         purged = 0
         for table in (SessionWorkspaces, EgressAllowlists):

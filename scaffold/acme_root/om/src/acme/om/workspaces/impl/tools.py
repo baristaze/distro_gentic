@@ -192,6 +192,7 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
 
     async def purge_workspace(self, org_id: UUID, session_id: UUID) -> None:
         await self._inner.purge_workspace(org_id, session_id)
+        await self._workspaces.purge_session(org_id, session_id)
         self._held.let_go(session_id)
         self._directories.pop(session_id, None)
         self._hosted.discard(session_id)

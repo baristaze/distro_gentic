@@ -271,7 +271,7 @@ async def test_a_dirty_checkout_is_kept_before_it_is_cut_or_nothing_is_cut(
     assert ref in told.as_text() and commit in told.as_text() and "merged" in told.as_text()
 
 
-async def test_a_branch_that_moved_here_and_on_its_repository_ends_the_loop_loudly(
+async def test_a_branch_that_moved_here_and_on_its_repository_parks_the_loop_for_a_person(
     tmp_path: Path,
 ) -> None:
     git = GitTwin()
@@ -284,11 +284,12 @@ async def test_a_branch_that_moved_here_and_on_its_repository_ends_the_loop_loud
 
     run = await one_loop(loop, session_id)
 
-    assert run.outcome is LoopOutcome.ERRORED and loop.anthropic.calls == []
+    assert run.end is RunEnd.PARKED and run.park is not None and loop.anthropic.calls == []
+    assert (run.park.reason, run.park.unlock) == (ParkReason.PERSON, "workspace")
     assert git.cuts == [], "nothing merged or cut"
 
 
-async def test_a_vanished_branch_with_no_known_reason_ends_the_loop_loudly(
+async def test_a_vanished_branch_with_no_known_reason_parks_the_loop_for_a_person(
     tmp_path: Path,
 ) -> None:
     git = GitTwin()
@@ -304,7 +305,8 @@ async def test_a_vanished_branch_with_no_known_reason_ends_the_loop_loudly(
 
     lost = await one_loop(loop, session_id, "Go on.")
 
-    assert lost.outcome is LoopOutcome.ERRORED
+    assert lost.end is RunEnd.PARKED and lost.park is not None
+    assert (lost.park.reason, lost.park.unlock) == (ParkReason.PERSON, "workspace")
     assert len(loop.anthropic.calls) == calls, "it failed before the first model call"
     assert git.cuts == [], "nothing restarted from the default branch"
     assert provider(loop).live == set()
@@ -654,3 +656,17 @@ async def test_a_session_started_in_a_project_works_on_the_projects_repository(
     workspaces = loop.managers.workspaces
     assert not await workspaces.outward(loop.owner, session.id, own), "the project's repository"
     assert await workspaces.outward(loop.owner, session.id, elsewhere)
+
+
+async def test_a_sessions_purge_takes_its_workspace_row(tmp_path: Path) -> None:
+    loop = loop_of(tmp_path)
+    session_id = await loop.start("twinned")
+    other = await loop.start("twinned")
+    workspaces = loop.managers.workspaces
+    assert (await workspaces.get_workspace(loop.owner, session_id)).id == session_id
+
+    await loop.managers.tools.purge_workspace(loop.owner.org_id, session_id)
+
+    with pytest.raises(NotFound):
+        await workspaces.get_workspace(loop.owner, session_id)
+    assert (await workspaces.get_workspace(loop.owner, other)).id == other

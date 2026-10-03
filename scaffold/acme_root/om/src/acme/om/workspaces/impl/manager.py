@@ -487,6 +487,9 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
             await self._write(ctx, session_id, {"branch_seen": True})
         return await self._source_control.open_pull_request(binding, held.branch, title, body)
 
+    async def purge_session(self, org_id: UUID, session_id: UUID) -> bool:
+        return await self._storage.purge_workspace(org_id, session_id)
+
     async def purge_tenant(self, ctx: TenantContext) -> int:
         ctx.require(Permission.WRITE)
         if not await self._tenancy.tenant_expired(ctx):
