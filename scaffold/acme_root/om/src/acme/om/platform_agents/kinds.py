@@ -4,11 +4,13 @@ authority its calls run under, its workspace, and its layer of policy; the
 engine runs every one of them the same way.
 
 - The engineer takes an objective to a validated, reviewable change in a
-  workspace of its own: it opens its pull request on its own branch, so its
-  committed head is on the repository, validates that head on a fresh
-  executor, and ends through the result gate, citing those runs.
-- Analysis reads what a run produced in a workspace, changes nothing, and
-  answers with findings.
+  workspace of its own: it edits a file by one place, searches the code,
+  opens its pull request on its own branch, so its committed head is on
+  the repository, validates that head on a fresh executor, and ends
+  through the result gate, citing those runs. It searches and reads the
+  knowledge base, and suggests an entry for a person to review.
+- Analysis reads what a run produced in a workspace, searches it and the
+  knowledge base, changes nothing, and answers with findings.
 - The planner turns findings into tasks: it reads where sessions stand,
   hands new engineering work to an engineer, and answers with its plan.
 - The platform assistant answers the people who run their part of the
@@ -35,6 +37,8 @@ PLATFORM_ASSISTANT = "platform_assistant"
 LIST_FILES = "list_files"
 READ_FILE = "read_file"
 WRITE_FILE = "write_file"
+EDIT_FILE = "edit_file"
+SEARCH_CODE = "search_code"
 RUN_COMMAND = "run_command"
 SUBMIT_RESULT = "submit_result"
 VALIDATE = "validate"
@@ -43,6 +47,9 @@ SEARCH_CORPUS = "search_corpus"
 READ_SESSION = "read_session"
 DRAFT_TOOL_POLICY = "draft_tool_policy"
 HAND_OFF = "hand_off_to_engineer"
+SEARCH_KNOWLEDGE = "search_knowledge"
+READ_KNOWLEDGE = "read_knowledge"
+SUGGEST_KNOWLEDGE = "suggest_knowledge"
 
 WORKSPACE = IsolationSpec(mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode=EgressMode.NONE))
 """A container of its own, from which nothing leaves: the workspace of the
@@ -57,7 +64,7 @@ def allowing(*classes: ToolClass) -> PolicyLayer:
     )
 
 
-ENGINEER_KIND = AgentKind(
+ENGINEER_V1 = AgentKind(
     name=ENGINEER,
     version=1,
     tools=(
@@ -87,8 +94,50 @@ ENGINEER_KIND = AgentKind(
     policy=allowing(ToolClass.READ, ToolClass.WRITE, ToolClass.EXECUTE, ToolClass.INTEGRATION),
     isolation=WORKSPACE,
 )
+"""The engineer before it edited by one place, searched the code, and used
+the knowledge base: kept while a session may still run it."""
 
-ANALYSIS_KIND = AgentKind(
+ENGINEER_KIND = AgentKind(
+    name=ENGINEER,
+    version=2,
+    tools=(
+        LIST_FILES,
+        READ_FILE,
+        SEARCH_CODE,
+        EDIT_FILE,
+        WRITE_FILE,
+        RUN_COMMAND,
+        SEARCH_KNOWLEDGE,
+        READ_KNOWLEDGE,
+        SUGGEST_KNOWLEDGE,
+        VALIDATE,
+        OPEN_PULL_REQUEST,
+        SUBMIT_RESULT,
+    ),
+    done_rule=DoneRule.RESULT_TOOL,
+    result_tool=SUBMIT_RESULT,
+    authority=AuthorityMode.STEADY,
+    tree=TreeLimits(height=1, count=0),
+    prompts=(
+        "You are an engineer. You take one objective to a validated, reviewable change "
+        "in your workspace. Take a baseline with validate before you change anything. "
+        "Look up what your team already knows with search_knowledge, and find code with "
+        "search_code. Change what the objective needs and nothing else: change a file "
+        "with edit_file, one place a call, and write a file whole only when it is new. "
+        "Commit it. Open its pull request with open_pull_request, so your head is on your "
+        "branch and a person can review it, then validate that head. Your branch only "
+        "moves forward: a fix is a new commit on top, never an amend or a rebase. Submit "
+        "the result with submit_result, citing the runs validate answered: a success "
+        "counts only when the validation at your head passed. A failure you explain with "
+        "those runs is a result too. When you learned something a later session should "
+        "not have to find out again, suggest it with suggest_knowledge.",
+    ),
+    # Its pull request is its own work product, so it opens without asking.
+    policy=allowing(ToolClass.READ, ToolClass.WRITE, ToolClass.EXECUTE, ToolClass.INTEGRATION),
+    isolation=WORKSPACE,
+)
+
+ANALYSIS_V1 = AgentKind(
     name=ANALYSIS,
     version=1,
     tools=(LIST_FILES, READ_FILE, RUN_COMMAND),
@@ -99,6 +148,25 @@ ANALYSIS_KIND = AgentKind(
         "You read what a run produced (its logs, its telemetry, its recordings) in your "
         "workspace, and turn it into findings. Change nothing. Answer with the findings, "
         "each citing the files and the commands that show it.",
+    ),
+    policy=allowing(ToolClass.READ, ToolClass.EXECUTE),
+    isolation=WORKSPACE,
+)
+"""Analysis before it searched its workspace and the knowledge base: kept
+while a session may still run it."""
+
+ANALYSIS_KIND = AgentKind(
+    name=ANALYSIS,
+    version=2,
+    tools=(LIST_FILES, READ_FILE, SEARCH_CODE, RUN_COMMAND, SEARCH_KNOWLEDGE, READ_KNOWLEDGE),
+    done_rule=DoneRule.ANSWER,
+    authority=AuthorityMode.STEADY,
+    tree=TreeLimits(height=1, count=0),
+    prompts=(
+        "You read what a run produced (its logs, its telemetry, its recordings) in your "
+        "workspace, and turn it into findings. Search it with search_code, and look up "
+        "what your team already knows with search_knowledge. Change nothing. Answer with "
+        "the findings, each citing the files and the commands that show it.",
     ),
     policy=allowing(ToolClass.READ, ToolClass.EXECUTE),
     isolation=WORKSPACE,
@@ -142,7 +210,9 @@ PLATFORM_ASSISTANT_KIND = AgentKind(
 )
 
 SHIPPED: tuple[AgentKind, ...] = (
+    ENGINEER_V1,
     ENGINEER_KIND,
+    ANALYSIS_V1,
     ANALYSIS_KIND,
     PLANNER_KIND,
     PLATFORM_ASSISTANT_KIND,

@@ -87,6 +87,7 @@ def shipped_catalog() -> tuple[ToolInterface, ...]:
         evidence=unbound,  # pyright: ignore[reportArgumentType]
         workspaces=unbound,  # pyright: ignore[reportArgumentType]
         intake=unbound,  # pyright: ignore[reportArgumentType]
+        knowledge=unbound,  # pyright: ignore[reportArgumentType]
     )
 
 
@@ -131,8 +132,15 @@ def items_of(platform: Platform) -> list[WorkItem]:
 
 def test_every_shipped_agent_is_a_profile_that_sets_its_powers() -> None:
     classes = classes_of(shipped_catalog())
-    names = [kind.name for kind in SHIPPED]
-    assert names == ["engineer", "analysis", "planner", "platform_assistant"]
+    names = [(kind.name, kind.version) for kind in SHIPPED]
+    assert names == [
+        ("engineer", 1),
+        ("engineer", 2),
+        ("analysis", 1),
+        ("analysis", 2),
+        ("planner", 1),
+        ("platform_assistant", 1),
+    ]
     for kind in SHIPPED:
         assert set(kind.tools) <= set(classes), f"{kind.name} names a tool the catalog lacks"
         assert kind.prompts, f"{kind.name} carries its prompts"
@@ -141,6 +149,19 @@ def test_every_shipped_agent_is_a_profile_that_sets_its_powers() -> None:
     assert kinds.VALIDATE in ENGINEER_KIND.tools
     assert ENGINEER_KIND.isolation.mode is IsolationMode.CONTAINER
     assert {classes[tool] for tool in ENGINEER_KIND.tools} >= {"write", "execute"}
+    # The engineer edits by one place, searches the code, and uses the
+    # knowledge base; analysis searches and reads, and changes nothing.
+    assert {
+        kinds.EDIT_FILE,
+        kinds.SEARCH_CODE,
+        kinds.SEARCH_KNOWLEDGE,
+        kinds.READ_KNOWLEDGE,
+        kinds.SUGGEST_KNOWLEDGE,
+    } <= set(ENGINEER_KIND.tools)
+    assert {kinds.SEARCH_CODE, kinds.SEARCH_KNOWLEDGE, kinds.READ_KNOWLEDGE} <= set(
+        ANALYSIS_KIND.tools
+    )
+    assert {classes[tool] for tool in ANALYSIS_KIND.tools} == {"read", "execute"}
 
 
 # Each shipped kind reaches an accepted end; the engineer's success only on

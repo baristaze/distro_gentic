@@ -3,24 +3,29 @@ which is all policy reads of it, and takes a typed input that refuses a
 field it does not declare: what a model writes is checked before any of it
 runs.
 
-The workspace's four reach the world only through the call's runtime, so a
-kind with no workspace cannot use one even when it is handed one. The
+The workspace's tools reach the world only through the call's runtime, so
+a kind with no workspace cannot use one even when it is handed one: an
+edit reads and writes its file there, and a search of the code runs there,
+bounded in its matches and its bytes, never in the platform's process. The
 engineer's pull request opens its own branch on its project's repository
 with a push token the platform mints for the call and checks before it
 writes; the model names neither the branch nor the repository, and never
 sees the token. The branch and the pull request are bound to the session,
 and the push recorded as its act, so the events on them find it. The
 assistant's read the corpus and live state, and draft; the one that hands
-work on starts a session that waits for its person. A tool that reads a
-manager takes it late, as a callable the root answers once it has built
-it."""
+work on starts a session that waits for its person. The knowledge tools
+reach the reviewed entries of the session's project and of its whole
+tenant, and the platform's own documentation, its corpus; a suggestion
+waits for a person's review. A tool that reads a manager takes it late, as
+a callable the root answers once it has built it."""
 
 from collections.abc import Callable
 from datetime import datetime, timedelta
-from typing import ClassVar
+from pathlib import PurePosixPath
+from typing import ClassVar, Self
 from uuid import UUID
 
-from pydantic import Field
+from pydantic import Field, field_validator, model_validator
 
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.types.agent_session import SessionStatus
@@ -43,9 +48,12 @@ from acme.om.exceptions import (
 from acme.om.intake import IntakeManagerInterface
 from acme.om.intake.tools import FORGE
 from acme.om.intake.types.link import HandleKind
+from acme.om.knowledge import KnowledgeManagerInterface
+from acme.om.knowledge.types.knowledge import MAX_TEXT, Knowledge
 from acme.om.platform_agents import kinds, rules
 from acme.om.platform_agents.types.corpus import Corpus, Passage
 from acme.om.platform_agents.types.draft import PolicyDraft
+from acme.om.steps.types.content import MAX_NAME
 from acme.om.steps.types.header import ParkReason, ToolFailure
 from acme.om.tools import ToolsManagerInterface
 from acme.om.tools.tool import ToolInterface, ToolRuntime
@@ -56,6 +64,11 @@ from acme.om.workspaces.rules import COMMIT
 
 MAX_PATH = 1024
 MAX_READ = 200_000  # bytes one read takes at most
+MAX_EDIT = MAX_READ  # bytes of a file one edit reads and writes back, at most
+MAX_MATCHES = 200  # the most matches one search of the code answers
+MAX_MATCH_TEXT = 300  # characters of a matched line a match carries
+MAX_SEARCH_OUTPUT = 400_000  # characters of the search's output it reads, at most
+NO_NUL = r"^[^\x00]*$"
 
 
 class NativeToolImpl(ToolInterface):
@@ -152,11 +165,61 @@ class Written(Platform):
     size: int
 
 
-class WriteFileImpl(NativeToolImpl):
-    """Writes one file of the workspace. A path the policy of the session's
-    project protects is refused at the call, before anyone is asked: the
-    evidence reads it (`protection`) from the session's project, never from
-    the input."""
+class EditInput(ToolInput):
+    """One place in a file: `old_text`, which must match exactly one place,
+    or the lines `start_line` to `end_line`, counted from 1, both included."""
+
+    path: str = Field(min_length=1, max_length=MAX_PATH)
+    new_text: str = Field(max_length=MAX_EDIT)
+    old_text: str | None = Field(default=None, min_length=1, max_length=MAX_EDIT)
+    start_line: int | None = Field(default=None, ge=1)
+    end_line: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def _one_place(self) -> Self:
+        by_lines = self.start_line is not None or self.end_line is not None
+        if (self.old_text is not None) == by_lines:
+            raise ValueError("an edit names old_text or a line range, never both")
+        if by_lines and (
+            self.start_line is None or self.end_line is None or self.start_line > self.end_line
+        ):
+            raise ValueError("a line range names start_line and end_line, the start first")
+        return self
+
+
+class Edited(Platform):
+    path: str
+    line: int  # where the new text starts
+    lines: int  # how many lines the new text holds there
+    size: int
+
+
+class FileChangeImpl(NativeToolImpl):
+    """A tool that changes one file of the workspace, by the path its input
+    names. A path the policy of the session's project protects is refused at
+    the call, before anyone is asked: the evidence reads it (`protection`)
+    from the session's project, never from the input."""
+
+    def __init__(self, evidence: Callable[[], EvidenceManagerInterface]) -> None:
+        self._evidence = evidence
+
+    async def preflight(
+        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
+    ) -> None:
+        # The engine asks a tool's target with no session, and the session's
+        # project is what protects a path, so the refusal is made here.
+        assert isinstance(call_input, WriteInput | EditInput)
+        target = await self._evidence().protection(ctx, runtime.session_id, [call_input.path])
+        if target.kind == PATHS and target.attributes.get("protected"):
+            raise ToolFailed(
+                ToolFailure.DENIED,
+                f"{call_input.path} is protected by the project's validation policy: "
+                "it is never changed by an agent",
+            )
+
+
+class WriteFileImpl(FileChangeImpl):
+    """Writes one file of the workspace whole."""
 
     SPEC = ToolSpec(
         name=kinds.WRITE_FILE,
@@ -170,23 +233,6 @@ class WriteFileImpl(NativeToolImpl):
         mode=ToolMode.SYNC,
     )
 
-    def __init__(self, evidence: Callable[[], EvidenceManagerInterface]) -> None:
-        self._evidence = evidence
-
-    async def preflight(
-        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
-    ) -> None:
-        # The engine asks a tool's target with no session, and the session's
-        # project is what protects a path, so the refusal is made here.
-        assert isinstance(call_input, WriteInput)
-        target = await self._evidence().protection(ctx, runtime.session_id, [call_input.path])
-        if target.kind == PATHS and target.attributes.get("protected"):
-            raise ToolFailed(
-                ToolFailure.DENIED,
-                f"{call_input.path} is protected by the project's validation policy: "
-                "it is never changed by an agent",
-            )
-
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
     ) -> Platform:
@@ -194,6 +240,143 @@ class WriteFileImpl(NativeToolImpl):
         data = call_input.text.encode()
         await runtime.write_file(call_input.path, data)
         return Written(path=call_input.path, size=len(data))
+
+
+class EditFileImpl(FileChangeImpl):
+    """Replaces one place in a text file of the workspace and leaves the rest
+    of it as it was. A match of more than one place is refused, so an edit
+    never lands where the model did not mean. A repeat of a call could
+    change a range twice, so a call whose run was lost is never run again."""
+
+    SPEC = ToolSpec(
+        name=kinds.EDIT_FILE,
+        description=(
+            "Replaces one place in a text file of the workspace with new_text, and leaves "
+            "the rest of the file as it was. Name the place by old_text, copied exactly "
+            "from the file, which must match one place only: a match of more than one is "
+            "refused, so give more of the text around it. Or name it by start_line and "
+            "end_line, counted from 1, both included. Answers the line the new text starts "
+            "on and how many lines it holds."
+        ),
+        input_model=EditInput,
+        output_model=Edited,
+        timeout=timedelta(seconds=30),
+        authorization_class=ToolClass.WRITE,
+        effect=Effect.UNSAFE,
+        interruptible=False,
+        mode=ToolMode.SYNC,
+    )
+
+    async def run(
+        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
+    ) -> Platform:
+        assert isinstance(call_input, EditInput)
+        path = call_input.path
+        data = await runtime.read_file(path, MAX_EDIT + 1)
+        if len(data) > MAX_EDIT:
+            raise ToolFailed(
+                ToolFailure.PERMANENT,
+                f"{path} is past the {MAX_EDIT:,} bytes an edit takes: write it whole",
+            )
+        try:
+            text = data.decode()
+        except UnicodeDecodeError:
+            raise ToolFailed(ToolFailure.PERMANENT, f"{path} is not UTF-8 text") from None
+        try:
+            changed, line, lines = rules.edited(
+                text,
+                call_input.new_text,
+                old_text=call_input.old_text,
+                start_line=call_input.start_line,
+                end_line=call_input.end_line,
+            )
+        except rules.EditRefused as refused:
+            raise ToolFailed(ToolFailure.PERMANENT, f"{path}: {refused}") from None
+        written = changed.encode()
+        await runtime.write_file(path, written)
+        return Edited(path=path, line=line, lines=lines, size=len(written))
+
+
+class SearchCodeInput(ToolInput):
+    pattern: str = Field(min_length=1, max_length=500, pattern=NO_NUL)
+    path: str = Field(default=".", min_length=1, max_length=MAX_PATH, pattern=NO_NUL)
+    limit: int = Field(default=50, ge=1, le=MAX_MATCHES)
+
+    @field_validator("path")
+    @classmethod
+    def _inside(cls, path: str) -> str:
+        relative = PurePosixPath(path)
+        if relative.is_absolute() or ".." in relative.parts:
+            raise ValueError("a path inside the workspace: never absolute, never through ..")
+        return path
+
+
+class Match(Platform):
+    path: str
+    line: int
+    text: str
+
+
+class Matches(Platform):
+    matches: tuple[Match, ...]
+    more: bool  # matches past the bound were left out
+
+
+class SearchCodeImpl(NativeToolImpl):
+    """Searches the files under a path of the workspace for a pattern, with
+    the workspace's own grep, through the transport: wherever the session's
+    workspace runs, never in the platform's process. Each file answers at
+    most the limit, the answer at most the limit in all, each line cut at
+    its width, and the output read at most its bound, so a search never
+    floods the model's window. A path is the workspace's, never absolute
+    and never climbing out."""
+
+    SPEC = ToolSpec(
+        name=kinds.SEARCH_CODE,
+        description=(
+            "Searches the text files under a path of the workspace, the whole of it by "
+            "default, for an extended regular expression. Answers each matching line with "
+            "its file and its line number, at most limit of them, each cut at 300 "
+            "characters, and whether more were left out: narrow the pattern or the path "
+            "when they were."
+        ),
+        input_model=SearchCodeInput,
+        output_model=Matches,
+        timeout=timedelta(seconds=60),
+        authorization_class=ToolClass.READ,
+        effect=Effect.READ_ONLY,
+        interruptible=True,
+        mode=ToolMode.SYNC,
+    )
+
+    async def run(
+        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
+    ) -> Platform:
+        assert isinstance(call_input, SearchCodeInput)
+        argv = (
+            "grep",
+            "-r",
+            "-n",
+            "-I",
+            "-E",
+            "--null",
+            f"--max-count={call_input.limit}",
+            "--exclude-dir=.git",
+            "-e",
+            call_input.pattern,
+            "--",
+            call_input.path,
+        )
+        result = await runtime.run(argv, max_output=MAX_SEARCH_OUTPUT)
+        found, more = rules.matches_of(result.stdout, call_input.limit, MAX_MATCH_TEXT)
+        if result.exit_code not in (0, 1) and not found:
+            # Two: a pattern grep cannot read, or a path that is not there.
+            said = result.stderr.strip()[:500] or f"the search ended with {result.exit_code}"
+            raise ToolFailed(ToolFailure.PERMANENT, said)
+        return Matches(
+            matches=tuple(Match(path=p, line=n, text=t) for p, n, t in found),
+            more=more or result.truncated,
+        )
 
 
 class CommandInput(ToolInput):
@@ -404,6 +587,190 @@ class OpenPullRequestImpl(NativeToolImpl):
         except (NotFound, NotAuthorized, ValidationFailed, Conflict) as failed:
             raise ToolFailed(ToolFailure.PERMANENT, failed.message) from None
         return PullRequestOpened(id=opened.id, url=opened.url, branch=token.branch, head=head)
+
+
+# Knowledge.
+
+EXCERPT = 500  # characters of an entry or a passage a search answers
+
+PROJECT, TENANT, PLATFORM = "project", "tenant", "platform"
+"""Where a piece of knowledge comes from: an entry of the session's project,
+one of its whole tenant, or the platform's own documentation."""
+
+
+def scope_of(entry: Knowledge) -> str:
+    return TENANT if entry.project_id is None else PROJECT
+
+
+class KnowledgeQuery(ToolInput):
+    query: str = Field(min_length=1, max_length=500)
+    limit: int = Field(default=5, ge=1, le=10)
+
+
+class KnowledgeHit(Platform):
+    scope: str
+    slug: str | None  # what read_knowledge takes
+    title: str
+    heading: str | None = None  # the section of a platform document
+    excerpt: str
+
+
+class KnowledgeHits(Platform):
+    hits: tuple[KnowledgeHit, ...]
+
+
+class SearchKnowledgeImpl(NativeToolImpl):
+    """Searches what the session may know: the reviewed entries of its
+    project and of its whole tenant, never another project's or another
+    tenant's, and the platform's own documentation. An entry waiting for its
+    review is never found. The session and its project are the call's,
+    never the input's."""
+
+    SPEC = ToolSpec(
+        name=kinds.SEARCH_KNOWLEDGE,
+        description=(
+            "Searches the knowledge base: the entries people of your team kept for your "
+            "project and for the whole team, and the platform's documentation. Answers at "
+            "most limit of each, best first, each with its scope, its slug, its title, and "
+            "its opening. Read one whole with read_knowledge and its slug."
+        ),
+        input_model=KnowledgeQuery,
+        output_model=KnowledgeHits,
+        timeout=timedelta(seconds=10),
+        authorization_class=ToolClass.READ,
+        effect=Effect.READ_ONLY,
+        interruptible=True,
+        mode=ToolMode.SYNC,
+    )
+
+    def __init__(self, corpus: Corpus, knowledge: Callable[[], KnowledgeManagerInterface]) -> None:
+        self._corpus = corpus
+        self._knowledge = knowledge
+
+    async def run(
+        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
+    ) -> Platform:
+        assert isinstance(call_input, KnowledgeQuery)
+        entries = await self._knowledge().search(
+            ctx, runtime.session_id, call_input.query, call_input.limit
+        )
+        passages = rules.search(self._corpus, call_input.query, call_input.limit)
+        hits = [
+            KnowledgeHit(
+                scope=scope_of(entry),
+                slug=entry.slug,
+                title=entry.title,
+                excerpt=entry.text[:EXCERPT],
+            )
+            for entry in entries
+        ]
+        hits += [
+            KnowledgeHit(
+                scope=PLATFORM,
+                slug=passage.path,
+                title=passage.title,
+                heading=passage.heading,
+                excerpt=passage.text[:EXCERPT],
+            )
+            for passage in passages
+        ]
+        return KnowledgeHits(hits=tuple(hits))
+
+
+class KnowledgeSlug(ToolInput):
+    slug: str = Field(min_length=1, max_length=MAX_PATH)
+
+
+class KnowledgeRead(Platform):
+    scope: str
+    slug: str
+    title: str
+    text: str
+
+
+class ReadKnowledgeImpl(NativeToolImpl):
+    """Reads one piece of knowledge whole, by the slug a search answered: a
+    document of the platform's corpus by its path, or a reviewed entry the
+    session reaches. Any other entry is not found, as one that never existed
+    is not."""
+
+    SPEC = ToolSpec(
+        name=kinds.READ_KNOWLEDGE,
+        description=(
+            "Reads one piece of the knowledge base whole, by the slug search_knowledge answered."
+        ),
+        input_model=KnowledgeSlug,
+        output_model=KnowledgeRead,
+        timeout=timedelta(seconds=10),
+        authorization_class=ToolClass.READ,
+        effect=Effect.READ_ONLY,
+        interruptible=True,
+        mode=ToolMode.SYNC,
+    )
+
+    def __init__(self, corpus: Corpus, knowledge: Callable[[], KnowledgeManagerInterface]) -> None:
+        self._corpus = corpus
+        self._knowledge = knowledge
+
+    async def run(
+        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
+    ) -> Platform:
+        assert isinstance(call_input, KnowledgeSlug)
+        slug = call_input.slug
+        for document in self._corpus.documents:
+            if document.path == slug:
+                return KnowledgeRead(
+                    scope=PLATFORM, slug=slug, title=document.title, text=document.text
+                )
+        entry = await self._knowledge().read(ctx, runtime.session_id, slug)
+        return KnowledgeRead(scope=scope_of(entry), slug=slug, title=entry.title, text=entry.text)
+
+
+class SuggestionInput(ToolInput):
+    title: str = Field(min_length=1, max_length=MAX_NAME)
+    trigger: tuple[str, ...] = Field(min_length=1, max_length=20)
+    text: str = Field(min_length=1, max_length=MAX_TEXT)
+
+
+class Suggested(Platform):
+    slug: str | None
+    note: str
+
+
+class SuggestKnowledgeImpl(NativeToolImpl):
+    """Suggests an entry for the session's project, or its whole tenant when
+    it has none. It waits for a person's review, and no session recalls,
+    finds, or reads it before. A repeat would suggest it twice, so a call
+    whose run was lost is never run again."""
+
+    SPEC = ToolSpec(
+        name=kinds.SUGGEST_KNOWLEDGE,
+        description=(
+            "Suggests an entry for the knowledge base: what a later session should not have "
+            "to find out again, such as a procedure, a pitfall, or how a tool behaves here. "
+            "Give it a title, the words that should bring it into a session that is about "
+            "them, and its text. A person reviews it before any session reads it."
+        ),
+        input_model=SuggestionInput,
+        output_model=Suggested,
+        timeout=timedelta(seconds=10),
+        authorization_class=ToolClass.WRITE,
+        effect=Effect.UNSAFE,
+        interruptible=False,
+        mode=ToolMode.SYNC,
+    )
+
+    def __init__(self, knowledge: Callable[[], KnowledgeManagerInterface]) -> None:
+        self._knowledge = knowledge
+
+    async def run(
+        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
+    ) -> Platform:
+        assert isinstance(call_input, SuggestionInput)
+        entry = await self._knowledge().suggest(
+            ctx, runtime.session_id, call_input.title, call_input.trigger, call_input.text
+        )
+        return Suggested(slug=entry.slug, note="It waits for a person's review.")
 
 
 # The assistant's.
