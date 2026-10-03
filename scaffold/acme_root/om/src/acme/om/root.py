@@ -51,11 +51,12 @@ from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
 from acme.om.evidence.impl.manager import EvidenceManagerImpl, EvidenceOptions
 from acme.om.evidence.impl.ports import ExecutorAbsentImpl
 from acme.om.evidence.rules import PROTECTED_CEILING
-from acme.om.exceptions import UnsafeConfiguration
+from acme.om.exceptions import Unavailable, UnsafeConfiguration
 from acme.om.hosts import HostsManagerInterface
 from acme.om.hosts.impl.manager import HostsManagerImpl, HostsOptions
 from acme.om.idempotency import IdempotencyManagerInterface
 from acme.om.idempotency.impl.manager import IdempotencyManagerImpl, IdempotencyOptions
+from acme.om.intake import IntakeManagerInterface
 from acme.om.media import MediaManagerInterface
 from acme.om.media.impl.manager import MediaManagerImpl, MediaOptions
 from acme.om.models.impl.credentials import CallCredentialsPlatformImpl
@@ -231,6 +232,12 @@ def refuse_quiet_nulls(environment: str, *capabilities: object) -> None:
             )
 
 
+def intake_absent() -> IntakeManagerInterface:
+    """No intake in this process: a loud null, so a tool that binds its
+    session's work refuses rather than act where no event can find it."""
+    raise Unavailable("no intake binds a session's work in this process")
+
+
 async def purge_held(
     managers: Managers, org_id: UUID, session_id: UUID, tree_id: UUID | None
 ) -> None:
@@ -361,6 +368,7 @@ def build_managers(
     transport_layer: Callable[[TransportInterface], TransportInterface] | None = None,
     platform_agents_options: PlatformAgentsOptions | None = None,
     platform_agents: PlatformAgents | None = None,
+    intake: Callable[[], IntakeManagerInterface] | None = None,
     stations_options: StationsOptions | None = None,
     environment: str = LOCAL,
     tenant_keys: TenantKeysInterface | None = None,
@@ -454,6 +462,9 @@ def build_managers(
     join `tool_catalog`, ahead of the adopter's. A catalog that holds two
     tools of one name, or lets the assistant reach past reading and handing
     work on, is refused at boot (`UnsafeConfiguration`). None ships none.
+    `intake` answers the intake the process builds over these managers,
+    where the engineer's pull request is bound to its session; None binds
+    nothing, so that tool opens none.
 
     The platform's retention takes three. `tenant_keys` says whose key
     service holds each tenant's keys; None is infra's for every tenant, and
@@ -498,6 +509,7 @@ def build_managers(
             agents=lambda: managers.agents,
             evidence=lambda: managers.evidence,
             workspaces=lambda: managers.workspaces,
+            intake=intake or intake_absent,
         )
         refuse_reach(agent_kinds, tool_catalog)
     # The relay every core-role manager hands its outbox rows to. It reaches

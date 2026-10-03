@@ -56,7 +56,10 @@ workspace it works in, and which of its calls run without asking.
   ([ADR 2022](../../../../../docs/adr/2022-a-repositorys-credentials-are-the-platforms-and-the-agent-never-holds-one.md)).
   The model never sees the token, and names neither the branch nor the
   repository. A second call moves the branch and keeps the one pull
-  request.
+  request. The platform's account pushes for every session, so the head
+  is recorded as the session's act, and the branch bound to it, before
+  the push, and the pull request once it opens: a comment, a check, or a
+  person's push on either finds the session ([intake](../intake/README.md)).
 - **Start a validation session.** Its station work goes on its lab's
   lane of the [work queue](../work/README.md) in the same write, and the
   lab's daemon claims it through the gateway, as it claims any station
@@ -90,6 +93,8 @@ workspace it works in, and which of its calls run without asking.
 
 A process ships these agents by handing its root the corpus
 (`PlatformAgents`); their kinds and tools join the adopter's. The tools
-that read a manager take it late, once the root has built it. A station
+that read a manager take it late, once the root has built it; the
+engineer's pull request also takes the intake the process builds over
+those managers, and with none it opens nothing. A station
 daemon's report, through the gateway, finishes a validation session with
 the id of the execution record its run wrote.

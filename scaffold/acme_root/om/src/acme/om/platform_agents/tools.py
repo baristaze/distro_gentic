@@ -8,7 +8,8 @@ kind with no workspace cannot use one even when it is handed one. The
 engineer's pull request opens its own branch on its project's repository
 with a push token the platform mints for the call and checks before it
 writes; the model names neither the branch nor the repository, and never
-sees the token. The
+sees the token. The branch and the pull request are bound to the session,
+and the push recorded as its act, so the events on them find it. The
 assistant's read the corpus and live state, and draft; the one that hands
 work on starts a session that waits for its person. A tool that reads a
 manager takes it late, as a callable the root answers once it has built
@@ -32,12 +33,16 @@ from acme.om.evidence import EvidenceManagerInterface
 from acme.om.evidence.rules import PATHS
 from acme.om.evidence.types.record import RunPurpose
 from acme.om.exceptions import (
+    Conflict,
     NotAuthorized,
     NotFound,
     ToolFailed,
     Unavailable,
     ValidationFailed,
 )
+from acme.om.intake import IntakeManagerInterface
+from acme.om.intake.tools import FORGE
+from acme.om.intake.types.link import HandleKind
 from acme.om.platform_agents import kinds, rules
 from acme.om.platform_agents.types.corpus import Corpus, Passage
 from acme.om.platform_agents.types.draft import PolicyDraft
@@ -330,7 +335,11 @@ class OpenPullRequestImpl(NativeToolImpl):
     base are the platform's records, and the head is the checkout's, read as
     a commit's full id or refused. The push token is minted for this call,
     checked before each write, and never reaches the model, the workspace,
-    or the answer."""
+    or the answer. The platform's account pushes for every session, so the
+    head is recorded as the session's act and the branch bound to it before
+    the push, and the pull request once it opens: a comment, a check, or a
+    person's push on either finds the session, and an automation it feeds
+    knows its cause."""
 
     SPEC = ToolSpec(
         name=kinds.OPEN_PULL_REQUEST,
@@ -349,8 +358,13 @@ class OpenPullRequestImpl(NativeToolImpl):
         mode=ToolMode.SYNC,
     )
 
-    def __init__(self, workspaces: Callable[[], WorkspacesManagerInterface]) -> None:
+    def __init__(
+        self,
+        workspaces: Callable[[], WorkspacesManagerInterface],
+        intake: Callable[[], IntakeManagerInterface],
+    ) -> None:
         self._workspaces = workspaces
+        self._intake = intake
 
     async def target(self, ctx: TenantContext, call_input: ToolInput) -> Target:
         # Only the session's own branch and its pull request on its bound
@@ -367,7 +381,12 @@ class OpenPullRequestImpl(NativeToolImpl):
             raise ToolFailed(ToolFailure.PERMANENT, "the workspace holds no commit: commit first")
         workspaces = self._workspaces()
         try:
+            intake = self._intake()
             token = await workspaces.mint_push_token(ctx, runtime.session_id)
+            # Recorded and bound before the push: the forge's events on the
+            # commit and the branch may come back before the push answers.
+            await intake.record_act(ctx, runtime.session_id, FORGE, (head,))
+            await intake.bind_work(ctx, runtime.session_id, HandleKind.BRANCH, token.branch)
             opened = await workspaces.open_pull_request(
                 ctx,
                 runtime.session_id,
@@ -376,9 +395,10 @@ class OpenPullRequestImpl(NativeToolImpl):
                 call_input.title,
                 call_input.body,
             )
+            await intake.bind_work(ctx, runtime.session_id, HandleKind.PULL_REQUEST, opened.id)
         except Unavailable as failed:
             raise ToolFailed(ToolFailure.TRANSIENT, failed.message) from None
-        except (NotFound, NotAuthorized, ValidationFailed) as failed:
+        except (NotFound, NotAuthorized, ValidationFailed, Conflict) as failed:
             raise ToolFailed(ToolFailure.PERMANENT, failed.message) from None
         return PullRequestOpened(id=opened.id, url=opened.url, branch=token.branch, head=head)
 

@@ -2,9 +2,10 @@
 the agent never holds, over the memory roots and the forge's twin. A push
 token writes its session's own branch, its snapshots, and its pull request
 alone, and ends with its loop's workspace or its lifetime; the engineer
-opens its branch and pull request with one it never sees. A fetch
-credential is kept in the tenant's store under its project, handed to the
-read of a session's work product alone, and goes with its tenant."""
+opens its branch and pull request with one it never sees, and both are
+its session's work: the events on them find it. A fetch credential is
+kept in the tenant's store under its project, handed to the read of a
+session's work product alone, and goes with its tenant."""
 
 from collections.abc import Mapping
 from datetime import timedelta
@@ -13,7 +14,7 @@ from typing import Any
 from uuid import UUID
 
 import pytest
-from contracts.loops import Loop, loop_over, reply
+from contracts.loops import Loop, live, loop_over, reply, said
 from contracts.platform_agents import CORPUS, calls
 from contracts.workspaces import REPOSITORY, GitTwin, ProjectsTwin, ReaderTwin
 from pydantic import SecretStr
@@ -21,16 +22,43 @@ from pydantic import SecretStr
 from acme.infra.transports import CommandSpec
 from acme.infra.transports.twin import TransportTwinImpl, TwinReply
 from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
+from acme.integrations.events import OpenedPullRequest
 from acme.integrations.events.twin import IntegrationTwinImpl
 from acme.om.agents.types.result import Claim
-from acme.om.base import new_id, utcnow
+from acme.om.automations.root import build_automations
+from acme.om.automations.types.automation import (
+    Action,
+    ActionKind,
+    Automation,
+    Firing,
+    Limits,
+    Refusal,
+    RunStatus,
+    Trigger,
+    TriggerKind,
+)
+from acme.om.base import EMPTY_UUID, new_id, utcnow
+from acme.om.context import AppContext, AppType, CredentialKind, RequestContext, Role, build_context
+from acme.om.evidence.types.provenance import Provenance
 from acme.om.exceptions import NotAuthorized, NotFound, Unavailable
+from acme.om.intake.root import build_intake
+from acme.om.intake.rules import described
+from acme.om.intake.types.event import (
+    Arrival,
+    Author,
+    AuthorKind,
+    CheckState,
+    FeedbackEvent,
+    WorkNames,
+)
+from acme.om.intake.types.route import Effect
 from acme.om.platform_agents import kinds
 from acme.om.platform_agents.catalog import PlatformAgents
 from acme.om.platform_agents.kinds import ENGINEER_KIND
 from acme.om.steps.types.content import TextBlock, ToolResultBlock
-from acme.om.steps.types.header import ToolFailure, ToolResponseHeader
+from acme.om.steps.types.header import ParkReason, ToolFailure, ToolResponseHeader
 from acme.om.steps.types.step import StepType
+from acme.om.tenancy.rules import permissions_of
 from acme.om.workspaces import rules
 from acme.om.workspaces.impl.forge import SourceControlForgeImpl
 from acme.om.workspaces.impl.manager import WorkspacesOptions
@@ -46,11 +74,13 @@ ENGINEER = ENGINEER_KIND.model_copy(
 
 HEAD = "c" * 40
 PASSWORD = "fetch-only-0123456789"
+WORKER = AppContext(type=AppType.WORKER, version="worker@test")
 
 
 class Forged:
     """An engineer's platform: its project binds `REPOSITORY`, the forge is
-    the integration's twin, and the workspace's HEAD is `HEAD`."""
+    the integration's twin, the workspace's HEAD is `HEAD`, and intake binds
+    a session's work as the session runner wires it."""
 
     def __init__(self, tmp_path: Path, **roots: Any) -> None:
         self.forge = IntegrationTwinImpl("forge")
@@ -60,11 +90,21 @@ class Forged:
             tmp_path,
             kinds=(ENGINEER,),
             platform_agents=PlatformAgents(corpus=CORPUS),
+            intake=lambda: self.intake,
             workspace_projects=self.projects,
             workspace_git=GitTwin(head=HEAD),
             workspace_reader=self.reader,
             source_control=SourceControlForgeImpl(lambda name: self.forge),
             **roots,
+        )
+        self.intake = build_intake(self.loop.storage, self.loop.managers, principal_context=live)
+        self.service = build_context(
+            RequestContext(request_id=new_id(), app=WORKER),
+            user_id=EMPTY_UUID,
+            org_id=self.loop.owner.org_id,
+            role=Role.SERVICE,
+            permissions=permissions_of(Role.SERVICE),
+            credential_kind=CredentialKind.INTERNAL,
         )
         transport = self.loop.infra.get_transport()
         assert isinstance(transport, TransportTwinImpl)
@@ -198,6 +238,168 @@ async def test_a_workspace_with_no_commit_opens_nothing(tmp_path: Path) -> None:
     failure, text = await platform.answer(session_id, "use_pr")
     assert failure is ToolFailure.PERMANENT and "commit first" in text
     assert platform.forge.branches == {} and platform.forge.pull_requests == []
+
+
+# The engineer's branch and pull request are its session's work: a comment
+# or a person's push on either finds the session, and what follows from its
+# push names the session as its cause.
+
+
+async def opened(platform: Forged, session_id: UUID) -> OpenedPullRequest:
+    """The engineer opens its pull request and ends its turn; answers the
+    pull request as the forge holds it."""
+    platform.loop.anthropic.add(
+        reply(calls(kinds.OPEN_PULL_REQUEST, "use_pr", title="Add the total")),
+        reply(said("Opened.")),
+    )
+    await platform.loop.managers.loop.run(platform.loop.owner, session_id)
+    failure, text = await platform.answer(session_id, "use_pr")
+    assert failure is None, text
+    (pull_request,) = platform.forge.pull_requests
+    return pull_request
+
+
+def from_forge(
+    arrival: Arrival,
+    author: AuthorKind,
+    names: WorkNames,
+    *,
+    refs: tuple[str, ...] = (),
+    check: CheckState | None = None,
+    text: str = "",
+) -> FeedbackEvent:
+    who = "ann" if author is AuthorKind.PERSON else "ci"
+    return FeedbackEvent(
+        id=new_id(),
+        integration="forge",
+        provenance=Provenance.TWIN,
+        arrival=arrival,
+        author=Author(kind=author, external_id=who, name=who),
+        names=names,
+        refs=refs,
+        check=check,
+        text=text,
+        occurred_at=utcnow(),
+    )
+
+
+async def test_a_comment_on_the_engineers_pull_request_reaches_its_session(
+    tmp_path: Path,
+) -> None:
+    platform = Forged(tmp_path)
+    session_id = await platform.engineer()
+    await platform.loop.say(session_id, "The weekly report misses its total. Fix it.")
+    pull_request = await opened(platform, session_id)
+    comment = from_forge(
+        Arrival.COMMENT,
+        AuthorKind.PERSON,
+        WorkNames(pull_request=pull_request.id),
+        text="Name the column Total.",
+    )
+    routed = await platform.intake.route(platform.service, comment)
+    assert (routed.session_id, routed.effect) == (session_id, Effect.WAKE_AS_DATA)
+    landed = [s for s in await platform.loop.history(session_id) if s.id == routed.step_id]
+    assert len(landed) == 1 and "Name the column Total." in landed[0].model_dump_json()
+
+
+async def test_a_persons_push_to_the_engineers_branch_hands_its_session_over(
+    tmp_path: Path,
+) -> None:
+    platform = Forged(tmp_path)
+    session_id = await platform.engineer()
+    await platform.loop.say(session_id, "The weekly report misses its total. Fix it.")
+    await opened(platform, session_id)
+    branch = WorkNames(branch=rules.session_branch(session_id))
+    routed = await platform.intake.route(
+        platform.service, from_forge(Arrival.PUSH, AuthorKind.PERSON, branch)
+    )
+    assert (routed.session_id, routed.effect) == (session_id, Effect.HAND_OVER)
+    held = await platform.loop.managers.agent_sessions.get_session(platform.loop.owner, session_id)
+    assert held.park is not None and held.park.reason is ParkReason.HANDOVER
+
+
+def automation_named(name: str) -> Automation:
+    now = utcnow()
+    dollar = 1_000_000  # micros
+    return Automation(
+        id=new_id(),
+        created_at=now,
+        updated_at=now,
+        created_by=new_id(),
+        updated_by=new_id(),
+        name=name,
+        trigger=Trigger(kind=TriggerKind.EVENT),
+        action=Action(
+            kind=ActionKind.START_SESSION,
+            brief="Fix what the event reports.",
+            agent_kind=kinds.ENGINEER,
+            title=name,
+        ),
+        limits=Limits(
+            cost_cap_micros=1000 * dollar, run_cap_micros=50 * dollar, rate=10, concurrency=10
+        ),
+    )
+
+
+@pytest.mark.parametrize("named_by", ["its_branch", "its_commit_alone"])
+async def test_a_check_on_the_engineers_push_follows_its_session_a_hop_on(
+    tmp_path: Path, named_by: str
+) -> None:
+    """An automation starts the engineer, and CI fails on what it pushed.
+    The check names the engineer's branch, or only the commit the
+    platform's account pushed for it. Either way its cause is the
+    engineer's session, and the automation it feeds fires a hop past the
+    run that started that session."""
+    platform = Forged(tmp_path)
+    automations = build_automations(
+        platform.loop.storage,
+        platform.loop.managers,
+        project_required=False,
+        principal_context=live,
+    )
+    owner = platform.loop.owner
+    starter = await automations.create_automation(owner, automation_named("starter"))
+    report = Firing(
+        event_id=new_id(),
+        occurred_at=utcnow(),
+        integration="forge",
+        arrival=Arrival.TICKET.value,
+        effect=Effect.WAKE_AS_DATA.value,
+        text="The weekly report misses its total.",
+    )
+    (first,) = await automations.fire(platform.service, report)
+    assert first.session_id is not None and first.hop == 1
+    other = await automations.create_automation(owner, automation_named("other"))
+    await opened(platform, first.session_id)
+
+    if named_by == "its_branch":
+        names, refs = WorkNames(branch=rules.session_branch(first.session_id)), ()
+    else:
+        names, refs = WorkNames(), (HEAD,)
+    check = from_forge(
+        Arrival.CHECK,
+        AuthorKind.BOT,
+        names,
+        refs=refs,
+        check=CheckState.FAILED,
+        text="tests failed",
+    )
+    routed = await platform.intake.route(platform.service, check)
+    assert routed.caused_by == first.session_id
+    firing = Firing(
+        event_id=check.id,
+        occurred_at=check.occurred_at,
+        integration=check.integration,
+        arrival=check.arrival.value,
+        effect=routed.effect.value,
+        caused_by=routed.caused_by,
+        platform=routed.platform,
+        text=described(check),
+    )
+    runs = {run.automation_id: run for run in await automations.fire(platform.service, firing)}
+    assert runs[starter.id].refusal is Refusal.OWN_EVENT
+    fed = runs[other.id]
+    assert (fed.status, fed.caused_by, fed.hop) == (RunStatus.STARTED, first.session_id, 2)
 
 
 async def test_a_push_token_cannot_push_another_sessions_branch_or_outlive_its_loop(
