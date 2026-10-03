@@ -24,6 +24,7 @@ import pytest
 from acme.infra.base import new_id, utcnow
 from acme.infra.docker import DOCKER_VARIABLES
 from acme.infra.exceptions import InfraNotFound
+from acme.infra.impl.settings import InfraSettings
 from acme.infra.secrets.local import SecretsLocalImpl
 from acme.infra.transports import (
     CapabilityMissing,
@@ -47,7 +48,7 @@ from acme.infra.workspaces import (
     Workspace,
     WorkspaceProviderInterface,
 )
-from acme.infra.workspaces.container import WorkspaceContainerImpl
+from acme.infra.workspaces.container import DEFAULT_IMAGE, WorkspaceContainerImpl
 from acme.infra.workspaces.host import WorkspaceHostImpl
 
 SECRET = 'tok-3f9A/b+c="q"\\9z-0123456789'
@@ -472,6 +473,28 @@ class TestTransportContainer(TransportContract):
         await provider.release(workspace)
         again = await provider.prepare(workspace.org_id, workspace.id, workspace.spec)
         assert await transport.read_file(again, "kept.txt", 10) == b"kept"
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(not docker_runs(), reason="needs a local Docker")
+async def test_the_default_image_holds_git_for_a_sessions_checkout(tmp_path: Path) -> None:
+    """A container workspace from the image the settings name by default
+    runs `git`, which checks out and pushes a session's repository inside
+    it. The host's own default is the same image."""
+    image = InfraSettings.model_fields["workspace_image"].default
+    assert image == DEFAULT_IMAGE
+    provider = WorkspaceContainerImpl(image, timedelta(seconds=300))
+    spec = IsolationSpec(mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode=EgressMode.NONE))
+    workspace = await provider.prepare(new_id(), new_id(), spec)
+    transport = TransportContainerImpl(
+        tmp_path / "records", secrets_for(workspace.org_id), BrokerNullImpl(), timedelta(seconds=60)
+    )
+    try:
+        result = await transport.run(workspace, command("git", "--version"), seal=SEAL)
+    finally:
+        await provider.purge(workspace.org_id, workspace.id)
+    assert result.exit_code == 0, result.stderr
+    assert result.stdout.startswith("git version")
 
 
 def test_a_secret_in_the_base64_of_a_basic_header_is_one_of_the_forms() -> None:

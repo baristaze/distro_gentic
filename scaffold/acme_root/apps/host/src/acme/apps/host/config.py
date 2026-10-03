@@ -14,6 +14,8 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 
+from acme.infra.workspaces.container import DEFAULT_IMAGE
+
 DEFAULT_API_URL = "http://127.0.0.1:8000"
 CREDENTIAL_FILE = "credential.json"
 CEILINGS_FILE = "ceilings.toml"
@@ -33,7 +35,7 @@ class Settings:
     name: str
     enrollment_token: str | None
     workspace_user: str | None
-    workspace_image: str = "python:3.14-slim"
+    workspace_image: str = DEFAULT_IMAGE
     max_clock_skew_seconds: float = 60.0
     beat_seconds: float = 30.0
 
@@ -65,7 +67,7 @@ def settings_from_env() -> Settings:
         name=os.environ.get("ACME_HOST_NAME") or socket.gethostname()[:64] or "host",
         enrollment_token=os.environ.get("ACME_ENROLLMENT_TOKEN") or None,
         workspace_user=os.environ.get("ACME_HOST_WORKSPACE_USER") or None,
-        workspace_image=os.environ.get("ACME_HOST_WORKSPACE_IMAGE") or "python:3.14-slim",
+        workspace_image=os.environ.get("ACME_HOST_WORKSPACE_IMAGE") or DEFAULT_IMAGE,
     )
 
 

@@ -17,6 +17,11 @@ from acme.infra.workspaces import (
 MOUNT = "/workspace"
 """Where a workspace's files sit inside its container."""
 
+DEFAULT_IMAGE = "python:3.14"
+"""The image a container workspace runs unless a setting names another. An
+image holds what runs in the workspace: Python for its tools, and `git`,
+which checks out and pushes a session's repository inside it."""
+
 LIMIT_FLAGS = {"cpus": "--cpus", "memory_mb": "--memory", "processes": "--pids-limit"}
 
 

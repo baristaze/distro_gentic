@@ -19,9 +19,10 @@ from host_support import Stack, probes
 
 from acme.apps.host.agent import BACKOFF_MAX_SECONDS, ExecutorInterface, HostAgent, NotEnrolled
 from acme.apps.host.ceilings import Ask, Ceilings
-from acme.apps.host.config import load_credential
+from acme.apps.host.config import load_credential, settings_from_env
 from acme.client.client import ApiClient, ApiError
 from acme.client.types import ClaimedWorkView, IsolationMode
+from acme.infra.workspaces.container import DEFAULT_IMAGE
 from acme.om.base import new_id, utcnow
 from acme.om.hosts import rules
 from acme.om.hosts.rules import WireType
@@ -149,6 +150,17 @@ async def test_a_host_enrolls_once_and_resumes_with_its_own_credential(
     hosts = await api.container.managers.hosts.get_hosts(api.owner, pool.id)
     assert [status.host.id for status in hosts] == [UUID(held.host_id)]
     assert hosts[0].host.advertisement.isolation_modes == ("container",)
+
+
+def test_a_container_workspace_runs_the_engines_default_image_unless_its_owner_names_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The engine's default, which its container case shows holds `git`
+    for a session's checkout, is the host's too."""
+    monkeypatch.delenv("ACME_HOST_WORKSPACE_IMAGE", raising=False)
+    assert settings_from_env().workspace_image == DEFAULT_IMAGE
+    monkeypatch.setenv("ACME_HOST_WORKSPACE_IMAGE", "registry.example.test/tools:1")
+    assert settings_from_env().workspace_image == "registry.example.test/tools:1"
 
 
 async def test_a_host_with_no_credential_and_no_token_does_not_start(

@@ -92,8 +92,11 @@ refused. What the item runs it reads from the gateway while it holds it
   `ceilings.toml`, the host's own secret store, `secrets`, owner-only and
   keyed by tenant first, and `records/`, where its transport keeps how
   each command ended. `ACME_HOST_NAME` is the name it enrolls under.
-  `ACME_HOST_WORKSPACE_IMAGE` (default `python:3.14-slim`) is the image a
-  container workspace runs.
+  `ACME_HOST_WORKSPACE_IMAGE` (default `python:3.14`) is the image a
+  container workspace runs. An image holds Python, for the session's tools,
+  and `git`, since a pinned session's repository is checked out and pushed
+  inside its workspace: an image without `git` fails a session with a
+  repository before its first model call.
   `ACME_HOST_WORKSPACE_USER` is the user a bare-directory workspace runs
   as.
 

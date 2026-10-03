@@ -10,6 +10,8 @@ from dotenv import dotenv_values
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from acme.infra.workspaces.container import DEFAULT_IMAGE
+
 ENVIRONMENTS = frozenset({"local", "test", "dev", "staging", "production"})
 """The one set of environment names, shared with deployment/terraform."""
 
@@ -99,7 +101,7 @@ class InfraSettings(BaseSettings):
     # records of how commands ended, beside the workspaces.
     workspace_backend: Literal["none", "host", "container"] = "none"
     workspaces_root: Path = Path(".local/workspaces")
-    workspace_image: str = "python:3.14-slim"
+    workspace_image: str = DEFAULT_IMAGE
 
     aws_region: str = "us-east-1"
 
