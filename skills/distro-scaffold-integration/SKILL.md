@@ -76,11 +76,14 @@ and of its twin `IntegrationTwinImpl` in `events/twin.py`.
    answers `verify_delivery` with a `ProvidedEvent`, and the platform
    does the rest. An arrival is one the router reads, in its terms
    (Feedback Routing); the system's own event names stay inside
-   `<system>_wire.py`. `installation` is the tenant's org id, as
-   `event_of` in `om/src/<name>/om/intake/rules.py` reads it (a UUID):
-   the wire sends the org id, and nothing maps a real system's own
-   installation or account id to an org, so the report names that gap
-   for a real system's deliveries. An
+   `<system>_wire.py`. `installation` is the system's own id for its
+   installation of the platform, never an org id. A tenant connects it
+   once, at `POST /v1/integrations/<integration>/installations`, with
+   the grant the system handed the person who installed the platform:
+   intake records which tenant holds it, one tenant an installation, and
+   the ingress places each delivery with that tenant
+   (`tenant_of` in `om/src/<name>/om/intake/`). A delivery whose
+   installation no tenant connected is refused. An
    author is `platform` when the system names the platform's own
    account, which a setting of the system names: the router reads that
    kind as the session's own act (`effect_of`), so a comment the agent
@@ -94,7 +97,10 @@ and of its twin `IntegrationTwinImpl` in `events/twin.py`.
    Its key is `delivery_key(<integration>, <the system's delivery id>)`,
    so a retried delivery is one event. The body is data: no field of it
    decides who the author is beyond what the system signed, and none
-   decides what served it.
+   decides what served it. `verify_installation(grant, now)` checks the
+   grant the same way, with the system's own scheme for it, and answers
+   the installation it names; one that fails is `DeliveryRefused`. The
+   installation is the system's word, never what the person typed.
 3. Provenance is the integration's word, never the delivery's. The real
    client's `provenance` is `real`, and every `PostedMessage` it answers
    says `real`. The twin's is `twin`, every record it writes says
@@ -108,9 +114,15 @@ and of its twin `IntegrationTwinImpl` in `events/twin.py`.
    records every message posted through it, in order, as `posted`. The
    configured root refuses it outside `local` and `test`, as it refuses
    every twin.
-5. `post(address, text)` reaches a person: `address` is their account
-   on the system, the `external_id` of their account link, as the
-   notifications manager passes it (`om/src/<name>/om/notifications/impl/manager.py`).
+5. `post(address, text, mark)` reaches a person or the session's work:
+   `address` is their account on the system, the `external_id` of their
+   account link, as the notifications manager passes it
+   (`om/src/<name>/om/notifications/impl/manager.py`), or a pull request
+   or a ticket, as the `comment` tool passes it
+   (`om/src/<name>/om/intake/tools.py`). `mark`, when given, is the
+   platform's name for the act: the client carries it on what it posts,
+   where the system keeps it, so each delivery about the post names it
+   among its `refs`, beside the system's own id for the post.
    The real client posts through `httpx` with the timeout its settings
    name, and maps a refused key to `ProviderUnavailable`, never to a
    person's error, as `integrations/README.md` lists under What every
@@ -136,9 +148,11 @@ and of its twin `IntegrationTwinImpl` in `events/twin.py`.
      `integrations/tests/test_integration_twin.py`;
    - a body that claims a provenance is still the integration's, shape
      `test_a_body_that_claims_to_be_real_is_still_the_twins`;
-   - a post answers a `PostedMessage` with the integration's provenance,
-     and the twin records it; a post the system refuses with its key is
-     `ProviderUnavailable`;
+   - a grant the system signed names its installation, and a forged or
+     a stale one is `DeliveryRefused`;
+   - a post answers a `PostedMessage` with the integration's provenance
+     and the mark it was given, and the twin records it; a post the
+     system refuses with its key is `ProviderUnavailable`;
    - the setting selects the client or its twin, the twin is refused in
      a deployed environment, and the client without its secrets is
      absent, shape `test_the_twin_is_refused_in_a_deployed_environment`
