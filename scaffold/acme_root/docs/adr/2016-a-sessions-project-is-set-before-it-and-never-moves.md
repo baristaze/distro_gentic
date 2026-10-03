@@ -48,8 +48,8 @@ origin is not in.
 engine's own start stays beneath the projects' start. The API's start
 names the session's project and starts it through the projects, and
 outside `local` it refuses a session that names none. A session started
-in no project, by a local API or by an automation, has no row and takes
-its tenant's policies alone: `project_of` answers None, never another
+in no project, as a local stack may, has no row and takes its tenant's
+policies alone: `project_of` answers None, never another
 project, and `work_repository` none, so no write of it is work product.
 
 **An automation's session starts through the projects' start,** in the
@@ -69,7 +69,5 @@ nothing when it fires
 - A start that fails after its row is written leaves the row. A retry
   under the same id and project goes on from it; any other use of the
   id is refused.
-- The API's start names a project, and outside `local` refuses a
-  session without one. An automation's start names none yet, so the
-  sessions it starts take their tenant's policies alone. Requiring a
-  project there is a change of its own.
+- The API's start and an automation's each name a project, and outside
+  `local` each refuses a session without one.

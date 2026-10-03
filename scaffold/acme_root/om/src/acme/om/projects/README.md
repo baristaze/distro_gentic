@@ -24,9 +24,8 @@ one of the kinds of thing [Acme is made of](../../../../README.md).
   to its project from its first moment. A project of another tenant is
   not found, and nothing is started. The API's start names the
   session's project, and outside `local` refuses a session that names
-  none. An automation's start names none yet, so a session it starts
-  takes its tenant's policies alone; naming one there is a change of its
-  own.
+  none. An automation's start names its project too, and outside
+  `local` one that names none starts nothing.
 - **Spawn or hand over.** A session that another session spawns, or
   hands work to, belongs to the same project as that session.
 - **Ask a session's project.** A namespace that sets a policy per
