@@ -12,6 +12,8 @@ from acme.services.api.types.relay import (
     ExecDetailView,
     ExecLeaseView,
     PartRequest,
+    PreparedView,
+    PrepareRequest,
     ResultRequest,
 )
 
@@ -31,6 +33,11 @@ class RelayServiceInterface(ABC):
     async def push_result(
         self, rctx: RequestContext, host: HostIdentity, item_id: UUID, body: ResultRequest
     ) -> None: ...
+
+    @abstractmethod
+    async def prepared(
+        self, rctx: RequestContext, host: HostIdentity, item_id: UUID, body: PrepareRequest
+    ) -> PreparedView: ...
 
     @abstractmethod
     async def extend(

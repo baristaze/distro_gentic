@@ -51,6 +51,7 @@ from acme.client.types import (
     OrgView,
     OutputStream,
     PlatformSizeView,
+    PreparedView,
     Role,
     SessionControl,
     SignedOutView,
@@ -876,6 +877,16 @@ class ApiClient:
                 "crossing": _declared(CrossingKind.result, data),
             },
         )
+
+    async def answer_prepare(
+        self, item_id: UUID, *, location: str | None = None, refused: str | None = None
+    ) -> PreparedView:
+        """A prepare this host claimed: where the workspace it made is, or why
+        it made none. `held` False says another host of the pool holds the
+        session's workspace, and this host lets its own go."""
+        body = {"location": location} if refused is None else {"refused": refused}
+        answer = await self.request("POST", f"/v1/hosts/me/workspaces/{item_id}", json=body)
+        return PreparedView.model_validate(answer)
 
     async def extend_exec_lease(self, item_id: UUID) -> ExecLeaseView:
         answer = await self.request("POST", f"/v1/hosts/me/exec/{item_id}/lease")

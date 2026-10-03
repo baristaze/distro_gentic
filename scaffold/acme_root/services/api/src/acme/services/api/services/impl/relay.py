@@ -20,7 +20,7 @@ from acme.om.hosts.types.host import HostIdentity
 from acme.om.placement.rules import host_lane, pool_lane
 from acme.om.relay import RelayManagerInterface
 from acme.om.relay.rules import CONTROL_KIND
-from acme.om.relay.types.exec import REQUESTS
+from acme.om.relay.types.exec import REQUESTS, PrepareAnswer
 from acme.om.retention.crossing import Crossing
 from acme.services.api.services.relay import RelayServiceInterface
 from acme.services.api.types.relay import (
@@ -30,6 +30,8 @@ from acme.services.api.types.relay import (
     ExecDetailView,
     ExecLeaseView,
     PartRequest,
+    PreparedView,
+    PrepareRequest,
     ResultRequest,
 )
 
@@ -105,6 +107,18 @@ class RelayServiceImpl(RelayServiceInterface):
         await self._relay.push_result(
             rctx, host, item_id, crossing_of(body.crossing), decoded(body.data)
         )
+
+    async def prepared(
+        self, rctx: RequestContext, host: HostIdentity, item_id: UUID, body: PrepareRequest
+    ) -> PreparedView:
+        try:
+            answer = PrepareAnswer(location=body.location, refused=body.refused)
+        except ValueError as error:
+            raise ValidationFailed(
+                "a prepare is answered with its location or its refusal"
+            ) from error
+        binding = await self._relay.prepared(rctx, host, item_id, answer)
+        return PreparedView(held=binding is not None and binding.host_id == host.host_id)
 
     async def extend(
         self, rctx: RequestContext, host: HostIdentity, item_id: UUID

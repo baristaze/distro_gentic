@@ -55,6 +55,22 @@ class ResultRequest(RequestBody):
     crossing: CrossingBody
 
 
+class PrepareRequest(RequestBody):
+    """A host's answer to a prepare it claimed: where on it the workspace it
+    made is, or why it made none. Exactly one of the two."""
+
+    location: str | None = Field(default=None, min_length=1, max_length=1024)
+    refused: str | None = Field(default=None, min_length=1, max_length=2000)
+
+
+class PreparedView(View):
+    """Whether the session's workspace is now the one this host made. When
+    it is not, another host of the pool holds it, and this host lets its
+    own go."""
+
+    held: bool
+
+
 class ExecDetailView(View):
     """An item the host holds: the call, the workspace, and the operation."""
 

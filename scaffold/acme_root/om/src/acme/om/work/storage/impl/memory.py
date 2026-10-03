@@ -43,9 +43,17 @@ class WorkStorageMemoryImpl(MemoryStorageBase, WorkStorageInterface):
             return item
 
     async def write_item_if_failed(self, org_id: UUID, item: WorkItem) -> WorkItem | None:
+        return await self._write_item_if(org_id, item, WorkStatus.FAILED)
+
+    async def write_item_if_queued(self, org_id: UUID, item: WorkItem) -> WorkItem | None:
+        return await self._write_item_if(org_id, item, WorkStatus.QUEUED)
+
+    async def _write_item_if(
+        self, org_id: UUID, item: WorkItem, status: WorkStatus
+    ) -> WorkItem | None:
         async with self._lock:
             stored = self._get(self._items, org_id, item.id)
-            if stored is None or stored.status is not WorkStatus.FAILED:
+            if stored is None or stored.status is not status:
                 return None
             self._items[item.id] = (org_id, item)
             return item

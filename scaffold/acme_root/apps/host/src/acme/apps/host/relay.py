@@ -1,9 +1,16 @@
-"""What a host runs: an `exec` item it claimed and its owner's ceilings let
-through, through its own local transport, in the workspace it holds. The
-output streams back a part at a time and the result is pushed once, each
-with the hash the host declares of the bytes it sends. While the item runs
-the host renews its lease, and a stop from the control stream ends the
-command at once: the transport ends its whole process tree.
+"""What a host runs: a workspace its pool asked it to prepare, and an
+`exec` item it claimed, each once its owner's ceilings let it through. The
+ceilings hold an item's fields and the host builds from its spec, so an
+item whose spec asks other than its fields say is refused, with nothing
+made or run. A prepare makes the workspace through the host's own provider
+for the session's isolation and answers where it is, which binds the
+session to this host. An `exec` item runs through its own local transport,
+in the workspace it holds, prepared again first, so an instance that
+stopped since starts anew over its files. The output streams back a part
+at a time and the result is pushed once, each with the hash the host
+declares of the bytes it sends. While the item runs the host renews its
+lease, and a stop from the control stream ends the command at once: the
+transport ends its whole process tree.
 
 The host holds no key of the platform's. Its transport's record keeps how a
 command ended without its output, and the platform keeps the output sealed
@@ -20,21 +27,68 @@ from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID
 
+from pydantic import ValidationError
+
 from acme.apps.host.agent import ExecutorInterface
 from acme.apps.host.ceilings import Ask
 from acme.client.client import WIRE_FAILURES, ApiClient, ApiError
 from acme.client.types import ClaimedWorkView, ExecDetailView, OutputStream
+from acme.client.types import IsolationMode as HostIsolation
 from acme.infra.exceptions import InfraException
 from acme.infra.transports import CommandSpec, RecordSeal, TransportInterface
-from acme.infra.workspaces import IsolationMode, IsolationSpec, Workspace
+from acme.infra.workspaces import (
+    EgressMode,
+    IsolationMode,
+    IsolationRefused,
+    IsolationSpec,
+    Workspace,
+    WorkspaceProviderInterface,
+)
 
 log = logging.getLogger(__name__)
 
 EXEC = "EXEC"
+WORKSPACE = "WORKSPACE"
 STOPS = frozenset({"cancel", "interrupt", "deadline", "revoke"})
 """The control messages that end an item. Each but `revoke` is answered
 with how far the item got; a revoked lease is no longer the host's to
 answer for."""
+
+HOST_MODES: dict[IsolationMode, HostIsolation] = {
+    IsolationMode.VM: HostIsolation.vm,
+    IsolationMode.CONTAINER: HostIsolation.container,
+    IsolationMode.HOST: HostIsolation.directory,
+}
+"""The engine's isolation modes a host runs, by the names its ceilings give
+them. Any other mode names none."""
+
+
+def unlike(ask: Ask, spec: IsolationSpec, reads: tuple[str, ...]) -> str | None:
+    """Why the workspace the host would build differs from what its item
+    asked, or None when it does not. The owner's ceilings held the item's
+    fields; the host builds from its spec. So the spec is read as an ask, as
+    the platform writes the fields from it: its isolation, its egress, and
+    `reads`, the paths on the host its result reads. A spec that differs is
+    refused, so no payload widens what the host does past its ceilings."""
+    match spec.egress.mode:
+        case EgressMode.NONE:
+            egress: frozenset[str] | None = frozenset()
+        case EgressMode.ALLOWLIST:
+            egress = frozenset(spec.egress.hosts)
+        case EgressMode.OPEN:
+            egress = None
+    differs = [
+        name
+        for name, same in (
+            ("isolation", HOST_MODES.get(spec.mode) == ask.isolation),
+            ("egress", egress == ask.egress),
+            ("reads", frozenset(reads) == frozenset(ask.reads)),
+        )
+        if not same
+    ]
+    if not differs:
+        return None
+    return f"its spec and its fields differ on {' and '.join(differs)}"
 
 
 async def _kept_nowhere(data: bytes) -> bytes | None:
@@ -82,6 +136,7 @@ class ExecutorRelayImpl(ExecutorInterface):
         self,
         client: ClientFactory,
         transports: Mapping[IsolationMode, TransportInterface],
+        workspaces: Mapping[IsolationMode, WorkspaceProviderInterface] | None = None,
         *,
         flush_seconds: float = 0.25,
         part_bytes: int = 32_000,
@@ -90,6 +145,7 @@ class ExecutorRelayImpl(ExecutorInterface):
     ) -> None:
         self._client = client
         self._transports = dict(transports)
+        self._workspaces = dict(workspaces or {})
         self._flush_seconds = flush_seconds
         self._part_bytes = part_bytes
         self._renew_seconds = renew_seconds
@@ -98,6 +154,9 @@ class ExecutorRelayImpl(ExecutorInterface):
         self._running: dict[UUID, Running] = {}
 
     async def run(self, item: ClaimedWorkView, ask: Ask) -> None:
+        if item.kind == WORKSPACE:
+            await self._workspace(item, ask)
+            return
         if item.kind != EXEC:
             log.warning("item %s (%s) has no executor on this host yet", item.id, item.kind)
             return
@@ -105,7 +164,7 @@ class ExecutorRelayImpl(ExecutorInterface):
         running = Running(held_until=time.monotonic() + self._lease_seconds)
         self._running[item_id] = running
         try:
-            await self._run(item_id, running)
+            await self._run(item_id, running, ask)
         except ApiError as error:
             # The platform settled it meanwhile, or took the lease back: the
             # first settlement stands, and the host claims on.
@@ -116,6 +175,9 @@ class ExecutorRelayImpl(ExecutorInterface):
     async def refuse(self, item: ClaimedWorkView, reasons: list[str]) -> None:
         """An item past its owner's ceilings is refused at once, so the run
         that sent it reads why instead of waiting out its lease."""
+        if item.kind == WORKSPACE:
+            await self._answer(item.id, refused="this host refused it: " + "; ".join(reasons))
+            return
         if item.kind != EXEC:
             return
         item_id = UUID(str(item.payload["item_id"]))
@@ -137,19 +199,29 @@ class ExecutorRelayImpl(ExecutorInterface):
             running.operation.cancel()
         return True
 
-    async def _run(self, item_id: UUID, running: Running) -> None:
+    async def _run(self, item_id: UUID, running: Running, ask: Ask) -> None:
         async with self._client() as client:
             detail = await client.exec_detail(item_id)
         spec = IsolationSpec.model_validate(detail.spec)
+        reads = (detail.location,) if spec.mode is IsolationMode.HOST else ()
+        differs = unlike(ask, spec, reads)
+        if differs is not None:
+            why = "this host refused it: " + differs
+            refused = _result(refused=("refused_by_host", 403), detail=why)
+            await self._push(item_id, refused, running.held_until)
+            return
         transport = self._transports.get(spec.mode)
         if transport is None:
             why = f"this host runs no {spec.mode.value} workspace"
             refused = _result(refused=("capability_missing", 501), detail=why)
             await self._push(item_id, refused, running.held_until)
             return
-        workspace = Workspace(
-            id=detail.session_id, org_id=detail.org_id, spec=spec, location=detail.location
-        )
+        try:
+            workspace = await self._held(detail, spec)
+        except InfraException as error:
+            refused = _result(refused=(error.code, error.http_status), detail=error.message)
+            await self._push(item_id, refused, running.held_until)
+            return
         parts = _Parts(self._client, item_id, running, self._flush_seconds, self._part_bytes)
         renewal = asyncio.ensure_future(self._renew(item_id, running))
         result: dict[str, Any] | None = None
@@ -173,6 +245,78 @@ class ExecutorRelayImpl(ExecutorInterface):
                 stderr="".join(running.printed["stderr"]),
             )
         await self._push(item_id, result, running.held_until)
+
+    async def _held(self, detail: ExecDetailView, spec: IsolationSpec) -> Workspace:
+        """The workspace an item runs in, as this host holds it. One its own
+        provider makes is prepared again first: a look while its instance
+        runs, and a new instance over its files when it stopped, as after a
+        reboot or a Docker restart, as a cloud loop's prepare does. One this
+        host would make elsewhere than the platform says it is is refused."""
+        provider = self._workspaces.get(spec.mode)
+        if provider is None:
+            return Workspace(
+                id=detail.session_id, org_id=detail.org_id, spec=spec, location=detail.location
+            )
+        workspace = await provider.prepare(detail.org_id, detail.session_id, spec)
+        if workspace.location != detail.location:
+            raise IsolationRefused(
+                f"this host holds session {detail.session_id}'s workspace at "
+                f"{workspace.location}, not at {detail.location}"
+            )
+        return workspace
+
+    async def _workspace(self, item: ClaimedWorkView, ask: Ask) -> None:
+        """A prepare: the workspace made to the session's spec by this host's
+        provider for its mode, and where it is answered. One whose spec
+        differs from what it asked, or one this host cannot make, is answered
+        as refused, so another host of the pool may. Where the workspace is
+        made is the host's to choose, so a prepare reads no path of its own.
+        When another host holds the session's workspace already, this one's
+        goes. A release or a purge has no executor here yet."""
+        payload = item.payload
+        if payload.get("operation") != "prepare":
+            log.warning(
+                "item %s: a workspace %s has no executor here", item.id, payload.get("operation")
+            )
+            return
+        try:
+            spec = IsolationSpec.model_validate(payload["spec"])
+            session_id = UUID(str(payload["session_id"]))
+        except KeyError, ValueError, ValidationError:
+            await self._answer(item.id, refused="the prepare names no session or spec")
+            return
+        differs = unlike(ask, spec, ())
+        if differs is not None:
+            await self._answer(item.id, refused="this host refused it: " + differs)
+            return
+        org_id = item.org_id
+        provider = self._workspaces.get(spec.mode)
+        if provider is None:
+            await self._answer(item.id, refused=f"this host makes no {spec.mode.value} workspace")
+            return
+        try:
+            workspace = await provider.prepare(org_id, session_id, spec)
+        except InfraException as error:
+            await self._answer(item.id, refused=error.message)
+            return
+        held = await self._answer(item.id, location=workspace.location)
+        if held is False:
+            log.info("item %s: another host holds the workspace, so this one goes", item.id)
+            await provider.purge(org_id, session_id)
+
+    async def _answer(
+        self, item_id: UUID, *, location: str | None = None, refused: str | None = None
+    ) -> bool | None:
+        """A prepare's answer; whether the session's workspace is this host's,
+        or None when the platform took no answer, and the work's lease is
+        left to run out."""
+        try:
+            async with self._client() as client:
+                answered = await client.answer_prepare(item_id, location=location, refused=refused)
+        except (ApiError, *WIRE_FAILURES) as error:
+            log.warning("item %s: its answer was not taken: %s", item_id, error)
+            return None
+        return answered.held
 
     async def _renew(self, item_id: UUID, running: Running) -> None:
         """Renews the lease while the item runs. A failure the host outlasts

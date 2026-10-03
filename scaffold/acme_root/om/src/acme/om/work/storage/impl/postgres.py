@@ -71,6 +71,16 @@ class WorkStoragePostgresImpl(PgStorageBase, WorkStorageInterface):
             return written
 
     async def write_item_if_failed(self, org_id: UUID, item: WorkItem) -> WorkItem | None:
+        return await self._write_item_if(org_id, item, WorkStatus.FAILED)
+
+    async def write_item_if_queued(self, org_id: UUID, item: WorkItem) -> WorkItem | None:
+        return await self._write_item_if(org_id, item, WorkStatus.QUEUED)
+
+    async def _write_item_if(
+        self, org_id: UUID, item: WorkItem, status: WorkStatus
+    ) -> WorkItem | None:
+        """`item` over its row, in one statement, only while the row is at
+        `status`."""
         values = to_values(item, WorkItems)
         values.pop("id", None)
         stmt = (
@@ -78,7 +88,7 @@ class WorkStoragePostgresImpl(PgStorageBase, WorkStorageInterface):
             .where(
                 WorkItems.id == item.id,
                 WorkItems.org_id == org_id,
-                WorkItems.status == WorkStatus.FAILED.value,
+                WorkItems.status == status.value,
             )
             .values(**values)
             .returning(WorkItems)

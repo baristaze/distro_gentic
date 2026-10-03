@@ -116,9 +116,11 @@ class HostView(View):
 
 class ClaimedWorkView(View):
     """One item a host was handed, under a lease, as `exec` work of
-    `wire_version`. `payload` is the item's, as its kind fixes it."""
+    `wire_version`. `payload` is the item's, as its kind fixes it.
+    `org_id` is the tenant whose work it is, the host's own."""
 
     id: UUID
+    org_id: UUID
     kind: str
     target_id: UUID
     payload: dict[str, Any]

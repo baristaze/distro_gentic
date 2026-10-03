@@ -35,6 +35,7 @@ FITS: dict[str, Any] = {
 def item(payload: dict[str, Any], kind: str = "EXEC") -> ClaimedWorkView:
     return ClaimedWorkView(
         id=uuid4(),
+        org_id=uuid4(),
         kind=kind,
         target_id=uuid4(),
         payload=payload,

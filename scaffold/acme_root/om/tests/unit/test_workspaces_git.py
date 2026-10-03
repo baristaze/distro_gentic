@@ -4,11 +4,14 @@ the engine's one way into a workspace. A release pushes the work a loop
 left to a snapshot ref and leaves the branch, the index, and the files as
 they were; a branch the remote lost with no known fate fails loudly and
 nothing is checked out from the default branch; one gone after its pull
-request merged is cut again from it."""
+request merged is cut again from it. A pinned session's checkout runs on
+the host of its pool that holds its workspace, and none of it on the
+platform's machine."""
 
 import shutil
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from uuid import UUID
 
@@ -19,8 +22,15 @@ from contracts.workspaces import ProjectsTwin, PullRequestsTwin
 
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.keys import KeyServiceInterface
-from acme.infra.transports import TransportInterface
+from acme.infra.transports import (
+    CommandResult,
+    CommandSpec,
+    OutputSink,
+    RecordSeal,
+    TransportInterface,
+)
 from acme.infra.transports.local import DEFAULT_PATH, TransportLocalImpl
+from acme.infra.transports.twin import TransportNullImpl
 from acme.infra.workspaces import (
     EgressMode,
     EgressPolicy,
@@ -33,9 +43,17 @@ from acme.infra.workspaces import (
 from acme.infra.workspaces.host import WorkspaceHostImpl
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
 from acme.om.attribution.types.authority import AuthorityMode
-from acme.om.context import Role, TenantContext
+from acme.om.base import new_id, utcnow
+from acme.om.context import AppContext, AppType, RequestContext, Role, TenantContext
+from acme.om.hosts.impl.placement import PlacementHostsImpl
+from acme.om.hosts.types.host import Advertisement, Enrollment
+from acme.om.hosts.types.host import IsolationMode as Mode
+from acme.om.hosts.types.pool import HostPool
+from acme.om.relay.impl.placement import PlacementRelayedImpl
+from acme.om.relay.impl.transport import TransportPlacedImpl
 from acme.om.root import Managers, build_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
+from acme.om.trust.types.identities import Executor, ExecutorKind
 from acme.om.workspaces.rules import SNAPSHOT_PREFIX, session_branch
 from acme.om.workspaces.types.source import PullRequestFate
 
@@ -60,6 +78,12 @@ def git(where: Path, *args: str) -> str:
     return done.stdout.rstrip()
 
 
+def search_path() -> str:
+    """This host's search path, git and this interpreter on it."""
+    assert GIT is not None
+    return f"{Path(GIT).parent}:{Path(sys.executable).parent}:{DEFAULT_PATH}"
+
+
 class HostInfra(InfraLocalImpl):
     """The local root with a directory on this host for each workspace, and
     the transport that runs commands in it, git on its search path. The
@@ -68,14 +92,9 @@ class HostInfra(InfraLocalImpl):
     def __init__(self, root: Path, keys: KeyServiceInterface | None = None) -> None:
         super().__init__(root)
         self._shared_keys = keys or super().get_keys()
-        assert GIT is not None
-        found = f"{Path(GIT).parent}:{Path(sys.executable).parent}"
         self._host = WorkspaceHostImpl(root / "workspaces")
         self._local = TransportLocalImpl(
-            root / "records",
-            self.get_secrets(),
-            self.get_broker(),
-            search_path=f"{found}:{DEFAULT_PATH}",
+            root / "records", self.get_secrets(), self.get_broker(), search_path=search_path()
         )
 
     def get_workspaces(self) -> WorkspaceProviderInterface:
@@ -89,7 +108,13 @@ class HostInfra(InfraLocalImpl):
 
 
 class Checkout:
-    def __init__(self, tmp_path: Path) -> None:
+    def __init__(
+        self,
+        tmp_path: Path,
+        storage: StorageMemoryImpl | None = None,
+        infra: InfraLocalImpl | None = None,
+        transport_layer: Callable[[TransportInterface], TransportInterface] | None = None,
+    ) -> None:
         self.remote = tmp_path / "remote.git"
         seed = tmp_path / "seed"
         subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(self.remote)], check=True)
@@ -103,15 +128,17 @@ class Checkout:
         self.main = git(self.remote, "rev-parse", "main")
         self.pull_requests = PullRequestsTwin()
         self.projects = ProjectsTwin(repository=str(self.remote))
-        self.storage = StorageMemoryImpl()
+        self.storage = storage or StorageMemoryImpl()
         self.keys: KeyServiceInterface | None = None
-        self.managers: Managers = self.host(tmp_path)
+        self.transport_layer = transport_layer
+        self.managers: Managers = self.host(tmp_path, infra)
         self.ctx: TenantContext = context(Role.MEMBER)
 
-    def host(self, root: Path) -> Managers:
+    def host(self, root: Path, infra: InfraLocalImpl | None = None) -> Managers:
         """A root on a host of its own over the one storage, as a runner on
-        another host, or one that restarted, builds it."""
-        infra = HostInfra(root, self.keys)
+        another host, or one that restarted, builds it. A caller may pass
+        the infra of the first host."""
+        infra = infra or HostInfra(root, self.keys)
         self.keys = infra.get_keys()
         return build_managers(
             self.storage,
@@ -119,6 +146,7 @@ class Checkout:
             agent_kinds=(WORKER,),
             workspace_projects=self.projects,
             pull_requests=self.pull_requests,
+            transport_layer=self.transport_layer,
         )
 
     async def session(self) -> UUID:
@@ -527,3 +555,125 @@ async def test_a_replacement_the_agent_made_still_delivers_the_protected_edit(
     delivered = await checkout.managers.workspaces.delivery(checkout.ctx, workspace)
 
     assert delivered.head == edited and "checks/test_guard.py" in delivered.changed
+
+
+# Check 2: a pinned session's checkout runs through its placement.
+
+
+class Outside(TransportNullImpl):
+    """Infra's own transport, on the platform's machine: a pinned session's
+    command that reaches it ran outside its placement."""
+
+    def __init__(self) -> None:
+        self.ran: list[UUID] = []
+
+    async def run(
+        self,
+        workspace: Workspace,
+        command: CommandSpec,
+        on_output: OutputSink | None = None,
+        *,
+        seal: RecordSeal,
+    ) -> CommandResult:
+        self.ran.append(workspace.id)
+        return await super().run(workspace, command, on_output, seal=seal)
+
+
+class OnItsHost(TransportLocalImpl):
+    """The relay to the host that holds a pinned session's workspace: the
+    host runs each command in the directory it made, on this machine here,
+    and each one is counted."""
+
+    def __init__(self, root: Path, infra: InfraLocalImpl) -> None:
+        super().__init__(root, infra.get_secrets(), infra.get_broker(), search_path=search_path())
+        self.ran: list[UUID] = []
+
+    async def run(
+        self,
+        workspace: Workspace,
+        command: CommandSpec,
+        on_output: OutputSink | None = None,
+        *,
+        seal: RecordSeal,
+    ) -> CommandResult:
+        self.ran.append(workspace.id)
+        return await super().run(workspace, command, on_output, seal=seal)
+
+
+class PinnedInfra(InfraLocalImpl):
+    """The platform's machine, whose own transport runs nothing of a pinned
+    session's."""
+
+    def __init__(self, root: Path) -> None:
+        super().__init__(root)
+        self.outside = Outside()
+
+    def get_transport(self) -> TransportInterface:
+        return self.outside
+
+
+def request() -> RequestContext:
+    return RequestContext(request_id=new_id(), app=AppContext(type=AppType.PORTAL, version="t"))
+
+
+async def test_a_pinned_sessions_checkout_and_its_push_run_on_the_host_that_holds_it(
+    tmp_path: Path,
+) -> None:
+    storage = StorageMemoryImpl()
+    infra = PinnedInfra(tmp_path)
+    host = OnItsHost(tmp_path / "host-records", infra)
+    runner = Executor(kind=ExecutorKind.CLOUD, credential_id=new_id(), label="runner-1")
+    placement = PlacementRelayedImpl(
+        PlacementHostsImpl(
+            storage.get_hosts_storage(), storage.get_agent_session_storage(), runner
+        ),
+        storage.get_relay_storage(),
+    )
+    # The session runner's layer: a pinned session's calls go to its host.
+    checkout = Checkout(
+        tmp_path,
+        storage,
+        infra,
+        transport_layer=lambda direct: TransportPlacedImpl(direct, host, placement),
+    )
+    managers = checkout.managers
+    owner, _ = await managers.tenancy.bootstrap(request(), "Ajax", "ajax", "ann@ajax.test", "Ann")
+    now = utcnow()
+    pool = await managers.hosts.create_pool(
+        owner,
+        HostPool(
+            id=new_id(),
+            created_at=now,
+            updated_at=now,
+            created_by=owner.user_id,
+            updated_by=owner.user_id,
+            name="pool-a",
+            region="eu-west",
+        ),
+    )
+    issued = await managers.hosts.issue_enrollment_token(owner, pool.id)
+    probed = Advertisement(os="Linux 6.8", shell="/bin/bash", isolation_modes=(Mode.DIRECTORY,))
+    enrolled = await managers.hosts.enroll(
+        request(), issued.token, Enrollment(name="host-1", advertisement=probed, exec_version=1)
+    )
+    holder = await managers.hosts.authenticate(request(), enrolled.credential)
+    made = make_session().model_copy(update={"kind": WORKER.name, "tools": ()})
+    session = await managers.agent_sessions.create_session(owner, made)
+    await managers.hosts.place_session(owner, session.id, pool.id)
+    # The host prepared its workspace, an empty directory, and holds it.
+    here = tmp_path / "host" / session.id.hex
+    here.mkdir(parents=True)
+    await managers.relay.bind_workspace(owner, session.id, holder.host_id, str(here))
+
+    workspace = await managers.tools.prepare_workspace(owner, session.id, DIRECTORY)
+    assert workspace.location == str(here)
+    branch = session_branch(session.id)
+    assert git(here, "rev-parse", "--abbrev-ref", "HEAD") == branch, "checked out on its host"
+    (here / "notes.txt").write_text("half done\n")
+    await managers.tools.release_workspace(owner, workspace)
+
+    (ref,) = checkout.snapshots(branch)
+    assert git(checkout.remote, "show", f"{ref}:notes.txt") == "half done", "pushed from its host"
+    assert host.ran and set(host.ran) == {session.id}
+    assert infra.outside.ran == [], "nothing ran on the platform's machine"
+    assert git(here, "status", "--porcelain") == "?? notes.txt", "its host still holds it"

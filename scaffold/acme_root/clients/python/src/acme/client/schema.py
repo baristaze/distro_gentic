@@ -83,11 +83,13 @@ class ClaimedWorkView(BaseModel):
     """
     One item a host was handed, under a lease, as `exec` work of
     `wire_version`. `payload` is the item's, as its kind fixes it.
+    `org_id` is the tenant whose work it is, the host's own.
     """
     attempts: Annotated[int, Field(title='Attempts')]
     id: Annotated[UUID, Field(title='Id')]
     kind: Annotated[str, Field(title='Kind')]
     lease_expires_at: Annotated[AwareDatetime | None, Field(title='Lease Expires At')]
+    org_id: Annotated[UUID, Field(title='Org Id')]
     payload: Annotated[dict[str, Any], Field(title='Payload')]
     target_id: Annotated[UUID, Field(title='Target Id')]
     wire_version: Annotated[int, Field(title='Wire Version')]
@@ -760,6 +762,35 @@ class PoolView(BaseModel):
     labels: Annotated[list[str], Field(title='Labels')]
     name: Annotated[str, Field(title='Name')]
     region: Annotated[str, Field(title='Region')]
+
+
+class Location(RootModel[str]):
+    root: Annotated[str, Field(max_length=1024, min_length=1, title='Location')]
+
+
+class Refused(RootModel[str]):
+    root: Annotated[str, Field(max_length=2000, min_length=1, title='Refused')]
+
+
+class PrepareRequest(BaseModel):
+    """
+    A host's answer to a prepare it claimed: where on it the workspace it
+    made is, or why it made none. Exactly one of the two.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    location: Annotated[Location | None, Field(title='Location')] = None
+    refused: Annotated[Refused | None, Field(title='Refused')] = None
+
+
+class PreparedView(BaseModel):
+    """
+    Whether the session's workspace is now the one this host made. When
+    it is not, another host of the pool holds it, and this host lets its
+    own go.
+    """
+    held: Annotated[bool, Field(title='Held')]
 
 
 class Provenance(StrEnum):
