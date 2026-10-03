@@ -105,11 +105,13 @@ class ClaimedWorkView(BaseModel):
     """
     One item a host was handed, under a lease, as `exec` work of
     `wire_version`. `payload` is the item's, as its kind fixes it.
+    `org_id` is the tenant whose work it is, the host's own.
     """
     attempts: Annotated[int, Field(title='Attempts')]
     id: Annotated[UUID, Field(title='Id')]
     kind: Annotated[str, Field(title='Kind')]
     lease_expires_at: Annotated[AwareDatetime | None, Field(title='Lease Expires At')]
+    org_id: Annotated[UUID, Field(title='Org Id')]
     payload: Annotated[dict[str, Any], Field(title='Payload')]
     target_id: Annotated[UUID, Field(title='Target Id')]
     wire_version: Annotated[int, Field(title='Wire Version')]

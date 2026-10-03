@@ -2275,6 +2275,7 @@ export interface components {
          * ClaimedWorkView
          * @description One item a host was handed, under a lease, as `exec` work of
          *     `wire_version`. `payload` is the item's, as its kind fixes it.
+         *     `org_id` is the tenant whose work it is, the host's own.
          */
         ClaimedWorkView: {
             /** Attempts */
@@ -2288,6 +2289,11 @@ export interface components {
             kind: string;
             /** Lease Expires At */
             lease_expires_at: string | null;
+            /**
+             * Org Id
+             * Format: uuid
+             */
+            org_id: string;
             /** Payload */
             payload: {
                 [key: string]: unknown;

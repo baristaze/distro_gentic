@@ -208,11 +208,11 @@ class ExecutorRelayImpl(ExecutorInterface):
             return
         try:
             spec = IsolationSpec.model_validate(payload["spec"])
-            org_id = UUID(str(payload["org_id"]))
             session_id = UUID(str(payload["session_id"]))
         except KeyError, ValueError, ValidationError:
-            await self._answer(item.id, refused="the prepare names no tenant, session, or spec")
+            await self._answer(item.id, refused="the prepare names no session or spec")
             return
+        org_id = item.org_id
         provider = self._workspaces.get(spec.mode)
         if provider is None:
             await self._answer(item.id, refused=f"this host makes no {spec.mode.value} workspace")

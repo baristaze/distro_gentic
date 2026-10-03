@@ -332,6 +332,8 @@ REQUEST_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
         ("RelayManagerInterface", "push_result"),
         ("RelayManagerInterface", "extend"),
         ("RelayManagerInterface", "controls"),
+        # And its answer to a prepare it claimed, which binds the session.
+        ("RelayManagerInterface", "prepared"),
         # And the sweep's settlement of the items whose lease ended, across
         # tenants, each under its tenant's service context.
         ("RelayManagerInterface", "settle_expired"),

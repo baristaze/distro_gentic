@@ -586,7 +586,7 @@
         "type": "object"
       },
       "ClaimedWorkView": {
-        "description": "One item a host was handed, under a lease, as `exec` work of\n`wire_version`. `payload` is the item's, as its kind fixes it.",
+        "description": "One item a host was handed, under a lease, as `exec` work of\n`wire_version`. `payload` is the item's, as its kind fixes it.\n`org_id` is the tenant whose work it is, the host's own.",
         "properties": {
           "attempts": {
             "title": "Attempts",
@@ -613,6 +613,11 @@
             ],
             "title": "Lease Expires At"
           },
+          "org_id": {
+            "format": "uuid",
+            "title": "Org Id",
+            "type": "string"
+          },
           "payload": {
             "additionalProperties": true,
             "title": "Payload",
@@ -630,6 +635,7 @@
         },
         "required": [
           "id",
+          "org_id",
           "kind",
           "target_id",
           "payload",

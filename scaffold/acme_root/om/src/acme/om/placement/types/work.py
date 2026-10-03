@@ -77,7 +77,6 @@ class WorkspacePayload(Platform):
     operation: WorkspaceOperation
     pool_id: UUID | None = None
     host_id: UUID | None = None
-    org_id: UUID | None = None  # the tenant, which a host keys what it holds by
     session_id: UUID | None = None
     spec: IsolationSpec | None = None
     isolation: HostIsolation | None = None

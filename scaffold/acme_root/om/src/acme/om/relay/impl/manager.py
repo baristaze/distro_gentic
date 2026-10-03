@@ -196,7 +196,6 @@ class RelayManagerImpl(RelayManagerInterface):
         payload = WorkspacePayload(
             operation=WorkspaceOperation.PREPARE,
             pool_id=placed.pool.id,
-            org_id=ctx.org_id,
             session_id=session_id,
             spec=spec,
             isolation=isolation,
