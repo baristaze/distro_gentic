@@ -1,4 +1,4 @@
-"""What the acceptance suites share: a scenario on the `arm` project, an
+"""What the acceptance suites share: a scenario on the `checkout` project, an
 executor whose visible check fails at the base and passes once the change
 is in, and a scripted run, the path a session takes through the evidence,
 one step at a time, so each case can leave a link out."""
@@ -49,7 +49,7 @@ COMPLETE = CheckDeclaration(
 
 EXPORT = Scenario(
     name="orders-vanish",
-    project="arm",
+    project="checkout",
     base=BASE,
     objective="Some orders never reach the nightly export. Make every one of them reach it.",
     root_cause=("page boundary",),
@@ -140,7 +140,7 @@ class ScriptedRun:
         )
 
     def deliver(self, head: str = BASE, changed: tuple[str, ...] = ()) -> None:
-        delivery = Delivery(project="arm", base=BASE, head=head, changed=changed)
+        delivery = Delivery(project="checkout", base=BASE, head=head, changed=changed)
         self.evidence.work.deliver(self.ctx.org_id, self.session, delivery)
 
     async def baseline(self) -> Validation:
@@ -202,7 +202,7 @@ async def whole(run: ScriptedRun, *changed: str) -> Result:
 
 
 async def judged_trials(parts: EvidenceParts, ctx: TenantContext, pairs: int) -> tuple[Trial, ...]:
-    """Trials of both arms on one station, in the schedule's order: each a
+    """Trials of both arms on one executor, in the schedule's order: each a
     scripted session whose chain is whole, judged by the harness. Scripted
     sessions spend nothing, so each trial costs nothing."""
     trials: list[Trial] = []
@@ -213,7 +213,7 @@ async def judged_trials(parts: EvidenceParts, ctx: TenantContext, pairs: int) ->
             Trial(
                 arm=arm,
                 session_id=run.session,
-                station=parts.executor.name,
+                executor=parts.executor.name,
                 started_at=verdict.created_at,
                 verdict=verdict,
                 cost_micros=0,

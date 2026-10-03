@@ -9,9 +9,8 @@ outside text as data, secrets by placement, a tenant's provider keys,
 exfiltration, operator access, storage, retention, and the crossing
 itself. It leaves a host's own credential and what a host holds to
 `placement`, a workspace's stripped environment and its egress to
-`workspaces`, a station's limits to `stations`, the routing of a comment
-or a chat message to `intake` and `watch`, and the sweep that runs the
-retention duty to `fleet`.
+`workspaces`, the routing of a comment or a chat message to `intake` and
+`watch`, and the sweep that runs the retention duty to `fleet`.
 
 ## WAL-01 Executor, principal, spender, and actor are four answers
 
@@ -27,9 +26,9 @@ four answers.
 **Look for.** The audit entry's fields; every place an executor's
 credential is checked, and what it is let stand for.
 
-**Violation.** An audit entry without one of the four; a host's or a
-daemon's credential taken as a principal's authority or as a spender;
-one field or one credential standing for two of the four.
+**Violation.** An audit entry without one of the four; a host's
+credential taken as a principal's authority or as a spender; one field
+or one credential standing for two of the four.
 
 **Severity.** high
 
@@ -100,12 +99,12 @@ API, an automation, or a mapped user addressing the agent.
 
 ## WAL-05 A secret is resolved where it is used
 
-**Principle.** An environment secret is declared by name on a project or
-a station, with the variable a command sees and a scope. The platform
-stores names only. Where it can, the executor brokers the secret outside
-the workspace; otherwise the machine that executes the call resolves it
-from its own store, short-lived and scoped, injects it into that one
-process, redacts it everywhere, and audits its use by name.
+**Principle.** An environment secret is declared by name on a project,
+with the variable a command sees and a scope. The platform stores names
+only. Where it can, the executor brokers the secret outside the
+workspace; otherwise the machine that executes the call resolves it from
+its own store, short-lived and scoped, injects it into that one process,
+redacts it everywhere, and audits its use by name.
 
 **Source.** Trust, Secrets by Placement.
 
@@ -126,22 +125,20 @@ unredacted, or a use not audited by name.
 
 **Principle.** A cloud secret never reaches a customer's host; the
 per-session push token is minted for it. A workspace never holds a
-platform credential, and a station's secrets and limits never leave its
-host. What never crosses into the platform's cloud: a station's limits
-and secrets, and the environment secrets scoped to a customer's wall.
-What never crosses out to a customer's host: the platform's secrets,
-model keys, integration credentials, and the history.
+platform credential. What never crosses into the platform's cloud: the
+environment secrets scoped to a customer's wall. What never crosses out
+to a customer's host: the platform's secrets, model keys, integration
+credentials, and the history.
 
 **Source.** Trust, Secrets by Placement; Data, Retention, and the Wall.
 
-**Look for.** Every value the platform sends to a host or a daemon;
-every value a host or a daemon sends to the platform; what a workspace
-can read.
+**Look for.** Every value the platform sends to a host; every value a
+host sends to the platform; what a workspace can read.
 
 **Violation.** A platform secret, a model key, an integration's
-credential, or the history sent to a host; a station's secret or limit,
-or a secret scoped to the wall, sent to the cloud; a platform credential
-a workspace can read. (What a host holds is PLC-16.)
+credential, or the history sent to a host; a secret scoped to the wall
+sent to the cloud; a platform credential a workspace can read. (What a
+host holds is PLC-16.)
 
 **Severity.** high
 

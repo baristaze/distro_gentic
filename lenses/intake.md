@@ -139,8 +139,8 @@ evidence is EVD-03.)
 
 **Principle.** Automations turn events into bounded work. A trigger, an
 event with filters or a schedule, leads to an action: start a session,
-message a standing session, or run a station job. An automation runs as
-its creator or as the tenant's automation principal.
+or message a standing session. An automation runs as its creator or as
+the tenant's automation principal.
 
 **Source.** Work In, Results Out, Automations.
 
