@@ -2,7 +2,6 @@
 -- entry written before takes the empty list.
 
 ALTER TABLE core.station_line_entries ADD COLUMN commands jsonb NOT NULL DEFAULT '[]'::jsonb;
-ALTER TABLE core.station_line_entries ALTER COLUMN commands DROP DEFAULT;
 
 -- The station job an automation's run runs, named once it joined the line.
 
