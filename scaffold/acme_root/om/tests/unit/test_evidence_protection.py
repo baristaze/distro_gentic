@@ -2,7 +2,8 @@
 files reports the paths it changes as its target, the policy of the
 session's project says whether one is protected, and the platform's
 ceiling denies the call whatever the kind's defaults and the tenant's layer
-allow. The engineer's own `write_file` refuses it at the call."""
+allow. The engineer's own `write_file` and `edit_file` refuse it at the
+call."""
 
 from datetime import timedelta
 from pathlib import Path
@@ -20,7 +21,7 @@ from acme.om.base import Platform, new_id
 from acme.om.context import Role, TenantContext
 from acme.om.evidence.manager import EvidenceManagerInterface
 from acme.om.evidence.rules import CEILINGS, PROTECTED_CEILING
-from acme.om.platform_agents.tools import WriteFileImpl
+from acme.om.platform_agents.tools import EditFileImpl, WriteFileImpl
 from acme.om.root import build_managers
 from acme.om.steps.types.header import ToolFailure, ToolResponseHeader
 from acme.om.storage.impl.memory import StorageMemoryImpl
@@ -158,15 +159,24 @@ async def test_a_folder_a_policy_protects_refuses_an_edit_inside_it(
     assert gate.outcome is GateOutcome.REFUSE and gate.decision is Decision.DENY
 
 
-async def test_the_engineers_write_to_a_protected_path_is_refused_at_the_call(
-    tmp_path: Path,
+@pytest.mark.parametrize(
+    ("tool", "change"),
+    [
+        ("write_file", {"text": "x"}),
+        ("edit_file", {"old_text": "a", "new_text": "b"}),
+        ("edit_file", {"start_line": 1, "end_line": 1, "new_text": "b"}),
+    ],
+)
+async def test_the_engineers_change_to_a_protected_path_is_refused_at_the_call(
+    tool: str, change: dict[str, object], tmp_path: Path
 ) -> None:
     org = make_org()
     evidence = evidence_over()
     await evidence.manager.write_policy(context(Role.OWNER, org), checkout_policy())
     tools = tools_over(twin_transport(tmp_path)[0], options=ToolsOptions(ceilings=CEILINGS))
     ctx = context(Role.SERVICE, org)
-    registry = registry_of(WriteFileImpl(lambda: evidence.manager))
+    impls = {"write_file": WriteFileImpl, "edit_file": EditFileImpl}
+    registry = registry_of(impls[tool](lambda: evidence.manager))
     # A session of `checkout`, whose policy protects `tests/`, and one of a
     # project that declares no policy.
     elsewhere = new_id()
@@ -177,8 +187,8 @@ async def test_the_engineers_write_to_a_protected_path_is_refused_at_the_call(
             tools.manager,
             tools.steps,
             ctx,
-            "write_file",
-            {"path": "tests/test_cart.py", "text": "x"},
+            tool,
+            {"path": "tests/test_cart.py", **change},
             "write",
             session_id,
         )

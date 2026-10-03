@@ -28,6 +28,30 @@ class KnowledgeStorageMemoryImpl(MemoryStorageBase, KnowledgeStorageInterface):
         rows = [e for e in self._rows(self._entries, org_id) if e.status is status]
         return [e for e in rows if after is None or e.id > after][:limit]
 
+    async def read_reachable(
+        self, org_id: UUID, project_id: UUID | None, after: UUID | None, limit: int
+    ) -> list[Knowledge]:
+        rows = [
+            e
+            for e in self._rows(self._entries, org_id)
+            if e.status is KnowledgeStatus.REVIEWED and e.project_id in (None, project_id)
+        ]
+        return sorted((e for e in rows if after is None or e.id > after), key=lambda e: e.id)[
+            :limit
+        ]
+
+    async def read_by_slug(
+        self, org_id: UUID, project_id: UUID | None, slug: str
+    ) -> Knowledge | None:
+        found = [
+            e
+            for e in self._rows(self._entries, org_id)
+            if e.slug == slug
+            and e.status is KnowledgeStatus.REVIEWED
+            and e.project_id in (None, project_id)
+        ]
+        return min(found, key=lambda e: e.id) if found else None
+
     async def update_entry(
         self, org_id: UUID, entry: Knowledge, outbox_rows: tuple[OutboxRow, ...]
     ) -> None:

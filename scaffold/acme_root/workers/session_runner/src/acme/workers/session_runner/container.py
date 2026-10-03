@@ -38,6 +38,7 @@ from acme.om.relay.impl.transport import TransportPlacedImpl, TransportRelayImpl
 from acme.om.root import Managers, PlatformPorts, build_managers
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
+from acme.om.tools.attachments import AttachmentReaderInterface
 from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.trust.impl.keys import KeyProbeAbsentImpl
 from acme.om.trust.root import TrustLayer
@@ -81,15 +82,18 @@ class RunnerContainer:
         cls,
         settings: SessionRunnerSettings,
         *,
+        attachment_reader: AttachmentReaderInterface | None = None,
         ports: PlatformPorts | None = None,
     ) -> RunnerContainer:
         """Over the database, the infra, and the providers the settings
-        name. `ports` are the product's, among them the evidence's executor
-        and work product; None hands the root `PRODUCT_KINDS` and the
-        platform's own ports, and a product that sets ports of its own sets
-        `kinds=PRODUCT_KINDS` among them, so every process knows the same
-        kinds. The result gate every success passes is the evidence's, over
-        that work product: with none wired, no success counts."""
+        name. `attachment_reader` reads an attachment's text for the
+        engine's read tool, and None refuses every read. `ports` are the
+        product's, among them the evidence's executor and work product;
+        None hands the root `PRODUCT_KINDS` and the platform's own ports,
+        and a product that sets ports of its own sets `kinds=PRODUCT_KINDS`
+        among them, so every process knows the same kinds. The result gate
+        every success passes is the evidence's, over that work product: with
+        none wired, no success counts."""
         storage = StoragePostgresImpl(
             settings.role_urls(),
             settings.role_pools(),
@@ -104,6 +108,7 @@ class RunnerContainer:
             storage,
             infra,
             integrations,
+            attachment_reader=attachment_reader,
             ports=ports or PlatformPorts(kinds=PRODUCT_KINDS),
             platform_agents=shipped_agents(settings, settings.environment),
         )
@@ -116,6 +121,7 @@ class RunnerContainer:
         infra: InfraInterface,
         integrations: IntegrationsInterface,
         *,
+        attachment_reader: AttachmentReaderInterface | None = None,
         ports: PlatformPorts | None = None,
         platform_agents: PlatformAgents | None = None,
     ) -> RunnerContainer:
@@ -202,8 +208,10 @@ class RunnerContainer:
             integrations=integrations,
             environment=settings.environment,
             tool_catalog=acts,
+            attachment_reader=attachment_reader,
             platform_agents=platform_agents,
             intake=lambda: held[0].intake,
+            knowledge=knowledge.manager,
             budget_gate=ports.budget_gate or build_money_gate(storage),
             result_gate=ports.result_gate,
             executor=ports.executor,

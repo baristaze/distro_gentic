@@ -28,6 +28,23 @@ class KnowledgeStorageInterface(ABC):
         ...
 
     @abstractmethod
+    async def read_reachable(
+        self, org_id: UUID, project_id: UUID | None, after: UUID | None, limit: int
+    ) -> list[Knowledge]:
+        """The tenant's reviewed entries a session of `project_id` reaches
+        (None for one of no project): the project's own and those of no
+        project, never another project's, by id, strictly after `after`."""
+        ...
+
+    @abstractmethod
+    async def read_by_slug(
+        self, org_id: UUID, project_id: UUID | None, slug: str
+    ) -> Knowledge | None:
+        """The reviewed entry of `slug` a session of `project_id` reaches, as
+        `read_reachable` bounds it; None for any other."""
+        ...
+
+    @abstractmethod
     async def update_entry(
         self, org_id: UUID, entry: Knowledge, outbox_rows: tuple[OutboxRow, ...]
     ) -> None:

@@ -9,11 +9,18 @@ from pathlib import Path
 
 import httpx
 import pytest
+import typer
 from host_support import Stack, failing, probes
 
-from acme.apps.host.main import host_network
-from acme.apps.host.probe import Misconfigured, directory, proxy, startup
-from acme.client.client import ApiClient
+from acme.apps.host.main import (
+    EXIT_MISCONFIGURED,
+    EXIT_REFUSED,
+    EXIT_UNREACHABLE,
+    _guarded,
+    host_network,
+)
+from acme.apps.host.probe import Misconfigured, Probe, directory, proxy, startup
+from acme.client.client import ApiClient, ApiError
 from acme.client.types import IsolationMode
 from acme.om.base import utcnow
 
@@ -84,3 +91,35 @@ def test_a_ca_file_the_host_cannot_read_stops_it_before_any_prepare(
     with pytest.raises(Misconfigured) as refused:
         host_network()
     assert [probe.name for probe in refused.value.failed] == ["trust_store"]
+
+
+def _probe(name: str) -> Probe:
+    return Probe(name, False, "failed")
+
+
+@pytest.mark.parametrize(
+    ("raised", "code"),
+    [
+        # The platform down, or the clock not yet in step: it passes with time.
+        (Misconfigured([_probe("platform"), _probe("clock")]), EXIT_UNREACHABLE),
+        (Misconfigured([_probe("clock")]), EXIT_UNREACHABLE),
+        (ApiError(503, "unavailable", "down", None), EXIT_UNREACHABLE),
+        (ApiError(429, "too_many", "slow down", None), EXIT_UNREACHABLE),
+        # What a person must fix.
+        (Misconfigured([_probe("trust_store")]), EXIT_MISCONFIGURED),
+        (Misconfigured([_probe("platform"), _probe("proxy")]), EXIT_MISCONFIGURED),
+        (ApiError(401, "unauthorized", "token spent", None), EXIT_REFUSED),
+        (ApiError(409, "conflict", "name taken", None), EXIT_REFUSED),
+    ],
+)
+def test_a_start_that_fails_with_time_exits_to_be_restarted(raised: Exception, code: int) -> None:
+    """The unit restarts the host on 4 and leaves it stopped on 1 and 5: a
+    host started during an outage comes back on its own, and one a person
+    must fix does not spin."""
+
+    async def start() -> None:
+        raise raised
+
+    with pytest.raises(typer.Exit) as ended:
+        _guarded(start())
+    assert ended.value.exit_code == code

@@ -14,6 +14,7 @@ from datetime import datetime
 from uuid import UUID
 
 from acme.om.agent_sessions.types.agent_session import AgentSession
+from acme.om.agents.types.kind import AgentKind
 from acme.om.agents.types.request import Handoff, Spawn, Start
 from acme.om.agents.types.result import Result, Verdict
 from acme.om.agents.types.tree import AgentTree
@@ -59,6 +60,13 @@ class AgentsManagerInterface(ABC):
         ...
 
     @abstractmethod
+    async def kind_of(self, ctx: TenantContext, session_id: UUID) -> AgentKind:
+        """The kind a session runs, at the version it was started on: its
+        loop's limits, its deadline, and its tree's bounds. The session is
+        read first, so another tenant's is `NotFound`."""
+        ...
+
+    @abstractmethod
     async def set_deadline(
         self, ctx: TenantContext, session_id: UUID, deadline: datetime | None
     ) -> AgentTree:
@@ -73,8 +81,8 @@ class AgentsManagerInterface(ABC):
     async def cancel_children(self, ctx: TenantContext, session_id: UUID) -> tuple[UUID, ...]:
         """The cascade of a cancel: a `cancel` control to every session below
         `session_id` that is not idle, children and theirs, a session that
-        waits to begin its next loop among them. Answers the sessions it
-        reached."""
+        waits to begin its next loop among them, and those below a deleted
+        one. Answers the sessions it reached."""
         ...
 
     @abstractmethod

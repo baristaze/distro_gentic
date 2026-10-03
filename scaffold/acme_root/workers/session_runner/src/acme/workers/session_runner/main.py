@@ -29,6 +29,7 @@ from acme.infra.observability import (
 )
 from acme.infra.trust import install_trust_store
 from acme.om.root import PlatformPorts
+from acme.om.tools.attachments import AttachmentReaderInterface
 from acme.om.work.types.work_item import WorkKind
 from acme.workers.maintenance.health import Probe, WorkerHttpServer
 from acme.workers.maintenance.loop import LoopOptions, WorkerLoop
@@ -102,10 +103,15 @@ def boot(settings: SessionRunnerSettings) -> None:
     )
 
 
-async def serve(lane: str | None, *, ports: PlatformPorts | None = None) -> int:
+async def serve(
+    lane: str | None,
+    *,
+    attachment_reader: AttachmentReaderInterface | None = None,
+    ports: PlatformPorts | None = None,
+) -> int:
     settings = SessionRunnerSettings()
     boot(settings)
-    container = RunnerContainer.build(settings, ports=ports)
+    container = RunnerContainer.build(settings, attachment_reader=attachment_reader, ports=ports)
     await container.start()
     runner = build_runner(container, lane)
     running = asyncio.get_running_loop()
@@ -148,10 +154,17 @@ def health(settings: SessionRunnerSettings) -> int:
     return 1
 
 
-def main(argv: list[str] | None = None, *, ports: PlatformPorts | None = None) -> int:
-    """`ports` are the platform's ports a product's own entry point sets,
-    `kinds=PRODUCT_KINDS` among them; None hands the root `PRODUCT_KINDS`
-    and the platform's own ports (`RunnerContainer.build`)."""
+def main(
+    argv: list[str] | None = None,
+    *,
+    attachment_reader: AttachmentReaderInterface | None = None,
+    ports: PlatformPorts | None = None,
+) -> int:
+    """`attachment_reader` reads an attachment's text for the engine's read
+    tool, None refusing every read. `ports` are the platform's ports a
+    product's own entry point sets, `kinds=PRODUCT_KINDS` among them; None
+    hands the root `PRODUCT_KINDS` and the platform's own ports
+    (`RunnerContainer.build`)."""
     parser = argparse.ArgumentParser(prog="acme-session-runner")
     sub = parser.add_subparsers(dest="command", required=True)
     p_serve = sub.add_parser("serve", help="claim the loops of agent sessions and run them")
@@ -160,7 +173,7 @@ def main(argv: list[str] | None = None, *, ports: PlatformPorts | None = None) -
     args = parser.parse_args(argv)
     if args.command == "health":
         return health(SessionRunnerSettings())
-    return asyncio.run(serve(args.lane, ports=ports))
+    return asyncio.run(serve(args.lane, attachment_reader=attachment_reader, ports=ports))
 
 
 if __name__ == "__main__":

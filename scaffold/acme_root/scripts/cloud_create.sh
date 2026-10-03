@@ -518,7 +518,8 @@ if [ "$environment" = "staging" ]; then
           "fast gate",
           "integration over the compose stack",
           "the telemetry round trip over the devx profile",
-          "images build (api)", "images build (maintenance)", "images build (portal)",
+          "images build (api)", "images build (maintenance)", "images build (session-runner)",
+          "images build (portal)",
           "terraform format and validate (bootstrap/staging)",
           "terraform format and validate (bootstrap/prod)",
           "terraform format and validate (environments/staging)",
@@ -593,7 +594,7 @@ case "$environment" in
 esac
 cluster="acme-$environment"
 say "Written under $writer_profile, with AWS_ACCESS_KEY_ID and its siblings unset, one value at a time, read with read -rs so none is shown:"
-for secret in workos_api_key workos_webhook_secret sentry_dsn; do
+for secret in workos_api_key workos_webhook_secret sentry_dsn anthropic_api_key openai_api_key; do
   say "  aws secretsmanager put-secret-value --profile $writer_profile --region $region --secret-id acme/$environment/$secret --secret-string \"\$VALUE\""
 done
 say "  WorkOS first: the grants below sign people up through it. workos_api_key is the Acme App application's API key (Applications, Acme App, API keys), never the environment's; the API refuses to start on another. The bootstrap proves the key, adds https://$app_domain_name/auth/callback to the application's redirects, and names the Redirects tab's checks (the default redirect, https://$app_domain_name/login as the initiate login URI):"
@@ -603,8 +604,9 @@ case "$environment" in
 esac
 say "  workos_webhook_secret is the signing secret of the endpoint https://$api_domain_name/webhooks/identity, from its page under Webhooks in the WorkOS dashboard."
 say "  sentry_dsn is the DSN of the product's one project in the error tracker, the same value in every environment."
+say "  anthropic_api_key and openai_api_key are the platform's own model keys, which the session runner alone holds. Left \"off\", a model call runs only on a tenant's own key, and nothing is spent on the platform's account."
 say "  Then the tasks read the values at their next start: the next deploy, or now:"
-for service in api maintenance; do
+for service in api maintenance session-runner; do
   say "    aws ecs update-service --profile $writer_profile --region $region --cluster $cluster --service $service --force-new-deployment"
 done
 say "  The steps, the key permissions, and the checks: docs/runbooks/providers/workos.md."

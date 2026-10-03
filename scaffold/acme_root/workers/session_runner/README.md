@@ -82,11 +82,25 @@ The agent kinds and the tools are the product's, declared once in
 reads it, as the API's container does, since a session starts on a kind
 the API knows and runs here. A product's tool is built over the managers,
 read when it is called. An entry point that sets ports of its own sets
-`kinds=` among them, as `tests/e2e_runner.py` does.
+`kinds=` among them, as `tests/e2e_runner.py` does. The one part `main`
+takes beside its ports is the reader the engine's read tool reads an
+attachment's text through; with none, every read is refused.
 Its settings carry the prefix `ACME_RUNNER_` for its own knobs, and read the
 rest as every process does (`.env.example`).
 
 `serve` runs the process; `health` asks the running process's `/healthz`.
+
+## Where it runs
+
+Locally it is a host process (`scripts/dev.sh`). In staging and
+production it is a service of its own, from
+`deployment/docker/session-runner.Dockerfile`, rolled after the API's
+migration with a count and a ceiling. There it prepares no workspace: a
+session's tools run on a host of its tenant's pool, and a session that
+asks the runner for one is refused before its first model call. Its role
+reads a tenant's own secrets and writes none, and it reaches no inbound
+queue
+([ADR 2026](../../docs/adr/2026-the-runner-is-a-cloud-service-with-no-workspace-and-a-host-installs-as-a-user-of-its-own.md)).
 
 ## Test
 
