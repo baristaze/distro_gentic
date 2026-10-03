@@ -14,9 +14,10 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 
-from acme.infra.workspaces.container import DEFAULT_IMAGE
-
 DEFAULT_API_URL = "http://127.0.0.1:8000"
+DEFAULT_IMAGE = "python:3.14"
+"""The image a container workspace runs unless its owner names another: the
+engine's own default, which holds Python and `git`."""
 CREDENTIAL_FILE = "credential.json"
 CEILINGS_FILE = "ceilings.toml"
 SECRETS_FILE = "secrets"
