@@ -314,9 +314,9 @@ async def test_sessions_page_by_status(managers: Managers) -> None:
     ctx = context(Role.MEMBER)
     made = [await managers.agent_sessions.create_session(ctx, make_session()) for _ in range(3)]
     page = await managers.agent_sessions.get_sessions(ctx, SessionStatus.IDLE, None, 2)
-    assert page.items == tuple(made[:2]) and page.has_more
+    assert page.items == (made[2], made[1]) and page.has_more
     rest = await managers.agent_sessions.get_sessions(ctx, None, made[1].id, 10)
-    assert rest.items == (made[2],) and not rest.has_more
+    assert rest.items == (made[0],) and not rest.has_more
     assert (
         await managers.agent_sessions.get_sessions(ctx, SessionStatus.RUNNING, None, 10)
     ).items == ()

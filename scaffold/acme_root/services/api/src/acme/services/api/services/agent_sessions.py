@@ -42,8 +42,8 @@ class AgentSessionsServiceInterface(ABC):
     async def get_sessions(
         self, ctx: TenantContext, status: SessionStatus | None, cursor: str | None, limit: int
     ) -> AgentSessionPageView:
-        """One page of the tenant's sessions in a status, or in any, by id;
-        a deleted session is on no page."""
+        """One page of the tenant's sessions in a status, or in any, newest
+        first; a deleted session is on no page."""
         ...
 
     @abstractmethod

@@ -25,6 +25,9 @@ clients/*/coverage/
 # Test and tool reports
 junit*.xml
 *.log
+# The portal's browser check: its results and its screenshots
+apps/*/e2e/results/
+apps/*/e2e/screenshots/
 
 # Local state
 .env

@@ -68,8 +68,8 @@ class AgentSessionStoragePostgresImpl(PgStorageBase, AgentSessionStorageInterfac
         if status is not None:
             stmt = stmt.where(AgentSessions.status == status.value)
         if after is not None:
-            stmt = stmt.where(AgentSessions.id > after)
-        stmt = stmt.order_by(AgentSessions.id).limit(limit)
+            stmt = stmt.where(AgentSessions.id < after)
+        stmt = stmt.order_by(AgentSessions.id.desc()).limit(limit)
         async with self._session_for(stmt, org_id=org_id) as session:
             return [to_model(row, AgentSession) for row in (await session.execute(stmt)).scalars()]
 
