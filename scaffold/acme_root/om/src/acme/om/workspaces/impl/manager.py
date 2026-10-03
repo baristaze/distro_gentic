@@ -313,6 +313,10 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         stored = await self._storage.read_allowlist(ctx.org_id, allowlist.project_id)
         now = self._clock()
         terms = {"rules": allowlist.rules, "open": allowlist.open, "reason": allowlist.reason}
+        if stored is not None and _own_write(stored, allowlist, ctx):
+            # A retry whose write landed before its answer was lost: the row
+            # as stored, written once.
+            return stored
         if stored is None:
             created = EgressAllowlist.model_validate(
                 {
@@ -332,6 +336,9 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
                     f"the allowlist of project {allowlist.project_id} was written meanwhile"
                 ) from error
             if not landed:
+                raced = await self._storage.read_allowlist(ctx.org_id, allowlist.project_id)
+                if raced is not None and _own_write(raced, allowlist, ctx):
+                    return raced
                 raise PreconditionFailed(f"egress allowlist {created.id} is written already")
             await self._relay_all(ctx, rows)
             self._recorded(ctx, created)
@@ -647,3 +654,16 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         """The write has committed; a relay that fails is left to the sweep."""
         if rows:
             await self._relay.relay_all(ctx.org_id, rows)
+
+
+def _own_write(stored: EgressAllowlist, asked: EgressAllowlist, ctx: TenantContext) -> bool:
+    """Whether the stored row is the caller's write landed already: its id
+    and terms, at the version the caller read when it created the row, or
+    the one after when the caller's own update made it."""
+    if stored.id != asked.id:
+        return False
+    if (stored.rules, stored.open, stored.reason) != (asked.rules, asked.open, asked.reason):
+        return False
+    if stored.version == asked.version:
+        return stored.version == 1 and stored.created_by == ctx.user_id
+    return stored.version == asked.version + 1 and stored.updated_by == ctx.user_id

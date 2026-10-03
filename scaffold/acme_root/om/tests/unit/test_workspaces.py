@@ -40,7 +40,7 @@ from acme.om.base import new_id
 from acme.om.context import Role, TenantContext
 from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
 from acme.om.evidence.impl.ports import WorkProductAbsentImpl
-from acme.om.exceptions import NotAuthorized, NotFound, Unavailable
+from acme.om.exceptions import NotAuthorized, NotFound, PreconditionFailed, Unavailable
 from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.steps.types.header import LoopOutcome, ParkReason
 from acme.om.steps.types.step import Step, StepType
@@ -387,6 +387,38 @@ async def test_a_sessions_egress_is_its_projects_allowlist_as_pinned(tmp_path: P
     assert not await allowed(ask("metadata.google.internal", "93.184.215.17", None), later)
     assert not await allowed(ask("any.example.org", "169.254.169.254", None), later)
     assert not await allowed(ask("any.example.org", "192.168.1.20", None), later)
+
+
+async def test_an_allowlist_write_retried_after_it_landed_returns_the_row_as_stored(
+    tmp_path: Path,
+) -> None:
+    loop = loop_of(tmp_path)
+    workspaces = loop.managers.workspaces
+    listed = EgressAllowlist(
+        id=new_id(),
+        created_at=loop.clock(),
+        updated_at=loop.clock(),
+        created_by=loop.owner.user_id,
+        updated_by=loop.owner.user_id,
+        project_id=new_id(),
+        rules=(SOURCE,),
+    )
+
+    # A create whose answer was lost, asked again: the row as stored, once.
+    created = await workspaces.write_allowlist(loop.owner, listed)
+    assert await workspaces.write_allowlist(loop.owner, listed) == created
+    assert created.version == 1
+
+    # An update whose answer was lost, asked again at the version it read.
+    widened = created.model_copy(update={"rules": (SOURCE, MIRROR)})
+    updated = await workspaces.write_allowlist(loop.owner, widened)
+    assert await workspaces.write_allowlist(loop.owner, widened) == updated
+    stored = await workspaces.get_allowlist(loop.owner, listed.project_id)
+    assert stored == updated and updated.version == 2
+
+    # Another write at a stale version is still refused.
+    with pytest.raises(PreconditionFailed):
+        await workspaces.write_allowlist(loop.owner, created.model_copy(update={"rules": ()}))
 
 
 async def test_only_one_who_manages_the_tenant_writes_an_allowlist(tmp_path: Path) -> None:
