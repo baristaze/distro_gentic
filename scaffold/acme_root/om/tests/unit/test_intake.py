@@ -36,8 +36,8 @@ from acme.om.steps.types.header import ControlHeader, InputHeader, ParkReason
 from acme.om.steps.types.step import Actor, Origin, Step, StepType
 from acme.om.tools.types.policy import Decision, PolicyRule
 
-PR = "acme/robot#12"
-BRANCH = "agent/fix-the-gripper"
+PR = "acme/checkout#12"
+BRANCH = "agent/fix-the-checkout"
 
 
 def event(
@@ -46,7 +46,7 @@ def event(
     external_id: str = "U-ANN",
     *,
     session_id: UUID | None = None,
-    text: str = "Please rerun the gripper suite.",
+    text: str = "Please rerun the payments suite.",
     check: CheckState | None = None,
     integration: str = "chat",
 ) -> FeedbackEvent:
@@ -364,7 +364,7 @@ async def test_relayed_text_reaches_the_agent_quoted_and_labelled_by_the_platfor
     session_id = await bound(platform)
     # The session's principal set it going, and its loop ended: the comment
     # comes back to it later, as a review comment does.
-    await _say(platform, session_id, "Fix the gripper's import, and open a pull request.")
+    await _say(platform, session_id, "Fix the checkout's import, and open a pull request.")
     platform.anthropic.add(reply(said("The pull request is open.")))
     assert (await platform.loops.run(platform.owner, session_id)).end is RunEnd.ENDED
     planted = (

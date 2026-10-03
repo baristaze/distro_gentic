@@ -5,7 +5,7 @@ import json
 from typing import Any
 
 import pytest
-from contracts.evidence import arm_policy, delivered, stream
+from contracts.evidence import checkout_policy, delivered, stream
 from contracts.evidence_storage import make_policy
 
 from acme.om.base import new_id, utcnow
@@ -34,16 +34,16 @@ PATTERNS = ("tests/**", "**/conftest.py", "pytest.ini", ".github/workflows/*")
 @pytest.mark.parametrize(
     "path",
     [
-        "tests/test_grip.py",
-        "tests/fixtures/arm.json",
-        "src/arm/conftest.py",
+        "tests/test_cart.py",
+        "tests/fixtures/orders.json",
+        "src/api/conftest.py",
         "conftest.py",
         "pytest.ini",
         ".github/workflows/ci.yml",
-        "./tests/test_grip.py",
-        "/tests/test_grip.py",
-        "Tests/Test_Grip.py",
-        "src/../tests/test_grip.py",
+        "./tests/test_cart.py",
+        "/tests/test_cart.py",
+        "Tests/Test_Cart.py",
+        "src/../tests/test_cart.py",
         "tests",
         "../outside.py",
         "",
@@ -54,7 +54,7 @@ def test_a_protected_path_is_found_however_it_is_spelled(path: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "path", ["src/grip.py", "docs/tests.md", "src/tests_helper.py", ".github/dependabot.yml"]
+    "path", ["src/cart.py", "docs/tests.md", "src/tests_helper.py", ".github/dependabot.yml"]
 )
 def test_a_path_no_pattern_matches_is_free(path: str) -> None:
     assert protected_paths(PATTERNS, [path]) == ()
@@ -62,24 +62,24 @@ def test_a_path_no_pattern_matches_is_free(path: str) -> None:
 
 @pytest.mark.parametrize("pattern", ["tests/", "tests", "/tests/", "Tests/", "tests/**"])
 def test_a_pattern_that_names_a_folder_protects_everything_in_it(pattern: str) -> None:
-    paths = ["tests/test_x.py", "tests/fixtures/arm.json", "tests"]
+    paths = ["tests/test_x.py", "tests/fixtures/orders.json", "tests"]
     assert protected_paths([pattern], paths) == tuple(sorted(paths))
     assert protected_paths([pattern], ["src/tests.py", "docs/tests/a.md"]) == ()
 
 
 def test_a_glob_that_names_folders_protects_what_they_hold() -> None:
-    assert protected_paths(["src/*/fixtures"], ["src/arm/fixtures/a.json"]) == (
-        "src/arm/fixtures/a.json",
+    assert protected_paths(["src/*/fixtures"], ["src/api/fixtures/a.json"]) == (
+        "src/api/fixtures/a.json",
     )
-    assert protected_paths(["src/*/fixtures/"], ["src/arm/main.py"]) == ()
+    assert protected_paths(["src/*/fixtures/"], ["src/api/main.py"]) == ()
 
 
 def test_the_target_is_read_from_the_policy_never_from_the_call() -> None:
-    policy = arm_policy(protected=PATTERNS)
-    assert protection_target(policy, ["src/grip.py", "tests/a.py"]).attributes == {
+    policy = checkout_policy(protected=PATTERNS)
+    assert protection_target(policy, ["src/cart.py", "tests/a.py"]).attributes == {
         "protected": True
     }
-    assert protection_target(policy, ["src/grip.py"]).attributes == {"protected": False}
+    assert protection_target(policy, ["src/cart.py"]).attributes == {"protected": False}
     assert protection_target(None, ["tests/a.py"]).attributes == {"protected": False}
     assert protection_target(policy, []).kind == "paths"
 
@@ -88,19 +88,19 @@ def test_the_target_is_read_from_the_policy_never_from_the_call() -> None:
 
 
 def test_a_change_asks_for_the_checks_whose_paths_it_touches() -> None:
-    policy = arm_policy(
+    policy = checkout_policy(
         Requirement(check="unit", paths=("src/**",)),
-        Requirement(check="trials", paths=("src/arm/**", "firmware/**")),
+        Requirement(check="trials", paths=("src/api/**", "migrations/**")),
     )
-    assert [r.check for r in required(policy, ["src/grip.py"])] == ["unit"]
-    assert [r.check for r in required(policy, ["src/arm/joint.py"])] == ["unit", "trials"]
+    assert [r.check for r in required(policy, ["src/cart.py"])] == ["unit"]
+    assert [r.check for r in required(policy, ["src/api/routes.py"])] == ["unit", "trials"]
     assert required(policy, ["docs/a.md"]) == ()
     assert required(policy, []) == ()
 
 
 def test_a_validation_takes_its_checks_from_the_base_and_runs_at_the_head() -> None:
-    policy = arm_policy()
-    offer = Offer(capabilities=frozenset({"arm"}), schemas=frozenset({1}))
+    policy = checkout_policy()
+    offer = Offer(capabilities=frozenset({"browser"}), schemas=frozenset({1}))
     request = execution_request(new_id(), policy, delivered(), RunPurpose.VALIDATION, offer)
     assert isinstance(request, ExecutionRequest)
     assert (request.version, request.source) == ("c0ffee", "base0")
@@ -115,16 +115,20 @@ def test_a_check_the_executor_cannot_run_is_refused_before_anything_runs() -> No
         version="1",
         command=("x", "{out}"),
         kind="scenario",
-        capabilities=("arm",),
+        capabilities=("browser",),
         schema_version=1,
     )
     assert compatibility_refusal(check, Offer(capabilities=frozenset(), schemas=frozenset({1})))
-    assert compatibility_refusal(check, Offer(capabilities=frozenset({"arm"}), schemas=frozenset()))
+    assert compatibility_refusal(
+        check, Offer(capabilities=frozenset({"browser"}), schemas=frozenset())
+    )
     assert (
-        compatibility_refusal(check, Offer(capabilities=frozenset({"arm"}), schemas=frozenset({1})))
+        compatibility_refusal(
+            check, Offer(capabilities=frozenset({"browser"}), schemas=frozenset({1}))
+        )
         is None
     )
-    policy = arm_policy(Requirement(check="trials", paths=("src/**",)))
+    policy = checkout_policy(Requirement(check="trials", paths=("src/**",)))
     refusal = execution_request(
         new_id(),
         policy,
@@ -132,7 +136,7 @@ def test_a_check_the_executor_cannot_run_is_refused_before_anything_runs() -> No
         RunPurpose.VALIDATION,
         Offer(schemas=frozenset({1})),
     )
-    assert isinstance(refusal, str) and "needs arm" in refusal
+    assert isinstance(refusal, str) and "needs browser" in refusal
 
 
 def test_a_policy_is_well_formed() -> None:
@@ -165,7 +169,7 @@ def collected(data: bytes) -> Any:
         data,
         executor="executor-1",
         session_id=new_id(),
-        project="arm",
+        project="checkout",
         purpose=RunPurpose.VALIDATION,
         validation_id=new_id(),
         now=utcnow(),
@@ -185,7 +189,7 @@ def test_the_collector_reads_each_run_and_streams_its_cases() -> None:
     collector = Collector(
         executor="executor-1",
         session_id=new_id(),
-        project="arm",
+        project="checkout",
         purpose=RunPurpose.VALIDATION,
         validation_id=new_id(),
         now=at,
@@ -223,16 +227,16 @@ def test_a_results_stream_the_contract_does_not_hold_is_refused_whole(
 
 # Acceptance: the scanner.
 
-MARKERS = ("hidden_grip_suite", "tests/hidden/test_drop.py", "test_drop_at_placement")
+MARKERS = ("hidden_payments_suite", "tests/hidden/test_drop.py", "test_drop_at_placement")
 
 
 def clean() -> dict[Surface, dict[str, str]]:
     return {
         Surface.PROMPT: {"system": "Investigate why the export drops the record."},
-        Surface.KNOWLEDGE: {"lab": "The arm's gripper needs calibration weekly."},
+        Surface.KNOWLEDGE: {"staging": "The staging database is reset weekly."},
         Surface.TOOL_SOURCE: {"run_tests": "def run(): subprocess.run(['pytest', 'tests'])"},
         Surface.EVIDENCE: {"run-1": "unit passed 41 of 41 cases"},
-        Surface.PULL_REQUEST: {"body": "Tighten the grip before the move."},
+        Surface.PULL_REQUEST: {"body": "Retry the charge once before the refund."},
     }
 
 
@@ -244,8 +248,8 @@ def test_a_clean_set_of_surfaces_holds_no_leak() -> None:
 @pytest.mark.parametrize(
     "mention",
     [
-        "see the hidden_grip_suite for details",
-        "the Hidden-Grip-Suite checks it",
+        "see the hidden_payments_suite for details",
+        "the Hidden-Payments-Suite checks it",
         "run tests/hidden/test_drop.py first",
         "TEST_DROP_AT_PLACEMENT fails sometimes",
     ],
