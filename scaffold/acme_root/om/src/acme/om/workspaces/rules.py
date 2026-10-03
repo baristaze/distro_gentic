@@ -1,8 +1,11 @@
 """Pure rules of the workspaces namespace: the egress a session pins, what a
 host refuses, the answer a request gets at the egress proxy, what a prepare
-does with the session's branch, and which writes are the session's own work
-product. Values in, values out; no clock, no storage, no settings."""
+does with the session's branch, which writes are the session's own work
+product, and what a push token reaches. Values in, values out; no clock, no
+storage, no settings."""
 
+import hmac
+import re
 from collections.abc import Sequence
 from datetime import datetime
 from ipaddress import IPv4Address, IPv4Network, IPv6Address, IPv6Network, ip_address, ip_network
@@ -25,6 +28,7 @@ from acme.om.workspaces.types.source import (
     RepositoryWrite,
     WriteKind,
 )
+from acme.om.workspaces.types.workspace import SessionWorkspace
 
 Network = IPv4Network | IPv6Network
 
@@ -34,6 +38,13 @@ BRANCH_PREFIX = "sessions"
 SNAPSHOT_PREFIX = "refs/snapshots"
 """Where a release pushes the work a loop left uncommitted, beside the
 branches and never on one."""
+
+COMMIT = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
+"""A commit's full id, SHA-1 or SHA-256, as git prints it."""
+
+PUSH_TOKEN_PREFIX = "spt_"
+"""What a session's push token starts with, apart from every other kind of
+credential the platform mints."""
 
 NEVER_REACHED: tuple[Network, ...] = tuple(
     ip_network(cidr)
@@ -267,8 +278,10 @@ def _repository(name: str) -> str:
 
 def project_key(binding: RepositoryBinding) -> str:
     """The name a project's work product goes by in its evidence: its
-    repository's, as `host/owner/name`."""
-    return _repository(binding.repository).lstrip("/")
+    repository's, as `host/owner/name`. The host goes without its port, so a
+    forge served on one has a name too."""
+    host, slash, path = _repository(binding.repository).lstrip("/").partition("/")
+    return host.split(":", 1)[0] + slash + path
 
 
 def is_work_product(write: RepositoryWrite, binding: RepositoryBinding | None, branch: str) -> bool:
@@ -284,3 +297,34 @@ def is_work_product(write: RepositoryWrite, binding: RepositoryBinding | None, b
     if write.kind is WriteKind.PULL_REQUEST:
         return ref == branch
     return False
+
+
+# The credentials a repository is reached with.
+
+
+def fetch_secret_name(project_id: UUID) -> str:
+    """The name the tenant's store keeps a project's fetch credential under:
+    apart from every declared secret's (`project-`, `station-`) and every
+    provider key's (`provider-key-`)."""
+    return f"repository-fetch-{project_id.hex}"
+
+
+def push_refusal(
+    held: SessionWorkspace,
+    binding: RepositoryBinding | None,
+    digest: str,
+    write: RepositoryWrite,
+    now: datetime,
+) -> str | None:
+    """Why a push token, by its digest, does not make `write` for the session
+    whose workspace is `held`; None when it does. It makes only the session's
+    own work product (`is_work_product`), and only while it is the loop's
+    live token and has not expired."""
+    live = held.push_digest
+    if live is None or not hmac.compare_digest(live, digest):
+        return "the push token is not the live token of this session's loop"
+    if held.push_expires_at is None or now >= held.push_expires_at:
+        return "the push token has expired"
+    if not is_work_product(write, binding, held.branch):
+        return f"the push token writes {held.branch} and its pull request on its repository alone"
+    return None

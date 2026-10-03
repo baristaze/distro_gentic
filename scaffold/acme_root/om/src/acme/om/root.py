@@ -51,11 +51,12 @@ from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
 from acme.om.evidence.impl.manager import EvidenceManagerImpl, EvidenceOptions
 from acme.om.evidence.impl.ports import ExecutorAbsentImpl
 from acme.om.evidence.rules import PROTECTED_CEILING
-from acme.om.exceptions import UnsafeConfiguration
+from acme.om.exceptions import Unavailable, UnsafeConfiguration
 from acme.om.hosts import HostsManagerInterface
 from acme.om.hosts.impl.manager import HostsManagerImpl, HostsOptions
 from acme.om.idempotency import IdempotencyManagerInterface
 from acme.om.idempotency.impl.manager import IdempotencyManagerImpl, IdempotencyOptions
+from acme.om.intake import IntakeManagerInterface
 from acme.om.media import MediaManagerInterface
 from acme.om.media.impl.manager import MediaManagerImpl, MediaOptions
 from acme.om.models.impl.credentials import CallCredentialsPlatformImpl
@@ -142,6 +143,7 @@ from acme.om.work.impl.manager import WorkManagerImpl, WorkOptions
 from acme.om.work.impl.operator import WorkOperatorManagerImpl
 from acme.om.workspaces import WorkspacesManagerInterface
 from acme.om.workspaces.git import RepositoryReaderInterface, WorkspaceGitInterface
+from acme.om.workspaces.impl.forge import SourceControlAbsentImpl, SourceControlForgeImpl
 from acme.om.workspaces.impl.git import GitOptions, WorkspaceGitTransportImpl
 from acme.om.workspaces.impl.manager import WorkspacesManagerImpl, WorkspacesOptions
 from acme.om.workspaces.impl.projects import PullRequestsNullImpl, WorkspaceProjectsBoundImpl
@@ -149,7 +151,11 @@ from acme.om.workspaces.impl.reader import RepositoryReaderGitImpl
 from acme.om.workspaces.impl.sessions import AgentSessionsPinnedImpl
 from acme.om.workspaces.impl.tools import HeldWorkspaces, ToolsManagerWorkspacesImpl
 from acme.om.workspaces.impl.work_product import WorkProductWorkspacesImpl
-from acme.om.workspaces.projects import PullRequestsInterface, WorkspaceProjectsInterface
+from acme.om.workspaces.projects import (
+    PullRequestsInterface,
+    SourceControlInterface,
+    WorkspaceProjectsInterface,
+)
 from acme.om.workspaces.types.host import HostOffer
 
 
@@ -225,6 +231,12 @@ def refuse_quiet_nulls(environment: str, *capabilities: object) -> None:
                 f"{type(capability).__name__} holds nothing, and is refused "
                 f"when the environment is {environment}"
             )
+
+
+def intake_absent() -> IntakeManagerInterface:
+    """No intake in this process: a loud null, so a tool that binds its
+    session's work refuses rather than act where no event can find it."""
+    raise Unavailable("no intake binds a session's work in this process")
 
 
 async def purge_held(
@@ -349,6 +361,7 @@ def build_managers(
     workspace_host: HostOffer | None = None,
     workspace_projects: WorkspaceProjectsInterface | None = None,
     pull_requests: PullRequestsInterface | None = None,
+    source_control: SourceControlInterface | None = None,
     workspace_git: WorkspaceGitInterface | None = None,
     workspace_reader: RepositoryReaderInterface | None = None,
     hosts_options: HostsOptions | None = None,
@@ -356,6 +369,7 @@ def build_managers(
     transport_layer: Callable[[TransportInterface], TransportInterface] | None = None,
     platform_agents_options: PlatformAgentsOptions | None = None,
     platform_agents: PlatformAgents | None = None,
+    intake: Callable[[], IntakeManagerInterface] | None = None,
     stations_options: StationsOptions | None = None,
     environment: str = LOCAL,
     tenant_keys: TenantKeysInterface | None = None,
@@ -451,6 +465,9 @@ def build_managers(
     join `tool_catalog`, ahead of the adopter's. A catalog that holds two
     tools of one name, or lets the assistant reach past reading and handing
     work on, is refused at boot (`UnsafeConfiguration`). None ships none.
+    `intake` answers the intake the process builds over these managers,
+    where the engineer's pull request is bound to its session; None binds
+    nothing, so that tool opens none.
 
     The platform's retention takes three. `tenant_keys` says whose key
     service holds each tenant's keys; None is infra's for every tenant, and
@@ -475,11 +492,13 @@ def build_managers(
     refused outside `local`), and `pull_requests` why a session's branch is
     gone; None reads the projects' rows for the one,
     and knows no pull request, so a branch gone for any reason fails
-    loudly. `workspace_git` runs the checkout; None runs it in the
+    loudly. `source_control` opens a session's branch and pull request;
+    None writes through the forge integration, and with no integrations,
+    nowhere. `workspace_git` runs the checkout; None runs it in the
     workspace through the transport the tools take, so a workspace inside
     a tenant's wall is checked out there. `workspace_reader` reads what a
     session delivered from its repository; None fetches it into a fresh
-    repository of this process's own. `workspaces_options` names the
+    repository of this process's own, with the project's fetch credential. `workspaces_options` names the
     networks no workspace reaches, and the sweep's batch."""
     if platform_agents is not None:
         # Their tools read the managers built below, so each edge is bound
@@ -493,6 +512,8 @@ def build_managers(
             policies=lambda: managers.tools,
             agents=lambda: managers.agents,
             evidence=lambda: managers.evidence,
+            workspaces=lambda: managers.workspaces,
+            intake=intake or intake_absent,
         )
         refuse_reach(agent_kinds, tool_catalog)
     # The relay every core-role manager hands its outbox rows to. It reaches
@@ -588,6 +609,13 @@ def build_managers(
         workspace_git or WorkspaceGitTransportImpl(placed, steps, records, GitOptions()),
         workspace_reader or RepositoryReaderGitImpl(),
         workspaces_options or WorkspacesOptions(),
+        infra.get_secrets(),
+        source_control
+        or (
+            SourceControlAbsentImpl()
+            if integrations is None
+            else SourceControlForgeImpl(integrations.get_integration)
+        ),
     )
     engine_sessions = AgentSessionsManagerImpl(
         storage.get_agent_session_storage(),
