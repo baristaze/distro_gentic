@@ -210,6 +210,7 @@ class RunnerContainer:
             domain_classes=domain_classes,
             platform_agents=platform_agents,
             intake=lambda: held[0].intake,
+            knowledge=knowledge.manager,
             budget_gate=ports.budget_gate or build_money_gate(storage),
             result_gate=ports.result_gate,
             executor=ports.executor,
