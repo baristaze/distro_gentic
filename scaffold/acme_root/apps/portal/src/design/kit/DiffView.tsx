@@ -1,12 +1,13 @@
 // A unified diff, file by file: each line numbered before and after, an
 // added line marked + and a removed one -, so the change reads without colour.
-import { diffFileName, parseUnifiedDiff } from "./diffModel";
+import { diffFileName, wholeDiff } from "./diffModel";
 
 const SIGN = { add: "+", del: "-", context: " " } as const;
 
 export function DiffView({ text }: { text: string }) {
-  const files = parseUnifiedDiff(text);
-  if (files.length === 0) return <pre className="acme-code">{text}</pre>;
+  // A text with a line no hunk holds is drawn whole, so no line is lost.
+  const files = wholeDiff(text);
+  if (files === null) return <pre className="acme-code">{text}</pre>;
   return (
     <div className="acme-diff">
       {files.map((file, fileIndex) => (

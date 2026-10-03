@@ -122,6 +122,12 @@ describe("the history", () => {
     expect(bodyKind({ type: "summary", text: "# Notes" })).toBe("markdown");
     expect(bodyKind({ type: "tool_response", text: "ok\n" })).toBe("log");
   });
+
+  it("reads a tool's output with lines outside its hunks as a log, so every line is drawn", () => {
+    const show = "commit 0123abc\nAuthor: A <a@example.test>\n\n    Tidy\n\ndiff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1 +1 @@\n-old\n+new\n";
+    expect(bodyKind({ type: "tool_response", text: show })).toBe("log");
+    expect(bodyKind({ type: "tool_response", text: "Changed:\n@@ -1 +1 @@\n-old\n+new" })).toBe("log");
+  });
 });
 
 describe("tool calls, runs, delivery, and usage", () => {
