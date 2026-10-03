@@ -1,6 +1,7 @@
-"""The stream service: where the parts the loop emits wait for whoever
-watches. It is the loop's stream sink, so emission never waits on it, and
+"""The stream service: where the parts of a step wait for whoever watches.
+It implements the loop's stream sink, so an emit into it never waits, and
 it holds a bounded buffer per open stream, which is all the state it holds.
+No root hands it to the loop as its sink yet.
 A part is a cache whose loss costs nothing: the step it adds up to is the
 record, so a buffer that drops a part, or is lost whole, loses no fact."""
 

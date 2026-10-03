@@ -3,8 +3,9 @@
     stream = StreamServiceMemoryImpl()
     watch = build_watch(managers, stream, WatchOptions(live_read_key=key))
 
-`stream` is the stream service the reads come from: the same one the loop
-emits into, as its stream sink, in a process that runs both."""
+`stream` is the stream service the reads come from. A root that runs the
+loop could hand it the same service as its `stream_sink`; none does yet,
+so a read finds nothing open."""
 
 from collections.abc import Callable
 from datetime import datetime

@@ -14,9 +14,11 @@ does; a chat message counts as a person's only as
 - **A live-read handle**: one session's open streams, readable until
   the handle expires. It is signed, the way a presigned URL is, so a
   read needs no session of its own and no database.
-- **The stream service's buffers**: the parts the loop emits, a bounded
-  buffer per open stream. A stream is the parts of one step. Nothing
-  else: the step each adds up to is the record.
+- **The stream service's buffers**: the parts of each open stream, a
+  bounded buffer per stream. A stream is the parts of one step. Nothing
+  else: the step each adds up to is the record. No root hands the
+  service to the loop as its sink yet, so until a carrier brings a
+  runner's parts to it, a read finds nothing open.
 
 It keeps no table. A person's command is the relay's `exec` item, and
 the record that it is theirs is an entry in the tenant's event stream.
@@ -60,8 +62,9 @@ the record that it is theirs is an entry in the tenant's event stream.
   the session takes it.
 
 <!-- agents-only
-The service is `impl/stream.StreamServiceMemoryImpl`, the loop's
-`StreamSinkInterface`; `StreamOptions` bounds parts and bytes a stream,
+The service is `impl/stream.StreamServiceMemoryImpl`, which implements
+the loop's `StreamSinkInterface`, though no root passes it to
+`build_managers` as `stream_sink`; `StreamOptions` bounds parts and bytes a stream,
 streams a session and overall, and closes a stream idle past `idle`. The
 handle is `rules.signed`/`rules.verified` (HMAC-SHA256 over a purpose
 prefix and the `Grant`), keyed by `WatchOptions.live_read_key`; none
@@ -80,7 +83,8 @@ current epoch, unless `stop`. ADR 2007 records the scoped read.
 
 ## How another namespace composes it
 
-A root builds it with `build_watch(managers, stream)`, over the same
-stream service the loop emits into. The API issues the handle, serves
+A root builds it with `build_watch(managers, stream)`, over a stream
+service. No root hands that service to the loop as its sink yet: the
+API's is read by the watch alone, and finds nothing open. The API issues the handle, serves
 the read by the handle alone, and serves take control, a command, and
 give back as the person.

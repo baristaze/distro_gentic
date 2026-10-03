@@ -61,7 +61,9 @@ every live read and says so at start.
 - A read costs no database: the signature is the authority, and the
   buffer is in memory.
 - A rotated key ends every handle out; a viewer asks for a new one.
-- The loop emits into the stream service of its own process. Until a
-  carrier brings a runner's parts to the API's, the API's read finds
-  nothing open, and the steps hold everything said. The hints for a
-  stream opened or completed are not on the channel yet.
+- No root hands the loop a stream service as its sink yet: the
+  runner's loop emits into a null sink, and the API's stream service is
+  read by the watch alone. Until a carrier brings a runner's parts to
+  the API's service, a live read finds nothing open, and the steps hold
+  everything said. The hints for a stream opened or completed are not
+  on the channel yet.
