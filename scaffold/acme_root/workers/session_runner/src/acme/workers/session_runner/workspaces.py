@@ -30,8 +30,8 @@ files. Its work is not pushed again when a snapshot taken after the
 session's last step holds it already, as a loop's end leaves it. One a
 person holds, its loop parked on a hand-over, is theirs and stays. One
 whose release was asked since its session's last loop is not asked
-again, answered or failed: a failed one is logged, and the next loop's
-end asks anew. One whose host is offline, revoked, or out of the
+again, answered or failed: a failed one is logged, and is asked anew
+only after the session's next loop. One whose host is offline, revoked, or out of the
 session's pool waits for a pass that reaches it. A deleted tenant's is
 left to the tenant's purge: nothing is sent into its wall."""
 
@@ -278,7 +278,7 @@ class HeldWorkspacesSweep:
             self._failed[session_id] = asked.id
             log.warning(
                 "session %s of org %s: its host did not let its instance go (%s); "
-                "the next loop's end asks again",
+                "it is asked again after the session's next loop",
                 session_id,
                 ctx.org_id,
                 asked.last_error,
