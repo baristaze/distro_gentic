@@ -20,6 +20,7 @@ from acme.om.base import new_id
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
 from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
 from acme.om.evidence.impl.ports import WorkProductAbsentImpl
+from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.root import build_managers
 from acme.om.steps.types.header import LoopOutcome, ParkReason
 from acme.om.steps.types.step import StepType
@@ -124,7 +125,11 @@ async def test_a_host_that_cannot_give_the_pin_parks_the_loop_over_postgres(
         kinds=(TWINNED,),
         environment="production",
         # Outside `local` a root refuses the null result gate.
-        result_gate=ResultGateEvidenceImpl(storage.get_evidence_storage(), WorkProductAbsentImpl()),
+        result_gate=ResultGateEvidenceImpl(
+            storage.get_evidence_storage(),
+            WorkProductAbsentImpl(),
+            SessionProjectsBoundImpl(storage.get_project_storage()),
+        ),
     )
     session_id = await loop.start("twinned")
     await loop.say(session_id, "Answer it.")

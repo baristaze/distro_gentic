@@ -19,6 +19,7 @@ from acme.integrations.model_providers.absent import ModelProviderAbsentImpl
 from acme.integrations.model_providers.types import ProviderName
 from acme.om.base import utcnow
 from acme.om.privacy.impl.keys import SessionKeysImpl
+from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.root import Managers, private_history
 from acme.om.steps.storage.impl.memory import StepStorageMemoryImpl
 from acme.om.storage.root import StorageInterface
@@ -71,7 +72,9 @@ def build_trust_operator(
 class TrustLayer:
     """`placement` answers where each session runs and on which machine
     credential; `probe` asks a provider about a key before it is saved; and
-    `clients` builds a provider's client on a tenant's key."""
+    `clients` builds a provider's client on a tenant's key. A session's
+    project, which keeps a project's secrets to it, is read from the
+    projects' rows."""
 
     def __init__(
         self,
@@ -112,6 +115,7 @@ class TrustLayer:
             managers.outbox,
             self._infra.get_secrets(),
             self._placement,
+            SessionProjectsBoundImpl(storage.get_project_storage()),
             self._probe,
             self.options,
             self._clock,

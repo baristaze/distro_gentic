@@ -23,6 +23,7 @@ from acme.om.budgets.types.hold import (
 from acme.om.context import TenantContext
 from acme.om.exceptions import BudgetRefused, Unavailable
 from acme.om.models.types.fill import Fill, ModelRole
+from acme.om.projects.policies import SessionProjectsInterface
 from acme.om.windows.gate import CallGateInterface
 from acme.om.windows.rules import call_shape
 
@@ -87,24 +88,26 @@ class CallGateBudgetImpl(CallGateInterface):
     read. A model call's worst case is priced from the one source of prices
     (`windows.rules.call_shape`, `budgets.rules.call_exposure`) and held on
     every scope the call serves: its session, its tree, the person who pays,
-    and the tenant. A refusal raises `BudgetRefused`, listing every breach,
-    with nothing held. A settlement prices the usage the provider reported
-    at the same list price; a call the provider never processed releases
-    its hold. Every settled call counts its tokens and its spend, under
-    the matrix version `version` reads of its session; None counts them
-    all under `none`."""
+    the project `projects` reads of its session, and the tenant. A refusal
+    raises `BudgetRefused`, listing every breach, with nothing held. A
+    settlement prices the usage the provider reported at the same list
+    price; a call the provider never processed releases its hold. Every
+    settled call counts its tokens and its spend, under the matrix version
+    `version` reads of its session; None counts them all under `none`."""
 
     def __init__(
         self,
         gate: BudgetGateInterface,
         pricing: PricingInterface,
         sessions: AgentSessionsManagerInterface,
+        projects: SessionProjectsInterface,
         *,
         version: PinnedVersion | None = None,
     ) -> None:
         self._gate = gate
         self._pricing = pricing
         self._sessions = sessions
+        self._projects = projects
         self._version = version
         self._held: dict[UUID, tuple[ModelPrice | None, str]] = {}
 
@@ -122,11 +125,14 @@ class CallGateBudgetImpl(CallGateInterface):
         # Whose key the call goes out on changes who pays the provider, never
         # what is gated: the same budgets, at the same list price.
         session = await self._sessions.get_session(ctx, session_id)
+        project_id = await self._projects.project_of(ctx, session_id)
         label = await version_label(self._version, ctx, session_id)
         price = self._pricing.price_of(fill.provider.value, fill.model)
         request = HoldRequest(
             spender_id=spender.id,
-            scopes=scopes_of(ctx.org_id, session_id, session.root_id, spender),
+            scopes=scopes_of(
+                ctx.org_id, session_id, session.root_id, spender, project_id=project_id
+            ),
             exposure=call_exposure(call_shape(call, fill), price),
             session_id=session_id,
             purpose=role,
@@ -153,14 +159,26 @@ class CallGateBudgetImpl(CallGateInterface):
 
 
 def scopes_of(
-    org_id: UUID, session_id: UUID, tree_id: UUID, spender: Principal
+    org_id: UUID,
+    session_id: UUID,
+    tree_id: UUID,
+    spender: Principal,
+    *,
+    project_id: UUID | None,
 ) -> tuple[BudgetScope, ...]:
     """The scopes a model call of a session is charged to: the session, the
-    tree it draws on, the person who pays, and the tenant. A project's or a
-    team's are the platform's to add."""
+    tree it draws on, the person who pays, the project the session belongs
+    to, by its id, and the tenant. A session of no project is charged to no
+    project. A team's scope is the platform's to add."""
+    project = (
+        ()
+        if project_id is None
+        else (BudgetScope(kind=BudgetScopeKind.PROJECT, key=str(project_id)),)
+    )
     return (
         BudgetScope(kind=BudgetScopeKind.SESSION, key=str(session_id)),
         BudgetScope(kind=BudgetScopeKind.TREE, key=str(tree_id)),
         BudgetScope(kind=BudgetScopeKind.PERSON, key=str(spender.id)),
+        *project,
         BudgetScope(kind=BudgetScopeKind.TENANT, key=str(org_id)),
     )

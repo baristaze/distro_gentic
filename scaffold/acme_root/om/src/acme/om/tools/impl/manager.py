@@ -286,6 +286,7 @@ class ToolsManagerImpl(ToolsManagerInterface):
         epoch: int,
         tree_deadline: datetime | None,
         on_output: OutputSink | None = None,
+        kept_as: Mapping[str, str] | None = None,
     ) -> Step:
         ctx.require(Permission.WRITE)
         resolved = await self._resolve(ctx, registry, request, call_input)
@@ -299,7 +300,9 @@ class ToolsManagerImpl(ToolsManagerInterface):
         )
         retried = False
         while True:
-            runtime = self._runtime(ctx, request, tool, workspace, epoch, deadline, on_output)
+            runtime = self._runtime(
+                ctx, request, tool, workspace, epoch, deadline, on_output, kept_as=kept_as
+            )
             try:
                 async with asyncio.timeout(self._seconds_until(deadline + self._options.grace)):
                     output = await tool.run(ctx, parsed, runtime)
@@ -342,6 +345,7 @@ class ToolsManagerImpl(ToolsManagerInterface):
         epoch: int,
         tree_deadline: datetime | None,
         on_output: OutputSink | None = None,
+        kept_as: Mapping[str, str] | None = None,
     ) -> Step:
         ctx.require(Permission.WRITE)
         tool = registry.get(_header(request).tool)
@@ -355,6 +359,7 @@ class ToolsManagerImpl(ToolsManagerInterface):
                 epoch=epoch,
                 tree_deadline=tree_deadline,
                 on_output=on_output,
+                kept_as=kept_as,
             )
         # Asking admits this run's epoch on the transport first, so the lost
         # run's command for this call can no longer start there.
@@ -387,6 +392,7 @@ class ToolsManagerImpl(ToolsManagerInterface):
         *,
         epoch: int,
         tree_deadline: datetime | None,
+        kept_as: Mapping[str, str] | None = None,
     ) -> JobHandle | Step:
         ctx.require(Permission.WRITE)
         resolved = await self._resolve(ctx, registry, request, call_input)
@@ -396,7 +402,9 @@ class ToolsManagerImpl(ToolsManagerInterface):
         if not isinstance(tool, JobToolInterface):
             raise ValidationFailed(f"{tool.spec.name} is not a job")
         deadline = job_deadline(self._clock(), tool.spec.timeout, tree_deadline)
-        runtime = self._runtime(ctx, request, tool, workspace, epoch, deadline, None)
+        runtime = self._runtime(
+            ctx, request, tool, workspace, epoch, deadline, None, kept_as=kept_as
+        )
         try:
             # Starting is quick, and never outlasts the engine's limit or the
             # job's deadline; the work runs by that deadline.
@@ -552,6 +560,7 @@ class ToolsManagerImpl(ToolsManagerInterface):
         on_output: OutputSink | None,
         *,
         read_only: bool = False,
+        kept_as: Mapping[str, str] | None = None,
     ) -> ToolRuntime:
         async def audit(use: SecretUse) -> None:
             entry = audit_event(
@@ -577,7 +586,12 @@ class ToolsManagerImpl(ToolsManagerInterface):
             epoch=epoch,
             deadline=deadline,
             effect=tool.spec.effect,
-            secrets=tool.spec.secrets,
+            # Each declared secret, read under the name its store keeps it
+            # under: only where a declared one is kept moves, never what it is.
+            secrets=tuple(
+                use.model_copy(update={"kept_as": kept_as.get(use.name)}) if kept_as else use
+                for use in tool.spec.secrets
+            ),
             audit=audit,
             on_output=on_output,
             read_only=read_only,

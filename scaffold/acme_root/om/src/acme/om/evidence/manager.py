@@ -23,7 +23,8 @@ class EvidenceManagerInterface(ABC):
 
     @abstractmethod
     async def get_policy(self, ctx: TenantContext, project: str) -> ValidationPolicy:
-        """The project's validation policy; `NotFound` when it declares none."""
+        """The validation policy kept under `project`, a project's id
+        (`rules.policy_key`); `NotFound` when it declares none."""
         ...
 
     @abstractmethod
@@ -35,11 +36,15 @@ class EvidenceManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def protection(self, ctx: TenantContext, project: str, paths: Sequence[str]) -> Target:
-        """What a call that changes `paths` of a project acts on, for policy
-        to read: whether the project's policy protects any of them. A tool
-        that changes files reports it as its target, and the platform's
-        ceiling denies the call (`rules.PROTECTED_CEILING`)."""
+    async def protection(
+        self, ctx: TenantContext, session_id: UUID, paths: Sequence[str]
+    ) -> Target:
+        """What a call of the session that changes `paths` acts on, for
+        policy to read: whether the policy of the session's project, as the
+        projects answer it, protects any of them. A session of no project,
+        or of one with no policy, has nothing protected. A tool that changes
+        files reports it as its target, and the platform's ceiling denies
+        the call (`rules.PROTECTED_CEILING`), or refuses the call itself."""
         ...
 
     # The runs.
@@ -83,8 +88,10 @@ class EvidenceManagerInterface(ABC):
         wrote: a `validation` at the committed head, of the checks the
         change asks for, or a `baseline` at the base, of every check the
         policy requires. The checks, fixtures, and runner come from the
-        base. Refused before anything runs (`PreconditionFailed`) when the
-        session holds no work product, its project declares no policy, its
+        base. The policy is the session's project's, as the projects answer
+        it, never one the work product names. Refused before anything runs
+        (`PreconditionFailed`) when the session holds no work product,
+        belongs to no project, its project declares no policy, its
         tree is dirty, its change touches a protected path, nothing is asked
         for, or the executor cannot run a check. Results that do not hash to
         what the executor wrote, or that do not read as the contract says,

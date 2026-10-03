@@ -45,6 +45,19 @@ def make_binding(session_id: UUID, project_id: UUID) -> SessionProject:
     return SessionProject(id=session_id, created_at=utcnow(), project_id=project_id)
 
 
+async def in_project(
+    storage: ProjectStorageInterface, org_id: UUID, *sessions: UUID, path: str = "octo/reports"
+) -> UUID:
+    """A new project of the tenant, with each session bound to it in its
+    rows, as the projects' start binds one: a suite's way to place a
+    session it started otherwise. Answers the project's id."""
+    project = make_project(path)
+    assert await storage.create_project(org_id, project, ())
+    for session_id in sessions:
+        await storage.bind_session(org_id, make_binding(session_id, project.id))
+    return project.id
+
+
 class ProjectStorageContract:
     @pytest.fixture
     def storage(self) -> ProjectStorageInterface:

@@ -1,10 +1,12 @@
 """Pure rules of trust: the four answers of a tool call, read each from its
-own source; where a secret may be resolved, given the session's wall; and
+own source; where a secret may be resolved, given the session's wall and
+its project; and
 whether an operator's content grant holds. Values in, values out; no
 clock, no storage."""
 
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta
+from uuid import UUID
 
 from acme.infra.transports import SecretUse, SecretVia
 from acme.om.attribution.types.principal import Principal
@@ -12,7 +14,7 @@ from acme.om.steps.types.header import ModelRequestHeader, ToolRequestHeader
 from acme.om.steps.types.step import Step
 from acme.om.trust.types.grant import ContentGrant
 from acme.om.trust.types.identities import ActorRef, CallAudit, Executor
-from acme.om.trust.types.secret import SecretDeclaration, SecretStore
+from acme.om.trust.types.secret import SecretDeclaration, SecretOwnerKind, SecretStore
 
 
 def call_audit(
@@ -50,13 +52,25 @@ def store_of(declaration: SecretDeclaration | None) -> SecretStore:
 
 
 def crossing(
-    use: SecretUse, declaration: SecretDeclaration | None, *, inside_wall: bool
+    use: SecretUse,
+    declaration: SecretDeclaration | None,
+    *,
+    inside_wall: bool,
+    project_id: UUID | None,
 ) -> str | None:
     """Why a command may not use `use` in a session on this side of a wall,
-    or None when it may. A cloud secret never reaches a customer's host, and
+    of the project `project_id`, or None when it may. A project's secret
+    reaches that project's sessions alone, never a session of another
+    project or of none. A cloud secret never reaches a customer's host, and
     a secret held inside the wall never crosses into the cloud. An injected
     secret lands in the variable its declaration names, or not at all. The
     reason names the secret and never its value."""
+    if (
+        declaration is not None
+        and declaration.owner_kind is SecretOwnerKind.PROJECT
+        and declaration.owner_id != project_id
+    ):
+        return f"{use.name} is declared on another project, and never reaches this session"
     store = store_of(declaration)
     if inside_wall and store is SecretStore.CLOUD:
         return f"{use.name} is a cloud secret, and never reaches a customer's host"
@@ -76,11 +90,15 @@ def first_crossing(
     declarations: Mapping[str, SecretDeclaration],
     *,
     inside_wall: bool,
+    project_id: UUID | None,
 ) -> str | None:
-    """The first of `uses` that may not be used on this side of the wall,
-    with its reason; None when every one may."""
+    """The first of `uses` that may not be used on this side of the wall, in
+    a session of the project `project_id`, with its reason; None when every
+    one may."""
     for use in uses:
-        refusal = crossing(use, declarations.get(use.name), inside_wall=inside_wall)
+        refusal = crossing(
+            use, declarations.get(use.name), inside_wall=inside_wall, project_id=project_id
+        )
         if refusal is not None:
             return refusal
     return None

@@ -1,7 +1,7 @@
 """The secrets of one command, for as long as it runs: the brokered ones
-attached outside the workspace, the injected ones resolved by name under the
-workspace's tenant, and the redaction that matches them. Nothing here
-outlives the command (ADR 1003)."""
+attached outside the workspace, the injected ones resolved under the
+workspace's tenant by the name their store keeps them under, and the
+redaction that matches them. Nothing here outlives the command (ADR 1003)."""
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -41,7 +41,7 @@ async def injected(
         env: dict[str, str] = {}
         for use in command.secrets:
             if use.via is SecretVia.INJECTED and use.env is not None:
-                values[use.name] = await secrets.get(workspace.org_id, use.name)
+                values[use.name] = await secrets.get(workspace.org_id, use.kept_as or use.name)
                 env[use.env] = values[use.name]
         yield Injection(
             env=env,

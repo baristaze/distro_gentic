@@ -19,6 +19,7 @@ from acme.om.events.manager import audit_event
 from acme.om.exceptions import Conflict, NotFound, UniqueKeyTaken, ValidationFailed
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import OutboxRow, versioned_row
+from acme.om.projects.policies import SessionProjectsInterface
 from acme.om.steps import StepsManagerInterface
 from acme.om.steps.types.header import ParkReason, ToolRequestHeader
 from acme.om.steps.types.step import Step
@@ -31,7 +32,12 @@ from acme.om.trust.rules import call_audit, first_crossing
 from acme.om.trust.storage import TrustStorageInterface
 from acme.om.trust.types.identities import CallAudit
 from acme.om.trust.types.provider_key import KeyStatus, ProviderKey, key_secret_name
-from acme.om.trust.types.secret import SecretDeclaration, SecretStore
+from acme.om.trust.types.secret import (
+    SecretDeclaration,
+    SecretOwnerKind,
+    SecretStore,
+    kept_as,
+)
 
 CALL_AUDITED = "trust.call.audited"
 DECLARED = "trust.secret_declaration.created"
@@ -67,6 +73,7 @@ class TrustManagerImpl(TrustManagerInterface):
         relay: OutboxRelayInterface,
         secrets: SecretsInterface,
         placement: PlacementInterface,
+        projects: SessionProjectsInterface,
         probe: KeyProbeInterface,
         options: TrustOptions,
         clock: Callable[[], datetime] = utcnow,
@@ -80,6 +87,7 @@ class TrustManagerImpl(TrustManagerInterface):
         self._relay = relay
         self._secrets = secrets
         self._placement = placement
+        self._projects = projects
         self._probe = probe
         self._options = options
         self._clock = clock
@@ -128,6 +136,10 @@ class TrustManagerImpl(TrustManagerInterface):
         self, ctx: TenantContext, declaration: SecretDeclaration
     ) -> SecretDeclaration:
         ctx.require(Permission.MANAGE_MEMBERS)
+        if declaration.owner_kind is SecretOwnerKind.PROJECT and not await self._projects.holds(
+            ctx, declaration.owner_id
+        ):
+            raise NotFound(f"no project {declaration.owner_id} of this tenant")
         now = self._clock()
         made = SecretDeclaration.model_validate(
             {
@@ -143,49 +155,62 @@ class TrustManagerImpl(TrustManagerInterface):
             landed = await self._storage.create_declaration(ctx.org_id, made, rows)
         except UniqueKeyTaken:
             landed = False
-        stored = await self._storage.read_declaration(ctx.org_id, made.name)
+        stored = await self._storage.read_declaration(
+            ctx.org_id, made.owner_kind, made.owner_id, made.name
+        )
         if stored is None:
             raise Conflict(f"secret {made.name} was written under another id")
         if not landed and _declared(stored) != _declared(made):
-            raise Conflict(f"secret {made.name} is declared already, otherwise")
+            raise Conflict(f"secret {made.name} is declared already on its owner, otherwise")
         if landed:
             await self._relay_all(ctx, rows)
         return stored
 
     async def get_secrets(
-        self, ctx: TenantContext, after: str | None, limit: int
+        self, ctx: TenantContext, after: tuple[str, UUID] | None, limit: int
     ) -> tuple[SecretDeclaration, ...]:
         ctx.require(Permission.READ)
         bounded = max(1, min(limit, self._options.max_page))
         return tuple(await self._storage.read_declarations(ctx.org_id, after, bounded))
 
-    async def put_secret(self, ctx: TenantContext, name: str, value: str) -> SecretDeclaration:
+    async def put_secret(
+        self, ctx: TenantContext, project_id: UUID, name: str, value: str
+    ) -> SecretDeclaration:
         ctx.require(Permission.MANAGE_MEMBERS)
-        declaration = await self._storage.read_declaration(ctx.org_id, name)
+        declaration = await self._storage.read_declaration(
+            ctx.org_id, SecretOwnerKind.PROJECT, project_id, name
+        )
         if declaration is None:
-            raise NotFound(f"no secret named {name} is declared")
+            raise NotFound(f"no secret named {name} is declared on project {project_id}")
         if declaration.store is not SecretStore.CLOUD:
             raise SecretCrossesWall(
                 f"{name} is held inside a customer's wall; its host's store takes its value"
             )
-        await self._secrets.put(ctx.org_id, name, value, deadline=ctx.deadline)
+        await self._secrets.put(ctx.org_id, kept_as(declaration), value, deadline=ctx.deadline)
         return declaration
 
-    async def refuse_crossing(
+    async def resolve_secrets(
         self, ctx: TenantContext, session_id: UUID, uses: Sequence[SecretUse]
-    ) -> None:
+    ) -> dict[str, str]:
         ctx.require(Permission.READ)
         if not uses:
-            return
+            return {}
         inside = await self._placement.inside_wall(ctx.org_id, session_id)
+        project_id = await self._projects.project_of(ctx, session_id)
         declared: dict[str, SecretDeclaration] = {}
         for use in uses:
-            found = await self._storage.read_declaration(ctx.org_id, use.name)
+            found = await self._storage.resolve_declaration(ctx.org_id, use.name, project_id)
             if found is not None:
                 declared[use.name] = found
-        refusal = first_crossing(uses, declared, inside_wall=inside)
+        refusal = first_crossing(uses, declared, inside_wall=inside, project_id=project_id)
         if refusal is not None:
             raise SecretCrossesWall(refusal)
+        # A secret held on a host is resolved there, by its name.
+        return {
+            name: kept_as(declaration)
+            for name, declaration in declared.items()
+            if declaration.store is SecretStore.CLOUD
+        }
 
     # The tenant's provider keys.
 
@@ -259,7 +284,7 @@ class TrustManagerImpl(TrustManagerInterface):
         declared = await self._storage.read_declarations(ctx.org_id, None, batch)
         for declaration in declared:
             if declaration.store is SecretStore.CLOUD:
-                await self._secrets.delete(ctx.org_id, declaration.name, deadline=ctx.deadline)
+                await self._secrets.delete(ctx.org_id, kept_as(declaration), deadline=ctx.deadline)
         gone += await self._storage.purge_declarations(ctx.org_id, [d.id for d in declared])
         return gone + await self._storage.purge_grants(ctx.org_id, batch)
 

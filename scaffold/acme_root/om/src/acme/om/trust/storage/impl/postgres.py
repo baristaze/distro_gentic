@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import delete, or_, select, update
+from sqlalchemy import and_, case, delete, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 
@@ -18,7 +18,7 @@ from acme.om.trust.storage.tables.provider_keys import ProviderKeys
 from acme.om.trust.storage.tables.secret_declarations import SecretDeclarations
 from acme.om.trust.types.grant import ContentGrant
 from acme.om.trust.types.provider_key import KeyStatus, ProviderKey
-from acme.om.trust.types.secret import SecretDeclaration
+from acme.om.trust.types.secret import SecretDeclaration, SecretOwnerKind
 
 
 class TrustStoragePostgresImpl(PgStorageBase, TrustStorageInterface):
@@ -29,21 +29,50 @@ class TrustStoragePostgresImpl(PgStorageBase, TrustStorageInterface):
     ) -> bool:
         return await self._insert(SecretDeclarations, org_id, declaration, outbox_rows)
 
-    async def read_declaration(self, org_id: UUID, name: str) -> SecretDeclaration | None:
+    async def read_declaration(
+        self, org_id: UUID, owner_kind: SecretOwnerKind, owner_id: UUID, name: str
+    ) -> SecretDeclaration | None:
         stmt = select(SecretDeclarations).where(
-            SecretDeclarations.org_id == org_id, SecretDeclarations.name == name
+            SecretDeclarations.org_id == org_id,
+            SecretDeclarations.name == name,
+            SecretDeclarations.owner_kind == owner_kind.value,
+            SecretDeclarations.owner_id == owner_id,
+        )
+        async with self._session_for(stmt, org_id=org_id) as session:
+            row = (await session.execute(stmt)).scalar_one_or_none()
+            return None if row is None else to_model(row, SecretDeclaration)
+
+    async def resolve_declaration(
+        self, org_id: UUID, name: str, project_id: UUID | None
+    ) -> SecretDeclaration | None:
+        project = SecretDeclarations.owner_kind == SecretOwnerKind.PROJECT.value
+        whose = ~project
+        if project_id is not None:
+            whose = or_(whose, and_(project, SecretDeclarations.owner_id == project_id))
+        # The project's own first; then the tenant's, one on no project.
+        stmt = (
+            select(SecretDeclarations)
+            .where(SecretDeclarations.org_id == org_id, SecretDeclarations.name == name, whose)
+            .order_by(case((project, 0), else_=1), SecretDeclarations.id)
+            .limit(1)
         )
         async with self._session_for(stmt, org_id=org_id) as session:
             row = (await session.execute(stmt)).scalar_one_or_none()
             return None if row is None else to_model(row, SecretDeclaration)
 
     async def read_declarations(
-        self, org_id: UUID, after: str | None, limit: int
+        self, org_id: UUID, after: tuple[str, UUID] | None, limit: int
     ) -> list[SecretDeclaration]:
         stmt = select(SecretDeclarations).where(SecretDeclarations.org_id == org_id)
         if after is not None:
-            stmt = stmt.where(SecretDeclarations.name > after)
-        stmt = stmt.order_by(SecretDeclarations.name).limit(limit)
+            name, last = after
+            stmt = stmt.where(
+                or_(
+                    SecretDeclarations.name > name,
+                    and_(SecretDeclarations.name == name, SecretDeclarations.id > last),
+                )
+            )
+        stmt = stmt.order_by(SecretDeclarations.name, SecretDeclarations.id).limit(limit)
         async with self._session_for(stmt, org_id=org_id) as session:
             rows = (await session.execute(stmt)).scalars().all()
             return [to_model(row, SecretDeclaration) for row in rows]

@@ -3,7 +3,8 @@ value. It is declared on a project or a station, with the variable a
 command sees, the scope the credential is minted for, and the store that
 holds its value: the platform's, in its cloud, or the store of the machine
 that executes the call, inside a customer's wall. The value lives only in
-that store; the platform keeps the declaration."""
+that store; the platform keeps the declaration. A name is one owner's:
+each project declares its own secret of a name, and keeps its own value."""
 
 from enum import StrEnum
 from typing import ClassVar, Self
@@ -54,3 +55,10 @@ class SecretDeclaration(Identifiable, Trackable):
         if self.owner_kind is SecretOwnerKind.STATION and self.store is not SecretStore.HOST:
             raise ValueError("a station's secret is held on its host, never in the cloud")
         return self
+
+
+def kept_as(declaration: SecretDeclaration) -> str:
+    """The name the tenant's store keeps a declared secret's value under:
+    under its owner, so each project keeps its own value of one name, apart
+    from the tenant's own and from every other project's."""
+    return f"{declaration.owner_kind.value}-{declaration.owner_id.hex}-{declaration.name}"

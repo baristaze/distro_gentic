@@ -17,10 +17,11 @@ from acme.om.evidence.types.record import PROJECT, VERSION, RunPurpose
 
 class Delivery(Platform):
     """What a session's work product holds now, as the system that keeps it
-    reports it, never as the agent describes it: its project, the version
-    the work started from, the committed head, whether the tree holds
-    uncommitted changes, and every path changed from the base, committed or
-    not."""
+    reports it, never as the agent describes it: the name its project goes
+    by there, the version the work started from, the committed head,
+    whether the tree holds uncommitted changes, and every path changed from
+    the base, committed or not. No policy is read by that name: a session
+    is judged by its own project's."""
 
     project: str = Field(pattern=PROJECT)
     base: str = Field(pattern=VERSION)

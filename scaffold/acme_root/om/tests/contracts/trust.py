@@ -34,6 +34,8 @@ from acme.om.context import (
 )
 from acme.om.exceptions import NotAuthorized
 from acme.om.models.impl.credentials import CallCredentialsPlatformImpl
+from acme.om.projects.impl.policies import SessionProjectsBoundImpl
+from acme.om.projects.types.project import Project
 from acme.om.root import Managers, build_managers
 from acme.om.steps.types.step import Step
 from acme.om.storage.impl.memory import StorageMemoryImpl
@@ -52,6 +54,7 @@ from acme.om.windows.impl.gate import CallGateBudgetImpl
 from contracts.doubles import APP, context
 from contracts.factories import make_org
 from contracts.loops import Clock, Lookup
+from contracts.project_storage import make_binding, make_project
 from contracts.step_storage import make_message
 from contracts.tools import INJECTED_TOKEN, TWIN_SPEC, Command
 
@@ -139,6 +142,9 @@ class Trusted:
     placement: Placement
     probe: KeyProbeTwinImpl
     lookup: Lookup
+    # The owner's project, where a suite's sessions start and its secrets
+    # are declared.
+    project: Project = field(default_factory=make_project)
 
     @property
     def transport(self) -> TransportTwinImpl:
@@ -157,10 +163,23 @@ class Trusted:
             credential_kind=CredentialKind.SESSION_TOKEN,
         )
 
-    async def start(self, ctx: TenantContext | None = None, kind: str = "steady") -> UUID:
+    async def owners_project(self) -> UUID:
+        """The owner's project, written on its first use."""
+        projects = self.storage.get_project_storage()
+        await projects.create_project(self.owner.org_id, self.project, ())
+        return self.project.id
+
+    async def start(
+        self, ctx: TenantContext | None = None, kind: str = "steady", *, project: bool = False
+    ) -> UUID:
+        """A session of no project, or of the owner's. Its project's row is
+        written once it stands, so no workspace checks the project out."""
         session = await self.managers.agents.start_session(
             ctx or self.owner, Start(id=new_id(), kind=kind, title="the records")
         )
+        if project:
+            binding = make_binding(session.id, await self.owners_project())
+            await self.storage.get_project_storage().bind_session(self.owner.org_id, binding)
         return session.id
 
     async def say(self, session_id: UUID, text: str, ctx: TenantContext | None = None) -> Step:
@@ -233,7 +252,12 @@ def trusted(
         managers.models,
         managers.windows,
         managers.tools,
-        CallGateBudgetImpl(managers.budget_gate, managers.pricing, managers.agent_sessions),
+        CallGateBudgetImpl(
+            managers.budget_gate,
+            managers.pricing,
+            managers.agent_sessions,
+            SessionProjectsBoundImpl(storage.get_project_storage()),
+        ),
         CallCredentialsPlatformImpl(providers),
         infra.get_outages(),
         sink,

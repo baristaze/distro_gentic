@@ -38,6 +38,7 @@ from acme.om.context import Role
 from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
 from acme.om.evidence.impl.ports import WorkProductAbsentImpl
 from acme.om.exceptions import NotAuthorized, NotFound, Unavailable
+from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.steps.types.header import LoopOutcome, ParkReason
 from acme.om.steps.types.step import Step, StepType
 from acme.om.storage.impl.memory import StorageMemoryImpl
@@ -70,7 +71,11 @@ MIRROR = EgressRule(destination="*.mirror.example.com", methods=READ_ONLY)
 def gate(storage: StorageInterface) -> ResultGateInterface:
     """The evidence's gate, as a deployed root takes it: outside `local`, a
     root refuses the null one."""
-    return ResultGateEvidenceImpl(storage.get_evidence_storage(), WorkProductAbsentImpl())
+    return ResultGateEvidenceImpl(
+        storage.get_evidence_storage(),
+        WorkProductAbsentImpl(),
+        SessionProjectsBoundImpl(storage.get_project_storage()),
+    )
 
 
 def loop_of(tmp_path: Path, *kinds: AgentKind, **roots: Any) -> Loop:
