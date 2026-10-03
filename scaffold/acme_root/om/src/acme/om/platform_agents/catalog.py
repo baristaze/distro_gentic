@@ -13,11 +13,13 @@ from acme.om.agents.types.kind import AgentKind
 from acme.om.base import Platform
 from acme.om.evidence import EvidenceManagerInterface
 from acme.om.exceptions import UnsafeConfiguration
+from acme.om.intake import IntakeManagerInterface
 from acme.om.platform_agents import kinds, rules
 from acme.om.platform_agents.tools import (
     DraftToolPolicyImpl,
     HandOffToEngineerImpl,
     ListFilesImpl,
+    OpenPullRequestImpl,
     ReadFileImpl,
     ReadSessionImpl,
     RunCommandImpl,
@@ -30,6 +32,7 @@ from acme.om.platform_agents.types.corpus import Corpus, Document
 from acme.om.tools import ToolsManagerInterface
 from acme.om.tools.tool import ToolInterface
 from acme.om.tools.types.tool import ToolClass
+from acme.om.workspaces import WorkspacesManagerInterface
 
 KNOWLEDGE_MAP = "llms.txt"
 
@@ -66,15 +69,19 @@ def with_shipped(
     policies: Callable[[], ToolsManagerInterface],
     agents: Callable[[], AgentsManagerInterface],
     evidence: Callable[[], EvidenceManagerInterface],
+    workspaces: Callable[[], WorkspacesManagerInterface],
+    intake: Callable[[], IntakeManagerInterface],
 ) -> tuple[ToolInterface, ...]:
     """The platform's tools, then the adopter's. The managers come late, as
-    callables the root answers once it has built them."""
+    callables the root answers once it has built them; `intake` is built
+    over the managers, so the process that builds it answers it."""
     own_specs = (
         ListFilesImpl.SPEC,
         ReadFileImpl.SPEC,
         WriteFileImpl.SPEC,
         RunCommandImpl.SPEC,
         ValidateImpl.SPEC,
+        OpenPullRequestImpl.SPEC,
         SubmitResultImpl.SPEC,
         SearchCorpusImpl.SPEC,
         ReadSessionImpl.SPEC,
@@ -90,6 +97,7 @@ def with_shipped(
         WriteFileImpl(evidence),
         RunCommandImpl(),
         ValidateImpl(evidence),
+        OpenPullRequestImpl(workspaces, intake),
         SubmitResultImpl(),
         SearchCorpusImpl(shipped.corpus),
         ReadSessionImpl(sessions),

@@ -5,7 +5,8 @@ engine runs every one of them the same way.
 
 - The engineer takes an objective to a validated, reviewable change in a
   workspace of its own: it validates its committed head on a fresh
-  executor, and ends through the result gate, citing those runs.
+  executor, opens its pull request on its own branch, and ends through the
+  result gate, citing those runs.
 - Analysis reads what a run produced in a workspace, changes nothing, and
   answers with findings.
 - The planner turns findings into tasks: it reads where sessions stand,
@@ -37,6 +38,7 @@ WRITE_FILE = "write_file"
 RUN_COMMAND = "run_command"
 SUBMIT_RESULT = "submit_result"
 VALIDATE = "validate"
+OPEN_PULL_REQUEST = "open_pull_request"
 SEARCH_CORPUS = "search_corpus"
 READ_SESSION = "read_session"
 DRAFT_TOOL_POLICY = "draft_tool_policy"
@@ -58,7 +60,15 @@ def allowing(*classes: ToolClass) -> PolicyLayer:
 ENGINEER_KIND = AgentKind(
     name=ENGINEER,
     version=1,
-    tools=(LIST_FILES, READ_FILE, WRITE_FILE, RUN_COMMAND, VALIDATE, SUBMIT_RESULT),
+    tools=(
+        LIST_FILES,
+        READ_FILE,
+        WRITE_FILE,
+        RUN_COMMAND,
+        VALIDATE,
+        OPEN_PULL_REQUEST,
+        SUBMIT_RESULT,
+    ),
     done_rule=DoneRule.RESULT_TOOL,
     result_tool=SUBMIT_RESULT,
     authority=AuthorityMode.STEADY,
@@ -67,11 +77,13 @@ ENGINEER_KIND = AgentKind(
         "You are an engineer. You take one objective to a validated, reviewable change "
         "in your workspace. Take a baseline with validate before you change anything. "
         "Change what the objective needs and nothing else, commit it, and validate the "
-        "committed head. Submit the result with submit_result, citing the runs validate "
+        "committed head. Open its pull request with open_pull_request, so a person can "
+        "review it. Submit the result with submit_result, citing the runs validate "
         "answered: a success counts only when the validation at your head passed. A "
         "failure you explain with those runs is a result too.",
     ),
-    policy=allowing(ToolClass.READ, ToolClass.WRITE, ToolClass.EXECUTE),
+    # Its pull request is its own work product, so it opens without asking.
+    policy=allowing(ToolClass.READ, ToolClass.WRITE, ToolClass.EXECUTE, ToolClass.INTEGRATION),
     isolation=WORKSPACE,
 )
 

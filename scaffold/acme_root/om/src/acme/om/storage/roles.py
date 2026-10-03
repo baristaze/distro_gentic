@@ -88,6 +88,7 @@ TABLE_ROLES: dict[str, DatabaseRole] = {
     "station_jobs": DatabaseRole.CORE,
     "session_workspaces": DatabaseRole.CORE,
     "egress_allowlists": DatabaseRole.CORE,
+    "repository_credentials": DatabaseRole.CORE,
     "matrix_versions": DatabaseRole.CORE,
     "benchmark_results": DatabaseRole.CORE,
     "model_retirements": DatabaseRole.CORE,

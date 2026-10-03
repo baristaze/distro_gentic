@@ -5,6 +5,11 @@ runs.
 
 The workspace's four reach the world only through the call's runtime, so a
 kind with no workspace cannot use one even when it is handed one. The
+engineer's pull request opens its own branch on its project's repository
+with a push token the platform mints for the call and checks before it
+writes; the model names neither the branch nor the repository, and never
+sees the token. The branch and the pull request are bound to the session,
+and the push recorded as its act, so the events on them find it. The
 assistant's read the corpus and live state, and draft; the one that hands
 work on starts a session that waits for its person. A tool that reads a
 manager takes it late, as a callable the root answers once it has built
@@ -27,7 +32,17 @@ from acme.om.context import TenantContext
 from acme.om.evidence import EvidenceManagerInterface
 from acme.om.evidence.rules import PATHS
 from acme.om.evidence.types.record import RunPurpose
-from acme.om.exceptions import ToolFailed
+from acme.om.exceptions import (
+    Conflict,
+    NotAuthorized,
+    NotFound,
+    ToolFailed,
+    Unavailable,
+    ValidationFailed,
+)
+from acme.om.intake import IntakeManagerInterface
+from acme.om.intake.tools import FORGE
+from acme.om.intake.types.link import HandleKind
 from acme.om.platform_agents import kinds, rules
 from acme.om.platform_agents.types.corpus import Corpus, Passage
 from acme.om.platform_agents.types.draft import PolicyDraft
@@ -36,6 +51,8 @@ from acme.om.tools import ToolsManagerInterface
 from acme.om.tools.tool import ToolInterface, ToolRuntime
 from acme.om.tools.types.policy import ApproverRule, PolicyRule, Target
 from acme.om.tools.types.tool import Effect, ToolClass, ToolInput, ToolMode, ToolSpec
+from acme.om.workspaces import WorkspacesManagerInterface
+from acme.om.workspaces.rules import COMMIT
 
 MAX_PATH = 1024
 MAX_READ = 200_000  # bytes one read takes at most
@@ -291,6 +308,99 @@ class ValidateImpl(NativeToolImpl):
         return Validated(
             validation_id=validation.id, version=validation.version, runs=validation.records
         )
+
+
+# The repository.
+
+MAX_PULL_REQUEST_TITLE = 200
+MAX_PULL_REQUEST_BODY = 20_000
+
+
+class PullRequestInput(ToolInput):
+    title: str = Field(min_length=1, max_length=MAX_PULL_REQUEST_TITLE)
+    body: str = Field(default="", max_length=MAX_PULL_REQUEST_BODY)
+
+
+class PullRequestOpened(Platform):
+    id: str
+    url: str
+    branch: str
+    head: str
+
+
+class OpenPullRequestImpl(NativeToolImpl):
+    """Points the session's own branch at the workspace's committed head and
+    opens its pull request on the repository its project binds. The model
+    writes the title and the body alone: the branch, the repository, and the
+    base are the platform's records, and the head is the checkout's, read as
+    a commit's full id or refused. The push token is minted for this call,
+    checked before each write, and never reaches the model, the workspace,
+    or the answer. The platform's account pushes for every session, so the
+    head is recorded as the session's act and the branch bound to it before
+    the push, and the pull request once it opens: a comment, a check, or a
+    person's push on either finds the session, and an automation it feeds
+    knows its cause."""
+
+    SPEC = ToolSpec(
+        name=kinds.OPEN_PULL_REQUEST,
+        description=(
+            "Opens the pull request of your committed head on your session's own branch of "
+            "the project's repository, with a title and a body; answers where a person reads "
+            "it. Commit first: only the committed head is opened. Opening it again moves the "
+            "branch to your new head, and keeps the one pull request."
+        ),
+        input_model=PullRequestInput,
+        output_model=PullRequestOpened,
+        timeout=timedelta(minutes=2),
+        authorization_class=ToolClass.INTEGRATION,
+        effect=Effect.IDEMPOTENT,
+        interruptible=False,
+        mode=ToolMode.SYNC,
+    )
+
+    def __init__(
+        self,
+        workspaces: Callable[[], WorkspacesManagerInterface],
+        intake: Callable[[], IntakeManagerInterface],
+    ) -> None:
+        self._workspaces = workspaces
+        self._intake = intake
+
+    async def target(self, ctx: TenantContext, call_input: ToolInput) -> Target:
+        # Only the session's own branch and its pull request on its bound
+        # repository: its work product, never an outward write.
+        return Target(attributes={"outward": False})
+
+    async def run(
+        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
+    ) -> Platform:
+        assert isinstance(call_input, PullRequestInput)
+        found = await runtime.run(("git", "rev-parse", "--verify", "--quiet", "HEAD^{commit}"))
+        head = found.stdout.strip()
+        if found.exit_code != 0 or not COMMIT.fullmatch(head):
+            raise ToolFailed(ToolFailure.PERMANENT, "the workspace holds no commit: commit first")
+        workspaces = self._workspaces()
+        try:
+            intake = self._intake()
+            token = await workspaces.mint_push_token(ctx, runtime.session_id)
+            # Recorded and bound before the push: the forge's events on the
+            # commit and the branch may come back before the push answers.
+            await intake.record_act(ctx, runtime.session_id, FORGE, (head,))
+            await intake.bind_work(ctx, runtime.session_id, HandleKind.BRANCH, token.branch)
+            opened = await workspaces.open_pull_request(
+                ctx,
+                runtime.session_id,
+                token.token.get_secret_value(),
+                head,
+                call_input.title,
+                call_input.body,
+            )
+            await intake.bind_work(ctx, runtime.session_id, HandleKind.PULL_REQUEST, opened.id)
+        except Unavailable as failed:
+            raise ToolFailed(ToolFailure.TRANSIENT, failed.message) from None
+        except (NotFound, NotAuthorized, ValidationFailed, Conflict) as failed:
+            raise ToolFailed(ToolFailure.PERMANENT, failed.message) from None
+        return PullRequestOpened(id=opened.id, url=opened.url, branch=token.branch, head=head)
 
 
 # The assistant's.

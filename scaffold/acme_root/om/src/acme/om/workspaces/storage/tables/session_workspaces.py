@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
@@ -22,4 +23,6 @@ class SessionWorkspaces(IdentifiableMixin, TrackableMixin, Base):
     branch_seen: Mapped[bool]
     snapshot_ref: Mapped[str | None]
     notice: Mapped[str | None]
+    push_digest: Mapped[str | None]
+    push_expires_at: Mapped[datetime | None]
     version: Mapped[int]
