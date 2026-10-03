@@ -82,9 +82,11 @@ of](../../../../README.md).
   test declared. A fixed count runs every trial, whatever the first ones
   showed.
 - **The hidden suite stays hidden.** It lives in a source of its own,
-  never in the project's repository the workspace checks out, and the
-  executor fetches it only to run it. A scan of every surface the agent
-  reads finds any mention of it.
+  a commit of another project's repository, never in the project's
+  repository the workspace checks out, and the executor fetches it only
+  to run it. The paths it names are protected in that run: they come from
+  its source, whatever the head holds there. A scan of every surface the
+  agent reads finds any mention of it.
 - **Acceptance judges the chain, never the files.** A failing baseline at
   the base before the change, every hypothesis resolved, a validation the
   gate accepts, a result that cites it, and the hidden suite passing at

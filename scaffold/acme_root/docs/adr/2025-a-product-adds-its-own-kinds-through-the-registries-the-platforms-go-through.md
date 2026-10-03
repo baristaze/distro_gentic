@@ -36,7 +36,9 @@ Five registries, each refusing a name registered twice:
 - An **executor**, by the validation environment it runs
   (`evidence/executor.py`). The fresh executor runs `platform`.
 
-A product hands its kinds to every root in one place,
+A product hands its kinds to every root in one place, `PRODUCT_KINDS`
+in `product_kinds.py`, with its agent kinds, its tools, and the classes
+they declare. Every process's entry point passes it as
 `PlatformPorts.kinds`, so each process builds the same registry. A name
 the platform holds is refused at boot.
 

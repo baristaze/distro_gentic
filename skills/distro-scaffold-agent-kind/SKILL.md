@@ -72,7 +72,14 @@ The shape of a kind is the four profiles in
    `om/src/<name>/om/matrix/root.py`, requires every role a shipped kind
    names. A kind in `SHIPPED` is in every process, so no container
    changes. A product's own kind, one no other product built on the
-   platform would ship, is the engine's: `agentic-scaffold-agent-kind`.
+   platform would ship, is the engine's: `agentic-scaffold-agent-kind`,
+   with one difference in this base. Its kinds, its tools, and the
+   classes they declare go in `PRODUCT_KINDS`, in
+   `om/src/<name>/om/product_kinds.py` (`agents`, `tools`, `classes` of
+   `ProductKinds` in `om/src/<name>/om/root.py`), which every process's
+   entry point hands its root, never in a container's call to
+   `build_managers`. Its `tools` builds them over the managers, read when
+   a tool is called, as `with_shipped` builds the platform's.
 2. A kind is versioned, and a session keeps the version it started on.
    A change to a kind that the last commit holds
    (`git show HEAD:om/src/<name>/om/platform_agents/kinds.py`) is the

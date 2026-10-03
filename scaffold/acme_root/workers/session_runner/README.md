@@ -77,9 +77,12 @@ on their channels, before its item completes
 
 ## What a product gives it
 
-The agent kinds and the tools are the product's. A product's own entry
-point passes them to `main`, as `tests/e2e_runner.py` passes the suite's,
-and its API passes the same kinds, since a session starts on one of them.
+The agent kinds and the tools are the product's, declared once in
+`PRODUCT_KINDS` (`om/src/acme/om/product_kinds.py`). `RunnerContainer.build`
+reads it, as the API's container does, since a session starts on a kind
+the API knows and runs here. A product's tool is built over the managers,
+read when it is called. An entry point that sets ports of its own sets
+`kinds=` among them, as `tests/e2e_runner.py` does.
 Its settings carry the prefix `ACME_RUNNER_` for its own knobs, and read the
 rest as every process does (`.env.example`).
 
