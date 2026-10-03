@@ -349,7 +349,7 @@ class StationsStoragePostgresImpl(PgStorageBase, StationsStorageInterface):
             return True
 
     async def read_lapsed(
-        self, now: datetime, margin: timedelta, limit: int
+        self, now: datetime, margin: timedelta, limit: int, skip: frozenset[UUID]
     ) -> list[tuple[UUID, UUID]]:
         # The grant's own condition on the row, and an entry it serves.
         asked = (
@@ -366,9 +366,11 @@ class StationsStoragePostgresImpl(PgStorageBase, StationsStorageInterface):
             )
             .exists()
         )
+        lapsed = or_(Stations.held_until.is_(None), Stations.held_until <= now - margin)
+        kept = (Stations.org_id.not_in(skip),) if skip else ()
         stmt = (
             select(Stations.org_id, Stations.id)
-            .where(or_(Stations.held_until.is_(None), Stations.held_until <= now - margin), asked)
+            .where(lapsed, asked, *kept)
             .order_by(Stations.held_until.asc().nulls_first(), Stations.id)
             .limit(limit)
         )

@@ -516,7 +516,8 @@ class StationsStorageContract:
         """Across tenants: a station whose lease lapsed past the margin, and
         one no lease holds, each with an entry it serves, the one free
         longest first. A live lease, an entry asking for what the station
-        cannot do, and a line nobody stands in keep a station out."""
+        cannot do, a line nobody stands in, and a tenant skipped keep a
+        station out."""
         org, other = new_id(), new_id()
         lapsed, lease = await self.held(storage, org)
         await self.waiting(storage, org, make_pool_of(lapsed))
@@ -533,14 +534,18 @@ class StationsStorageContract:
         assert await storage.create_entry(org, needy, ())
         await self.a_station(storage, org)
 
-        found = await storage.read_lapsed(later, MARGIN, 10_000)
+        found = await storage.read_lapsed(later, MARGIN, 10_000, frozenset())
         ours = [pair for pair in found if pair[0] in (org, other)]
         assert ours == [(other, never_held.id), (org, lapsed.id)]
         assert (org, bare.id) not in found and (org, live.id) not in found
-        assert len(await storage.read_lapsed(later, MARGIN, 1)) == 1
+        assert len(await storage.read_lapsed(later, MARGIN, 1, frozenset())) == 1
+        skipped = await storage.read_lapsed(later, MARGIN, 10_000, frozenset({other}))
+        assert [pair for pair in skipped if pair[0] in (org, other)] == [(org, lapsed.id)], (
+            "a tenant skipped has no station among them"
+        )
         assert [
             pair
-            for pair in await storage.read_lapsed(later - MARGIN, MARGIN, 10_000)
+            for pair in await storage.read_lapsed(later - MARGIN, MARGIN, 10_000, frozenset())
             if pair[0] == org
         ] == [], "a lease not past its margin still holds its station"
 

@@ -248,7 +248,7 @@ class StationsStorageMemoryImpl(MemoryStorageBase, StationsStorageInterface):
             return True
 
     async def read_lapsed(
-        self, now: datetime, margin: timedelta, limit: int
+        self, now: datetime, margin: timedelta, limit: int, skip: frozenset[UUID]
     ) -> list[tuple[UUID, UUID]]:
         waiting = [
             (org_id, entry)
@@ -258,7 +258,8 @@ class StationsStorageMemoryImpl(MemoryStorageBase, StationsStorageInterface):
         found = [
             (org_id, station)
             for org_id, station in self._rows_across_tenants(self._stations)
-            if free(station, now, margin)
+            if org_id not in skip
+            and free(station, now, margin)
             and any(org == org_id and serves(station, entry) for org, entry in waiting)
         ]
         found.sort(key=lambda pair: (pair[1].held_until is not None, pair[1].held_until or now))

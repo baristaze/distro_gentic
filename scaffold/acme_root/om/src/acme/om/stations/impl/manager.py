@@ -319,29 +319,46 @@ class StationsManagerImpl(StationsManagerInterface):
         return None
 
     async def offer_lapsed(self, rctx: RequestContext) -> int:
-        lapsed = await self._storage.read_lapsed(
-            self._clock(), self._options.skew_margin, self._options.sweep_batch
-        )
+        now, batch = self._clock(), self._options.sweep_batch
         contexts: dict[UUID, TenantContext | None] = {}
+        offered: set[UUID] = set()
+        skip: frozenset[UUID] = frozenset()
         granted = 0
-        for org_id, station_id in lapsed:
-            if org_id not in contexts:
+        while True:
+            lapsed = await self._storage.read_lapsed(now, self._options.skew_margin, batch, skip)
+            for org_id, station_id in lapsed:
+                if station_id in offered or len(offered) >= batch:
+                    continue
+                if org_id not in contexts:
+                    try:
+                        # The platform grants it, as no person: the system user.
+                        contexts[org_id] = await self._tenancy.service_context(
+                            rctx, org_id, EMPTY_UUID
+                        )
+                    except InvalidCredential:
+                        contexts[org_id] = (
+                            None  # a tenant that is gone: its purge takes its stations
+                        )
+                ctx = contexts[org_id]
+                if ctx is None:
+                    continue
+                offered.add(station_id)
                 try:
-                    # The platform grants it, as no person: the system user.
-                    contexts[org_id] = await self._tenancy.service_context(rctx, org_id, EMPTY_UUID)
-                except InvalidCredential:
-                    contexts[org_id] = None  # a tenant that is gone: its purge takes its stations
-            ctx = contexts[org_id]
-            if ctx is None:
-                continue
-            try:
-                lease = await self._offer(ctx, station_id)
-            except Exception:
-                log.exception("station %s of org %s waits for the next pass", station_id, org_id)
-                continue
-            if lease is not None:
-                granted += 1
-        return granted
+                    lease = await self._offer(ctx, station_id)
+                except Exception:
+                    log.exception(
+                        "station %s of org %s waits for the next pass", station_id, org_id
+                    )
+                    continue
+                if lease is not None:
+                    granted += 1
+            # A gone tenant's stations sort first pass after pass, so a whole
+            # batch that held one is read again without it: they never keep
+            # a live tenant's station from its turn.
+            gone = frozenset(org_id for org_id, ctx in contexts.items() if ctx is None)
+            if len(lapsed) < batch or gone == skip or len(offered) >= batch:
+                return granted
+            skip = gone
 
     async def leave(self, ctx: TenantContext, session_id: UUID) -> int:
         ctx.require(Permission.WRITE)
