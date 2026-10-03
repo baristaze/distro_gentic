@@ -1,9 +1,10 @@
 """The money ledger contract: a hold is held on its limits and drawn on its
 buckets in the fixed order, or turned away with nothing written; holds
-over one bucket never all pass when fewer fit; a hold closes once, its
-settlement and charge together; a payment credits once; a raise counts in
-its window alone; and every entry of a call is in the one ledger. The
-cases named in `CROSS_TENANT_CASES` are the tenant fence's evidence."""
+over one bucket, or two over one line on either funding, never all pass
+when fewer fit; a hold closes once, its settlement and charge together; a
+payment credits once; a raise counts in its window alone; and every entry
+of a call is in the one ledger. The cases named in `CROSS_TENANT_CASES`
+are the tenant fence's evidence."""
 
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
@@ -194,6 +195,24 @@ class MoneyLedgerStorageContract:
         assert len(run.admitted) == 3, run.summary()
         counts = await storage.read_counts(org, [bucket_key(Bucket.CREDITS, paid_by)])
         assert counts[bucket_key(Bucket.CREDITS, paid_by)].held == 3_000
+
+    @pytest.mark.parametrize("mode", list(FundingMode))
+    async def test_two_holds_that_fit_a_line_only_alone_never_both_pass(
+        self, storage: MoneyLedgerStorageInterface, mode: FundingMode
+    ) -> None:
+        org = new_id()
+        line = a_line(cost_micros=1_500)
+        paid_by = funding(included=10, mode=mode)
+
+        async def one() -> FundedHold | None:
+            answer = await storage.open_hold(org, a_funded_hold(line, units=1, paid_by=paid_by))
+            return answer if isinstance(answer, FundedHold) else None
+
+        # Each hold is 1_000 against the line's 1_500: one fits, two never do.
+        run = await race(one(), one())
+        assert len(run.admitted) == 1, run.summary()
+        counts = await storage.read_counts(org, list(line_keys(line)))
+        assert [counts[key].held for key in line_keys(line)] == [1_000, 100]
 
     async def test_a_hold_closes_once_with_its_charge_in_the_one_ledger(
         self, storage: MoneyLedgerStorageInterface
