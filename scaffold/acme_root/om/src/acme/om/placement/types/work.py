@@ -1,6 +1,6 @@
 """The payloads of the work a session produces outside the cloud's
 runners: what each kind must name so its item goes to the lane where its
-environment is. The work queue fixes them per kind (`WORK_PAYLOADS`); the
+environment is. The kinds' registry fixes them per kind (`placement.kinds`); the
 kinds that carry what a host runs add their fields here."""
 
 from enum import StrEnum

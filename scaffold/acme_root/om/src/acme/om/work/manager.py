@@ -22,9 +22,9 @@ class WorkManagerInterface(ABC):
         retried enqueue never resets a claim, and so does a reused idempotency
         key: the insert reports which key collided and the manager reads the
         row back by it. Raises NotAuthorized when the context lacks the
-        permission WORK_ENQUEUE_PERMISSIONS names for the kind, or the table
-        names none, and ValidationFailed when the payload is not the shape
-        WORK_PAYLOADS fixes for the kind."""
+        permission the kind is registered with, or the kinds' registry
+        holds no such kind, and ValidationFailed when the payload is not the
+        shape the kind fixes."""
         ...
 
     @abstractmethod
@@ -38,7 +38,7 @@ class WorkManagerInterface(ABC):
         `idempotency_key`, the same on every run of the relay, so a relay that
         runs twice and a caller that retries meet one row under one key. Raises
         ValidationFailed when the row names a kind this build does not know or
-        carries a payload outside the shape WORK_PAYLOADS fixes for it."""
+        carries a payload outside the shape its kind fixes."""
         ...
 
     @abstractmethod

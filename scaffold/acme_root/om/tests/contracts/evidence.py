@@ -9,6 +9,8 @@ from datetime import timedelta
 from typing import Any
 from uuid import UUID
 
+from contracts.doubles import Members, SessionProjectsMemory
+from contracts.evidence_storage import make_policy
 from acme.infra.topics.memory import TopicsMemoryImpl
 from acme.om.base import utcnow
 from acme.om.context import TenantContext
@@ -32,8 +34,6 @@ from acme.om.evidence.types.validation import (
 )
 from acme.om.outbox.impl.relay import OutboxRelayImpl
 from acme.om.outbox.storage.impl.memory import OutboxStorageMemoryImpl
-from contracts.doubles import Members, SessionProjectsMemory
-from contracts.evidence_storage import make_policy
 
 CHECKOUT = UUID("0192f3a0-0000-7000-8000-00000000a12a")
 """The `checkout` project's id: every session of a suite's evidence belongs to
