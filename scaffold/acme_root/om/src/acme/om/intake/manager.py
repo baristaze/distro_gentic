@@ -79,6 +79,12 @@ class IntakeManagerInterface(ABC):
         ...
 
     @abstractmethod
+    async def get_work(self, ctx: TenantContext, session_id: UUID) -> tuple[WorkBinding, ...]:
+        """The pull requests and branches bound to a session as its work,
+        oldest first. A session the tenant does not hold is `NotFound`."""
+        ...
+
+    @abstractmethod
     async def record_act(
         self, ctx: TenantContext, session_id: UUID, integration: str, refs: Sequence[str]
     ) -> None:

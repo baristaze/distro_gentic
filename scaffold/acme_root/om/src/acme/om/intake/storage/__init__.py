@@ -67,6 +67,11 @@ class IntakeStorageInterface(ABC):
     ) -> WorkBinding | None: ...
 
     @abstractmethod
+    async def read_session_bindings(self, org_id: UUID, session_id: UUID) -> list[WorkBinding]:
+        """The handles bound to a session as its work, oldest first."""
+        ...
+
+    @abstractmethod
     async def record_act(self, org_id: UUID, act: PlatformAct) -> None:
         """The act, in place of any the tenant holds under its name: the
         latest act under a name holds."""

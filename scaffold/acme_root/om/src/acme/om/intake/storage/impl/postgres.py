@@ -137,6 +137,16 @@ class IntakeStoragePostgresImpl(PgStorageBase, IntakeStorageInterface):
             row = (await session.execute(stmt)).scalar_one_or_none()
             return None if row is None else to_model(row, WorkBinding)
 
+    async def read_session_bindings(self, org_id: UUID, session_id: UUID) -> list[WorkBinding]:
+        stmt = (
+            select(WorkBindings)
+            .where(WorkBindings.org_id == org_id, WorkBindings.session_id == session_id)
+            .order_by(WorkBindings.created_at, WorkBindings.id)
+        )
+        async with self._session_for(stmt, org_id=org_id) as session:
+            rows = (await session.execute(stmt)).scalars().all()
+            return [to_model(row, WorkBinding) for row in rows]
+
     async def record_act(self, org_id: UUID, act: PlatformAct) -> None:
         # One act a name: the unique index decides, and the latest holds.
         stmt = (

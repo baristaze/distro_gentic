@@ -2,10 +2,12 @@
 listed in a status a page at a time, a session's children, archive, delete
 and restore, each by the role that may; what a session asks of a person
 and the calls it holds, per session and across the tenant; its bounds, its
-tool calls, and its usage; and every route that names a session, called
-by another tenant with one that exists, answered as an unknown id is. No
-runner works behind the API here, so a case writes a loop's steps itself,
-the way a run writes them."""
+tool calls, and its usage, and the tenant's usage across its budgets; the
+runs and validations a session's evidence holds, and what it delivered;
+and every route that names a session, called by another tenant with one
+that exists, answered as an unknown id is. No runner works behind the API
+here, so a case writes a loop's steps, its runs, and its bound work
+itself, the way a run writes them."""
 
 from pathlib import Path
 from typing import Any
@@ -15,6 +17,9 @@ import httpx
 import pytest
 from api_support import PROJECT_ID, add_member, build_container, seed_request, sign_in_as
 from contracts.agent_session_storage import make_session
+from contracts.evidence_storage import make_record, make_validation
+from contracts.intake_storage import make_binding
+from contracts.ledger_storage import a_hold
 from contracts.step_storage import (
     make_request,
     make_response,
@@ -25,8 +30,21 @@ from contracts.step_storage import (
 from acme.integrations.model_providers.types import Usage
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
 from acme.om.attribution.types.authority import AuthorityMode
+from acme.om.base import new_id, utcnow
+from acme.om.budgets.rules import window_bounds
+from acme.om.budgets.types.amount import Amount
+from acme.om.budgets.types.budget import Budget, BudgetScopeKind, WindowKind
+from acme.om.budgets.types.hold import HoldLine
 from acme.om.context import Role, TenantContext
-from acme.om.steps.types.header import ModelResponseHeader, Park, ParkReason
+from acme.om.intake.types.link import HandleKind
+from acme.om.steps.types.header import (
+    AcceptedResult,
+    LoopOutcome,
+    ModelResponseHeader,
+    Park,
+    ParkReason,
+    ToolResponseHeader,
+)
 from acme.om.steps.types.step import Step
 from acme.services.api.container import AppContainer
 
@@ -87,9 +105,11 @@ async def a_loop(
     calls: int,
     answered: int = 0,
     park: Park | None = None,
+    accepted: AcceptedResult | None = None,
 ) -> dict[str, Any]:
     """A session a person spoke to, whose loop made one model call that
     asked for `calls` tool calls, the first `answered` of them answered,
+    the last of those with `accepted` as its verdict when one is named,
     and then parked on `park`, when one is named."""
     session = await start(client, headers, "the dropped object")
     said = await client.post(
@@ -108,7 +128,10 @@ async def a_loop(
         call = make_tool_request(sid, loop_id, response.id)
         steps.append(call)
         if index < answered:
-            steps.append(make_tool_response(sid, loop_id, call.id))
+            answer = make_tool_response(sid, loop_id, call.id)
+            if accepted is not None and index == answered - 1:
+                answer = answer.model_copy(update={"header": ToolResponseHeader(accepted=accepted)})
+            steps.append(answer)
     epoch = await managers.steps.begin_run(ctx, sid)
     await managers.steps.append_steps(ctx, sid, epoch, steps)
     if park is not None:
@@ -316,3 +339,161 @@ async def test_a_sessions_bounds_are_its_kinds_loop_limits_and_its_trees(
         4,
         0,
     )
+
+
+async def test_a_sessions_runs_and_validations_are_read_oldest_first_a_page_at_a_time(
+    client: httpx.AsyncClient, owner: dict[str, str], container: AppContainer
+) -> None:
+    session = await start(client, owner, "the dropped object")
+    path = f"/v1/agent-sessions/{session['id']}"
+    ctx = await context_of(container, owner)
+    sid = UUID(session["id"])
+    runs = [make_record(sid, check=f"unit-{index}") for index in range(3)]
+    for record in runs:
+        await container.managers.evidence.record_run(ctx, record)
+    validation, validated = make_validation(sid, 2)
+    evidence = container.storage.get_evidence_storage()
+    await evidence.create_validation(ctx.org_id, validation, validated)
+
+    whole = await client.get(f"{path}/executions", headers=owner)
+    first = await client.get(f"{path}/executions", headers=owner, params={"limit": 2})
+    rest = await client.get(
+        f"{path}/executions", headers=owner, params={"cursor": first.json()["next_cursor"]}
+    )
+    validations = await client.get(f"{path}/validations", headers=owner)
+
+    assert whole.status_code == 200, whole.text
+    every = [run["id"] for run in whole.json()["items"]]
+    assert set(every) == {str(record.id) for record in (*runs, *validated)}
+    assert [run["id"] for run in first.json()["items"] + rest.json()["items"]] == every
+    assert rest.json()["next_cursor"] is None
+    work = next(run for run in whole.json()["items"] if run["id"] == str(runs[0].id))
+    assert (work["purpose"], work["check"], work["outcome"]) == ("work", "unit-0", "passed")
+    assert work["cases"] == {"passed": 1, "failed": 0, "skipped": 0}
+    assert validations.status_code == 200, validations.text
+    assert [(v["id"], v["records"]) for v in validations.json()] == [
+        (str(validation.id), [str(record.id) for record in validated])
+    ]
+
+
+async def test_a_sessions_delivery_is_its_branch_its_bound_work_and_its_accepted_result(
+    client: httpx.AsyncClient, owner: dict[str, str], container: AppContainer
+) -> None:
+    done = AcceptedResult(outcome=LoopOutcome.SUCCEEDED, verified=True)
+    session = await a_loop(client, container, owner, calls=1, answered=1, accepted=done)
+    path = f"/v1/agent-sessions/{session['id']}"
+    ctx = await context_of(container, owner)
+    sid = UUID(session["id"])
+    workspace = await container.managers.workspaces.get_workspace(ctx, sid)
+    intake = container.storage.get_intake_storage()
+    await intake.create_binding(ctx.org_id, make_binding("acme/checkout#12", sid))
+    untouched = await start(client, owner, "nothing yet")
+
+    delivery = await client.get(f"{path}/delivery", headers=owner)
+    nothing = await client.get(f"/v1/agent-sessions/{untouched['id']}/delivery", headers=owner)
+
+    assert delivery.status_code == 200, delivery.text
+    body = delivery.json()
+    assert (body["branch"], body["branch_seen"]) == (workspace.branch, False)
+    assert [(w["kind"], w["handle"]) for w in body["work"]] == [
+        (HandleKind.PULL_REQUEST.value, "acme/checkout#12")
+    ]
+    assert body["report"]["seq"] == 5
+    assert (body["report"]["outcome"], body["report"]["verified"]) == ("succeeded", True)
+    assert nothing.status_code == 200, nothing.text
+    assert (nothing.json()["work"], nothing.json()["report"]) == ([], None)
+
+
+async def test_the_tenants_usage_is_each_budget_with_what_its_window_spent(
+    client: httpx.AsyncClient, owner: dict[str, str], container: AppContainer
+) -> None:
+    ctx = await context_of(container, owner)
+    now = utcnow()
+    budgets = [
+        await container.managers.budgets.create_budget(
+            ctx,
+            Budget(
+                id=new_id(),
+                created_at=now,
+                updated_at=now,
+                created_by=ctx.user_id,
+                updated_by=ctx.user_id,
+                scope_kind=BudgetScopeKind.TENANT,
+                scope_key=f"{ctx.org_id}-{index}",
+                window_kind=WindowKind.LIFE,
+                cost_micros=1_000_000,
+            ),
+        )
+        for index in range(2)
+    ]
+    charged = budgets[0]
+    start_at, resets_at = window_bounds(charged.window, now)
+    line = HoldLine(
+        budget_id=charged.id,
+        scope=charged.scope,
+        window_start=start_at,
+        resets_at=resets_at,
+        amount=Amount(cost_micros=1_000_000),
+    )
+    ledger = container.storage.get_ledger_storage()
+    assert await ledger.open_hold(ctx.org_id, a_hold(line, cost_micros=600, tokens=100)) is None
+
+    first = await client.get("/v1/usage", headers=owner, params={"limit": 1})
+    rest = await client.get(
+        "/v1/usage", headers=owner, params={"cursor": first.json()["next_cursor"]}
+    )
+
+    assert first.status_code == 200, first.text
+    items = first.json()["items"] + rest.json()["items"]
+    assert sorted(item["budget"]["id"] for item in items) == sorted(str(b.id) for b in budgets)
+    held = {item["budget"]["id"]: item["held_cost_micros"] for item in items}
+    assert held == {str(budgets[0].id): 600, str(budgets[1].id): 0}
+    assert {item["spent_cost_micros"] for item in items} == {0}
+    assert rest.json()["next_cursor"] is None
+
+
+async def test_every_read_reaches_a_viewer_and_no_route_reaches_another_tenants_session(
+    client: httpx.AsyncClient, owner: dict[str, str], container: AppContainer
+) -> None:
+    """Every route this file reads or writes a session by, called by another
+    tenant with a session that exists: each is the 404 an unknown id gets.
+    The tenant-wide lists another tenant reads carry none of it. A viewer
+    reads every one."""
+    session = await a_loop(client, container, owner, calls=1, park=APPROVAL)
+    path = f"/v1/agent-sessions/{session['id']}"
+    viewer = await viewer_of(client, container, owner)
+    _, other = await container.managers.tenancy.bootstrap(
+        seed_request(), "Other", "other", "owner@other.test", "Other"
+    )
+    stranger = await sign_in_as(client, "owner@other.test", other.id)
+    unknown = f"/v1/agent-sessions/{UUID(int=7)}"
+    reads = [
+        "/children",
+        "/questions",
+        "/approvals",
+        "/bounds",
+        "/tool-calls",
+        "/usage",
+        "/executions",
+        "/validations",
+        "/delivery",
+    ]
+    writes = [("POST", "/archive"), ("POST", "/restore"), ("DELETE", "")]
+
+    for method, tail in [("GET", tail) for tail in reads] + writes:
+        crossed = await client.request(method, f"{path}{tail}", headers=stranger)
+        missing = await client.request(method, f"{unknown}{tail}", headers=stranger)
+        assert crossed.status_code == 404, f"{method} {tail}: {crossed.text}"
+        assert (crossed.status_code, crossed.json()["error"]["code"]) == (
+            missing.status_code,
+            missing.json()["error"]["code"],
+        ), f"{method} {tail}"
+    for tail in reads:
+        read = await client.get(f"{path}{tail}", headers=viewer)
+        assert read.status_code == 200, f"GET {tail}: {read.text}"
+    for listed in ("/v1/agent-sessions", "/v1/approvals", "/v1/usage"):
+        theirs = await client.get(listed, headers=stranger)
+        assert theirs.status_code == 200, f"{listed}: {theirs.text}"
+        assert session["id"] not in theirs.text, listed
+    still = await client.get(path, headers=owner)
+    assert (still.json()["archived_at"], still.json()["deleted_at"]) == (None, None)

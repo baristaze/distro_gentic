@@ -153,6 +153,11 @@ class IntakeManagerImpl(IntakeManagerInterface):
             raise Conflict(f"{kind.value} {handle} is another session's work")
         return held
 
+    async def get_work(self, ctx: TenantContext, session_id: UUID) -> tuple[WorkBinding, ...]:
+        ctx.require(Permission.READ)
+        await self._sessions.get_session(ctx, session_id)
+        return tuple(await self._storage.read_session_bindings(ctx.org_id, session_id))
+
     async def record_act(
         self, ctx: TenantContext, session_id: UUID, integration: str, refs: Sequence[str]
     ) -> None:
