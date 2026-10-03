@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import Column, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -13,6 +14,10 @@ class SessionWorkspaces(IdentifiableMixin, TrackableMixin, Base):
     its isolation pinned and what the cache knows between loops."""
 
     __tablename__ = "session_workspaces"
+    # The one notice `notices` replaced leaves the mapping a release before
+    # it leaves the table (ADR 0038).
+    __table_args__ = (Column("notice", Text()),)
+    __mapper_args__ = {"exclude_properties": ["notice"]}
     project_id: Mapped[UUID | None]
     level: Mapped[str]
     limits: Mapped[dict[str, Any]]
@@ -22,7 +27,7 @@ class SessionWorkspaces(IdentifiableMixin, TrackableMixin, Base):
     branch: Mapped[str]
     branch_seen: Mapped[bool]
     snapshot_ref: Mapped[str | None]
-    notice: Mapped[str | None]
+    notices: Mapped[list[str]]
     push_digest: Mapped[str | None]
     push_expires_at: Mapped[datetime | None]
     version: Mapped[int]
