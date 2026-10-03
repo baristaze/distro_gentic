@@ -238,7 +238,7 @@ async def test_a_hosts_standing_names_its_state_and_what_its_lanes_hold(
     pool = await client.post(
         "/v1/host-pools",
         headers={**owner, "Idempotency-Key": str(uuid4())},
-        json={"name": "lab", "region": "eu-west"},
+        json={"name": "build", "region": "eu-west"},
     )
     pool_id = pool.json()["id"]
     issued = await client.post(f"/v1/host-pools/{pool_id}/enrollment-tokens", headers=owner)

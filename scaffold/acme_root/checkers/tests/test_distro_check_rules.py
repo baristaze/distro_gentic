@@ -62,18 +62,16 @@ def test_plc10_the_hosts_own_app_and_the_client_pass(tmp_path):
 
 
 def test_plc10_the_option_names_another_app_inside_the_wall(tmp_path):
-    daemon = "apps/station_daemon/src/acme/apps/station_daemon"
+    edge = "apps/edge/src/acme/apps/edge"
     files = {
-        f"{daemon}/__init__.py": "",
-        f"{daemon}/main.py": "from acme.apps.host import config\n",
+        f"{edge}/__init__.py": "",
+        f"{edge}/main.py": "from acme.apps.host import config\n",
     }
     write_project(tmp_path, files)
     assert found(tmp_path, "PLC-10") == []
-    option = (
-        '\n[tool.distro-check.options.PLC-10]\nmodules = ["apps.host", "apps.station_daemon"]\n'
-    )
+    option = '\n[tool.distro-check.options.PLC-10]\nmodules = ["apps.host", "apps.edge"]\n'
     write_project(tmp_path, files, pyproject=PYPROJECT + option)
-    assert [(p, line) for p, line, _ in found(tmp_path, "PLC-10")] == [(f"{daemon}/main.py", 1)]
+    assert [(p, line) for p, line, _ in found(tmp_path, "PLC-10")] == [(f"{edge}/main.py", 1)]
 
 
 def test_plc10_no_app_named_checks_nothing(tmp_path):

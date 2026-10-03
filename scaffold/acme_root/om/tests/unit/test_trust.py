@@ -172,13 +172,15 @@ async def test_an_audit_entry_refuses_one_answer_in_two_fields() -> None:
         "request_id": new_id(),
         "session_id": session_id,
         "tool": "lookup",
-        "executor": Executor(kind=ExecutorKind.HOST, credential_id=new_id(), label="lab-host-1"),
+        "executor": Executor(kind=ExecutorKind.HOST, credential_id=new_id(), label="build-host-1"),
         "principal": person(new_id()),
         "spender": payer,
         "actor": agent,
     }
     CallAudit.model_validate(whole)
-    machine_as_person = Executor(kind=ExecutorKind.HOST, credential_id=payer.id, label="lab-host-1")
+    machine_as_person = Executor(
+        kind=ExecutorKind.HOST, credential_id=payer.id, label="build-host-1"
+    )
     principal_as_actor = ActorRef(actor=Actor.PERSON)
     elsewhere = ActorRef(
         actor=Actor.AGENT, agent=AgentRef(kind="steady", version=1, session_id=new_id())
@@ -365,13 +367,6 @@ async def test_a_secret_crosses_no_wall_either_way_and_takes_no_value_from_the_c
     aimed_elsewhere = INJECTED_TOKEN.model_copy(update={"env": "OTHER_TOKEN"})
     with pytest.raises(SecretCrossesWall):
         await trust.resolve_secrets(platform.owner, walled, (aimed_elsewhere,))
-    with pytest.raises(ValueError):
-        SecretDeclaration.model_validate(
-            {
-                **declared(project=project).model_dump(),
-                "owner_kind": SecretOwnerKind.STATION,
-            }
-        )
     with pytest.raises(NotAuthorized):
         await trust.declare_secret(platform.member(), declared(name="another", project=project))
 

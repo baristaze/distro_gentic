@@ -110,7 +110,7 @@ async def a_member(managers: Managers, slug: str, role: Role) -> TenantContext:
     return await managers.tenancy.member_context(request(APP), owner.org_id, user.id)
 
 
-def a_pool(name: str = "lab") -> HostPool:
+def a_pool(name: str = "build") -> HostPool:
     now = utcnow()
     return HostPool(
         id=new_id(),

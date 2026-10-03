@@ -36,10 +36,9 @@ routes accept only `hst_`.
 version of `exec` work it reads. The tenant, the pool, and the host come
 from the credential, and placement claims from the lanes they name.
 
-**A floor per wire type.** `exec` and `station` carry a version, and the
-platform hands work only to a machine at or above each type's floor. A
-host below it is refused at its claim and its enrollment, and does not
-count as online.
+**A floor per wire type.** `exec` carries a version, and the platform
+hands work only to a host at or above its floor. A host below it is
+refused at its claim and its enrollment, and does not count as online.
 
 **A pinned session waits.** A principal places a session on a pool or in
 the cloud, and nothing else moves it. Its placement reads `waiting`
@@ -57,10 +56,9 @@ it did not probe, before anything runs.
 
 ## Consequences
 
-- A host holds logic, as a station's daemon does: its probes and its
-  owner's ceilings decide what runs. That departs from the guideline's
-  DEL-01 for the same reason the daemon does. The guard nearest the
-  machine must hold when the platform is wrong.
+- A host holds logic: its probes and its owner's ceilings decide what
+  runs. That departs from the guideline's DEL-01, because the guard
+  nearest the machine must hold when the platform is wrong or gone.
 - A host offline for more than an hour has no live credential, and its
   owner enrolls it again with a new token.
 - A copy of a credential that rotates first holds the host's identity

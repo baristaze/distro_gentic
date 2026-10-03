@@ -62,9 +62,9 @@ rebuilt from.
   session that resumes while it is still being released keeps the
   workspace its new run took.
 - **Egress.** The egress proxy asks for each connection. A metadata
-  endpoint, the host itself, the platform's internal network, and a
-  station's network are never reached, under any egress, by name or by
-  the address a name resolves to. Then no egress refuses all, open
+  endpoint, the host itself, and the platform's internal network are
+  never reached, under any egress, by name or by the address a name
+  resolves to. Then no egress refuses all, open
   egress allows the rest, and an allowlist allows a destination and port
   it names, by a method that rule takes.
 - **Outward.** A push to the session's own branch or its snapshots, and
