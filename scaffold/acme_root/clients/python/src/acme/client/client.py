@@ -23,6 +23,8 @@ from acme.client.types import (
     AdvertisementBody,
     AgentSessionPageView,
     AgentSessionView,
+    AutomationRequest,
+    AutomationView,
     ClaimView,
     ControlView,
     CrossingKind,
@@ -30,6 +32,7 @@ from acme.client.types import (
     EventView,
     ExecDetailView,
     ExecLeaseView,
+    FetchCredentialView,
     FilePageView,
     FileView,
     HostView,
@@ -41,6 +44,8 @@ from acme.client.types import (
     IssuedSessionView,
     IssuedTicketView,
     IssuedUploadView,
+    KnowledgeStatus,
+    KnowledgeView,
     MembershipChoicePageView,
     MembershipChoiceView,
     MeView,
@@ -52,7 +57,10 @@ from acme.client.types import (
     OrgView,
     OutputStream,
     PlatformSizeView,
+    PlaybookView,
     PreparedView,
+    ProjectView,
+    PublishRequest,
     Role,
     SessionControl,
     SessionStatus,
@@ -62,6 +70,8 @@ from acme.client.types import (
     StepPageView,
     StepView,
     StorageUsageView,
+    ToolPolicyRequest,
+    ToolPolicyView,
     UserPageView,
     UserView,
 )
@@ -700,6 +710,162 @@ class ApiClient:
         if fetched.is_error:
             raise ApiError(fetched.status_code, "download_refused", fetched.text[:200], None)
         return fetched.content
+
+    # A tenant's configuration: its projects and the credential each one's
+    # repository is read with, its automations, what its sessions recall and
+    # follow, and its layer of tool policy.
+
+    async def create_project(
+        self, name: str, host: str, path: str, *, idempotency_key: str | None = None
+    ) -> ProjectView:
+        """A project bound to the repository at `host`/`path`, which never
+        moves. An owner's or an admin's. Always under an idempotency key."""
+        made = await self.request(
+            "POST",
+            "/v1/projects",
+            json={"name": name, "repository": {"host": host, "path": path}},
+            idempotency_key=idempotency_key or str(uuid4()),
+        )
+        return ProjectView.model_validate(made)
+
+    async def projects(
+        self, *, after: UUID | None = None, limit: int = LIMIT_MAX
+    ) -> list[ProjectView]:
+        params: dict[str, Any] = {"limit": limit}
+        if after is not None:
+            params["after"] = str(after)
+        found = await self.request("GET", "/v1/projects", params=params)
+        return [ProjectView.model_validate(project) for project in found]
+
+    async def project(self, project_id: UUID) -> ProjectView:
+        return ProjectView.model_validate(await self.request("GET", f"/v1/projects/{project_id}"))
+
+    async def rename_project(self, project_id: UUID, name: str) -> ProjectView:
+        renamed = await self.request("PATCH", f"/v1/projects/{project_id}", json={"name": name})
+        return ProjectView.model_validate(renamed)
+
+    async def remove_project(self, project_id: UUID) -> ProjectView:
+        """Refused with `project_in_use` while a session belongs to it."""
+        removed = await self.request("DELETE", f"/v1/projects/{project_id}")
+        return ProjectView.model_validate(removed)
+
+    async def put_fetch_credential(
+        self, project_id: UUID, username: str, password: str
+    ) -> FetchCredentialView:
+        """A read-only credential of the project's repository. The answer
+        says who gave it when; nothing ever reads it back."""
+        given = await self.request(
+            "PUT",
+            f"/v1/projects/{project_id}/credential",
+            json={"username": username, "password": password},
+        )
+        return FetchCredentialView.model_validate(given)
+
+    async def create_automation(
+        self, automation: AutomationRequest, *, idempotency_key: str | None = None
+    ) -> AutomationView:
+        """Made in person; it runs as its maker unless it says otherwise.
+        Always under an idempotency key."""
+        made = await self.request(
+            "POST",
+            "/v1/automations",
+            json=automation.model_dump(mode="json", exclude_unset=True),
+            idempotency_key=idempotency_key or str(uuid4()),
+        )
+        return AutomationView.model_validate(made)
+
+    async def automations(
+        self, *, after: UUID | None = None, limit: int = LIMIT_MAX
+    ) -> list[AutomationView]:
+        params: dict[str, Any] = {"limit": limit}
+        if after is not None:
+            params["after"] = str(after)
+        found = await self.request("GET", "/v1/automations", params=params)
+        return [AutomationView.model_validate(automation) for automation in found]
+
+    async def automation(self, automation_id: UUID) -> AutomationView:
+        read = await self.request("GET", f"/v1/automations/{automation_id}")
+        return AutomationView.model_validate(read)
+
+    async def update_automation(
+        self, automation_id: UUID, automation: AutomationRequest
+    ) -> AutomationView:
+        """The automation whole, as edited; one that runs as its creator is
+        edited by its creator alone, and one that runs as the automation
+        principal takes its editor as its creator."""
+        edited = await self.request(
+            "PUT",
+            f"/v1/automations/{automation_id}",
+            json=automation.model_dump(mode="json", exclude_unset=True),
+        )
+        return AutomationView.model_validate(edited)
+
+    async def knowledge(
+        self,
+        status: KnowledgeStatus = KnowledgeStatus.reviewed,
+        *,
+        after: UUID | None = None,
+        limit: int = LIMIT_MAX,
+    ) -> list[KnowledgeView]:
+        """The entries in a state; the suggestions are what waits on a review."""
+        params: dict[str, Any] = {"status": status.value, "limit": limit}
+        if after is not None:
+            params["after"] = str(after)
+        found = await self.request("GET", "/v1/knowledge", params=params)
+        return [KnowledgeView.model_validate(entry) for entry in found]
+
+    async def knowledge_entry(self, entry_id: UUID) -> KnowledgeView:
+        read = await self.request("GET", f"/v1/knowledge/{entry_id}")
+        return KnowledgeView.model_validate(read)
+
+    async def write_knowledge(self, title: str, trigger: list[str], text: str) -> KnowledgeView:
+        written = await self.request(
+            "POST", "/v1/knowledge", json={"title": title, "trigger": trigger, "text": text}
+        )
+        return KnowledgeView.model_validate(written)
+
+    async def edit_knowledge(
+        self, entry_id: UUID, title: str, trigger: list[str], text: str, *, version: int
+    ) -> KnowledgeView:
+        """The edit, on the version read; `precondition_failed` when it moved."""
+        edited = await self.request(
+            "PUT",
+            f"/v1/knowledge/{entry_id}",
+            json={"title": title, "trigger": trigger, "text": text},
+            if_match=version,
+        )
+        return KnowledgeView.model_validate(edited)
+
+    async def review_knowledge(self, entry_id: UUID, *, keep: bool) -> KnowledgeView:
+        reviewed = await self.request(
+            "POST", f"/v1/knowledge/{entry_id}/review", json={"keep": keep}
+        )
+        return KnowledgeView.model_validate(reviewed)
+
+    async def playbook(self, name: str) -> PlaybookView:
+        """The latest version of the name."""
+        return PlaybookView.model_validate(await self.request("GET", f"/v1/playbooks/{name}"))
+
+    async def publish_playbook(self, draft: PublishRequest) -> PlaybookView:
+        """The next version of the draft's name, published in person."""
+        published = await self.request(
+            "POST", "/v1/playbooks", json=draft.model_dump(mode="json", exclude_unset=True)
+        )
+        return PlaybookView.model_validate(published)
+
+    async def tool_policy(self) -> ToolPolicyView:
+        return ToolPolicyView.model_validate(await self.request("GET", "/v1/tools/policy"))
+
+    async def write_tool_policy(self, layer: ToolPolicyRequest, *, version: int) -> ToolPolicyView:
+        """The tenant's layer whole, on the version read; `precondition_failed`
+        when it moved."""
+        written = await self.request(
+            "PUT",
+            "/v1/tools/policy",
+            json=layer.model_dump(mode="json", exclude_unset=True),
+            if_match=version,
+        )
+        return ToolPolicyView.model_validate(written)
 
     # Agent sessions: started on a kind, spoken to, steered, and read. The
     # loop runs in the session runner; a send answers once it is durable.

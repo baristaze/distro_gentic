@@ -31,6 +31,15 @@ class AutomationStorageMemoryImpl(MemoryStorageBase, AutomationStorageInterface)
     async def read_automation(self, org_id: UUID, automation_id: UUID) -> Automation | None:
         return self._get(self._automations, org_id, automation_id)
 
+    async def write_automation(
+        self, org_id: UUID, automation: Automation, outbox_rows: tuple[OutboxRow, ...]
+    ) -> bool:
+        async with self._lock:
+            if self._get(self._automations, org_id, automation.id) is None:
+                return False
+            self._put(self._automations, org_id, automation, outbox_rows)
+            return True
+
     async def read_automations(
         self, org_id: UUID, after: UUID | None, limit: int
     ) -> list[Automation]:

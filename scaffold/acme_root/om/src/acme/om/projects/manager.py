@@ -1,8 +1,9 @@
 """The projects swimlane: a tenant's projects, each bound to one repository,
 and the project each session belongs to.
 
-A session started under a project belongs to it from before its row is
-written, and a session spawned or handed over belongs to the project of
+A project's name may change, and a project no session belongs to may be
+removed; its repository never moves. A session started under a project
+belongs to it from before its row is written, and a session spawned or handed over belongs to the project of
 the session it came from. Nothing moves a session to another project. The
 namespaces that key a policy by project read the session's project here,
 and the one repository its own branch and pull request count as work
@@ -30,6 +31,29 @@ class ProjectsManagerInterface(ABC):
     async def get_project(self, ctx: TenantContext, project_id: UUID) -> Project:
         """A project of the tenant; one another tenant holds is `NotFound`, as
         one that never existed is."""
+        ...
+
+    @abstractmethod
+    async def list_projects(
+        self, ctx: TenantContext, after: UUID | None, limit: int
+    ) -> tuple[Project, ...]:
+        """The tenant's projects by id, strictly after `after`; `limit` is
+        clamped."""
+        ...
+
+    @abstractmethod
+    async def rename_project(self, ctx: TenantContext, project_id: UUID, name: str) -> Project:
+        """The project under its new name, as one who writes the tenant's
+        configuration may (`manage_members`). Announced. Its repository never
+        moves. Another tenant's project is `NotFound`."""
+        ...
+
+    @abstractmethod
+    async def remove_project(self, ctx: TenantContext, project_id: UUID) -> Project:
+        """Removes a project no session belongs to, as one who writes the
+        tenant's configuration may (`manage_members`), and answers it as it
+        stood. Announced. One a session belongs to is `ProjectInUse`, and
+        stays; another tenant's is `NotFound`."""
         ...
 
     @abstractmethod

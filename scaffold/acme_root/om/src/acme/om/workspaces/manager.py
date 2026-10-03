@@ -166,6 +166,14 @@ class WorkspacesManagerInterface(ABC):
         ...
 
     @abstractmethod
+    async def remove_fetch_credential(self, ctx: TenantContext, project_id: UUID) -> bool:
+        """Takes a project's fetch credential away, as one who manages the
+        tenant's members may: its value leaves the tenant's store before its
+        record goes. False when the project had none in this tenant. Asks
+        nothing of the project, so a removed project's credential goes too."""
+        ...
+
+    @abstractmethod
     async def mint_push_token(self, ctx: TenantContext, session_id: UUID) -> PushToken:
         """A push token for the session's own branch on the repository its
         project binds: it writes that branch, its snapshots, and its pull

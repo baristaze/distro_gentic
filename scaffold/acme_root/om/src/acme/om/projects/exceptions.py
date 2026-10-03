@@ -12,3 +12,10 @@ class ProjectFixed(ProjectsException, Conflict):
     was named for a session created under none."""
 
     code = "project_fixed"
+
+
+class ProjectInUse(ProjectsException, Conflict):
+    """A project a session belongs to stays: its sessions read their
+    policies and their work product through it."""
+
+    code = "project_in_use"

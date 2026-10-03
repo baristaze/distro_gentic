@@ -21,10 +21,14 @@ from acme.services.api.routers import (
     fleet,
     hosts,
     intake,
+    knowledge,
     media,
     notifications,
+    playbooks,
+    projects,
     relay,
     tenancy,
+    tools,
     usage,
     watch,
 )
@@ -52,8 +56,16 @@ HOSTED: dict[str, tuple[APIRouter, ...]] = {
     # What a tenant may spend: a budget's amount, which a raise of wakes the
     # sessions waiting on it, and what each budget's window spent.
     "budgets": (budgets.router, usage.router),
-    # The tenant's automation principal and its grant.
+    # The tenant's automations, and its automation principal and its grant.
     "automations": (automations.router,),
+    # A tenant's projects, each bound to its repository, and the fetch
+    # credential the platform reads that repository with.
+    "projects": (projects.router,),
+    # What sessions recall, and the procedures they follow.
+    "knowledge": (knowledge.router,),
+    "playbooks": (playbooks.router,),
+    # The tenant's layer of tool policy.
+    "tools": (tools.router,),
     # What waits on a person, and their mark that they read it.
     "notifications": (notifications.router,),
     # A live read of a session by a scoped handle, and take control, a
