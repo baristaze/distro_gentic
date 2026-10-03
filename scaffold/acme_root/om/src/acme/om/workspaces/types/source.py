@@ -99,3 +99,11 @@ class RepositoryWrite(Platform):
     repository: str = Field(min_length=1, max_length=500)
     kind: WriteKind
     ref: str = Field(default="", max_length=255)
+
+
+class OpenedPullRequest(Platform):
+    """A session's pull request, as source control answers it: its id and
+    where a person reads it."""
+
+    id: str = Field(min_length=1, max_length=200)
+    url: str = Field(min_length=1, max_length=500)

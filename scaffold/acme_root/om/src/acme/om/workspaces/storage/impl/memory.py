@@ -5,6 +5,7 @@ from acme.om.outbox.storage import OutboxLandingInterface
 from acme.om.outbox.types.row import OutboxRow
 from acme.om.storage.impl.memory_base import HasId, MemoryStorageBase, MemoryTable
 from acme.om.workspaces.storage import WorkspaceStorageInterface
+from acme.om.workspaces.types.credential import RepositoryCredential
 from acme.om.workspaces.types.egress import EgressAllowlist
 from acme.om.workspaces.types.workspace import SessionWorkspace
 
@@ -14,6 +15,7 @@ class WorkspaceStorageMemoryImpl(MemoryStorageBase, WorkspaceStorageInterface):
         super().__init__(outbox)
         self._workspaces: MemoryTable[SessionWorkspace] = {}
         self._allowlists: MemoryTable[EgressAllowlist] = {}
+        self._credentials: MemoryTable[RepositoryCredential] = {}
 
     async def read_workspace(self, org_id: UUID, session_id: UUID) -> SessionWorkspace | None:
         return self._get(self._workspaces, org_id, session_id)
@@ -66,6 +68,37 @@ class WorkspaceStorageMemoryImpl(MemoryStorageBase, WorkspaceStorageInterface):
                     f"egress allowlist {allowlist.id} is no longer at version {expected_version}"
                 )
             self._put(self._allowlists, org_id, allowlist, outbox_rows)
+
+    async def read_credential(self, org_id: UUID, project_id: UUID) -> RepositoryCredential | None:
+        return self._get(self._credentials, org_id, project_id)
+
+    async def create_credential(self, org_id: UUID, credential: RepositoryCredential) -> bool:
+        async with self._lock:
+            return self._insert(self._credentials, org_id, credential)
+
+    async def write_credential(
+        self, org_id: UUID, credential: RepositoryCredential, expected_version: int
+    ) -> None:
+        async with self._lock:
+            found = self._get(self._credentials, org_id, credential.id)
+            if found is None or found.version != expected_version:
+                raise PreconditionFailed(
+                    f"repository credential {credential.id} is no longer at version "
+                    f"{expected_version}"
+                )
+            self._put(self._credentials, org_id, credential)
+
+    async def read_credentials(self, org_id: UUID, limit: int) -> list[RepositoryCredential]:
+        return list(self._rows(self._credentials, org_id))[:limit]
+
+    async def purge_credentials(self, org_id: UUID, project_ids: list[UUID]) -> int:
+        async with self._lock:
+            gone = [
+                row.id for row in self._rows(self._credentials, org_id) if row.id in project_ids
+            ]
+            for row_id in gone:
+                del self._credentials[row_id]
+            return len(gone)
 
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:
         async with self._lock:

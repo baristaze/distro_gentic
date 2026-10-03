@@ -5,6 +5,7 @@ knows of the durable state it is rebuilt from: the session's branch, whether
 the remote has held it, the last snapshot of its work, and what the next
 loop must be told."""
 
+from datetime import datetime
 from typing import ClassVar
 from uuid import UUID
 
@@ -28,6 +29,8 @@ class SessionWorkspace(Identifiable, Trackable):
         "branch_seen",
         "snapshot_ref",
         "notice",
+        "push_digest",
+        "push_expires_at",
         "version",
     )
 
@@ -47,6 +50,10 @@ class SessionWorkspace(Identifiable, Trackable):
     snapshot_ref: str | None = Field(default=None, max_length=255)
     # What the next loop is told before its first call; cleared once told.
     notice: str | None = Field(default=None, max_length=2000)
+    # The digest of the one push token the loop holds, and when it expires;
+    # a prepare or a release clears both, so no token outlives its loop.
+    push_digest: str | None = Field(default=None, max_length=64)
+    push_expires_at: datetime | None = None
     version: int = Field(default=1, ge=1)
 
     def spec(self) -> IsolationSpec:

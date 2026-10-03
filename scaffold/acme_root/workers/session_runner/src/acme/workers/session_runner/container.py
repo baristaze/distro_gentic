@@ -178,7 +178,8 @@ class RunnerContainer:
         built: list[Managers] = []
         held: list[RunnerContainer] = []
         # The tools through which a session acts as the platform's account
-        # record each act with intake, which the container builds below.
+        # record each act with intake, and the engineer's pull request binds
+        # its work there; the container builds it below.
         acts = (CommentImpl(lambda: held[0].intake, integrations.get_integration),)
 
         def stage() -> RequestContext:
@@ -205,6 +206,7 @@ class RunnerContainer:
             tool_catalog=(*tool_catalog, *acts),
             domain_classes=domain_classes,
             platform_agents=platform_agents,
+            intake=lambda: held[0].intake,
             budget_gate=ports.budget_gate or build_money_gate(storage),
             result_gate=ports.result_gate,
             executor=ports.executor,

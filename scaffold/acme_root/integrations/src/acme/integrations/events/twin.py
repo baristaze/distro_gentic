@@ -14,7 +14,11 @@ secret, the timestamp in whole seconds, sent as `t=<timestamp>,
 v1=<signature>` in `Twin-Signature`, and checked inside a five-minute
 window in constant time. An installation's grant is signed the same way
 over `<timestamp>.installation:<installation>`, and carried as
-`<installation>;t=<timestamp>, v1=<signature>`."""
+`<installation>;t=<timestamp>, v1=<signature>`.
+
+The forge's twin holds the branches the platform points and the pull
+requests it opens, by name and head alone, with no commits behind them;
+any other integration's twin holds no repository."""
 
 import hashlib
 import hmac
@@ -28,12 +32,13 @@ from pydantic import ValidationError
 
 from acme.integrations.events import (
     IntegrationInterface,
+    OpenedPullRequest,
     PostedMessage,
     Provenance,
     ProvidedEvent,
     delivery_key,
 )
-from acme.integrations.exceptions import DeliveryRefused
+from acme.integrations.exceptions import DeliveryRefused, ProviderRefused
 
 SIGNATURE_HEADER = "twin-signature"
 TOLERANCE = timedelta(minutes=5)
@@ -41,6 +46,7 @@ TWIN_SECRET = "twin-integration-secret"
 """The secret every twin signs with; never a real integration's."""
 
 TWIN = "twin"
+FORGE = "forge"
 
 
 def sign(payload: bytes, secret: str, at: datetime) -> str:
@@ -96,6 +102,10 @@ class IntegrationTwinImpl(IntegrationInterface):
         self._counter = itertools.count(1)
         self.posted: list[PostedMessage] = []
         """Every message the platform posted through the twin, in order."""
+        self.branches: dict[tuple[str, str], str] = {}
+        """Each branch the platform pointed, by repository and name: its head."""
+        self.pull_requests: list[OpenedPullRequest] = []
+        """Every pull request the platform opened through the twin, in order."""
 
     def _id(self, kind: str) -> str:
         return f"twin_{kind}_{next(self._counter):06d}"
@@ -167,6 +177,37 @@ class IntegrationTwinImpl(IntegrationInterface):
         )
         self.posted.append(message)
         return message
+
+    async def push_branch(self, repository: str, branch: str, head: str) -> None:
+        self._holds_repositories()
+        self.branches[(repository, branch)] = head
+
+    async def open_pull_request(
+        self, repository: str, head: str, base: str | None, title: str, body: str
+    ) -> OpenedPullRequest:
+        self._holds_repositories()
+        if (repository, head) not in self.branches:
+            raise ProviderRefused(f"{repository} has no branch {head}")
+        for opened in self.pull_requests:
+            if (opened.repository, opened.head) == (repository, head):
+                return opened
+        number = len(self.pull_requests) + 1
+        opened = OpenedPullRequest(
+            id=self._id("pull_request"),
+            url=f"twin://{repository}/pull/{number}",
+            repository=repository,
+            head=head,
+            base=base,
+            title=title,
+            body=body,
+            provenance=TWIN,
+        )
+        self.pull_requests.append(opened)
+        return opened
+
+    def _holds_repositories(self) -> None:
+        if self._name != FORGE:
+            raise ProviderRefused(f"the {self._name} twin holds no repository")
 
     def describe(self) -> str:
         return f"{self._name}=twin"
