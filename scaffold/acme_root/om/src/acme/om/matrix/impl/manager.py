@@ -5,6 +5,7 @@ from uuid import UUID
 
 from pydantic import ValidationError
 
+from acme.integrations.model_providers.types import ProviderName
 from acme.om.base import new_id, utcnow
 from acme.om.billing.storage import AccountStorageInterface
 from acme.om.billing.types.account import FundingMode
@@ -16,7 +17,7 @@ from acme.om.matrix.manager import MatrixManagerInterface, MatrixOperatorManager
 from acme.om.matrix.storage import MatrixStorageInterface, MatrixTenantStorageInterface
 from acme.om.matrix.types.matrix import MatrixRow, MatrixStatus, MatrixVersion
 from acme.om.matrix.types.record import BenchmarkResult, BenchmarkRun, ModelRef, Retirement
-from acme.om.matrix.types.tenant import FillOverride, MatrixPin
+from acme.om.matrix.types.tenant import FillOptions, FillOverride, MatrixPin
 from acme.om.models.prices import ModelPricesInterface
 from acme.om.models.types.fill import Fill, ModelRole
 from acme.om.trust.storage import TrustStorageInterface
@@ -175,6 +176,24 @@ class MatrixManagerImpl(MatrixManagerInterface):
         if pin is None:
             raise NotFound(f"session {session_id} holds no matrix version")
         return pin
+
+    async def get_options(self, ctx: TenantContext) -> tuple[FillOptions, ...]:
+        ctx.require(Permission.READ)
+        account = await self._accounts.read_account(ctx.org_id)
+        if account is None or account.funding is not FundingMode.OWN_KEY:
+            return ()
+        current = await self._matrix.read_latest(MatrixStatus.PUBLISHED)
+        if current is None:
+            return ()
+        keyed = [
+            provider
+            for provider in ProviderName
+            if await self._keys.read_live_key(ctx.org_id, provider) is not None
+        ]
+        return tuple(
+            FillOptions(role=role, fills=rules.choosable(current, role, keyed))
+            for role in current.roles
+        )
 
     async def choose_fill(self, ctx: TenantContext, role: ModelRole, fill: Fill) -> FillOverride:
         ctx.require(Permission.MANAGE_MEMBERS)

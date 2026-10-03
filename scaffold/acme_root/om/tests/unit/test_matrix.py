@@ -55,6 +55,7 @@ from acme.om.matrix.types.matrix import (
     MatrixStatus,
 )
 from acme.om.matrix.types.record import ModelRef
+from acme.om.matrix.types.tenant import FillOptions
 from acme.om.models.types.fill import MAIN, SUMMARIZER, Eligibility, Fill, SwitchReason
 from acme.om.placement.rules import DEFAULT_TIER
 from acme.om.placement.types.share import FairShare
@@ -773,6 +774,12 @@ async def test_a_tenant_on_its_own_keys_chooses_only_among_qualified_fills_it_ho
             *CATCH_ALL,
         )
     )
+    # What it may choose from is what choose takes: the qualified fills of
+    # each role, its rows' order, from the one provider it holds a key for.
+    assert await fleet.matrix.matrix.get_options(fleet.owner) == (
+        FillOptions(role=MAIN, fills=(OPUS, SONNET)),
+        FillOptions(role=SUMMARIZER, fills=(HAIKU, SONNET)),
+    )
     with pytest.raises(ValidationFailed, match="no live openai key"):
         await choose(fleet.owner, MAIN, SOL)
     with pytest.raises(ValidationFailed, match="qualified"):
@@ -791,6 +798,7 @@ async def test_a_tenant_on_its_own_keys_chooses_only_among_qualified_fills_it_ho
     platform, _ = await platform_tenant(fleet)
     with pytest.raises(ValidationFailed, match="own keys"):
         await choose(platform, MAIN, OPUS)
+    assert await fleet.matrix.matrix.get_options(platform) == ()
     assert await fleet.matrix.matrix.drop_choice(fleet.owner, MAIN)
     assert await fleet.matrix.matrix.get_choices(fleet.owner) == ()
 

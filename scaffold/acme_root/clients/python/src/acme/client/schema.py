@@ -97,6 +97,22 @@ class ApprovalView(BaseModel):
     tool: Annotated[str, Field(title='Tool')]
 
 
+class Arm(StrEnum):
+    candidate = 'candidate'
+    baseline = 'baseline'
+
+
+class ArmResultView(BaseModel):
+    """
+    One arm's result: its trials, how many passed, the mean of their
+    scores, and the sum of their costs.
+    """
+    cost_micros: Annotated[int, Field(title='Cost Micros')]
+    passed: Annotated[int, Field(title='Passed')]
+    score: Annotated[float, Field(title='Score')]
+    trials: Annotated[int, Field(title='Trials')]
+
+
 class BudgetScopeKind(StrEnum):
     session = 'session'
     tree = 'tree'
@@ -404,6 +420,39 @@ class Effect(StrEnum):
     unsafe = 'unsafe'
 
 
+class Effort(StrEnum):
+    """
+    How hard a model works on a call. A provider that has no such level
+    for a model leaves it out and names what it dropped.
+    """
+    none = 'none'
+    low = 'low'
+    medium = 'medium'
+    high = 'high'
+    xhigh = 'xhigh'
+    max = 'max'
+
+
+class Region(RootModel[str]):
+    root: Annotated[str, Field(max_length=64, min_length=1, title='Region')]
+
+
+class EligibilityBody(BaseModel):
+    """
+    What a fill offers: zero data retention, a region.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    region: Annotated[Region | None, Field(title='Region')] = None
+    zero_retention: Annotated[bool | None, Field(title='Zero Retention')] = False
+
+
+class EligibilityView(BaseModel):
+    region: Annotated[str | None, Field(title='Region')]
+    zero_retention: Annotated[bool, Field(title='Zero Retention')]
+
+
 class EnrollmentTokenView(BaseModel):
     created_at: Annotated[AwareDatetime, Field(title='Created At')]
     created_by: Annotated[UUID, Field(title='Created By')]
@@ -411,6 +460,16 @@ class EnrollmentTokenView(BaseModel):
     id: Annotated[UUID, Field(title='Id')]
     pool_id: Annotated[UUID, Field(title='Pool Id')]
     revoked_at: Annotated[AwareDatetime | None, Field(title='Revoked At')]
+
+
+class EntryKind(StrEnum):
+    hold = 'hold'
+    settlement = 'settlement'
+    charge = 'charge'
+    credit = 'credit'
+    grant = 'grant'
+    raise_ = 'raise'
+    approval = 'approval'
 
 
 class EventView(BaseModel):
@@ -520,6 +579,14 @@ class FileView(BaseModel):
     size_bytes: Annotated[int, Field(title='Size Bytes')]
     status: FileStatus
     subject_id: Annotated[UUID | None, Field(title='Subject Id')]
+
+
+class SchemaName(RootModel[str]):
+    root: Annotated[str, Field(max_length=200, min_length=1, title='Schema Name')]
+
+
+class ThinkingBudget(RootModel[int]):
+    root: Annotated[int, Field(gt=0, title='Thinking Budget')]
 
 
 class FillUsageView(BaseModel):
@@ -679,6 +746,12 @@ class IssuedTotpSecretView(BaseModel):
     otpauth_uri: Annotated[str | None, Field(title='Otpauth Uri')]
 
 
+class KeyStatus(StrEnum):
+    live = 'live'
+    rotated = 'rotated'
+    refused = 'refused'
+
+
 class KnowledgeRequest(BaseModel):
     """
     An entry: its title, the words that trigger it, all of which must
@@ -715,6 +788,46 @@ class KnowledgeView(BaseModel):
     trigger: Annotated[list[str], Field(title='Trigger')]
     updated_at: Annotated[AwareDatetime, Field(title='Updated At')]
     version: Annotated[int, Field(title='Version')]
+
+
+class LedgerEntryView(BaseModel):
+    """
+    One entry, written once. A field a kind does not carry is null:
+
+    - `hold`: `session_id`, `units` (the worst case, null when no price
+      applies), and `cost_micros` (the exposure).
+    - `settlement`: `hold_id`, `cost_micros` and `tokens` (what it spent).
+    - `charge`: `hold_id`, `units`, and `amount_micros` (what the money
+      buckets paid).
+    - `credit`: `amount_micros` and `reference` (the payment's).
+    - `grant`: `units`, `reason`, and `by` (the operator).
+    - `raise`: `budget_id`, `cost_micros`, `tokens`, and `by`.
+    - `approval`: `session_id`, `amount_micros` (the cost it allows), and
+      `by`.
+    """
+    amount_micros: Annotated[int | None, Field(title='Amount Micros')] = None
+    budget_id: Annotated[UUID | None, Field(title='Budget Id')] = None
+    by: Annotated[UUID | None, Field(title='By')] = None
+    cost_micros: Annotated[int | None, Field(title='Cost Micros')] = None
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    hold_id: Annotated[UUID | None, Field(title='Hold Id')] = None
+    id: Annotated[UUID, Field(title='Id')]
+    kind: EntryKind
+    reason: Annotated[str | None, Field(title='Reason')] = None
+    reference: Annotated[str | None, Field(title='Reference')] = None
+    session_id: Annotated[UUID | None, Field(title='Session Id')] = None
+    tokens: Annotated[int | None, Field(title='Tokens')] = None
+    units: Annotated[int | None, Field(title='Units')] = None
+
+
+class LedgerPageView(BaseModel):
+    """
+    One read of a tenant's ledger, the newest first. `has_more` says the
+    read was cut at its limit and older entries match it too: narrow it by
+    kind, hold, or session to reach them.
+    """
+    has_more: Annotated[bool, Field(title='Has More')]
+    items: Annotated[list[LedgerEntryView], Field(title='Items')]
 
 
 class LimitsBody(BaseModel):
@@ -792,6 +905,55 @@ class LoopOutcome(StrEnum):
     inconclusive = 'inconclusive'
     cancelled = 'cancelled'
     errored = 'errored'
+
+
+class Environment(RootModel[str]):
+    root: Annotated[str, Field(pattern='^[a-z][a-z0-9-]{0,31}$', title='Environment')]
+
+
+class Kind(RootModel[str]):
+    root: Annotated[str, Field(max_length=200, min_length=1, title='Kind')]
+
+
+class PlanTier(RootModel[str]):
+    root: Annotated[str, Field(pattern='^[a-z][a-z0-9-]{0,31}$', title='Plan Tier')]
+
+
+class Role1(RootModel[str]):
+    root: Annotated[str, Field(pattern='^[a-z][a-z0-9_]{0,63}$', title='Role')]
+
+
+class Workload(RootModel[str]):
+    root: Annotated[str, Field(pattern='^[a-z][a-z0-9-]{0,31}$', title='Workload')]
+
+
+class MatrixKeyBody(BaseModel):
+    """
+    What a row answers: each key it names must equal the question's, and a
+    key left out matches every value. The row that names none matches every
+    question.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    environment: Annotated[Environment | None, Field(title='Environment')] = None
+    kind: Annotated[Kind | None, Field(title='Kind')] = None
+    plan_tier: Annotated[PlanTier | None, Field(title='Plan Tier')] = None
+    role: Annotated[Role1 | None, Field(title='Role')] = None
+    workload: Annotated[Workload | None, Field(title='Workload')] = None
+
+
+class MatrixKeyView(BaseModel):
+    environment: Annotated[str | None, Field(title='Environment')]
+    kind: Annotated[str | None, Field(title='Kind')]
+    plan_tier: Annotated[str | None, Field(title='Plan Tier')]
+    role: Annotated[str | None, Field(title='Role')]
+    workload: Annotated[str | None, Field(title='Workload')]
+
+
+class MatrixStatus(StrEnum):
+    pending = 'pending'
+    published = 'published'
 
 
 class MessageRequest(BaseModel):
@@ -891,6 +1053,11 @@ class Origin(StrEnum):
     automation = 'automation'
     parent = 'parent'
     engine = 'engine'
+
+
+class OutputShape(StrEnum):
+    text = 'text'
+    schema = 'schema'
 
 
 class OutputStream(StrEnum):
@@ -1058,6 +1225,11 @@ class Provenance(StrEnum):
     unavailable = 'unavailable'
 
 
+class ProviderName(StrEnum):
+    anthropic = 'anthropic'
+    openai = 'openai'
+
+
 class PublishRequest(BaseModel):
     """
     The next version of a playbook's name: its description, its body, and
@@ -1129,6 +1301,29 @@ class RepositoryView(BaseModel):
     path: Annotated[str, Field(title='Path')]
 
 
+class RetireRequest(BaseModel):
+    """
+    A model its provider retired, by name, as a fill names it.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    model: Annotated[str, Field(max_length=200, min_length=1, title='Model')]
+    provider: ProviderName
+
+
+class RetirementView(BaseModel):
+    """
+    A retired model: no session resolves to it again, and a version that
+    names it is not published. Recorded once a model.
+    """
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    id: Annotated[UUID, Field(title='Id')]
+    model: Annotated[str, Field(title='Model')]
+    provider: ProviderName
+    recorded_by: Annotated[UUID, Field(title='Recorded By')]
+
+
 class ReviewRequest(BaseModel):
     """
     Keep a suggestion, so any session may recall it, or reject it.
@@ -1170,6 +1365,17 @@ class RunsAs(StrEnum):
     """
     creator = 'creator'
     automation_principal = 'automation_principal'
+
+
+class SaveKeyRequest(BaseModel):
+    """
+    A key's value. It is written once, under a new reference, and no
+    response, log, or error ever carries it.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    value: Annotated[SecretStr, Field(max_length=4096, min_length=1, title='Value')]
 
 
 class SecondFactorRequest(BaseModel):
@@ -1349,6 +1555,10 @@ class SsoLinkView(BaseModel):
     url: Annotated[str, Field(title='Url')]
 
 
+class Role2(RootModel[str]):
+    root: Annotated[str, Field(pattern='^[a-z][a-z0-9_]{0,63}$')]
+
+
 class StartSessionRequest(BaseModel):
     """
     A session to start on the latest version of a kind the product runs,
@@ -1478,6 +1688,22 @@ class TreeBoundsView(BaseModel):
     height: Annotated[int, Field(title='Height')]
     root_id: Annotated[UUID, Field(title='Root Id')]
     size: Annotated[int, Field(title='Size')]
+
+
+class TrialView(BaseModel):
+    """
+    One trial: its arm, its session, where and when it ran, its cost, and
+    what its acceptance verdict found.
+    """
+    arm: Arm
+    broken: Annotated[list[str], Field(title='Broken')]
+    cost_micros: Annotated[int, Field(title='Cost Micros')]
+    executor: Annotated[str, Field(title='Executor')]
+    passed: Annotated[bool, Field(title='Passed')]
+    score: Annotated[float, Field(title='Score')]
+    session_id: Annotated[UUID, Field(title='Session Id')]
+    started_at: Annotated[AwareDatetime, Field(title='Started At')]
+    verdict_id: Annotated[UUID, Field(title='Verdict Id')]
 
 
 class TriggerKind(StrEnum):
@@ -1755,6 +1981,40 @@ class AutomationView(BaseModel):
     updated_by: Annotated[UUID, Field(title='Updated By')]
 
 
+class BenchmarkResultRequest(BaseModel):
+    """
+    What a benchmark run showed of a model for a model role: whether it
+    passed, and where its evidence is (`run`, such as the run's id or its
+    report's address). The latest result for the model and the role decides
+    whether a version that serves the role with the model may be
+    published.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    benchmark: Annotated[str, Field(pattern='^[a-z][a-z0-9_.-]{0,99}$', title='Benchmark')]
+    model: Annotated[str, Field(max_length=200, min_length=1, title='Model')]
+    passed: Annotated[bool, Field(title='Passed')]
+    provider: ProviderName
+    role: Annotated[str, Field(pattern='^[a-z][a-z0-9_]{0,63}$', title='Role')]
+    run: Annotated[str, Field(max_length=500, min_length=1, title='Run')]
+
+
+class BenchmarkResultView(BaseModel):
+    """
+    A recorded result, written once.
+    """
+    benchmark: Annotated[str, Field(title='Benchmark')]
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    id: Annotated[UUID, Field(title='Id')]
+    model: Annotated[str, Field(title='Model')]
+    passed: Annotated[bool, Field(title='Passed')]
+    provider: ProviderName
+    recorded_by: Annotated[UUID, Field(title='Recorded By')]
+    role: Annotated[str, Field(title='Role')]
+    run: Annotated[str, Field(title='Run')]
+
+
 class BoundsView(BaseModel):
     """
     The bounds a session runs under: its kind's loop limits, the deadline
@@ -1905,6 +2165,40 @@ class FilePageView(BaseModel):
     """
     items: Annotated[list[FileView], Field(title='Items')]
     next_cursor: Annotated[str | None, Field(title='Next Cursor')]
+
+
+class FillBody(BaseModel):
+    """
+    A fill: a provider's model, how hard it works, its output bound and
+    shape, its context window, and what it offers. The output bound fits
+    inside the window, and a schema is named exactly when the output is one.
+    An output left out is text, and an eligibility left out offers
+    nothing.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    context_window: Annotated[int, Field(gt=0, title='Context Window')]
+    effort: Effort | None = None
+    eligibility: EligibilityBody | None = None
+    max_output_tokens: Annotated[int, Field(gt=0, title='Max Output Tokens')]
+    model: Annotated[str, Field(max_length=200, min_length=1, title='Model')]
+    output: OutputShape | None = None
+    provider: ProviderName
+    schema_name: Annotated[SchemaName | None, Field(title='Schema Name')] = None
+    thinking_budget: Annotated[ThinkingBudget | None, Field(title='Thinking Budget')] = None
+
+
+class FillView(BaseModel):
+    context_window: Annotated[int, Field(title='Context Window')]
+    effort: Effort | None
+    eligibility: EligibilityView
+    max_output_tokens: Annotated[int, Field(title='Max Output Tokens')]
+    model: Annotated[str, Field(title='Model')]
+    output: OutputShape
+    provider: ProviderName
+    schema_name: Annotated[str | None, Field(title='Schema Name')]
+    thinking_budget: Annotated[int | None, Field(title='Thinking Budget')]
 
 
 class GrantRequest(BaseModel):
@@ -2093,6 +2387,43 @@ class LoopStandingView(BaseModel):
     status: WorkStatus
 
 
+class MatrixRowBody(BaseModel):
+    """
+    A row: the questions it matches, and its fills, the first the fill and
+    the rest the fallbacks, each named once. A row that names no match
+    matches every question.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    fills: Annotated[list[FillBody], Field(max_length=8, min_length=1, title='Fills')]
+    matches: MatrixKeyBody | None = None
+
+
+class MatrixRowView(BaseModel):
+    """
+    A row: the questions it matches, the row's key, and its fills.
+    """
+    fills: Annotated[list[FillView], Field(title='Fills')]
+    matches: MatrixKeyView
+
+
+class MatrixVersionView(BaseModel):
+    """
+    A version: pending until an operator publishes it, and the matrix from
+    then until the next is published. Its rows never change.
+    """
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    created_by: Annotated[UUID, Field(title='Created By')]
+    id: Annotated[UUID, Field(title='Id')]
+    number: Annotated[int, Field(title='Number')]
+    published_at: Annotated[AwareDatetime | None, Field(title='Published At')]
+    published_by: Annotated[UUID | None, Field(title='Published By')]
+    roles: Annotated[list[str], Field(title='Roles')]
+    rows: Annotated[list[MatrixRowView], Field(title='Rows')]
+    status: MatrixStatus
+
+
 class MeView(BaseModel):
     app: Annotated[str, Field(title='App')]
     org: OrgView
@@ -2226,6 +2557,19 @@ class ProjectView(BaseModel):
     updated_by: Annotated[UUID, Field(title='Updated By')]
 
 
+class ProviderKeyView(BaseModel):
+    """
+    What the tenant sees of a key: its reference, who added it and when,
+    its state, and when it was last used. Never its value.
+    """
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    created_by: Annotated[UUID, Field(title='Created By')]
+    id: Annotated[UUID, Field(title='Id')]
+    last_used_at: Annotated[AwareDatetime | None, Field(title='Last Used At')]
+    provider: ProviderName
+    status: KeyStatus
+
+
 class ResultRequest(BaseModel):
     """
     How an item ended: the JSON of an exec result, in base64.
@@ -2235,6 +2579,12 @@ class ResultRequest(BaseModel):
     )
     crossing: CrossingBody
     data: Annotated[str, Field(max_length=16000000, title='Data')]
+
+
+class RoleFillView(BaseModel):
+    fallbacks: Annotated[list[FillView], Field(title='Fallbacks')]
+    fill: FillView
+    role: Annotated[str, Field(title='Role')]
 
 
 class SessionStandingView(BaseModel):
@@ -2255,6 +2605,18 @@ class SessionStandingView(BaseModel):
     session_id: Annotated[UUID, Field(title='Session Id')]
     share_set: Annotated[bool, Field(title='Share Set')]
     status: SessionStatus
+
+
+class StageRequest(BaseModel):
+    """
+    A new version of the matrix: the model roles it serves and its rows,
+    one a key. It is checked whole when it is published.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    roles: Annotated[list[Role2], Field(max_length=64, min_length=1, title='Roles')]
+    rows: Annotated[list[MatrixRowBody], Field(max_length=500, min_length=1, title='Rows')]
 
 
 class StepShapeView(BaseModel):
@@ -2420,6 +2782,27 @@ class BudgetUsageView(BaseModel):
     window_start: Annotated[AwareDatetime, Field(title='Window Start')]
 
 
+class ChooseRequest(BaseModel):
+    """
+    The fill a tenant chooses for a model role: one of that role's
+    options.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    fill: FillBody
+
+
+class ContenderView(BaseModel):
+    """
+    What an arm's sessions ran: the agent kind, its version, and each model
+    role's fill.
+    """
+    fills: Annotated[list[RoleFillView], Field(title='Fills')]
+    kind: Annotated[str, Field(title='Kind')]
+    kind_version: Annotated[int, Field(title='Kind Version')]
+
+
 class ErrorBody(BaseModel):
     code: Annotated[str, Field(title='Code')]
     last_owner: LastOwnerDetail | None = None
@@ -2439,6 +2822,28 @@ class ExecutionPageView(BaseModel):
     """
     items: Annotated[list[ExecutionView], Field(title='Items')]
     next_cursor: Annotated[str | None, Field(title='Next Cursor')]
+
+
+class FillChoiceView(BaseModel):
+    """
+    The tenant's choice for one model role, from its next session on.
+    """
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    fill: FillView
+    id: Annotated[UUID, Field(title='Id')]
+    role: Annotated[str, Field(title='Role')]
+    updated_at: Annotated[AwareDatetime, Field(title='Updated At')]
+    updated_by: Annotated[UUID, Field(title='Updated By')]
+
+
+class FillOptionsView(BaseModel):
+    """
+    What a tenant on its own keys may choose for one model role: the fills
+    the published matrix qualified for it, from a provider it holds a live
+    key for.
+    """
+    fills: Annotated[list[FillView], Field(title='Fills')]
+    role: Annotated[str, Field(title='Role')]
 
 
 class HostStandingView(BaseModel):
@@ -2535,3 +2940,35 @@ class UsagePageView(BaseModel):
     """
     items: Annotated[list[BudgetUsageView], Field(title='Items')]
     next_cursor: Annotated[str | None, Field(title='Next Cursor')]
+
+
+class BenchmarkSummaryView(BaseModel):
+    """
+    One run of a scenario, without its trials: a point of the scenario's
+    trend.
+    """
+    baseline: ContenderView
+    baseline_result: ArmResultView
+    candidate: ContenderView
+    candidate_result: ArmResultView
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    id: Annotated[UUID, Field(title='Id')]
+    recorded_by: Annotated[UUID, Field(title='Recorded By')]
+    regressed: Annotated[bool, Field(title='Regressed')]
+    scenario: Annotated[str, Field(title='Scenario')]
+
+
+class BenchmarkView(BaseModel):
+    """
+    One run of a scenario, with every trial of both arms.
+    """
+    baseline: ContenderView
+    baseline_result: ArmResultView
+    candidate: ContenderView
+    candidate_result: ArmResultView
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    id: Annotated[UUID, Field(title='Id')]
+    recorded_by: Annotated[UUID, Field(title='Recorded By')]
+    regressed: Annotated[bool, Field(title='Regressed')]
+    scenario: Annotated[str, Field(title='Scenario')]
+    trials: Annotated[list[TrialView], Field(title='Trials')]
