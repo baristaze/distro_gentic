@@ -17,9 +17,9 @@ workspace it works in, and which of its calls run without asking.
   committed head on a fresh executor, and submits its result through the
   [result gate](../evidence/README.md), citing the runs that validation
   wrote. A success counts only when the validation at its head passed.
-- **Analysis** reads what a run produced (its logs, telemetry,
-  recordings, and sensor data) in a workspace of its own, changes
-  nothing, and answers with its findings.
+- **Analysis** reads what a run produced (its logs, telemetry, and
+  recordings) in a workspace of its own, changes nothing, and answers
+  with its findings.
 - **The planner** turns findings into tasks. It reads where sessions
   stand, hands new engineering work to an engineer, and answers with its
   plan: each task and the session it goes to.

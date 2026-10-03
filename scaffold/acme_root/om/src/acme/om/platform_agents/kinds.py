@@ -83,9 +83,9 @@ ANALYSIS_KIND = AgentKind(
     authority=AuthorityMode.STEADY,
     tree=TreeLimits(height=1, count=0),
     prompts=(
-        "You read what a run produced (its logs, its telemetry, its recordings, its sensor "
-        "data) in your workspace, and turn it into findings. Change nothing. Answer with "
-        "the findings, each citing the files and the commands that show it.",
+        "You read what a run produced (its logs, its telemetry, its recordings) in your "
+        "workspace, and turn it into findings. Change nothing. Answer with the findings, "
+        "each citing the files and the commands that show it.",
     ),
     policy=allowing(ToolClass.READ, ToolClass.EXECUTE),
     isolation=WORKSPACE,
