@@ -220,6 +220,24 @@ async def test_a_sessions_children_are_listed_with_their_parent(
     assert rest.json()["next_cursor"] is None
 
 
+async def test_a_deleted_child_leaves_its_parents_children_until_it_is_restored(
+    client: httpx.AsyncClient, owner: dict[str, str], container: AppContainer
+) -> None:
+    parent = await start(client, owner, "the parent")
+    kept, gone = sorted([await spawn(container, owner, parent["id"]) for _ in range(2)])
+    children = f"/v1/agent-sessions/{parent['id']}/children"
+
+    deleted = await client.delete(f"/v1/agent-sessions/{gone}", headers=owner)
+    without = await client.get(children, headers=owner)
+    restored = await client.post(f"/v1/agent-sessions/{gone}/restore", headers=owner)
+    back = await client.get(children, headers=owner)
+
+    assert deleted.status_code == 200, deleted.text
+    assert [child["id"] for child in without.json()["items"]] == [kept]
+    assert restored.status_code == 200, restored.text
+    assert [child["id"] for child in back.json()["items"]] == [kept, gone]
+
+
 async def test_a_member_archives_deletes_and_restores_a_session_and_a_viewer_does_not(
     client: httpx.AsyncClient, owner: dict[str, str], container: AppContainer
 ) -> None:

@@ -178,7 +178,14 @@ class AgentSessionsServiceImpl(AgentSessionsServiceInterface):
         after = decode_cursor(CHILDREN, cursor) if cursor else None
         await self._sessions.get_session(ctx, session_id)
         page = await self._sessions.get_children(ctx, session_id, after, clamp_limit(limit))
-        return session_page(page, CHILDREN)
+        # A deleted child is on no read until it is restored. The manager
+        # answers it, since a tree's walk passes through it, so it is left
+        # out here; the cursor still follows the page as read.
+        listed = session_page(page, CHILDREN)
+        return AgentSessionPageView(
+            items=[child for child in listed.items if child.deleted_at is None],
+            next_cursor=listed.next_cursor,
+        )
 
     async def archive_session(self, ctx: TenantContext, session_id: UUID) -> AgentSessionView:
         return session_view(await self._sessions.archive_session(ctx, session_id))
