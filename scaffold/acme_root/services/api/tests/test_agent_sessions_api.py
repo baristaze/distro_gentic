@@ -59,7 +59,7 @@ def runs_of(container: AppContainer, session_id: str) -> int:
     work = container.storage.get_work_storage()
     assert isinstance(work, WorkStorageMemoryImpl)
     items = [item for _, item in work._items.values()]  # pyright: ignore[reportPrivateUsage]
-    return len([i for i in items if i.kind is WorkKind.LOOP and str(i.target_id) == session_id])
+    return len([i for i in items if i.kind == WorkKind.LOOP and str(i.target_id) == session_id])
 
 
 async def test_a_session_is_started_spoken_to_steered_and_read(

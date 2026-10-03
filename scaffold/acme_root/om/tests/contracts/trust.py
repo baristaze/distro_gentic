@@ -36,7 +36,7 @@ from acme.om.exceptions import NotAuthorized
 from acme.om.models.impl.credentials import CallCredentialsPlatformImpl
 from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.projects.types.project import Project
-from acme.om.root import Managers, build_managers
+from acme.om.root import Managers, ProductKinds, build_managers
 from acme.om.steps.types.step import Step
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
@@ -205,9 +205,11 @@ def trusted(
     clients: ClientFactory = absent_client,
     storage: StorageInterface | None = None,
     owner: TenantContext | None = None,
+    product_kinds: ProductKinds | None = None,
 ) -> Trusted:
     """`storage` None is the memory storage, and `owner` None a fresh
-    tenant's owner; a suite over Postgres hands in both."""
+    tenant's owner; a suite over Postgres hands in both. `product_kinds` is
+    what a product registers beside the platform's kinds."""
     infra = InfraLocalImpl(tmp_path)
     anthropic = ModelProviderScriptedImpl(ProviderName.ANTHROPIC)
     openai = ModelProviderScriptedImpl(ProviderName.OPENAI)
@@ -225,7 +227,13 @@ def trusted(
     )
     clock = Clock()
     layer = TrustLayer(
-        storage, infra, placement=placement, probe=probe, clients=clients, clock=clock
+        storage,
+        infra,
+        placement=placement,
+        probe=probe,
+        clients=clients,
+        product_kinds=product_kinds,
+        clock=clock,
     )
     managers = build_managers(
         storage,
@@ -235,6 +243,7 @@ def trusted(
         principal_context=transition,
         tool_catalog=catalog,
         tools_layer=layer.tools,
+        product_kinds=product_kinds,
     )
     trust = layer.build(managers)
 

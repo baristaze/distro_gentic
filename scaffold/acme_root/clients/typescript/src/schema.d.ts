@@ -4405,7 +4405,8 @@ export interface components {
         };
         /** LaneLoadView */
         LaneLoadView: {
-            kind: components["schemas"]["WorkKind"];
+            /** Kind */
+            kind: string;
             /** Lane */
             lane: string;
             /** Ready */
@@ -4990,7 +4991,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
-            kind: components["schemas"]["WorkKind"];
+            /** Kind */
+            kind: string;
             /** Last Error */
             last_error: string | null;
             /** Max Attempts */
@@ -6327,11 +6329,6 @@ export interface components {
             handle: string;
             kind: components["schemas"]["HandleKind"];
         };
-        /**
-         * WorkKind
-         * @enum {string}
-         */
-        WorkKind: "NOOP" | "ORCHESTRATION" | "WAKE_PARKED" | "DELETE_ACCOUNT" | "DELETE_ORG" | "WAKE_SESSION" | "WAKE_SESSIONS" | "LOOP" | "VALIDATION" | "EXEC" | "WORKSPACE";
         /**
          * WorkStatus
          * @enum {string}

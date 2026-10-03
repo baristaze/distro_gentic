@@ -306,6 +306,11 @@ REQUEST_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
         # The claim made on behalf of a host, which rebuilds the
         # run's context from the item as the claim does.
         ("PlacementManagerInterface", "claim_for"),
+        # A claimant's answers for an item it holds, which rebuild the
+        # tenant's context once the claimant is found to hold it.
+        ("PlacementManagerInterface", "held_for"),
+        ("PlacementManagerInterface", "report_for"),
+        ("PlacementManagerInterface", "extend_for"),
         # A host's calls: it is no person, so its enrollment, its credential,
         # its beat, and its claim run from the request stage; the claim
         # rebuilds the run's context from the item through placement.

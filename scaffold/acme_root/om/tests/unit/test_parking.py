@@ -53,7 +53,7 @@ class Engine:
         work = self.storage.get_work_storage()
         assert isinstance(work, WorkStorageMemoryImpl)
         items = [item for _, item in work._items.values()]  # pyright: ignore[reportPrivateUsage]
-        return [item for item in items if item.kind is kind]
+        return [item for item in items if item.kind == kind]
 
 
 @pytest.fixture

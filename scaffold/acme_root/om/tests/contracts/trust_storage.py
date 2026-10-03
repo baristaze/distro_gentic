@@ -15,14 +15,13 @@ from acme.om.exceptions import PreconditionFailed, UniqueKeyTaken
 from acme.om.trust.storage import TrustStorageInterface
 from acme.om.trust.types.grant import ContentGrant
 from acme.om.trust.types.provider_key import KeyStatus, ProviderKey
-from acme.om.trust.types.secret import SecretDeclaration, SecretOwnerKind, SecretStore
+from acme.om.trust.types.secret import PROJECT, SecretDeclaration, SecretStore
 
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
         "create_declaration",
         "read_declaration",
         "read_declarations",
-        "resolve_declaration",
         "create_key",
         "read_live_key",
         "read_keys",
@@ -45,7 +44,7 @@ def make_declaration(
     store: SecretStore = SecretStore.CLOUD,
     *,
     owner: UUID | None = None,
-    kind: SecretOwnerKind = SecretOwnerKind.PROJECT,
+    kind: str = PROJECT,
 ) -> SecretDeclaration:
     now = utcnow()
     actor = new_id()
@@ -126,17 +125,17 @@ class TrustStorageContract:
         assert await storage.read_declaration(org, kind, first.owner_id, first.name) == first
         assert await storage.read_declaration(org, kind, other.owner_id, other.name) == other
 
-    async def test_a_name_resolves_to_its_projects_and_never_anothers(
+    async def test_a_name_reads_on_its_owner_and_never_another_kinds_of_one_id(
         self, storage: TrustStorageInterface
     ) -> None:
         org, ours, theirs = new_id(), new_id(), new_id()
         assert await storage.create_declaration(org, make_declaration(owner=theirs), ())
-        assert await storage.resolve_declaration(org, "deploy_token", ours) is None
-        assert await storage.resolve_declaration(org, "deploy_token", None) is None
+        assert await storage.read_declaration(org, PROJECT, ours, "deploy_token") is None
         own = make_declaration(owner=ours)
         assert await storage.create_declaration(org, own, ())
-        assert await storage.resolve_declaration(org, "deploy_token", ours) == own
-        assert await storage.resolve_declaration(org, "other", ours) is None
+        assert await storage.read_declaration(org, PROJECT, ours, "deploy_token") == own
+        assert await storage.read_declaration(org, "batch", ours, "deploy_token") is None
+        assert await storage.read_declaration(org, PROJECT, ours, "other") is None
 
     async def test_declarations_list_by_name_and_id_after_a_name_and_id(
         self, storage: TrustStorageInterface
@@ -167,14 +166,6 @@ class TrustStorageContract:
         kind, owner = declaration.owner_kind, declaration.owner_id
         assert await storage.create_declaration(new_id(), declaration, ())
         assert await storage.read_declaration(new_id(), kind, owner, "deploy_token") is None
-
-    async def test_resolve_declaration_of_another_tenant_finds_nothing(
-        self, storage: TrustStorageInterface
-    ) -> None:
-        declaration = make_declaration()
-        assert await storage.create_declaration(new_id(), declaration, ())
-        found = await storage.resolve_declaration(new_id(), "deploy_token", declaration.owner_id)
-        assert found is None
 
     async def test_read_declarations_of_another_tenant_finds_nothing(
         self, storage: TrustStorageInterface

@@ -39,7 +39,8 @@ from acme.om.context import (
 )
 from acme.om.exceptions import NotFound, UnknownAgentKind
 from acme.om.matrix.types.matrix import MatrixStatus
-from acme.om.placement.rules import CLAIMED_THROUGH_THE_GATEWAY, DEFAULT_TIER
+from acme.om.placement.kinds import platform_work_kinds
+from acme.om.placement.rules import DEFAULT_TIER
 from acme.om.steps.rules import message_step
 from acme.om.steps.types.content import Attachment, Children, DocumentBlock
 from acme.om.steps.types.content import TextBlock as KeptText
@@ -54,7 +55,6 @@ from acme.om.tools.types.tool import Effect, ToolClass, ToolInput, ToolSpec
 from acme.om.work.storage.impl.memory import WorkStorageMemoryImpl
 from acme.om.work.types.handler import WorkParked
 from acme.om.work.types.work_item import (
-    WORK_ENQUEUE_PERMISSIONS,
     WorkItem,
     WorkKind,
     WorkStatus,
@@ -212,7 +212,7 @@ async def test_a_runner_that_lacks_the_kind_leaves_the_loop_to_a_retry(tmp_path:
 
     def loop_items() -> list[WorkItem]:
         items = [item for _, item in work._items.values()]  # pyright: ignore[reportPrivateUsage]
-        return [i for i in items if i.kind is WorkKind.LOOP]
+        return [i for i in items if i.kind == WorkKind.LOOP]
 
     runner = build_runner(lacking)
     running = asyncio.create_task(runner.run())
@@ -244,9 +244,13 @@ def test_every_kind_is_claimed_by_one_worker_and_asked_for_as_widely_as_it_runs(
     runner = runner_over(tmp_path)
     handlers = build_runner(runner)._handlers  # pyright: ignore[reportPrivateUsage]
     assert set(handlers) == {WorkKind.LOOP} and not maintenance & set(handlers)
-    assert not (maintenance | set(handlers)) & CLAIMED_THROUGH_THE_GATEWAY
-    assert maintenance | set(handlers) | CLAIMED_THROUGH_THE_GATEWAY == set(WorkKind)
-    asking = WORK_ENQUEUE_PERMISSIONS[WorkKind.LOOP]
+    kinds = platform_work_kinds()
+    gateway = {spec.name for spec in kinds if spec.claimant is not None}
+    assert not (maintenance | set(handlers)) & gateway
+    assert maintenance | set(handlers) | gateway == {spec.name for spec in kinds} == set(WorkKind)
+    loop = kinds.get(WorkKind.LOOP)
+    assert loop is not None
+    asking = loop.permission
     requires = (*LoopHandlerImpl.REQUIRES, *FairShareGuardImpl.REQUIRES)
     for role, permissions in ROLE_PERMISSIONS.items():
         if asking in permissions:

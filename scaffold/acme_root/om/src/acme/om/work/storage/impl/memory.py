@@ -7,7 +7,7 @@ from acme.om.exceptions import TenantMismatch
 from acme.om.storage.impl.memory_base import MemoryStorageBase, MemoryTable
 from acme.om.work.rules import attempts_after_claim, is_exhausted, stagger_delay
 from acme.om.work.storage import InsertOutcome, WorkStorageInterface
-from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
+from acme.om.work.types.work_item import WorkItem, WorkStatus
 
 
 class WorkStorageMemoryImpl(MemoryStorageBase, WorkStorageInterface):
@@ -59,7 +59,7 @@ class WorkStorageMemoryImpl(MemoryStorageBase, WorkStorageInterface):
             return item
 
     async def claim_next(
-        self, lane: str, kinds: Sequence[WorkKind], worker_id: str, lease: timedelta
+        self, lane: str, kinds: Sequence[str], worker_id: str, lease: timedelta
     ) -> tuple[UUID, WorkItem] | None:
         now = utcnow()
         async with self._lock:
@@ -93,7 +93,7 @@ class WorkStorageMemoryImpl(MemoryStorageBase, WorkStorageInterface):
         return sum(
             1
             for other in self._rows(self._items, org_id)
-            if other.kind is item.kind
+            if other.kind == item.kind
             and other.id != item.id
             and other.status is WorkStatus.CLAIMED
             and other.lease_expires_at is not None
@@ -104,9 +104,9 @@ class WorkStorageMemoryImpl(MemoryStorageBase, WorkStorageInterface):
             )
         )
 
-    async def has_open_item(self, org_id: UUID, kind: WorkKind, target_id: UUID) -> bool:
+    async def has_open_item(self, org_id: UUID, kind: str, target_id: UUID) -> bool:
         return any(
-            item.kind is kind
+            item.kind == kind
             and item.target_id == target_id
             and item.status in (WorkStatus.QUEUED, WorkStatus.CLAIMED)
             for item in self._rows(self._items, org_id)
@@ -196,20 +196,20 @@ class WorkStorageMemoryImpl(MemoryStorageBase, WorkStorageInterface):
 
     async def count_ready_on_lanes(
         self, org_id: UUID, lanes: Sequence[str], now: datetime
-    ) -> dict[tuple[str, WorkKind], int]:
-        found: dict[tuple[str, WorkKind], int] = {}
+    ) -> dict[tuple[str, str], int]:
+        found: dict[tuple[str, str], int] = {}
         for item in self._rows(self._items, org_id):
             if self._ready(item, now) and item.lane in lanes:
                 found[(item.lane, item.kind)] = found.get((item.lane, item.kind), 0) + 1
         return found
 
     async def read_latest_for_target(
-        self, org_id: UUID, kind: WorkKind, target_id: UUID
+        self, org_id: UUID, kind: str, target_id: UUID
     ) -> WorkItem | None:
         mine = [
             item
             for item in self._rows(self._items, org_id)
-            if item.kind is kind and item.target_id == target_id
+            if item.kind == kind and item.target_id == target_id
         ]
         return max(mine, key=lambda item: (item.created_at, item.id), default=None)
 

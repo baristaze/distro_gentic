@@ -20,7 +20,7 @@ from acme.om.context import TenantContext
 from acme.om.steps.types.step import Step
 from acme.om.trust.types.identities import CallAudit
 from acme.om.trust.types.provider_key import ProviderKey
-from acme.om.trust.types.secret import SecretDeclaration
+from acme.om.trust.types.secret import PROJECT, SecretDeclaration
 
 
 class TrustManagerInterface(ABC):
@@ -73,14 +73,20 @@ class TrustManagerInterface(ABC):
 
     @abstractmethod
     async def put_secret(
-        self, ctx: TenantContext, project_id: UUID, name: str, value: str
+        self,
+        ctx: TenantContext,
+        project_id: UUID,
+        name: str,
+        value: str,
+        *,
+        owner_kind: str = PROJECT,
     ) -> SecretDeclaration:
         """Writes the value of a cloud secret the project `project_id`
         declared into the platform's store, under that project, as one who
-        writes the tenant's configuration may. A secret held inside a
-        customer's wall never takes its value here (`SecretCrossesWall`): its
-        host's store holds it. `NotFound` for a name the project never
-        declared."""
+        writes the tenant's configuration may; `owner_kind` names an owner
+        of a product's kind in its place. A secret held inside a customer's
+        wall never takes its value here (`SecretCrossesWall`): its host's
+        store holds it. `NotFound` for a name the owner never declared."""
         ...
 
     @abstractmethod
@@ -88,9 +94,10 @@ class TrustManagerInterface(ABC):
         self, ctx: TenantContext, session_id: UUID, uses: Sequence[SecretUse]
     ) -> dict[str, str]:
         """The name the tenant's store keeps each of `uses` under, for the
-        session: a name means the declaration of the session's project
-        first, then the tenant's own, on no project, and never another
-        project's, as the projects answer the session's project. A declared
+        session: a name means the declaration of the first owner the session
+        is placed on, through the owner kinds in the registry's order (its
+        project first, as the projects answer it), and never one of an owner
+        it is not placed on. A declared
         cloud secret is kept under its owner; one never declared is kept
         under its own name, and is absent from the answer. Refuses
         (`SecretCrossesWall`) secrets that would be resolved on the far side

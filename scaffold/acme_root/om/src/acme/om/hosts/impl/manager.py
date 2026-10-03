@@ -39,7 +39,8 @@ from acme.om.hosts.types.pool import HostPool
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import OutboxRow, outbox_row, versioned_row
 from acme.om.placement import PlacementManagerInterface
-from acme.om.placement.types.claimant import Claimant, ClaimantKind
+from acme.om.placement.kinds import HOST
+from acme.om.placement.types.claimant import Claimant
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tenancy.rules import hash_token
 from acme.om.work.types.work_item import WorkItem
@@ -379,9 +380,7 @@ class HostsManagerImpl(HostsManagerInterface):
         )
         # The claimant is the identity the credential resolved to: the host,
         # the tenant whose wall it sits in, and the pool its enrollment named.
-        claimant = Claimant(
-            kind=ClaimantKind.HOST, id=host.host_id, org_id=host.org_id, pool_id=host.pool_id
-        )
+        claimant = Claimant(kind=HOST, id=host.host_id, org_id=host.org_id, pool_id=host.pool_id)
         return await self._placement.claim_for(rctx, claimant, self._options.claim_lease)
 
     # Helpers.

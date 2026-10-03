@@ -153,7 +153,6 @@ def execution_request(
     policy: ValidationPolicy,
     delivery: Delivery,
     purpose: RunPurpose,
-    offer: Offer,
 ) -> ExecutionRequest | str:
     """What a fresh executor is asked to run, or why nothing is run. A
     validation runs the checks the change asks for at the committed head; a
@@ -180,10 +179,6 @@ def execution_request(
     counts = trials_of(needed)
     rules = stopping_rules(needed)
     checks = tuple(policy.declared(name) for name in sorted(counts))
-    for check in checks:
-        refusal = compatibility_refusal(check, offer)
-        if refusal is not None:
-            return refusal
     return ExecutionRequest(
         session_id=session_id,
         project=policy.project,
@@ -195,6 +190,27 @@ def execution_request(
         rates=tuple(rules.get(check.name) for check in checks),
         protected=policy.protected,
     )
+
+
+def by_environment(request: ExecutionRequest) -> dict[str, ExecutionRequest]:
+    """The request as one request per environment its checks name, in name
+    order: each holds that environment's checks with their own trials and
+    rates, so all of a check's runs are one validation's, and the gate
+    reads their batches and provenance per validation as it always does."""
+    rates = request.rates or (None,) * len(request.checks)
+    parts: dict[str, list[int]] = {}
+    for at, check in enumerate(request.checks):
+        parts.setdefault(check.environment, []).append(at)
+    return {
+        environment: request.model_copy(
+            update={
+                "checks": tuple(request.checks[at] for at in held),
+                "trials": tuple(request.trials[at] for at in held),
+                "rates": tuple(rates[at] for at in held) if request.rates else (),
+            }
+        )
+        for environment, held in sorted(parts.items())
+    }
 
 
 # The result gate.

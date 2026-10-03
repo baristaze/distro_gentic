@@ -261,6 +261,7 @@ class AppContainer:
             work_product=ports.work_product,
             session_projects=ports.session_projects,
             workspace_projects=ports.workspace_projects,
+            product_kinds=ports.kinds,
         )
         refuse_open_money(settings.environment, managers)
         # A tenant's own provider keys, saved and listed here and never read
@@ -279,7 +280,7 @@ class AppContainer:
         # clears what waits on them.
         intake = build_intake(storage, managers, integrations=integrations)
         # The streams the runners write, read from the shared cache.
-        stream = build_stream(infra, lambda: managers.events)
+        stream = build_stream(infra, lambda: managers.events, product_kinds=ports.kinds)
         watch = build_watch(managers, stream, WatchOptions(live_read_key=settings.live_read_key))
         services = build_services(
             managers,

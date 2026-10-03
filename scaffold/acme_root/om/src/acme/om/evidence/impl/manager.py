@@ -8,9 +8,10 @@ from pydantic import Field
 from acme.om.base import Platform, new_id, utcnow
 from acme.om.context import Permission, Role, TenantContext
 from acme.om.evidence.collector import collect, digest
-from acme.om.evidence.executor import ExecutorInterface
+from acme.om.evidence.executor import ExecutorInterface, Executors
 from acme.om.evidence.manager import EvidenceManagerInterface
 from acme.om.evidence.rules import (
+    by_environment,
     compatibility_refusal,
     execution_request,
     policy_key,
@@ -52,7 +53,7 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
         storage: EvidenceStorageInterface,
         tenancy: TenancyManagerInterface,
         relay: OutboxRelayInterface,
-        executor: ExecutorInterface,
+        executors: Executors,
         work_product: WorkProductInterface,
         projects: SessionProjectsInterface,
         options: EvidenceOptions,
@@ -61,7 +62,7 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
         self._storage = storage
         self._tenancy = tenancy
         self._relay = relay
-        self._executor = executor
+        self._executors = executors
         self._work_product = work_product
         self._projects = projects
         self._options = options
@@ -190,7 +191,7 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
 
     async def validate(
         self, ctx: TenantContext, session_id: UUID, purpose: RunPurpose
-    ) -> Validation:
+    ) -> tuple[Validation, ...]:
         ctx.require(Permission.WRITE)
         delivery = await self._work_product.delivered(ctx, session_id)
         if delivery is None:
@@ -203,12 +204,11 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
         policy = await self._storage.read_policy(ctx.org_id, policy_key(project_id))
         if policy is None:
             raise PreconditionFailed(f"the project {project_id} declares no validation policy")
-        request = execution_request(
-            session_id, policy, delivery, purpose, await self._executor.offer(ctx)
-        )
+        request = execution_request(session_id, policy, delivery, purpose)
         if isinstance(request, str):
             raise PreconditionFailed(request)
-        return await self._run(ctx, request)
+        planned = await self._planned(ctx, request)
+        return tuple([await self._run(ctx, executor, part) for executor, part in planned])
 
     async def run_check(
         self,
@@ -229,9 +229,6 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
         declared = next((each for each in policy.checks if each.name == check), None)
         if declared is None:
             raise PreconditionFailed(f"the project {project_id} declares no check {check}")
-        refusal = compatibility_refusal(declared, await self._executor.offer(ctx))
-        if refusal is not None:
-            raise PreconditionFailed(refusal)
         request = ExecutionRequest(
             session_id=session_id,
             project=policy.project,
@@ -242,14 +239,39 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
             trials=(1,),
             protected=policy.protected,
         )
-        return await self._run(ctx, request)
+        ((executor, part),) = await self._planned(ctx, request)
+        return await self._run(ctx, executor, part)
 
-    async def _run(self, ctx: TenantContext, request: ExecutionRequest) -> Validation:
-        """Runs `request` on the executor and keeps what it wrote, every run
+    async def _planned(
+        self, ctx: TenantContext, request: ExecutionRequest
+    ) -> list[tuple[ExecutorInterface, ExecutionRequest]]:
+        """Each environment the request's checks name, with its executor and
+        its part of the request, once every executor offers what its checks
+        need. An environment no executor of this process runs, or a check
+        its executor cannot run, refuses the whole request before anything
+        runs."""
+        planned: list[tuple[ExecutorInterface, ExecutionRequest]] = []
+        for environment, part in by_environment(request).items():
+            executor = self._executors.get(environment)
+            if executor is None:
+                raise PreconditionFailed(f"no executor here runs the {environment} environment")
+            offer = await executor.offer(ctx)
+            for check in part.checks:
+                refusal = compatibility_refusal(check, offer)
+                if refusal is not None:
+                    raise PreconditionFailed(refusal)
+            planned.append((executor, part))
+        return planned
+
+    async def _run(
+        self, ctx: TenantContext, executor: ExecutorInterface, request: ExecutionRequest
+    ) -> Validation:
+        """Runs `request` on `executor` and keeps what it wrote, every run
         with its validation or none: results past the bound, that do not hash
         to what the executor wrote, or that hold anything not asked for are
-        `ValidationFailed`, and nothing is kept."""
-        report = await self._executor.run(ctx, request)
+        `ValidationFailed`, and nothing is kept. Every executor's report is
+        held to these alike, the platform's and a product's."""
+        report = await executor.run(ctx, request)
         if len(report.results) > self._options.max_results_bytes:
             raise ValidationFailed(
                 f"the results are {len(report.results)} bytes, past the "

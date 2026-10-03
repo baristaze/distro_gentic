@@ -281,7 +281,7 @@ async def test_a_pinned_projects_delivery_is_validated_on_its_pools_host_and_the
     host = await pool_host(api, pool.id, tmp_path / "host")
     session_id, head = await delivered(run, api, pool.id)
 
-    validation = await pumped(
+    (validation,) = await pumped(
         managers.evidence.validate(owner, session_id, RunPurpose.VALIDATION),
         {host.agent: host.claimed},
     )
@@ -341,7 +341,7 @@ async def test_the_instance_goes_after_its_run_and_no_other_pools_or_tenants_hos
     session_id, _ = await delivered(over_memory, api, pool.id)
     elsewhere: dict[HostAgent, list[UUID]] = {beside: [], theirs: []}
 
-    validation = await pumped(
+    (validation,) = await pumped(
         managers.evidence.validate(owner, session_id, RunPurpose.VALIDATION),
         {host.agent: host.claimed, **elsewhere},
     )
@@ -369,7 +369,7 @@ async def test_the_instance_goes_when_its_check_ends_the_run(
     host = await pool_host(api, pool.id, tmp_path / "host-a")
     session_id, _ = await delivered(over_memory, api, pool.id, SILENT)
 
-    validation = await pumped(
+    (validation,) = await pumped(
         managers.evidence.validate(owner, session_id, RunPurpose.VALIDATION),
         {host.agent: host.claimed},
     )
@@ -390,7 +390,7 @@ async def test_a_results_stream_longer_than_one_relayed_read_is_an_errored_run_r
     host = await pool_host(api, pool.id, tmp_path / "host-a")
     session_id, _ = await delivered(over_memory, api, pool.id, LONG)
 
-    validation = await asyncio.wait_for(
+    (validation,) = await asyncio.wait_for(
         pumped(
             managers.evidence.validate(owner, session_id, RunPurpose.VALIDATION),
             {host.agent: host.claimed},

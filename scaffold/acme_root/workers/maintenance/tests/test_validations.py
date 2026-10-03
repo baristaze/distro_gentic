@@ -18,7 +18,7 @@ from acme.om.base import new_id
 from acme.om.context import TenantContext
 from acme.om.evidence.rules import policy_key
 from acme.om.platform_agents.types.validation import ValidationStart, ValidationStatus
-from acme.om.root import PlatformPorts
+from acme.om.root import PlatformPorts, ProductKinds
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.work.types.handler import WorkRefused
 from acme.om.work.types.work_item import WorkItem, WorkKind
@@ -30,9 +30,17 @@ HEAD = "c" * 40
 BASE = "b" * 40
 
 
-async def started(container: WorkerContainer, ctx: TenantContext, check: str) -> UUID:
+async def started(
+    container: WorkerContainer, ctx: TenantContext, check: str, environment: str | None = None
+) -> UUID:
     project_id = new_id()
-    await container.managers.evidence.write_policy(ctx, make_policy(policy_key(project_id)))
+    policy = make_policy(policy_key(project_id))
+    if environment is not None:
+        moved = tuple(
+            each.model_copy(update={"environment": environment}) for each in policy.checks
+        )
+        policy = policy.model_copy(update={"checks": moved})
+    await container.managers.evidence.write_policy(ctx, policy)
     session = await container.managers.platform_agents.start_validation(
         ctx,
         ValidationStart(id=new_id(), project_id=project_id, check_name=check, head=HEAD, base=BASE),
@@ -85,3 +93,23 @@ async def test_a_check_its_policy_does_not_declare_fails_for_good(tmp_path: Path
     with pytest.raises(WorkRefused, match="declares no check lint"):
         await handler.handle(ctx, item)
     assert executor.requests == []
+
+
+async def test_a_check_in_a_products_environment_runs_on_its_executor(tmp_path: Path) -> None:
+    platform, batch = (
+        ScriptedExecutor(capabilities=frozenset()),
+        ScriptedExecutor(name="batch-1", capabilities=frozenset()),
+    )
+    ports = PlatformPorts(executor=platform, kinds=ProductKinds(executors={"batch": batch}))
+    container = WorkerContainer.for_tests(
+        StorageMemoryImpl(), InfraLocalImpl(tmp_path), ports=ports
+    )
+    owner = await sign_in(container)
+    session_id = await started(container, owner, "unit", environment="batch")
+    handler = build_loop(container)._handlers[WorkKind.VALIDATION]  # pyright: ignore[reportPrivateUsage]
+
+    ctx, item = await claimed(container)
+    await handler.handle(ctx, item)
+    (record,) = (await container.managers.evidence.get_runs(owner, session_id, None, 10)).items
+    assert (len(batch.requests), platform.requests) == (1, [])
+    assert record.executor == "batch-1"
