@@ -14,7 +14,8 @@ workspace it works in, and which of its calls run without asking.
 - **The engineer** takes an objective to a validated, reviewable change.
   It works in a container of its own, from which nothing leaves: it reads
   and writes files and runs commands. It asks for a validation of its
-  committed head on a fresh executor, and submits its result through the
+  committed head on a fresh executor, opens its pull request on its own
+  branch, and submits its result through the
   [result gate](../evidence/README.md), citing the runs that validation
   wrote. A success counts only when the validation at its head passed.
 - **Analysis** reads what a run produced (its logs, telemetry,
@@ -48,6 +49,14 @@ workspace it works in, and which of its calls run without asking.
 - **Apply a draft.** A person who manages the tenant writes the policy a
   draft holds, at the version the draft was drawn from. A policy changed
   since is refused, never written over.
+- **Open a pull request.** The engineer's `open_pull_request` takes a
+  title and a body, and nothing else. The workspace's committed head goes
+  to the session's own branch on its project's repository, with a push
+  token the workspaces mint for the call and check before each write
+  ([ADR 2022](../../../../../docs/adr/2022-a-repositorys-credentials-are-the-platforms-and-the-agent-never-holds-one.md)).
+  The model never sees the token, and names neither the branch nor the
+  repository. A second call moves the branch and keeps the one pull
+  request.
 - **Start a validation session.** Its station work goes on its lab's
   lane of the [work queue](../work/README.md) in the same write, and the
   lab's daemon claims it through the gateway, as it claims any station

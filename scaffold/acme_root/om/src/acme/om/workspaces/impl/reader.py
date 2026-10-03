@@ -7,7 +7,7 @@ its checkout's config, its refs, its replacements, nor its hooks. The
 directory goes when the read ends.
 
 A private repository is read with its project's fetch credential. It
-reaches git through the environment of the two commands that ask the
+reaches git through the environment of the commands that ask the
 repository, as a header for the repository's URL alone: never on a command
 line, in a file, or in any message, and never in a workspace."""
 
