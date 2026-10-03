@@ -58,7 +58,7 @@ if git remote get-url origin >/dev/null 2>&1; then
 else
   git remote add origin "$REPOSITORY"
 fi
-git fetch -q --prune --no-tags "$BUNDLE" "+refs/heads/*:refs/remotes/origin/*"
+git fetch -q --prune "$BUNDLE" "+refs/heads/*:refs/remotes/origin/*"
 rm -f "$BUNDLE"
 git symbolic-ref refs/remotes/origin/HEAD "refs/remotes/origin/$DEFAULT"
 remote=no
@@ -77,7 +77,8 @@ fi
 echo "branch $remote $held $moved"
 """
 """Names `origin` for the bound repository, brings its branches in from the
-platform's bundle, and the branch out where either side holds it,
+platform's bundle, with the tags in their history that the checkout does
+not hold yet, and the branch out where either side holds it,
 fast-forwarded to the remote's; prints whether the remote and the checkout
 hold it, and whether the checkout reached the remote's branch."""
 

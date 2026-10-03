@@ -122,8 +122,13 @@ rebuilt from.
   the same pin, and its loop waits on the resource until a host holds it.
 - A session's project and the repository it binds are the projects'
   rows, read through `WorkspaceProjectsInterface`; a repository is read
-  over HTTPS on the platform's host (`impl/reader.py`), and a branch cut
-  from its own default branch. A gone branch's fate
+  over HTTPS on the platform's host (`impl/reader.py`), with the tags in
+  its branches' history, and a branch cut from its own default branch.
+  The read reaches only where a workspace may: a host any of whose
+  addresses is in a network no workspace reaches is refused before
+  anything is fetched, git is held to the addresses checked, and no
+  redirect is followed. The root walls off what the options name; in
+  `local`, a repository on disk is read too. A gone branch's fate
   comes from `PullRequestsInterface`, whose null knows none, so a branch
   gone for any reason ends the loop.
 - What a host offers beyond its provider is a `HostOffer`, its owner's

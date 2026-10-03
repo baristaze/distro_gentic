@@ -46,6 +46,7 @@ from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.settings import MigrationSettings
 from acme.om.workspaces import rules
 from acme.om.workspaces.impl.forge import SourceControlForgeImpl
+from acme.om.workspaces.impl.reader import RepositoryReaderGitImpl
 from acme.om.workspaces.types.credential import FetchCredential
 
 GIT = shutil.which("git")
@@ -228,6 +229,12 @@ async def storage(
     await root.close()
 
 
+def on_loopback() -> RepositoryReaderGitImpl:
+    """The platform's reader of a repository this host serves on its
+    loopback, which a deployment's reader never reads from."""
+    return RepositoryReaderGitImpl(walled=())
+
+
 def a_delivery(served: Path) -> tuple[str, str]:
     """The private repository: its default branch, and a session's branch
     one change ahead of it, pushed as the session would. Answers the two
@@ -255,6 +262,7 @@ async def test_a_private_repositorys_delivery_is_read_with_the_fetch_credential_
         agent_kinds=(WORKER,),
         workspace_projects=projects,
         workspace_git=GitTwin(),
+        workspace_reader=on_loopback(),
     )
     owner, _ = await managers.tenancy.bootstrap(
         RequestContext(request_id=new_id(), app=APP),
@@ -314,7 +322,7 @@ async def test_a_session_works_a_private_repository_with_no_credential_in_its_wo
 ) -> None:
     main, remote = a_delivery(private_git.root)
     projects = ProjectsTwin(repository=private_git.url)
-    forge = IntegrationTwinImpl("forge", writes_with=(WRITER, WRITER_PASSWORD))
+    forge = IntegrationTwinImpl("forge", writes=True, credential=(WRITER, WRITER_PASSWORD))
     infra = HostInfra(tmp_path / "host")
     managers: Managers = build_managers(
         storage,
@@ -322,6 +330,7 @@ async def test_a_session_works_a_private_repository_with_no_credential_in_its_wo
         agent_kinds=(ENGINEER,),
         platform_agents=PlatformAgents(corpus=CORPUS),
         workspace_projects=projects,
+        workspace_reader=on_loopback(),
         source_control=SourceControlForgeImpl(lambda name: forge),
     )
     owner, _ = await managers.tenancy.bootstrap(

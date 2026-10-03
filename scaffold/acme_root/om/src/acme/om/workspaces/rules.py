@@ -166,6 +166,12 @@ def _address(value: IPv4Address | IPv6Address) -> IPv4Address | IPv6Address:
     return value
 
 
+def walled(address: str, walls: Sequence[Network]) -> bool:
+    """Whether `address`, as a resolver answers it, is inside one of
+    `walls`: an IPv4 address carried in IPv6 counts as the one it carries."""
+    return any(_address(ip_address(address)) in network for network in walls)
+
+
 def _literal(name: str) -> IPv4Address | IPv6Address | None:
     try:
         return _address(ip_address(name.strip("[]")))
