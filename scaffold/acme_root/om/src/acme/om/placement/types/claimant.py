@@ -36,11 +36,13 @@ class ReportOutcome(StrEnum):
 
 class ClaimantReport(Platform):
     """What a claimant answers for an item it holds: done, or failed with
-    why. It comes from outside the platform's processes, so it is held to
-    its shape before anything reads it: a failure names its reason, within
-    bounds, and a success names none."""
+    why, under the claim token its claim was handed. It comes from outside
+    the platform's processes, so it is held to its shape before anything
+    reads it: a failure names its reason, within bounds, and a success
+    names none."""
 
     item_id: UUID
+    claim_token: UUID
     outcome: ReportOutcome
     error: str | None = Field(default=None, min_length=1, max_length=500)
 

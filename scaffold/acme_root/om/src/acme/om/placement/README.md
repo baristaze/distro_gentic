@@ -90,5 +90,5 @@ A kind a host runs names where it runs in its payload
 (`types/work.py`): a host or a pool. A product's kind names it too, and
 its registered lane reads it. The gateway resolves a caller's credential
 to a `Claimant` and calls `claim_for`, then `held_for`, `extend_for`,
-and `report_for` for a product's claimant; it never passes a lane or a
-kind.
+and `report_for` for a product's claimant, each under the claim token
+`claim_for` handed it; it never passes a lane or a kind.

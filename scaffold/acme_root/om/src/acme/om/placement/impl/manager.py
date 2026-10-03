@@ -6,7 +6,7 @@ from uuid import UUID
 from acme.infra.observability import OUTCOMES
 from acme.om.base import EMPTY_UUID, Platform, derived_id, utcnow
 from acme.om.context import Permission, RequestContext, TenantContext
-from acme.om.exceptions import NotFound
+from acme.om.exceptions import LeaseLost, NotFound
 from acme.om.placement.kinds import HOST, ClaimantKinds, claims_of, held_to, placed_lane
 from acme.om.placement.manager import PlacementManagerInterface
 from acme.om.placement.rules import DEFAULT_TIER, admits, loop_lane
@@ -103,7 +103,7 @@ class PlacementManagerImpl(PlacementManagerInterface):
     async def report_for(
         self, rctx: RequestContext, claimant: Claimant, org_id: UUID, report: ClaimantReport
     ) -> WorkItem:
-        ctx, item = await self._held(rctx, claimant, org_id, report.item_id)
+        ctx, item = await self._held(rctx, claimant, org_id, report.item_id, report.claim_token)
         if report.outcome is ReportOutcome.DONE:
             return await self._work.complete(ctx, item)
         assert report.error is not None  # the report's own rule
@@ -115,25 +115,38 @@ class PlacementManagerImpl(PlacementManagerInterface):
         claimant: Claimant,
         org_id: UUID,
         item_id: UUID,
+        claim_token: UUID,
         lease: timedelta,
     ) -> WorkItem:
-        ctx, item = await self._held(rctx, claimant, org_id, item_id)
+        ctx, item = await self._held(rctx, claimant, org_id, item_id, claim_token)
         return await self._work.extend_lease(ctx, item, lease)
 
     async def held_for(
-        self, rctx: RequestContext, claimant: Claimant, org_id: UUID, item_id: UUID
+        self,
+        rctx: RequestContext,
+        claimant: Claimant,
+        org_id: UUID,
+        item_id: UUID,
+        claim_token: UUID,
     ) -> WorkItem:
-        return (await self._held(rctx, claimant, org_id, item_id))[1]
+        return (await self._held(rctx, claimant, org_id, item_id, claim_token))[1]
 
     async def _held(
-        self, rctx: RequestContext, claimant: Claimant, org_id: UUID, item_id: UUID
+        self,
+        rctx: RequestContext,
+        claimant: Claimant,
+        org_id: UUID,
+        item_id: UUID,
+        claim_token: UUID,
     ) -> tuple[TenantContext, WorkItem]:
         """The item the claimant holds, under its tenant's service context.
         One of another tenant, held by another claimant, of a kind its kind
         does not take, or not there at all is the same NotFound, so a
-        claimant learns nothing of work that is not its own. A host reads and
-        answers its items through the relay, which keeps their record, so it
-        holds none here."""
+        claimant learns nothing of work that is not its own. Its own item
+        under a token that is not the claim's, since its lease lapsed and
+        the item was claimed again, is LeaseLost: the claim token, not the
+        claimant's name, is the fence. A host reads and answers its items
+        through the relay, which keeps their record, so it holds none here."""
         missing = NotFound(f"{claimant.worker_id} holds no work item {item_id}")
         if claimant.kind == HOST or (claimant.org_id is not None and org_id != claimant.org_id):
             raise missing
@@ -148,6 +161,8 @@ class PlacementManagerImpl(PlacementManagerInterface):
             or item.kind not in self._kinds.claimed_by(claimant.kind)
         ):
             raise missing
+        if item.claim_token != claim_token:
+            raise LeaseLost(f"{claimant.worker_id} no longer holds work item {item_id}")
         return ctx, item
 
     async def purge_tenant(self, ctx: TenantContext) -> int:

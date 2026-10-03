@@ -36,7 +36,13 @@ from acme.om.evidence.types.contract import PLATFORM_ENVIRONMENT
 from acme.om.evidence.types.policy import Requirement, ValidationPolicy
 from acme.om.evidence.types.provenance import Provenance
 from acme.om.evidence.types.record import RunPurpose
-from acme.om.exceptions import NotAuthorized, NotFound, PreconditionFailed, ValidationFailed
+from acme.om.exceptions import (
+    LeaseLost,
+    NotAuthorized,
+    NotFound,
+    PreconditionFailed,
+    ValidationFailed,
+)
 from acme.om.outbox.types.row import outbox_row
 from acme.om.placement.impl.manager import PlacementManagerImpl
 from acme.om.placement.kinds import (
@@ -190,10 +196,12 @@ async def test_a_claimant_reads_and_answers_only_the_items_it_holds(managers: Ma
     claimed = await managers.placement.claim_for(request(), holder, LEASE)
     assert claimed is not None
     item = claimed[1]
+    token = item.claim_token
+    assert token is not None
     placement = managers.placement
-    assert (await placement.held_for(request(), holder, ajax.org_id, item.id)).id == item.id
+    assert (await placement.held_for(request(), holder, ajax.org_id, item.id, token)).id == item.id
 
-    done = ClaimantReport(item_id=item.id, outcome=ReportOutcome.DONE)
+    done = ClaimantReport(item_id=item.id, claim_token=token, outcome=ReportOutcome.DONE)
     strangers = (
         (node(pool, ajax.org_id), ajax.org_id),  # another node of its kind and tenant
         (holder, beta.org_id),  # its own, asked in another tenant
@@ -203,39 +211,84 @@ async def test_a_claimant_reads_and_answers_only_the_items_it_holds(managers: Ma
     )
     for who, org_id in strangers:
         with pytest.raises(NotFound):
-            await placement.held_for(request(), who, org_id, item.id)
+            await placement.held_for(request(), who, org_id, item.id, token)
         with pytest.raises(NotFound):
             await placement.report_for(request(), who, org_id, done)
         with pytest.raises(NotFound):
-            await placement.extend_for(request(), who, org_id, item.id, LEASE)
+            await placement.extend_for(request(), who, org_id, item.id, token, LEASE)
     with pytest.raises(NotFound):
-        await placement.held_for(request(), holder, ajax.org_id, new_id())
+        await placement.held_for(request(), holder, ajax.org_id, new_id(), token)
 
     # A report is held to its shape before anything reads it.
+    claim = {"item_id": str(item.id), "claim_token": str(token)}
     malformed: tuple[dict[str, Any], ...] = (
-        {"item_id": str(item.id), "outcome": "failed"},
-        {"item_id": str(item.id), "outcome": "done", "error": "late"},
-        {"item_id": str(item.id), "outcome": "failed", "error": "x" * 501},
-        {"item_id": str(item.id), "outcome": "lost"},
-        {"item_id": "not-an-id", "outcome": "done"},
+        {**claim, "outcome": "failed"},
+        {**claim, "outcome": "done", "error": "late"},
+        {**claim, "outcome": "failed", "error": "x" * 501},
+        {**claim, "outcome": "lost"},
+        {**claim, "item_id": "not-an-id", "outcome": "done"},
+        {"item_id": str(item.id), "outcome": "done"},
     )
     for report in malformed:
         with pytest.raises(ValidationError):
             ClaimantReport.model_validate(report)
 
-    renewed = await placement.extend_for(request(), holder, ajax.org_id, item.id, LEASE)
+    renewed = await placement.extend_for(request(), holder, ajax.org_id, item.id, token, LEASE)
     assert renewed.lease_expires_at is not None
     finished = await placement.report_for(request(), holder, ajax.org_id, done)
     assert finished.status is WorkStatus.DONE
     with pytest.raises(NotFound):
-        await placement.held_for(request(), holder, ajax.org_id, item.id)
+        await placement.held_for(request(), holder, ajax.org_id, item.id, token)
 
     second = await placement.claim_for(request(), holder, LEASE)
-    assert second is not None
-    failure = ClaimantReport(item_id=second[1].id, outcome=ReportOutcome.FAILED, error="no disk")
+    assert second is not None and second[1].claim_token is not None
+    failure = ClaimantReport(
+        item_id=second[1].id,
+        claim_token=second[1].claim_token,
+        outcome=ReportOutcome.FAILED,
+        error="no disk",
+    )
     failed = await placement.report_for(request(), holder, ajax.org_id, failure)
     assert failed.status is WorkStatus.QUEUED, "retried until its attempts are spent"
     assert failed.last_error == f"{holder.worker_id}: no disk"
+
+
+async def test_a_first_runs_report_after_its_claim_lapsed_settles_nothing(
+    managers: Managers,
+) -> None:
+    ajax = await an_owner(managers, "ajax")
+    pool = new_id()
+    await managers.work.enqueue(ajax, a_render(ajax, pool))
+    holder = node(pool, ajax.org_id)
+    lapsed = timedelta(seconds=-1)
+    first = await managers.placement.claim_for(request(), holder, lapsed)
+    assert first is not None and first[1].claim_token is not None
+    assert await managers.work.requeue_stale(request(), limit=100) == 1
+    second = await managers.placement.claim_for(request(), holder, LEASE)
+    assert second is not None and second[1].id == first[1].id
+    stale, fresh = first[1].claim_token, second[1].claim_token
+    assert fresh is not None and fresh != stale
+
+    # The first run's calls carry its own token, and the item's claim is the
+    # second's: nothing settles, nothing renews.
+    placement = managers.placement
+    item_id = first[1].id
+    for outcome, error in ((ReportOutcome.DONE, None), (ReportOutcome.FAILED, "no disk")):
+        report = ClaimantReport(item_id=item_id, claim_token=stale, outcome=outcome, error=error)
+        with pytest.raises(LeaseLost):
+            await placement.report_for(request(), holder, ajax.org_id, report)
+    with pytest.raises(LeaseLost):
+        await placement.extend_for(request(), holder, ajax.org_id, item_id, stale, LEASE)
+    with pytest.raises(LeaseLost):
+        await placement.held_for(request(), holder, ajax.org_id, item_id, stale)
+    kept = await managers.work.get_item(ajax, item_id)
+    assert (kept.status, kept.claim_token) == (WorkStatus.CLAIMED, fresh)
+    assert kept.lease_expires_at == second[1].lease_expires_at
+
+    done = ClaimantReport(item_id=item_id, claim_token=fresh, outcome=ReportOutcome.DONE)
+    assert (await placement.report_for(request(), holder, ajax.org_id, done)).status is (
+        WorkStatus.DONE
+    )
 
 
 async def test_an_unregistered_kind_or_a_payload_off_its_shape_is_refused(

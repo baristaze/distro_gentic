@@ -61,13 +61,20 @@ class PlacementManagerInterface(ABC):
 
     @abstractmethod
     async def held_for(
-        self, rctx: RequestContext, claimant: Claimant, org_id: UUID, item_id: UUID
+        self,
+        rctx: RequestContext,
+        claimant: Claimant,
+        org_id: UUID,
+        item_id: UUID,
+        claim_token: UUID,
     ) -> WorkItem:
         """Platform-internal: the item `claimant` holds, in the tenant
-        `org_id`, as the gateway reads it for the claimant. NotFound alike
-        for an item of another tenant, one another claimant holds, one of a
-        kind its kind does not take, and one not there, so a claimant reads
-        only the items it holds, within its tenant."""
+        `org_id`, under the `claim_token` its claim was handed, as the
+        gateway reads it for the claimant. NotFound alike for an item of
+        another tenant, one another claimant holds, one of a kind its kind
+        does not take, and one not there, so a claimant reads only the items
+        it holds, within its tenant. LeaseLost under a token that is not the
+        claim's: its lease lapsed, and the item was claimed again."""
         ...
 
     @abstractmethod
@@ -87,6 +94,7 @@ class PlacementManagerInterface(ABC):
         claimant: Claimant,
         org_id: UUID,
         item_id: UUID,
+        claim_token: UUID,
         lease: timedelta,
     ) -> WorkItem:
         """Platform-internal: renews the lease on an item the claimant holds,

@@ -72,9 +72,14 @@ class PlacementClaimsRelayedImpl(PlacementManagerInterface):
                 return claimed
 
     async def held_for(
-        self, rctx: RequestContext, claimant: Claimant, org_id: UUID, item_id: UUID
+        self,
+        rctx: RequestContext,
+        claimant: Claimant,
+        org_id: UUID,
+        item_id: UUID,
+        claim_token: UUID,
     ) -> WorkItem:
-        return await self._inner.held_for(rctx, claimant, org_id, item_id)
+        return await self._inner.held_for(rctx, claimant, org_id, item_id, claim_token)
 
     async def report_for(
         self, rctx: RequestContext, claimant: Claimant, org_id: UUID, report: ClaimantReport
@@ -87,9 +92,10 @@ class PlacementClaimsRelayedImpl(PlacementManagerInterface):
         claimant: Claimant,
         org_id: UUID,
         item_id: UUID,
+        claim_token: UUID,
         lease: timedelta,
     ) -> WorkItem:
-        return await self._inner.extend_for(rctx, claimant, org_id, item_id, lease)
+        return await self._inner.extend_for(rctx, claimant, org_id, item_id, claim_token, lease)
 
     async def purge_tenant(self, ctx: TenantContext) -> int:
         return await self._inner.purge_tenant(ctx)
