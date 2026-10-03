@@ -344,7 +344,7 @@ async def test_an_aborted_trial_is_classified_by_the_declared_rule() -> None:
     stops = ScriptedExecutor(outcome=lambda check, trial: "aborted" if trial == 0 else "passed")
     case = await Case.start(stops, trials(300, aborted=AbortRule.INCONCLUSIVE))
     await case.validate()
-    assert refused(await case.submit(), "1 trials a safety stop ended")
+    assert refused(await case.submit(), "1 trials an abort ended")
     counted = await Case.start(
         ScriptedExecutor(outcome=lambda check, trial: "aborted" if trial == 0 else "passed"),
         trials(300, max_rate=0.01),

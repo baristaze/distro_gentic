@@ -358,7 +358,7 @@ def batch_refusal(
     """Why one validation's trials of a check, in the order they ran, leave
     its rate unmet: trials below the grade, fewer trials than a fixed count
     declared, a sequential test stopped anywhere but where its rule stops
-    it, a safety stop the rule leaves without a conclusion, or a bound above
+    it, an abort the rule leaves without a conclusion, or a bound above
     the declared rate."""
     below = sum(1 for record in batch if record.provenance.strength < floor)
     if below:
@@ -376,7 +376,7 @@ def batch_refusal(
         return [f"{name} ran {len(batch)} of the {rule.trials} trials declared"]
     aborted = sum(1 for record in batch if record.outcome is RunOutcome.ABORTED)
     if aborted and rule.aborted is AbortRule.INCONCLUSIVE:
-        return [f"{name} had {aborted} trials a safety stop ended"]
+        return [f"{name} had {aborted} trials an abort ended"]
     claim = rate_claim(name, head, batch, confidence, rule.bound, rule.alternative)
     if claim.upper > rule.max_rate:
         return [f"{name}: {claim.render()}, above the {rule.max_rate:.2%} declared"]

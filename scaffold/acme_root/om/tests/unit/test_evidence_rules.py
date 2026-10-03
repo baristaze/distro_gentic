@@ -210,7 +210,7 @@ def a_run(**changes: Any) -> list[dict[str, Any]]:
         (results(a_run()[:2]), "still open"),
         (results(a_run()[1:]), "outside a run"),
         (results([a_run()[0], *a_run()]), "before the last one ended"),
-        (results(a_run(end={"outcome": "aborted"})), "names its safety stop"),
+        (results(a_run(end={"outcome": "aborted"})), "names its abort"),
         (results(a_run(start={"dirty": True})), "never a dirty tree"),
     ],
 )
