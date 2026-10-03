@@ -52,12 +52,16 @@ class SourceControlInterface(ABC):
     """The writes that open a session's branch and its pull request on its
     bound repository, as the platform's integration makes them, with its own
     credential, which never leaves it. The workspaces call it only for a
-    write a session's push token reaches (`rules.push_refusal`). A root
-    wires the forge's (`acme.om.workspaces.impl.forge.SourceControlForgeImpl`);
+    write a session's push token reaches (`rules.push_refusal`), and each
+    goes only to a repository an installation of `ctx`'s tenant holds:
+    `NotAuthorized` for any other, before anything is written. A root wires
+    the forge's (`acme.om.workspaces.impl.forge.SourceControlForgeImpl`);
     with none, every write is `Unavailable`."""
 
     @abstractmethod
-    async def push(self, binding: RepositoryBinding, ref: str, head: str, bundle: bytes) -> None:
+    async def push(
+        self, ctx: TenantContext, binding: RepositoryBinding, ref: str, head: str, bundle: bytes
+    ) -> None:
         """Points `ref` of the bound repository (a full name) at the commit
         `head`, forward only, carrying the commits it needs from `bundle`,
         the git bundle the platform made of them; nothing else in it is
@@ -66,7 +70,7 @@ class SourceControlInterface(ABC):
 
     @abstractmethod
     async def open_pull_request(
-        self, binding: RepositoryBinding, branch: str, title: str, body: str
+        self, ctx: TenantContext, binding: RepositoryBinding, branch: str, title: str, body: str
     ) -> OpenedPullRequest:
         """Opens the pull request of `branch` onto the repository's default
         branch, or answers the one open already."""

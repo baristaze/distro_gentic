@@ -44,9 +44,25 @@ from acme.om.workspaces.rules import SNAPSHOT_PREFIX, session_branch
 from acme.workers.session_runner.workspaces import HeldOptions, HeldWorkspacesSweep
 
 GIT = shutil.which("git")
-FORGE = SourceControlForgeImpl(lambda name: IntegrationTwinImpl(name, writes=True))
-"""A forge that pushes to the repository on disk, which asks no credential
-of it."""
+
+
+class Connected:
+    """The tenant that connected the forge twin's one installation, once the
+    case names it."""
+
+    def __init__(self) -> None:
+        self.org_id: UUID | None = None
+
+    async def __call__(self, integration: str, installation: str) -> UUID | None:
+        return self.org_id
+
+
+def forge(connected: Connected) -> SourceControlForgeImpl:
+    """A forge that pushes to the repository on disk, which asks no credential
+    of it, for the tenant `connected` names."""
+    return SourceControlForgeImpl(lambda name: IntegrationTwinImpl(name, writes=True), connected)
+
+
 APP = AppContext(type=AppType.WORKER, version="session-runner@test")
 GRACE = timedelta(minutes=5)
 DIRECTORY = IsolationSpec(mode=IsolationMode.HOST, egress=EgressPolicy(mode=EgressMode.OPEN))
@@ -189,16 +205,18 @@ async def test_a_killed_runs_instance_is_released_past_the_grace_with_its_work_o
     tmp_path: Path, remote: Path
 ) -> None:
     infra = HostInfra(tmp_path)
+    connected = Connected()
     managers = build_managers(
         StorageMemoryImpl(),
         infra,
         agent_kinds=(worker(DIRECTORY),),
         workspace_projects=ProjectsTwin(repository=str(remote)),
         pull_requests=PullRequestsTwin(),
-        source_control=FORGE,
+        source_control=forge(connected),
     )
     host = Host(managers, infra.get_workspaces())
     await host.start()
+    connected.org_id = host.owner.org_id
     killed, item, here = await host.run_left(DIRECTORY)
     (here / "notes.txt").write_text("half done\n")
     live, _, _ = await host.run_left(DIRECTORY)
@@ -274,16 +292,18 @@ async def test_a_deleted_tenants_instance_is_purged_past_the_grace(
     tmp_path: Path, remote: Path
 ) -> None:
     infra = HostInfra(tmp_path)
+    connected = Connected()
     managers = build_managers(
         StorageMemoryImpl(),
         infra,
         agent_kinds=(worker(DIRECTORY),),
         workspace_projects=ProjectsTwin(repository=str(remote)),
         pull_requests=PullRequestsTwin(),
-        source_control=FORGE,
+        source_control=forge(connected),
     )
     host = Host(managers, infra.get_workspaces())
     await host.start()
+    connected.org_id = host.owner.org_id
     session_id, _, here = await host.run_left(DIRECTORY)
     (here / "notes.txt").write_text("half done\n")
     await deleted(managers, host.owner.org_id)

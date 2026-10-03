@@ -1,0 +1,18 @@
+{
+  "ref": "refs/heads/agent/fix-totals",
+  "before": "4c4fd1b7a9d3c6e2f1a0b9c8d7e6f5a4b3c2d1e0",
+  "after": "9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b",
+  "created": false,
+  "deleted": false,
+  "forced": false,
+  "commits": [{"id": "9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b", "message": "Handle the empty cart"}],
+  "head_commit": {
+    "id": "9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b",
+    "message": "Handle the empty cart",
+    "timestamp": "2026-10-03T12:20:00Z"
+  },
+  "repository": {"id": 7001, "full_name": "octo-org/widgets"},
+  "pusher": {"name": "octocat"},
+  "sender": {"login": "octocat", "id": 583231, "type": "User"},
+  "installation": {"id": 71001}
+}

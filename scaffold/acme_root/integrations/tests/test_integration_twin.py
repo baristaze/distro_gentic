@@ -1,7 +1,8 @@
 """An integration's twin names its provenance on every record it writes, and
 the configured root refuses it anywhere but a local environment: what it
 signs, what it verifies, and what it records say `twin`, whatever a
-delivery claims."""
+delivery claims. The forge's twin holds each owner's repositories by an
+installation of that owner's own, and refuses a write through any other."""
 
 import json
 from datetime import UTC, datetime, timedelta
@@ -9,8 +10,18 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from acme.integrations.events import INTEGRATIONS, IntegrationAbsentImpl
-from acme.integrations.events.twin import SIGNATURE_HEADER, IntegrationTwinImpl, sign
-from acme.integrations.exceptions import DeliveryRefused, ProviderUnavailable, UnsafeIntegration
+from acme.integrations.events.twin import (
+    SIGNATURE_HEADER,
+    IntegrationTwinImpl,
+    sign,
+    twin_installation,
+)
+from acme.integrations.exceptions import (
+    DeliveryRefused,
+    ProviderRefused,
+    ProviderUnavailable,
+    UnsafeIntegration,
+)
 from acme.integrations.impl.configured import IntegrationsConfiguredImpl
 from acme.integrations.settings import IntegrationsSettings
 
@@ -48,6 +59,31 @@ async def test_a_message_the_platform_posts_is_recorded_as_the_twins() -> None:
     posted = await twin.post("ann", "The session waits for your approval: /v1/x")
     assert posted.provenance == "twin" and posted.id.startswith("twin_")
     assert twin.posted == [posted]
+
+
+async def test_each_owners_repositories_are_written_through_an_installation_of_its_own() -> None:
+    twin = IntegrationTwinImpl("forge")
+    ajax, brio = "https://example.test/ajax/first.git", "https://example.test/Brio/first.git"
+    assert await twin.installation_of(ajax) == twin_installation("ajax")
+    assert await twin.installation_of("ajax/first#3") == twin_installation("ajax")
+    assert (
+        await twin.installation_of(brio) == twin_installation("brio") != twin_installation("ajax")
+    )
+
+    await twin.push(ajax, "refs/heads/x", "abc", b"", installation=twin_installation("ajax"))
+    opened = await twin.open_pull_request(
+        ajax, "x", "main", "T", "B", installation=twin_installation("ajax")
+    )
+    assert await twin.installation_of(opened.id) == twin_installation("ajax")
+    await twin.post(opened.id, "Fixed.", installation=twin_installation("ajax"))
+    for installation in (twin_installation("brio"), None):
+        with pytest.raises(ProviderRefused):
+            await twin.post("ajax/first#3", "Fixed.", installation=installation)
+    with pytest.raises(ProviderRefused):
+        await twin.push(brio, "refs/heads/x", "abc", b"", installation=twin_installation("ajax"))
+    with pytest.raises(ProviderRefused):
+        await twin.installation_of("twin_pull_request_999999")
+    assert twin.refs == {(ajax, "refs/heads/x"): "abc"} and len(twin.posted) == 1
 
 
 def test_a_body_that_claims_to_be_real_is_still_the_twins() -> None:

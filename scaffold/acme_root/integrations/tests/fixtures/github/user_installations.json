@@ -1,0 +1,7 @@
+{
+  "total_count": 2,
+  "installations": [
+    {"id": 71001, "account": {"login": "octo-org", "id": 7700}, "app_id": 9100, "target_type": "Organization"},
+    {"id": 71009, "account": {"login": "octocat", "id": 583231}, "app_id": 9100, "target_type": "User"}
+  ]
+}
