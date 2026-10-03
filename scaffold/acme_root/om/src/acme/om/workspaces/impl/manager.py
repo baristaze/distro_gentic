@@ -168,7 +168,7 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         held = await self._storage.read_workspace(ctx.org_id, workspace.id)
         if held is None:
             return workspace
-        told = [] if held.notice is None else [held.notice]
+        told = list(held.notices)
         seen = held.branch_seen
         kept: str | None = None
         binding = await self._binding(ctx, held)
@@ -201,11 +201,12 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
             if plan in (BranchPlan.CUT, BranchPlan.REBUILD):
                 # What the checkout holds is kept before it is cut over: a
                 # push that does not land raises, and nothing is cut.
-                ref = rules.snapshot_ref(held.branch, self._clock())
+                at = self._clock()
+                ref = rules.snapshot_ref(held.branch, at)
                 snapshot = await self._git.snapshot(ctx, workspace, binding, held.branch, ref)
                 if snapshot.commit is not None:
                     kept = snapshot.ref
-                    told.append(rules.told_of_snapshot(snapshot.ref, snapshot.commit))
+                    told.append(rules.told_of_snapshot(snapshot.ref, snapshot.commit, at))
                 await self._git.cut(ctx, workspace, binding, held.branch)
             if plan is BranchPlan.REBUILD and fate is not None:
                 told.append(rules.told_of_rebuild(held.branch, fate, binding.default_branch))
@@ -217,9 +218,11 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
                     fate.value,
                 )
             seen = state.remote
-        changed = held.notice is not None or seen != held.branch_seen or kept is not None
+        changed = bool(held.notices) or seen != held.branch_seen or kept is not None
         if changed or held.push_digest is not None:
-            await self._update(ctx, workspace.id, notice=None, branch_seen=seen, snapshot_ref=kept)
+            await self._update(
+                ctx, workspace.id, branch_seen=seen, snapshot_ref=kept, told=held.notices
+            )
         return workspace.model_copy(update={"changed": "\n\n".join(told) or None})
 
     async def detach(self, ctx: TenantContext, workspace: Workspace) -> None:
@@ -230,12 +233,13 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         binding = await self._binding(ctx, held)
         if binding is None:
             return
-        ref = rules.snapshot_ref(held.branch, self._clock())
+        at = self._clock()
+        ref = rules.snapshot_ref(held.branch, at)
         snapshot = await self._git.snapshot(ctx, workspace, binding, held.branch, ref)
         seen = held.branch_seen or snapshot.remote_branch
         if snapshot.commit is None:
             if seen != held.branch_seen or held.push_digest is not None:
-                await self._update(ctx, workspace.id, notice=held.notice, branch_seen=seen)
+                await self._update(ctx, workspace.id, branch_seen=seen)
             return
         log.info(
             "session %s of org %s: the work its loop left is %s on %s",
@@ -244,9 +248,12 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
             snapshot.commit,
             snapshot.ref,
         )
-        notice = rules.told_of_snapshot(snapshot.ref, snapshot.commit)
         await self._update(
-            ctx, workspace.id, notice=notice, branch_seen=seen, snapshot_ref=snapshot.ref
+            ctx,
+            workspace.id,
+            branch_seen=seen,
+            snapshot_ref=snapshot.ref,
+            adds=rules.told_of_snapshot(snapshot.ref, snapshot.commit, at),
         )
 
     async def delivery(self, ctx: TenantContext, workspace: Workspace) -> Delivery:
@@ -545,31 +552,44 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         ctx: TenantContext,
         session_id: UUID,
         *,
-        notice: str | None,
         branch_seen: bool,
         snapshot_ref: str | None = None,
+        told: tuple[str, ...] = (),
+        adds: str | None = None,
     ) -> None:
         """The cache's state, written over the stored row; the loop's push
         token, if one is live, ends with it."""
         changes: dict[str, object] = {
-            "notice": notice,
             "branch_seen": branch_seen,
             "push_digest": None,
             "push_expires_at": None,
         }
         if snapshot_ref is not None:
             changes["snapshot_ref"] = snapshot_ref
-        await self._write(ctx, session_id, changes)
+        await self._write(ctx, session_id, changes, told=told, adds=adds)
 
-    async def _write(self, ctx: TenantContext, session_id: UUID, fields: dict[str, object]) -> None:
+    async def _write(
+        self,
+        ctx: TenantContext,
+        session_id: UUID,
+        fields: dict[str, object],
+        *,
+        told: tuple[str, ...] = (),
+        adds: str | None = None,
+    ) -> None:
         """`fields` written over the stored row, read again when a writer
-        landed first."""
+        landed first. Its notices are never written over: those an attach
+        `told` leave, compared against the row as stored, so one a release
+        wrote meanwhile stays for the next loop; the one a release `adds`
+        joins any not yet told."""
         for attempt in range(self._options.write_tries):
             stored = await self._storage.read_workspace(ctx.org_id, session_id)
             if stored is None:
                 return
+            notices = tuple(n for n in stored.notices if n not in told)
             changes = {
                 **fields,
+                "notices": notices if adds is None else (*notices, adds),
                 "version": stored.version + 1,
                 "updated_at": self._clock(),
                 "updated_by": ctx.user_id,

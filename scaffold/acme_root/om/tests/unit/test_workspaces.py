@@ -190,7 +190,7 @@ async def test_the_work_a_loop_left_is_pushed_before_release_and_the_next_loop_i
     ((ref, commit),) = git.pushed.items()
     assert ref.startswith(f"{SNAPSHOT_PREFIX}/{branch}/"), "beside the branch, never on it"
     held = await loop.managers.workspaces.get_workspace(loop.owner, session_id)
-    assert held.snapshot_ref == ref and held.notice is not None and commit in held.notice
+    assert held.snapshot_ref == ref and len(held.notices) == 1 and commit in held.notices[0]
     assert provider(loop).live == set(), "kept, then let go"
 
     git.dirty = False
@@ -204,7 +204,7 @@ async def test_the_work_a_loop_left_is_pushed_before_release_and_the_next_loop_i
     assert requests[1].seq < told.seq < requests[2].seq, "told before the next loop's call"
     assert told.id in requests[2].refs, "the call delivered it"
     held = await loop.managers.workspaces.get_workspace(loop.owner, session_id)
-    assert held.notice is None, "told once"
+    assert held.notices == (), "told once"
 
 
 async def test_a_workspace_whose_work_is_not_pushed_is_not_let_go(tmp_path: Path) -> None:
@@ -219,7 +219,7 @@ async def test_a_workspace_whose_work_is_not_pushed_is_not_let_go(tmp_path: Path
     assert run.outcome is LoopOutcome.SUCCEEDED
     assert session_id in provider(loop).live, "the instance, and the work in it, stay"
     held = await loop.managers.workspaces.get_workspace(loop.owner, session_id)
-    assert held.snapshot_ref is None and held.notice is None
+    assert held.snapshot_ref is None and held.notices == ()
 
 
 async def test_a_dirty_checkout_is_kept_before_it_is_cut_or_nothing_is_cut(

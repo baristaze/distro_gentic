@@ -129,7 +129,7 @@ class WorkspaceStorageContract:
             update={
                 "branch_seen": True,
                 "snapshot_ref": f"refs/snapshots/{workspace.branch}/1",
-                "notice": "told",
+                "notices": ("told", "told again"),
                 "push_digest": "d" * 64,
                 "push_expires_at": utcnow(),
                 "version": 2,
@@ -149,7 +149,7 @@ class WorkspaceStorageContract:
         assert await storage.create_workspace(org_a, workspace)
         with pytest.raises(PreconditionFailed):
             await storage.write_workspace(
-                org_b, workspace.model_copy(update={"notice": "x", "version": 2}), 1
+                org_b, workspace.model_copy(update={"notices": ("x",), "version": 2}), 1
             )
         assert await storage.read_workspace(org_a, workspace.id) == workspace
 

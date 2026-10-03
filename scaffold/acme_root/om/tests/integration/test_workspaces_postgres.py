@@ -166,6 +166,6 @@ async def test_the_work_a_loop_left_is_recorded_and_told_over_postgres(
 
     (kept,) = list(git.pushed)
     held = await loop.managers.workspaces.get_workspace(owner, session_id)
-    assert held.snapshot_ref == kept and held.notice is None and held.version > 1
+    assert held.snapshot_ref == kept and held.notices == () and held.version > 1
     told = [s for s in await loop.history(session_id) if s.type is StepType.ENVIRONMENT_CHANGED]
     assert len(told) == 1 and kept in told[0].as_text()
