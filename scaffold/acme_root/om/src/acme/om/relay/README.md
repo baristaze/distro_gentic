@@ -87,6 +87,8 @@ platform's cloud. Each call crosses the wall as `exec`
   a lost run sent is refused at its claim.
 - **What crosses is checked.** A part or a result whose bytes do not
   match the hash the host declared is refused before it is read.
+- **A read crosses whole.** A file is read in one item, and a file longer
+  than one result carries is refused at once, never waited on.
 - **The first settlement wins.** A result for an item a stop, its lease,
   or the sweep already settled lands nothing.
 - **Every row belongs to one org.**

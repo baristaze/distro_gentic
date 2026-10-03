@@ -49,11 +49,13 @@ to the isolation the session is pinned to, its level, its egress, and its
 limits: its pool gives that, where a cloud executor's container with no
 egress may be beyond a pool of bare directories, and a pinned project's
 checks may need what its pool is pinned for. The tree is written in, the
-checks run, and
-the results stream is read back, each as `exec` work, and the executor
-hashes what it read. When the run ends, whatever ended it, the holding
-host is asked to purge the instance, or the prepare that waits is ended,
-and the relay's rows of the instance go at once. A root that reaches no
+checks run, and the results stream is read back, each as `exec` work,
+and the executor hashes what it read. A trial's stream is read in one
+item, whose result crosses the wall whole: a stream longer than one
+carries is refused at once, naming that bound, never waited on. When the
+run ends, whatever ended it, the holding host is asked to purge the
+instance, or the prepare that waits is ended, and the relay's rows of the
+instance go at once. A root that reaches no
 pool refuses the run, loudly (`Unavailable`), never a run elsewhere.
 
 **A validation session is platform work.** It names its project, a check

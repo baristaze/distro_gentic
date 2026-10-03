@@ -5,9 +5,11 @@ attaches to it rather than starting another. An expired lease completes an
 unsafe item `interrupted` and requeues a repeatable one to its workspace's
 host alone. A stop reaches the host's control stream at once, and nothing a
 stale writer sends acts. A part or a result whose hash does not verify is
-refused at the relay."""
+refused at the relay. A file is read in one item, whose result crosses
+whole: a file longer than one carries is refused at once."""
 
 import asyncio
+import base64
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -19,7 +21,13 @@ from contracts.agent_session_storage import make_session
 from contracts.project_storage import in_project
 
 from acme.infra.impl.local import InfraLocalImpl
-from acme.infra.transports import CommandResult, CommandSpec, RecordSeal, StaleCommand
+from acme.infra.transports import (
+    CommandResult,
+    CommandSpec,
+    FileTooLarge,
+    RecordSeal,
+    StaleCommand,
+)
 from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec, Workspace
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
@@ -42,7 +50,7 @@ from acme.om.relay.exceptions import ItemNotHeld, NoWorkspaceHost, StaleExec
 from acme.om.relay.impl.manager import RelayOptions
 from acme.om.relay.impl.placement import PlacementRelayedImpl
 from acme.om.relay.impl.transport import TransportPlacedImpl, TransportRelayImpl
-from acme.om.relay.rules import exec_id, key_time
+from acme.om.relay.rules import READ_BYTES, RESULT_CHARS, exec_id, key_time
 from acme.om.relay.types.exec import (
     ExecCall,
     ExecOutcome,
@@ -51,6 +59,7 @@ from acme.om.relay.types.exec import (
     ExecResult,
     ExecState,
     PrepareAnswer,
+    ReadRequest,
     RunRequest,
     StopKind,
 )
@@ -209,9 +218,12 @@ class Host:
             data,
         )
 
-    async def finish(self, row: WorkItem, exit_code: int = 0, stdout: str = "") -> None:
+    async def finish(
+        self, row: WorkItem, exit_code: int = 0, stdout: str = "", data: bytes | None = None
+    ) -> None:
+        read = None if data is None else base64.b64encode(data).decode()
         result = ExecResult(
-            outcome=ExecOutcome(exit_code=exit_code), output=ExecOutput(stdout=stdout)
+            outcome=ExecOutcome(exit_code=exit_code), output=ExecOutput(stdout=stdout, data=read)
         )
         data = result.model_dump_json().encode()
         await self.managers.relay.push_result(
@@ -566,6 +578,46 @@ async def test_a_part_or_a_result_whose_hash_does_not_verify_is_refused(wall: Wa
     assert progress.state is ExecState.RUNNING and progress.parts == ()
     await host.finish(row, 0, "ok")
     assert (await waiting).stdout == "ok"
+
+
+# A file crosses whole in one item's result, or is refused at once.
+
+
+async def test_a_relayed_read_crosses_whole_and_a_longer_file_is_refused_at_once(
+    wall: Wall,
+) -> None:
+    host = Host(wall.managers, wall.holder)
+    asked: list[ReadRequest] = []
+
+    async def answers(data: bytes) -> None:
+        row = await host.claim_soon()
+        detail = await wall.managers.relay.detail(request(), wall.holder, host.item_id(row))
+        asked.append(cast(ReadRequest, detail.request))
+        await host.finish(row, data=data)
+
+    # A bound past what one result carries asks for that much and a byte.
+    bound = 64 * 1024 * 1024 + 1
+    reads = transport(wall.managers)
+    short = b'{"kind": "end", "outcome": "passed"}\n'
+    read, _ = await asyncio.gather(
+        reads.read_file(wall.workspace, "out/0-0.jsonl", bound), answers(short)
+    )
+    assert read == short
+    longer = b"r" * (READ_BYTES + 1)
+    with pytest.raises(FileTooLarge, match=f"past the {READ_BYTES} bytes"):
+        await asyncio.wait_for(
+            asyncio.gather(
+                reads.read_file(wall.workspace, "out/0-1.jsonl", bound), answers(longer)
+            ),
+            timeout=10,
+        )
+    assert [read.max_bytes for read in asked] == [READ_BYTES + 1] * 2
+    # And the most it asks for crosses within what a host's result carries.
+    result = ExecResult(
+        outcome=ExecOutcome(exit_code=0),
+        output=ExecOutput(data=base64.b64encode(longer).decode()),
+    )
+    assert len(base64.b64encode(result.model_dump_json().encode())) <= RESULT_CHARS
 
 
 # Where a call runs: the placement picks the transport, and names the host.

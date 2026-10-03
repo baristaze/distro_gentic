@@ -11,7 +11,8 @@ egress is none. Each check's
 command template runs with `{version}` and `{out}` filled, in the tree,
 under the environment of the instance's image and its transport, never one
 an agent set. Each trial's results stream is read back within the bound,
-and the executor hashes what it read.
+and within what one read of its transport carries, and the executor hashes
+what it read.
 
 For a session of the cloud, the instance is the cloud's, made by the
 provider and reached by the transport the platform's own processes hold. A
@@ -29,7 +30,13 @@ from uuid import UUID
 from pydantic import Field
 
 from acme.infra.exceptions import InfraException
-from acme.infra.transports import CommandResult, CommandSpec, RecordSeal, TransportInterface
+from acme.infra.transports import (
+    CommandResult,
+    CommandSpec,
+    FileTooLarge,
+    RecordSeal,
+    TransportInterface,
+)
 from acme.infra.workspaces import (
     EgressMode,
     EgressPolicy,
@@ -215,12 +222,18 @@ class ExecutorWorkspacesImpl(ExecutorInterface):
         command writes its results stream, and run in the tree; and the
         stream read back from `path`, the same file from the instance's root,
         within what is left of the bound. A check that wrote none is refused: a run nobody can read is
-        no evidence."""
+        no evidence. So is a stream longer than one read of the transport
+        carries, such as the relay's into a tenant's wall."""
         argv = tuple(part.format(version=request.version, out=out) for part in check.command)
         await self._command(transport, workspace, argv, TREE, self._options.trial_time)
         left = self._options.max_results_bytes - read
         try:
             stream = await transport.read_file(workspace, path, left + 1)
+        except FileTooLarge as failed:
+            raise ValidationFailed(
+                f"the results of {check.name} are past the {failed.limit} bytes "
+                "one read of its instance carries"
+            ) from None
         except InfraException as failed:
             if failed.http_status != MISSING:
                 raise

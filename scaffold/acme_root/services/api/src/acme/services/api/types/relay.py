@@ -10,6 +10,7 @@ from uuid import UUID
 
 from pydantic import Field
 
+from acme.om.relay.rules import RESULT_CHARS
 from acme.om.retention.crossing import SHA256, CrossingKind
 from acme.services.api.types.common import RequestBody, View
 
@@ -51,7 +52,7 @@ class PartRequest(RequestBody):
 class ResultRequest(RequestBody):
     """How an item ended: the JSON of an exec result, in base64."""
 
-    data: str = Field(max_length=16_000_000)
+    data: str = Field(max_length=RESULT_CHARS)
     crossing: CrossingBody
 
 

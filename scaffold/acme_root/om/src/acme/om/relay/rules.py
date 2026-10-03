@@ -28,6 +28,16 @@ UNSAFE_ATTEMPTS = 1
 """An unsafe item's row is claimed once. When its lease runs out the queue's
 own sweep fails it rather than requeue it, whatever else runs first."""
 
+RESULT_CHARS = 16_000_000
+"""The most a host's result of one item carries across the wall: the
+characters of its JSON in base64."""
+
+READ_BYTES = 8 * 1024 * 1024
+"""The most of a file one relayed read carries. Its bytes ride in the
+result in base64, and the result in base64 again, so a read of one byte
+more than this still crosses within `RESULT_CHARS`, with room for the rest
+of the result. A longer file is refused at once, never waited on."""
+
 HOST_ISOLATION: dict[IsolationMode, HostIsolation] = {
     IsolationMode.VM: "vm",
     IsolationMode.CONTAINER: "container",
