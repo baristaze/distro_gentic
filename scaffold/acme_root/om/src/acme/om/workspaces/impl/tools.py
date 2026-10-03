@@ -8,9 +8,10 @@ holds, then lets go only of what its own run holds. Every other operation is
 the engine's, unchanged.
 
 A run is named by its epoch, read from storage as it prepares: a session
-that resumes while the run before it is still being released is the later
-run's from the moment it takes its epoch, so the earlier release leaves its
-instance, and what this host holds of it, to the later one.
+that resumes on this host while the run before it is still being released
+is the later run's from the moment its prepare starts here, so the earlier
+release leaves its instance, and what this host holds of it, to the later
+one. A later run on another host makes its own there, and this host's goes.
 
 The host is this process: what it offers and how many directory sessions it
 holds live are its own, never the control plane's. A session that runs
@@ -91,10 +92,24 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         # The directory workspaces live here, each under its run's epoch.
         self._directories: dict[UUID, int] = {}
         self._hosted: set[UUID] = set()  # the workspaces a host of the tenant's holds
+        self._preparing: dict[UUID, int] = {}  # the prepares under way here, by session
 
     # The workspace.
 
     async def prepare_workspace(
+        self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec
+    ) -> Workspace:
+        # Marked before the first await, and until the workspace is held: a
+        # release that lands meanwhile leaves the instance to this run.
+        self._preparing[session_id] = self._preparing.get(session_id, 0) + 1
+        try:
+            return await self._prepare(ctx, session_id, spec)
+        finally:
+            left = self._preparing.pop(session_id) - 1
+            if left:
+                self._preparing[session_id] = left
+
+    async def _prepare(
         self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec
     ) -> Workspace:
         pinned = await self._workspaces.pinned(ctx, session_id, spec)
@@ -147,10 +162,9 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
             # Kept first: a push that does not land raises, and the instance
             # and its work stay.
             await self._workspaces.detach(ctx, workspace)
-        if epoch is not None and (await self._steps.get_cursor(ctx, workspace.id)).epoch != epoch:
-            # The session resumed while its work was kept: the instance is
-            # the later run's, to let go when it ends, and on another host
-            # the sweep's.
+        if epoch is not None and self._taken_here(workspace.id, epoch):
+            # The session resumed here while its work was kept: the instance
+            # is the later run's, to let go when it ends.
             log.info("session %s: a later run holds its workspace, which stays", workspace.id)
         elif workspace.id in self._hosted:
             # Its host holds it, warm for the next loop: nothing of this
@@ -163,6 +177,13 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
             self._held.let_go(workspace.id, epoch)
             if self._directories.get(workspace.id) == epoch:
                 del self._directories[workspace.id]
+
+    def _taken_here(self, session_id: UUID, epoch: int) -> bool:
+        """Whether a later run in this process prepares the session's
+        workspace or holds it. One on another host, or one that never
+        prepares, takes nothing of this host's."""
+        held = self._held.epoch_of(session_id)
+        return session_id in self._preparing or (held is not None and held != epoch)
 
     async def purge_workspace(self, org_id: UUID, session_id: UUID) -> None:
         await self._inner.purge_workspace(org_id, session_id)

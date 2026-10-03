@@ -544,6 +544,48 @@ async def test_a_run_that_resumes_before_the_last_release_lands_keeps_its_worksp
         await products.delivered(loop.owner, session_id)
 
 
+@pytest.mark.parametrize("prepares", [True, False], ids=["prepares", "never-prepares"])
+async def test_a_run_that_resumes_on_another_host_leaves_this_hosts_instance_to_go(
+    tmp_path: Path, prepares: bool
+) -> None:
+    git, projects = SlowPushGit(), ProjectsTwin()
+    reader = ReaderTwin(head="c" * 40, changed=("checks/test_guard.py",))
+    host_a = loop_of(
+        tmp_path, workspace_projects=projects, workspace_git=git, workspace_reader=reader
+    )
+    (tmp_path / "b").mkdir()
+    # Another runner host: its own provider, over the same storage.
+    host_b = loop_of(
+        tmp_path / "b",
+        storage=host_a.storage,
+        owner=host_a.owner,
+        workspace_projects=projects,
+        workspace_git=git,
+        workspace_reader=reader,
+    )
+    steps = host_a.managers.steps
+    session_id = await host_a.start("twinned")
+    await steps.begin_run(host_a.owner, session_id)
+    parked = await host_a.managers.tools.prepare_workspace(
+        host_a.owner, session_id, TWINNED.isolation
+    )
+    # The run parks on host A, and its release pushes its work slowly.
+    git.cue, git.dirty = asyncio.Event(), True
+    releasing = asyncio.create_task(host_a.managers.tools.release_workspace(host_a.owner, parked))
+    await asyncio.wait_for(git.waiting.wait(), timeout=5)
+
+    # The next run takes its epoch on host B, then host A's release lands.
+    await steps.begin_run(host_a.owner, session_id)
+    if prepares:
+        await host_b.managers.tools.prepare_workspace(host_a.owner, session_id, TWINNED.isolation)
+    git.cue.set()
+    await releasing
+
+    assert git.pushed, "the parked run's work was kept"
+    assert session_id not in provider(host_a).live, "host A's instance goes at once"
+    assert (session_id in provider(host_b).live) is prepares, "host B's is its own run's"
+
+
 # A session's project and its repository are the projects' rows.
 
 
