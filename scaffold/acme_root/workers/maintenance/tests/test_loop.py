@@ -156,6 +156,14 @@ class LeaseLosingWork(WorkManagerInterface):
     async def has_open(self, ctx: TenantContext, kind: WorkKind, target_id: UUID) -> bool:
         return await self._inner.has_open(ctx, kind, target_id)
 
+    async def latest_for_target(
+        self, ctx: TenantContext, kind: WorkKind, target_id: UUID
+    ) -> WorkItem | None:
+        return await self._inner.latest_for_target(ctx, kind, target_id)
+
+    async def end_queued(self, ctx: TenantContext, item: WorkItem, reason: str) -> WorkItem | None:
+        return await self._inner.end_queued(ctx, item, reason)
+
     async def get_item(self, ctx: TenantContext, item_id: UUID) -> WorkItem:
         return await self._inner.get_item(ctx, item_id)
 

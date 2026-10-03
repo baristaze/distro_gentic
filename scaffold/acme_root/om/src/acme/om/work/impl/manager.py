@@ -245,6 +245,27 @@ class WorkManagerImpl(WorkManagerInterface):
         ctx.require(Permission.READ)
         return await self._storage.has_open_item(ctx.org_id, kind, target_id)
 
+    async def latest_for_target(
+        self, ctx: TenantContext, kind: WorkKind, target_id: UUID
+    ) -> WorkItem | None:
+        ctx.require(Permission.READ)
+        return await self._storage.read_latest_for_target(ctx.org_id, kind, target_id)
+
+    async def end_queued(self, ctx: TenantContext, item: WorkItem, reason: str) -> WorkItem | None:
+        asking = WORK_ENQUEUE_PERMISSIONS.get(item.kind)
+        if asking is None:
+            raise NotAuthorized(f"no permission asks for work of kind {item.kind.value}")
+        ctx.require(asking)
+        ended = item.model_copy(
+            update={
+                "status": WorkStatus.DONE,
+                "last_error": reason,
+                "updated_at": utcnow(),
+                "updated_by": ctx.user_id,
+            }
+        )
+        return await self._storage.write_item_if_queued(ctx.org_id, ended)
+
     async def fail_for_good(self, ctx: TenantContext, item: WorkItem, error: str) -> WorkItem:
         return await self._fail(ctx, item, error, True)
 

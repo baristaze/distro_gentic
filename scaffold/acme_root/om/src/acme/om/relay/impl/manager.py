@@ -187,7 +187,7 @@ class RelayManagerImpl(RelayManagerInterface):
         placed = await self._hosts.placement_of(ctx, session_id)
         if placed.pool is None:
             raise ValidationFailed(f"session {session_id} runs in the cloud; no host prepares it")
-        if await self._work.has_open(ctx, WorkKind.WORKSPACE, session_id):
+        if await self._asked_of(ctx, session_id, placed.pool.id):
             return False
         # Where on the host it is made is the host's to choose, so a prepare
         # reads no path of the host's.
@@ -605,6 +605,25 @@ class RelayManagerImpl(RelayManagerInterface):
                 f"epoch {epoch} is below session {session_id}'s {cursor.epoch}: "
                 "the run that sent it no longer holds the session"
             )
+
+    async def _asked_of(self, ctx: TenantContext, session_id: UUID, pool_id: UUID) -> bool:
+        """Whether the session's prepare waits or runs on `pool_id`'s lane. One
+        that waits on another pool's, as the session moved since, is ended,
+        so no host of a pool it left makes it. One a host of that pool holds
+        already is left to end: its host is no host of the session's pool,
+        so the session never runs there."""
+        latest = await self._work.latest_for_target(ctx, WorkKind.WORKSPACE, session_id)
+        if latest is None or latest.status not in (WorkStatus.QUEUED, WorkStatus.CLAIMED):
+            return False
+        try:
+            asked_of = WorkspacePayload.model_validate(latest.payload).pool_id
+        except ValidationError:
+            asked_of = None
+        if asked_of == pool_id:
+            return True
+        if latest.status is WorkStatus.QUEUED:
+            await self._work.end_queued(ctx, latest, f"its session moved to pool {pool_id}")
+        return False
 
     async def _prepare_held(
         self, ctx: TenantContext, host: HostIdentity, item_id: UUID

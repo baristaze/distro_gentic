@@ -48,8 +48,9 @@ class RelayManagerInterface(ABC):
     async def ask_prepare(self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec) -> bool:
         """Platform-internal: asks a host of the session's pool to prepare its
         workspace to `spec`, as `workspace` work on the pool's lane, which any
-        host of the pool may claim; nothing when a prepare asked before still
-        waits for a host or runs. Whether it asked now. `ValidationFailed`
+        host of the pool may claim; nothing when a prepare asked of this
+        pool before still waits for a host or runs. One that waits on a pool
+        the session left is ended. Whether it asked now. `ValidationFailed`
         for a session of the cloud."""
         ...
 

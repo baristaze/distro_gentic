@@ -123,6 +123,23 @@ class WorkManagerInterface(ABC):
         ...
 
     @abstractmethod
+    async def latest_for_target(
+        self, ctx: TenantContext, kind: WorkKind, target_id: UUID
+    ) -> WorkItem | None:
+        """The tenant's item of `kind` on `target_id` made last, whatever its
+        status; None when there is none."""
+        ...
+
+    @abstractmethod
+    async def end_queued(self, ctx: TenantContext, item: WorkItem, reason: str) -> WorkItem | None:
+        """Ends an item no worker took, as done, with `reason` as its last
+        word: work its asker no longer wants, such as a prepare on a pool its
+        session left. Written only while the item is queued: None when a
+        worker claimed it first, or it ended. Asked with the permission its
+        kind is enqueued with."""
+        ...
+
+    @abstractmethod
     async def requeue_stale(self, rctx: RequestContext, limit: int) -> int:
         """Platform-internal: the sweep, across tenants, like the claim: returns
         up to `limit` items whose lease expired to the queue, or fails them

@@ -4,7 +4,8 @@ however often the loop asks. The first host's answer binds the session to
 it; a second host that made one too lets its own go. A host that cannot
 make it hands the work back to its pool, and a host answers only a prepare
 it holds. One whose spec asks more than its fields say is refused, and
-nothing is made."""
+nothing is made. A session moved to another pool is prepared there, and
+the prepare asked of the pool it left ends."""
 
 from dataclasses import replace
 from pathlib import Path
@@ -83,6 +84,29 @@ async def test_a_host_that_cannot_make_it_hands_the_prepare_back_to_its_pool(
     # Back on the pool's lane after a wait, for a host that can give it.
     assert await api.container.managers.work.has_open(api.owner, WorkKind.WORKSPACE, session_id)
     assert await host.claim_once() is None
+
+
+async def test_a_session_moved_to_another_pool_is_prepared_by_a_host_of_that_pool(
+    api: Stack, tmp_path: Path
+) -> None:
+    relay = api.container.managers.relay
+    left, joined = await api.pool("left"), await api.pool("joined")
+    session_id = await a_pinned_session(api, left.id)
+    assert await relay.ask_prepare(api.owner, session_id, DIRECTORY)  # no host of it is online
+    await api.container.managers.hosts.place_session(api.owner, session_id, joined.id)
+    assert await relay.ask_prepare(api.owner, session_id, DIRECTORY)
+    assert not await relay.ask_prepare(api.owner, session_id, DIRECTORY)  # one ask waits
+
+    host, root = await directory_host(api, joined.id, tmp_path / "joined", name="host-j")
+    assert await host.claim_once() is not None
+    await host.idle()
+    bound = await relay.binding_of(api.owner, session_id)
+    assert bound is not None and bound.host_id == UUID(host.credential.host_id)
+    assert made_in(bound.location, root)
+    # The prepare asked of the pool it left ended: no host there makes it.
+    stale, _ = await directory_host(api, left.id, tmp_path / "left", name="host-l")
+    assert await stale.claim_once() is None
+    assert not await api.container.managers.work.has_open(api.owner, WorkKind.WORKSPACE, session_id)
 
 
 async def test_a_prepare_whose_spec_opens_egress_its_fields_close_is_refused_and_nothing_made(
