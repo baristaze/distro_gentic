@@ -26,12 +26,6 @@ PURGED_IN_ORDER = (HostCredentials, Hosts, HostEnrollmentTokens, HostPools, Sess
 """A deleted tenant's tables, each purged a batch at a time."""
 
 
-def claimant_of(row: Hosts) -> EnrolledClaimant:
-    """The claimant a row holds: a host with what it advertised, any other
-    kind without."""
-    return to_model(row, Host) if row.kind == HOST else to_model(row, EnrolledClaimant)
-
-
 class HostsStoragePostgresImpl(PgStorageBase, HostsStorageInterface):
     async def create_pool(
         self, org_id: UUID, pool: HostPool, outbox_rows: tuple[OutboxRow, ...]
@@ -96,7 +90,7 @@ class HostsStoragePostgresImpl(PgStorageBase, HostsStorageInterface):
     async def enroll(
         self,
         org_id: UUID,
-        claimant: EnrolledClaimant,
+        claimant: EnrolledClaimant | Host,
         credential: HostCredential,
         outbox_rows: tuple[OutboxRow, ...],
     ) -> None:
@@ -123,7 +117,7 @@ class HostsStoragePostgresImpl(PgStorageBase, HostsStorageInterface):
         stmt = select(Hosts).where(Hosts.org_id == org_id, Hosts.id == claimant_id)
         async with self._session_for(stmt, org_id=org_id) as session:
             row = (await session.execute(stmt)).scalar_one_or_none()
-            return None if row is None else claimant_of(row)
+            return None if row is None else to_model(row, EnrolledClaimant)
 
     async def read_hosts(self, org_id: UUID, pool_id: UUID, limit: int) -> list[Host]:
         stmt = (
@@ -168,7 +162,7 @@ class HostsStoragePostgresImpl(PgStorageBase, HostsStorageInterface):
             return (
                 credential.org_id,
                 to_model(credential, HostCredential),
-                claimant_of(claimant),
+                to_model(claimant, EnrolledClaimant),
             )
 
     async def rotate_credential(
@@ -273,7 +267,7 @@ class HostsStoragePostgresImpl(PgStorageBase, HostsStorageInterface):
                 )
                 for outbox_row in outbox_rows:
                     session.add(to_row(outbox_row, OutboxRows, org_id=org_id))
-            claimant = claimant_of(row)
+            claimant = to_model(row, EnrolledClaimant)
             await session.commit()
             return claimant
 

@@ -167,7 +167,7 @@ tenantless = [
     "EventStorageInterface.count_since",
     "EventStorageInterface.trim",
     "HostsStorageInterface.read_enrollment_token_by_digest",
-    "HostsStorageInterface.read_host_by_credential_digest",
+    "HostsStorageInterface.read_claimant_by_credential_digest",
     "HostsStorageInterface.count_hosts",
     "IntakeStorageInterface.read_installation_org",
     "IdempotencyStorageInterface.purge_records",
@@ -251,9 +251,16 @@ builders = ["build_context"]
 
 # The entities a reader with no tenant takes, which carry their org_id: the
 # guideline's two, the claimant the control plane claims for across
-# tenants, whose org_id is the wall it sits in, the identity a host's
-# credential resolves to, found by its digest across tenants, and what a
-# host reads of an exec item it holds, which names the host's own tenant
-# for the secret store it keys by tenant.
+# tenants, whose org_id is the wall it sits in, the identity a claimant's
+# credential resolves to (a host's among them), found by its digest across
+# tenants, and what a host reads of an exec item it holds, which names the
+# host's own tenant for the secret store it keys by tenant.
 [tool.arch-check.options.OM-02]
-tenantless = ["OutboxRow", "Event", "Claimant", "HostIdentity", "ExecDetail"]
+tenantless = [
+    "OutboxRow",
+    "Event",
+    "Claimant",
+    "ClaimantIdentity",
+    "HostIdentity",
+    "ExecDetail",
+]

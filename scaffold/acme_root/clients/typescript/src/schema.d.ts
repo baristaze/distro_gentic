@@ -7154,10 +7154,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                "claim-token": string;
                 "x-app"?: string | null;
                 "x-app-version"?: string | null;
                 authorization?: string | null;
+                "claim-token": string;
             };
             path: {
                 item_id: string;

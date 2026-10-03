@@ -108,6 +108,11 @@ def make_host(pool_id: UUID) -> Host:
     )
 
 
+def claimant_of(host: Host) -> EnrolledClaimant:
+    """A host as a claimant's read returns it: its claimant's fields alone."""
+    return EnrolledClaimant.model_validate(host, from_attributes=True)
+
+
 def make_claimant(pool_id: UUID) -> EnrolledClaimant:
     """A claimant of a product's kind: it advertises nothing and reads no
     `exec` work."""
@@ -295,7 +300,7 @@ class HostsStorageContract:
         assert await storage.read_hosts(org, host.pool_id, 10) == [host]
         assert await storage.read_hosts(org, new_id(), 10) == []
         found = await storage.read_claimant_by_credential_digest(credential.digest)
-        assert found == (org, credential, host)
+        assert found == (org, credential, claimant_of(host))
         assert await storage.read_claimant_by_credential_digest("digest-unknown") is None
 
     async def test_a_credentials_digest_is_unique_across_tenants(
@@ -333,7 +338,7 @@ class HostsStorageContract:
         assert await storage.read_claimant_by_credential_digest(minted.digest) == (
             org,
             minted,
-            host,
+            claimant_of(host),
         )
         # The next rotation, inside the last one's grace, ends that one at
         # once, and a later end never stretches a sooner one.
@@ -348,7 +353,11 @@ class HostsStorageContract:
         second = await storage.read_claimant_by_credential_digest(minted.digest)
         assert second is not None
         assert (second[1].expires_at, second[1].rotated_at) == (minted.expires_at, at)
-        assert await storage.read_claimant_by_credential_digest(third.digest) == (org, third, host)
+        assert await storage.read_claimant_by_credential_digest(third.digest) == (
+            org,
+            third,
+            claimant_of(host),
+        )
 
     async def test_a_credential_rotates_once(self, storage: HostsStorageInterface) -> None:
         org = new_id()
@@ -379,7 +388,7 @@ class HostsStorageContract:
         assert await storage.read_claimant_by_credential_digest(minted.digest) is None
         assert await storage.read_claimant_by_credential_digest(stranger.digest) is None
         found = await storage.read_claimant_by_credential_digest(credential.digest)
-        assert found == (org, credential, host)
+        assert found == (org, credential, claimant_of(host))
 
     async def test_mark_seen_keeps_what_the_host_stated(
         self, storage: HostsStorageInterface
@@ -430,7 +439,7 @@ class HostsStorageContract:
         assert await storage.read_claimant_by_credential_digest(credential.digest) == (
             org,
             credential,
-            host,
+            claimant_of(host),
         )
 
     async def test_a_claimant_of_another_kind_is_no_host(
@@ -450,7 +459,7 @@ class HostsStorageContract:
         assert await storage.read_hosts(org, pool_id, 10) == [host]
         assert await storage.read_host(org, claimant.id) is None
         assert await storage.read_claimant(org, claimant.id) == claimant
-        assert await storage.read_claimant(org, host.id) == host
+        assert await storage.read_claimant(org, host.id) == claimant_of(host)
         assert await storage.read_claimant_by_credential_digest(credential.digest) == (
             org,
             credential,

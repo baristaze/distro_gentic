@@ -41,6 +41,7 @@ from acme.services.api.types.hosts import (
     HostView,
     IssuedEnrollmentTokenView,
     IssuedHostCredentialView,
+    IssueEnrollmentTokenRequest,
     PlacementView,
     PlaceSessionRequest,
     PoolView,
@@ -162,8 +163,9 @@ class HostsServiceImpl(HostsServiceInterface):
         return [status_view(status) for status in await self._hosts.get_hosts(ctx, pool_id)]
 
     async def issue_enrollment_token(
-        self, ctx: TenantContext, pool_id: UUID, kind: str
+        self, ctx: TenantContext, pool_id: UUID, body: IssueEnrollmentTokenRequest | None
     ) -> IssuedEnrollmentTokenView:
+        kind = (body or IssueEnrollmentTokenRequest()).kind
         issued = await self._hosts.issue_enrollment_token(ctx, pool_id, kind)
         return IssuedEnrollmentTokenView(
             token=issued.token, enrollment=token_view(issued.enrollment)

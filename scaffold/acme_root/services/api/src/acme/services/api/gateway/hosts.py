@@ -7,6 +7,7 @@ nothing a claimant sends names its kind, its tenant, its pool, or a
 lane."""
 
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import Depends, Header, Request
 
@@ -65,3 +66,13 @@ async def current_claimant(
 
 
 Claimant = Annotated[ClaimantIdentity, Depends(current_claimant)]
+
+
+async def claim_token(claim_token: Annotated[UUID, Header()]) -> UUID:
+    """The claim token a claimant's claim was handed, which its read of the
+    item it holds carries as the `Claim-Token` header, since a read has no
+    body. An item held under any other token reads as not found."""
+    return claim_token
+
+
+ClaimToken = Annotated[UUID, Depends(claim_token)]

@@ -11844,16 +11844,6 @@
           },
           {
             "in": "header",
-            "name": "claim-token",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Claim-Token",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
             "name": "x-app",
             "required": false,
             "schema": {
@@ -11898,6 +11888,16 @@
                 }
               ],
               "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "claim-token",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Claim-Token",
+              "type": "string"
             }
           }
         ],

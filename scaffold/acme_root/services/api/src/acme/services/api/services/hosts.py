@@ -26,6 +26,7 @@ from acme.services.api.types.hosts import (
     HostView,
     IssuedEnrollmentTokenView,
     IssuedHostCredentialView,
+    IssueEnrollmentTokenRequest,
     PlacementView,
     PlaceSessionRequest,
     PoolView,
@@ -50,8 +51,10 @@ class HostsServiceInterface(ABC):
 
     @abstractmethod
     async def issue_enrollment_token(
-        self, ctx: TenantContext, pool_id: UUID, kind: str
-    ) -> IssuedEnrollmentTokenView: ...
+        self, ctx: TenantContext, pool_id: UUID, body: IssueEnrollmentTokenRequest | None
+    ) -> IssuedEnrollmentTokenView:
+        """A token of the kind the body names, a host's with no body."""
+        ...
 
     @abstractmethod
     async def revoke_enrollment_token(

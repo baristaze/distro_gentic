@@ -77,12 +77,20 @@ class EnrolledClaimant(Identifiable, Trackable):
     revoked_by: UUID | None = None
 
 
-class Host(EnrolledClaimant):
+class Host(Identifiable, Trackable):
     """One enrolled workspace host: the claimant of the host kind, with what
-    it advertised and the version of `exec` work it reads."""
+    it advertised and the version of `exec` work it reads. Its row is an
+    `EnrolledClaimant`'s with those two beside it."""
 
+    kind: str = Field(pattern=r"^[a-z][a-z0-9_]{0,31}$")
+    pool_id: UUID
+    name: HostName
+    enrolled_with: UUID
     advertisement: Advertisement
     exec_version: int = Field(ge=1)  # the version of `exec` work it reads
+    last_seen_at: datetime
+    revoked_at: datetime | None = None
+    revoked_by: UUID | None = None
 
 
 class ClaimantIdentity(Platform):

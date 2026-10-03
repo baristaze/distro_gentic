@@ -61,8 +61,7 @@ async def issue_enrollment_token(
     once: hosts, unless the body names a product's kind. A retry mints
     another, so it takes no Idempotency-Key; the one never read expires on
     its own."""
-    kind = (body or IssueEnrollmentTokenRequest()).kind
-    return await hosts.issue_enrollment_token(ctx, pool_id, kind)
+    return await hosts.issue_enrollment_token(ctx, pool_id, body)
 
 
 @router.delete("/host-enrollment-tokens/{token_id}", response_model=EnrollmentTokenView)

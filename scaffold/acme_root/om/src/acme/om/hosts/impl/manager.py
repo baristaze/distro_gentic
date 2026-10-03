@@ -224,8 +224,9 @@ class HostsManagerImpl(HostsManagerInterface):
         ctx.require(Permission.MANAGE_MEMBERS)
         if await self._storage.read_host(ctx.org_id, host_id) is None:
             raise NotFound(f"host {host_id} not found")
-        revoked = await self.revoke_claimant(ctx, host_id)
-        if not isinstance(revoked, Host):
+        await self.revoke_claimant(ctx, host_id)
+        revoked = await self._storage.read_host(ctx.org_id, host_id)
+        if revoked is None:
             raise NotFound(f"host {host_id} not found")
         return revoked
 
@@ -464,7 +465,7 @@ class HostsManagerImpl(HostsManagerInterface):
         return org_id, enrollment_token
 
     async def _admit(
-        self, rctx: RequestContext, org_id: UUID, claimant: EnrolledClaimant
+        self, rctx: RequestContext, org_id: UUID, claimant: EnrolledClaimant | Host
     ) -> IssuedCredential:
         """The claimant and its first credential, under its kind's prefix.
         The person who issued the token answers for the enrollment."""
@@ -533,8 +534,10 @@ class HostsManagerImpl(HostsManagerInterface):
         return stored
 
     async def _live_host(self, host: HostIdentity) -> Host:
-        stored = await self._live(host)
-        if not isinstance(stored, Host):
+        """The host behind an identity, with what it advertised, refused as
+        `_live` refuses."""
+        stored = await self._storage.read_host(host.org_id, host.id)
+        if stored is None or stored.revoked_at is not None:
             raise CredentialExpired("host revoked")
         return stored
 
@@ -566,7 +569,9 @@ class HostsManagerImpl(HostsManagerInterface):
         if not await self._storage.mark_seen(claimant.org_id, claimant.id, self._clock(), report):
             raise CredentialExpired(f"{claimant.kind} revoked")
 
-    def _credential(self, claimant: EnrolledClaimant, now: datetime) -> tuple[str, HostCredential]:
+    def _credential(
+        self, claimant: EnrolledClaimant | Host, now: datetime
+    ) -> tuple[str, HostCredential]:
         """A fresh credential of the claimant, under its kind's prefix."""
         spec = self._claimants.get(claimant.kind)
         if spec is None:
@@ -583,7 +588,7 @@ class HostsManagerImpl(HostsManagerInterface):
 
     @staticmethod
     def _issued(
-        secret: str, credential: HostCredential, claimant: EnrolledClaimant
+        secret: str, credential: HostCredential, claimant: EnrolledClaimant | Host
     ) -> IssuedCredential:
         return IssuedCredential(
             credential=secret,

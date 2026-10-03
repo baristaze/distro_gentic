@@ -12,12 +12,17 @@ from acme.om.outbox.types.row import OutboxRow
 from acme.om.storage.impl.memory_base import MemoryStorageBase, MemoryTable
 
 
+def claimant_of(row: EnrolledClaimant | Host) -> EnrolledClaimant:
+    """A row as its claimant's fields alone, whatever its kind."""
+    return EnrolledClaimant.model_validate(row, from_attributes=True)
+
+
 class HostsStorageMemoryImpl(MemoryStorageBase, HostsStorageInterface):
     def __init__(self, outbox: OutboxLandingInterface | None = None) -> None:
         super().__init__(outbox)
         self._pools: MemoryTable[HostPool] = {}
         self._tokens: MemoryTable[EnrollmentToken] = {}
-        self._hosts: MemoryTable[EnrolledClaimant] = {}
+        self._hosts: MemoryTable[EnrolledClaimant | Host] = {}
         self._credentials: MemoryTable[HostCredential] = {}
         self._placements: MemoryTable[SessionPlacement] = {}
 
@@ -72,7 +77,7 @@ class HostsStorageMemoryImpl(MemoryStorageBase, HostsStorageInterface):
     async def enroll(
         self,
         org_id: UUID,
-        claimant: EnrolledClaimant,
+        claimant: EnrolledClaimant | Host,
         credential: HostCredential,
         outbox_rows: tuple[OutboxRow, ...],
     ) -> None:
@@ -89,7 +94,8 @@ class HostsStorageMemoryImpl(MemoryStorageBase, HostsStorageInterface):
         return found if isinstance(found, Host) else None
 
     async def read_claimant(self, org_id: UUID, claimant_id: UUID) -> EnrolledClaimant | None:
-        return self._get(self._hosts, org_id, claimant_id)
+        found = self._get(self._hosts, org_id, claimant_id)
+        return None if found is None else claimant_of(found)
 
     async def read_hosts(self, org_id: UUID, pool_id: UUID, limit: int) -> list[Host]:
         hosts = [
@@ -113,7 +119,7 @@ class HostsStorageMemoryImpl(MemoryStorageBase, HostsStorageInterface):
         for org_id, credential in self._rows_across_tenants(self._credentials):
             if credential.digest == digest:
                 claimant = self._get(self._hosts, org_id, credential.host_id)
-                return None if claimant is None else (org_id, credential, claimant)
+                return None if claimant is None else (org_id, credential, claimant_of(claimant))
         return None
 
     async def rotate_credential(
@@ -175,7 +181,7 @@ class HostsStorageMemoryImpl(MemoryStorageBase, HostsStorageInterface):
         async with self._lock:
             claimant = self._get(self._hosts, org_id, claimant_id)
             if claimant is None or claimant.revoked_at is not None:
-                return claimant
+                return None if claimant is None else claimant_of(claimant)
             revoked = claimant.model_copy(
                 update={"revoked_at": at, "revoked_by": by, "updated_at": at, "updated_by": by}
             )
@@ -184,7 +190,7 @@ class HostsStorageMemoryImpl(MemoryStorageBase, HostsStorageInterface):
                 if credential.host_id == claimant_id and credential.expires_at > at:
                     ended = credential.model_copy(update={"expires_at": at})
                     self._put(self._credentials, org_id, ended)
-            return revoked
+            return claimant_of(revoked)
 
     async def read_placement(self, org_id: UUID, session_id: UUID) -> SessionPlacement | None:
         for placement in self._rows(self._placements, org_id):

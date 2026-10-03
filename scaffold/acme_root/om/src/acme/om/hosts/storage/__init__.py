@@ -63,7 +63,7 @@ class HostsStorageInterface(ABC):
     async def enroll(
         self,
         org_id: UUID,
-        claimant: EnrolledClaimant,
+        claimant: EnrolledClaimant | Host,
         credential: HostCredential,
         outbox_rows: tuple[OutboxRow, ...],
     ) -> None:
@@ -78,7 +78,8 @@ class HostsStorageInterface(ABC):
 
     @abstractmethod
     async def read_claimant(self, org_id: UUID, claimant_id: UUID) -> EnrolledClaimant | None:
-        """The claimant of any kind; a host reads as a `Host`."""
+        """The claimant of any kind, a host's row among them, as its
+        claimant's fields alone."""
         ...
 
     @abstractmethod
@@ -101,7 +102,7 @@ class HostsStorageInterface(ABC):
     ) -> tuple[UUID, HostCredential, EnrolledClaimant] | None:
         """Cross-tenant: a claimant's call names no tenant, so its
         credential's digest finds the tenant with the credential and its
-        claimant, a host as a `Host`."""
+        claimant, of any kind."""
         ...
 
     @abstractmethod

@@ -4,13 +4,12 @@ then rotate its credential, claim, and read, renew, and report the item
 it holds, with that credential alone. Each function is one call into the
 hosts service."""
 
-from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Header
+from fastapi import APIRouter
 
 from acme.services.api.gateway.auth import Ctx, Rctx
-from acme.services.api.gateway.hosts import Claimant, EnrollmentBearer
+from acme.services.api.gateway.hosts import Claimant, ClaimToken, EnrollmentBearer
 from acme.services.api.gateway.ratelimit import rate_limited
 from acme.services.api.gateway.resolve import HostsService
 from acme.services.api.types.claimants import (
@@ -71,7 +70,7 @@ async def held(
     hosts: HostsService,
     claimant: Claimant,
     item_id: UUID,
-    claim_token: Annotated[UUID, Header()],
+    claim_token: ClaimToken,
 ) -> ClaimantWorkView:
     """The item the claimant holds, under the claim token its claim was
     handed (the `Claim-Token` header). Any other is not found."""
