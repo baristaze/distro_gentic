@@ -9,8 +9,7 @@ when its stream ends.
 
 The loop also says when a stream opens, before its first part, and when it
 completes, once its step is stored or its call has failed, so a carrier can
-tell whoever watches. Neither waits either, and a sink with no one to tell
-does nothing."""
+tell whoever watches. Neither waits."""
 
 from abc import ABC, abstractmethod
 from uuid import UUID
@@ -25,12 +24,14 @@ class StreamSinkInterface(ABC):
         """Hands a part to the carrier and returns at once."""
         ...
 
+    @abstractmethod
     def opened(self, ctx: TenantContext, session_id: UUID, step_id: UUID) -> None:
         """The stream of `step_id` opens, under the run's context. Returns at
         once."""
-        return None
+        ...
 
+    @abstractmethod
     def completed(self, ctx: TenantContext, session_id: UUID, step_id: UUID) -> None:
         """The stream of `step_id` is over: its step is stored, or its call
         failed. Returns at once."""
-        return None
+        ...

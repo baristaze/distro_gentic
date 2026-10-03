@@ -58,7 +58,7 @@ from acme.om.root import Managers, build_managers
 from acme.om.steps.rules import message_step
 from acme.om.steps.types.header import InputHeader, ParkReason
 from acme.om.steps.types.step import StepType
-from acme.om.steps.types.stream import TextPart
+from acme.om.steps.types.stream import StreamPart, TextPart
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import permissions_of
 from acme.om.watch.exceptions import CommandRunning, LiveReadRefused, NotHandedOver
@@ -296,7 +296,7 @@ class Told(StreamSinkMemoryImpl):
         super().__init__()
         self.told: list[tuple[str, UUID]] = []
 
-    def emit(self, part: TextPart) -> None:  # type: ignore[override]
+    def emit(self, part: StreamPart) -> None:
         super().emit(part)
         self.told.append(("part", part.step_id))
 

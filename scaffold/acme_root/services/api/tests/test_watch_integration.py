@@ -7,6 +7,7 @@ fenced, and gives it back."""
 import base64
 import hashlib
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 import pytest
@@ -120,7 +121,7 @@ async def test_a_handle_reads_only_its_own_sessions_streams_through_the_shared_c
         )
         await container.stream.flush()
 
-        async def read(session_id: UUID) -> list[dict[str, object]]:
+        async def read(session_id: UUID) -> list[dict[str, Any]]:
             opened = await client.post(f"/v1/agent-sessions/{session_id}/live", headers=owner)
             read = await client.get("/v1/live", params={"handle": opened.json()["handle"]})
             assert read.status_code == 200, read.text

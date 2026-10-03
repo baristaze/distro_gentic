@@ -54,6 +54,7 @@ end
 if redis.call('EXISTS', KEYS[1]) == 0 then
   redis.call('DEL', KEYS[2])
   redis.call('ZREM', KEYS[3], stream)
+  redis.call('ZREM', KEYS[4], group .. ':' .. stream)
   if redis.call('ZCARD', KEYS[3]) >= max_streams then
     close(group .. ':' .. redis.call('ZRANGE', KEYS[3], 0, 0)[1])
   end
