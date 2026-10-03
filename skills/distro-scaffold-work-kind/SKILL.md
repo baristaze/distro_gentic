@@ -99,7 +99,9 @@ When a root already passes ports of the product's, `kinds=` joins them.
 5. With `--stream`: a `StreamKind` with its entries, its bytes, and its
    open streams of one group, each the most one stream of the kind may
    hold, and `claimant=` the `--claimant` kind, which writes it for the
-   item it holds. The open streams of every group and the idle time are
+   item it holds. Set `claimant=` only when the product's claimant writes
+   the stream through the gateway; a stream the product's own service
+   writes has none. The open streams of every group and the idle time are
    the step's; a kind never sets them. This skill registers the kind and
    adds no stream route: the claimant appends at
    `/v1/claimants/me/items/{item_id}/streams/{kind}`, and a member of the
