@@ -27,10 +27,12 @@ from contracts.loops import (
 )
 from contracts.step_storage import make_request, make_response
 
+from acme.infra.exceptions import InfraException
 from acme.infra.workspaces import (
     EgressMode,
     EgressPolicy,
     IsolationMode,
+    IsolationRefused,
     IsolationSpec,
     Workspace,
     WorkspaceLost,
@@ -675,6 +677,87 @@ async def test_a_call_a_lost_run_may_have_started_is_settled_by_its_effect_befor
     assert answer.seq < next(s.seq for s in steps if s.type is StepType.PARKED), (
         "settled before the park"
     )
+
+
+@pytest.mark.parametrize(
+    ("refusal", "reason"),
+    [
+        (IsolationRefused("no host can give it the workspace yet"), ParkReason.RESOURCE),
+        (WorkspaceLost("the branch of the session is gone"), ParkReason.PERSON),
+    ],
+)
+async def test_a_call_a_lost_run_may_have_started_is_settled_by_its_effect_after_a_workspace_park(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    refusal: InfraException,
+    reason: ParkReason,
+) -> None:
+    loop = loop_over(tmp_path)
+    session_id = await loop.start()
+    await loop.say(session_id, "Note the fix.")
+    loop.anthropic.add(reply(use("note", use_id="use_note")), reply(said("Checked; done.")))
+    note = loop.tools["note"]
+    note.holds = True
+    lost = asyncio.ensure_future(loop.loops.run(loop.owner, session_id))
+    await note.started.wait()
+    prepare = loop.managers.tools.prepare_workspace
+
+    async def refused(*args: object, **kwargs: object) -> Workspace:
+        raise refusal
+
+    monkeypatch.setattr(loop.managers.tools, "prepare_workspace", refused)
+    parked = await loop.loops.run(loop.owner, session_id)
+    note.release.set()
+    await lost
+    monkeypatch.setattr(loop.managers.tools, "prepare_workspace", prepare)
+    await loop.managers.steps.append_inputs(
+        loop.owner, session_id, [control(loop, session_id, ControlCommand.UNLOCK)]
+    )
+    resumed = await loop.loops.run(loop.owner, session_id)
+
+    assert parked.park is not None and parked.park.reason is reason
+    assert resumed.outcome is LoopOutcome.SUCCEEDED
+    assert len(note.ran_as) == 1, "the unsafe call never runs a second time"
+    steps = await loop.history(session_id)
+    (request,) = of_type(steps, StepType.TOOL_REQUEST)
+    assert getattr(answer_to(steps, request).header, "failure", None) is ToolFailure.INTERRUPTED
+
+
+async def test_an_approved_call_held_back_by_a_park_runs_once_after_a_workspace_park(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    loop = loop_over(tmp_path)
+    session_id = await loop.start()
+    await loop.say(session_id, "Find the total and send it.")
+    loop.anthropic.add(
+        reply(use("lookup", use_id="use_lookup")),
+        reply(use("send", use_id="use_send")),
+        reply(said("Sent.")),
+    )
+    asked = await loop.loops.run(loop.owner, session_id)
+    assert asked.park is not None and asked.park.unlock == "approval"
+    send = next(
+        s
+        for s in of_type(await loop.history(session_id), StepType.TOOL_REQUEST)
+        if isinstance(s.header, ToolRequestHeader) and s.header.tool == "send"
+    )
+    await loop.managers.tools.decide_call(loop.owner, session_id, send.seq, approve=True)
+    prepare = loop.managers.tools.prepare_workspace
+
+    async def refused(*args: object, **kwargs: object) -> Workspace:
+        raise IsolationRefused("no host can give it the workspace yet")
+
+    monkeypatch.setattr(loop.managers.tools, "prepare_workspace", refused)
+    waiting = await loop.loops.run(loop.owner, session_id)
+    monkeypatch.setattr(loop.managers.tools, "prepare_workspace", prepare)
+    await loop.managers.steps.append_inputs(
+        loop.owner, session_id, [control(loop, session_id, ControlCommand.UNLOCK)]
+    )
+    sent = await loop.loops.run(loop.owner, session_id)
+
+    assert waiting.park is not None and waiting.park.reason is ParkReason.RESOURCE
+    assert sent.outcome is LoopOutcome.SUCCEEDED
+    assert loop.tools["send"].ran_as == [loop.owner.user_id], "it never ran, so it runs"
 
 
 async def test_a_cancel_answers_a_call_a_lost_run_may_have_started_as_unknown(

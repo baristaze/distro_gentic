@@ -238,10 +238,12 @@ class LoopManagerImpl(LoopManagerInterface):
                 # Its unlock happened: a new run takes it up, and its gates
                 # run again before its next call. A park the loop wrote
                 # itself came at a safe point, so the calls it held back
-                # never ran; a hand-over was written from outside, while a
-                # call may have been running, and is settled by effect.
+                # never ran. A hand-over was written from outside, while a
+                # call may have been running, and a park on the workspace
+                # may come before its run settled a lost run's calls: those
+                # are settled by effect.
                 session = await self._sessions.resume(ctx, session_id, epoch, loop_id)
-                resumed = loop.park.reason is not ParkReason.HANDOVER
+                resumed = loop.park.reason is not ParkReason.HANDOVER and not loop.park.unsettled
         kind = self._kinds.get(session.kind, session.kind_version)
         registry = ToolRegistry(
             (tool for tool in self._catalog if tool.spec.name in session.tools),
@@ -279,7 +281,12 @@ class LoopManagerImpl(LoopManagerInterface):
                 # no call spent. It waits on the resource and asks again.
                 log.warning("session %s waits for a workspace: %s", session_id, refused)
                 retry_at = self._clock() + self._options.workspace_wait
-                park = Park(reason=ParkReason.RESOURCE, unlock=WORKSPACE_UNLOCK, retry_at=retry_at)
+                park = Park(
+                    reason=ParkReason.RESOURCE,
+                    unlock=WORKSPACE_UNLOCK,
+                    retry_at=retry_at,
+                    unsettled=not resumed,
+                )
                 return await self._park(run, park)
             if refused.code != WorkspaceLost.code:
                 raise
@@ -287,7 +294,8 @@ class LoopManagerImpl(LoopManagerInterface):
             # from scratch in its stead, and a person says what comes next.
             # The loop parks with everything it reached kept.
             log.error("session %s lost its workspace: %s", session_id, refused)
-            return await self._park(run, Park(reason=ParkReason.PERSON, unlock=WORKSPACE_UNLOCK))
+            park = Park(reason=ParkReason.PERSON, unlock=WORKSPACE_UNLOCK, unsettled=not resumed)
+            return await self._park(run, park)
         try:
             if run.workspace.changed is not None:
                 # What changed under the model since its last loop, told
@@ -673,8 +681,8 @@ class LoopManagerImpl(LoopManagerInterface):
     def _never_ran(self, run: _Run, request: Step) -> bool:
         """Whether no run may have started a call: this run wrote it, or a
         park the loop wrote held it back. A run settles a lost run's calls
-        before it parks, so a call still open at such a park is one it
-        never started."""
+        before it parks, or marks the park unsettled, so a call still open
+        at a settled park is one it never started."""
         return request.id in run.made or run.resumed
 
     async def _recover_calls(self, run: _Run) -> LoopRun | None:
