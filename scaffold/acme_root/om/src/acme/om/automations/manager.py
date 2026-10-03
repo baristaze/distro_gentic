@@ -35,6 +35,27 @@ class AutomationsManagerInterface(ABC):
         ...
 
     @abstractmethod
+    async def update_automation(
+        self, ctx: TenantContext, automation_id: UUID, automation: Automation
+    ) -> Automation:
+        """The tenant's automation as edited, announced, by a person in person,
+        held to the create's checks: its trigger, its action, its limits,
+        whom it runs as, and whether it is enabled all change; its id, its
+        creator, and its creation stay. One that runs as its creator after the
+        edit is edited by its creator alone, since its brief is the creator's
+        word and it runs on the creator's authority: anyone else is
+        `NotAuthorized`. Another tenant's is `NotFound`."""
+        ...
+
+    @abstractmethod
+    async def list_automations(
+        self, ctx: TenantContext, after: UUID | None, limit: int
+    ) -> tuple[Automation, ...]:
+        """The tenant's automations by id, strictly after `after`; `limit` is
+        clamped."""
+        ...
+
+    @abstractmethod
     async def grant_principal(self, ctx: TenantContext, role: Role) -> AutomationPrincipal:
         """The tenant's automation principal granted `role`, by a person who
         manages its members, in person: a context an agent's call runs under

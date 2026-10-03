@@ -1,9 +1,11 @@
+from typing import Any
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, exists, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from acme.om.exceptions import TenantMismatch
+from acme.om.outbox.storage.tables.outbox_rows import OutboxRows
 from acme.om.outbox.types.row import OutboxRow
 from acme.om.projects.storage import ProjectStorageInterface
 from acme.om.projects.storage.tables.projects import Projects
@@ -11,7 +13,7 @@ from acme.om.projects.storage.tables.session_projects import SessionProjects
 from acme.om.projects.types.binding import SessionProject
 from acme.om.projects.types.project import Project
 from acme.om.storage.impl.pg_base import PgStorageBase, delete_batch, deleted
-from acme.om.storage.utils.translation import to_model, to_values
+from acme.om.storage.utils.translation import to_model, to_row, to_values
 
 
 class ProjectStoragePostgresImpl(PgStorageBase, ProjectStorageInterface):
@@ -25,6 +27,57 @@ class ProjectStoragePostgresImpl(PgStorageBase, ProjectStorageInterface):
         async with self._session_for(stmt, org_id=org_id) as session:
             row = (await session.execute(stmt)).scalar_one_or_none()
             return None if row is None else to_model(row, Project)
+
+    async def read_projects(self, org_id: UUID, after: UUID | None, limit: int) -> list[Project]:
+        stmt = select(Projects).where(Projects.org_id == org_id)
+        if after is not None:
+            stmt = stmt.where(Projects.id > after)
+        stmt = stmt.order_by(Projects.id).limit(limit)
+        async with self._session_for(stmt, org_id=org_id) as session:
+            rows = (await session.execute(stmt)).scalars().all()
+            return [to_model(row, Project) for row in rows]
+
+    async def write_project(
+        self, org_id: UUID, project: Project, outbox_rows: tuple[OutboxRow, ...]
+    ) -> bool:
+        values = {k: v for k, v in to_values(project, Projects).items() if k != "id"}
+        stmt = (
+            update(Projects)
+            .where(Projects.org_id == org_id, Projects.id == project.id)
+            .values(**values)
+            .returning(Projects.id)
+        )
+        return await self._landed(stmt, org_id, outbox_rows)
+
+    async def delete_project(
+        self, org_id: UUID, project_id: UUID, outbox_rows: tuple[OutboxRow, ...]
+    ) -> bool:
+        """The session rows are asked in the delete's own WHERE, so a session
+        row that stands when it runs keeps its project."""
+        in_use = exists().where(
+            SessionProjects.org_id == org_id, SessionProjects.project_id == project_id
+        )
+        stmt = (
+            delete(Projects)
+            .where(Projects.org_id == org_id, Projects.id == project_id, ~in_use)
+            .returning(Projects.id)
+        )
+        return await self._landed(stmt, org_id, outbox_rows)
+
+    async def _landed(
+        self, stmt: Any, org_id: UUID, outbox_rows: tuple[OutboxRow, ...]
+    ) -> bool:
+        """A statement that returns the project's id when it touched it, and
+        the rows that announce it, in one commit; nothing lands when it
+        touched none."""
+        async with self._session_for(Projects, org_id=org_id) as session:
+            if (await session.execute(stmt)).scalar_one_or_none() is None:
+                await session.rollback()
+                return False
+            for outbox_row in outbox_rows:
+                session.add(to_row(outbox_row, OutboxRows, org_id=org_id))
+            await session.commit()
+            return True
 
     async def bind_session(self, org_id: UUID, binding: SessionProject) -> SessionProject:
         """The insert meets the primary key when the session has a row, and

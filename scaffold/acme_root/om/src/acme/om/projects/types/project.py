@@ -4,8 +4,8 @@ workspace may reach, which secrets a command sees, retention's narrowing)
 are read through the project a session belongs to, and the session's own
 branch and pull request are work product on this repository alone.
 
-A project is written once. Its repository never moves, so the work product
-of every session already in it stays where it was."""
+A project's name may change. Its repository never moves, so the work
+product of every session already in it stays where it was."""
 
 from pydantic import Field, field_validator
 
