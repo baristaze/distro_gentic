@@ -310,6 +310,26 @@ class RelayStorageContract:
             await storage.write_binding(other, binding.model_copy(update={"version": 2}), 1, ())
         assert await storage.read_binding(org, session) == binding
 
+    async def test_bindings_are_read_across_tenants_in_id_order_a_page_at_a_time(
+        self, storage: RelayStorageInterface
+    ) -> None:
+        org, other = new_id(), new_id()
+        mine = {org: make_binding(new_id()), other: make_binding(new_id())}
+        for tenant, binding in mine.items():
+            await storage.write_binding(tenant, binding, 0, ())
+        # The database may hold other suites' rows: the pages are read to the end.
+        found: list[tuple[UUID, WorkspaceBinding]] = []
+        after: UUID | None = None
+        while page := await storage.read_bindings(after, 2):
+            assert len(page) <= 2
+            found.extend(page)
+            after = page[-1][1].id
+        ids = [binding.id for _, binding in found]
+        assert ids == sorted(ids)
+        assert set(mine.items()) <= set(found)
+        first = min(binding.id for binding in mine.values())
+        assert all(binding.id > first for _, binding in await storage.read_bindings(first, 100))
+
     # Purges.
 
     async def test_purge_session_takes_that_session_alone(

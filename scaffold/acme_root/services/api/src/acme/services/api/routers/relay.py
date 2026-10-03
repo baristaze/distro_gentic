@@ -1,5 +1,5 @@
 """The relay's routes: a host's own calls about the `exec` items it holds,
-and its answer to a workspace it was asked to prepare.
+and its answers to a workspace it was asked to prepare or to release.
 Each is a request the host opens from inside its wall with its own
 credential; the platform calls into no host. Its control stream, the one
 long-lived connection it holds, is `realtime/control.py`. Each function is
@@ -63,3 +63,10 @@ async def prepared(
     is, which binds the session to it, or why it made none, which hands the
     work back to its pool after a wait."""
     return await relay.prepared(rctx, host, item_id, body)
+
+
+@router.post("/hosts/me/workspaces/{item_id}/released", status_code=204)
+async def released(rctx: Rctx, relay: RelayService, host: Host, item_id: UUID) -> None:
+    """The host's answer to a release it claimed: the instance is gone, and
+    its files stay on the host."""
+    await relay.released(rctx, host, item_id)

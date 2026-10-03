@@ -7,7 +7,7 @@ storage, no settings."""
 import hmac
 import re
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import UTC, datetime
 from ipaddress import IPv4Address, IPv4Network, IPv6Address, IPv6Network, ip_address, ip_network
 from uuid import UUID
 
@@ -94,6 +94,15 @@ def session_branch(session_id: UUID) -> str:
 def snapshot_ref(branch: str, at: datetime) -> str:
     """The ref one release's snapshot of `branch` is pushed to."""
     return f"{SNAPSHOT_PREFIX}/{branch}/{at:%Y%m%dT%H%M%S%fZ}"
+
+
+def snapshot_at(ref: str) -> datetime | None:
+    """When the snapshot `snapshot_ref` named was taken, in UTC; None for a
+    ref it did not name."""
+    try:
+        return datetime.strptime(ref.rsplit("/", 1)[-1], "%Y%m%dT%H%M%S%fZ").replace(tzinfo=UTC)
+    except ValueError:
+        return None
 
 
 # The egress a session pins.

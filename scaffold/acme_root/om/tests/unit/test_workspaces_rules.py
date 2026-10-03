@@ -327,3 +327,9 @@ def test_every_other_write_acts_outward(write: RepositoryWrite, why: str) -> Non
 def test_a_projects_work_product_is_named_by_its_repository(repository: str, key: str) -> None:
     binding = RepositoryBinding(project_id=new_id(), repository=repository)
     assert rules.project_key(binding) == key
+
+
+def test_a_snapshot_ref_tells_when_it_was_taken() -> None:
+    at = utcnow()
+    assert rules.snapshot_at(rules.snapshot_ref(rules.session_branch(new_id()), at)) == at
+    assert rules.snapshot_at(f"{rules.SNAPSHOT_PREFIX}/main") is None

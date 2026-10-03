@@ -113,6 +113,7 @@ class Host:
             provider,
             managers.tools,
             managers.workspaces,
+            managers.agent_sessions,
             managers.steps,
             managers.work,
             managers.tenancy,

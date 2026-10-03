@@ -92,6 +92,15 @@ class RelayStorageInterface(ABC):
     async def read_binding(self, org_id: UUID, session_id: UUID) -> WorkspaceBinding | None: ...
 
     @abstractmethod
+    async def read_bindings(
+        self, after: UUID | None, limit: int
+    ) -> list[tuple[UUID, WorkspaceBinding]]:
+        """Cross-tenant, for the sweep: the bindings in id order after the one
+        `after` names when it names one, each with its tenant, at most
+        `limit`."""
+        ...
+
+    @abstractmethod
     async def purge_session(self, org_id: UUID, session_id: UUID, limit: int) -> int:
         """At most `limit` rows of each table that hold the session's: its
         items, their parts and controls, and its binding; returns how many

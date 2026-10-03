@@ -6,8 +6,9 @@ maintenance worker's claim loop: a lease it renews while the loop runs, a
 fence that cancels a run whose lease is lost, a liveness beat, and a drain
 on stop. A claimed loop over its tenant's fair share goes back to its lane
 before it runs. Its sweep takes back the expired leases, relays the outbox
-a crash left, and lets go of each workspace instance this host holds that
-no run accounts for (`workspaces.HeldWorkspacesSweep`). It purges no
+a crash left, and lets go of each workspace instance this host, or a
+tenant's host, holds that no run accounts for
+(`workspaces.HeldWorkspacesSweep`). It purges no
 rows."""
 
 import argparse
@@ -68,10 +69,12 @@ def build_runner(container: RunnerContainer, lane: str | None = None) -> WorkerL
         container.infra.get_workspaces(),
         managers.tools,
         managers.workspaces,
+        managers.agent_sessions,
         managers.steps,
         managers.work,
         managers.tenancy,
         HeldOptions(grace=timedelta(seconds=container.settings.runner_workspace_grace_seconds)),
+        relay=managers.relay,
     )
     return WorkerLoop(
         work=managers.work,

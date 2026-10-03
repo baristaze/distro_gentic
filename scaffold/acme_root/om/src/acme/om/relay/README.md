@@ -27,6 +27,9 @@ platform's cloud. Each call crosses the wall as `exec`
 - **A prepare**: `workspace` work on the lane of the session's pool,
   asking any host of the pool to make the session's workspace to its
   pinned isolation.
+- **A release**: `workspace` work on the lane of the host that holds the
+  session's workspace, asking it to let the instance go and keep its
+  files.
 
 ## What can happen
 
@@ -38,6 +41,13 @@ platform's cloud. Each call crosses the wall as `exec`
   One that cannot make it hands the ask back to the pool after a wait.
   A session whose host is offline waits for it; one whose host was
   revoked asks the pool again.
+- **Release.** The runner's sweep finds a workspace a host holds that no
+  run accounts for past its grace, among the bindings. It pushes the
+  checkout's work through the relay first, then asks the holding host,
+  while that host is live and online, to let the instance go. One release
+  waits at a time. Only that host answers it, and its answer completes
+  the work. A release that waits when a prepare is asked is ended, since
+  no live host is left holding the workspace.
 - **Send.** The runner's transport sends each operation of a call. A new
   one goes on the lane of the host that holds the workspace. One the
   call sent before is met as it stands, so a run that resumes after a
@@ -91,4 +101,7 @@ gateway serves the host's calls and its control stream. The maintenance
 worker settles items whose lease ran out and purges a tenant's rows. The
 runner's tools find a pinned session's workspace on its host
 (`impl/workspaces.PlacedWorkspacesRelayedImpl`), and the host's answer to a
-prepare binds it with `bind_workspace` (`prepared`).
+prepare binds it with `bind_workspace` (`prepared`). The runner's sweep
+reads the bindings (`bindings`), reaches a holding host through `holder`,
+and asks it to let an instance go with `ask_release`; the host answers
+with `released`.
