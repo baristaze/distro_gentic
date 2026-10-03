@@ -71,6 +71,9 @@ MAX_MATCHES = 100
 MAX_MATCH_TEXT = 200
 MAX_SEARCH_OUTPUT = 400_000  # characters of the search's output it reads, at most
 NO_NUL = r"^[^\x00]*$"
+# A line break splits grep's pattern into several, any of which matches, and
+# an empty one matches every line: a search's pattern is one line.
+ONE_LINE = r"^[^\x00\r\n]*$"
 
 
 class NativeToolImpl(ToolInterface):
@@ -299,7 +302,7 @@ class EditFileImpl(FileChangeImpl):
 
 
 class SearchCodeInput(ToolInput):
-    pattern: str = Field(min_length=1, max_length=500, pattern=NO_NUL)
+    pattern: str = Field(min_length=1, max_length=500, pattern=ONE_LINE)
     path: str = Field(default=".", min_length=1, max_length=MAX_PATH, pattern=NO_NUL)
     limit: int = Field(default=50, ge=1, le=MAX_MATCHES)
 

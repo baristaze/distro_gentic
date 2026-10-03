@@ -43,6 +43,7 @@ from acme.infra.workspaces import (
 )
 from acme.infra.workspaces.host import WorkspaceHostImpl
 from acme.integrations.model_providers.calls import ModelCall, ModelReply
+from acme.om import base
 from acme.om.agent_sessions.types.agent_session import SessionStatus
 from acme.om.agents.types.kind import AgentKind, DoneRule
 from acme.om.agents.types.result import Claim
@@ -89,9 +90,9 @@ from acme.om.steps.types.header import LoopOutcome, ToolFailure
 from acme.om.steps.types.step import Step
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import permissions_of
-from acme.om.tools.tool import ToolInterface
+from acme.om.tools.tool import ToolInterface, ToolRuntime
 from acme.om.tools.types.policy import Decision, PolicyRule, ToolPolicy
-from acme.om.tools.types.tool import ToolClass
+from acme.om.tools.types.tool import ToolClass, ToolInput
 from acme.om.work.storage.impl.memory import WorkStorageMemoryImpl
 from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
 
@@ -936,3 +937,33 @@ async def test_a_search_of_one_file_answers_its_matching_line(tmp_path: Path) ->
         "matches": [{"path": "src/cart.py", "line": 2, "text": "value = 'needle'"}],
         "more": False,
     }
+
+
+class WatchedSearch(SearchCodeImpl):
+    """The search, counting the times it runs."""
+
+    def __init__(self) -> None:
+        self.runs = 0
+
+    async def run(
+        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
+    ) -> base.Platform:
+        self.runs += 1
+        return await super().run(ctx, call_input, runtime)
+
+
+async def test_a_pattern_of_more_than_one_line_is_refused_before_it_runs(
+    tmp_path: Path,
+) -> None:
+    ctx = context(Role.SERVICE, make_org())
+    tools = on_the_host(tmp_path)
+    workspace = await tools.manager.prepare_workspace(ctx, new_id(), HOST_SPEC)
+    (Path(workspace.location) / "kept.py").write_text("needle\nhaystack\n")
+    search = WatchedSearch()
+    for pattern in ("needle\n", "needle\r", "\nneedle", "needle\r\nhay"):
+        response = await called(tools, search, ctx, workspace, pattern=pattern)
+        assert failure_of(response) is ToolFailure.INVALID_INPUT, pattern
+    assert search.runs == 0
+    response = await called(tools, search, ctx, workspace, pattern="needle")
+    assert [m["text"] for m in json.loads(result_text(response))["matches"]] == ["needle"]
+    assert search.runs == 1
