@@ -33,7 +33,9 @@ delivered commit holds there. It is written in as files, with no
 credential and no history. Each check's command template runs with
 `{version}` and `{out}` filled, under the environment of the instance's
 image and its transport. Each trial's results stream is read back within
-the run's bound, and the executor hashes what it read. The instance and
+the run's bound, and the executor hashes what it read. A trial that
+crashes, runs past its time, or writes no run it can read is an errored
+run, so every trial counts. The instance and
 its command records are destroyed when the run ends, whatever ended it.
 
 Outside `local`, every root wires this executor in place of the loud
@@ -52,7 +54,8 @@ checks may need what its pool is pinned for. The tree is written in, the
 checks run, and the results stream is read back, each as `exec` work,
 and the executor hashes what it read. A trial's stream is read in one
 item, whose result crosses the wall whole: a stream longer than one
-carries is refused at once, naming that bound, never waited on. When the
+carries is read no further, never waited on, and its trial is an errored
+run that names that bound. When the
 run ends, whatever ended it, the holding host is asked to purge the
 instance, or the prepare that waits is ended, and the relay's rows of the
 instance go at once. A root that reaches no
