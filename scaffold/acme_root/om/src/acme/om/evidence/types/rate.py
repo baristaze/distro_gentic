@@ -22,7 +22,7 @@ class Bound(StrEnum):
 
 
 class AbortRule(StrEnum):
-    """How a trial a safety stop ended is classified. It is never dropped."""
+    """How a trial an abort ended is classified. It is never dropped."""
 
     FAILURE = "failure"  # it counts as a failure
     INCONCLUSIVE = "inconclusive"  # any such trial leaves the claim without a conclusion
@@ -32,7 +32,7 @@ class RateRule(Platform):
     """A rate a check's failures must stay under, declared before its
     trials: the most failures it may show as a rate, the confidence of the
     bound, how the bound is computed, the trials to run, and the rule for a
-    trial a safety stop ended. An exact or a Wilson bound runs `trials`
+    trial an abort ended. An exact or a Wilson bound runs `trials`
     trials, every one of them. A sequential test runs at most `trials`, and
     stops at the first trial where its bound falls under `max_rate`, or
     where no trial left could bring it there; `alternative` is the rate it

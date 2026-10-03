@@ -9,7 +9,7 @@ count, or a sequential test valid under optional stopping, is declared
 before the trials. Acceptance judges the chain of evidence against a
 hidden suite, never the presence of files. Benchmarks keep scored runs
 against a baseline, pinned to what produced them, with candidate and
-baseline trials interleaved on one station.
+baseline trials interleaved on one executor.
 
 Each leaves a choice open. Which sequential test, and what its bound
 reports. What "the chain" is made of, and where the hidden suite's runs
@@ -50,7 +50,7 @@ refused. A trial's score is the share of the links held.
 
 **A benchmark runs its own baseline, interleaved.** Each run of a
 scenario holds trials of both arms, scheduled candidate, baseline,
-baseline, candidate, on one station. So the baseline's score is measured
+baseline, candidate, on one executor. So the baseline's score is measured
 under the conditions the candidate's was, and a drift over the run falls
 on both. Any lower candidate score is flagged. A benchmark is a global
 row an operator records, written once, and no purge reaches it. What

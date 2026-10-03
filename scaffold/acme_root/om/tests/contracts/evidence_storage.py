@@ -49,7 +49,7 @@ in this module that presents another tenant's."""
 HASH = "ab" * 32
 
 
-def make_policy(project: str = "arm") -> ValidationPolicy:
+def make_policy(project: str = "checkout") -> ValidationPolicy:
     now = utcnow()
     actor = new_id()
     return ValidationPolicy(
@@ -90,7 +90,7 @@ def make_record(
         id=new_id(),
         created_at=now,
         session_id=session_id,
-        project="arm",
+        project="checkout",
         purpose=purpose,
         step_id=step_id,
         validation_id=validation_id,
@@ -111,7 +111,7 @@ def make_record(
             passed=int(outcome is RunOutcome.PASSED), failed=int(outcome is RunOutcome.FAILED)
         ),
         artifacts=(ArtifactRef(name="log.txt", sha256=HASH, provenance=Provenance.REAL),),
-        dependencies=(Dependency(name="arm", provenance=provenance),),
+        dependencies=(Dependency(name="browser", provenance=provenance),),
         abort="the guard stopped it" if outcome is RunOutcome.ABORTED else None,
     )
 
@@ -121,7 +121,7 @@ def make_validation(
     *runs: int,
     version: str = "c0ffee",
     executor: str = "executor-1",
-    project: str = "arm",
+    project: str = "checkout",
 ) -> tuple[Validation, tuple[ExecutionRecord, ...]]:
     validation_id = new_id()
     records = tuple(
@@ -181,10 +181,10 @@ class EvidenceStorageContract:
 
     async def test_a_policy_round_trips(self, storage: EvidenceStorageInterface) -> None:
         org = new_id()
-        assert await storage.read_policy(org, "arm") is None
+        assert await storage.read_policy(org, "checkout") is None
         policy = make_policy()
         assert await storage.create_policy(org, policy, ())
-        assert await storage.read_policy(org, "arm") == policy
+        assert await storage.read_policy(org, "checkout") == policy
         assert await storage.read_policy(org, "other") is None
 
     async def test_a_project_holds_one_policy(self, storage: EvidenceStorageInterface) -> None:
@@ -195,7 +195,7 @@ class EvidenceStorageContract:
         with pytest.raises(UniqueKeyTaken):
             await storage.create_policy(org, make_policy(), ())
         assert await storage.create_policy(org, make_policy("leg"), ())
-        assert await storage.read_policy(org, "arm") == first
+        assert await storage.read_policy(org, "checkout") == first
 
     async def test_create_policy_under_another_tenant_is_not_read_here(
         self, storage: EvidenceStorageInterface
@@ -204,13 +204,13 @@ class EvidenceStorageContract:
         policy = make_policy()
         assert await storage.create_policy(org_a, policy, ())
         assert not await storage.create_policy(org_b, policy, ())
-        assert await storage.read_policy(org_b, "arm") is None
+        assert await storage.read_policy(org_b, "checkout") is None
 
     async def test_read_policy_of_another_tenant_finds_nothing(
         self, storage: EvidenceStorageInterface
     ) -> None:
         assert await storage.create_policy(new_id(), make_policy(), ())
-        assert await storage.read_policy(new_id(), "arm") is None
+        assert await storage.read_policy(new_id(), "checkout") is None
 
     async def test_write_policy_is_a_compare_and_set(
         self, storage: EvidenceStorageInterface
@@ -220,10 +220,10 @@ class EvidenceStorageContract:
         assert await storage.create_policy(org, policy, ())
         moved = policy.model_copy(update={"protected": ("**",), "version": 2})
         await storage.write_policy(org, moved, 1, ())
-        assert await storage.read_policy(org, "arm") == moved
+        assert await storage.read_policy(org, "checkout") == moved
         with pytest.raises(PreconditionFailed):
             await storage.write_policy(org, moved.model_copy(update={"version": 3}), 1, ())
-        assert await storage.read_policy(org, "arm") == moved
+        assert await storage.read_policy(org, "checkout") == moved
 
     async def test_write_policy_of_another_tenant_changes_nothing(
         self, storage: EvidenceStorageInterface
@@ -233,7 +233,7 @@ class EvidenceStorageContract:
         assert await storage.create_policy(org_a, policy, ())
         with pytest.raises(PreconditionFailed):
             await storage.write_policy(org_b, policy.model_copy(update={"version": 2}), 1, ())
-        assert await storage.read_policy(org_a, "arm") == policy
+        assert await storage.read_policy(org_a, "checkout") == policy
 
     # The runs.
 
@@ -431,7 +431,7 @@ class EvidenceStorageContract:
         assert await storage.create_record(kept, kept_run)
         assert await storage.purge_tenant(gone, 10) == 5
         assert await storage.purge_tenant(gone, 10) == 0
-        assert await storage.read_policy(gone, "arm") is None
+        assert await storage.read_policy(gone, "checkout") is None
         assert await storage.read_records(gone, session, None, 10) == []
-        assert await storage.read_policy(kept, "arm") == stays
+        assert await storage.read_policy(kept, "checkout") == stays
         assert await storage.read_records(kept, kept_run.session_id, None, 10) == [kept_run]

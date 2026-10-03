@@ -35,9 +35,9 @@ the changed text changes with it.
   line; nothing inside may close it. Tags follow How to Read This, in
   the spec.
 - The spec borrows a product's nouns in its examples only, to
-  illustrate, and stations are its optional section. Nothing else here
-  carries product or hardware vocabulary, and nothing outside the spec
-  names a repository but the guideline and the engine.
+  illustrate. Nothing else here carries product or hardware vocabulary,
+  and nothing outside the spec names a repository but the guideline and
+  the engine.
 
 ## Layout
 

@@ -138,7 +138,7 @@ def rate_claim(
     alternative: float | None = None,
 ) -> RateClaim:
     """What every trial of a check at a version shows. A trial that did not
-    pass, or passed no case, is a failure; one a safety stop ended counts as
+    pass, or passed no case, is a failure; one an abort ended counts as
     one too, under the rule that lets it be counted at all. No trial is
     dropped. A sequential bound takes the alternative its test declared."""
     failures = sum(1 for record in trials if not record.passing)

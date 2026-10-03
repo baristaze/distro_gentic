@@ -55,7 +55,7 @@ def make_link(external_id: str = "U024BE7LH", user_id: UUID | None = None) -> Ac
     )
 
 
-def make_binding(handle: str = "acme/robot#12", session_id: UUID | None = None) -> WorkBinding:
+def make_binding(handle: str = "acme/checkout#12", session_id: UUID | None = None) -> WorkBinding:
     return WorkBinding(
         id=new_id(),
         created_at=utcnow(),

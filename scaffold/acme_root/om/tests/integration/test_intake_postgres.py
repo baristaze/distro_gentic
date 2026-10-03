@@ -124,7 +124,7 @@ async def test_a_failing_check_wakes_its_session_and_fires_a_bounded_run_over_po
         author=Author(kind=AuthorKind.BOT, external_id="ci", name="ci"),
         names=WorkNames(branch="agent/fix"),
         check=CheckState.FAILED,
-        text="tests/test_gripper.py::test_grip FAILED",
+        text="tests/test_payments.py::test_refund FAILED",
         occurred_at=now,
     )
     routed = await platform.intake.route(platform.service, check)

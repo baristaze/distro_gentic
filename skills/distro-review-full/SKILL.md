@@ -1,13 +1,13 @@
 ---
 name: distro-review-full
-description: "Full platform review: the nine lens groups of the distro_gentic spec run in parallel beside the engine's and the guideline's full reviews, and the three layers merge into one report. Use before a pull request to platform code, or when a change crosses groups."
+description: "Full platform review: the eight lens groups of the distro_gentic spec run in parallel beside the engine's and the guideline's full reviews, and the three layers merge into one report. Use before a pull request to platform code, or when a change crosses groups."
 allowed-tools: Read, Grep, Glob, Agent, Skill, Bash(git diff:*), Bash(git show:*), Bash(git log:*), Bash(git status:*), Bash(git rev-parse:*), Bash(git merge-base:*), Bash(git symbolic-ref:*), Bash(git ls-files:*)
 ---
 
 # distro-review-full
 
 A platform stands on two layers, and its full review judges all three,
-each once. This skill runs the platform's nine lens groups over one
+each once. This skill runs the platform's eight lens groups over one
 scope, in parallel, each by its own reviewer so that no perspective is
 diluted by another. The layers beneath have full reviews of their own,
 and those are theirs to run: the engine's `agentic-review-full`, from
@@ -24,7 +24,7 @@ reads them (see `../distro-review-placement/SKILL.md`, Input; a path
 that starts with `../` is read from this skill's folder as `realpath`
 resolves it). Resolve the scope once, here, into a concrete
 description (the list of files, or the range or commit) and hand the
-same description to every reviewer of this layer so the nine reports
+same description to every reviewer of this layer so the eight reports
 cover the same ground. A range or a commit is handed over as the ref,
 with its list of files, and the reviewer reads each file at the
 range's end or the commit, never from the working tree. `all` and a
@@ -35,7 +35,7 @@ itself with the same call, and reads the working tree, never that
 commit, which only records where `HEAD` stood. The layers beneath get
 the arguments as given, and resolve them by the same rules. An empty
 scope is reported as "nothing to review" and the skill stops. `all`
-costs nine full reads of the repository for this layer, and the layers
+costs eight full reads of the repository for this layer, and the layers
 beneath add their own; a path or a range is the cheaper question
 whenever the change is narrower than the tree.
 
@@ -63,7 +63,7 @@ whenever the change is narrower than the tree.
    never judges a lens of that layer in its place.
 4. Where the agent can start subagents, launch every reviewer of the
    three layers at once: those each skill beneath launches, as it says,
-   and this layer's nine, one per group. Each of the nine gets the
+   and this layer's eight, one per group. Each of the eight gets the
    scope line, the group name, the absolute path of its lens file
    (`<catalog>/<group>.md`), and the absolute path of the spec. Use the
    `distro-reviewer` agent that `../../agents/distro-reviewer.md`
@@ -78,11 +78,10 @@ whenever the change is narrower than the tree.
    read-only (it never edits, stages, or commits, and never runs a file
    of the repository under review), and that it returns its report
    within 80 turns, the cap `distro-reviewer` holds. Where the agent
-   has no subagents, run the nine group procedures one after another in
+   has no subagents, run the eight group procedures one after another in
    this session, and each layer beneath as its skill says. The groups:
    - `distro-review-placement`
    - `distro-review-workspaces`
-   - `distro-review-stations`
    - `distro-review-watch`
    - `distro-review-intake`
    - `distro-review-evidence`
@@ -103,7 +102,7 @@ whenever the change is narrower than the tree.
    report that skill would write. That report is kept for step 7 and
    never written out on its own. A layer beneath whose run fails is
    reported as not run, with the error.
-6. Merge this layer's nine reports:
+6. Merge this layer's eight reports:
    - First write every path repository-relative, as `git ls-files`
      prints it at the root: no leading `./`, no absolute prefix, no
      `<ref>:`. The matching and sorting below compare these.
@@ -163,7 +162,7 @@ per-layer table, and a per-group table of this layer:
 
 **Scope.** <the scope line>
 **Layers.** platform, engine, guideline (a layer not run: `<layer> (not run: <why>)`)
-**Groups.** placement, workspaces, stations, watch, intake, evidence, wall, money, fleet
+**Groups.** placement, workspaces, watch, intake, evidence, wall, money, fleet
 **Lenses.** <n> applied, <p> passed, <f> findings, <u> unverified, <x> not applicable
 
 ## Findings
@@ -188,7 +187,6 @@ per-layer table, and a per-group table of this layer:
 |------------|---------|--------|----------|------------|----------------|
 | placement  |         |        |          |            |                |
 | workspaces |         |        |          |            |                |
-| stations   |         |        |          |            |                |
 | watch      |         |        |          |            |                |
 | intake     |         |        |          |            |                |
 | evidence   |         |        |          |            |                |

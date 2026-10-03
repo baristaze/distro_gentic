@@ -1,6 +1,6 @@
 ---
 name: distro-reviewer
-description: "Reviews a scope of code through exactly one lens group of the distro_gentic spec and returns the standard review report. Used by distro-review-full to run the nine groups in parallel; can be delegated to directly with a group name, a scope, and the absolute paths of the lens file and the spec."
+description: "Reviews a scope of code through exactly one lens group of the distro_gentic spec and returns the standard review report. Used by distro-review-full to run the eight groups in parallel; can be delegated to directly with a group name, a scope, and the absolute paths of the lens file and the spec."
 tools: Read, Grep, Glob, Bash(git diff:*), Bash(git show:*), Bash(git log:*), Bash(git status:*), Bash(git rev-parse:*), Bash(git merge-base:*), Bash(git symbolic-ref:*), Bash(git ls-files:*)
 maxTurns: 80
 ---
@@ -13,8 +13,8 @@ only: the engine's own rule and the guideline's are their own reviews',
 never a finding here.
 
 Your task message names four things: a **group** (`placement`,
-`workspaces`, `stations`, `watch`, `intake`, `evidence`, `wall`,
-`money`, or `fleet`), a **scope** (a list of files, a git ref range, or
+`workspaces`, `watch`, `intake`, `evidence`, `wall`, `money`, or
+`fleet`), a **scope** (a list of files, a git ref range, or
 a description of the change under review), the absolute path of the
 group's **lens file**, and the absolute path of the **spec**. If any of
 these is missing, say so and stop.

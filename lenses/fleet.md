@@ -32,18 +32,20 @@ powers its profile does not set.
 
 **Check.** review
 
-## FLT-02 A validation session runs a check with no agent
+## FLT-02 A validation session runs a delivery's checks with no agent
 
-**Principle.** A validation session runs a check on a station with no
-agent at all, on the same queue and the same record.
+**Principle.** A validation session runs a delivery's checks with no
+agent at all, on a fresh executor (a workspace nobody used, never the
+agent's), on the same queue, and writes the same execution record.
 
 **Source.** The Agents a Platform Ships.
 
-**Look for.** How a validation session runs; the queue it uses; the
-records it writes.
+**Look for.** How a validation session runs; the executor it runs on;
+the queue it uses; the records it writes.
 
 **Violation.** A validation session that makes a model call; one that
-runs off the work queue, or writes records of another shape.
+runs off the work queue, or writes records of another shape. (One run in
+the agent's workspace or on a reused executor is EVD-06.)
 
 **Severity.** medium
 
@@ -56,8 +58,7 @@ run their part of the platform. It explains the product, citing a
 corpus. It diagnoses live state with tools, never with guesses. It
 drafts configuration, validates it against the tenant's real records,
 and shows the difference from what is live; a person applies it. Its
-authority is delegated, and it has no workspace, repository, shell, or
-station.
+authority is delegated, and it has no workspace, repository, or shell.
 
 **Source.** The Agents a Platform Ships.
 
@@ -65,8 +66,8 @@ station.
 draft becomes live configuration.
 
 **Violation.** An assistant tool that applies configuration; an
-assistant with a workspace, a repository, a shell, or a station; an
-assistant with steady authority.
+assistant with a workspace, a repository, or a shell; an assistant with
+steady authority.
 
 **Severity.** high
 
@@ -137,18 +138,17 @@ parked session woken at the same instant.
 ## FLT-07 Every cloud worker runs the sweep, and a beat is no trigger
 
 **Principle.** Sessions die with their runners, and the platform notices
-through the guideline's sweep, which every cloud worker runs; hosts and
-daemons, not worker roles, never run it. A runner's beat is a signal,
-never a trigger.
+through the guideline's sweep, which every cloud worker runs; hosts, not
+worker roles, never run it. A runner's beat is a signal, never a
+trigger.
 
 **Source.** Failure at Fleet Scale.
 
 **Look for.** Which processes run the sweep; what a runner's beat
 causes.
 
-**Violation.** A host or a daemon that runs the sweep; a cloud worker
-role that does not; a recovery that a missed beat starts, rather than
-the sweep.
+**Violation.** A host that runs the sweep; a cloud worker role that does
+not; a recovery that a missed beat starts, rather than the sweep.
 
 **Severity.** medium
 
@@ -158,11 +158,10 @@ the sweep.
 
 **Principle.** The platform adds its duties to the sweep: an expired
 loop is requeued; an expired `exec` item follows the relay transport; a
-station lease past its expiry and margin is freed; a workspace instance
-nobody claims is purged; a hold nobody settled settles; an approval past
-its expiry is asked again; a line entry for a session that no longer
-waits is removed; a session with a pending input and no queued loop is
-woken; and expired content's keys are revoked and expired shape purged.
+workspace instance nobody claims is purged; a hold nobody settled
+settles; an approval past its expiry is asked again; a session with a
+pending input and no queued loop is woken; and expired content's keys
+are revoked and expired shape purged.
 
 **Source.** Failure at Fleet Scale.
 
@@ -170,7 +169,7 @@ woken; and expired content's keys are revoked and expired shape purged.
 
 **Violation.** A duty missing from the sweep, or run by a scheduler, a
 runner's beat, or a host. (Each duty's own rule is its lens: FLT-09,
-PLC-20, STN-07, WSP-01, FLT-10, STN-02, WAL-12.)
+PLC-20, WSP-01, FLT-10, WAL-12.)
 
 **Severity.** medium
 
@@ -217,10 +216,10 @@ can be retrieved.
 every system: each task that repeats is a skill a person runs with an
 agent, and the boundary is the credential it holds. The scaffold ships
 the platform's operational skills beside the guideline's own
-(`ops-session-stuck`, `ops-host-idle`, `ops-station-idle`,
-`ops-integration-silent`, `ops-provider-outage`, `audit-model-spend`),
-and makes two of the guideline's optional audits required,
-`audit-provider-calls` and `audit-credential-lifetimes`.
+(`ops-session-stuck`, `ops-host-idle`, `ops-integration-silent`,
+`ops-provider-outage`, `audit-model-spend`), and makes two of the
+guideline's optional audits required, `audit-provider-calls` and
+`audit-credential-lifetimes`.
 
 **Source.** Operations.
 
@@ -240,8 +239,8 @@ operational skills missing; `audit-provider-calls` or
 
 **Principle.** The operator dashboard, declared as code, adds the
 platform's signals, each with a bounded label: parks by reason and age,
-loop lanes' depth by plan tier, hosts and stations by pool, cache hit
-rates, and spend by matrix version. Views of one tenant or one host are
+loop lanes' depth by plan tier, hosts by pool, cache hit rates, and
+spend by matrix version. Views of one tenant or one host are
 operator-plane reads, never labels.
 
 **Source.** Operations.
@@ -256,8 +255,7 @@ signals missing.
 
 **Check.** `distro-check` decides that no metric whose label names are a
 literal or a module constant is labelled by a tenant, a host, a session,
-a person, a request, a workspace, a station, or a project; the rest is
-judged.
+a person, a request, a workspace, or a project; the rest is judged.
 
 ## FLT-13 One run's request id crosses the runner, the host, and its steps
 

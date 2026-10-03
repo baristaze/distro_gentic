@@ -195,11 +195,10 @@ optional stopping.
 
 ## EVD-09 Every trial counts, and candidate and baseline interleave
 
-**Principle.** The gate counts every trial at that version, and a trial
-aborted by a safety stop is classified by a declared rule, never
-dropped. Candidate and baseline trials interleave on the same station,
-and a claim across many scenarios corrects for the number of
-comparisons.
+**Principle.** The gate counts every trial at that version, and an
+aborted trial is classified by a declared rule, never dropped. Candidate
+and baseline trials interleave on the same host, and a claim across
+many scenarios corrects for the number of comparisons.
 
 **Source.** Evidence, Statistical Evidence.
 
@@ -209,7 +208,7 @@ across scenarios is corrected.
 
 **Violation.** A trial at the version dropped from the count; an aborted
 trial dropped, or classified by no declared rule; candidate and baseline
-run in separate blocks or on different stations; a claim across
+run in separate blocks or on different hosts; a claim across
 scenarios with no correction for the number of comparisons.
 
 **Severity.** high
@@ -246,8 +245,8 @@ recorded as succeeded; a claim that cites no run.
 check is declared: a command template, its kind, the capabilities it
 needs, and the version of the results schema it writes. A run writes a
 strict, versioned results file and streams its cases as they finish. A
-compatibility check refuses a run before any station is leased. One
-collector serves every place a check can run.
+compatibility check refuses a run before anything runs. One collector
+serves every place a check can run.
 
 **Source.** Evidence, The Results Contract.
 
@@ -256,8 +255,8 @@ version; where compatibility is checked; the collectors.
 
 **Violation.** A test runner the platform requires; a check with no
 declared template, kind, capabilities, or schema version; a lenient or
-unversioned results file; an incompatible run found only after a station
-is leased; a second collector for a place a check runs.
+unversioned results file; an incompatible run found only after it
+started; a second collector for a place a check runs.
 
 **Severity.** medium
 

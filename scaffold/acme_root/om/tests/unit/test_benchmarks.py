@@ -1,7 +1,7 @@
 """A benchmark keeps every trial of a scenario, each arm pinned to the
 agent kind, its version, and the fill set that produced it, with the
 verdict that judged it, its score, and its cost; candidate and baseline
-trials interleave on one station; and a candidate that scores under its
+trials interleave on one executor; and a candidate that scores under its
 baseline is flagged."""
 
 import pytest
@@ -98,7 +98,7 @@ async def test_a_run_that_changed_the_kind_beside_the_model_qualifies_nothing(
             assert qualifications(await benchmarks.record(admin, run), RUN) == ()
 
 
-# The arms interleave on one station.
+# The arms interleave on one executor.
 
 
 def test_the_schedule_interleaves_the_arms() -> None:
@@ -130,10 +130,10 @@ async def test_trials_that_do_not_interleave_are_refused(
     assert await benchmarks.history(admin, "orders-vanish", 10) == ()
 
 
-async def test_trials_on_two_stations_are_refused(benchmarks: BenchmarksManagerImpl) -> None:
+async def test_trials_on_two_executors_are_refused(benchmarks: BenchmarksManagerImpl) -> None:
     run = make_trials([WHOLE], [WHOLE])
-    moved = (run.trials[0], run.trials[1].model_copy(update={"station": "station-2"}))
-    with pytest.raises(ValidationFailed, match="more than one station"):
+    moved = (run.trials[0], run.trials[1].model_copy(update={"executor": "executor-2"}))
+    with pytest.raises(ValidationFailed, match="more than one executor"):
         await benchmarks.record(operator(), run.model_copy(update={"trials": moved}))
 
 
