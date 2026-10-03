@@ -10,7 +10,8 @@ kinds of thing [Acme is made of](../../../../README.md).
   status (queued, claimed, done, failed), when it becomes available,
   who claimed it and until when, its attempts, and its last error.
 - **Kind**: the job's shape, with a fixed payload and the permission a
-  person needs to ask for it. The core has eight: `NOOP`, a step of an
+  person needs to ask for it, held in one registry (`kinds.py`) that the
+  platform's kinds and a product's go through alike. The core has eight: `NOOP`, a step of an
   `ORCHESTRATION`, `WAKE_PARKED` for the records a cleared reason
   frees, `DELETE_ACCOUNT` and `DELETE_ORG` for the identity provider's
   side of a deletion, `WAKE_SESSION` and `WAKE_SESSIONS` for the
@@ -18,8 +19,8 @@ kinds of thing [Acme is made of](../../../../README.md).
   a session's loop, which the session runner runs. The platform adds
   `VALIDATION`, a validation session's check, which its own worker runs
   on a fresh executor, and two that a host claims through the gateway:
-  `EXEC` and `WORKSPACE`. A kind whose payload names a time waits until
-  then.
+  `EXEC` and `WORKSPACE`. A product registers its own at its root. A
+  kind whose payload names a time waits until then.
 - **Lane**: a routing name, which
   [placement](../placement/README.md) answers at every enqueue. A
   worker serves one lane.
@@ -67,7 +68,9 @@ kinds of thing [Acme is made of](../../../../README.md).
 
 A write that starts work lands a `work.<kind>` outbox row beside its
 own, and the relay enqueues the item under the row's id; a namespace
-never enqueues across a role itself. A new kind adds its name to
-`WorkKind`, its payload to `WORK_PAYLOADS`, its permission to
-`WORK_ENQUEUE_PERMISSIONS`, and its handler to the worker. A handler
+never enqueues across a role itself. A kind of the platform's adds its
+name to `WorkKind`, its `WorkKindSpec` to `WORK_KINDS` (or placement's
+`PLACED_KINDS`, when a host claims it), and its handler to the worker. A
+product's kind is a `WorkKindSpec` it hands its roots in `ProductKinds`;
+an enqueue of a kind the registry does not hold is refused. A handler
 raises `WorkParked` to wait and `WorkRefused` to fail for good.

@@ -8,7 +8,7 @@ from uuid import UUID
 
 from acme.om.context import OperatorContext, RequestContext, TenantContext
 from acme.om.outbox.types.row import OutboxRow
-from acme.om.work.types.work_item import WorkItem, WorkKind
+from acme.om.work.types.work_item import WorkItem
 
 
 class WorkManagerInterface(ABC):
@@ -46,7 +46,7 @@ class WorkManagerInterface(ABC):
         self,
         rctx: RequestContext,
         lane: str,
-        kinds: Sequence[WorkKind],
+        kinds: Sequence[str],
         worker_id: str,
         lease: timedelta,
     ) -> tuple[TenantContext, WorkItem] | None:
@@ -116,7 +116,7 @@ class WorkManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def has_open(self, ctx: TenantContext, kind: WorkKind, target_id: UUID) -> bool:
+    async def has_open(self, ctx: TenantContext, kind: str, target_id: UUID) -> bool:
         """Whether an item of `kind` on `target_id` waits for a worker or
         runs: one of the tenant's, queued or claimed. An item handed back
         until later is queued."""
@@ -124,7 +124,7 @@ class WorkManagerInterface(ABC):
 
     @abstractmethod
     async def latest_for_target(
-        self, ctx: TenantContext, kind: WorkKind, target_id: UUID
+        self, ctx: TenantContext, kind: str, target_id: UUID
     ) -> WorkItem | None:
         """The tenant's item of `kind` on `target_id` made last, whatever its
         status; None when there is none."""

@@ -77,6 +77,6 @@ def test_the_runners_executor_records_the_image_its_workspaces_run(tmp_path: Pat
 
     evidence = container.managers.evidence
     assert isinstance(evidence, EvidenceManagerImpl)
-    executor = evidence._executor  # pyright: ignore[reportPrivateUsage]
+    executor = evidence._executors.platform  # pyright: ignore[reportPrivateUsage]
     assert isinstance(executor, ExecutorWorkspacesImpl)
     assert executor._options.image == "registry.example/checks:2"  # pyright: ignore[reportPrivateUsage]

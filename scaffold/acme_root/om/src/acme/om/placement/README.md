@@ -18,10 +18,16 @@ environment is.
   | `EXEC` | `host:<host id>`, the host that holds the workspace | that host, through the gateway |
   | `WORKSPACE` | `pool:<pool id>` to prepare; `host:<host id>` to release or purge | a host of the pool, or the holding host, through the gateway |
   | the platform's own | `default` | the maintenance worker |
+  | a product's | where its registered lane reads off its payload | a claimant of its registered kind, through the gateway |
 
-- **A claimant**: a host outside the platform's processes, as its
-  credential says it is: its id, the tenant whose wall it sits in (none
-  for a host of the platform's own pool), and its pool.
+- **A claimant**: a machine outside the platform's processes, as its
+  credential says it is: its kind, its id, the tenant whose wall it sits
+  in (none for one of the platform's own pool), and its pool. The
+  platform's kind is the host; a product registers its own.
+- **The kinds' registries** (`kinds.py`): each kind of work with its
+  lane and the claimant kind that takes it, and each claimant kind with
+  the lanes and kinds its identity claims. The platform's go through them
+  as a product's do.
 - **A fair share**: each tenant's plan tier, whether its loops run in a
   lane of their own, and how many of them run at once. A tenant with
   none has the default share: the `standard` tier and eight loops.
@@ -34,10 +40,15 @@ environment is.
   payload names.
 - **Claim by a runner.** A session runner serves one loop lane and
   claims from the queue as every worker does.
-- **Claim for a host.** The control plane claims on its
-  behalf, from the lanes its identity names and nothing in its call. A
-  claimant inside one tenant's wall is never handed another tenant's
-  item: the item fails for good, a dead letter.
+- **Claim for a claimant.** The control plane claims on its
+  behalf, from the lanes its identity names and nothing in its call, and
+  only the kinds registered for its kind. A claimant inside one tenant's
+  wall is never handed another tenant's item: the item fails for good, a
+  dead letter.
+- **Answer for a held item.** A product's claimant reads its item, renews
+  its lease, and reports it done or failed, only while it holds it, in
+  its tenant. Any other item is not found. A report is held to its shape
+  first. A host answers through the relay instead.
 - **The guard at the claim.** A claimed loop runs only while fewer of
   its tenant's loops run ahead of it than its share allows. Otherwise it
   goes back to its lane for a delay, with no attempt spent.
@@ -60,6 +71,9 @@ environment is.
 
 - **A lane is where the environment is.** A kind is claimed only from
   its own lanes, and a claimant's lanes come from its identity.
+- **A claimant takes only its own kinds.** A kind is taken only by the
+  claimant kind it names, and a claimant kind that names another's kind
+  takes none of it.
 - **The claim stays the guideline's.** The order within a lane is the
   queue's own; the guard counts the loops claimed under a live lease
   before an item in that order, and every one on another lane, so of
@@ -73,6 +87,8 @@ environment is.
 ## How another namespace composes it
 
 A kind a host runs names where it runs in its payload
-(`types/work.py`): a host or a pool. The gateway resolves a
-caller's credential to a `Claimant` and calls `claim_for`; it never
-passes a lane or a kind.
+(`types/work.py`): a host or a pool. A product's kind names it too, and
+its registered lane reads it. The gateway resolves a caller's credential
+to a `Claimant` and calls `claim_for`, then `held_for`, `extend_for`,
+and `report_for` for a product's claimant; it never passes a lane or a
+kind.

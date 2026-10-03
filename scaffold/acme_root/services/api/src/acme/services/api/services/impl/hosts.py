@@ -183,7 +183,7 @@ class HostsServiceImpl(HostsServiceInterface):
             item=ClaimedWorkView(
                 id=item.id,
                 org_id=ctx.org_id,
-                kind=item.kind.value,
+                kind=item.kind,
                 target_id=item.target_id,
                 payload=thaw_mapping(item.payload),
                 lease_expires_at=item.lease_expires_at,

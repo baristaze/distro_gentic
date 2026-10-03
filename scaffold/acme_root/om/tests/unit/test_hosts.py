@@ -31,8 +31,9 @@ from acme.om.hosts.rules import ENROLLMENT_PREFIX, HOST_CREDENTIAL_PREFIX, WireT
 from acme.om.hosts.types.credential import IssuedHostCredential
 from acme.om.hosts.types.host import Advertisement, Enrollment, HostReport, IsolationMode
 from acme.om.hosts.types.pool import HostPool
+from acme.om.placement.kinds import HOST
 from acme.om.placement.rules import host_lane, pool_lane
-from acme.om.placement.types.claimant import Claimant, ClaimantKind
+from acme.om.placement.types.claimant import Claimant
 from acme.om.placement.types.work import WorkspaceOperation
 from acme.om.root import Managers, build_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
@@ -473,7 +474,7 @@ async def test_a_pinned_session_with_no_host_online_waits_and_never_moves_to_the
         owner, an_item(owner, WorkKind.WORKSPACE, prepare_in(pool.id))
     )
     assert prepare.lane == pool_lane(pool.id)
-    cloud = Claimant(kind=ClaimantKind.HOST, id=new_id(), pool_id=CLOUD_POOL)
+    cloud = Claimant(kind=HOST, id=new_id(), pool_id=CLOUD_POOL)
     for _ in range(3):
         assert await managers.placement.claim_for(request(), cloud, timedelta(seconds=30)) is None
         clock.advance(timedelta(days=1))

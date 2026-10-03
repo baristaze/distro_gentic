@@ -219,7 +219,7 @@ async def test_a_write_that_also_starts_work_rides_a_second_row_the_relay_enqueu
     assert await managers.outbox.relay(ctx.org_id, asked)
     enqueued = await storage.get_work_storage().read_item_by_key(ctx.org_id, asked.id)
     assert enqueued is not None
-    assert enqueued.kind is WorkKind.NOOP and enqueued.target_id == user.id
+    assert enqueued.kind == WorkKind.NOOP and enqueued.target_id == user.id
     assert enqueued.created_by == ctx.user_id, "the actor of the write that asked"
     assert enqueued.updated_by == EMPTY_UUID
     # The handoff carries the request that made the write and its trace

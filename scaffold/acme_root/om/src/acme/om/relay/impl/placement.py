@@ -9,7 +9,7 @@ from uuid import UUID
 
 from acme.om.context import RequestContext, TenantContext
 from acme.om.placement.manager import PlacementManagerInterface
-from acme.om.placement.types.claimant import Claimant
+from acme.om.placement.types.claimant import Claimant, ClaimantReport
 from acme.om.relay.manager import RelayManagerInterface
 from acme.om.relay.storage import RelayStorageInterface
 from acme.om.trust.placement import PlacementInterface
@@ -68,8 +68,28 @@ class PlacementClaimsRelayedImpl(PlacementManagerInterface):
             if claimed is None:
                 return None
             ctx, item = claimed
-            if item.kind is not WorkKind.EXEC or await self._relay().start(ctx, item):
+            if item.kind != WorkKind.EXEC or await self._relay().start(ctx, item):
                 return claimed
+
+    async def held_for(
+        self, rctx: RequestContext, claimant: Claimant, org_id: UUID, item_id: UUID
+    ) -> WorkItem:
+        return await self._inner.held_for(rctx, claimant, org_id, item_id)
+
+    async def report_for(
+        self, rctx: RequestContext, claimant: Claimant, org_id: UUID, report: ClaimantReport
+    ) -> WorkItem:
+        return await self._inner.report_for(rctx, claimant, org_id, report)
+
+    async def extend_for(
+        self,
+        rctx: RequestContext,
+        claimant: Claimant,
+        org_id: UUID,
+        item_id: UUID,
+        lease: timedelta,
+    ) -> WorkItem:
+        return await self._inner.extend_for(rctx, claimant, org_id, item_id, lease)
 
     async def purge_tenant(self, ctx: TenantContext) -> int:
         return await self._inner.purge_tenant(ctx)

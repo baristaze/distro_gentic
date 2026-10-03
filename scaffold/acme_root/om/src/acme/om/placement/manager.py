@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from acme.om.context import OperatorContext, RequestContext, TenantContext
-from acme.om.placement.types.claimant import Claimant
+from acme.om.placement.types.claimant import Claimant, ClaimantReport
 from acme.om.placement.types.share import FairShare
 
 if TYPE_CHECKING:
@@ -27,10 +27,12 @@ class PlacementManagerInterface(ABC):
         """Platform-internal: the lane an item is enqueued on, which the work
         manager asks at every enqueue, so no producer picks one. A loop goes
         to its tenant's lane, a lane of its own when its share says so and
-        its plan tier's otherwise; a command to the host that holds its
-        workspace; a workspace to prepare to its placement's pool, and one
-        to release or purge to its host. Any other kind keeps the lane it
-        came with, the platform's own."""
+        its plan tier's otherwise. A kind with a lane of its own goes where
+        its registered lane reads off its payload: a command to the host
+        that holds its workspace, a workspace to prepare to its placement's
+        pool and one to release or purge to its host, and a product's kind
+        where its own lane says. Any other kind keeps the lane it came with,
+        the platform's own."""
         ...
 
     @abstractmethod
@@ -48,12 +50,47 @@ class PlacementManagerInterface(ABC):
         self, rctx: RequestContext, claimant: Claimant, lease: timedelta
     ) -> tuple[TenantContext, WorkItem] | None:
         """Platform-internal: the claim the control plane makes on behalf of
-        a host outside its processes, which holds no database
+        a claimant outside its processes, which holds no database
         credential. The lanes and the kinds come from the claimant's
-        identity, never from its call (`rules.claims_of`), and the claim
-        carries its name. An item of another tenant than a claimant inside
-        a tenant's wall is never handed over: it is failed for good, a dead
-        letter, and the claim goes on. None when nothing is ready."""
+        identity, never from its call (`kinds.claims_of`): only the kinds
+        registered for its claimant kind, and the claim carries its name.
+        An item of another tenant than a claimant inside a tenant's wall is
+        never handed over: it is failed for good, a dead letter, and the
+        claim goes on. None when nothing is ready."""
+        ...
+
+    @abstractmethod
+    async def held_for(
+        self, rctx: RequestContext, claimant: Claimant, org_id: UUID, item_id: UUID
+    ) -> WorkItem:
+        """Platform-internal: the item `claimant` holds, in the tenant
+        `org_id`, as the gateway reads it for the claimant. NotFound alike
+        for an item of another tenant, one another claimant holds, one of a
+        kind its kind does not take, and one not there, so a claimant reads
+        only the items it holds, within its tenant."""
+        ...
+
+    @abstractmethod
+    async def report_for(
+        self, rctx: RequestContext, claimant: Claimant, org_id: UUID, report: ClaimantReport
+    ) -> WorkItem:
+        """Platform-internal: a claimant's answer for an item it holds, as
+        the gateway passes it: done completes the item, failed fails it with
+        the reason, retried until its attempts are spent. Held as `held_for`
+        holds the read, and LeaseLost once its claim went to another."""
+        ...
+
+    @abstractmethod
+    async def extend_for(
+        self,
+        rctx: RequestContext,
+        claimant: Claimant,
+        org_id: UUID,
+        item_id: UUID,
+        lease: timedelta,
+    ) -> WorkItem:
+        """Platform-internal: renews the lease on an item the claimant holds,
+        held as `held_for` holds the read."""
         ...
 
     @abstractmethod
