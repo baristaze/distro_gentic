@@ -27,6 +27,15 @@ class AutomationStorageInterface(ABC):
     async def read_automation(self, org_id: UUID, automation_id: UUID) -> Automation | None: ...
 
     @abstractmethod
+    async def write_automation(
+        self, org_id: UUID, automation: Automation, outbox_rows: tuple[OutboxRow, ...]
+    ) -> bool:
+        """A stored automation as changed, with the rows that announce it, in
+        one commit. False, with nothing landed, when the tenant holds no such
+        automation."""
+        ...
+
+    @abstractmethod
     async def read_automations(
         self, org_id: UUID, after: UUID | None, limit: int
     ) -> list[Automation]:

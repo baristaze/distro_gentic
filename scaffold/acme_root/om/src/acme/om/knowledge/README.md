@@ -19,6 +19,12 @@ of](../../../../README.md).
 - **Write.** A person writes an entry in person, for the whole tenant; it
   is reviewed as it is written.
 - **Review.** A person keeps or rejects a suggestion, in person.
+- **Read.** The tenant's entries in a state, the suggestions waiting on
+  a review among them, and one entry.
+- **Edit.** A person edits an entry in person, on the version they read.
+  A reviewed entry's words are then the editor's, so the editor is its
+  reviewer; a suggestion still waits for its review, and a rejected one
+  is written again instead.
 - **Recall.** The reviewed entries whose every trigger word appears in
   what a session is about arrive in it, once each, at its next model
   call. A session recalls as it starts: when its first loop prepares the

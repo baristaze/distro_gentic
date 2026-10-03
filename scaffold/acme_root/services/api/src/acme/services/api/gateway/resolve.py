@@ -17,12 +17,16 @@ from acme.services.api.services import (
     FleetServiceInterface,
     HostsServiceInterface,
     IntakeServiceInterface,
+    KnowledgeServiceInterface,
     MediaServiceInterface,
     NotificationsServiceInterface,
+    PlaybooksServiceInterface,
+    ProjectsServiceInterface,
     RealtimeServiceInterface,
     RelayServiceInterface,
     ServicesInterface,
     TenancyServiceInterface,
+    ToolsServiceInterface,
     WatchServiceInterface,
     WebhooksServiceInterface,
 )
@@ -99,6 +103,22 @@ def notifications_service(connection: HTTPConnection) -> NotificationsServiceInt
     return services_of(connection).get_notifications_service()
 
 
+def projects_service(connection: HTTPConnection) -> ProjectsServiceInterface:
+    return services_of(connection).get_projects_service()
+
+
+def knowledge_service(connection: HTTPConnection) -> KnowledgeServiceInterface:
+    return services_of(connection).get_knowledge_service()
+
+
+def playbooks_service(connection: HTTPConnection) -> PlaybooksServiceInterface:
+    return services_of(connection).get_playbooks_service()
+
+
+def tools_service(connection: HTTPConnection) -> ToolsServiceInterface:
+    return services_of(connection).get_tools_service()
+
+
 TenancyService = Annotated[TenancyServiceInterface, Depends(tenancy_service)]
 AdminService = Annotated[AdminServiceInterface, Depends(admin_service)]
 EventsService = Annotated[EventsServiceInterface, Depends(events_service)]
@@ -114,3 +134,7 @@ AutomationsService = Annotated[AutomationsServiceInterface, Depends(automations_
 BudgetsService = Annotated[BudgetsServiceInterface, Depends(budgets_service)]
 IntakeService = Annotated[IntakeServiceInterface, Depends(intake_service)]
 NotificationsService = Annotated[NotificationsServiceInterface, Depends(notifications_service)]
+ProjectsService = Annotated[ProjectsServiceInterface, Depends(projects_service)]
+KnowledgeService = Annotated[KnowledgeServiceInterface, Depends(knowledge_service)]
+PlaybooksService = Annotated[PlaybooksServiceInterface, Depends(playbooks_service)]
+ToolsService = Annotated[ToolsServiceInterface, Depends(tools_service)]

@@ -440,6 +440,24 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         )
         return record
 
+    async def remove_fetch_credential(self, ctx: TenantContext, project_id: UUID) -> bool:
+        ctx.require(Permission.MANAGE_MEMBERS)
+        if await self._storage.read_credential(ctx.org_id, project_id) is None:
+            return False
+        # The value leaves the store first, so a record left by a failure
+        # still names a value the purge takes out.
+        await self._secrets.delete(
+            ctx.org_id, rules.fetch_secret_name(project_id), deadline=ctx.deadline
+        )
+        await self._storage.purge_credentials(ctx.org_id, [project_id])
+        log.info(
+            "user %s of org %s took the fetch credential of project %s away",
+            ctx.user_id,
+            ctx.org_id,
+            project_id,
+        )
+        return True
+
     async def mint_push_token(self, ctx: TenantContext, session_id: UUID) -> PushToken:
         ctx.require(Permission.WRITE)
         held = await self._storage.read_workspace(ctx.org_id, session_id)
