@@ -8,29 +8,27 @@ This group judges where each part of a session runs and how its work
 reaches it: the kinds of work and their lanes, the session runner that
 hosts the brain, placement, the workspace host and what it holds, and
 the relay transport that carries a tool call into a customer's wall. It
-leaves a workspace's isolation and egress to `workspaces`, station work
-to `stations`, a person's commands on a workspace to `watch`, the four
-identities and how a secret is resolved to `wall`, and the sweep's
-duties to `fleet`.
+leaves a workspace's isolation and egress to `workspaces`, a person's
+commands on a workspace to `watch`, the four identities and how a secret
+is resolved to `wall`, and the sweep's duties to `fleet`.
 
 ## PLC-01 A session becomes work of a kind, claimed where it can run
 
 **Principle.** A session always lives in the control plane, whatever
 machine runs its commands. To make progress it becomes a row of the
-guideline's work queue, of one kind: `loop`, `exec`, `workspace`,
-`station`, or the platform's own. Each kind runs where its environment
-is, claimed from its lane, and a lane is the guideline's work-item lane,
-so every kind is one queue with one shape. A runner claims from the
-queue directly; a host or a daemon outside the cloud claims through the
-gateway, and the control plane claims the row on its behalf. A tool call
-to a cloud workspace needs no item: the runner reaches it by the direct
-transport.
+guideline's work queue, of one kind: `loop`, `exec`, `workspace`, or the
+platform's own. Each kind runs where its environment is, claimed from
+its lane, and a lane is the guideline's work-item lane, so every kind is
+one queue with one shape. A runner claims from the queue directly; a
+host outside the cloud claims through the gateway, and the control plane
+claims the row on its behalf. A tool call to a cloud workspace needs no
+item: the runner reaches it by the direct transport.
 
 **Source.** Sessions Are Work, Kinds of Work.
 
 **Look for.** The work kinds and the lane each is claimed from; the
-claim path of a runner, and of a host or a daemon outside the cloud; how
-a tool call reaches a cloud workspace.
+claim path of a runner, and of a host outside the cloud; how a tool call
+reaches a cloud workspace.
 
 **Violation.** A second queue, or a work row of the platform's own shape
 beside the guideline's; a kind claimed from a lane other than the one
@@ -224,21 +222,20 @@ the model provider. (A fill outside the tenant's eligibility is MNY-17.)
 **Principle.** A workspace host outside the cloud is a client of the
 gateway, like the CLI, never a process of the platform's deployment. It
 opens every connection outward; the platform never calls in. Every
-connection that crosses a customer's wall is opened from inside it, a
-station daemon's included.
+connection that crosses a customer's wall is opened from inside it.
 
 **Source.** At a Glance; Placement and Workspace Hosts, Workspace Hosts;
 The Relay Transport.
 
-**Look for.** How a host and a daemon connect to the platform; any
-listener or inbound port they open; any platform code that dials an
-address inside a customer's wall.
+**Look for.** How a host connects to the platform; any listener or
+inbound port it opens; any platform code that dials an address inside a
+customer's wall.
 
-**Violation.** A platform service that opens a connection to a host or a
-daemon inside a customer's wall: a callback URL, an inbound port, a push
-to its address; a host or a daemon inside a customer's wall deployed as
-a process of the platform's deployment, or reaching the platform by
-anything but the gateway.
+**Violation.** A platform service that opens a connection to a host
+inside a customer's wall: a callback URL, an inbound port, a push to its
+address; a host inside a customer's wall deployed as a process of the
+platform's deployment, or reaching the platform by anything but the
+gateway.
 
 **Severity.** high
 
@@ -267,22 +264,22 @@ another credential. (An executor taken for a principal is WAL-01.)
 
 **Check.** review
 
-## PLC-12 Exec and station work are versioned public types
+## PLC-12 Exec work is a versioned public type
 
-**Principle.** `exec` and `station` work are public wire types, versioned
-like any other. A host states its version at every claim, and one below
-the supported floor is refused, since a customer upgrades on its own
+**Principle.** `exec` work is a public wire type, versioned like any
+other. A host states its version at every claim, and one below the
+supported floor is refused, since a customer upgrades on its own
 schedule.
 
 **Source.** Placement and Workspace Hosts, Workspace Hosts (Versioned
 work).
 
-**Look for.** The wire types of `exec` and `station` work and their
-versions; the version a claim carries; the floor check.
+**Look for.** The wire type of `exec` work and its versions; the version
+a claim carries; the floor check.
 
-**Violation.** An internal type sent as `exec` or `station` work; a claim
-with no version; a host below the floor handed work; a breaking change
-to a wire type without a new version.
+**Violation.** An internal type sent as `exec` work; a claim with no
+version; a host below the floor handed work; a breaking change to a wire
+type without a new version.
 
 **Severity.** medium
 
@@ -338,7 +335,7 @@ commands. A compromised control plane still cannot widen what a host
 does.
 
 **Source.** Placement and Workspace Hosts, Workspace Hosts (Owner's
-ceilings).
+ceilings); Deviations from the Guideline.
 
 **Look for.** Where the owner's ceilings are kept and checked on the
 host; every message from the control plane that could change one.

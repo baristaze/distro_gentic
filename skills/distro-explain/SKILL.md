@@ -27,7 +27,7 @@ The arguments are one of:
 
 Empty arguments mean: give the guided tour. The Core first, one line
 for each invariant, then every section in the order of the spec's
-Contents, two sentences each, then the nine lens groups in one line
+Contents, two sentences each, then the eight lens groups in one line
 each.
 
 ## Procedure

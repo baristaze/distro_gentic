@@ -209,18 +209,17 @@ outside into a workspace inside a customer's wall.
 
 ## WSP-10 A workspace never reaches the platform's insides
 
-**Principle.** A workspace never reaches the platform's internal
-network, a cloud metadata endpoint, or a station's network.
+**Principle.** A workspace never reaches the platform's internal network
+or a cloud metadata endpoint.
 
 **Source.** Workspaces and Isolation, Egress.
 
 **Look for.** The network rules of each isolation level; the routes from
-a workspace to internal addresses, metadata addresses, and a station's
-network.
+a workspace to internal addresses and metadata addresses.
 
 **Violation.** A workspace that can open a connection to an internal
-service, a cloud metadata address, or a station's network, by allowlist,
-by route, or through a proxy.
+service or a cloud metadata address, by allowlist, by route, or through
+a proxy.
 
 **Severity.** high
 
