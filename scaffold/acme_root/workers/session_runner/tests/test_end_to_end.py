@@ -55,6 +55,7 @@ from acme.om.budgets.types.budget import Budget, BudgetScopeKind, WindowKind
 from acme.om.budgets.types.hold import Settlement
 from acme.om.context import TenantContext
 from acme.om.exceptions import StaleWriter
+from acme.om.matrix.types.matrix import MatrixStatus
 from acme.om.placement.rules import DEFAULT_TIER, tier_lane
 from acme.om.privacy.impl.sealed_steps import says_something
 from acme.om.steps.types.content import ContentState
@@ -493,7 +494,9 @@ async def test_one_session_in_a_project_meets_every_gate_on_its_way_to_a_success
     person = await owner_of(stack)
     project = project_key(stack.repository(person.project_id))
     await stack.container.managers.evidence.write_policy(person.ctx, make_policy(project))
-    stack.runner("runner-gates", [runs(*FIXES_THE_REPORT), validates(), submits("succeeded")])
+    runner = stack.runner(
+        "runner-gates", [runs(*FIXES_THE_REPORT), validates(), submits("succeeded")]
+    )
     session_id = await started(stack, person, "engineer")
 
     await say(stack, person, session_id, "The weekly report misses its total. Fix it.")
@@ -540,6 +543,20 @@ async def test_one_session_in_a_project_meets_every_gate_on_its_way_to_a_success
     assert bills == ["billed"] * 3
     plans = {held.funding.plan.id for held in holds if isinstance(held, FundedHold)}
     found["money"] = f"{len(holds)} holds on plan {sorted(plans)}, settled {bills}"
+
+    # Its spend counts under the matrix version it ran on and its plan tier.
+    published = await storage.get_matrix_storage().read_latest(MatrixStatus.PUBLISHED)
+    assert published is not None
+    async with httpx.AsyncClient(timeout=5) as client:
+        exposed = (await client.get(f"http://127.0.0.1:{runner.port}/metrics")).text
+    spend = [line for line in exposed.splitlines() if line.startswith("acme_model_spend_micros")]
+    assert spend and not [line for line in spend if 'matrix_version="none"' in line]
+    assert [
+        line
+        for line in spend
+        if f'matrix_version="{published.number}"' in line and f'plan_tier="{DEFAULT_TIER}"' in line
+    ]
+    found["spend"] = [line for line in spend if "_total{" in line]
 
     # Its tool call was audited with its four identities.
     events = await storage.get_event_storage().read_after(org_id, 0, 1000)
