@@ -16,7 +16,7 @@ from uuid import UUID
 from acme.om.context import OperatorContext, TenantContext
 from acme.om.matrix.types.matrix import MatrixRow, MatrixVersion
 from acme.om.matrix.types.record import BenchmarkResult, BenchmarkRun, ModelRef, Retirement
-from acme.om.matrix.types.tenant import FillOverride, MatrixPin
+from acme.om.matrix.types.tenant import FillOptions, FillOverride, MatrixPin
 from acme.om.models.types.fill import Fill, ModelRole
 
 
@@ -69,6 +69,14 @@ class MatrixManagerInterface(ABC):
     async def get_pin(self, ctx: TenantContext, session_id: UUID) -> MatrixPin:
         """The version of the matrix the session's fills came from last;
         `NotFound` before its fills are resolved."""
+        ...
+
+    @abstractmethod
+    async def get_options(self, ctx: TenantContext) -> tuple[FillOptions, ...]:
+        """What the tenant may choose from, for each model role the published
+        matrix serves, in its order: exactly the fills `choose_fill` takes.
+        None for a tenant the platform pays for, and none before a version
+        is published."""
         ...
 
     @abstractmethod
