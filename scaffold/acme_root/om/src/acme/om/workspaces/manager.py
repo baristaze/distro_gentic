@@ -183,7 +183,9 @@ class WorkspacesManagerInterface(ABC):
         """Points the session's branch at the commit `head` and opens its pull
         request onto the repository's default branch, through source control,
         once the push token reaches both writes (`rules.push_refusal`):
-        `NotAuthorized`, naming why, when it does not. A refusal of source
+        `NotAuthorized`, naming why, when it does not. A body that would make
+        the forge fetch a URL off the repository's host is `ValidationFailed`
+        before anything is pushed (`rules.body_refusal`). A refusal of source
         control's is `ValidationFailed`, and its absence `Unavailable`."""
         ...
 

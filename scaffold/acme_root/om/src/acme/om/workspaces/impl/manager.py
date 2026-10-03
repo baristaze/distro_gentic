@@ -443,6 +443,9 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
             raise Unavailable(f"session {session_id} works on no bound repository")
         if not rules.COMMIT.fullmatch(head):
             raise ValidationFailed("the head of a pull request is a commit's full id")
+        refusal = rules.body_refusal(body, binding)
+        if refusal is not None:
+            raise ValidationFailed(refusal)
         digest, now = hash_token(token), self._clock()
         for write in (
             RepositoryWrite(

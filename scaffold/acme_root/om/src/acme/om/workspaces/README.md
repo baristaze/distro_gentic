@@ -170,8 +170,9 @@ rebuilt from.
   project's fetch credential, handed to that git alone.
 - The engineer's pull request goes through
   `WorkspacesManagerInterface.open_pull_request`, which checks the push
-  token, bundles the committed head out of the workspace this host
-  holds, and writes through `SourceControlInterface` (`projects.py`): the
+  token, refuses a body with an image or a URL off the repository's host,
+  since the forge renders it, bundles the committed head out of the
+  workspace this host holds, and writes through `SourceControlInterface` (`projects.py`): the
   one head, to the session's branch alone, forward only. The root wires
   the forge's (`impl/forge.py`), and with none every write is
   unavailable.
