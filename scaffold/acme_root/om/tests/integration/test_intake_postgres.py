@@ -1,30 +1,40 @@
 """Intake and automations over Postgres: a failing check on a session's
 pull request wakes it as data, and fires an automation whose run starts a
-session held to its share of the cost cap, recorded once."""
+session held to its share of the cost cap, recorded once. A schedule
+fires once a slot however many workers tick it at once, and an
+automation run as the tenant's automation principal acts on that
+principal's role alone."""
 
+import asyncio
 from collections.abc import AsyncIterator
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
 from contracts.intake import wired
-from contracts.loops import reply, said
+from contracts.loops import reply, said, use
 
 from acme.infra.impl.configured import InfraConfiguredImpl
 from acme.infra.impl.settings import InfraSettings
 from acme.om.agent_sessions.types.agent_session import SessionStatus
 from acme.om.agents.types.run import RunEnd
+from acme.om.attribution.types.principal import Principal, PrincipalKind
+from acme.om.automations.root import build_automations
 from acme.om.automations.types.automation import (
     Action,
     ActionKind,
     Automation,
     Firing,
     Limits,
+    Refusal,
+    RunsAs,
     RunStatus,
     Trigger,
     TriggerKind,
 )
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext, Role, TenantContext
+from acme.om.evidence.types.provenance import Provenance
 from acme.om.intake.rules import described
 from acme.om.intake.types.event import (
     Arrival,
@@ -40,6 +50,7 @@ from acme.om.root import build_managers
 from acme.om.steps.rules import message_step
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.settings import MigrationSettings
+from acme.om.tenancy.rules import permissions_of
 
 pytestmark = pytest.mark.integration
 
@@ -108,6 +119,7 @@ async def test_a_failing_check_wakes_its_session_and_fires_a_bounded_run_over_po
     check = FeedbackEvent(
         id=new_id(),
         integration="forge",
+        provenance=Provenance.TWIN,
         arrival=Arrival.CHECK,
         author=Author(kind=AuthorKind.BOT, external_id="ci", name="ci"),
         names=WorkNames(branch="agent/fix"),
@@ -136,3 +148,87 @@ async def test_a_failing_check_wakes_its_session_and_fires_a_bounded_run_over_po
     assert limited.status is RunStatus.REFUSED
     budget = await platform.managers.budgets.get_budget(owner, run.budget_id)
     assert budget.cost_micros == automation.limits.run_cap_micros
+
+
+def every_hour(creator: TenantContext, runs_as: RunsAs = RunsAs.CREATOR) -> Automation:
+    now = utcnow()
+    return Automation(
+        id=new_id(),
+        created_at=now,
+        updated_at=now,
+        created_by=creator.user_id,
+        updated_by=creator.user_id,
+        name="the nightly check",
+        trigger=Trigger(kind=TriggerKind.SCHEDULE, every=timedelta(hours=1)),
+        action=Action(
+            kind=ActionKind.START_SESSION,
+            brief="Check the records.",
+            agent_kind="steady",
+            title="the nightly records",
+        ),
+        limits=Limits(
+            cost_cap_micros=1_000_000_000, run_cap_micros=50_000_000, rate=10, concurrency=10
+        ),
+        runs_as=runs_as,
+    )
+
+
+async def test_a_schedule_fires_once_a_slot_across_several_workers_over_postgres(
+    storage: StoragePostgresImpl, tmp_path: Path
+) -> None:
+    owner = await an_owner(storage, tmp_path)
+    platform = wired(tmp_path, storage=storage, owner=owner)
+    creator = platform.person(Role.ADMIN)
+    mine = await platform.automations.create_automation(creator, every_hour(creator))
+    # Four workers' sweeps, each its own automations manager over the one
+    # database, tick the tenant at once, in each of two slots.
+    workers = [
+        build_automations(
+            storage, platform.managers, principal_context=platform.members, clock=platform.clock
+        )
+        for _ in range(4)
+    ]
+    for slot in (1, 2):
+        await asyncio.gather(*(worker.tick(platform.service) for worker in workers))
+        await asyncio.gather(*(worker.tick(platform.service) for worker in workers))
+        runs = await platform.automations.get_runs(owner, mine.id, 10)
+        assert len(runs) == slot and {r.status for r in runs} == {RunStatus.STARTED}
+        page = await platform.managers.agent_sessions.get_sessions(owner, None, None, 100)
+        started = [s for s in page.items if s.title == "the nightly records"]
+        assert len(started) == slot
+        assert {s.id for s in started} == {r.session_id for r in runs}
+        platform.clock.now += timedelta(hours=1)
+
+
+async def test_an_automation_run_as_the_automation_principal_holds_its_role_alone_over_postgres(
+    storage: StoragePostgresImpl, tmp_path: Path
+) -> None:
+    owner = await an_owner(storage, tmp_path)
+    platform = wired(tmp_path, storage=storage, owner=owner)
+    creator = platform.person(Role.ADMIN)
+    granted = await platform.automations.grant_principal(creator, Role.MEMBER)
+    await platform.automations.create_automation(
+        creator, every_hour(creator, RunsAs.AUTOMATION_PRINCIPAL)
+    )
+    (run,) = await platform.automations.tick(platform.service)
+    assert run.status is RunStatus.STARTED and run.session_id is not None
+    session = await platform.managers.agent_sessions.get_session(owner, run.session_id)
+    assert session.created_by == granted.id != creator.user_id
+    platform.anthropic.add(reply(use("lookup")), reply(said("Checked.")))
+    assert (await platform.loops.run(platform.service, run.session_id)).end is RunEnd.ENDED
+    assert platform.lookup.ran_as == [granted.id]
+    live = await platform.principals(
+        RequestContext(request_id=new_id(), app=APP),
+        owner.org_id,
+        Principal(kind=PrincipalKind.PERSON, id=granted.id),
+    )
+    assert (live.role, live.security.permissions) == (Role.MEMBER, permissions_of(Role.MEMBER))
+    # A role that cannot start the work starts none, though its creator could.
+    await platform.automations.grant_principal(creator, Role.VIEWER)
+    platform.clock.now += timedelta(hours=1)
+    (refused,) = await platform.automations.tick(platform.service)
+    assert (refused.status, refused.refusal, refused.session_id) == (
+        RunStatus.REFUSED,
+        Refusal.ACTION,
+        None,
+    )

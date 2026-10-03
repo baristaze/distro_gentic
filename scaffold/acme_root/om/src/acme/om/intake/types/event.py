@@ -1,7 +1,9 @@
 """An event from outside, as an integration hands it to the router: what
-arrived, who wrote it, and the work it names. The integration reads these
-fields from what its system reports. The router decides the rest: which
-session it reaches, whether it wakes it, and in whose name it speaks."""
+arrived, who wrote it, the work it names, and what served it. The
+integration reads these fields from what its system reports, and the
+ingress sets what served it from the integration, never from the event.
+The router decides the rest: which session it reaches, whether it wakes
+it, and in whose name it speaks."""
 
 from datetime import datetime
 from enum import StrEnum
@@ -11,6 +13,7 @@ from uuid import UUID
 from pydantic import Field, model_validator
 
 from acme.om.base import Platform
+from acme.om.evidence.types.provenance import Provenance
 from acme.om.steps.types.content import MAX_NAME, Stored
 
 MAX_TEXT = 20_000
@@ -64,17 +67,23 @@ class WorkNames(Platform):
     branch: Stored | None = Field(default=None, min_length=1, max_length=MAX_NAME)
 
 
+SERVED = frozenset({Provenance.REAL, Provenance.TWIN})
+"""What may serve an event: the integration's system itself, or its twin."""
+
+
 class FeedbackEvent(Platform):
     """One event from outside. `id` is derived from the delivery that carried
     it, so a redelivery is the same event. `integration` names the system
-    it came from, and `text` is what it says, which reaches a session as
-    data unless a principal wrote it. `refs` are the integration's own
+    it came from, and `provenance` what served it, the system or its twin,
+    which every record of the event names. `text` is what it says, which
+    reaches a session as data unless a principal wrote it. `refs` are the integration's own
     names for what the event is and what it follows from, such as a
     comment's id or the commit a check ran on: an act of the platform's
     account recorded under one of them is the event's cause."""
 
     id: UUID
     integration: Stored = Field(min_length=1, max_length=MAX_NAME)
+    provenance: Provenance
     arrival: Arrival
     author: Author
     names: WorkNames
@@ -89,6 +98,8 @@ class FeedbackEvent(Platform):
     def _a_check_has_a_state(self) -> Self:
         if (self.arrival is Arrival.CHECK) != (self.check is not None):
             raise ValueError("a check says whether it passed, and nothing else does")
+        if self.provenance not in SERVED:
+            raise ValueError("an event is served by its integration's system or its twin")
         return self
 
 

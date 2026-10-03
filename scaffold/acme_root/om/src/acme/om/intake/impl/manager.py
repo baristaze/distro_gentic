@@ -27,6 +27,7 @@ from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tools.manager import ToolsManagerInterface
 
 ROUTED = "intake.event.routed"
+UNLINKED = "intake.account_link.deleted"
 APPROVED = "intake.chat_approval.decided"
 REFUSED = "intake.chat_approval.refused"
 
@@ -34,6 +35,8 @@ REFUSED = "intake.chat_approval.refused"
 class IntakeOptions(Platform):
     # The most rows of each kind one purge call takes.
     purge_batch: int = Field(default=1000, gt=0)
+    # The most accounts one read of a user's links answers.
+    links: int = Field(default=50, gt=0)
 
 
 class IntakeManagerImpl(IntakeManagerInterface):
@@ -80,6 +83,23 @@ class IntakeManagerImpl(IntakeManagerInterface):
             raise Conflict(f"{integration} account {external_id} is linked to another user")
         return held
 
+    async def unlink_account(self, ctx: TenantContext, integration: str, external_id: str) -> None:
+        ctx.require(Permission.WRITE)
+        if not in_person(ctx):
+            raise NotAuthorized("an account is unlinked by a person, never by an agent's call")
+        link = await self._storage.read_link(ctx.org_id, integration, external_id)
+        if link is None:
+            raise NotFound(f"{integration} account {external_id} is linked to no user")
+        if link.user_id != ctx.user_id:
+            ctx.require(Permission.MANAGE_MEMBERS)
+        if await self._storage.delete_link(ctx.org_id, integration, external_id):
+            facts: dict[str, object] = {"integration": integration, "user_id": str(link.user_id)}
+            await self._audit(ctx, UNLINKED, link.id, facts)
+
+    async def get_links(self, ctx: TenantContext, user_id: UUID) -> tuple[AccountLink, ...]:
+        ctx.require(Permission.READ)
+        return tuple(await self._storage.read_user_links(ctx.org_id, user_id, self._options.links))
+
     async def bind_work(
         self, ctx: TenantContext, session_id: UUID, kind: HandleKind, handle: str
     ) -> WorkBinding:
@@ -116,6 +136,7 @@ class IntakeManagerImpl(IntakeManagerInterface):
         routed = Routed(
             event_id=event.id,
             integration=event.integration,
+            provenance=event.provenance,
             arrival=event.arrival.value,
             effect=Effect.UNROUTED,
         )
@@ -214,6 +235,7 @@ class IntakeManagerImpl(IntakeManagerInterface):
         routed = Routed(
             event_id=event.id,
             integration=event.integration,
+            provenance=event.provenance,
             arrival=event.arrival.value,
             effect=effect,
             session_id=session.id,

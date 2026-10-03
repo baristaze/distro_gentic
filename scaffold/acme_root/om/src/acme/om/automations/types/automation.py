@@ -1,6 +1,6 @@
-"""An automation: a trigger that leads to an action, run as its creator,
-inside limits of its own. And a run: the record of one firing, whatever
-became of it."""
+"""An automation: a trigger that leads to an action, run as its creator or
+as the tenant's automation principal, inside limits of its own. And a
+run: the record of one firing, whatever became of it."""
 
 from datetime import datetime, timedelta
 from enum import StrEnum
@@ -12,9 +12,13 @@ from pydantic import Field, model_validator
 from acme.om.agents.types.request import MAX_TITLE
 from acme.om.attribution.types.principal import MAX_KIND
 from acme.om.base import Created, Identifiable, Platform, Trackable
+from acme.om.context import Role
 from acme.om.steps.types.content import MAX_NAME, Stored
 
 MAX_BRIEF = 20_000
+
+MIN_EVERY = timedelta(minutes=1)
+"""The shortest period a schedule fires at."""
 
 
 class TriggerKind(StrEnum):
@@ -24,7 +28,8 @@ class TriggerKind(StrEnum):
 
 class Trigger(Platform):
     """What fires an automation: an event that passes every filter it sets,
-    or a schedule. A filter left empty matches any event."""
+    or a schedule, at most once a `MIN_EVERY`. A filter left empty matches
+    any event."""
 
     kind: TriggerKind
     integrations: tuple[Stored, ...] = ()
@@ -37,6 +42,8 @@ class Trigger(Platform):
         scheduled = self.kind is TriggerKind.SCHEDULE
         if scheduled != (self.every is not None):
             raise ValueError("a schedule fires every so often, and an event trigger does not")
+        if self.every is not None and self.every < MIN_EVERY:
+            raise ValueError(f"a schedule fires at most once every {MIN_EVERY}")
         if scheduled and (self.integrations or self.arrivals or self.effects):
             raise ValueError("a schedule has no event to filter")
         return self
@@ -91,10 +98,30 @@ class Limits(Platform):
         return self
 
 
+class RunsAs(StrEnum):
+    """Whose authority an automation's action runs on."""
+
+    CREATOR = "creator"  # the person who made it, as their place stands at the firing
+    AUTOMATION_PRINCIPAL = "automation_principal"  # the tenant's granted service principal
+
+
+class AutomationPrincipal(Identifiable, Created):
+    """The tenant's automation principal: a service principal the tenant
+    grants, one a tenant, holding one role. `id` is the principal's, which
+    the sessions it starts and the calls they make name. An automation that
+    runs as it holds that role's authority and no more: never its
+    creator's, and never the service role's."""
+
+    role: Role
+    granted_by: UUID
+
+
 class Automation(Identifiable, Trackable):
     """A trigger, an action, and limits. It runs as its creator, whose live
-    place in the tenant is read at every firing. `own_events` lets it fire
-    on the events its own sessions caused, which it otherwise ignores."""
+    place in the tenant is read at every firing, or as the tenant's
+    automation principal (`runs_as`), whose grant is read at every firing.
+    `own_events` lets it fire on the events its own sessions caused, which
+    it otherwise ignores."""
 
     MANAGER_OWNED_FIELDS: ClassVar[tuple[str, ...]] = ("created_by", "updated_by")
 
@@ -102,6 +129,7 @@ class Automation(Identifiable, Trackable):
     trigger: Trigger
     action: Action
     limits: Limits
+    runs_as: RunsAs = RunsAs.CREATOR
     own_events: bool = False
     enabled: bool = True
 
@@ -120,7 +148,7 @@ class Refusal(StrEnum):
     COST_CAP = "cost_cap"
     RATE = "rate"
     CONCURRENCY = "concurrency"
-    PRINCIPAL = "principal"  # its creator holds no place in the tenant now
+    PRINCIPAL = "principal"  # its creator left, or the principal is ungranted or above its creator
     ACTION = "action"  # its action was refused: an unknown kind, a session gone
     UNATTRIBUTED = "unattributed"  # the platform's own act, with no session recorded for it
 

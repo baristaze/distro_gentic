@@ -30,6 +30,8 @@ from acme.om.knowledge.impl.manager import KnowledgeOptions
 from acme.om.knowledge.root import build_knowledge
 from acme.om.media.impl.manager import MediaOptions
 from acme.om.models.impl.manager import ModelsOptions
+from acme.om.notifications.impl.manager import NotificationsOptions
+from acme.om.notifications.root import build_notifications
 from acme.om.orchestrations.impl.manager import OrchestrationsOptions
 from acme.om.placement.impl.manager import PlacementOptions
 from acme.om.platform_agents.impl.manager import PlatformAgentsOptions
@@ -172,7 +174,7 @@ class WorkerContainer:
             options=TrustOptions(purge_batch=settings.worker_purge_batch),
         ).build(managers)
         # Where the world's events come in, and the work they set going; with
-        # playbooks and knowledge, for their purges.
+        # playbooks, knowledge, and notifications, for their purges.
         batch = settings.worker_purge_batch
         self.intake = build_intake(storage, managers, options=IntakeOptions(purge_batch=batch))
         self.automations = build_automations(
@@ -200,6 +202,13 @@ class WorkerContainer:
             managers.work,
             managers.tenancy,
             StalledOptions(batch=STALLED_SWEEP_BATCH),
+        )
+        self.notifications = build_notifications(
+            storage,
+            managers,
+            integrations,
+            self.intake,
+            options=NotificationsOptions(purge_batch=batch),
         )
 
     @property

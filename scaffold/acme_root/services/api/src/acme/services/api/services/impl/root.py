@@ -103,7 +103,9 @@ def build_services(
         realtime=RealtimeServiceImpl(
             managers.tenancy, managers.events, infra.get_topics(), head_max_age
         ),
-        webhooks=WebhooksServiceImpl(integrations.get_identity_provider(), infra.get_queues()),
+        webhooks=WebhooksServiceImpl(
+            integrations.get_identity_provider(), infra.get_queues(), integrations.get_integration
+        ),
         agent_sessions=AgentSessionsServiceImpl(
             managers.agent_sessions, managers.agents, managers.steps, managers.tools
         ),
