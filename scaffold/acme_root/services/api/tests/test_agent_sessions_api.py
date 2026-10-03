@@ -70,7 +70,7 @@ async def test_a_session_is_started_spoken_to_steered_and_read(
     path = f"/v1/agent-sessions/{session['id']}"
 
     said = await client.post(
-        f"{path}/messages", headers=created(owner), json={"text": "Why does it drop the object?"}
+        f"{path}/messages", headers=created(owner), json={"text": "Why does the export time out?"}
     )
     paused = await client.post(
         f"{path}/controls", headers=created(owner), json={"command": "pause"}
@@ -82,7 +82,7 @@ async def test_a_session_is_started_spoken_to_steered_and_read(
         1,
         "person",
     )
-    assert said.json()["text"] == "Why does it drop the object?"
+    assert said.json()["text"] == "Why does the export time out?"
     assert paused.status_code == 201, paused.text
     assert (paused.json()["type"], paused.json()["command"]) == ("control", "pause")
     read = await client.get(path, headers=owner)
