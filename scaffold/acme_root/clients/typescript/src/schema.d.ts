@@ -6693,6 +6693,7 @@ export interface operations {
                 authorization?: string | null;
                 "x-app"?: string | null;
                 "x-app-version"?: string | null;
+                "idempotency-key"?: string | null;
             };
             path: {
                 integration: string;
