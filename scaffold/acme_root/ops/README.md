@@ -60,9 +60,25 @@ row names.
 | `stress-test-create-or-update` | none | Write or change a scenario, with its target stated first. |
 | `stress-test-run` | Provisioner, Investigator | Run a scenario and say whether the target held. |
 
+The platform adds its own, each reading what the operator plane or the
+signals hold as aggregates: a supporter reads one named tenant's
+standing, never what the tenant wrote and never a session's content, and
+an investigator reads counts by bounded labels, never a tenant's rows.
+
+| Skill | Needs | Answers |
+|-------|-------|---------|
+| `ops-session-stuck` | Supporter | Why one session is not moving: its park, its loop's lease and lane, its place in line, its share, and where it runs. |
+| `ops-host-idle` | Supporter | Why one host takes no work: what it advertised and the version it reads, against what waits on its lanes. |
+| `ops-station-idle` | Supporter | Why one station takes no work: its daemon, its lease, its line, and its readiness. |
+| `ops-integration-silent` | Investigator | Why an integration's events stopped: what its route answered, what the worker made of them, and the dead letters. |
+| `ops-provider-outage` | Investigator | Which provider and credential fail, and how many sessions park on a provider, for how long. |
+
 The audits read and never fix. The database ones build a database of
 their own on the local stack and drop it; their tools are in
-[audit/](audit/README.md).
+[audit/](audit/README.md). The platform requires two audits the
+guideline leaves optional, `audit-provider-calls` and
+`audit-credential-lifetimes`, since a platform of agents lives on
+provider calls and credentials, and adds `audit-model-spend`.
 
 | Skill | Needs | Answers |
 |-------|-------|---------|
@@ -72,6 +88,7 @@ their own on the local stack and drop it; their tools are in
 | `audit-credential-lifetimes` | none (local) | How long each credential works after it is revoked, on each channel. |
 | `audit-provider-calls` | none (local) | Every call to a provider, flow by flow, and which to remove, fold, move, or cache. |
 | `audit-deploy-time` | Investigator | Where a deploy's minutes go, and what would shorten it. |
+| `audit-model-spend` | Investigator | What model calls spend by matrix version, the cache's hit rate, and what rebuilt caches cost. |
 
 `tickets-triage` reads the tracker and the repository, and holds none of
 these roles.

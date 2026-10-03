@@ -96,9 +96,10 @@ its `-dead` queue at start. Valkey snapshots on shutdown.
 ## Signals
 
 - **Metrics.** Prometheus scrapes the app containers. For host processes,
-  the collector scrapes the API on `ACME_COLLECTOR_SCRAPE_PORT` and the
-  worker on 9464, and remote-writes into Prometheus, as the cloud's
-  sidecar does. `make collector-scrape SCRAPE_PORT=<port>` points it
+  the collector scrapes the API on `ACME_COLLECTOR_SCRAPE_PORT`, the
+  worker on 9464, and the session runner on 9465, and remote-writes into
+  Prometheus, as the cloud's sidecar does. The runner runs only on the
+  host, so the collector is the one place its series come from. `make collector-scrape SCRAPE_PORT=<port>` points it
   elsewhere. Grafana opens on the provisioned overview dashboard, which
   the cloud's CloudWatch dashboard mirrors by panel title.
 - **Traces.** The app containers export to Jaeger. A host process exports

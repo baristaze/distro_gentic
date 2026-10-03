@@ -22,6 +22,7 @@ from acme.om.root import Managers, TenancyOperatorOptions, TenancyOptions, build
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
+from acme.om.trust.root import build_trust_operator
 from acme.services.api.gateway.ratelimit import RateLimit, RateLimitOptions, RefusedAddresses
 from acme.services.api.services import ServicesInterface
 from acme.services.api.services.impl.root import build_services
@@ -204,6 +205,7 @@ class AppContainer:
             infra,
             integrations,
             timedelta(seconds=settings.realtime_head_max_age_seconds),
+            build_trust_operator(storage, infra),
         )
         return cls(
             settings,

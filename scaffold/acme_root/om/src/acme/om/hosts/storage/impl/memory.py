@@ -91,6 +91,14 @@ class HostsStorageMemoryImpl(MemoryStorageBase, HostsStorageInterface):
         hosts = [host for host in self._rows(self._hosts, org_id) if host.pool_id == pool_id]
         return hosts[:limit]
 
+    async def count_hosts(self, seen_since: datetime, floor: int) -> dict[tuple[bool, bool], int]:
+        found: dict[tuple[bool, bool], int] = {}
+        for _, host in self._rows_across_tenants(self._hosts):
+            if host.revoked_at is None:
+                key = (host.last_seen_at > seen_since, host.exec_version >= floor)
+                found[key] = found.get(key, 0) + 1
+        return found
+
     async def read_host_by_credential_digest(
         self, digest: str
     ) -> tuple[UUID, HostCredential, Host] | None:

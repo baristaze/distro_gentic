@@ -53,6 +53,23 @@ def online(host: Host, now: datetime, window: timedelta) -> bool:
     )
 
 
+class HostState(StrEnum):
+    """A host as the platform's gauge counts it: the label is bounded, and a
+    host's own view is an operator-plane read."""
+
+    ONLINE = "online"  # called within the window, at or above the floor
+    OFFLINE = "offline"  # silent past the window
+    BELOW_FLOOR = "below_floor"  # reads a version of `exec` work below the floor
+
+
+def host_state(seen: bool, at_floor: bool) -> HostState:
+    """The state a count of hosts is labelled with: a host below the floor
+    is that first, whether it calls or not, since no work reaches it."""
+    if not at_floor:
+        return HostState.BELOW_FLOOR
+    return HostState.ONLINE if seen else HostState.OFFLINE
+
+
 def retired_at(expires_at: datetime, now: datetime, grace: timedelta) -> datetime:
     """When a rotated credential ends: after the grace, so a call in flight
     with it still lands, and never later than it would have. It does not

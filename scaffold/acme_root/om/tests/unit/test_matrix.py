@@ -27,6 +27,7 @@ from contracts.matrix import (
     fleet_over,
     kept_in,
 )
+from prometheus_client import REGISTRY
 from pydantic import SecretStr
 
 from acme.integrations.model_providers.calls import ModelCall, StreamPart
@@ -369,6 +370,50 @@ async def test_a_running_session_keeps_its_matrix_version_across_a_publish(
     fleet.loop.openai.add(reply(said("The total is 12."), model=SOL.model))
     assert await loop_once(fleet, fresh) is RunEnd.ENDED
     assert (await fleet.matrix.matrix.get_pin(fleet.owner, fresh)).matrix_version == (second.number)
+
+
+def counted(name: str, **labels: str) -> float:
+    return REGISTRY.get_sample_value(name, labels) or 0.0
+
+
+async def test_a_calls_tokens_and_spend_count_under_its_sessions_pinned_version(
+    tmp_path: Path,
+) -> None:
+    """A session's calls count under the matrix version it is pinned to, not
+    the newest: a publish moves a fresh session's calls, never a running
+    one's."""
+    fleet = await fleet_over(tmp_path)
+    first = await fleet.publish()
+    session_id = await fleet.loop.start()
+    fleet.loop.anthropic.add(reply(said("The total is 12.")))
+    assert await loop_once(fleet, session_id) is RunEnd.ENDED
+    second = await fleet.publish()
+    old, new = str(first.number), str(second.number)
+    before = {
+        label: (
+            counted("acme_model_tokens_total", matrix_version=label, kind="input"),
+            counted("acme_model_spend_micros_total", matrix_version=label),
+        )
+        for label in (old, new)
+    }
+
+    fleet.loop.anthropic.add(reply(said("The average is 3.")))
+    assert await loop_once(fleet, session_id, "And the average?") is RunEnd.ENDED
+
+    tokens, spend = before[old]
+    assert counted("acme_model_tokens_total", matrix_version=old, kind="input") == tokens + 120
+    assert counted("acme_model_spend_micros_total", matrix_version=old) > spend
+    assert (
+        counted("acme_model_tokens_total", matrix_version=new, kind="input"),
+        counted("acme_model_spend_micros_total", matrix_version=new),
+    ) == before[new], "the running session kept its version"
+
+    fresh = await fleet.loop.start()
+    fleet.loop.anthropic.add(reply(said("The total is 12.")))
+    assert await loop_once(fleet, fresh) is RunEnd.ENDED
+    tokens, spend = before[new]
+    assert counted("acme_model_tokens_total", matrix_version=new, kind="input") == tokens + 120
+    assert counted("acme_model_spend_micros_total", matrix_version=new) > spend
 
 
 async def test_a_retired_model_switches_at_the_next_loop_with_a_switched_step(

@@ -309,7 +309,12 @@ def loop_over(
         managers.windows,
         managers.tools,
         (
-            CallGateBudgetImpl(managers.budget_gate, managers.pricing, managers.agent_sessions)
+            CallGateBudgetImpl(
+                managers.budget_gate,
+                managers.pricing,
+                managers.agent_sessions,
+                version=None if models_layer is None else models_layer.version,
+            )
             if call_gate is None
             else call_gate(managers, clock)
         ),

@@ -6,18 +6,21 @@ engine's root, and the matrix managers built over the managers it returns.
     managers = build_managers(storage, infra, ..., models_layer=matrix.layer)
     built = matrix.build(managers)
 
-The layer gives the engine three things: the matrix as its resolver, a face
+The layer gives the engine four things: the matrix as its resolver, a face
 over its models manager that resolves within the tenant's retention and
-switches a retired model at the next loop, and the key each call goes out
-on, the tenant's own when it pays its providers."""
+switches a retired model at the next loop, the key each call goes out on,
+the tenant's own when it pays its providers, and the version each session
+is pinned to, which its calls' tokens and spend count under."""
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from uuid import UUID
 
 from acme.integrations.model_providers import ModelProvidersInterface
 from acme.om.agents.types.kind import AgentKind
 from acme.om.base import utcnow
+from acme.om.context import TenantContext
 from acme.om.matrix.impl.credentials import CallCredentialsByFundingImpl
 from acme.om.matrix.impl.manager import MatrixManagerImpl, MatrixOperatorManagerImpl
 from acme.om.matrix.impl.models import ModelsManagerMatrixImpl
@@ -76,7 +79,12 @@ class MatrixLayer:
     @property
     def layer(self) -> ModelsLayer:
         """What the engine's root takes of the matrix."""
-        return ModelsLayer(resolver=self.resolver, models=self.models, credentials=self.credentials)
+        return ModelsLayer(
+            resolver=self.resolver,
+            models=self.models,
+            credentials=self.credentials,
+            version=self.version,
+        )
 
     def resolver(self, prices: ModelPricesInterface) -> MatrixResolverImpl:
         if self._resolver is None:
@@ -110,6 +118,12 @@ class MatrixLayer:
             self.options,
             self._clock,
         )
+
+    async def version(self, ctx: TenantContext, session_id: UUID) -> int | None:
+        """The matrix version the session's fills came from last, None before
+        its first loop resolved them."""
+        pin = await self._storage.get_matrix_tenant_storage().read_pin(ctx.org_id, session_id)
+        return None if pin is None else pin.matrix_version
 
     def credentials(self, providers: ModelProvidersInterface) -> CallCredentialsInterface:
         clients = self._clients

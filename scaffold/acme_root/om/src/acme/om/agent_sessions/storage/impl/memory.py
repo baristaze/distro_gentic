@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
@@ -6,6 +7,7 @@ from acme.om.agent_sessions.types.agent_session import AgentSession, SessionStat
 from acme.om.exceptions import PreconditionFailed
 from acme.om.outbox.storage import OutboxLandingInterface
 from acme.om.outbox.types.row import OutboxRow
+from acme.om.steps.types.header import ParkReason
 from acme.om.storage.impl.memory_base import MemoryStorageBase, MemoryTable
 
 
@@ -72,6 +74,15 @@ class AgentSessionStorageMemoryImpl(MemoryStorageBase, AgentSessionStorageInterf
             for org_id, s in self._rows_across_tenants(self._sessions)
             if s.deleted_at is not None and s.deleted_at < deleted_before
         ][:limit]
+
+    async def count_parked(self, cuts: Sequence[datetime]) -> dict[tuple[ParkReason, int], int]:
+        found: dict[tuple[ParkReason, int], int] = {}
+        for _, s in self._rows_across_tenants(self._sessions):
+            if s.park is None or s.deleted_at is not None:
+                continue
+            key = (s.park.reason, sum(1 for cut in cuts if s.updated_at <= cut))
+            found[key] = found.get(key, 0) + 1
+        return found
 
     async def read_stalled(
         self, after: datetime, before: datetime, limit: int

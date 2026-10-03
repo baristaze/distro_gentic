@@ -113,6 +113,16 @@ class ConfirmTotpRequest(BaseModel):
     totp_code: Annotated[str, Field(max_length=6, min_length=6, title='Totp Code')]
 
 
+class ContentState(StrEnum):
+    """
+    Where what a step says is. The state answers, so no caller compares
+    strings.
+    """
+    plain = 'plain'
+    sealed = 'sealed'
+    absent = 'absent'
+
+
 class ControlCommand(StrEnum):
     """
     What a `control` step records: a command that travels out of band.
@@ -426,6 +436,16 @@ class FileView(BaseModel):
     size_bytes: Annotated[int, Field(title='Size Bytes')]
     status: FileStatus
     subject_id: Annotated[UUID | None, Field(title='Subject Id')]
+
+
+class HostState(StrEnum):
+    """
+    A host as the platform's gauge counts it: the label is bounded, and a
+    host's own view is an operator-plane read.
+    """
+    online = 'online'
+    offline = 'offline'
+    below_floor = 'below_floor'
 
 
 class InvitationState(StrEnum):
@@ -880,6 +900,33 @@ class SessionView(BaseModel):
     expires_at: Annotated[AwareDatetime, Field(title='Expires At')]
     id: Annotated[UUID, Field(title='Id')]
     revoked_at: Annotated[AwareDatetime | None, Field(title='Revoked At')]
+
+
+class SetShareRequest(BaseModel):
+    """
+    A tenant's fair share: the plan tier whose lane its loops run in,
+    whether they run in a lane of their own instead, and how many of them
+    run at once.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    concurrency: Annotated[int, Field(ge=1, le=10000, title='Concurrency')]
+    own_lane: Annotated[bool | None, Field(title='Own Lane')] = False
+    plan_tier: Annotated[str, Field(pattern='^[a-z][a-z0-9-]{0,31}$', title='Plan Tier')]
+
+
+class ShareView(BaseModel):
+    """
+    A tenant's fair share as the operator wrote it, at its version.
+    """
+    concurrency: Annotated[int, Field(title='Concurrency')]
+    org_id: Annotated[UUID, Field(title='Org Id')]
+    own_lane: Annotated[bool, Field(title='Own Lane')]
+    plan_tier: Annotated[str, Field(title='Plan Tier')]
+    updated_at: Annotated[AwareDatetime, Field(title='Updated At')]
+    updated_by: Annotated[UUID, Field(title='Updated By')]
+    version: Annotated[int, Field(title='Version')]
 
 
 class InvitationToken(RootModel[str]):
@@ -1448,12 +1495,37 @@ class IssuedUploadView(BaseModel):
     url: Annotated[str | None, Field(title='Url')]
 
 
+class LaneLoadView(BaseModel):
+    kind: WorkKind
+    lane: Annotated[str, Field(title='Lane')]
+    ready: Annotated[int, Field(title='Ready')]
+
+
 class LastOwnerDetail(BaseModel):
     """
     What a `last_owner` refusal carries: every team org the person is the
     last owner of, which they hand on or delete before their account goes.
     """
     orgs: Annotated[list[OwnedOrgRef], Field(title='Orgs')]
+
+
+class LoopStandingView(BaseModel):
+    """
+    The session's loop item made last, and its place in line:
+    `ready_ahead` items of any tenant are ready before it on its lane, and
+    `running_ahead` of its tenant's loops run ahead of it, which the claim
+    counts against the share.
+    """
+    attempts: Annotated[int, Field(title='Attempts')]
+    available_at: Annotated[AwareDatetime, Field(title='Available At')]
+    claimed_by: Annotated[str | None, Field(title='Claimed By')]
+    item_id: Annotated[UUID, Field(title='Item Id')]
+    lane: Annotated[str, Field(title='Lane')]
+    lease_expires_at: Annotated[AwareDatetime | None, Field(title='Lease Expires At')]
+    max_attempts: Annotated[int, Field(title='Max Attempts')]
+    ready_ahead: Annotated[int, Field(title='Ready Ahead')]
+    running_ahead: Annotated[int, Field(title='Running Ahead')]
+    status: WorkStatus
 
 
 class MeView(BaseModel):
@@ -1581,6 +1653,26 @@ class ResultRequest(BaseModel):
     data: Annotated[str, Field(max_length=16000000, title='Data')]
 
 
+class SessionStandingView(BaseModel):
+    """
+    Why a session is or is not moving. `changed_at` is its last change:
+    when it parked, for a parked one. `pool_id` null is the cloud, where
+    `hosts_online` is null; `share_set` false is the default share.
+    """
+    changed_at: Annotated[AwareDatetime, Field(title='Changed At')]
+    concurrency: Annotated[int, Field(title='Concurrency')]
+    hosts_online: Annotated[int | None, Field(title='Hosts Online')]
+    loop: LoopStandingView | None
+    own_lane: Annotated[bool, Field(title='Own Lane')]
+    park: ParkView | None
+    pending_input: Annotated[bool, Field(title='Pending Input')]
+    plan_tier: Annotated[str, Field(title='Plan Tier')]
+    pool_id: Annotated[UUID | None, Field(title='Pool Id')]
+    session_id: Annotated[UUID, Field(title='Session Id')]
+    share_set: Annotated[bool, Field(title='Share Set')]
+    status: SessionStatus
+
+
 class StationClaimView(BaseModel):
     """
     What a claim answers: the item, the job it names, and how many
@@ -1591,6 +1683,28 @@ class StationClaimView(BaseModel):
     item: ClaimedStationWorkView | None
     job: StationJobView | None = None
     lease_seconds: Annotated[float | None, Field(title='Lease Seconds')] = 0
+
+
+class StepShapeView(BaseModel):
+    """
+    One step as an operator's `read` sees it: what it is, who wrote it,
+    and the fields of its header a reader acts on, never what it says.
+    `content` says whether what it says is kept.
+    """
+    actor: Actor
+    command: ControlCommand | None
+    content: ContentState
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    failure: ToolFailure | None
+    id: Annotated[UUID, Field(title='Id')]
+    loop_id: Annotated[UUID, Field(title='Loop Id')]
+    origin: Origin
+    outcome: LoopOutcome | None
+    park: ParkView | None
+    responds_to: Annotated[UUID | None, Field(title='Responds To')]
+    seq: Annotated[int, Field(title='Seq')]
+    tool: Annotated[str | None, Field(title='Tool')]
+    type: StepType
 
 
 class StepView(BaseModel):
@@ -1651,6 +1765,23 @@ class ErrorResponse(BaseModel):
     error: ErrorBody
 
 
+class HostStandingView(BaseModel):
+    """
+    Why a host takes no work: its state, what it advertised, the version
+    of `exec` work it reads against the floor, when it last called, and what
+    is ready on its pool's lane and its own.
+    """
+    advertisement: AdvertisementView
+    exec_floor: Annotated[int, Field(title='Exec Floor')]
+    exec_version: Annotated[int, Field(title='Exec Version')]
+    host_id: Annotated[UUID, Field(title='Host Id')]
+    lanes: Annotated[list[LaneLoadView], Field(title='Lanes')]
+    last_seen_at: Annotated[AwareDatetime, Field(title='Last Seen At')]
+    pool_id: Annotated[UUID, Field(title='Pool Id')]
+    revoked: Annotated[bool, Field(title='Revoked')]
+    state: HostState
+
+
 class InvitationPageView(BaseModel):
     """
     One page of the org's pending invitations, newest first; `next_cursor`
@@ -1709,6 +1840,14 @@ class MembershipPageView(BaseModel):
     """
     items: Annotated[list[MembershipView], Field(title='Items')]
     next_cursor: Annotated[str | None, Field(title='Next Cursor')]
+
+
+class ShapePageView(BaseModel):
+    """
+    One page of a session's shape, after the seq the request named.
+    """
+    has_more: Annotated[bool, Field(title='Has More')]
+    items: Annotated[list[StepShapeView], Field(title='Items')]
 
 
 class StepPageView(BaseModel):

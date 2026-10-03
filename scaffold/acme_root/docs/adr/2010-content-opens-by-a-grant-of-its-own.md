@@ -47,6 +47,7 @@ records asks `read`. No call returns a value.
   none, whatever it is told.
 - A member manages the keys they sign in with and no secret of the
   tenant's; an admin or the owner does that.
-- The grant job's commands and the operator plane's route for content
-  are not built yet; until they are, a grant is written through the
-  manager alone.
+- The grant job writes and ends a grant by the operator's email and the
+  tenant's id (`acme-api grant-operator --grant-content`,
+  `--revoke-content`), and the operator plane opens content at
+  `/v1/admin/orgs/{org_id}/sessions/{session_id}/content`.

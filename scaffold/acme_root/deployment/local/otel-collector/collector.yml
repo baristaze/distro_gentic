@@ -1,7 +1,8 @@
 # The collector beside the host processes, in the shape of the cloud's
 # sidecar (deployment/terraform/modules/service/main.tf): a Prometheus
-# receiver scrapes the api and the maintenance worker that scripts/dev.sh
-# runs on 127.0.0.1, and the samples go on to Prometheus by remote write.
+# receiver scrapes the api, the maintenance worker, and the session runner
+# that scripts/dev.sh runs on 127.0.0.1, and the samples go on to Prometheus
+# by remote write.
 # The processes stay on loopback, and the collector listens on nothing.
 #
 # Three settings place it, and docker-compose.yml sets all three:
@@ -36,6 +37,12 @@ receivers:
         - job_name: maintenance
           static_configs:
             - targets: ["${env:ACME_COLLECTOR_SCRAPE_HOST}:9464"]
+              labels: {runs_in: host}
+        # The runner settles every model call and counts each outage
+        # report; it runs only as a host process, so this is its one job.
+        - job_name: session_runner
+          static_configs:
+            - targets: ["${env:ACME_COLLECTOR_SCRAPE_HOST}:9465"]
               labels: {runs_in: host}
 
 processors:

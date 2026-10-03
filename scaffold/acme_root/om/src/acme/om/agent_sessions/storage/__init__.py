@@ -5,11 +5,13 @@ rows in one commit. Its delete, the purge, runs under the purge login, which
 no serving process holds (ADR 1010)."""
 
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
 from acme.om.agent_sessions.types.agent_session import AgentSession, SessionStatus
 from acme.om.outbox.types.row import OutboxRow
+from acme.om.steps.types.header import ParkReason
 
 
 class AgentSessionStorageInterface(ABC):
@@ -63,6 +65,14 @@ class AgentSessionStorageInterface(ABC):
         with its tenant, in no order: the sessions whose retention has
         ended, claimed for their purge or not yet. One read a pass for every
         tenant, so a tenant with nothing to purge costs nothing."""
+        ...
+
+    @abstractmethod
+    async def count_parked(self, cuts: Sequence[datetime]) -> dict[tuple[ParkReason, int], int]:
+        """Cross-tenant, for the platform's gauge of parks, in the system
+        scope: the parked sessions not marked deleted, by their park's reason
+        and their age, which is how many of `cuts` their last change is at or
+        before. With `cuts` newest first, age 0 changed after the first."""
         ...
 
     @abstractmethod

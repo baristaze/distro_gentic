@@ -80,6 +80,14 @@ class HostsStorageInterface(ABC):
         ...
 
     @abstractmethod
+    async def count_hosts(self, seen_since: datetime, floor: int) -> dict[tuple[bool, bool], int]:
+        """Cross-tenant, for the platform's gauge of hosts, in the system
+        scope: the hosts not revoked, by whether they called since
+        `seen_since` and whether they read `exec` work at or above `floor`.
+        A count, never a host."""
+        ...
+
+    @abstractmethod
     async def read_host_by_credential_digest(
         self, digest: str
     ) -> tuple[UUID, HostCredential, Host] | None:
