@@ -350,7 +350,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List Sessions
+         * @description The tenant's sessions in a status, or in any, a page at a time by id.
+         */
+        get: operations["list_sessions_v1_agent_sessions_get"];
         put?: never;
         /**
          * Start Session
@@ -374,6 +378,32 @@ export interface paths {
         get: operations["get_session_v1_agent_sessions__session_id__get"];
         put?: never;
         post?: never;
+        /**
+         * Delete Session
+         * @description An idle session marked deleted: it answers as one that never existed
+         *     until it is restored, and its retention ends the chance.
+         */
+        delete: operations["delete_session_v1_agent_sessions__session_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-sessions/{session_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archive Session
+         * @description An idle session archived: it keeps what arrives and wakes for nothing
+         *     until a person's message brings it back.
+         */
+        post: operations["archive_session_v1_agent_sessions__session_id__archive_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -394,6 +424,26 @@ export interface paths {
          * @description An approval or a denial of the tool call at `request_seq`, as stored.
          */
         post: operations["decide_call_v1_agent_sessions__session_id__calls__request_seq__decision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-sessions/{session_id}/children": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Children
+         * @description The sessions this one spawned, a page at a time by id.
+         */
+        get: operations["list_children_v1_agent_sessions__session_id__children_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -564,6 +614,26 @@ export interface paths {
          */
         put: operations["place_session_v1_agent_sessions__session_id__placement_put"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-sessions/{session_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Session
+         * @description A deleted session back as it was, with its history.
+         */
+        post: operations["restore_session_v1_agent_sessions__session_id__restore_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1780,11 +1850,24 @@ export interface components {
             shell: string;
         };
         /**
+         * AgentSessionPageView
+         * @description One page of sessions, by id. `next_cursor` fetches the next page and
+         *     is null on the last one.
+         */
+        AgentSessionPageView: {
+            /** Items */
+            items: components["schemas"]["AgentSessionView"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /**
          * AgentSessionView
          * @description A session: its kind, its title, and its status, which follows its
          *     steps. `pending` while an input waits for a run, `running` while a run
          *     holds its loop, `parked` while the loop waits, `idle` when no loop is
-         *     open.
+         *     open. A sub-agent names the session that spawned it, and every session
+         *     the root of its tree. `deleted_at` is set only on the answer to a
+         *     delete: a deleted session is on no read until it is restored.
          */
         AgentSessionView: {
             /** Archived At */
@@ -1799,6 +1882,8 @@ export interface components {
              * Format: uuid
              */
             created_by: string;
+            /** Deleted At */
+            deleted_at: string | null;
             /**
              * Id
              * Format: uuid
@@ -1808,7 +1893,14 @@ export interface components {
             kind: string;
             /** Kind Version */
             kind_version: number;
+            /** Parent Id */
+            parent_id: string | null;
             park: components["schemas"]["ParkView"] | null;
+            /**
+             * Root Id
+             * Format: uuid
+             */
+            root_id: string;
             status: components["schemas"]["SessionStatus"];
             /** Title */
             title: string;
@@ -4756,6 +4848,43 @@ export interface operations {
             };
         };
     };
+    list_sessions_v1_agent_sessions_get: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["SessionStatus"] | null;
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSessionPageView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     start_session_v1_agent_sessions_post: {
         parameters: {
             query?: never;
@@ -4829,6 +4958,76 @@ export interface operations {
             };
         };
     };
+    delete_session_v1_agent_sessions__session_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSessionView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    archive_session_v1_agent_sessions__session_id__archive_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSessionView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     decide_call_v1_agent_sessions__session_id__calls__request_seq__decision_post: {
         parameters: {
             query?: never;
@@ -4857,6 +5056,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StepView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_children_v1_agent_sessions__session_id__children_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSessionPageView"];
                 };
             };
             /** @description Validation Error */
@@ -5198,6 +5435,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlacementView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_session_v1_agent_sessions__session_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSessionView"];
                 };
             };
             /** @description Validation Error */

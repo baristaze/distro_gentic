@@ -29,6 +29,7 @@ from acme.apps.cli.model import (
     follow_succeeded,
     human_size,
     org_lines,
+    session_line,
     settled,
     step_line,
 )
@@ -39,6 +40,7 @@ from acme.client.types import (
     IssuedLoginView,
     IssuedSessionView,
     SessionControl,
+    SessionStatus,
     StepView,
 )
 
@@ -408,7 +410,7 @@ def upload(
 # Sessions with an agent
 
 session_app = typer.Typer(
-    help="A session with an agent: start one, speak to it, steer it, read its history.",
+    help="A session with an agent: list them, start one, speak to it, steer it, read its history.",
     no_args_is_help=True,
 )
 app.add_typer(session_app, name="session")
@@ -437,6 +439,29 @@ def start_session(
             typer.echo(started.model_dump_json(indent=2))
         else:
             typer.echo(f"started {started.id} on {started.kind} {started.kind_version}")
+
+    run(go, api)
+
+
+@session_app.command("list")
+def list_sessions(
+    status: Annotated[
+        SessionStatus | None, typer.Option(help="Only the sessions in this status.")
+    ] = None,
+    as_json: Json = False,
+    api: Api = None,
+) -> None:
+    """The org's sessions, one a line, by id, every page read."""
+
+    async def go(client: ApiClient) -> None:
+        cursor: str | None = None
+        while True:
+            page = await client.agent_sessions(status=status, cursor=cursor)
+            for session in page.items:
+                typer.echo(session.model_dump_json() if as_json else session_line(session))
+            cursor = page.next_cursor
+            if cursor is None:
+                return
 
     run(go, api)
 

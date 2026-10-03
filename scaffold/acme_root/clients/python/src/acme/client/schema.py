@@ -1224,15 +1224,20 @@ class AgentSessionView(BaseModel):
     A session: its kind, its title, and its status, which follows its
     steps. `pending` while an input waits for a run, `running` while a run
     holds its loop, `parked` while the loop waits, `idle` when no loop is
-    open.
+    open. A sub-agent names the session that spawned it, and every session
+    the root of its tree. `deleted_at` is set only on the answer to a
+    delete: a deleted session is on no read until it is restored.
     """
     archived_at: Annotated[AwareDatetime | None, Field(title='Archived At')]
     created_at: Annotated[AwareDatetime, Field(title='Created At')]
     created_by: Annotated[UUID, Field(title='Created By')]
+    deleted_at: Annotated[AwareDatetime | None, Field(title='Deleted At')]
     id: Annotated[UUID, Field(title='Id')]
     kind: Annotated[str, Field(title='Kind')]
     kind_version: Annotated[int, Field(title='Kind Version')]
+    parent_id: Annotated[UUID | None, Field(title='Parent Id')]
     park: ParkView | None
+    root_id: Annotated[UUID, Field(title='Root Id')]
     status: SessionStatus
     title: Annotated[str, Field(title='Title')]
 
@@ -1740,6 +1745,15 @@ class UserPageView(BaseModel):
     whatever a fixed limit happened to cover.
     """
     items: Annotated[list[UserView], Field(title='Items')]
+    next_cursor: Annotated[str | None, Field(title='Next Cursor')]
+
+
+class AgentSessionPageView(BaseModel):
+    """
+    One page of sessions, by id. `next_cursor` fetches the next page and
+    is null on the last one.
+    """
+    items: Annotated[list[AgentSessionView], Field(title='Items')]
     next_cursor: Annotated[str | None, Field(title='Next Cursor')]
 
 

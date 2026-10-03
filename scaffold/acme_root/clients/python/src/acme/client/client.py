@@ -21,6 +21,7 @@ import truststore
 
 from acme.client.types import (
     AdvertisementBody,
+    AgentSessionPageView,
     AgentSessionView,
     ClaimView,
     ControlView,
@@ -54,6 +55,7 @@ from acme.client.types import (
     PreparedView,
     Role,
     SessionControl,
+    SessionStatus,
     SignedOutView,
     SignInStartView,
     SsoLinkView,
@@ -727,6 +729,22 @@ class ApiClient:
     async def agent_session(self, session_id: UUID) -> AgentSessionView:
         read = await self.request("GET", f"/v1/agent-sessions/{session_id}")
         return AgentSessionView.model_validate(read)
+
+    async def agent_sessions(
+        self,
+        *,
+        status: SessionStatus | None = None,
+        cursor: str | None = None,
+        limit: int = LIMIT_MAX,
+    ) -> AgentSessionPageView:
+        """One page of the tenant's sessions in `status`, or in any, by id."""
+        params: dict[str, Any] = {"limit": limit}
+        if status is not None:
+            params["status"] = status.value
+        if cursor:
+            params["cursor"] = cursor
+        body = await self.request("GET", "/v1/agent-sessions", params=params)
+        return AgentSessionPageView.model_validate(body)
 
     async def send_message(
         self, session_id: UUID, text: str, *, idempotency_key: str | None = None
