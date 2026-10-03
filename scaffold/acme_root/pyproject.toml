@@ -196,6 +196,7 @@ tenantless = [
     "RetentionStorageInterface.read_behind",
     "RetentionStorageInterface.read_due",
     "StationsStorageInterface.read_daemon_credential_by_digest",
+    "StationsStorageInterface.read_lapsed",
     "TenancyStorageInterface.clear_failed_sign_ins",
     "TenancyStorageInterface.confirm_totp",
     "TenancyStorageInterface.count_orgs",

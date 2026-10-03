@@ -112,6 +112,10 @@ STORAGE_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         ("RelayStorageInterface", "read_expired"),
         # And a station daemon's, by its credential's digest, the same way.
         ("StationsStorageInterface", "read_daemon_credential_by_digest"),
+        # The sweep's read of stations no live lease holds that a waiting
+        # entry asks for, each named with its tenant, whose service context
+        # the sweep offers it under.
+        ("StationsStorageInterface", "read_lapsed"),
         # The sweep's requeue of expired leases: a named write in the system
         # scope, like the claim it undoes. A crashed worker's item waits one
         # pass for it, not the turn of its tenant in a ring of every tenant.
@@ -343,6 +347,9 @@ REQUEST_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
         ("StationsManagerInterface", "claim"),
         ("StationsManagerInterface", "renew"),
         ("StationsManagerInterface", "report"),
+        # And the sweep's offer of each station whose lease lapsed, across
+        # tenants, each under its tenant's service context.
+        ("StationsManagerInterface", "offer_lapsed"),
         # A live read, by its handle alone: the handle is the authority, as a
         # presigned URL is, and the read mints no context.
         ("WatchManagerInterface", "read_live"),
