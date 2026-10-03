@@ -69,6 +69,7 @@ def build_runner(container: RunnerContainer, lane: str | None = None) -> WorkerL
         container.infra.get_workspaces(),
         managers.tools,
         managers.workspaces,
+        managers.agent_sessions,
         managers.steps,
         managers.work,
         managers.tenancy,

@@ -169,6 +169,7 @@ async def test_a_killed_runs_instance_on_its_host_is_released_past_the_grace_wit
         runner.infra.get_workspaces(),
         managers.tools,
         managers.workspaces,
+        managers.agent_sessions,
         managers.steps,
         managers.work,
         managers.tenancy,

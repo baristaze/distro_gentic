@@ -26,10 +26,14 @@ for past the grace is let go the same way, from here: its checkout's work
 is pushed to a snapshot ref through the relay, by the platform's git and
 with no credential in the workspace, and only then is its host asked,
 as `workspace` work on its lane, to let the instance go and keep its
-files. One released since its session's last loop is not asked again; one
-whose host is offline, revoked, or out of the session's pool waits for
-a pass that reaches it. A deleted tenant's is left to the tenant's
-purge: nothing is sent into its wall."""
+files. Its work is not pushed again when a snapshot taken after the
+session's last step holds it already, as a loop's end leaves it. One a
+person holds, its loop parked on a hand-over, is theirs and stays. One
+whose release was asked since its session's last loop is not asked
+again, answered or failed: a failed one is logged, and the next loop's
+end asks anew. One whose host is offline, revoked, or out of the
+session's pool waits for a pass that reaches it. A deleted tenant's is
+left to the tenant's purge: nothing is sent into its wall."""
 
 import logging
 from collections.abc import Callable
@@ -39,17 +43,21 @@ from uuid import UUID
 from pydantic import Field, ValidationError
 
 from acme.infra.workspaces import HeldInstance, Workspace, WorkspaceProviderInterface
+from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.base import EMPTY_UUID, Platform, utcnow
 from acme.om.context import RequestContext, TenantContext
+from acme.om.exceptions import NotFound
 from acme.om.placement.types.work import WorkspaceOperation, WorkspacePayload
 from acme.om.relay.manager import RelayManagerInterface
 from acme.om.relay.types.exec import WorkspaceBinding
 from acme.om.steps import StepsManagerInterface
+from acme.om.steps.types.header import ParkReason
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.work import WorkManagerInterface
 from acme.om.work.types.work_item import WorkKind, WorkStatus
 from acme.om.workspaces.manager import WorkspacesManagerInterface
+from acme.om.workspaces.rules import snapshot_at
 
 log = logging.getLogger(__name__)
 
@@ -72,6 +80,7 @@ class HeldWorkspacesSweep:
         provider: WorkspaceProviderInterface,
         tools: ToolsManagerInterface,
         workspaces: WorkspacesManagerInterface,
+        sessions: AgentSessionsManagerInterface,
         steps: StepsManagerInterface,
         work: WorkManagerInterface,
         tenancy: TenancyManagerInterface,
@@ -82,6 +91,7 @@ class HeldWorkspacesSweep:
         self._provider = provider
         self._tools = tools
         self._workspaces = workspaces
+        self._sessions = sessions
         self._steps = steps
         self._work = work
         self._tenancy = tenancy
@@ -93,6 +103,8 @@ class HeldWorkspacesSweep:
         self._unaccounted: dict[UUID, datetime] = {}
         # Each instance logged as one this database holds no record of.
         self._logged: set[UUID] = set()
+        # Each session whose release was logged as failed, and that release.
+        self._failed: dict[UUID, UUID] = {}
 
     async def __call__(self, rctx: RequestContext) -> int:
         """One pass over what this host holds, then over what the tenants'
@@ -103,6 +115,7 @@ class HeldWorkspacesSweep:
         ids = {instance.id for instance in held} | {b.session_id for _, b in hosted}
         self._unaccounted = {id_: at for id_, at in self._unaccounted.items() if id_ in ids}
         self._logged &= ids
+        self._failed = {id_: item for id_, item in self._failed.items() if id_ in ids}
         let_go = 0
         for instance in held:
             try:
@@ -204,15 +217,18 @@ class HeldWorkspacesSweep:
             self._unaccounted.pop(session_id, None)
             return False
         ctx = await self._tenancy.service_context(rctx, org_id, EMPTY_UUID)
-        if await self._work.has_open(ctx, WorkKind.LOOP, session_id) or await self._released(
-            ctx, session_id
+        if (
+            await self._work.has_open(ctx, WorkKind.LOOP, session_id)
+            or await self._released(ctx, session_id)
+            or await self._handed_over(ctx, session_id)
         ):
             self._unaccounted.pop(session_id, None)
             return False
         since = self._unaccounted.setdefault(session_id, now)
         if now - since < self._options.grace:
             return False
-        if (await self._steps.get_cursor(ctx, session_id)).epoch == 0:
+        cursor = await self._steps.get_cursor(ctx, session_id)
+        if cursor.epoch == 0:
             self._unknown(
                 HeldInstance(id=session_id, org_id=org_id, location=binding.location),
                 "its session",
@@ -227,9 +243,10 @@ class HeldWorkspacesSweep:
         workspace = Workspace(
             id=session_id, org_id=org_id, spec=pinned.spec(), location=holder.location
         )
-        # Kept first, through the relay: a push that does not land raises,
-        # and the instance and its work stay.
-        await self._workspaces.detach(ctx, workspace)
+        if not await self._kept(ctx, session_id, cursor.head, pinned.snapshot_ref):
+            # Kept first, through the relay: a push that does not land
+            # raises, and the instance and its work stay.
+            await self._workspaces.detach(ctx, workspace)
         await self._relay.ask_release(ctx, session_id, workspace.spec)
         log.info(
             "session %s of org %s: host %s is asked to let go of its instance no run held",
@@ -242,9 +259,11 @@ class HeldWorkspacesSweep:
 
     async def _released(self, ctx: TenantContext, session_id: UUID) -> bool:
         """Whether a release of the session's instance was asked after its
-        last loop moved, and has not failed: nothing has run on it since."""
+        last loop moved, answered or failed: nothing has run on it since,
+        and a host that fails it would fail it again. A failed one is
+        logged, once a process."""
         asked = await self._work.latest_for_target(ctx, WorkKind.WORKSPACE, session_id)
-        if asked is None or asked.status is WorkStatus.FAILED:
+        if asked is None:
             return False
         try:
             operation = WorkspacePayload.model_validate(asked.payload).operation
@@ -253,7 +272,43 @@ class HeldWorkspacesSweep:
         if operation is not WorkspaceOperation.RELEASE:
             return False
         loop = await self._work.latest_for_target(ctx, WorkKind.LOOP, session_id)
-        return loop is None or loop.updated_at <= asked.created_at
+        if loop is not None and loop.updated_at > asked.created_at:
+            return False
+        if asked.status is WorkStatus.FAILED and self._failed.get(session_id) != asked.id:
+            self._failed[session_id] = asked.id
+            log.warning(
+                "session %s of org %s: its host did not let its instance go (%s); "
+                "the next loop's end asks again",
+                session_id,
+                ctx.org_id,
+                asked.last_error,
+            )
+        return True
+
+    async def _handed_over(self, ctx: TenantContext, session_id: UUID) -> bool:
+        """Whether a person holds the session's workspace: its loop is parked
+        on a hand-over, which only their giving back clears, and their
+        commands run in it meanwhile."""
+        try:
+            session = await self._sessions.get_session(ctx, session_id)
+        except NotFound:
+            # One marked deleted is let go like any other.
+            return False
+        return session.park is not None and session.park.reason is ParkReason.HANDOVER
+
+    async def _kept(
+        self, ctx: TenantContext, session_id: UUID, head: int, snapshot_ref: str | None
+    ) -> bool:
+        """Whether the session's last snapshot was taken after its last step,
+        as a loop's end takes it: no call has run in its checkout since, so a
+        push would only keep the same work again."""
+        taken = None if snapshot_ref is None else snapshot_at(snapshot_ref)
+        if taken is None:
+            return False
+        if head == 0:
+            return True
+        page = await self._steps.get_steps(ctx, session_id, head - 1, 1)
+        return all(step.created_at <= taken for step in page.items)
 
     def _unknown(self, instance: HeldInstance, what: str) -> None:
         """Logs, once a process, an instance this database cannot account
