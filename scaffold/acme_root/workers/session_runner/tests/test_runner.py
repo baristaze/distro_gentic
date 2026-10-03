@@ -554,6 +554,7 @@ class Driven:
         owner, _ = await managers.tenancy.bootstrap(
             RequestContext(request_id=new_id(), app=APP), "Ajax", "ajax", "ann@example.test", "Ann"
         )
+        await seed_platform(self.container.storage, managers, owner, (READING,))
         twin = self.container.integrations.get_model_providers().get(ProviderName.ANTHROPIC)
         reads = ToolUseBlock(
             id=f"use_{new_id().hex[:12]}",
@@ -625,7 +626,9 @@ def test_a_runner_booted_through_main_reads_an_attachment_with_the_products_read
         driven.append(Driven(container, lane, file))
         return driven[-1]
 
-    monkeypatch.setattr(runner_main, "SessionRunnerSettings", settings)
+    monkeypatch.setattr(
+        runner_main, "SessionRunnerSettings", lambda: settings(corpus_root=ENV_EXAMPLE.parent)
+    )
     monkeypatch.setattr(runner_main, "boot", lambda _: None)
     monkeypatch.setattr(runner_main, "WorkerHttpServer", Quiet)
     monkeypatch.setattr(runner_main, "build_runner", driving)
