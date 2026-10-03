@@ -2,9 +2,9 @@
 repository is served by git's own HTTP backend behind basic authentication,
 the project's fetch credential is given to the platform and kept in the
 tenant's store, and the platform's own git alone is handed it. The forge
-writes with a credential of its own. The session's workspace, a directory
-on this host, checks the repository out and delivers to it, and holds
-neither."""
+writes with a credential of its own, the local stack's twin with the one
+its settings give it. The session's workspace, a directory on this host,
+checks the repository out and delivers to it, and holds neither."""
 
 import base64
 import shutil
@@ -33,6 +33,9 @@ from acme.infra.workspaces import (
 )
 from acme.infra.workspaces.host import WorkspaceHostImpl
 from acme.integrations.events.twin import IntegrationTwinImpl
+from acme.integrations.exceptions import ProviderUnavailable
+from acme.integrations.impl.configured import integrations_for
+from acme.integrations.settings import IntegrationsSettings
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
 from acme.om.agents.types.request import Start
 from acme.om.attribution.types.authority import AuthorityMode
@@ -402,3 +405,35 @@ async def test_a_session_works_a_private_repository_with_no_credential_in_its_wo
     await managers.tools.release_workspace(owner, workspace)
     kept = git(Path(remote), "for-each-ref", "--format=%(refname)", "refs/snapshots")
     assert kept.startswith(f"refs/snapshots/{branch}/"), kept
+
+
+@pytest.mark.parametrize("given", [True, False], ids=["with-the-setting", "without-it"])
+async def test_the_local_stacks_forge_twin_pushes_to_a_private_repository_with_its_setting(
+    tmp_path: Path, private_git: PrivateGit, given: bool
+) -> None:
+    main, remote = a_delivery(private_git.root)
+    seed = private_git.root.parent / "seed"
+    git(seed, "checkout", "-q", "-b", "sessions/one")
+    (seed / "total.py").write_text("TOTAL = 3\n")
+    git(seed, "add", "total.py")
+    git(seed, "-c", "user.name=a", "-c", "user.email=a@example.invalid", "commit", "-qm", "2")
+    head = git(seed, "rev-parse", "HEAD")
+    git(seed, "bundle", "create", "-q", str(tmp_path / "work.bundle"), "sessions/one")
+    bundle = (tmp_path / "work.bundle").read_bytes()
+    values = {"forge_twin_username": WRITER, "forge_twin_password": WRITER_PASSWORD}
+    built = integrations_for(
+        IntegrationsSettings.model_validate(
+            {"_env_file": None, "integrations": "twin", **(values if given else {})}
+        )
+    )
+    forge = built["forge"]
+
+    if given:
+        await forge.push(private_git.url, "refs/heads/sessions/one", head, bundle)
+        assert git(Path(remote), "rev-parse", "refs/heads/sessions/one") == head
+    else:
+        with pytest.raises(ProviderUnavailable):
+            await forge.push(private_git.url, "refs/heads/sessions/one", head, bundle)
+        held = git(Path(remote), "for-each-ref", "--format=%(refname) %(objectname)")
+        assert held == f"refs/heads/main {main}", "nothing was written"
+        assert private_git.refused > 0 and private_git.authorized == 0

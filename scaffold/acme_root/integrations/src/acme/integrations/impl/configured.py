@@ -44,16 +44,39 @@ def refuse_unsafe(settings: IntegrationsSettings, environment: str, deployed: bo
         raise UnsafeIntegration(
             f"ACME_INTEGRATIONS=twin is refused when ACME_ENVIRONMENT={environment}"
         )
+    if deployed and settings.forge_twin_username:
+        raise UnsafeIntegration(
+            f"ACME_FORGE_TWIN_USERNAME is refused when ACME_ENVIRONMENT={environment}"
+        )
+    if deployed and settings.forge_twin_password is not None:
+        raise UnsafeIntegration(
+            f"ACME_FORGE_TWIN_PASSWORD is refused when ACME_ENVIRONMENT={environment}"
+        )
 
 
 def integrations_for(settings: IntegrationsSettings) -> dict[str, IntegrationInterface]:
     """Each integration the platform names, from settings: its twin, or the
     absent one, which refuses every call as unavailable. The forge's twin
     writes what is pushed to the repository, so a session's branch and its
-    snapshots are there for its next loop."""
+    snapshots are there for its next loop, with the credential its settings
+    give it where the repository asks one."""
     if settings.integrations == "twin":
-        return {name: IntegrationTwinImpl(name, writes=name == FORGE) for name in INTEGRATIONS}
+        built: dict[str, IntegrationInterface] = {
+            name: IntegrationTwinImpl(name) for name in INTEGRATIONS
+        }
+        built[FORGE] = IntegrationTwinImpl(
+            FORGE, writes=True, credential=forge_twin_credential(settings)
+        )
+        return built
     return {name: IntegrationAbsentImpl(name) for name in INTEGRATIONS}
+
+
+def forge_twin_credential(settings: IntegrationsSettings) -> tuple[str, str] | None:
+    """The user and the password the forge's twin pushes with; none while
+    the password is unset."""
+    if settings.forge_twin_password is None:
+        return None
+    return settings.forge_twin_username, settings.forge_twin_password.get_secret_value()
 
 
 def model_providers_for(settings: IntegrationsSettings) -> ModelProvidersInterface:

@@ -100,6 +100,21 @@ def test_the_twin_refuses_to_start_outside_local(environment: str) -> None:
         IntegrationsConfiguredImpl(settings(integrations="twin"), environment, True)
 
 
+@pytest.mark.parametrize("environment", ["dev", "staging", "production"])
+@pytest.mark.parametrize(
+    ("setting", "values"),
+    [
+        ("ACME_FORGE_TWIN_USERNAME", {"forge_twin_username": "forge"}),
+        ("ACME_FORGE_TWIN_PASSWORD", {"forge_twin_password": "forge-writes"}),
+    ],
+)
+def test_the_forge_twins_credential_is_refused_outside_local(
+    environment: str, setting: str, values: dict[str, object]
+) -> None:
+    with pytest.raises(UnsafeIntegration, match=setting):
+        IntegrationsConfiguredImpl(settings(**values), environment, True)
+
+
 @pytest.mark.parametrize("environment", ["local", "test"])
 def test_the_twin_serves_every_integration_locally(environment: str) -> None:
     root = IntegrationsConfiguredImpl(settings(integrations="twin"), environment, False)

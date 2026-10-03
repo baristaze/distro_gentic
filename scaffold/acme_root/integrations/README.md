@@ -86,6 +86,7 @@ A real client of a forge or a chat is not built yet.
 | `ACME_WORKOS_WEBHOOK_SECRET` | The webhook endpoint's signing secret, injected at start. Unset, every delivery is refused as unavailable. |
 | `ACME_WORKOS_BASE_URL`, `ACME_WORKOS_TIMEOUT_SECONDS` | Where the client calls, and the timeout of every call. |
 | `ACME_INTEGRATIONS` | `twin` or `none` (the default): what serves the forge and the chat. The twin is refused at boot outside `local` and `test`. |
+| `ACME_FORGE_TWIN_USERNAME`, `ACME_FORGE_TWIN_PASSWORD` | The credential the forge's twin pushes with, for a repository behind basic authentication. Unset, it pushes with none. Refused at boot outside `local` and `test`. |
 
 [The WorkOS runbook](../docs/runbooks/providers/workos.md) sets them up.
 
