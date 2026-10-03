@@ -22,14 +22,15 @@ only what the engine's layer and the platform's add.
 ## The procedure
 
 `<pin>` is the guideline release this plugin's scaffold pins: `pinned
-at release` in `../../scaffold/acme_root/specs/architecture.md`. Read
-the guideline's skill at that release,
-`curl -fsSL https://raw.githubusercontent.com/baristaze/swe_guidelines/v<pin>/skills/arch-upgrade-scaffold/SKILL.md`,
+at release` in `../../scaffold/acme_root/specs/architecture.md`, which
+already holds the `v` (`v0.48.0`). Read the guideline's skill at that
+release,
+`curl -fsSL https://raw.githubusercontent.com/baristaze/swe_guidelines/<pin>/skills/arch-upgrade-scaffold/SKILL.md`,
 and follow it, with the differences below. Its `<base.py>` is the
 absolute path of this plugin's `../../scaffold/base.py`, the same
 script. Every other path it names from its own folder is the
-guideline's file at `v<pin>`, read from
-`https://raw.githubusercontent.com/baristaze/swe_guidelines/v<pin>/<path>`.
+guideline's file at `<pin>`, read from
+`https://raw.githubusercontent.com/baristaze/swe_guidelines/<pin>/<path>`.
 
 ## Input
 
@@ -98,9 +99,13 @@ read as the guideline's skill reads them, with these differences.
   last migration of that role where it has one, else the engine's, else
   the guideline's. A migration's stamp is its `revision`, and its parent
   is its `down_revision`. The checkout's own migrations keep their
-  stamps: what a database applied is never renamed. Where the guideline's
-  table re-points the first of a role's own chain to a new scaffold
-  head, only its `down_revision` changes. A migration the checkout writes
+  stamps in a copy, which applies databases: what a database applied is
+  never renamed. In a layer, which applies none, the scaffold's gate
+  holds each role's head to its highest stamp, so the first of a role's
+  own chain is re-pointed to the new scaffold head and the chain takes
+  stamps above that head, in order, each parent following. Where the
+  guideline's table re-points the first of a role's own chain in a
+  copy, only its `down_revision` changes. A migration the checkout writes
   for a scaffold change takes a stamp above every stamp of its role,
   the scaffold's included, and its role's head as its parent. After the
   merge, each role has one head:

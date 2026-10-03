@@ -34,11 +34,11 @@ enterprise plan have runners of their own".
 
 ## Created
 
-None, unless the product has no runner entry point of its own yet:
+None, unless the product has kinds of its own and no runner entry point yet:
 
 | File | Holds |
 |------|-------|
-| `workers/session_runner/tests/test_entry.py` (the first runner) | the entry point passes the product's catalog to `main`, the case of step 5 |
+| `workers/session_runner/tests/test_entry.py` (the first runner, with kinds of its own) | the entry point passes the product's catalog to `main`, the case of step 5 |
 
 ## Changed
 
@@ -48,7 +48,7 @@ which passes the runner suites' catalog to `main` in
 
 | File | Change |
 |------|--------|
-| `workers/session_runner/src/<name>/workers/session_runner/entry.py` (the first runner) | `run(agent_kinds=..., tool_catalog=..., domain_classes=...)`, the product's catalog, after the trust store is installed |
+| `workers/session_runner/src/<name>/workers/session_runner/entry.py` (the first runner, with kinds of its own) | `run(agent_kinds=..., tool_catalog=..., domain_classes=...)`, the product's catalog, after the trust store is installed |
 | `scripts/dev.sh` | a runner process for the lane, `serve --lane <lane>`, beside the default runner's |
 | `.env.example` | the lane, in the comment on `ACME_RUNNER_LANE` that says each lane in use has runners of its own |
 | `deployment/README.md` | the lane, in the row of the session runner |
@@ -69,7 +69,7 @@ which passes the runner suites' catalog to `main` in
    imported from one module both read, never listed twice. A session
    starts on a kind the API knows and runs on the runner, so a kind
    only one of them knows fails the session. When the product has no
-   kinds of its own, `entry.py` stays as it is.
+   kinds of its own, neither `entry.py` nor `test_entry.py` is written.
 3. A lane has runners of its own. The binary is the same; a runner of
    the lane is `serve --lane <lane>`, which overrides `ACME_RUNNER_LANE`.
    A loop reaches the lane only through placement: `lane_for` puts a

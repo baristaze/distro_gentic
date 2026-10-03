@@ -34,7 +34,11 @@ as the host's dedicated workspace user, never as the host's own".
 - `--transport` names a transport under
   `infra/src/<name>/infra/transports/` that already runs commands at
   that mode, such as one `distro-scaffold-workspace-provider` wrote.
-  Without it, the host gets a transport of its own.
+  Without it, the host gets a transport of its own. The `directory`
+  mode runs as the dedicated workspace user; `local` runs a session's
+  commands as the host process's own user, so it never serves
+  `directory`. When the given transport cannot run as the dedicated
+  user, stop and say so.
 
 ## Created
 

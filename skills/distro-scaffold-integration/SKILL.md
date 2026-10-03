@@ -63,7 +63,7 @@ and of its twin `IntegrationTwinImpl` in `events/twin.py`.
 | `integrations/src/<name>/integrations/impl/configured.py` | in `integrations_for`, `<integration>` served by `<System>Impl` or `<System>TwinImpl` as its setting says, else as `integrations` says; in `refuse_unsafe`, the system's twin refused when deployed |
 | `.env.example` | `ACME_<INTEGRATION>_INTEGRATION` and the system's settings, commented, with `ACME_` read as the tree's prefix; a secret's line names the variable, never a value |
 | `integrations/tests/test_configured.py` | the cases of step 6 for the setting |
-| `deployment/terraform/modules/secrets/main.tf`, `outputs.tf`, `deployment/terraform/modules/environment/main.tf`, `deployment/terraform/modules/README.md` | each secret of the system, shape `workos_api_key`: a secret, `off` until set, injected as `ACME_<SYSTEM>_<KEY>` into the processes that build the integrations; each other setting given its value in the environment's `app_environment` |
+| `deployment/terraform/modules/secrets/main.tf`, `outputs.tf`, `deployment/terraform/modules/environment/main.tf`, `deployment/terraform/modules/README.md` | each secret of the system, shape `workos_api_key`: a secret, `off` until set, injected as `ACME_<SYSTEM>_<KEY>` into the processes that build the integrations; each other setting given its value in the environment's `process_environment` (`modules/environment/main.tf`), the map every process shares, the maintenance worker's included |
 | `services/api/tests/test_settings.py`, `workers/maintenance/tests/test_settings.py` | a setting whose local default serves the cloud, in `LOCAL_DEFAULT_SERVES_THE_CLOUD` with its reason, as `workos_base_url` is |
 | `integrations/README.md` | the client and its twin in the table of The integrations, and their settings |
 
@@ -77,7 +77,10 @@ and of its twin `IntegrationTwinImpl` in `events/twin.py`.
    does the rest. An arrival is one the router reads, in its terms
    (Feedback Routing); the system's own event names stay inside
    `<system>_wire.py`. `installation` is the tenant's org id, as
-   `event_of` in `om/src/<name>/om/intake/rules.py` reads it. An
+   `event_of` in `om/src/<name>/om/intake/rules.py` reads it (a UUID):
+   the wire sends the org id, and nothing maps a real system's own
+   installation or account id to an org, so the report names that gap
+   for a real system's deliveries. An
    author is `platform` when the system names the platform's own
    account, which a setting of the system names: the router reads that
    kind as the session's own act (`effect_of`), so a comment the agent

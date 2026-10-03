@@ -60,6 +60,7 @@ The shape of a kind is the four profiles in
 | `om/src/<name>/om/platform_agents/catalog.py` (a tool of its own) | the tool in `with_shipped`, in `own_specs` and in `own` |
 | `om/tests/unit/test_platform_agents.py` | the kind in `test_every_shipped_agent_is_a_profile_that_sets_its_powers`, and the cases of step 5 |
 | `om/tests/unit/test_matrix.py` (with `--roles`) | the case of step 5 for its roles |
+| `om/tests/contracts/matrix.py` (with `--roles`) | `CATCH_ALL` and the default roles of `publish` serve the kind's roles, since a role added to a shipped kind joins the required set of every version, and the unit and integration matrix suites refuse a default publish that lacks it |
 | `om/src/<name>/om/platform_agents/README.md` | the kind, in What it holds |
 | `om/README.md`, `llms.txt` | the count and the list of the kinds the platform ships |
 
