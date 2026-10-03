@@ -23,9 +23,17 @@ from acme.om.workspaces.types.egress import EgressRule
 
 
 class SessionWorkspace(Identifiable, Trackable):
-    """One row a session; `id` is the session's."""
+    """One row a session; `id` is the session's. The manager sets every field:
+    the pin when the session is created, the rest as its loops run."""
 
     MANAGER_OWNED_FIELDS: ClassVar[tuple[str, ...]] = (
+        "project_id",
+        "level",
+        "limits",
+        "egress",
+        "rules",
+        "egress_source",
+        "branch",
         "branch_seen",
         "snapshot_ref",
         "notices",

@@ -39,6 +39,7 @@ from acme.om.trust.root import build_trust_operator
 from acme.om.watch.impl.manager import WatchOptions
 from acme.om.watch.root import build_stream, build_watch
 from acme.om.watch.stream import StreamServiceInterface
+from acme.om.workspaces.impl.executor import ExecutorOptions
 from acme.services.api.gateway.ratelimit import RateLimit, RateLimitOptions, RefusedAddresses
 from acme.services.api.services import ServicesInterface
 from acme.services.api.services.impl.root import build_services
@@ -235,6 +236,7 @@ class AppContainer:
             budget_gate=ports.budget_gate or build_money_gate(storage),
             result_gate=ports.result_gate,
             executor=ports.executor,
+            executor_options=ExecutorOptions(image=settings.workspace_image),
             work_product=ports.work_product,
             session_projects=ports.session_projects,
             workspace_projects=ports.workspace_projects,

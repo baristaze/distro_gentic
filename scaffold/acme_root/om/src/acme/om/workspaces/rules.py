@@ -5,6 +5,7 @@ product, and what a push token reaches. Values in, values out; no clock, no
 storage, no settings."""
 
 import hmac
+import html
 import re
 from collections.abc import Sequence
 from datetime import UTC, datetime
@@ -243,11 +244,12 @@ def egress_decision(
 def branch_plan(state: BranchState, *, seen: bool, fate: PullRequestFate | None) -> BranchPlan:
     """What a prepare does with the session's branch. One the remote holds is
     tracked. One the remote never held is kept where the checkout holds it,
-    and cut from the default branch where nothing does. One the remote held
-    and lost is rebuilt only when its pull request was merged or closed;
-    anything else fails, and nothing restarts from the default branch. A
-    branch that moved on the remote and in the checkout both fails too:
-    nothing merges the two silently."""
+    and cut where nothing does: from its last snapshot, which holds its
+    commits and the work left uncommitted, or from the default branch when
+    it has none. One the remote held and lost is rebuilt only when its pull
+    request was merged or closed; anything else fails, and nothing restarts
+    from the default branch. A branch that moved on the remote and in the
+    checkout both fails too: nothing merges the two silently."""
     if state.remote:
         return BranchPlan.DIVERGED if state.diverged else BranchPlan.TRACK
     if not seen:
@@ -299,6 +301,45 @@ def project_key(binding: RepositoryBinding) -> str:
     forge served on one has a name too."""
     host, slash, path = _repository(binding.repository).lstrip("/").partition("/")
     return host.split(":", 1)[0] + slash + path
+
+
+FETCHED = re.compile(
+    r"!\[|<\s*(?:img|image|picture|source|video|audio|track|iframe|frame|object|embed|svg"
+    r"|input|link|meta|style|base)\b",
+    re.IGNORECASE,
+)
+"""What a forge fetches as it renders a body: a Markdown image, and an HTML
+element that loads a URL."""
+AUTHORITY = re.compile(r"[/\\]{2,}([^\s/\\?#<>()\[\]{}\"'`|]+)")
+"""The host a URL names after the slashes that open it, whatever its scheme
+or none: a backslash is read as a slash, as a browser reads it."""
+SCHEMED = re.compile(r"\b(?:https?|ftps?|wss?):[/\\]*([^\s/\\?#<>()\[\]{}\"'`|]+)", re.IGNORECASE)
+"""The host a URL of a scheme a surface fetches names, with any number of
+slashes before it, none included, as a browser reads it."""
+WWW = re.compile(r"\b(www\.[^\s/\\?#<>()\[\]{}\"'`|]+)", re.IGNORECASE)
+"""A host a renderer links without a scheme."""
+
+
+def body_refusal(body: str, binding: RepositoryBinding) -> str | None:
+    """Why a pull request's body is refused, or None. The agent writes it and
+    the forge renders it, so nothing in it may make the forge, or a surface
+    that mirrors it, fetch a URL the agent chose: it holds no image and no
+    element that loads one, and every URL in it, a link's included, is on
+    the bound repository's own host. It is read as written and with its
+    character references resolved, as a renderer reads it."""
+    own_host = project_key(binding).partition("/")[0]
+    for text in (body, html.unescape(body)):
+        if FETCHED.search(text):
+            return "a pull request's body carries no image, and no element that loads a URL"
+        for pattern in (AUTHORITY, SCHEMED, WWW):
+            for found in pattern.finditer(text):
+                host = found.group(1).rsplit("@", 1)[-1].split(":", 1)[0].rstrip(".").lower()
+                if not own_host or host != own_host:
+                    return (
+                        f"a pull request's body links only to its repository's host, "
+                        f"never to {host[:100]}"
+                    )
+    return None
 
 
 def is_work_product(write: RepositoryWrite, binding: RepositoryBinding | None, branch: str) -> bool:

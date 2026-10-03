@@ -40,7 +40,7 @@ from acme.om.automations.types.automation import (
 from acme.om.base import EMPTY_UUID, new_id, utcnow
 from acme.om.context import AppContext, AppType, CredentialKind, RequestContext, Role, build_context
 from acme.om.evidence.types.provenance import Provenance
-from acme.om.exceptions import NotAuthorized, NotFound, Unavailable
+from acme.om.exceptions import NotAuthorized, NotFound, Unavailable, ValidationFailed
 from acme.om.intake.root import build_intake
 from acme.om.intake.rules import described
 from acme.om.intake.types.event import (
@@ -448,6 +448,40 @@ async def test_a_push_token_cannot_push_another_sessions_branch_or_outlive_its_l
     branch = f"refs/heads/{rules.session_branch(one)}"
     assert platform.forge.refs == {(REPOSITORY, branch): HEAD}, "its own branch alone"
     assert (await platform.held(one)).branch_seen, "the platform pushed it, so it knows it"
+
+
+# The forge renders the body the agent writes: nothing in it makes the
+# forge, or a surface that mirrors it, fetch a URL the agent chose.
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "![status](https://tracker.invalid/pixel.png)",
+        '<img src="https://tracker.invalid/pixel.png">',
+        '<picture><source srcset="https://tracker.invalid/p.png"></picture>',
+        "See [the log](https://tracker.invalid/log).",
+        "See <//tracker.invalid/log>.",
+        "See [the log](https&#58;//tracker.invalid/log).",
+        "See www.tracker.invalid.",
+    ],
+)
+async def test_a_pull_request_body_that_makes_the_forge_fetch_elsewhere_is_refused(
+    tmp_path: Path, body: str
+) -> None:
+    platform = Forged(tmp_path)
+    workspaces, owner = platform.loop.managers.workspaces, platform.loop.owner
+    one = await platform.engineer()
+    await platform.loop.managers.tools.prepare_workspace(owner, one, TWIN)
+    token = (await workspaces.mint_push_token(owner, one)).token.get_secret_value()
+
+    with pytest.raises(ValidationFailed, match="pull request's body"):
+        await workspaces.open_pull_request(owner, one, token, HEAD, "t", body)
+
+    assert platform.forge.refs == {} and platform.forge.pull_requests == [], "nothing written"
+    own = "Fixes the total. See https://git.example.com/ajax/app/pull/1.\n\n`a // b`"
+    await workspaces.open_pull_request(owner, one, token, HEAD, "t", own)
+    assert [opened.body for opened in platform.forge.pull_requests] == [own]
 
 
 # A fetch credential is the tenant's, kept under its project, and reaches

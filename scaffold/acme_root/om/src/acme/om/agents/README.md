@@ -112,8 +112,8 @@ of](../../../../README.md).
 - **Isolation is refused, never weakened.** A workspace no provider can
   meet the spec of parks the loop on `resource` before its first model
   call, and it asks again after a wait. One whose durable state is gone
-  ends the loop, loudly. What changed under the model since its last loop
-  is told before the call.
+  parks the loop, loudly, for a person. What changed under the model
+  since its last loop is told before the call.
 - **Emission never waits.** A part is handed to the carrier, and the
   loop goes on.
 

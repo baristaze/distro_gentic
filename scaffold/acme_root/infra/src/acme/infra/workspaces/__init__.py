@@ -13,7 +13,7 @@ found and let go.
 
 What a workspace is rebuilt from may be gone for good, such as the branch a
 checkout tracks. A layer that prepares one then raises `WorkspaceLost`, and
-the loop ends, loudly; and what changed under the model since its last loop
+the loop parks, loudly, for a person; and what changed under the model since its last loop
 rides on the workspace it prepares (`Workspace.changed`), which the loop
 tells the model before its first call."""
 
@@ -127,7 +127,7 @@ class WorkspaceLost(InfraException):
     """What a workspace is rebuilt from is gone, or cannot be brought in, and
     nothing says how, such as a branch deleted under it or one that moved
     on both sides: never rebuilt from something else in its stead, and the
-    loop that asked ends, loudly."""
+    loop that asked parks, loudly, for a person."""
 
     http_status = 409
     code = "workspace_lost"

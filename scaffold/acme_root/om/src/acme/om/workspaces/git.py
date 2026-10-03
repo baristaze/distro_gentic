@@ -5,8 +5,9 @@ hands the checkout a bundle (`RepositoryReaderInterface.incoming`), and
 takes the session's commits out as a bundle it makes there, for source
 control to push. A root wires the transport's
 (`acme.om.workspaces.impl.git.WorkspaceGitTransportImpl`), which runs each
-operation as one command in the workspace, the engine's one way in, under
-the epoch of the run that holds the session."""
+operation as one command in the workspace, the engine's one way in. Each
+command carries `epoch`: the epoch the run that asks held when it began,
+so the transport refuses every command of a run that lost its claim."""
 
 from abc import ABC, abstractmethod
 
@@ -32,6 +33,8 @@ class WorkspaceGitInterface(ABC):
         binding: RepositoryBinding,
         branch: str,
         incoming: Incoming,
+        *,
+        epoch: int,
     ) -> BranchState:
         """Names the checkout's `origin` for the bound repository, brings in
         its branches from the `incoming` bundle, never from the repository
@@ -43,15 +46,23 @@ class WorkspaceGitInterface(ABC):
 
     @abstractmethod
     async def cut(
-        self, ctx: TenantContext, workspace: Workspace, binding: RepositoryBinding, branch: str
+        self,
+        ctx: TenantContext,
+        workspace: Workspace,
+        binding: RepositoryBinding,
+        branch: str,
+        *,
+        epoch: int,
+        start: str | None = None,
     ) -> None:
-        """Checks `branch` out anew from the default branch as the last
-        `sync` brought it in, over whatever the checkout held: the caller
-        keeps that first (`snapshot`)."""
+        """Checks `branch` out anew, over whatever the checkout held: the
+        caller keeps that first (`snapshot`). It starts from the snapshot ref
+        `start` when the last `sync` brought it in, and from the default
+        branch as that sync brought it otherwise."""
         ...
 
     @abstractmethod
-    async def checkout(self, ctx: TenantContext, workspace: Workspace) -> Checkout:
+    async def checkout(self, ctx: TenantContext, workspace: Workspace, *, epoch: int) -> Checkout:
         """What the checkout says of itself: its HEAD and whether it holds
         uncommitted work. The agent can write all of it, so it tells only
         what was not delivered (`RepositoryReaderInterface`)."""
@@ -65,6 +76,8 @@ class WorkspaceGitInterface(ABC):
         binding: RepositoryBinding,
         branch: str,
         ref: str,
+        *,
+        epoch: int,
     ) -> Snapshot:
         """Commits what the checkout holds uncommitted, beside its branch and
         never on it, and has source control push it to `ref` on the bound
@@ -75,7 +88,9 @@ class WorkspaceGitInterface(ABC):
         ...
 
     @abstractmethod
-    async def outgoing(self, ctx: TenantContext, workspace: Workspace, head: str) -> bytes:
+    async def outgoing(
+        self, ctx: TenantContext, workspace: Workspace, head: str, *, epoch: int
+    ) -> bytes:
         """A git bundle the platform makes of the commit `head` and every
         commit it needs that the remote lacked when it was last brought in;
         empty when the remote held them all. `Unavailable` when the checkout
@@ -84,7 +99,7 @@ class WorkspaceGitInterface(ABC):
 
     @abstractmethod
     async def landed(
-        self, ctx: TenantContext, workspace: Workspace, branch: str, head: str
+        self, ctx: TenantContext, workspace: Workspace, branch: str, head: str, *, epoch: int
     ) -> None:
         """Tells the checkout that the remote's `branch` is at `head` now, once
         source control pushed it, so a release keeps no snapshot of work the
@@ -101,26 +116,40 @@ class RepositoryReaderInterface(ABC):
 
     @abstractmethod
     async def delivered(
-        self, binding: RepositoryBinding, branch: str, credential: FetchCredential | None = None
+        self,
+        binding: RepositoryBinding,
+        branch: str,
+        credential: FetchCredential | None = None,
+        *,
+        cut: str | None = None,
     ) -> Delivered:
         """The bound repository's default branch and the session's `branch`
         there, fetched by the repository's URL: where the branch meets the
         default branch, its head, and every path changed between them, a
-        moved file by both its paths. A private repository is read with the
-        project's fetch `credential`, which reaches only the read's own git
-        and the repository's URL. `Unavailable` when the repository cannot be
-        read."""
+        moved file by both its paths. A branch the repository does not hold
+        delivered nothing, from where it was `cut`: the commit the checkout
+        says its branch meets the default branch at, when the default
+        branch's history holds it, and the default branch's tip otherwise.
+        A private repository is read with the project's fetch `credential`,
+        which reaches only the read's own git and the repository's URL.
+        `Unavailable` when the repository cannot be read."""
         ...
 
     @abstractmethod
     async def incoming(
-        self, binding: RepositoryBinding, branch: str, credential: FetchCredential | None = None
+        self,
+        binding: RepositoryBinding,
+        branch: str,
+        credential: FetchCredential | None = None,
+        *,
+        snapshot: str | None = None,
     ) -> Incoming:
-        """The bound repository's default branch, and the session's `branch`
-        where the repository holds it, fetched by the repository's URL as
-        `delivered` fetches them, with the same `credential`, and handed on
-        as a bundle with no credential in it. `Unavailable` when the
-        repository cannot be read, or the bundle is past its bound."""
+        """The bound repository's default branch, the session's `branch`, and
+        its last `snapshot` of that branch, each where the repository holds
+        it, fetched by the repository's URL as `delivered` fetches them,
+        with the same `credential`, and handed on as a bundle with no
+        credential in it. `Unavailable` when the repository cannot be read,
+        or the bundle is past its bound."""
         ...
 
     @abstractmethod

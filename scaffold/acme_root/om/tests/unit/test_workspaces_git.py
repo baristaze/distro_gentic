@@ -14,6 +14,7 @@ import subprocess
 import sys
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 import pytest
@@ -28,6 +29,7 @@ from acme.infra.transports import (
     CommandSpec,
     OutputSink,
     RecordSeal,
+    StaleCommand,
     TransportInterface,
 )
 from acme.infra.transports.local import DEFAULT_PATH, TransportLocalImpl
@@ -236,6 +238,31 @@ async def test_a_clean_checkout_the_remote_holds_pushes_nothing(checkout: Checko
     assert held.branch_seen and held.notices == ()
 
 
+async def test_a_branch_held_nowhere_is_cut_from_its_last_snapshot(checkout: Checkout) -> None:
+    session_id = await checkout.session()
+    branch = session_branch(session_id)
+    workspace = await checkout.prepare(session_id)
+    here = Path(workspace.location)
+    (here / "feature.txt").write_text("the feature\n")
+    git(here, "add", "feature.txt")
+    git(here, "-c", "user.name=a", "-c", "user.email=a@example.invalid", "commit", "-qm", "f")
+    (here / "notes.txt").write_text("half done\n")
+    await checkout.release(workspace)
+    (ref,) = checkout.snapshots(branch)
+    # The instance went with its checkout; the repository never held the
+    # branch.
+    shutil.rmtree(here)
+
+    again = await checkout.prepare(session_id)
+
+    there = Path(again.location)
+    assert git(there, "rev-parse", "--abbrev-ref", "HEAD") == branch
+    assert git(there, "rev-parse", "HEAD") == git(checkout.remote, "rev-parse", ref)
+    assert (there / "feature.txt").read_text() == "the feature\n", "its commit came back"
+    assert (there / "notes.txt").read_text() == "half done\n", "and the work left uncommitted"
+    assert again.changed is not None and ref in again.changed, "the next loop is told"
+
+
 # Every instance let go is told of: a release adds its notice beside any the
 # next loop has not read, and an attach clears only the notices it read.
 
@@ -377,6 +404,36 @@ async def test_a_notice_written_while_an_attach_syncs_outlives_that_attach(
     assert following.changed is not None and late in following.changed, "the next loop is told"
 
 
+# A lost claim stops the checkout: each command carries the epoch its run
+# held when it began, never one read again as the command runs.
+
+
+async def test_a_release_whose_run_lost_its_claim_midway_moves_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    infra = HostInfra(tmp_path)
+    checkout = Checkout(tmp_path, infra=infra)
+    session_id = await checkout.session()
+    branch = session_branch(session_id)
+    await checkout.managers.steps.begin_run(checkout.ctx, session_id)
+    workspace = await checkout.prepare(session_id)
+    (Path(workspace.location) / "notes.txt").write_text("the stale run's draft\n")
+    binding_of = checkout.projects.binding_of
+
+    async def claimed_meanwhile(*args: Any, **kwargs: Any) -> object:
+        # The session's next run claims it, and its first command lands.
+        found = await binding_of(*args, **kwargs)
+        epoch = await checkout.managers.steps.begin_run(checkout.ctx, session_id)
+        await infra.get_transport().write_file(workspace, ".claimed", b"", epoch)
+        return found
+
+    monkeypatch.setattr(checkout.projects, "binding_of", claimed_meanwhile)
+    with pytest.raises(StaleCommand):
+        await checkout.release(workspace)
+
+    assert checkout.snapshots(branch) == [], "the run that lost its claim pushed nothing"
+
+
 # Check 2: a vanished branch with no known reason fails loudly.
 
 
@@ -417,6 +474,30 @@ async def test_a_branch_the_remote_lost_fails_loudly_and_nothing_restarts_from_m
     assert rebuilt.changed is not None and "merged" in rebuilt.changed and ref in rebuilt.changed
 
 
+async def test_a_merged_branch_rebuilt_is_cut_later_from_main_never_from_its_old_work(
+    checkout: Checkout,
+) -> None:
+    session_id = await checkout.session()
+    branch = session_branch(session_id)
+    workspace = await checkout.prepare(session_id)
+    here = Path(workspace.location)
+    (here / "feature.txt").write_text("the feature\n")
+    commit(here, "feature")
+    git(here, "push", "-q", "origin", branch)
+    await checkout.release(workspace)
+    git(checkout.remote, "update-ref", "-d", f"refs/heads/{branch}")
+    checkout.pull_requests.fates[branch] = PullRequestFate.MERGED
+    rebuilt = await checkout.prepare(session_id)
+    await checkout.release(rebuilt)
+    shutil.rmtree(here)
+
+    again = await checkout.prepare(session_id)
+
+    there = Path(again.location)
+    assert git(there, "rev-parse", "HEAD") == checkout.main, "cut from main again"
+    assert not (there / "feature.txt").exists(), "the merged work stays in its pull request"
+
+
 # The branch is brought up to what its repository holds.
 
 
@@ -436,6 +517,27 @@ async def test_a_persons_push_between_loops_is_in_the_next_loops_checkout(
     assert again.location == workspace.location, "the warm checkout"
     assert git(here, "rev-parse", "HEAD") == theirs
     assert (here / "fix.txt").read_text() == "a person's fix\n"
+
+
+async def test_a_tracked_branchs_fresh_checkout_holds_the_snapshot_its_loop_is_told_of(
+    checkout: Checkout,
+) -> None:
+    session_id = await checkout.session()
+    branch = session_branch(session_id)
+    workspace = await checkout.prepare(session_id)
+    here = Path(workspace.location)
+    (here / "total.py").write_text("TOTAL = 3\n")
+    await open_it(checkout, session_id, commit(here, "total"))
+    (here / "notes.txt").write_text("half done\n")
+    await checkout.release(workspace)
+    (ref,) = checkout.snapshots(branch)
+    shutil.rmtree(here)
+
+    again = await checkout.prepare(session_id)
+
+    there = Path(again.location)
+    assert again.changed is not None and ref in again.changed
+    assert git(there, "show", f"{ref}:notes.txt") == "half done", "restorable from there"
 
 
 async def test_a_branch_that_moved_here_and_on_its_repository_fails_loudly(
@@ -491,6 +593,32 @@ async def test_what_a_session_delivered_is_read_from_its_repository(checkout: Ch
     commit(here, "not pushed")
     ahead = await checkout.managers.workspaces.delivery(checkout.ctx, workspace)
     assert ahead.head == pushed and ahead.dirty, "a commit not pushed is not delivered"
+
+
+async def test_an_undelivered_branchs_base_is_where_it_was_cut_not_the_default_branchs_tip(
+    checkout: Checkout, tmp_path: Path
+) -> None:
+    session_id = await checkout.session()
+    workspace = await checkout.prepare(session_id)
+    here = Path(workspace.location)
+    (here / "feature.txt").write_text("the feature\n")
+    commit(here, "not pushed yet")
+    moved = checkout.push_as_a_person(tmp_path, "main", "moved")
+    git(here, "fetch", "-q", "origin", "main:refs/remotes/origin/main")  # it knows the move
+
+    delivered = await checkout.managers.workspaces.delivery(checkout.ctx, workspace)
+
+    assert moved != checkout.main
+    assert (delivered.base, delivered.head) == (checkout.main, checkout.main), (
+        "a baseline runs where the branch was cut, never where the default moved since"
+    )
+    assert delivered.dirty and delivered.changed == ()
+
+    # A base the checkout makes up is held to the default branch's history.
+    (here / "more.txt").write_text("more\n")
+    git(here, "update-ref", "refs/remotes/origin/HEAD", commit(here, "made up"))
+    made_up = await checkout.managers.workspaces.delivery(checkout.ctx, workspace)
+    assert made_up.base == moved, "a commit the default never held is not a base"
 
 
 async def test_an_agent_that_moves_its_default_branch_still_delivers_the_protected_edit(
