@@ -66,7 +66,7 @@ def proxy_address(value: str) -> str | None:
 @dataclass(frozen=True)
 class HostNetwork:
     """The host's proxy and CA file, as its environment names them when it
-    starts. The empty one names neither."""
+    starts."""
 
     proxies: tuple[tuple[str, str], ...] = ()  # each proxy variable, and its address
     no_proxy: tuple[tuple[str, str], ...] = ()  # each no-proxy variable, as the host has it
@@ -96,3 +96,8 @@ class HostNetwork:
         if self.ca_file is not None:
             seen |= dict.fromkeys(CA_VARIABLES, ca_path or str(self.ca_file))
         return seen
+
+
+NO_HOST_NETWORK = HostNetwork()
+"""The network of a host that names no proxy and no CA file: what a
+transport or a provider hands a command unless it is given the host's."""

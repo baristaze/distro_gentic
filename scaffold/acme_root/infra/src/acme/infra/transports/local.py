@@ -21,7 +21,7 @@ from acme.infra.transports.injection import BASE_LANG, injected
 from acme.infra.transports.processes import drive, end_tree, spawn
 from acme.infra.transports.records import RecordBook, opened_result, sealed_record
 from acme.infra.workspaces import IsolationMode, Workspace
-from acme.infra.workspaces.network import HostNetwork
+from acme.infra.workspaces.network import NO_HOST_NETWORK, HostNetwork
 
 DEFAULT_PATH = "/usr/local/bin:/usr/bin:/bin"
 """The search path of a command's environment, which holds nothing else of
@@ -43,7 +43,7 @@ class TransportLocalImpl(TransportInterface):
         secrets: SecretsInterface,
         broker: CredentialBrokerInterface,
         search_path: str = DEFAULT_PATH,
-        network: HostNetwork = HostNetwork(),
+        network: HostNetwork = NO_HOST_NETWORK,
     ) -> None:
         self._book = RecordBook(records)
         self._secrets = secrets

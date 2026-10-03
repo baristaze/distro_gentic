@@ -14,7 +14,7 @@ from acme.infra.workspaces import (
     WorkspaceProviderInterface,
     refusal,
 )
-from acme.infra.workspaces.network import HostNetwork
+from acme.infra.workspaces.network import NO_HOST_NETWORK, HostNetwork
 
 MOUNT = "/workspace"
 """Where a workspace's files sit inside its container."""
@@ -103,7 +103,7 @@ class WorkspaceContainerImpl(WorkspaceProviderInterface):
         timeout: timedelta,
         deployment: str,
         pull_timeout: timedelta = DEFAULT_PULL_TIMEOUT,
-        network: HostNetwork = HostNetwork(),
+        network: HostNetwork = NO_HOST_NETWORK,
     ) -> None:
         self._image = image
         self._timeout = timeout

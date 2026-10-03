@@ -24,7 +24,7 @@ from acme.infra.transports.processes import drive, end_tree, spawn
 from acme.infra.transports.records import RecordBook, opened_result, sealed_record
 from acme.infra.workspaces import IsolationMode, Workspace
 from acme.infra.workspaces.container import CA_MOUNT, MOUNT
-from acme.infra.workspaces.network import HostNetwork
+from acme.infra.workspaces.network import NO_HOST_NETWORK, HostNetwork
 
 LAUNCHER = 'echo $$ > "$1"; shift; exec "$@"'
 """Writes the command's own pid where the end of its tree finds it, then
@@ -94,7 +94,7 @@ class TransportContainerImpl(TransportInterface):
         secrets: SecretsInterface,
         broker: CredentialBrokerInterface,
         timeout: timedelta,
-        network: HostNetwork = HostNetwork(),
+        network: HostNetwork = NO_HOST_NETWORK,
     ) -> None:
         self._book = RecordBook(records)
         self._secrets = secrets
