@@ -682,6 +682,43 @@
         "title": "ApproverRuleView",
         "type": "object"
       },
+      "Arm": {
+        "enum": [
+          "candidate",
+          "baseline"
+        ],
+        "title": "Arm",
+        "type": "string"
+      },
+      "ArmResultView": {
+        "description": "One arm's result: its trials, how many passed, the mean of their\nscores, and the sum of their costs.",
+        "properties": {
+          "cost_micros": {
+            "title": "Cost Micros",
+            "type": "integer"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "integer"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "trials": {
+            "title": "Trials",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "trials",
+          "passed",
+          "score",
+          "cost_micros"
+        ],
+        "title": "ArmResultView",
+        "type": "object"
+      },
       "AutomationPrincipalView": {
         "description": "The tenant's automation principal: its id, the role it holds, and who\ngranted it.",
         "properties": {
@@ -830,6 +867,221 @@
           "updated_by"
         ],
         "title": "AutomationView",
+        "type": "object"
+      },
+      "BenchmarkResultRequest": {
+        "additionalProperties": false,
+        "description": "What a benchmark run showed of a model for a model role: whether it\npassed, and where its evidence is (`run`, such as the run's id or its\nreport's address). The latest result for the model and the role decides\nwhether a version that serves the role with the model may be\npublished.",
+        "properties": {
+          "benchmark": {
+            "pattern": "^[a-z][a-z0-9_.-]{0,99}$",
+            "title": "Benchmark",
+            "type": "string"
+          },
+          "model": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Model",
+            "type": "string"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ProviderName"
+          },
+          "role": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "title": "Role",
+            "type": "string"
+          },
+          "run": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Run",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "role",
+          "benchmark",
+          "passed",
+          "run"
+        ],
+        "title": "BenchmarkResultRequest",
+        "type": "object"
+      },
+      "BenchmarkResultView": {
+        "description": "A recorded result, written once.",
+        "properties": {
+          "benchmark": {
+            "title": "Benchmark",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ProviderName"
+          },
+          "recorded_by": {
+            "format": "uuid",
+            "title": "Recorded By",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "run": {
+            "title": "Run",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "model",
+          "role",
+          "benchmark",
+          "passed",
+          "run",
+          "created_at",
+          "recorded_by"
+        ],
+        "title": "BenchmarkResultView",
+        "type": "object"
+      },
+      "BenchmarkSummaryView": {
+        "description": "One run of a scenario, without its trials: a point of the scenario's\ntrend.",
+        "properties": {
+          "baseline": {
+            "$ref": "#/components/schemas/ContenderView"
+          },
+          "baseline_result": {
+            "$ref": "#/components/schemas/ArmResultView"
+          },
+          "candidate": {
+            "$ref": "#/components/schemas/ContenderView"
+          },
+          "candidate_result": {
+            "$ref": "#/components/schemas/ArmResultView"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "recorded_by": {
+            "format": "uuid",
+            "title": "Recorded By",
+            "type": "string"
+          },
+          "regressed": {
+            "title": "Regressed",
+            "type": "boolean"
+          },
+          "scenario": {
+            "title": "Scenario",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "scenario",
+          "created_at",
+          "candidate",
+          "baseline",
+          "candidate_result",
+          "baseline_result",
+          "regressed",
+          "recorded_by"
+        ],
+        "title": "BenchmarkSummaryView",
+        "type": "object"
+      },
+      "BenchmarkView": {
+        "description": "One run of a scenario, with every trial of both arms.",
+        "properties": {
+          "baseline": {
+            "$ref": "#/components/schemas/ContenderView"
+          },
+          "baseline_result": {
+            "$ref": "#/components/schemas/ArmResultView"
+          },
+          "candidate": {
+            "$ref": "#/components/schemas/ContenderView"
+          },
+          "candidate_result": {
+            "$ref": "#/components/schemas/ArmResultView"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "recorded_by": {
+            "format": "uuid",
+            "title": "Recorded By",
+            "type": "string"
+          },
+          "regressed": {
+            "title": "Regressed",
+            "type": "boolean"
+          },
+          "scenario": {
+            "title": "Scenario",
+            "type": "string"
+          },
+          "trials": {
+            "items": {
+              "$ref": "#/components/schemas/TrialView"
+            },
+            "title": "Trials",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "scenario",
+          "created_at",
+          "candidate",
+          "baseline",
+          "candidate_result",
+          "baseline_result",
+          "regressed",
+          "recorded_by",
+          "trials"
+        ],
+        "title": "BenchmarkView",
         "type": "object"
       },
       "BoundsView": {
@@ -1012,6 +1264,20 @@
           "skipped"
         ],
         "title": "CasesView",
+        "type": "object"
+      },
+      "ChooseRequest": {
+        "additionalProperties": false,
+        "description": "The fill a tenant chooses for a model role: one of that role's\noptions.",
+        "properties": {
+          "fill": {
+            "$ref": "#/components/schemas/FillBody"
+          }
+        },
+        "required": [
+          "fill"
+        ],
+        "title": "ChooseRequest",
         "type": "object"
       },
       "ClaimRequest": {
@@ -1287,6 +1553,33 @@
           "grant"
         ],
         "title": "ConnectInstallationRequest",
+        "type": "object"
+      },
+      "ContenderView": {
+        "description": "What an arm's sessions ran: the agent kind, its version, and each model\nrole's fill.",
+        "properties": {
+          "fills": {
+            "items": {
+              "$ref": "#/components/schemas/RoleFillView"
+            },
+            "title": "Fills",
+            "type": "array"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "kind_version": {
+            "title": "Kind Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "kind_version",
+          "fills"
+        ],
+        "title": "ContenderView",
         "type": "object"
       },
       "ContentState": {
@@ -1797,6 +2090,70 @@
         "title": "Effect",
         "type": "string"
       },
+      "Effort": {
+        "description": "How hard a model works on a call. A provider that has no such level\nfor a model leaves it out and names what it dropped.",
+        "enum": [
+          "none",
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        "title": "Effort",
+        "type": "string"
+      },
+      "EligibilityBody": {
+        "additionalProperties": false,
+        "description": "What a fill offers: zero data retention, a region.",
+        "properties": {
+          "region": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Region"
+          },
+          "zero_retention": {
+            "default": false,
+            "title": "Zero Retention",
+            "type": "boolean"
+          }
+        },
+        "title": "EligibilityBody",
+        "type": "object"
+      },
+      "EligibilityView": {
+        "properties": {
+          "region": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Region"
+          },
+          "zero_retention": {
+            "title": "Zero Retention",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "zero_retention",
+          "region"
+        ],
+        "title": "EligibilityView",
+        "type": "object"
+      },
       "EnrollRequest": {
         "additionalProperties": false,
         "description": "A host's name and its report, beside its enrollment token. The pool\nis the token's.",
@@ -1874,6 +2231,19 @@
         ],
         "title": "EnrollmentTokenView",
         "type": "object"
+      },
+      "EntryKind": {
+        "enum": [
+          "hold",
+          "settlement",
+          "charge",
+          "credit",
+          "grant",
+          "raise",
+          "approval"
+        ],
+        "title": "EntryKind",
+        "type": "string"
       },
       "ErrorBody": {
         "properties": {
@@ -2421,6 +2791,158 @@
         "title": "FileView",
         "type": "object"
       },
+      "FillBody": {
+        "additionalProperties": false,
+        "description": "A fill: a provider's model, how hard it works, its output bound and\nshape, its context window, and what it offers. The output bound fits\ninside the window, and a schema is named exactly when the output is one.\nAn output left out is text, and an eligibility left out offers\nnothing.",
+        "properties": {
+          "context_window": {
+            "exclusiveMinimum": 0.0,
+            "title": "Context Window",
+            "type": "integer"
+          },
+          "effort": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Effort"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "eligibility": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EligibilityBody"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "max_output_tokens": {
+            "exclusiveMinimum": 0.0,
+            "title": "Max Output Tokens",
+            "type": "integer"
+          },
+          "model": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Model",
+            "type": "string"
+          },
+          "output": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OutputShape"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ProviderName"
+          },
+          "schema_name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schema Name"
+          },
+          "thinking_budget": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thinking Budget"
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "max_output_tokens",
+          "context_window"
+        ],
+        "title": "FillBody",
+        "type": "object"
+      },
+      "FillChoiceView": {
+        "description": "The tenant's choice for one model role, from its next session on.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "fill": {
+            "$ref": "#/components/schemas/FillView"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "updated_by": {
+            "format": "uuid",
+            "title": "Updated By",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "role",
+          "fill",
+          "created_at",
+          "updated_at",
+          "updated_by"
+        ],
+        "title": "FillChoiceView",
+        "type": "object"
+      },
+      "FillOptionsView": {
+        "description": "What a tenant on its own keys may choose for one model role: the fills\nthe published matrix qualified for it, from a provider it holds a live\nkey for.",
+        "properties": {
+          "fills": {
+            "items": {
+              "$ref": "#/components/schemas/FillView"
+            },
+            "title": "Fills",
+            "type": "array"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "fills"
+        ],
+        "title": "FillOptionsView",
+        "type": "object"
+      },
       "FillUsageView": {
         "description": "What one model, at its provider, used in the session's calls: the\ncalls that answered, and their tokens by class, no token counted\ntwice.",
         "properties": {
@@ -2463,6 +2985,76 @@
           "thinking"
         ],
         "title": "FillUsageView",
+        "type": "object"
+      },
+      "FillView": {
+        "properties": {
+          "context_window": {
+            "title": "Context Window",
+            "type": "integer"
+          },
+          "effort": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Effort"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "eligibility": {
+            "$ref": "#/components/schemas/EligibilityView"
+          },
+          "max_output_tokens": {
+            "title": "Max Output Tokens",
+            "type": "integer"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "output": {
+            "$ref": "#/components/schemas/OutputShape"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ProviderName"
+          },
+          "schema_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schema Name"
+          },
+          "thinking_budget": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thinking Budget"
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "effort",
+          "thinking_budget",
+          "max_output_tokens",
+          "output",
+          "schema_name",
+          "context_window",
+          "eligibility"
+        ],
+        "title": "FillView",
         "type": "object"
       },
       "GateBody": {
@@ -3283,6 +3875,15 @@
         "title": "IssuedUploadView",
         "type": "object"
       },
+      "KeyStatus": {
+        "enum": [
+          "live",
+          "rotated",
+          "refused"
+        ],
+        "title": "KeyStatus",
+        "type": "string"
+      },
       "KnowledgeRequest": {
         "additionalProperties": false,
         "description": "An entry: its title, the words that trigger it, all of which must\nappear in what a session is about, and what it says. A trigger word\nwith none of a-z, 0-9, `_`, `.` or `-` is refused: recall reads nothing\nin it, so it would match every session.",
@@ -3443,6 +4044,167 @@
           "orgs"
         ],
         "title": "LastOwnerDetail",
+        "type": "object"
+      },
+      "LedgerEntryView": {
+        "description": "One entry, written once. A field a kind does not carry is null:\n\n- `hold`: `session_id`, `units` (the worst case, null when no price\n  applies), and `cost_micros` (the exposure).\n- `settlement`: `hold_id`, `cost_micros` and `tokens` (what it spent).\n- `charge`: `hold_id`, `units`, and `amount_micros` (what the money\n  buckets paid).\n- `credit`: `amount_micros` and `reference` (the payment's).\n- `grant`: `units`, `reason`, and `by` (the operator).\n- `raise`: `budget_id`, `cost_micros`, `tokens`, and `by`.\n- `approval`: `session_id`, `amount_micros` (the cost it allows), and\n  `by`.",
+        "properties": {
+          "amount_micros": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Micros"
+          },
+          "budget_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Id"
+          },
+          "by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "By"
+          },
+          "cost_micros": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Micros"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "hold_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hold Id"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/EntryKind"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tokens"
+          },
+          "units": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Units"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "created_at"
+        ],
+        "title": "LedgerEntryView",
+        "type": "object"
+      },
+      "LedgerPageView": {
+        "description": "One read of a tenant's ledger, the newest first. `has_more` says the\nread was cut at its limit and older entries match it too: narrow it by\nkind, hold, or session to reach them.",
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LedgerEntryView"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "has_more"
+        ],
+        "title": "LedgerPageView",
         "type": "object"
       },
       "LimitsBody": {
@@ -3845,6 +4607,280 @@
           "running_ahead"
         ],
         "title": "LoopStandingView",
+        "type": "object"
+      },
+      "MatrixKeyBody": {
+        "additionalProperties": false,
+        "description": "What a row answers: each key it names must equal the question's, and a\nkey left out matches every value. The row that names none matches every\nquestion.",
+        "properties": {
+          "environment": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z][a-z0-9-]{0,31}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Environment"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "plan_tier": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z][a-z0-9-]{0,31}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Tier"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "workload": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z][a-z0-9-]{0,31}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workload"
+          }
+        },
+        "title": "MatrixKeyBody",
+        "type": "object"
+      },
+      "MatrixKeyView": {
+        "properties": {
+          "environment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Environment"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "plan_tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Tier"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "workload": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workload"
+          }
+        },
+        "required": [
+          "environment",
+          "role",
+          "kind",
+          "plan_tier",
+          "workload"
+        ],
+        "title": "MatrixKeyView",
+        "type": "object"
+      },
+      "MatrixRowBody": {
+        "additionalProperties": false,
+        "description": "A row: the questions it matches, and its fills, the first the fill and\nthe rest the fallbacks, each named once. A row that names no match\nmatches every question.",
+        "properties": {
+          "fills": {
+            "items": {
+              "$ref": "#/components/schemas/FillBody"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Fills",
+            "type": "array"
+          },
+          "matches": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MatrixKeyBody"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "fills"
+        ],
+        "title": "MatrixRowBody",
+        "type": "object"
+      },
+      "MatrixRowView": {
+        "description": "A row: the questions it matches, the row's key, and its fills.",
+        "properties": {
+          "fills": {
+            "items": {
+              "$ref": "#/components/schemas/FillView"
+            },
+            "title": "Fills",
+            "type": "array"
+          },
+          "matches": {
+            "$ref": "#/components/schemas/MatrixKeyView"
+          }
+        },
+        "required": [
+          "matches",
+          "fills"
+        ],
+        "title": "MatrixRowView",
+        "type": "object"
+      },
+      "MatrixStatus": {
+        "enum": [
+          "pending",
+          "published"
+        ],
+        "title": "MatrixStatus",
+        "type": "string"
+      },
+      "MatrixVersionView": {
+        "description": "A version: pending until an operator publishes it, and the matrix from\nthen until the next is published. Its rows never change.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "format": "uuid",
+            "title": "Created By",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "published_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published By"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Roles",
+            "type": "array"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/MatrixRowView"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MatrixStatus"
+          }
+        },
+        "required": [
+          "id",
+          "number",
+          "roles",
+          "rows",
+          "status",
+          "created_at",
+          "created_by",
+          "published_at",
+          "published_by"
+        ],
+        "title": "MatrixVersionView",
         "type": "object"
       },
       "MeView": {
@@ -4456,6 +5492,14 @@
         "title": "Origin",
         "type": "string"
       },
+      "OutputShape": {
+        "enum": [
+          "text",
+          "schema"
+        ],
+        "title": "OutputShape",
+        "type": "string"
+      },
       "OutputStream": {
         "enum": [
           "stdout",
@@ -5033,6 +6077,62 @@
         "title": "Provenance",
         "type": "string"
       },
+      "ProviderKeyView": {
+        "description": "What the tenant sees of a key: its reference, who added it and when,\nits state, and when it was last used. Never its value.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "format": "uuid",
+            "title": "Created By",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ProviderName"
+          },
+          "status": {
+            "$ref": "#/components/schemas/KeyStatus"
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "status",
+          "created_at",
+          "created_by",
+          "last_used_at"
+        ],
+        "title": "ProviderKeyView",
+        "type": "object"
+      },
+      "ProviderName": {
+        "enum": [
+          "anthropic",
+          "openai"
+        ],
+        "title": "ProviderName",
+        "type": "string"
+      },
       "PublishRequest": {
         "additionalProperties": false,
         "description": "The next version of a playbook's name: its description, its body, and\nits gates.",
@@ -5243,6 +6343,63 @@
         "title": "ResultRequest",
         "type": "object"
       },
+      "RetireRequest": {
+        "additionalProperties": false,
+        "description": "A model its provider retired, by name, as a fill names it.",
+        "properties": {
+          "model": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Model",
+            "type": "string"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ProviderName"
+          }
+        },
+        "required": [
+          "provider",
+          "model"
+        ],
+        "title": "RetireRequest",
+        "type": "object"
+      },
+      "RetirementView": {
+        "description": "A retired model: no session resolves to it again, and a version that\nnames it is not published. Recorded once a model.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ProviderName"
+          },
+          "recorded_by": {
+            "format": "uuid",
+            "title": "Recorded By",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "model",
+          "created_at",
+          "recorded_by"
+        ],
+        "title": "RetirementView",
+        "type": "object"
+      },
       "ReviewRequest": {
         "additionalProperties": false,
         "description": "Keep a suggestion, so any session may recall it, or reject it.",
@@ -5268,6 +6425,31 @@
         ],
         "title": "Role",
         "type": "string"
+      },
+      "RoleFillView": {
+        "properties": {
+          "fallbacks": {
+            "items": {
+              "$ref": "#/components/schemas/FillView"
+            },
+            "title": "Fallbacks",
+            "type": "array"
+          },
+          "fill": {
+            "$ref": "#/components/schemas/FillView"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "fill",
+          "fallbacks"
+        ],
+        "title": "RoleFillView",
+        "type": "object"
       },
       "RunOutcome": {
         "enum": [
@@ -5297,6 +6479,25 @@
         ],
         "title": "RunsAs",
         "type": "string"
+      },
+      "SaveKeyRequest": {
+        "additionalProperties": false,
+        "description": "A key's value. It is written once, under a new reference, and no\nresponse, log, or error ever carries it.",
+        "properties": {
+          "value": {
+            "format": "password",
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Value",
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "value"
+        ],
+        "title": "SaveKeyRequest",
+        "type": "object"
       },
       "SecondFactorRequest": {
         "additionalProperties": false,
@@ -5812,6 +7013,37 @@
           "url"
         ],
         "title": "SsoLinkView",
+        "type": "object"
+      },
+      "StageRequest": {
+        "additionalProperties": false,
+        "description": "A new version of the matrix: the model roles it serves and its rows,\none a key. It is checked whole when it is published.",
+        "properties": {
+          "roles": {
+            "items": {
+              "pattern": "^[a-z][a-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "title": "Roles",
+            "type": "array"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/MatrixRowBody"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Rows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "roles",
+          "rows"
+        ],
+        "title": "StageRequest",
         "type": "object"
       },
       "StartSessionRequest": {
@@ -6539,6 +7771,65 @@
         "title": "TreeBoundsView",
         "type": "object"
       },
+      "TrialView": {
+        "description": "One trial: its arm, its session, where and when it ran, its cost, and\nwhat its acceptance verdict found.",
+        "properties": {
+          "arm": {
+            "$ref": "#/components/schemas/Arm"
+          },
+          "broken": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Broken",
+            "type": "array"
+          },
+          "cost_micros": {
+            "title": "Cost Micros",
+            "type": "integer"
+          },
+          "executor": {
+            "title": "Executor",
+            "type": "string"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "verdict_id": {
+            "format": "uuid",
+            "title": "Verdict Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "arm",
+          "session_id",
+          "executor",
+          "started_at",
+          "cost_micros",
+          "verdict_id",
+          "passed",
+          "score",
+          "broken"
+        ],
+        "title": "TrialView",
+        "type": "object"
+      },
       "TriggerBody": {
         "additionalProperties": false,
         "description": "An event that passes every filter set (one left empty matches any),\nor a schedule, every `every` seconds, a minute at least.",
@@ -6979,6 +8270,798 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/v1/admin/benchmarks": {
+      "get": {
+        "description": "The scenario's runs, the newest first: each arm's score and cost, and\nwhether the candidate regressed.",
+        "operationId": "get_trend_v1_admin_benchmarks_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "scenario",
+            "required": true,
+            "schema": {
+              "pattern": "^[a-z][a-z0-9_.-]{0,99}$",
+              "title": "Scenario",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BenchmarkSummaryView"
+                  },
+                  "title": "Response Get Trend V1 Admin Benchmarks Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Trend",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/benchmarks/{benchmark_id}": {
+      "get": {
+        "operationId": "get_benchmark_v1_admin_benchmarks__benchmark_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "benchmark_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Benchmark Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BenchmarkView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Benchmark",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/matrix/results": {
+      "post": {
+        "description": "What a benchmark run showed of a model for a model role. The latest\nresult for the two decides whether a version that serves the role with\nthe model may be published.",
+        "operationId": "record_result_v1_admin_matrix_results_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BenchmarkResultRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BenchmarkResultView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record Result",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/matrix/retirements": {
+      "post": {
+        "description": "A model its provider retired: no session resolves to it again, each\nsession on it switches at its next loop, and no version that names it\nis published. A model retired already answers its first record.",
+        "operationId": "retire_v1_admin_matrix_retirements_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetireRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetirementView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retire",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/matrix/versions": {
+      "post": {
+        "description": "A new pending version, numbered after the last. Its shape is checked\nhere, its fills when it is published.",
+        "operationId": "stage_v1_admin_matrix_versions_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatrixVersionView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stage",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/matrix/versions/current": {
+      "get": {
+        "description": "The latest version published: the matrix.",
+        "operationId": "get_current_v1_admin_matrix_versions_current_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatrixVersionView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Current",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/matrix/versions/{number}": {
+      "get": {
+        "operationId": "get_version_v1_admin_matrix_versions__number__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "number",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Number",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatrixVersionView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Version",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/matrix/versions/{number}/publish": {
+      "post": {
+        "description": "The pending version, published: every session resolved from now on\nis pinned to it, and a running one keeps the version it holds.\n`validation_failed` names every reason it may not be: no row matches\nevery question, or a fill is unpriced, unqualified for a model role its\nrow serves, or retired.",
+        "operationId": "publish_v1_admin_matrix_versions__number__publish_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "number",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Number",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatrixVersionView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Publish",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/v1/admin/me": {
       "get": {
         "description": "Who the plane admitted and what the entry grants; the check a skill\nmakes before its first read.",
@@ -8132,6 +10215,158 @@
           }
         },
         "summary": "Host Standing",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/orgs/{org_id}/ledger": {
+      "get": {
+        "description": "The tenant's entries, the newest first, narrowed to one kind, one\nhold (its hold, settlement, and charge), or one session (its holds and\napprovals) when named. `has_more` says the read was cut at its limit.",
+        "operationId": "get_ledger_v1_admin_orgs__org_id__ledger_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/EntryKind"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "hold_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Hold Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Session Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LedgerPageView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Ledger",
         "tags": [
           "admin"
         ]
@@ -16525,6 +18760,362 @@
         ]
       }
     },
+    "/v1/matrix/choices": {
+      "get": {
+        "operationId": "get_choices_v1_matrix_choices_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FillChoiceView"
+                  },
+                  "title": "Response Get Choices V1 Matrix Choices Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Choices",
+        "tags": [
+          "matrix"
+        ]
+      }
+    },
+    "/v1/matrix/choices/{role}": {
+      "delete": {
+        "description": "The matrix answers `role` again. Requires managing the org.",
+        "operationId": "drop_choice_v1_matrix_choices__role__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "role",
+            "required": true,
+            "schema": {
+              "pattern": "^[a-z][a-z0-9_]{0,63}$",
+              "title": "Role",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Drop Choice",
+        "tags": [
+          "matrix"
+        ]
+      },
+      "put": {
+        "description": "The tenant's fill for `role` from its next session on, one of the\nrole's options; it replaces the last. Requires managing the org.",
+        "operationId": "choose_v1_matrix_choices__role__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "role",
+            "required": true,
+            "schema": {
+              "pattern": "^[a-z][a-z0-9_]{0,63}$",
+              "title": "Role",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChooseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FillChoiceView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Choose",
+        "tags": [
+          "matrix"
+        ]
+      }
+    },
+    "/v1/matrix/options": {
+      "get": {
+        "description": "For each model role of the published matrix, the fills the tenant\nmay choose: none unless it pays its providers on its own keys.",
+        "operationId": "get_options_v1_matrix_options_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FillOptionsView"
+                  },
+                  "title": "Response Get Options V1 Matrix Options Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Options",
+        "tags": [
+          "matrix"
+        ]
+      }
+    },
     "/v1/me": {
       "get": {
         "operationId": "me_v1_me_get",
@@ -19617,6 +22208,202 @@
         "summary": "Put Fetch Credential",
         "tags": [
           "projects"
+        ]
+      }
+    },
+    "/v1/provider-keys": {
+      "get": {
+        "description": "The tenant's keys, the newest first, a rotated or refused one among\nthem; never a value.",
+        "operationId": "get_keys_v1_provider_keys_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProviderKeyView"
+                  },
+                  "title": "Response Get Keys V1 Provider Keys Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Keys",
+        "tags": [
+          "provider-keys"
+        ]
+      }
+    },
+    "/v1/provider-keys/{provider}": {
+      "put": {
+        "description": "The tenant's live key to `provider`, the one before it rotated out.\nRequires managing the org. `key_refused` when the provider does not take\nit, and 503 when no probe can ask.",
+        "operationId": "save_key_v1_provider_keys__provider__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProviderName"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveKeyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderKeyView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Key",
+        "tags": [
+          "provider-keys"
         ]
       }
     },

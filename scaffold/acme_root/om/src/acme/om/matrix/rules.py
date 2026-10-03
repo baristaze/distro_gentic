@@ -82,6 +82,23 @@ def serves(version: MatrixVersion, role: ModelRole) -> frozenset[Fill]:
     )
 
 
+def choosable(
+    version: MatrixVersion, role: ModelRole, keyed: Collection[ProviderName]
+) -> tuple[Fill, ...]:
+    """The fills a tenant on its own keys may choose for `role`: each fill
+    the version qualified for it (`serves`) from a provider in `keyed`, once,
+    in the order the version's rows name them."""
+    return tuple(
+        dict.fromkeys(
+            fill
+            for row in version.rows
+            if role in version.roles_of(row)
+            for fill in row.fills
+            if fill.provider in keyed
+        )
+    )
+
+
 def latest_results(
     results: Iterable[BenchmarkResult],
 ) -> dict[tuple[ModelRef, ModelRole], BenchmarkResult]:

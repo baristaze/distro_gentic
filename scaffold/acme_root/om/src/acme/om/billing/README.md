@@ -44,6 +44,8 @@ of](../../../../README.md).
 - **Raise a limit once.** The raise counts in the window open now and in
   no other.
 - **Approve a call** that the anomaly guard parked.
+- **Read a tenant's ledger.** An operator reads its entries, the newest
+  first, naming the tenant, under the operators' read.
 - **Settle what nobody settled.** A hold an hour open with no settlement
   belongs to a run that died. The sweep settles it through its gate, at
   the bill the provider gives, else whole, and releases it only on the
