@@ -1,0 +1,78 @@
+# The workspace host on a tenant's Linux machine, as deployment/host/install.sh
+# installs it to /etc/systemd/system/acme-host.service. It runs as its own
+# system user, never root, from a release root owns, and reaches nothing of
+# the machine beyond its own state: the platform over the network, and a
+# container engine over its socket. The check is deployment/host/check.sh,
+# which reads its exposure with `systemd-analyze security`.
+[Unit]
+Description=Acme workspace host
+After=network-online.target
+Wants=network-online.target
+# After a rootful engine's socket, where one exists, so that the wall below
+# covers it from the host's first start.
+After=docker.socket docker.service containerd.service
+
+[Service]
+Type=simple
+User=acme-host
+Group=acme-host
+# ACME_API_URL, ACME_HOST_NAME, the first start's ACME_ENROLLMENT_TOKEN, and
+# the machine's proxy and CA file. Root reads it before the host starts; the
+# host's own user cannot read it.
+EnvironmentFile=/etc/acme-host/host.env
+Environment=ACME_HOST_HOME=/var/lib/acme-host
+Environment=HOME=/var/lib/acme-host
+WorkingDirectory=/var/lib/acme-host
+ExecStart=/opt/acme-host/current/bin/acme-host run
+# 1 refused, 2 a setting or a file is wrong, 3 not enrolled, 5 a startup
+# probe failed: a person must act, so systemd does not spin on them. An
+# unreachable platform (4) and a crash restart.
+Restart=on-failure
+RestartSec=10
+RestartPreventExitStatus=1 2 3 5
+TimeoutStopSec=60
+
+# Its state: the credential, the secret store, and the records, owner-only.
+StateDirectory=acme-host
+StateDirectoryMode=0700
+UMask=0077
+# The owner's ceilings, which the host reads and never writes.
+BindReadOnlyPaths=-/etc/acme-host/ceilings.toml:/var/lib/acme-host/ceilings.toml
+
+# The rest of the machine is read-only or absent.
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+PrivateIPC=yes
+ProtectHostname=yes
+ProtectClock=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectProc=invisible
+ProcSubset=pid
+RemoveIPC=yes
+# A rootful engine's socket is root by another name: the host never sees it,
+# even when someone adds its user to the engine's group. Its engine is a
+# rootless one, run as its own user (install.sh --engine rootless).
+InaccessiblePaths=-/run/docker.sock -/var/run/docker.sock -/run/containerd -/run/podman
+
+# No privilege to gain, keep, or borrow.
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallErrorNumber=EPERM
+
+[Install]
+WantedBy=multi-user.target

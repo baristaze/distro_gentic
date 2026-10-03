@@ -136,6 +136,18 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,scope=${{ matrix.image }},mode=max
 
+  host:
+    # The workspace host's installer on a Linux machine with systemd, a
+    # container: it starts under its unit as its own user, and the unit's
+    # exposure stays under its bound.
+    name: the host installs and starts under its unit
+    runs-on: ubuntu-latest
+    needs: check
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: make host-check
+
   terraform:
     name: terraform format and validate
     runs-on: ubuntu-latest
