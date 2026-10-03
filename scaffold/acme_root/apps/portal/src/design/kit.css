@@ -908,3 +908,299 @@ select.acme-field {
   color: var(--acme-text);
   border-color: var(--acme-border);
 }
+
+/* Code, a log, and a diff: monospace on the subtle surface, wide lines
+   scrolled inside their box rather than widening the page. */
+.acme-code,
+.acme-log,
+.acme-diff-lines,
+.acme-json {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.acme-code {
+  margin: 0;
+  padding: 10px 12px;
+  overflow-x: auto;
+  background: var(--acme-surface-subtle);
+  border: 1px solid var(--acme-border);
+  border-radius: 8px;
+  white-space: pre;
+}
+
+.acme-log {
+  max-height: 420px;
+  overflow: auto;
+  padding: 8px 0;
+  background: var(--acme-surface-subtle);
+  border: 1px solid var(--acme-border);
+  border-radius: 8px;
+}
+
+.acme-log-line {
+  display: flex;
+  white-space: pre;
+}
+
+.acme-log-line[data-stream="stderr"] .acme-log-text {
+  color: var(--acme-danger-text);
+}
+
+.acme-log-no {
+  flex: 0 0 48px;
+  padding-right: 12px;
+  text-align: right;
+  color: var(--acme-muted);
+  user-select: none;
+}
+
+.acme-log-hidden {
+  padding: 0 12px 4px 60px;
+  color: var(--acme-muted);
+}
+
+.acme-diff {
+  display: grid;
+  gap: 12px;
+}
+
+.acme-diff-file {
+  overflow-x: auto;
+  border: 1px solid var(--acme-border);
+  border-radius: 8px;
+}
+
+.acme-diff-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--acme-border);
+  background: var(--acme-surface-subtle);
+  font-size: 13px;
+}
+
+.acme-diff-path {
+  font-weight: 550;
+  margin-right: auto;
+}
+
+.acme-diff-count[data-kind="add"] {
+  color: var(--acme-live);
+}
+
+.acme-diff-count[data-kind="del"] {
+  color: var(--acme-danger-text);
+}
+
+.acme-diff-lines {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.acme-diff-lines td {
+  padding: 0 8px;
+  white-space: pre;
+  vertical-align: top;
+}
+
+.acme-diff-no {
+  width: 1%;
+  text-align: right;
+  color: var(--acme-muted);
+  user-select: none;
+}
+
+.acme-diff-sign {
+  width: 1%;
+  user-select: none;
+}
+
+.acme-diff-lines tr[data-kind="hunk"] td {
+  color: var(--acme-muted);
+  background: var(--acme-surface-subtle);
+}
+
+.acme-diff-lines tr[data-kind="add"] {
+  background: color-mix(in srgb, var(--acme-live) 12%, transparent);
+}
+
+.acme-diff-lines tr[data-kind="del"] {
+  background: color-mix(in srgb, var(--acme-danger) 12%, transparent);
+}
+
+/* Markdown: the prose rhythm of a card, its code and tables from the kit. */
+.acme-md {
+  display: grid;
+  gap: 8px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.acme-md > * {
+  margin: 0;
+}
+
+.acme-md :is(h3, h4, h5, h6) {
+  margin: 4px 0 0;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.acme-md :is(ul, ol) {
+  padding-left: 20px;
+}
+
+.acme-md blockquote {
+  padding-left: 12px;
+  border-left: 3px solid var(--acme-border-strong);
+  color: var(--acme-muted);
+}
+
+.acme-md :not(pre) > code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--acme-surface-subtle);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.acme-md a {
+  color: var(--acme-link);
+}
+
+.acme-md hr {
+  border: none;
+  border-top: 1px solid var(--acme-border);
+}
+
+.acme-json {
+  overflow-x: auto;
+}
+
+.acme-json-row {
+  display: flex;
+  align-items: baseline;
+  white-space: pre;
+}
+
+.acme-json-toggle {
+  flex: 0 0 18px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--acme-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.acme-json-key {
+  color: var(--acme-muted);
+}
+
+.acme-json-value[data-kind="string"] {
+  color: var(--acme-live);
+}
+
+.acme-json-value[data-kind="number"],
+.acme-json-value[data-kind="boolean"] {
+  color: var(--acme-link);
+}
+
+.acme-json-value[data-kind="object"],
+.acme-json-value[data-kind="array"],
+.acme-json-value[data-kind="null"] {
+  color: var(--acme-muted);
+}
+
+/* A table's header that sorts its column. */
+.acme-sort {
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.acme-table-empty {
+  color: var(--acme-muted);
+  text-align: center;
+}
+
+/* The lightbox: one thing over the page, as large as the window allows. */
+.acme-lightbox {
+  display: flex;
+  flex-direction: column;
+  width: min(1100px, 100%);
+  max-height: calc(100vh - 32px);
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--acme-surface);
+  box-shadow: var(--acme-shadow-lg);
+}
+
+.acme-lightbox-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.acme-lightbox-head .acme-card-title {
+  margin: 0 auto 0 0;
+}
+
+.acme-lightbox-count {
+  color: var(--acme-muted);
+  font-size: 13px;
+}
+
+.acme-lightbox-body {
+  min-height: 0;
+  overflow: auto;
+}
+
+.acme-lightbox-body img {
+  display: block;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+/* The command palette: near the top of the window, the field over its list. */
+.acme-palette-backdrop {
+  align-items: flex-start;
+  padding-top: 12vh;
+}
+
+.acme-palette-list {
+  max-height: 320px;
+  overflow-y: auto;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.acme-palette-option,
+.acme-palette-empty {
+  padding: 8px 10px;
+  border-radius: 6px;
+}
+
+.acme-palette-option {
+  cursor: pointer;
+}
+
+.acme-palette-option[aria-selected="true"] {
+  background: var(--acme-accent-soft);
+  color: var(--acme-link);
+}
+
+.acme-palette-empty {
+  color: var(--acme-muted);
+}
