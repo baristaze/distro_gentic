@@ -474,6 +474,41 @@ async def test_a_spending_job_the_money_gate_parks_starts_nothing_and_holds_noth
     assert [h for h in holds if isinstance(h, FundedHold) and h.hold.purpose == "compute"] == []
 
 
+async def test_a_run_that_recovers_a_jobs_call_starts_it_once_under_one_hold(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A run lost after it wrote a spending job's request, before it held
+    anything, leaves the call open. The run that recovers the call holds and
+    starts the job once, and parks on that job."""
+    money = money_over(tmp_path, kinds=(ASSISTANT, DELIVERY, BUILDER))
+    await money.open(plan="team")
+    loop, owner = money.loop, money.loop.owner
+    session_id = await loop.start("builder")
+    await loop.say(session_id, "Start it.")
+    loop.anthropic.add(reply(call("compute", q="everything")), reply(said("It is done.")))
+    real = money.calls.authorize_job
+    lost: list[bool] = []
+
+    async def lost_once(*args: object) -> UUID:
+        if not lost:
+            lost.append(True)
+            raise RuntimeError("the run is lost here")
+        return await real(*args)  # pyright: ignore[reportArgumentType]
+
+    monkeypatch.setattr(money.calls, "authorize_job", lost_once)
+    with pytest.raises(RuntimeError):
+        await loop.loops.run(owner, session_id)
+
+    parked = await loop.loops.run(owner, session_id)
+
+    assert parked.park is not None and parked.park.reason is ParkReason.JOB
+    assert parked.park.job is not None
+    holds = await money.ledger.read_entries(owner.org_id, kind=EntryKind.HOLD, limit=10)
+    jobs = [h.id for h in holds if isinstance(h, FundedHold) and h.hold.purpose == "compute"]
+    assert jobs == [parked.park.job.hold_id], "one job, one hold"
+    assert len(loop.jobs["compute"].deadlines) == 1, "started once"
+
+
 # Time zones.
 
 
