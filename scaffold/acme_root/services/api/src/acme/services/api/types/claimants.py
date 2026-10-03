@@ -5,7 +5,6 @@ claimant's requests carry no kind, no pool, no tenant, and no lane: those
 are its credential's."""
 
 import base64
-import binascii
 from datetime import datetime
 from typing import Any, Self
 from uuid import UUID
@@ -15,10 +14,12 @@ from pydantic import Field, model_validator
 from acme.om.base import EMPTY_UUID
 from acme.om.exceptions import ValidationFailed
 from acme.om.placement.types.claimant import ClaimantReport, ReportOutcome
+from acme.om.retention.crossing import Crossing
 from acme.om.watch.kinds import MAX_APPEND_BYTES, MAX_APPEND_ENTRIES
-from acme.om.watch.types.live import Appended, Entry
+from acme.om.watch.types.live import MAX_ENTRY, Appended, SentEntry
 from acme.om.work.types.work_item import WorkStatus
 from acme.services.api.types.common import RequestBody, View
+from acme.services.api.types.relay import CrossingBody
 
 MAX_APPEND_CHARS = 4 * -(-MAX_APPEND_BYTES // 3)
 """The base64 of an append's most bytes: no entry's data runs longer."""
@@ -116,10 +117,12 @@ class ClaimantReportRequest(RequestBody):
 
 
 class EntryBody(RequestBody):
-    """One numbered entry of a stream: its bytes in base64."""
+    """One numbered entry of a stream: its bytes as they crossed the wall,
+    in base64, and the hash its sender declared of them, a `stream_part`."""
 
-    n: int = Field(ge=0)
+    n: int = Field(ge=0, le=MAX_ENTRY)
     data: str = Field(max_length=MAX_APPEND_CHARS)
+    crossing: CrossingBody
 
 
 class ClaimantAppendRequest(RequestBody):
@@ -139,11 +142,15 @@ class ClaimantAppendRequest(RequestBody):
         return self
 
     def appended(self) -> Appended:
-        entries: list[Entry] = []
+        entries: list[SentEntry] = []
         for entry in self.entries:
             try:
                 data = base64.b64decode(entry.data, validate=True)
-            except binascii.Error:
+            except ValueError:
+                # Not base64, or text outside ASCII, which no base64 is.
                 raise ValidationFailed("an entry's data is base64") from None
-            entries.append(Entry(n=entry.n, data=data))
+            crossing = Crossing(
+                kind=entry.crossing.kind, sha256=entry.crossing.sha256, size=entry.crossing.size
+            )
+            entries.append(SentEntry(n=entry.n, data=data, crossing=crossing))
         return Appended(claim_token=self.claim_token, stream=self.stream, entries=tuple(entries))

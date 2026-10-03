@@ -68,7 +68,9 @@ class WatchManagerInterface(ABC):
         identity held (`hosts.held_as`). Its own item under a lapsed lease,
         or a token the claim no longer carries, is `LeaseLost`. More than
         `MAX_APPEND_ENTRIES` entries, or `MAX_APPEND_BYTES` of them, is
-        `ValidationFailed`, and lands nothing."""
+        `ValidationFailed`, and an entry whose bytes do not match the
+        `stream_part` crossing it declared is `CrossingRefused`; either
+        lands nothing."""
         ...
 
     @abstractmethod

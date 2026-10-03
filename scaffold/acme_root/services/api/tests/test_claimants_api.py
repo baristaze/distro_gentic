@@ -23,8 +23,10 @@ from acme.om.base import Platform, new_id, utcnow
 from acme.om.context import Permission, Role, TenantContext
 from acme.om.placement.kinds import ClaimantKindSpec
 from acme.om.placement.types.claimant import Claimant
+from acme.om.retention.crossing import Crossing, CrossingKind, declared
 from acme.om.root import PlatformPorts, ProductKinds
 from acme.om.watch.kinds import MAX_APPEND_BYTES, MAX_APPEND_ENTRIES, StreamKind
+from acme.om.watch.types.live import MAX_ENTRY
 from acme.om.work.kinds import WorkKindSpec
 from acme.om.work.types.work_item import WorkItem, WorkStatus
 from acme.services.api.container import AppContainer
@@ -295,10 +297,18 @@ async def test_an_owner_lists_a_pools_claimants_and_revokes_one_by_the_id_the_li
 
 
 def entries(*texts: str, start: int = 0) -> list[dict[str, Any]]:
-    return [
-        {"n": start + n, "data": base64.b64encode(text.encode()).decode()}
-        for n, text in enumerate(texts)
-    ]
+    return [an_entry(start + n, text.encode()) for n, text in enumerate(texts)]
+
+
+def an_entry(n: int, data: bytes, crossing: Crossing | None = None) -> dict[str, Any]:
+    """One entry as a claimant sends it: its bytes in base64, and the
+    crossing it declares of them, its bytes' own unless another is named."""
+    crossing = crossing or declared(CrossingKind.STREAM_PART, data)
+    return {
+        "n": n,
+        "data": base64.b64encode(data).decode(),
+        "crossing": crossing.model_dump(mode="json"),
+    }
 
 
 async def held_render(
@@ -492,16 +502,49 @@ async def test_an_append_is_held_to_its_size_before_anything_lands(
         entries(*(["e"] * (MAX_APPEND_ENTRIES + 1))),
         entries("x" * (MAX_APPEND_BYTES + 1)),
         entries(half, half),
-        [{"n": 0, "data": "not base64!"}],
+        [{**an_entry(0, b"x"), "data": "not base64!"}],
+        [{**an_entry(0, b"x"), "data": "\u00e9"}],
+        [an_entry(MAX_ENTRY + 1, b"x")],
         [],
     ):
         refused = await append(client, node, render.id, claim_token, uuid4(), sent)
         assert refused.status_code == 422, refused.text
     assert await read(client, owner, render.id) == {}
+    opened = await client.post(f"/v1/work-items/{render.id}/streams/{LOG}/live", headers=owner)
+    past = await client.get(
+        "/v1/live/items",
+        params={"handle": opened.json()["handle"], "after": [f"{uuid4()}:{MAX_ENTRY + 1}"]},
+    )
+    assert past.status_code == 422, past.text
     whole = await append(
         client, node, render.id, claim_token, uuid4(), entries("x" * MAX_APPEND_BYTES)
     )
     assert whole.status_code == 204, whole.text
+
+
+async def test_an_append_whose_bytes_do_not_match_their_crossing_lands_nothing(
+    client: httpx.AsyncClient, owner: dict[str, str], container: AppContainer
+) -> None:
+    pool_id = await a_pool(client, owner)
+    node = await a_node(client, await a_token(client, owner, pool_id))
+    render, claim_token = await held_render(client, container, owner, node)
+    stream = uuid4()
+    real = declared(CrossingKind.STREAM_PART, b"f1")
+    # Another's hash, its own hash at another size, and its own bytes
+    # declared as another kind: each refuses the whole append.
+    for crossing in (
+        declared(CrossingKind.STREAM_PART, b"f2"),
+        Crossing(kind=CrossingKind.STREAM_PART, sha256=real.sha256, size=real.size + 1),
+        declared(CrossingKind.RESULT, b"f1"),
+    ):
+        sent = [an_entry(0, b"f0"), an_entry(1, b"f1", crossing)]
+        refused = await append(client, node, render.id, claim_token, stream, sent)
+        assert refused.status_code == 422, refused.text
+        assert refused.json()["error"]["code"] == "crossing_refused"
+    assert await read(client, owner, render.id) == {}
+    landed = await append(client, node, render.id, claim_token, stream, entries("f0", "f1"))
+    assert landed.status_code == 204, landed.text
+    assert await read(client, owner, render.id) == {str(stream): [(0, "f0"), (1, "f1")]}
 
 
 async def test_an_append_spends_the_claimants_budget_of_writes(tmp_path: Path) -> None:

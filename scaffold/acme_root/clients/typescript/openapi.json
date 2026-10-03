@@ -2470,14 +2470,18 @@
       },
       "EntryBody": {
         "additionalProperties": false,
-        "description": "One numbered entry of a stream: its bytes in base64.",
+        "description": "One numbered entry of a stream: its bytes as they crossed the wall,\nin base64, and the hash its sender declared of them, a `stream_part`.",
         "properties": {
+          "crossing": {
+            "$ref": "#/components/schemas/CrossingBody"
+          },
           "data": {
             "maxLength": 87384,
             "title": "Data",
             "type": "string"
           },
           "n": {
+            "maximum": 99999999999998.0,
             "minimum": 0.0,
             "title": "N",
             "type": "integer"
@@ -2485,7 +2489,8 @@
         },
         "required": [
           "n",
-          "data"
+          "data",
+          "crossing"
         ],
         "title": "EntryBody",
         "type": "object"

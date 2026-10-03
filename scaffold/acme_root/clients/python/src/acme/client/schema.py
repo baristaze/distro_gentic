@@ -491,17 +491,6 @@ class EnrollmentTokenView(BaseModel):
     revoked_at: Annotated[AwareDatetime | None, Field(title='Revoked At')]
 
 
-class EntryBody(BaseModel):
-    """
-    One numbered entry of a stream: its bytes in base64.
-    """
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    data: Annotated[str, Field(max_length=87384, title='Data')]
-    n: Annotated[int, Field(ge=0, title='N')]
-
-
 class EntryKind(StrEnum):
     hold = 'hold'
     settlement = 'settlement'
@@ -2153,21 +2142,6 @@ class ClaimView(BaseModel):
     item: ClaimedWorkView | None
 
 
-class ClaimantAppendRequest(BaseModel):
-    """
-    What a claimant appends to one stream of its kind for the item it
-    holds, under its claim token: the stream it names, and its entries in
-    their order, an entry numbered at or below the stream's last landing
-    nothing. It is held to its bounds before anything reads it.
-    """
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    claim_token: Annotated[UUID, Field(title='Claim Token')]
-    entries: Annotated[list[EntryBody], Field(max_length=64, min_length=1, title='Entries')]
-    stream: Annotated[UUID, Field(title='Stream')]
-
-
 class ClaimantReportRequest(BaseModel):
     """
     A claimant's answer for an item it holds: done, or failed with why,
@@ -2280,6 +2254,19 @@ class EnrollRequest(BaseModel):
     advertisement: AdvertisementBody
     exec_version: Annotated[int, Field(ge=1, title='Exec Version')]
     name: Annotated[str, Field(max_length=64, min_length=1, title='Name')]
+
+
+class EntryBody(BaseModel):
+    """
+    One numbered entry of a stream: its bytes as they crossed the wall,
+    in base64, and the hash its sender declared of them, a `stream_part`.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    crossing: CrossingBody
+    data: Annotated[str, Field(max_length=87384, title='Data')]
+    n: Annotated[int, Field(ge=0, le=99999999999998, title='N')]
 
 
 class ExecutionView(BaseModel):
@@ -2961,6 +2948,21 @@ class ChooseRequest(BaseModel):
         extra='forbid',
     )
     fill: FillBody
+
+
+class ClaimantAppendRequest(BaseModel):
+    """
+    What a claimant appends to one stream of its kind for the item it
+    holds, under its claim token: the stream it names, and its entries in
+    their order, an entry numbered at or below the stream's last landing
+    nothing. It is held to its bounds before anything reads it.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    claim_token: Annotated[UUID, Field(title='Claim Token')]
+    entries: Annotated[list[EntryBody], Field(max_length=64, min_length=1, title='Entries')]
+    stream: Annotated[UUID, Field(title='Stream')]
 
 
 class ClaimantClaimView(BaseModel):

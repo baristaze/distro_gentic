@@ -12,10 +12,17 @@ from uuid import UUID
 from pydantic import Field
 
 from acme.om.base import Platform
+from acme.om.retention.crossing import Crossing
 from acme.om.steps.types.stream import StreamPart
 
 MAX_SEEN = 64
 """The most streams one read names the last part of."""
+
+MAX_ENTRY = 10**14 - 2
+"""The highest number an entry of a product's stream takes. The shared
+cache's script spells an entry's id `0-<n + 1>`, and spells a number at or
+past 10^14 in exponent form, which is no id: such an entry would land
+nothing, and a read after it would read nothing."""
 
 
 class LiveRead(Platform):
@@ -69,8 +76,16 @@ class LivePage(Platform):
 class Entry(Platform):
     """One numbered entry of a product's stream, its bytes the claimant's."""
 
-    n: int = Field(ge=0)
+    n: int = Field(ge=0, le=MAX_ENTRY)
     data: bytes
+
+
+class SentEntry(Entry):
+    """An entry as a claimant sends it across the wall: its number, its
+    bytes, and the crossing it declared of them, which the bytes match
+    before anything reads them."""
+
+    crossing: Crossing
 
 
 class Appended(Platform):
@@ -81,7 +96,7 @@ class Appended(Platform):
 
     claim_token: UUID
     stream: UUID
-    entries: tuple[Entry, ...]
+    entries: tuple[SentEntry, ...]
 
 
 class ItemRead(Platform):
@@ -111,7 +126,7 @@ class ItemSeen(Platform):
     after it."""
 
     stream: UUID
-    n: int = Field(ge=0)
+    n: int = Field(ge=0, le=MAX_ENTRY)
 
 
 class ItemStream(Platform):

@@ -2,7 +2,8 @@
 compose stack: Postgres holds the item and its claim, and the shared cache
 on Valkey holds the stream. A member of the item's tenant reads what the
 claimant appended by a handle; a member of another tenant opens none, and
-once the claimant hands the item back, nothing more lands."""
+once the claimant hands the item back, nothing more lands. The highest
+number an entry takes lands in Valkey, and a read resumes before it."""
 
 from pathlib import Path
 from uuid import uuid4
@@ -30,6 +31,7 @@ from acme.infra.impl.configured import InfraConfiguredImpl
 from acme.integrations.impl.configured import IntegrationsConfiguredImpl
 from acme.om.base import new_id
 from acme.om.root import PlatformPorts
+from acme.om.watch.types.live import MAX_ENTRY
 from acme.services.api.app import create_app
 from acme.services.api.container import AppContainer, postgres_storage
 
@@ -67,6 +69,13 @@ async def test_a_claimants_stream_is_read_by_its_tenant_alone_over_the_stack(
             landed = await append(client, node, render.id, claim_token, stream, entries("f0", "f1"))
             assert landed.status_code == 204, landed.text
             assert await read(client, owner, render.id) == {str(stream): [(0, "f0"), (1, "f1")]}
+            top = uuid4()
+            highest = await append(
+                client, node, render.id, claim_token, top, entries("top", start=MAX_ENTRY)
+            )
+            assert highest.status_code == 204, highest.text
+            resumed = await read(client, owner, render.id, (f"{top}:{MAX_ENTRY - 1}",))
+            assert resumed[str(top)] == [(MAX_ENTRY, "top")]
 
             beta = await tenant(client, container, f"beta-{suffix}")
             crossed = await client.post(
@@ -84,6 +93,9 @@ async def test_a_claimants_stream_is_read_by_its_tenant_alone_over_the_stack(
                 client, node, render.id, claim_token, stream, entries("f2", start=2)
             )
             assert late.status_code == 404, late.text
-            assert await read(client, owner, render.id) == {str(stream): [(0, "f0"), (1, "f1")]}
+            assert await read(client, owner, render.id) == {
+                str(stream): [(0, "f0"), (1, "f1")],
+                str(top): [(MAX_ENTRY, "top")],
+            }
     finally:
         await container.close()

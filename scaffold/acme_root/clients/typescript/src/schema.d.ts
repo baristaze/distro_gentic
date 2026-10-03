@@ -3889,9 +3889,11 @@ export interface components {
         };
         /**
          * EntryBody
-         * @description One numbered entry of a stream: its bytes in base64.
+         * @description One numbered entry of a stream: its bytes as they crossed the wall,
+         *     in base64, and the hash its sender declared of them, a `stream_part`.
          */
         EntryBody: {
+            crossing: components["schemas"]["CrossingBody"];
             /** Data */
             data: string;
             /** N */

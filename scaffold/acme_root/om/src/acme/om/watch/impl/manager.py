@@ -20,6 +20,8 @@ from acme.om.relay import RelayManagerInterface
 from acme.om.relay.exceptions import NoWorkspaceHost
 from acme.om.relay.rules import exec_id, key_time, stale
 from acme.om.relay.types.exec import REQUESTS, ExecCall, ExecProgress, RunRequest
+from acme.om.retention.crossing import CrossingKind, CrossingRefused
+from acme.om.retention.crossing import verified as crossed
 from acme.om.steps import StepsManagerInterface
 from acme.om.steps.types.header import ParkReason
 from acme.om.watch.exceptions import CommandRunning, LiveReadRefused, NotHandedOver
@@ -124,6 +126,13 @@ class WatchManagerImpl(WatchManagerInterface):
             raise ValidationFailed(f"an append carries at most {MAX_APPEND_ENTRIES} entries")
         if sum(len(entry.data) for entry in appended.entries) > MAX_APPEND_BYTES:
             raise ValidationFailed(f"an append carries at most {MAX_APPEND_BYTES} bytes")
+        # Each entry's bytes are checked against their hash before anything
+        # reads them, as a host's part is, so one that does not match lands
+        # nothing of the append.
+        for entry in appended.entries:
+            if entry.crossing.kind is not CrossingKind.STREAM_PART:
+                raise CrossingRefused(f"a {entry.crossing.kind.value} sent as a stream_part")
+            crossed(entry.crossing, entry.data)
         item = await self._hosts.held_as(rctx, claimant, item_id, appended.claim_token)
         # A lease that lapsed is no longer held, though no sweep requeued
         # the item yet: the claimant renews it before it writes again.
