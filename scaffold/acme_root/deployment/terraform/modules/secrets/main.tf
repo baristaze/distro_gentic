@@ -114,6 +114,26 @@ resource "aws_secretsmanager_secret_version" "totp_encryption_key" {
   secret_string_wo_version = 1
 }
 
+# The key the API signs a live-read handle with, and checks it by: 48
+# random characters, the same in every API task. A new one ends every
+# handle out, which lives minutes, so it rotates by raising the version.
+ephemeral "random_password" "live_read_key" {
+  length  = 48
+  special = false
+}
+
+resource "aws_secretsmanager_secret" "live_read_key" {
+  name                    = "${var.prefix}live_read_key"
+  recovery_window_in_days = local.recovery_window_in_days
+  tags                    = local.tags
+}
+
+resource "aws_secretsmanager_secret_version" "live_read_key" {
+  secret_id                = aws_secretsmanager_secret.live_read_key.id
+  secret_string_wo         = ephemeral.random_password.live_read_key.result
+  secret_string_wo_version = 1
+}
+
 # The value the portal's CloudFront distribution adds to every request it
 # sends the API, as the X-Acme-Edge header. It lets the API trust one more
 # hop of X-Forwarded-For: CloudFront appends the viewer's address, the load

@@ -23,6 +23,10 @@ from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.trust.root import build_trust_operator
+from acme.om.watch.impl.manager import WatchOptions
+from acme.om.watch.impl.stream import StreamServiceMemoryImpl
+from acme.om.watch.root import build_watch
+from acme.om.watch.stream import StreamServiceInterface
 from acme.services.api.gateway.ratelimit import RateLimit, RateLimitOptions, RefusedAddresses
 from acme.services.api.services import ServicesInterface
 from acme.services.api.services.impl.root import build_services
@@ -134,6 +138,7 @@ class AppContainer:
         managers: Managers,
         services: ServicesInterface,
         rate_limits: RateLimitOptions,
+        stream: StreamServiceInterface,
     ) -> None:
         self.settings = settings
         self.storage = storage
@@ -142,6 +147,8 @@ class AppContainer:
         self.managers = managers
         self.services = services
         self.rate_limits = rate_limits
+        # The stream service the live reads of this process come from.
+        self.stream = stream
         # What the shared count said of each address that spent its budget of
         # failed authentications, until that window ends (ADR 0059).
         self.refused_addresses = RefusedAddresses()
@@ -200,11 +207,14 @@ class AppContainer:
             environment=settings.environment,
             agent_kinds=agent_kinds,
         )
+        stream = StreamServiceMemoryImpl()
+        watch = build_watch(managers, stream, WatchOptions(live_read_key=settings.live_read_key))
         services = build_services(
             managers,
             infra,
             integrations,
             timedelta(seconds=settings.realtime_head_max_age_seconds),
+            watch,
             build_trust_operator(storage, infra),
         )
         return cls(
@@ -215,6 +225,7 @@ class AppContainer:
             managers,
             services,
             rate_limit_options(settings),
+            stream,
         )
 
     async def start(self) -> None:
@@ -231,6 +242,8 @@ class AppContainer:
                 "no TOTP encryption key: the operator plane refuses every enrolment "
                 "and every sign-in that presents a code"
             )
+        if self.settings.live_read_key is None:
+            log.warning("no live-read key: every live read of a session is refused")
 
     async def close(self) -> None:
         await self.integrations.close()

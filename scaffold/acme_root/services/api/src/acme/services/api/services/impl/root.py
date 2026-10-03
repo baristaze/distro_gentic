@@ -7,6 +7,7 @@ from acme.infra.root import InfraInterface
 from acme.integrations.root import IntegrationsInterface
 from acme.om.root import Managers
 from acme.om.trust import TrustOperatorManagerInterface
+from acme.om.watch import WatchManagerInterface
 from acme.services.api.services import (
     AdminServiceInterface,
     AgentSessionsServiceInterface,
@@ -19,6 +20,7 @@ from acme.services.api.services import (
     ServicesInterface,
     StationsServiceInterface,
     TenancyServiceInterface,
+    WatchServiceInterface,
     WebhooksServiceInterface,
 )
 from acme.services.api.services.impl.admin import AdminServiceImpl
@@ -31,6 +33,7 @@ from acme.services.api.services.impl.realtime import RealtimeServiceImpl
 from acme.services.api.services.impl.relay import RelayServiceImpl
 from acme.services.api.services.impl.stations import StationsServiceImpl
 from acme.services.api.services.impl.tenancy import TenancyServiceImpl
+from acme.services.api.services.impl.watch import WatchServiceImpl
 from acme.services.api.services.impl.webhooks import WebhooksServiceImpl
 
 
@@ -48,6 +51,7 @@ class ServicesImpl(ServicesInterface):
         fleet: FleetServiceInterface,
         relay: RelayServiceInterface,
         stations: StationsServiceInterface,
+        watch: WatchServiceInterface,
     ) -> None:
         self._tenancy = tenancy
         self._admin = admin
@@ -60,6 +64,7 @@ class ServicesImpl(ServicesInterface):
         self._fleet = fleet
         self._relay = relay
         self._stations = stations
+        self._watch = watch
 
     def get_tenancy_service(self) -> TenancyServiceInterface:
         return self._tenancy
@@ -94,12 +99,16 @@ class ServicesImpl(ServicesInterface):
     def get_stations_service(self) -> StationsServiceInterface:
         return self._stations
 
+    def get_watch_service(self) -> WatchServiceInterface:
+        return self._watch
+
 
 def build_services(
     managers: Managers,
     infra: InfraInterface,
     integrations: IntegrationsInterface,
     head_max_age: timedelta,
+    watch: WatchManagerInterface,
     trust_operator: TrustOperatorManagerInterface,
 ) -> ServicesInterface:
     """In-process impls only: a Python caller outside the process reaches the
@@ -122,4 +131,5 @@ def build_services(
         fleet=FleetServiceImpl(managers.placement_operator, trust_operator),
         relay=RelayServiceImpl(managers.relay, infra.get_topics()),
         stations=StationsServiceImpl(managers.stations),
+        watch=WatchServiceImpl(watch),
     )

@@ -79,6 +79,22 @@ class RelayManagerInterface(ABC):
         ...
 
     @abstractmethod
+    async def running(self, rctx: RequestContext, org_id: UUID, session_id: UUID) -> list[ExecItem]:
+        """Platform-internal: the session's items a host runs now, oldest
+        first, at most the options' page."""
+        ...
+
+    @abstractmethod
+    async def interrupt_running(
+        self, rctx: RequestContext, org_id: UUID, session_id: UUID, below: int | None
+    ) -> list[ExecItem]:
+        """Platform-internal: every item a host runs for the session now, or,
+        with `below`, those of a run below that writer epoch alone, each
+        answered `interrupted` as a principal's stop, its host told over its
+        control stream to end it and push nothing. What it answered."""
+        ...
+
+    @abstractmethod
     async def outcome_of(
         self, rctx: RequestContext, org_id: UUID, session_id: UUID, key: UUID, epoch: int
     ) -> ExecItem | None:
