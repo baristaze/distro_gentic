@@ -234,6 +234,13 @@ class WorkManagerImpl(WorkManagerInterface):
         ctx.require(Permission.READ)
         return await self._storage.count_claimed_ahead(ctx.org_id, item, utcnow())
 
+    async def get_item(self, ctx: TenantContext, item_id: UUID) -> WorkItem:
+        ctx.require(Permission.READ)
+        item = await self._storage.read_item(ctx.org_id, item_id)
+        if item is None:
+            raise NotFound(f"work item {item_id} not found")
+        return item
+
     async def has_open(self, ctx: TenantContext, kind: WorkKind, target_id: UUID) -> bool:
         ctx.require(Permission.READ)
         return await self._storage.has_open_item(ctx.org_id, kind, target_id)

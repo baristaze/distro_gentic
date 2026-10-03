@@ -8,7 +8,7 @@ from enum import StrEnum
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import ConfigDict, Field, TypeAdapter
+from pydantic import ConfigDict, Field, TypeAdapter, model_validator
 
 from acme.infra.transports import FileEntry, SecretUse
 from acme.infra.workspaces import IsolationSpec
@@ -220,3 +220,17 @@ class WorkspaceBinding(Identifiable, Trackable):
     host_name: str = Field(min_length=1, max_length=64)
     location: str = Field(min_length=1, max_length=1024)
     version: int = Field(default=1, ge=1)
+
+
+class PrepareAnswer(Platform):
+    """A host's answer to a prepare it claimed: where on it the workspace
+    it made is, or why it made none. Exactly one of the two."""
+
+    location: str | None = Field(default=None, min_length=1, max_length=1024)
+    refused: str | None = Field(default=None, min_length=1, max_length=2000)
+
+    @model_validator(mode="after")
+    def _one_of_the_two(self) -> PrepareAnswer:
+        if (self.location is None) == (self.refused is None):
+            raise ValueError("a prepare is answered with its location or its refusal")
+        return self

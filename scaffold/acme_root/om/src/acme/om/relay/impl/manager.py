@@ -7,6 +7,7 @@ from uuid import UUID
 from pydantic import ValidationError
 
 from acme.infra.observability import OUTCOMES
+from acme.infra.workspaces import IsolationSpec
 from acme.om.base import EMPTY_UUID, Platform, new_id, utcnow
 from acme.om.context import Permission, RequestContext, TenantContext
 from acme.om.exceptions import (
@@ -21,7 +22,12 @@ from acme.om.hosts.types.host import HostIdentity
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import outbox_row, versioned_row
 from acme.om.placement.types.claimant import Claimant, ClaimantKind
-from acme.om.placement.types.work import ExecOperation, ExecPayload
+from acme.om.placement.types.work import (
+    ExecOperation,
+    ExecPayload,
+    WorkspaceOperation,
+    WorkspacePayload,
+)
 from acme.om.projects import ProjectsManagerInterface
 from acme.om.relay.exceptions import ContentNotKept, ItemNotHeld, NoWorkspaceHost, StaleExec
 from acme.om.relay.manager import RelayManagerInterface
@@ -52,6 +58,7 @@ from acme.om.relay.types.exec import (
     ExecResult,
     ExecState,
     PartText,
+    PrepareAnswer,
     StopKind,
     WorkspaceBinding,
 )
@@ -82,6 +89,9 @@ class RelayOptions(Platform):
     control_page: int = 500
     sweep_batch: int = 500
     purge_batch: int = 1000
+    # How long a prepare a host refused waits before a host of the pool may
+    # claim it again.
+    prepare_retry: timedelta = timedelta(seconds=30)
 
 
 def worker_of(host: HostIdentity) -> str:
@@ -171,6 +181,77 @@ class RelayManagerImpl(RelayManagerInterface):
     async def binding_of(self, ctx: TenantContext, session_id: UUID) -> WorkspaceBinding | None:
         ctx.require(Permission.READ)
         return await self._storage.read_binding(ctx.org_id, session_id)
+
+    async def ask_prepare(self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec) -> bool:
+        ctx.require(Permission.WRITE)
+        placed = await self._hosts.placement_of(ctx, session_id)
+        if placed.pool is None:
+            raise ValidationFailed(f"session {session_id} runs in the cloud; no host prepares it")
+        if await self._work.has_open(ctx, WorkKind.WORKSPACE, session_id):
+            return False
+        # Where on the host it is made is the host's to choose, so a prepare
+        # reads no path of the host's.
+        isolation, egress, _ = asks(spec, "")
+        project = await self._projects.project_of(ctx, session_id)
+        payload = WorkspacePayload(
+            operation=WorkspaceOperation.PREPARE,
+            pool_id=placed.pool.id,
+            org_id=ctx.org_id,
+            session_id=session_id,
+            spec=spec,
+            isolation=isolation,
+            egress=egress,
+            project_id=None if project is None else project.id,
+        )
+        now = self._clock()
+        row = new_id()
+        await self._work.enqueue(
+            ctx,
+            WorkItem(
+                id=row,
+                created_at=now,
+                updated_at=now,
+                created_by=ctx.user_id,
+                updated_by=ctx.user_id,
+                kind=WorkKind.WORKSPACE,
+                target_id=session_id,
+                idempotency_key=row,
+                request_id=ctx.request_id,
+                traceparent=ctx.traceparent,
+                payload=payload.model_dump(mode="json"),
+                status=WorkStatus.QUEUED,
+                available_at=now,
+            ),
+        )
+        OUTCOMES.labels(subsystem="relay", outcome="prepare_asked").inc()
+        return True
+
+    async def prepared(
+        self, rctx: RequestContext, host: HostIdentity, item_id: UUID, answer: PrepareAnswer
+    ) -> WorkspaceBinding | None:
+        ctx = await self._service(rctx, host.org_id)
+        row, session_id = await self._prepare_held(ctx, host, item_id)
+        if answer.refused is not None:
+            # Back to the pool's lane after a wait, for a host that can give
+            # it; the loop waits on the resource meanwhile.
+            log.info("host %s refused to prepare a workspace: %s", host.host_id, answer.refused)
+            await self._work.defer(ctx, row, self._options.prepare_retry)
+            OUTCOMES.labels(subsystem="relay", outcome="prepare_refused").inc()
+            return None
+        assert answer.location is not None  # the answer's own rule
+        binding = await self._storage.read_binding(host.org_id, session_id)
+        if (
+            binding is None
+            or binding.host_id == host.host_id
+            or not await self._holds(ctx, session_id, binding.host_id)
+        ):
+            binding = await self.bind_workspace(ctx, session_id, host.host_id, answer.location)
+        try:
+            await self._work.complete(ctx, row)
+        except LeaseLost, NotFound:
+            log.info("workspace item %s: its row was no longer held when it was answered", row.id)
+        OUTCOMES.labels(subsystem="relay", outcome="prepared").inc()
+        return binding
 
     # The runner's side.
 
@@ -525,6 +606,41 @@ class RelayManagerImpl(RelayManagerInterface):
                 f"epoch {epoch} is below session {session_id}'s {cursor.epoch}: "
                 "the run that sent it no longer holds the session"
             )
+
+    async def _prepare_held(
+        self, ctx: TenantContext, host: HostIdentity, item_id: UUID
+    ) -> tuple[WorkItem, UUID]:
+        """The prepare the host holds under a live claim, and its session."""
+        try:
+            row: WorkItem | None = await self._work.get_item(ctx, item_id)
+        except NotFound:
+            row = None
+        payload = None
+        if row is not None and row.kind is WorkKind.WORKSPACE:
+            try:
+                payload = WorkspacePayload.model_validate(row.payload)
+            except ValidationError:
+                payload = None
+        if (
+            row is None
+            or payload is None
+            or payload.operation is not WorkspaceOperation.PREPARE
+            or payload.pool_id != host.pool_id
+            or payload.session_id is None
+            or row.status is not WorkStatus.CLAIMED
+            or row.claimed_by != worker_of(host)
+        ):
+            raise ItemNotHeld(f"workspace item {item_id} is not held by this host")
+        return row, payload.session_id
+
+    async def _holds(self, ctx: TenantContext, session_id: UUID, host_id: UUID) -> bool:
+        """Whether the host is a live host of the session's pool: one that was
+        neither revoked nor moved holds what it prepared."""
+        placed = await self._hosts.placement_of(ctx, session_id)
+        if placed.pool is None:
+            return False
+        statuses = await self._hosts.get_hosts(ctx, placed.pool.id)
+        return any(s.host.id == host_id and s.host.revoked_at is None for s in statuses)
 
     async def _attach(self, ctx: TenantContext, item: ExecItem, call: ExecCall) -> ExecItem:
         """The item a call that sent it before meets: as it stands, so the

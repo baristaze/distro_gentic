@@ -6,7 +6,7 @@ server in front of it does."""
 import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from email.utils import format_datetime
 from pathlib import Path
 from uuid import UUID
@@ -15,13 +15,22 @@ import httpx
 from api_support import build_container, seed_request
 from fastapi import FastAPI
 
+from acme.apps.host.agent import HostAgent
+from acme.apps.host.ceilings import Ceilings
 from acme.apps.host.config import Settings
 from acme.apps.host.probe import Probe, Probes, platform_and_clock
+from acme.apps.host.relay import ExecutorRelayImpl
 from acme.client.client import ApiClient
 from acme.client.types import IsolationMode
+from acme.infra.secrets.local import SecretsLocalImpl
+from acme.infra.transports.broker import BrokerNullImpl
+from acme.infra.transports.local import TransportLocalImpl
+from acme.infra.workspaces import IsolationMode as ProviderMode
+from acme.infra.workspaces.host import WorkspaceHostImpl
 from acme.om.base import new_id, utcnow
 from acme.om.context import TenantContext
 from acme.om.hosts.types.pool import HostPool
+from acme.om.storage.root import StorageInterface
 from acme.services.api.app import create_app
 from acme.services.api.container import AppContainer
 
@@ -171,12 +180,59 @@ class Stack:
 
 
 @asynccontextmanager
-async def stack(tmp_path: Path) -> AsyncIterator[Stack]:
-    container = build_container(tmp_path)
+async def stack(tmp_path: Path, storage: StorageInterface | None = None) -> AsyncIterator[Stack]:
+    """Over the memory storage, or over `storage`, where a tenant of its own
+    is bootstrapped under a fresh slug."""
+    container = build_container(tmp_path, storage)
     app: FastAPI = create_app(container)
     async with app.router.lifespan_context(app):
+        slug = "ajax" if storage is None else f"ajax-{new_id().hex[-8:]}"
+        email = "ann@example.test" if storage is None else f"ann-{slug}@example.test"
         owner, _ = await container.managers.tenancy.bootstrap(
-            seed_request(), "Ajax", "ajax", "ann@example.test", "Ann"
+            seed_request(), "Ajax", slug, email, "Ann"
         )
         transport = Dated(Streamed(app))
         yield Stack(container=container, transport=transport, owner=owner)
+
+
+async def directory_host(
+    api: Stack,
+    pool_id: UUID,
+    where: Path,
+    *,
+    name: str = "host-1",
+    ceilings: Ceilings | None = None,
+) -> tuple[HostAgent, Path]:
+    """A host of the pool, started, that makes a directory per workspace
+    under its root and runs commands there; its root is answered with it.
+    Its ceilings take any project and any egress, and read its root alone,
+    unless the case names its own."""
+    root = where / "workspaces"
+    agents: list[HostAgent] = []
+    executor = ExecutorRelayImpl(
+        lambda: agents[0].client(),
+        {
+            ProviderMode.HOST: TransportLocalImpl(
+                where / "records", SecretsLocalImpl(None), BrokerNullImpl()
+            )
+        },
+        {ProviderMode.HOST: WorkspaceHostImpl(root)},
+        flush_seconds=0.0,
+        renew_seconds=0.2,
+    )
+    host = HostAgent(
+        replace(api.settings(where / "home", await api.token(pool_id)), name=name),
+        ceilings
+        or Ceilings(
+            projects=None,
+            min_isolation=IsolationMode.directory,
+            egress=None,
+            readable=(str(root),),
+        ),
+        probes(IsolationMode.directory),
+        api.client,
+        executor,
+    )
+    agents.append(host)
+    await host.start()
+    return host, root

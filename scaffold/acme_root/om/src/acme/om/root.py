@@ -97,6 +97,7 @@ from acme.om.projects.policies import SessionProjectsInterface
 from acme.om.relay import RelayManagerInterface
 from acme.om.relay.impl.manager import RelayManagerImpl, RelayOptions
 from acme.om.relay.impl.placement import PlacementClaimsRelayedImpl
+from acme.om.relay.impl.workspaces import PlacedWorkspacesRelayedImpl
 from acme.om.retention import RetentionManagerInterface
 from acme.om.retention.impl.keys import (
     KeyServiceByTenantImpl,
@@ -437,8 +438,10 @@ def build_managers(
     `relay_options` is the lease a host renews on an `exec` item and the
     bounds of its output; None keeps the defaults. `transport_layer` wraps
     the transport infra chose before the tools take it: the session runner
-    puts the relay behind it for a session inside its tenant's wall. None
-    takes infra's transport as it is.
+    puts the relay behind it for a session inside its tenant's wall, whose
+    workspace is then the one a host of its pool prepared and holds. None
+    takes infra's transport as it is, and makes every workspace on this
+    machine.
     `stations_options` is the lives of a daemon's credentials, the margin a
     lease that ran out waits before its station is granted again, and how
     long a renewal holds a station; None keeps the defaults.
@@ -566,6 +569,10 @@ def build_managers(
     bound = workspace_projects or WorkspaceProjectsBoundImpl(storage.get_project_storage())
     narrowed = session_projects or SessionProjectBoundImpl(storage.get_project_storage())
     refuse_quiet_nulls(environment, bound, narrowed)
+    # The transport infra chose, and the one the tools take: for a session
+    # inside its tenant's wall, the relay to its host.
+    transport = infra.get_transport()
+    placed = transport if transport_layer is None else transport_layer(transport)
     # Each session's workspace, pinned as the session is created: a
     # decorator below pins it before the session is written. Its checkout
     # runs in the workspace through the transport, under the session's
@@ -752,7 +759,6 @@ def build_managers(
     if PROTECTED_CEILING not in tool_options.ceilings.rules:
         ceilings = PolicyLayer(rules=(*tool_options.ceilings.rules, PROTECTED_CEILING))
         tool_options = tool_options.model_copy(update={"ceilings": ceilings})
-    transport = infra.get_transport()
     engine_tools = ToolsManagerImpl(
         storage.get_tool_storage(),
         steps,
@@ -760,7 +766,7 @@ def build_managers(
         events,
         outbox,
         infra.get_workspaces(),
-        transport if transport_layer is None else transport_layer(transport),
+        placed,
         tool_options,
         keyed_hash=privacy.keyed_hash,
         record_seal=records,
@@ -775,6 +781,12 @@ def build_managers(
         workspace_host or HostOffer(),
         local=environment == LOCAL,
         held=held,
+        # A session inside its tenant's wall finds its workspace on its
+        # host, where only the relayed transport reaches. The relay and the
+        # hosts are built below, so the edges are bound at call time.
+        placed=None
+        if transport_layer is None
+        else PlacedWorkspacesRelayedImpl(lambda: managers.relay, lambda: managers.hosts),
     )
     # What makes a result: the runs, the policies, and validation on the
     # executor, apart from every agent's workspace.

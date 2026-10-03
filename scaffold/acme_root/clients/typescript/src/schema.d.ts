@@ -1137,6 +1137,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/hosts/me/workspaces/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Prepared
+         * @description The host's answer to a prepare it claimed: where the workspace it made
+         *     is, which binds the session to it, or why it made none, which hands the
+         *     work back to its pool after a wait.
+         */
+        post: operations["prepared_v1_hosts_me_workspaces__item_id__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/hosts/{host_id}": {
         parameters: {
             query?: never;
@@ -4033,6 +4055,27 @@ export interface components {
             name: string;
             /** Region */
             region: string;
+        };
+        /**
+         * PrepareRequest
+         * @description A host's answer to a prepare it claimed: where on it the workspace it
+         *     made is, or why it made none. Exactly one of the two.
+         */
+        PrepareRequest: {
+            /** Location */
+            location?: string | null;
+            /** Refused */
+            refused?: string | null;
+        };
+        /**
+         * PreparedView
+         * @description Whether the session's workspace is now the one this host made. When
+         *     it is not, another host of the pool holds it, and this host lets its
+         *     own go.
+         */
+        PreparedView: {
+            /** Held */
+            held: boolean;
         };
         /**
          * Provenance
@@ -7144,6 +7187,45 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HostView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    prepared_v1_hosts_me_workspaces__item_id__post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PrepareRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreparedView"];
                 };
             };
             /** @description Validation Error */

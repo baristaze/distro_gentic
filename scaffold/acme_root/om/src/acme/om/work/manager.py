@@ -109,6 +109,13 @@ class WorkManagerInterface(ABC):
         ...
 
     @abstractmethod
+    async def get_item(self, ctx: TenantContext, item_id: UUID) -> WorkItem:
+        """The tenant's item as the queue holds it now, its claim included:
+        what a namespace whose worker answers outside its claim settles.
+        NotFound when the tenant has none under `item_id`."""
+        ...
+
+    @abstractmethod
     async def has_open(self, ctx: TenantContext, kind: WorkKind, target_id: UUID) -> bool:
         """Whether an item of `kind` on `target_id` waits for a worker or
         runs: one of the tenant's, queued or claimed. An item handed back

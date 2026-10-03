@@ -4117,6 +4117,54 @@
         "title": "PoolView",
         "type": "object"
       },
+      "PrepareRequest": {
+        "additionalProperties": false,
+        "description": "A host's answer to a prepare it claimed: where on it the workspace it\nmade is, or why it made none. Exactly one of the two.",
+        "properties": {
+          "location": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "refused": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refused"
+          }
+        },
+        "title": "PrepareRequest",
+        "type": "object"
+      },
+      "PreparedView": {
+        "description": "Whether the session's workspace is now the one this host made. When\nit is not, another host of the pool holds it, and this host lets its\nown go.",
+        "properties": {
+          "held": {
+            "title": "Held",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "held"
+        ],
+        "title": "PreparedView",
+        "type": "object"
+      },
       "Provenance": {
         "description": "From the strongest to the weakest.",
         "enum": [
@@ -12100,6 +12148,108 @@
         "summary": "Heartbeat",
         "tags": [
           "hosts"
+        ]
+      }
+    },
+    "/v1/hosts/me/workspaces/{item_id}": {
+      "post": {
+        "description": "The host's answer to a prepare it claimed: where the workspace it made\nis, which binds the session to it, or why it made none, which hands the\nwork back to its pool after a wait.",
+        "operationId": "prepared_v1_hosts_me_workspaces__item_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrepareRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreparedView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Prepared",
+        "tags": [
+          "relay"
         ]
       }
     },

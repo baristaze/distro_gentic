@@ -133,9 +133,11 @@ class RunnerContainer:
         and refused a secret that would cross its session's wall. A session
         in the cloud runs on this runner, its executor, through infra's
         transport. A session pinned to its tenant's hosts is inside the wall,
-        its sub-agents with it: none of their calls runs on this runner. Each
-        travels as exec work to the host that holds its workspace, its
-        executor, and until one does it is refused.
+        its sub-agents with it: none of their calls runs on this runner. Its
+        workspace is prepared by a host of its pool, which holds it from
+        then on; until one does, its loop waits on the resource before any
+        model call. Each call travels as exec
+        work to that host, its executor.
 
         Every model call passes billing's money gate, which asks who pays
         before it holds, and its fills come from the model matrix, whose

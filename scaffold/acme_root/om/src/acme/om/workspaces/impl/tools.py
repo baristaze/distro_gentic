@@ -7,7 +7,10 @@ up to the session's branch; a release first pushes what the workspace
 holds. Every other operation is the engine's, unchanged.
 
 The host is this process: what it offers and how many directory sessions it
-holds live are its own, never the control plane's."""
+holds live are its own, never the control plane's. A session that runs
+inside its tenant's wall is the exception: its workspace is the one the host
+of its pool holds (`PlacedWorkspacesInterface`), which this process neither
+makes nor lets go, and its checkout runs there through the relay."""
 
 import logging
 from collections.abc import Mapping
@@ -24,6 +27,7 @@ from acme.om.tools.registry import ToolRegistry
 from acme.om.tools.types.call import Gate, JobHandle
 from acme.om.tools.types.policy import PolicyLayer, ToolPolicy
 from acme.om.workspaces.manager import WorkspacesManagerInterface
+from acme.om.workspaces.placed import PlacedWorkspacesInterface
 from acme.om.workspaces.rules import host_refusal
 from acme.om.workspaces.types.host import HostOffer
 
@@ -57,13 +61,16 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         *,
         local: bool,
         held: HeldWorkspaces | None = None,
+        placed: PlacedWorkspacesInterface | None = None,
     ) -> None:
         self._inner = inner
         self._workspaces = workspaces
         self._offer = offer
         self._local = local
         self._held = held or HeldWorkspaces()
+        self._placed = placed
         self._directories: set[UUID] = set()  # the directory workspaces live here
+        self._hosted: set[UUID] = set()  # the workspaces a host of the tenant's holds
 
     # The workspace.
 
@@ -73,6 +80,15 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         pinned = await self._workspaces.pinned(ctx, session_id, spec)
         if pinned.mode is IsolationMode.NONE:
             return await self._inner.prepare_workspace(ctx, session_id, pinned)
+        if self._placed is not None:
+            hosted = await self._placed.held_on_host(ctx, session_id, pinned)
+            if hosted is not None:
+                # Its host made it to the pin and holds it; the checkout is
+                # brought up to the session's branch there.
+                attached = await self._workspaces.attach(ctx, hosted)
+                self._hosted.add(session_id)
+                self._held.hold(attached)
+                return attached
         running = len(self._directories - {session_id})
         why = host_refusal(pinned, self._offer, local=self._local, running=running)
         if why is not None:
@@ -105,7 +121,12 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
             # Kept first: a push that does not land raises, and the instance
             # and its work stay.
             await self._workspaces.detach(ctx, workspace)
-        await self._inner.release_workspace(ctx, workspace)
+        if workspace.id in self._hosted:
+            # Its host holds it, warm for the next loop: nothing of this
+            # process's goes.
+            self._hosted.discard(workspace.id)
+        else:
+            await self._inner.release_workspace(ctx, workspace)
         self._held.let_go(workspace.id)
         self._directories.discard(workspace.id)
 
@@ -113,6 +134,7 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         await self._inner.purge_workspace(org_id, session_id)
         self._held.let_go(session_id)
         self._directories.discard(session_id)
+        self._hosted.discard(session_id)
 
     # The engine's, unchanged.
 

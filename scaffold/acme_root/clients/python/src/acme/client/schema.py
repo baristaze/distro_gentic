@@ -923,6 +923,35 @@ class PoolView(BaseModel):
     region: Annotated[str, Field(title='Region')]
 
 
+class Location(RootModel[str]):
+    root: Annotated[str, Field(max_length=1024, min_length=1, title='Location')]
+
+
+class Refused(RootModel[str]):
+    root: Annotated[str, Field(max_length=2000, min_length=1, title='Refused')]
+
+
+class PrepareRequest(BaseModel):
+    """
+    A host's answer to a prepare it claimed: where on it the workspace it
+    made is, or why it made none. Exactly one of the two.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    location: Annotated[Location | None, Field(title='Location')] = None
+    refused: Annotated[Refused | None, Field(title='Refused')] = None
+
+
+class PreparedView(BaseModel):
+    """
+    Whether the session's workspace is now the one this host made. When
+    it is not, another host of the pool holds it, and this host lets its
+    own go.
+    """
+    held: Annotated[bool, Field(title='Held')]
+
+
 class Provenance(StrEnum):
     """
     From the strongest to the weakest.

@@ -1,4 +1,5 @@
-"""The relay's routes: a host's own calls about the `exec` items it holds.
+"""The relay's routes: a host's own calls about the `exec` items it holds,
+and its answer to a workspace it was asked to prepare.
 Each is a request the host opens from inside its wall with its own
 credential; the platform calls into no host. Its control stream, the one
 long-lived connection it holds, is `realtime/control.py`. Each function is
@@ -11,7 +12,14 @@ from fastapi import APIRouter
 from acme.services.api.gateway.auth import Rctx
 from acme.services.api.gateway.hosts import Host
 from acme.services.api.gateway.resolve import RelayService
-from acme.services.api.types.relay import ExecDetailView, ExecLeaseView, PartRequest, ResultRequest
+from acme.services.api.types.relay import (
+    ExecDetailView,
+    ExecLeaseView,
+    PartRequest,
+    PreparedView,
+    PrepareRequest,
+    ResultRequest,
+)
 
 router = APIRouter(tags=["relay"])
 
@@ -45,3 +53,13 @@ async def push_result(
 async def extend(rctx: Rctx, relay: RelayService, host: Host, item_id: UUID) -> ExecLeaseView:
     """Renews the host's lease on the item while it runs."""
     return await relay.extend(rctx, host, item_id)
+
+
+@router.post("/hosts/me/workspaces/{item_id}", response_model=PreparedView)
+async def prepared(
+    rctx: Rctx, relay: RelayService, host: Host, item_id: UUID, body: PrepareRequest
+) -> PreparedView:
+    """The host's answer to a prepare it claimed: where the workspace it made
+    is, which binds the session to it, or why it made none, which hands the
+    work back to its pool after a wait."""
+    return await relay.prepared(rctx, host, item_id, body)

@@ -1,5 +1,9 @@
-"""What a host runs: an `exec` item it claimed and its owner's ceilings let
-through, through its own local transport, in the workspace it holds. The
+"""What a host runs: a workspace its pool asked it to prepare, and an
+`exec` item it claimed, each once its owner's ceilings let it through. A
+prepare makes the workspace through the host's own provider for the
+session's isolation and answers where it is, which binds the session to
+this host. An `exec` item runs through its own local transport, in the
+workspace it holds. The
 output streams back a part at a time and the result is pushed once, each
 with the hash the host declares of the bytes it sends. While the item runs
 the host renews its lease, and a stop from the control stream ends the
@@ -20,17 +24,25 @@ from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID
 
+from pydantic import ValidationError
+
 from acme.apps.host.agent import ExecutorInterface
 from acme.apps.host.ceilings import Ask
 from acme.client.client import WIRE_FAILURES, ApiClient, ApiError
 from acme.client.types import ClaimedWorkView, ExecDetailView, OutputStream
 from acme.infra.exceptions import InfraException
 from acme.infra.transports import CommandSpec, RecordSeal, TransportInterface
-from acme.infra.workspaces import IsolationMode, IsolationSpec, Workspace
+from acme.infra.workspaces import (
+    IsolationMode,
+    IsolationSpec,
+    Workspace,
+    WorkspaceProviderInterface,
+)
 
 log = logging.getLogger(__name__)
 
 EXEC = "EXEC"
+WORKSPACE = "WORKSPACE"
 STOPS = frozenset({"cancel", "interrupt", "deadline", "revoke"})
 """The control messages that end an item. Each but `revoke` is answered
 with how far the item got; a revoked lease is no longer the host's to
@@ -82,6 +94,7 @@ class ExecutorRelayImpl(ExecutorInterface):
         self,
         client: ClientFactory,
         transports: Mapping[IsolationMode, TransportInterface],
+        workspaces: Mapping[IsolationMode, WorkspaceProviderInterface] | None = None,
         *,
         flush_seconds: float = 0.25,
         part_bytes: int = 32_000,
@@ -90,6 +103,7 @@ class ExecutorRelayImpl(ExecutorInterface):
     ) -> None:
         self._client = client
         self._transports = dict(transports)
+        self._workspaces = dict(workspaces or {})
         self._flush_seconds = flush_seconds
         self._part_bytes = part_bytes
         self._renew_seconds = renew_seconds
@@ -98,6 +112,9 @@ class ExecutorRelayImpl(ExecutorInterface):
         self._running: dict[UUID, Running] = {}
 
     async def run(self, item: ClaimedWorkView, ask: Ask) -> None:
+        if item.kind == WORKSPACE:
+            await self._workspace(item)
+            return
         if item.kind != EXEC:
             log.warning("item %s (%s) has no executor on this host yet", item.id, item.kind)
             return
@@ -116,6 +133,9 @@ class ExecutorRelayImpl(ExecutorInterface):
     async def refuse(self, item: ClaimedWorkView, reasons: list[str]) -> None:
         """An item past its owner's ceilings is refused at once, so the run
         that sent it reads why instead of waiting out its lease."""
+        if item.kind == WORKSPACE:
+            await self._answer(item.id, refused="this host refused it: " + "; ".join(reasons))
+            return
         if item.kind != EXEC:
             return
         item_id = UUID(str(item.payload["item_id"]))
@@ -173,6 +193,53 @@ class ExecutorRelayImpl(ExecutorInterface):
                 stderr="".join(running.printed["stderr"]),
             )
         await self._push(item_id, result, running.held_until)
+
+    async def _workspace(self, item: ClaimedWorkView) -> None:
+        """A prepare: the workspace made to the session's spec by this host's
+        provider for its mode, and where it is answered. One this host
+        cannot make is answered as refused, so another host of the pool may.
+        When another host holds the session's workspace already, this one's
+        goes. A release or a purge has no executor here yet."""
+        payload = item.payload
+        if payload.get("operation") != "prepare":
+            log.warning(
+                "item %s: a workspace %s has no executor here", item.id, payload.get("operation")
+            )
+            return
+        try:
+            spec = IsolationSpec.model_validate(payload["spec"])
+            org_id = UUID(str(payload["org_id"]))
+            session_id = UUID(str(payload["session_id"]))
+        except KeyError, ValueError, ValidationError:
+            await self._answer(item.id, refused="the prepare names no tenant, session, or spec")
+            return
+        provider = self._workspaces.get(spec.mode)
+        if provider is None:
+            await self._answer(item.id, refused=f"this host makes no {spec.mode.value} workspace")
+            return
+        try:
+            workspace = await provider.prepare(org_id, session_id, spec)
+        except InfraException as error:
+            await self._answer(item.id, refused=error.message)
+            return
+        held = await self._answer(item.id, location=workspace.location)
+        if held is False:
+            log.info("item %s: another host holds the workspace, so this one goes", item.id)
+            await provider.purge(org_id, session_id)
+
+    async def _answer(
+        self, item_id: UUID, *, location: str | None = None, refused: str | None = None
+    ) -> bool | None:
+        """A prepare's answer; whether the session's workspace is this host's,
+        or None when the platform took no answer, and the work's lease is
+        left to run out."""
+        try:
+            async with self._client() as client:
+                answered = await client.answer_prepare(item_id, location=location, refused=refused)
+        except (ApiError, *WIRE_FAILURES) as error:
+            log.warning("item %s: its answer was not taken: %s", item_id, error)
+            return None
+        return answered.held
 
     async def _renew(self, item_id: UUID, running: Running) -> None:
         """Renews the lease while the item runs. A failure the host outlasts
