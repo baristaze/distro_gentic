@@ -343,7 +343,7 @@ def test_a_bulky_result_read_before_the_summary_renders_as_a_stub_with_its_handl
 def test_a_file_an_input_carries_renders_as_data_labelled_with_its_origin() -> None:
     history = History()
     report = Attachment(
-        id=new_id(), name="drop-report.pdf", media_type="application/pdf", size=9, hash="k:1"
+        id=new_id(), name="export-report.pdf", media_type="application/pdf", size=9, hash="k:1"
     )
     plot = Attachment(id=new_id(), name="latency.png", media_type="image/png", size=9, hash="k:2")
     asked = history.add(
@@ -372,7 +372,7 @@ def test_a_file_an_input_carries_renders_as_data_labelled_with_its_origin() -> N
     assert said == TextBlock(text="See the plot.") and image == ImageBlock(attachment_id=plot.id)
     assert isinstance(plot_label, TextBlock) and plot_label.text == (
         f'<data origin="file" of="message" seq="{asked.seq}" step="{asked.id}" '
-        'media_type="image/png">\ngrip.png\n</data>'
+        'media_type="image/png">\nlatency.png\n</data>'
     )
     assert isinstance(quoted, TextBlock) and quoted.text.startswith('<data origin="event"')
     assert isinstance(report_label, TextBlock) and report_label.text.startswith(

@@ -63,7 +63,7 @@ def test_a_session_is_started_spoken_to_steered_and_read(stack: Stack) -> None:
     read = stack.acme("session", "steps", session_id)
 
     assert said.exit_code == 0 and paused.exit_code == 0, said.output + paused.output
-    assert said.output.split() == ["1", "message", "Why", "does", "it", "drop", "the", "object?"]
+    assert said.output.split() == ["1", "message", "Why", "does", "the", "export", "time", "out?"]
     assert paused.output.split() == ["2", "control", "pause"]
     assert read.exit_code == 0, read.output
     assert [line.split()[:2] for line in read.output.splitlines()] == [

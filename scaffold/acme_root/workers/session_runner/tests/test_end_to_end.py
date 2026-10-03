@@ -395,7 +395,7 @@ async def test_a_message_through_the_api_is_run_by_the_runner_model_tool_model_t
     person = await owner_of(stack)
     stack.runner(
         "runner-one",
-        [runs("echo", "the cache flushes at 0.4 s"), answers("The cache flushes before the write.")],
+        [runs("echo", "the job stops at 0.4 s"), answers("The job stops before the write.")],
     )
     session_id = await started(stack, person)
 
@@ -408,8 +408,8 @@ async def test_a_message_through_the_api_is_run_by_the_runner_model_tool_model_t
     assert session["status"] == "idle" and session["park"] is None
     assert steps[-1]["outcome"] == "succeeded"
     assert steps[3]["tool"] == "run_command" and steps[4]["failure"] is None
-    assert "the cache flushes at 0.4 s" in steps[4]["text"]
-    assert steps[-2]["text"] == "The cache flushes before the write."
+    assert "the job stops at 0.4 s" in steps[4]["text"]
+    assert steps[-2]["text"] == "The job stops before the write."
 
 
 async def test_a_runner_killed_mid_tool_call_is_followed_by_a_new_epoch_that_settles_the_call(
