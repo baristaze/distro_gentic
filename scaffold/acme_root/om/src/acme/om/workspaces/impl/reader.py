@@ -6,6 +6,10 @@ replacement objects honoured. Nothing the agent can write takes part: not
 its checkout's config, its refs, its replacements, nor its hooks. The
 directory goes when the read ends.
 
+The same read brings a workspace its checkout (`incoming`): the default
+branch and the session's branch, fetched the same way and handed on as a
+bundle, so the workspace fetches nothing and holds no credential.
+
 A private repository is read with its project's fetch credential. It
 reaches git through the environment of the commands that ask the
 repository, as a header for the repository's URL alone: never on a command
@@ -25,7 +29,7 @@ from acme.om.base import Platform
 from acme.om.exceptions import Unavailable
 from acme.om.workspaces.git import RepositoryReaderInterface
 from acme.om.workspaces.types.credential import FetchCredential
-from acme.om.workspaces.types.source import Delivered, RepositoryBinding
+from acme.om.workspaces.types.source import Delivered, Incoming, RepositoryBinding
 
 BASE = "refs/delivery/base"
 HEAD = "refs/delivery/head"
@@ -36,6 +40,8 @@ class ReaderOptions(Platform):
     timeout: timedelta = timedelta(minutes=2)
     # The most paths a delivery lists.
     max_paths: int = Field(default=10_000, gt=0)
+    # The most bytes a bundle brought into a workspace holds.
+    max_bundle: int = Field(default=512 * 2**20, gt=0)
 
 
 class RepositoryReaderGitImpl(RepositoryReaderInterface):
@@ -79,6 +85,31 @@ class RepositoryReaderGitImpl(RepositoryReaderInterface):
             raise Unavailable(f"branch {branch} changes more than {self._options.max_paths} paths")
         return Delivered(base=base, head=head, changed=tuple(sorted(set(paths))))
 
+    async def incoming(
+        self, binding: RepositoryBinding, branch: str, credential: FetchCredential | None = None
+    ) -> Incoming:
+        with tempfile.TemporaryDirectory(prefix="incoming-") as root:
+            repo = Path(root) / "repo"
+            env = _environment(Path(root))
+            url = binding.repository
+            remote = {**env, **_authorized(url, credential)}
+            await self._git(env, None, "init", "-q", "--bare", str(repo))
+            default = binding.default_branch or _default_of(
+                await self._git(remote, repo, "ls-remote", "--symref", url, "HEAD")
+            )
+            wanted = [f"+refs/heads/{default}:refs/heads/{default}"]
+            if (await self._git(remote, repo, "ls-remote", url, f"refs/heads/{branch}")).strip():
+                wanted.append(f"+refs/heads/{branch}:refs/heads/{branch}")
+            await self._git(remote, repo, "fetch", "-q", "--no-tags", url, *wanted)
+            bundle = Path(root) / "incoming.bundle"
+            await self._git(env, repo, "bundle", "create", "-q", str(bundle), "--branches")
+            if bundle.stat().st_size > self._options.max_bundle:
+                raise Unavailable(
+                    f"the checkout of {branch} is past the {self._options.max_bundle} bytes "
+                    "a workspace is brought"
+                )
+            return Incoming(bundle=bundle.read_bytes(), default_branch=default)
+
     async def _git(self, env: Mapping[str, str], repo: Path | None, *args: str) -> str:
         """One git command, with no replacement objects, its output's first
         word kept for a sha, and all of it for a listing."""
@@ -105,6 +136,16 @@ class RepositoryReaderGitImpl(RepositoryReaderInterface):
             raise Unavailable(f"git {args[0]} of a delivery ended with exit {process.returncode}")
         text = out.decode()
         return text.split()[0] if args[0] in ("rev-parse", "merge-base") else text
+
+
+def _default_of(listed: str) -> str:
+    """The branch the repository's HEAD names, as `ls-remote --symref`
+    prints it: `ref: refs/heads/<name>` and a tab before `HEAD`."""
+    for line in listed.splitlines():
+        target, _, name = line.partition("\t")
+        if name == "HEAD" and target.startswith("ref: refs/heads/"):
+            return target.removeprefix("ref: refs/heads/")
+    raise Unavailable("the repository names no default branch")
 
 
 def _environment(home: Path) -> dict[str, str]:

@@ -54,10 +54,20 @@ class BranchPlan(StrEnum):
     LOST = "lost"  # gone, and nothing says why: the loop fails, loudly
 
 
+class Incoming(Platform):
+    """What the platform brings into a workspace from the bound repository,
+    read on its own host: a git bundle of the default branch, and of the
+    session's branch where the repository holds it, with no credential in
+    it; and the default branch's name."""
+
+    bundle: bytes
+    default_branch: str = Field(min_length=1, max_length=200)
+
+
 class Snapshot(Platform):
     """What a release kept: the commit pushed to the snapshot ref, None when
     the checkout held nothing the remote lacked, and whether the remote
-    held the session's branch then."""
+    held the session's branch when the platform last brought it in."""
 
     ref: str
     commit: str | None = None

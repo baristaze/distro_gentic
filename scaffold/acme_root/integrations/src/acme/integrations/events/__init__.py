@@ -142,10 +142,15 @@ class IntegrationInterface(ABC):
         ...
 
     @abstractmethod
-    async def push_branch(self, repository: str, branch: str, head: str) -> None:
-        """Points `branch` of `repository` at the commit `head`, with the
-        integration's own credential. `ProviderRefused` from an integration
-        that holds no repository; `ProviderUnavailable` when it cannot."""
+    async def push(self, repository: str, ref: str, head: str, bundle: bytes) -> None:
+        """Points `ref` of `repository` (a full name, `refs/heads/...` for a
+        branch) at the commit `head`, with the integration's own credential.
+        `bundle` is a git bundle of the commits `head` needs beyond what the
+        repository holds, empty when it holds them all; nothing else in it
+        is written. A ref only moves forward, so no commit on it is lost.
+        `ProviderRefused` from an integration that holds no repository, and
+        for a bundle without `head` or a move that is not forward;
+        `ProviderUnavailable` when it cannot."""
         ...
 
     @abstractmethod
@@ -155,7 +160,7 @@ class IntegrationInterface(ABC):
         """Opens the pull request of branch `head` onto `base`, the
         repository's default branch when None, or answers the one of `head`
         open already, so a repeated call opens no second. Refused and
-        unavailable as `push_branch` is."""
+        unavailable as `push` is."""
         ...
 
     @abstractmethod
@@ -196,7 +201,7 @@ class IntegrationAbsentImpl(IntegrationInterface):
     async def post(self, address: str, text: str, mark: str | None = None) -> PostedMessage:
         raise ProviderUnavailable(f"no {self._name} integration is configured")
 
-    async def push_branch(self, repository: str, branch: str, head: str) -> None:
+    async def push(self, repository: str, ref: str, head: str, bundle: bytes) -> None:
         raise ProviderUnavailable(f"no {self._name} integration is configured")
 
     async def open_pull_request(

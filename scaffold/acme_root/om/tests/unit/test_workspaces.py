@@ -79,6 +79,7 @@ def gate(storage: StorageInterface) -> ResultGateInterface:
 
 
 def loop_of(tmp_path: Path, *kinds: AgentKind, **roots: Any) -> Loop:
+    roots.setdefault("workspace_reader", ReaderTwin())
     return loop_over(tmp_path, kinds=kinds or (TWINNED,), **roots)
 
 

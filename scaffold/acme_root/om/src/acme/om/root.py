@@ -492,7 +492,8 @@ def build_managers(
     loudly. `source_control` opens a session's branch and pull request;
     None writes through the forge integration, and with no integrations,
     nowhere. `workspace_git` runs the checkout; None runs it in the
-    workspace through the transport. `workspace_reader` reads what a
+    workspace through the transport, from bundles the reader brings and
+    source control pushes. `workspace_reader` reads what a
     session delivered from its repository; None fetches it into a fresh
     repository of this process's own, with the project's fetch credential. `workspaces_options` names the
     networks no workspace reaches, and the sweep's batch."""
@@ -591,6 +592,14 @@ def build_managers(
     # decorator below pins it before the session is written. Its checkout
     # runs in the workspace through the transport, under the session's
     # epoch.
+    writes = source_control or (
+        SourceControlAbsentImpl()
+        if integrations is None
+        else SourceControlForgeImpl(integrations.get_integration)
+    )
+    # What a session delivered is read from its repository, and what it has
+    # not from the workspace this process holds for it.
+    held = HeldWorkspaces()
     workspaces = WorkspacesManagerImpl(
         storage.get_workspace_storage(),
         tenancy,
@@ -599,16 +608,12 @@ def build_managers(
         bound,
         pull_requests or PullRequestsNullImpl(),
         workspace_git
-        or WorkspaceGitTransportImpl(infra.get_transport(), steps, records, GitOptions()),
+        or WorkspaceGitTransportImpl(infra.get_transport(), steps, records, GitOptions(), writes),
         workspace_reader or RepositoryReaderGitImpl(),
         workspaces_options or WorkspacesOptions(),
         infra.get_secrets(),
-        source_control
-        or (
-            SourceControlAbsentImpl()
-            if integrations is None
-            else SourceControlForgeImpl(integrations.get_integration)
-        ),
+        writes,
+        held,
     )
     engine_sessions = AgentSessionsManagerImpl(
         storage.get_agent_session_storage(),
@@ -708,9 +713,6 @@ def build_managers(
         outbox,
         attribution_options or AttributionOptions(),
     )
-    # What a session delivered is read from its repository, and what it has
-    # not from the workspace this process holds for it.
-    held = HeldWorkspaces()
     products = work_product or WorkProductWorkspacesImpl(workspaces, held)
     # A budget and a validation policy set per project are read through the
     # session's project.

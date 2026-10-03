@@ -59,17 +59,18 @@ installs the platform there (`verify_installation`), by the system's
 signature or by a call to the system, so a tenant connects the
 installation the system names, never one a person types. It also
 posts a message to an account of its system. The forge also points a
-session's branch at a commit (`push_branch`) and opens its pull request
+session's branch or snapshot at a commit (`push`), taking the commits it
+needs as a git bundle the platform made, and opens its pull request
 (`open_pull_request`), with the integration's own credential, which never
-leaves it; a second opening of one branch answers the pull request it
-opened.
+leaves it. A ref only moves forward, and only the one named is written;
+a second opening of one branch answers the pull request it opened.
 
 What served an event is the integration's word (`provenance`), never the
 delivery's, so a twin's event is a twin's whatever its body claims.
 
 | Implementation | What it is |
 |----------------|------------|
-| `events/twin.py` | The twin of every integration, in memory. It signs its own deliveries (`Twin-Signature`, HMAC-SHA256 over `<timestamp>.<body>`, a five-minute window) and its installations' grants the same way, records each message posted through it and each branch and pull request it took, says `twin` on every record it writes, and mints every id as `twin_`. Refused at boot outside `local` and `test`. |
+| `events/twin.py` | The twin of every integration, in memory. It signs its own deliveries (`Twin-Signature`, HMAC-SHA256 over `<timestamp>.<body>`, a five-minute window) and its installations' grants the same way, records each message posted through it and each ref and pull request it took, and, made with a repository's credential (`writes_with`), pushes each ref's commits to the repository for real (`events/git.py`), says `twin` on every record it writes, and mints every id as `twin_`. Refused at boot outside `local` and `test`. |
 | `events.IntegrationAbsentImpl` | The integration of a process with none configured: every delivery and every post is unavailable, `503`. |
 
 A real client of a forge or a chat is not built yet.
