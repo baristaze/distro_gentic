@@ -87,8 +87,10 @@ from acme.om.privacy.impl.sealed_steps import StepStorageSealedImpl
 from acme.om.privacy.keys import SessionKeysInterface
 from acme.om.projects import ProjectsManagerInterface
 from acme.om.projects.impl.manager import ProjectsManagerImpl, ProjectsOptions
+from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.projects.impl.retention import SessionProjectBoundImpl
 from acme.om.projects.impl.sessions import AgentSessionsInProjectImpl
+from acme.om.projects.policies import SessionProjectsInterface
 from acme.om.relay import RelayManagerInterface
 from acme.om.relay.impl.manager import RelayManagerImpl, RelayOptions
 from acme.om.relay.impl.placement import PlacementClaimsRelayedImpl
@@ -336,6 +338,7 @@ def build_managers(
     environment: str = LOCAL,
     tenant_keys: TenantKeysInterface | None = None,
     session_projects: SessionProjectInterface | None = None,
+    session_policies: SessionProjectsInterface | None = None,
     retention_options: RetentionOptions | None = None,
     evidence_options: EvidenceOptions | None = None,
     executor: ExecutorInterface | None = None,
@@ -433,6 +436,9 @@ def build_managers(
     `retention_options` the sweep's batches.
 
     The platform's projects take `projects_options`, the purges' batch.
+    `session_policies` answers a session's project to the gate's budgets
+    and to the evidence's policy; None reads the projects' rows, and a
+    session with no row is charged to no project and judged by no policy.
 
     The workspaces take six. `workspace_host` is what this process, the
     host its tools run on, offers beyond its provider; None offers nothing
@@ -642,7 +648,12 @@ def build_managers(
     # not from the workspace this process holds for it.
     held = HeldWorkspaces()
     products = work_product or WorkProductWorkspacesImpl(workspaces, held)
-    results = result_gate or ResultGateEvidenceImpl(storage.get_evidence_storage(), products)
+    # A budget and a validation policy set per project are read through the
+    # session's project.
+    session_policies = session_policies or SessionProjectsBoundImpl(storage.get_project_storage())
+    results = result_gate or ResultGateEvidenceImpl(
+        storage.get_evidence_storage(), products, session_policies
+    )
     refuse_quiet_nulls(environment, results)
     agents = AgentsManagerImpl(
         storage.get_agent_storage(),
@@ -674,6 +685,7 @@ def build_managers(
         gate,
         pricing,
         agent_sessions,
+        session_policies,
         version=None if models_layer is None else models_layer.version,
     )
     windows = WindowsManagerImpl(
@@ -732,6 +744,7 @@ def build_managers(
         outbox,
         executor or ExecutorAbsentImpl(),
         products,
+        session_policies,
         evidence_options or EvidenceOptions(),
     )
     if tools_layer is not None:

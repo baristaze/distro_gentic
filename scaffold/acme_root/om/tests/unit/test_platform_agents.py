@@ -15,6 +15,7 @@ from contracts.evidence import ScriptedExecutor
 from contracts.evidence_storage import make_policy
 from contracts.loops import reply, said
 from contracts.platform_agents import CORPUS, Later, Platform, calls, platform_over
+from contracts.project_storage import in_project, make_binding
 
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
@@ -35,6 +36,7 @@ from acme.om.context import (
     build_context,
 )
 from acme.om.evidence.impl.ports import WorkProductMemoryImpl
+from acme.om.evidence.rules import policy_key
 from acme.om.evidence.types.validation import Delivery
 from acme.om.exceptions import NotAuthorized, NotFound, PreconditionFailed, UnsafeConfiguration
 from acme.om.placement.rules import lab_lane
@@ -188,10 +190,12 @@ def evidenced(tmp_path: Path) -> tuple[Platform, ScriptedExecutor, WorkProductMe
     return platform, executor, work
 
 
-async def an_engineer(platform: Platform, work: WorkProductMemoryImpl) -> UUID:
-    """An engineer session whose work product changed `src/` and is
-    committed, in a project whose policy requires its unit check there."""
+async def an_engineer(platform: Platform, work: WorkProductMemoryImpl, project_id: UUID) -> UUID:
+    """An engineer session of the project, whose work product changed `src/`
+    and is committed, and whose policy requires its unit check there."""
     session_id = await platform.start(kinds.ENGINEER)
+    binding = make_binding(session_id, project_id)
+    await platform.storage.get_project_storage().bind_session(platform.owner.org_id, binding)
     delivery = Delivery(project="reports", base="b1", head="c2", changed=("src/report.py",))
     work.deliver(platform.owner.org_id, session_id, delivery)
     await platform.say(session_id, "The weekly report misses its total. Fix it.")
@@ -202,12 +206,15 @@ async def test_the_engineers_success_needs_a_passing_validation_at_its_head(
     evidenced: tuple[Platform, ScriptedExecutor, WorkProductMemoryImpl],
 ) -> None:
     platform, executor, work = evidenced
-    await platform.managers.evidence.write_policy(platform.owner, make_policy("reports"))
+    projects = platform.storage.get_project_storage()
+    project_id = await in_project(projects, platform.owner.org_id)
+    policy = make_policy(policy_key(project_id))
+    await platform.managers.evidence.write_policy(platform.owner, policy)
 
     # No validation at its head, then a failing one: no success counts, and
     # a failure explained by the runs is an accepted end.
     executor.outcome = all_fail
-    failing = await an_engineer(platform, work)
+    failing = await an_engineer(platform, work, project_id)
     platform.anthropic.add(
         reply(calls(kinds.SUBMIT_RESULT, "use_bare", claim="succeeded", evidence=[])),
         reply(calls(kinds.VALIDATE, "use_validate")),
@@ -223,7 +230,7 @@ async def test_the_engineers_success_needs_a_passing_validation_at_its_head(
 
     # A passing validation at its head: the success is accepted, verified.
     executor.outcome = lambda check, trial: "passed"
-    passing = await an_engineer(platform, work)
+    passing = await an_engineer(platform, work, project_id)
     platform.anthropic.add(reply(calls(kinds.VALIDATE, "use_validate")), citing(Claim.SUCCEEDED))
     run = await platform.managers.loop.run(platform.owner, passing)
     assert run.outcome is LoopOutcome.SUCCEEDED

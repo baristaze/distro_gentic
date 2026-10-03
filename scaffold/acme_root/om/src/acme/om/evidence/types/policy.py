@@ -44,11 +44,12 @@ class Requirement(Platform):
 
 
 class ValidationPolicy(Identifiable, Trackable):
-    """One project's policy, written by a person, never by an agent. Its
-    checks are declared here; its requirements name them; `protected`
-    holds the patterns of every path the agent may not change: the checks,
-    their fixtures, and every path that changes how tests are found or how
-    the runtime starts. The policy itself is this record, which no tool
+    """One project's policy, written by a person, never by an agent, and
+    kept under the project's id (`rules.policy_key`). Its checks are
+    declared here; its requirements name them; `protected` holds the
+    patterns of every path the agent may not change: the checks, their
+    fixtures, and every path that changes how tests are found or how the
+    runtime starts. The policy itself is this record, which no tool
     reaches."""
 
     MANAGER_OWNED_FIELDS: ClassVar[tuple[str, ...]] = ("version",)

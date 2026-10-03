@@ -11,6 +11,7 @@ import pytest
 from contracts.evidence import ScriptedExecutor, arm_policy, delivered
 from contracts.evidence_storage import make_record
 from contracts.loops import loop_over, reply, said
+from contracts.project_storage import in_project
 from contracts.tools import result_text
 
 from acme.infra.impl.configured import InfraConfiguredImpl
@@ -21,6 +22,7 @@ from acme.om.context import AppContext, AppType, RequestContext, TenantContext
 from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
 from acme.om.evidence.impl.ports import WorkProductMemoryImpl
 from acme.om.evidence.types.record import RunPurpose
+from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.root import build_managers
 from acme.om.steps.types.content import ToolUseBlock
 from acme.om.steps.types.header import AcceptedResult, LoopOutcome, ToolResponseHeader
@@ -79,13 +81,18 @@ async def test_a_loop_ends_succeeded_only_once_its_head_is_validated(
         tmp_path,
         storage=storage,
         owner=owner,
-        result_gate=ResultGateEvidenceImpl(storage.get_evidence_storage(), work),
+        result_gate=ResultGateEvidenceImpl(
+            storage.get_evidence_storage(),
+            work,
+            SessionProjectsBoundImpl(storage.get_project_storage()),
+        ),
         executor=ScriptedExecutor(),
         work_product=work,
     )
     evidence = loop.managers.evidence
-    await evidence.write_policy(owner, arm_policy())
     session_id = await loop.start("delivery")
+    project = await in_project(storage.get_project_storage(), owner.org_id, session_id)
+    await evidence.write_policy(owner, arm_policy(project=project))
     run = make_record(session_id, step_id=new_id())
     await evidence.record_run(owner, run)
     work.deliver(owner.org_id, session_id, delivered())

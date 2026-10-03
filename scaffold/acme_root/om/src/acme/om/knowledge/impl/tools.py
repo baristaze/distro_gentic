@@ -93,6 +93,7 @@ class ToolsManagerRecallImpl(ToolsManagerInterface):
         epoch: int,
         tree_deadline: datetime | None,
         on_output: OutputSink | None = None,
+        kept_as: Mapping[str, str] | None = None,
     ) -> Step:
         return await self._inner.execute(
             ctx,
@@ -103,6 +104,7 @@ class ToolsManagerRecallImpl(ToolsManagerInterface):
             epoch=epoch,
             tree_deadline=tree_deadline,
             on_output=on_output,
+            kept_as=kept_as,
         )
 
     async def recover(
@@ -116,6 +118,7 @@ class ToolsManagerRecallImpl(ToolsManagerInterface):
         epoch: int,
         tree_deadline: datetime | None,
         on_output: OutputSink | None = None,
+        kept_as: Mapping[str, str] | None = None,
     ) -> Step:
         return await self._inner.recover(
             ctx,
@@ -126,6 +129,7 @@ class ToolsManagerRecallImpl(ToolsManagerInterface):
             epoch=epoch,
             tree_deadline=tree_deadline,
             on_output=on_output,
+            kept_as=kept_as,
         )
 
     async def start_job(
@@ -138,9 +142,17 @@ class ToolsManagerRecallImpl(ToolsManagerInterface):
         *,
         epoch: int,
         tree_deadline: datetime | None,
+        kept_as: Mapping[str, str] | None = None,
     ) -> JobHandle | Step:
         return await self._inner.start_job(
-            ctx, registry, request, call_input, workspace, epoch=epoch, tree_deadline=tree_deadline
+            ctx,
+            registry,
+            request,
+            call_input,
+            workspace,
+            epoch=epoch,
+            tree_deadline=tree_deadline,
+            kept_as=kept_as,
         )
 
     async def get_policy(self, ctx: TenantContext) -> ToolPolicy:

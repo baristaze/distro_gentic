@@ -41,6 +41,7 @@ from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import new_id, utcnow
 from acme.om.exceptions import StaleWriter
 from acme.om.models.types.fill import MAIN, SUMMARIZER, Eligibility
+from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.steps.types.content import UNPARSED, TextBlock, ToolResultBlock, ToolUseBlock
 from acme.om.steps.types.header import (
     ControlCommand,
@@ -249,7 +250,12 @@ async def test_a_request_a_lost_run_left_open_is_closed_and_its_hold_settled_who
     rendered = await managers.windows.render_request(ctx, session_id, epoch, trigger.id, prompts)
     fill = (await managers.models.get_fill_set(ctx, session_id)).fill_for(MAIN)
     assert fill is not None
-    gate = CallGateBudgetImpl(managers.budget_gate, managers.pricing, managers.agent_sessions)
+    gate = CallGateBudgetImpl(
+        managers.budget_gate,
+        managers.pricing,
+        managers.agent_sessions,
+        SessionProjectsBoundImpl(loop.storage.get_project_storage()),
+    )
     hold = await gate.authorize(
         ctx, session_id, person(ctx.user_id), MAIN, fill, rendered.call, credential="platform"
     )

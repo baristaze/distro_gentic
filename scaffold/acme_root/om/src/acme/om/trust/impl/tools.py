@@ -30,7 +30,8 @@ REFUSAL_CHARS = 2_000
 class ToolsManagerTrustedImpl(ToolsManagerInterface):
     """`trust` answers the trust manager at call time: a root builds this
     layer before the trust manager, which reads the managers this layer is
-    one of."""
+    one of. Where a call's secrets are kept is this layer's answer alone:
+    a `kept_as` it is handed is never passed on."""
 
     def __init__(
         self,
@@ -56,9 +57,9 @@ class ToolsManagerTrustedImpl(ToolsManagerInterface):
         holds_private: bool = True,
         tree_deadline: datetime | None = None,
     ) -> Gate:
-        refused = await self._crossing(ctx, registry, request)
-        if refused is not None:
-            return Gate(outcome=GateOutcome.REFUSE, response=refused)
+        resolved = await self._resolved(ctx, registry, request)
+        if isinstance(resolved, Step):
+            return Gate(outcome=GateOutcome.REFUSE, response=resolved)
         return await self._inner.gate(
             ctx,
             registry,
@@ -81,10 +82,11 @@ class ToolsManagerTrustedImpl(ToolsManagerInterface):
         epoch: int,
         tree_deadline: datetime | None,
         on_output: OutputSink | None = None,
+        kept_as: Mapping[str, str] | None = None,
     ) -> Step:
-        refused = await self._crossing(ctx, registry, request)
-        if refused is not None:
-            return refused
+        resolved = await self._resolved(ctx, registry, request)
+        if isinstance(resolved, Step):
+            return resolved
         await self._trust().audit_call(ctx, request)
         return await self._inner.execute(
             ctx,
@@ -95,6 +97,7 @@ class ToolsManagerTrustedImpl(ToolsManagerInterface):
             epoch=epoch,
             tree_deadline=tree_deadline,
             on_output=on_output,
+            kept_as=resolved,
         )
 
     async def recover(
@@ -108,10 +111,11 @@ class ToolsManagerTrustedImpl(ToolsManagerInterface):
         epoch: int,
         tree_deadline: datetime | None,
         on_output: OutputSink | None = None,
+        kept_as: Mapping[str, str] | None = None,
     ) -> Step:
-        refused = await self._crossing(ctx, registry, request)
-        if refused is not None:
-            return refused
+        resolved = await self._resolved(ctx, registry, request)
+        if isinstance(resolved, Step):
+            return resolved
         await self._trust().audit_call(ctx, request)
         return await self._inner.recover(
             ctx,
@@ -122,6 +126,7 @@ class ToolsManagerTrustedImpl(ToolsManagerInterface):
             epoch=epoch,
             tree_deadline=tree_deadline,
             on_output=on_output,
+            kept_as=resolved,
         )
 
     async def start_job(
@@ -134,13 +139,21 @@ class ToolsManagerTrustedImpl(ToolsManagerInterface):
         *,
         epoch: int,
         tree_deadline: datetime | None,
+        kept_as: Mapping[str, str] | None = None,
     ) -> JobHandle | Step:
-        refused = await self._crossing(ctx, registry, request)
-        if refused is not None:
-            return refused
+        resolved = await self._resolved(ctx, registry, request)
+        if isinstance(resolved, Step):
+            return resolved
         await self._trust().audit_call(ctx, request)
         return await self._inner.start_job(
-            ctx, registry, request, call_input, workspace, epoch=epoch, tree_deadline=tree_deadline
+            ctx,
+            registry,
+            request,
+            call_input,
+            workspace,
+            epoch=epoch,
+            tree_deadline=tree_deadline,
+            kept_as=resolved,
         )
 
     # The rest, as the engine's.
@@ -188,20 +201,22 @@ class ToolsManagerTrustedImpl(ToolsManagerInterface):
 
     # Helpers.
 
-    async def _crossing(
+    async def _resolved(
         self, ctx: TenantContext, registry: ToolRegistry, request: Step
-    ) -> Step | None:
-        """The `denied` answer to a call whose tool declares a secret that
-        would cross its session's wall, or None. A tool's declared secrets
-        are every secret its commands may name, so none of them crosses."""
+    ) -> Step | dict[str, str]:
+        """The name the tenant's store keeps each of the call's secrets
+        under, for its session; or the `denied` answer to a call whose tool
+        declares a secret that would cross its session's wall. A tool's
+        declared secrets are every secret its commands may name, so none of
+        them crosses."""
         header = request.header
         if not isinstance(header, ToolRequestHeader):
-            return None
+            return {}
         tool = registry.get(header.tool)
         if tool is None or not tool.spec.secrets:
-            return None
+            return {}
         try:
-            await self._trust().refuse_crossing(ctx, request.session_id, tool.spec.secrets)
+            return await self._trust().resolve_secrets(ctx, request.session_id, tool.spec.secrets)
         except SecretCrossesWall as refused:
             return response(
                 new_id(),
@@ -211,4 +226,3 @@ class ToolsManagerTrustedImpl(ToolsManagerInterface):
                 ToolFailure.DENIED,
                 limit=REFUSAL_CHARS,
             )
-        return None

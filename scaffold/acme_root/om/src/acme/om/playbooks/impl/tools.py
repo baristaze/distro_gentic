@@ -95,6 +95,7 @@ class ToolsManagerPlaybooksImpl(ToolsManagerInterface):
         epoch: int,
         tree_deadline: datetime | None,
         on_output: OutputSink | None = None,
+        kept_as: Mapping[str, str] | None = None,
     ) -> Step:
         if await self._narrowed(ctx, request, Decision.ALLOW) is Decision.DENY:
             return self._denied(request)
@@ -107,6 +108,7 @@ class ToolsManagerPlaybooksImpl(ToolsManagerInterface):
             epoch=epoch,
             tree_deadline=tree_deadline,
             on_output=on_output,
+            kept_as=kept_as,
         )
 
     async def recover(
@@ -120,6 +122,7 @@ class ToolsManagerPlaybooksImpl(ToolsManagerInterface):
         epoch: int,
         tree_deadline: datetime | None,
         on_output: OutputSink | None = None,
+        kept_as: Mapping[str, str] | None = None,
     ) -> Step:
         if await self._narrowed(ctx, request, Decision.ALLOW) is Decision.DENY:
             return self._denied(request)
@@ -132,6 +135,7 @@ class ToolsManagerPlaybooksImpl(ToolsManagerInterface):
             epoch=epoch,
             tree_deadline=tree_deadline,
             on_output=on_output,
+            kept_as=kept_as,
         )
 
     async def start_job(
@@ -144,11 +148,19 @@ class ToolsManagerPlaybooksImpl(ToolsManagerInterface):
         *,
         epoch: int,
         tree_deadline: datetime | None,
+        kept_as: Mapping[str, str] | None = None,
     ) -> JobHandle | Step:
         if await self._narrowed(ctx, request, Decision.ALLOW) is Decision.DENY:
             return self._denied(request)
         return await self._inner.start_job(
-            ctx, registry, request, call_input, workspace, epoch=epoch, tree_deadline=tree_deadline
+            ctx,
+            registry,
+            request,
+            call_input,
+            workspace,
+            epoch=epoch,
+            tree_deadline=tree_deadline,
+            kept_as=kept_as,
         )
 
     # The rest, as beneath.

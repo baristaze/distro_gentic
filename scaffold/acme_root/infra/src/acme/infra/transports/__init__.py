@@ -95,6 +95,10 @@ class SecretUse(InfraModel):
     via: SecretVia
     env: str | None = None
     destination: str | None = None
+    # The name its tenant's store keeps its value under, when it is not
+    # `name`: a secret declared on an owner is kept under that owner, so two
+    # owners each keep their own value of one name.
+    kept_as: str | None = Field(default=None, min_length=1, max_length=300, pattern=r"^[^/]+$")
 
     @model_validator(mode="after")
     def _names_where_it_goes(self) -> Self:

@@ -6,7 +6,7 @@ from collections.abc import Callable
 
 import pytest
 from contracts.doubles import context
-from contracts.evidence import ScriptedExecutor, arm_policy, delivered, evidence_over
+from contracts.evidence import ARM, ScriptedExecutor, arm_policy, delivered, evidence_over
 from contracts.evidence_storage import make_finding, make_hypothesis, make_record
 from contracts.factories import make_org
 
@@ -14,6 +14,7 @@ from acme.om.base import new_id
 from acme.om.context import Role, TenantContext
 from acme.om.evidence.impl.manager import EvidenceManagerImpl, EvidenceOptions
 from acme.om.evidence.impl.ports import ExecutorAbsentImpl, WorkProductAbsentImpl
+from acme.om.evidence.rules import policy_key
 from acme.om.evidence.types.inference import Inference
 from acme.om.evidence.types.policy import Requirement
 from acme.om.evidence.types.record import RunPurpose
@@ -32,7 +33,7 @@ async def test_a_person_who_manages_the_tenant_declares_the_policy() -> None:
     evidence = evidence_over()
     owner = context(Role.OWNER, org)
     with pytest.raises(NotFound):
-        await evidence.manager.get_policy(owner, "arm")
+        await evidence.manager.get_policy(owner, policy_key(ARM))
     created = await evidence.manager.write_policy(owner, arm_policy())
     assert created.version == 1 and created.created_by == owner.user_id
     for role in (Role.SERVICE, Role.MEMBER, Role.VIEWER):
@@ -44,7 +45,7 @@ async def test_a_person_who_manages_the_tenant_declares_the_policy() -> None:
     assert moved.version == 2 and moved.protected == ("**",) and moved.id == created.id
     with pytest.raises(PreconditionFailed):
         await evidence.manager.write_policy(owner, created)
-    assert await evidence.manager.get_policy(context(Role.VIEWER, org), "arm") == moved
+    assert await evidence.manager.get_policy(context(Role.VIEWER, org), policy_key(ARM)) == moved
 
 
 async def test_the_agents_run_is_kept_and_an_executors_is_refused_here() -> None:
@@ -202,6 +203,7 @@ async def test_the_absent_ports_refuse_loudly() -> None:
         evidence.manager._relay,  # pyright: ignore[reportPrivateUsage]
         ExecutorAbsentImpl(),
         WorkProductAbsentImpl(),
+        evidence.projects,
         EvidenceOptions(),
     )
     ctx = context(Role.MEMBER, org)

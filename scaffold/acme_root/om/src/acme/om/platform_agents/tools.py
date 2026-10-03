@@ -25,6 +25,7 @@ from acme.om.agents.types.result import Claim
 from acme.om.base import Platform
 from acme.om.context import TenantContext
 from acme.om.evidence import EvidenceManagerInterface
+from acme.om.evidence.rules import PATHS
 from acme.om.evidence.types.record import RunPurpose
 from acme.om.exceptions import ToolFailed
 from acme.om.platform_agents import kinds, rules
@@ -135,6 +136,11 @@ class Written(Platform):
 
 
 class WriteFileImpl(NativeToolImpl):
+    """Writes one file of the workspace. A path the policy of the session's
+    project protects is refused at the call, before anyone is asked: the
+    evidence reads it (`protection`) from the session's project, never from
+    the input."""
+
     SPEC = ToolSpec(
         name=kinds.WRITE_FILE,
         description="Writes a text file of the workspace whole, creating it if it is missing.",
@@ -146,6 +152,23 @@ class WriteFileImpl(NativeToolImpl):
         interruptible=False,
         mode=ToolMode.SYNC,
     )
+
+    def __init__(self, evidence: Callable[[], EvidenceManagerInterface]) -> None:
+        self._evidence = evidence
+
+    async def preflight(
+        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
+    ) -> None:
+        # The engine asks a tool's target with no session, and the session's
+        # project is what protects a path, so the refusal is made here.
+        assert isinstance(call_input, WriteInput)
+        target = await self._evidence().protection(ctx, runtime.session_id, [call_input.path])
+        if target.kind == PATHS and target.attributes.get("protected"):
+            raise ToolFailed(
+                ToolFailure.DENIED,
+                f"{call_input.path} is protected by the project's validation policy: "
+                "it is never changed by an agent",
+            )
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime

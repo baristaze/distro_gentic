@@ -1,7 +1,7 @@
 """Storage of the trust swimlane: the tenant's secret declarations, by
-name; its provider keys' records, by reference; and its operators' content
-grants. No row holds a secret's value or a key's. Every operation takes
-org_id first."""
+name and owner; its provider keys' records, by reference; and its
+operators' content grants. No row holds a secret's value or a key's. Every
+operation takes org_id first."""
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
@@ -12,7 +12,7 @@ from acme.integrations.model_providers.types import ProviderName
 from acme.om.outbox.types.row import OutboxRow
 from acme.om.trust.types.grant import ContentGrant
 from acme.om.trust.types.provider_key import ProviderKey
-from acme.om.trust.types.secret import SecretDeclaration
+from acme.om.trust.types.secret import SecretDeclaration, SecretOwnerKind
 
 
 class TrustStorageInterface(ABC):
@@ -24,17 +24,31 @@ class TrustStorageInterface(ABC):
     ) -> bool:
         """The create, with the rows that announce it, in one commit; False,
         with nothing landed, when the id is written already, and
-        `UniqueKeyTaken` when the tenant holds the name under another id."""
+        `UniqueKeyTaken` when its owner holds the name under another id."""
         ...
 
     @abstractmethod
-    async def read_declaration(self, org_id: UUID, name: str) -> SecretDeclaration | None: ...
+    async def read_declaration(
+        self, org_id: UUID, owner_kind: SecretOwnerKind, owner_id: UUID, name: str
+    ) -> SecretDeclaration | None:
+        """The one declaration of `name` on that owner."""
+        ...
+
+    @abstractmethod
+    async def resolve_declaration(
+        self, org_id: UUID, name: str, project_id: UUID | None
+    ) -> SecretDeclaration | None:
+        """What `name` means to a session of the project `project_id`: that
+        project's declaration, else the tenant's own, one on no project (the
+        first by id), and never another project's. None when neither is."""
+        ...
 
     @abstractmethod
     async def read_declarations(
-        self, org_id: UUID, after: str | None, limit: int
+        self, org_id: UUID, after: tuple[str, UUID] | None, limit: int
     ) -> list[SecretDeclaration]:
-        """The tenant's declarations in name order, after `after`."""
+        """The tenant's declarations in name order, then by id, after the
+        (name, id) `after`."""
         ...
 
     # Provider keys.

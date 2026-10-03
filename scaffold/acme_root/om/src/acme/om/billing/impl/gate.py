@@ -51,6 +51,7 @@ from acme.om.exceptions import (
     ValidationFailed,
 )
 from acme.om.models.types.fill import Fill, ModelRole
+from acme.om.projects.policies import SessionProjectsInterface
 from acme.om.windows.gate import CallGateInterface
 from acme.om.windows.impl.gate import (
     UNPINNED,
@@ -249,23 +250,26 @@ class MoneyGateImpl(MoneyGateInterface):
 class MoneyCallGateImpl(CallGateInterface):
     """The face the windows and the loop read, over the money gate. A model
     call's worst case is priced from the price table in force and held with
-    the row it was read from; its usage is billed from that same row, after
-    the next version is read and in another process too. Every settled call
-    counts its tokens and its spend under the matrix version `version` reads
-    of its session at the hold; a settle in another process counts them
-    under `none`."""
+    the row it was read from, on every scope the call serves: the project
+    `projects` reads of its session among them. Its usage is billed from
+    that same row, after the next version is read and in another process
+    too. Every settled call counts its tokens and its spend under the
+    matrix version `version` reads of its session at the hold; a settle in
+    another process counts them under `none`."""
 
     def __init__(
         self,
         gate: MoneyGateInterface,
         prices: PriceBookInterface,
         sessions: AgentSessionsManagerInterface,
+        projects: SessionProjectsInterface,
         *,
         version: PinnedVersion | None = None,
     ) -> None:
         self._gate = gate
         self._prices = prices
         self._sessions = sessions
+        self._projects = projects
         self._version = version
         self._labels: dict[UUID, str] = {}
 
@@ -281,6 +285,7 @@ class MoneyCallGateImpl(CallGateInterface):
         credential: str,
     ) -> UUID:
         session = await self._sessions.get_session(ctx, session_id)
+        project_id = await self._projects.project_of(ctx, session_id)
         label = await version_label(self._version, ctx, session_id)
         priced = PricedAt(
             version=self._prices.version, provider=fill.provider.value, model=fill.model
@@ -288,7 +293,9 @@ class MoneyCallGateImpl(CallGateInterface):
         price = self._prices.price_at(priced.version, priced.provider, priced.model)
         request = HoldRequest(
             spender_id=spender.id,
-            scopes=scopes_of(ctx.org_id, session_id, session.root_id, spender),
+            scopes=scopes_of(
+                ctx.org_id, session_id, session.root_id, spender, project_id=project_id
+            ),
             exposure=call_exposure(call_shape(call, fill), price),
             session_id=session_id,
             purpose=role,

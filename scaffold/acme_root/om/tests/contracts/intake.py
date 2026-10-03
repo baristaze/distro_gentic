@@ -49,6 +49,7 @@ from acme.om.notifications.manager import NotificationsManagerInterface
 from acme.om.notifications.root import build_notifications
 from acme.om.playbooks.manager import PlaybooksManagerInterface
 from acme.om.playbooks.root import PlaybooksLayer
+from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.root import Managers, build_managers
 from acme.om.steps.types.step import Step
 from acme.om.storage.impl.memory import StorageMemoryImpl
@@ -299,7 +300,12 @@ def wired(
         managers.models,
         managers.windows,
         managers.tools,
-        CallGateBudgetImpl(managers.budget_gate, managers.pricing, managers.agent_sessions),
+        CallGateBudgetImpl(
+            managers.budget_gate,
+            managers.pricing,
+            managers.agent_sessions,
+            SessionProjectsBoundImpl(storage.get_project_storage()),
+        ),
         CallCredentialsPlatformImpl(providers),
         infra.get_outages(),
         StreamSinkMemoryImpl(),
