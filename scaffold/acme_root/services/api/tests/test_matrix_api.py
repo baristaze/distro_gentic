@@ -1,9 +1,10 @@
 """The model matrix over the live app, in memory. A tenant on its own keys
 reads what it may choose, the published matrix's fills from the providers
 it holds a key for, and chooses and drops a fill; one the platform pays for
-chooses nothing. An operator who may write stages and publishes a version,
-which publishes only once its fills qualify; a read operator and a tenant
-do neither."""
+chooses nothing. An operator who may write stages a version, records the
+benchmark results that qualify its fills and the models their providers
+retire, and publishes it once its fills qualify; a read operator and a
+tenant do none of it."""
 
 from pathlib import Path
 from typing import Any
@@ -11,14 +12,12 @@ from typing import Any
 import httpx
 import pytest
 from api_support import OWNER, build_container, enrol_operator, seed_request, sign_in_as
-from contracts.benchmark_storage import operator
 
 from acme.integrations.payments.twin import PaymentProviderTwinImpl
 from acme.om.billing.root import build_billing
 from acme.om.billing.types.account import AccountRequest, FundingMode
 from acme.om.context import OperatorRole, TenantContext
-from acme.om.matrix.root import MatrixLayer
-from acme.om.matrix.types.record import BenchmarkRun
+from acme.om.matrix.types.record import ModelRef
 from acme.om.models.types.fill import MAIN, SUMMARIZER
 from acme.om.platform_agents.kinds import SHIPPED
 from acme.services.api.container import AppContainer
@@ -120,6 +119,18 @@ def a_version(*fills: dict[str, Any]) -> dict[str, Any]:
     return {"roles": roles, "rows": [{"fills": list(fills)}]}
 
 
+def a_result(fill: dict[str, Any], role: str, passed: bool = True) -> dict[str, Any]:
+    """What a benchmark run showed of the fill's model for `role`."""
+    return {
+        "provider": fill["provider"],
+        "model": fill["model"],
+        "role": role,
+        "benchmark": "swe-lite",
+        "passed": passed,
+        "run": "run-1",
+    }
+
+
 async def test_an_operator_publishes_a_version_once_its_fills_qualify(
     client: httpx.AsyncClient, container: AppContainer
 ) -> None:
@@ -137,17 +148,11 @@ async def test_an_operator_publishes_a_version_once_its_fills_qualify(
         await client.get("/v1/admin/matrix/versions/current", headers=writer)
     ).status_code == 404
 
-    operators = MatrixLayer(container.storage).build(container.managers).matrix_operator
     for role in version["roles"]:
-        run = BenchmarkRun(
-            provider=OPUS["provider"],
-            model=OPUS["model"],
-            role=role,
-            benchmark="swe-lite",
-            passed=True,
-            run="run-1",
-        )
-        await operators.record_benchmark(operator(), run)
+        result = a_result(OPUS, role)
+        recorded = await client.post("/v1/admin/matrix/results", headers=writer, json=result)
+        assert recorded.status_code == 201, recorded.text
+        assert recorded.json() | result == recorded.json(), "recorded as sent"
     published = await client.post("/v1/admin/matrix/versions/1/publish", headers=writer)
     assert published.status_code == 200, published.text
     assert published.json()["status"] == "published"
@@ -166,6 +171,7 @@ async def test_staging_and_publishing_need_the_operators_write_and_a_tenant_reac
     staged = await client.post("/v1/admin/matrix/versions", headers=writer, json=a_version(OPUS))
     number = staged.json()["number"]
 
+    retiring = {"provider": OPUS["provider"], "model": OPUS["model"]}
     for headers, status in ((owner, 401), (reader, 403)):
         stage = await client.post(
             "/v1/admin/matrix/versions", headers=headers, json=a_version(SONNET)
@@ -173,6 +179,11 @@ async def test_staging_and_publishing_need_the_operators_write_and_a_tenant_reac
         assert stage.status_code == status, stage.text
         publish = await client.post(f"/v1/admin/matrix/versions/{number}/publish", headers=headers)
         assert publish.status_code == status, publish.text
+        result = a_result(OPUS, MAIN)
+        record = await client.post("/v1/admin/matrix/results", headers=headers, json=result)
+        assert record.status_code == status, record.text
+        retire = await client.post("/v1/admin/matrix/retirements", headers=headers, json=retiring)
+        assert retire.status_code == status, retire.text
     read = await client.get(f"/v1/admin/matrix/versions/{number}", headers=reader)
     assert read.status_code == 200 and read.json()["status"] == "pending"
     tenant_read = await client.get(f"/v1/admin/matrix/versions/{number}", headers=owner)
@@ -183,6 +194,42 @@ async def test_staging_and_publishing_need_the_operators_write_and_a_tenant_reac
     assert current["number"] == number - 1
     later = await client.get(f"/v1/admin/matrix/versions/{number + 1}", headers=reader)
     assert later.status_code == 404, later.text
+    matrix = container.storage.get_matrix_storage()
+    assert await matrix.read_results(ModelRef.model_validate(retiring), 10) == []
+    assert await matrix.read_retirements(10) == []
+
+
+async def test_an_operator_retires_a_model_and_no_version_naming_it_publishes(
+    client: httpx.AsyncClient, container: AppContainer
+) -> None:
+    writer, _ = await enrol_operator(client, container, "root@example.test", OperatorRole.WRITE)
+    staged = await client.post("/v1/admin/matrix/versions", headers=writer, json=a_version(OPUS))
+    version = staged.json()
+    for role in version["roles"]:
+        result = a_result(OPUS, role)
+        recorded = await client.post("/v1/admin/matrix/results", headers=writer, json=result)
+        assert recorded.status_code == 201, recorded.text
+
+    model = {"provider": OPUS["provider"], "model": OPUS["model"]}
+    retired = await client.post("/v1/admin/matrix/retirements", headers=writer, json=model)
+    assert retired.status_code == 201, retired.text
+    assert retired.json() | model == retired.json()
+    again = await client.post("/v1/admin/matrix/retirements", headers=writer, json=model)
+    assert again.status_code == 201 and again.json()["id"] == retired.json()["id"], (
+        "a model is retired once"
+    )
+    refused = await client.post(
+        f"/v1/admin/matrix/versions/{version['number']}/publish", headers=writer
+    )
+    assert refused.status_code == 422, refused.text
+    assert "claude-opus-5-5 is retired" in refused.json()["error"]["message"]
+
+    unknown = {**model, "provider": "nobody"}
+    malformed = await client.post("/v1/admin/matrix/retirements", headers=writer, json=unknown)
+    assert malformed.status_code == 422, malformed.text
+    bad_role = a_result(OPUS, "Not A Role")
+    malformed = await client.post("/v1/admin/matrix/results", headers=writer, json=bad_role)
+    assert malformed.status_code == 422, malformed.text
 
 
 async def test_a_staged_shape_it_may_not_have_is_refused(

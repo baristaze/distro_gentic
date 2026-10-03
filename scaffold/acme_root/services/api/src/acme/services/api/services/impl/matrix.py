@@ -4,15 +4,20 @@ from acme.om.context import OperatorContext, TenantContext
 from acme.om.exceptions import NotFound, ValidationFailed
 from acme.om.matrix import MatrixManagerInterface, MatrixOperatorManagerInterface
 from acme.om.matrix.types.matrix import MatrixKey, MatrixRow
+from acme.om.matrix.types.record import BenchmarkRun, ModelRef
 from acme.om.models.types.fill import Fill, ModelRole
 from acme.services.api.services.matrix import MatrixServiceInterface
 from acme.services.api.types.matrix import (
+    BenchmarkResultRequest,
+    BenchmarkResultView,
     ChooseRequest,
     FillBody,
     FillChoiceView,
     FillOptionsView,
     MatrixRowBody,
     MatrixVersionView,
+    RetirementView,
+    RetireRequest,
     StageRequest,
 )
 
@@ -72,3 +77,15 @@ class MatrixServiceImpl(MatrixServiceInterface):
 
     async def get_version(self, admin: OperatorContext, number: int | None) -> MatrixVersionView:
         return MatrixVersionView.model_validate(await self._operators.get_version(admin, number))
+
+    async def record_result(
+        self, admin: OperatorContext, body: BenchmarkResultRequest
+    ) -> BenchmarkResultView:
+        run = BenchmarkRun.model_validate(body.model_dump())
+        return BenchmarkResultView.model_validate(
+            await self._operators.record_benchmark(admin, run)
+        )
+
+    async def retire(self, admin: OperatorContext, body: RetireRequest) -> RetirementView:
+        model = ModelRef.model_validate(body.model_dump())
+        return RetirementView.model_validate(await self._operators.retire_model(admin, model))

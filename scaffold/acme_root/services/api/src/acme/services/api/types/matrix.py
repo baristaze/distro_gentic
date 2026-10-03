@@ -1,6 +1,7 @@
 """Wire types of the model matrix: a fill as the API takes and shows it, a
-version an operator stages and publishes, and what a tenant on its own keys
-may choose and has chosen."""
+version an operator stages and publishes, a benchmark result and a
+retirement an operator records, and what a tenant on its own keys may
+choose and has chosen."""
 
 from datetime import datetime
 from typing import Annotated
@@ -11,6 +12,7 @@ from pydantic import Field, StringConstraints
 from acme.integrations.model_providers.types import Effort, ProviderName
 from acme.om.attribution.types.principal import MAX_KIND
 from acme.om.matrix.types.matrix import MAX_FILLS, MAX_ROLES, MAX_ROWS, NAME, MatrixStatus
+from acme.om.matrix.types.record import MAX_MODEL, BenchmarkName
 from acme.om.models.types.fill import ModelRole, OutputShape
 from acme.services.api.types.common import RequestBody, View
 
@@ -117,6 +119,53 @@ class MatrixVersionView(View):
     created_by: UUID
     published_at: datetime | None
     published_by: UUID | None
+
+
+class BenchmarkResultRequest(RequestBody):
+    """What a benchmark run showed of a model for a model role: whether it
+    passed, and where its evidence is (`run`, such as the run's id or its
+    report's address). The latest result for the model and the role decides
+    whether a version that serves the role with the model may be
+    published."""
+
+    provider: ProviderName
+    model: str = Field(min_length=1, max_length=MAX_MODEL)
+    role: ModelRole
+    benchmark: BenchmarkName
+    passed: bool
+    run: str = Field(min_length=1, max_length=500)
+
+
+class BenchmarkResultView(View):
+    """A recorded result, written once."""
+
+    id: UUID
+    provider: ProviderName
+    model: str
+    role: str
+    benchmark: str
+    passed: bool
+    run: str
+    created_at: datetime
+    recorded_by: UUID
+
+
+class RetireRequest(RequestBody):
+    """A model its provider retired, by name, as a fill names it."""
+
+    provider: ProviderName
+    model: str = Field(min_length=1, max_length=MAX_MODEL)
+
+
+class RetirementView(View):
+    """A retired model: no session resolves to it again, and a version that
+    names it is not published. Recorded once a model."""
+
+    id: UUID
+    provider: ProviderName
+    model: str
+    created_at: datetime
+    recorded_by: UUID
 
 
 class FillOptionsView(View):
