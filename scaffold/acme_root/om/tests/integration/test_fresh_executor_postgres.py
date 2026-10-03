@@ -5,7 +5,8 @@ project's repository, with the checks and their fixture from the base,
 and the container is gone after. The validation hashes to the results the
 run wrote, and the result gate confirms the success they show. A
 validation session runs as the platform's own work on the same executor,
-and a head that plants a runner of its own still runs the base's."""
+a head that plants a runner of its own still runs the base's, and a head's
+`.gitattributes` leaves nothing out of the tree the checks run on."""
 
 import os
 import subprocess
@@ -319,6 +320,31 @@ async def test_a_deliverys_checks_run_in_a_fresh_container_and_the_gate_confirms
         owner, session_id, Result(claim=Claim.SUCCEEDED, evidence=(record.id,))
     )
     assert (verdict.accepted, verdict.verified) == (True, True), verdict.reason
+
+
+# Check 1, under a head's attributes: a root `.gitattributes` that leaves
+# the base's fixture out of an export changes nothing the checks run on.
+
+
+async def test_a_heads_attributes_leave_nothing_out_of_the_checks(
+    storage: StoragePostgresImpl, tmp_path: Path
+) -> None:
+    delivered = Delivered(storage, tmp_path)
+    owner, session_id, head = await delivered.session(
+        {"src/cart.py": "TOTAL = 4\n", ".gitattributes": "checks/expected.txt export-ignore\n"}
+    )
+    evidence = delivered.managers.evidence
+
+    await evidence.validate(owner, session_id, RunPurpose.VALIDATION)
+
+    (record,) = (await evidence.get_runs(owner, session_id, None, 10)).items
+    assert (record.version, record.outcome) == (head, RunOutcome.FAILED), (
+        "the base's runner read the base's fixture against the head's cart"
+    )
+    verdict = await delivered.managers.agents.judge_result(
+        owner, session_id, Result(claim=Claim.SUCCEEDED, evidence=(record.id,))
+    )
+    assert not verdict.accepted, "the gate refuses a success the checks never showed"
 
 
 # Check 2: a validation session is platform work, run on the same fresh
