@@ -11,12 +11,6 @@ from datetime import timedelta
 from pathlib import Path
 from uuid import UUID
 
-from contracts.doubles import APP, context
-from contracts.factories import make_org
-from contracts.loops import Clock, Lookup
-from contracts.project_storage import make_binding, make_project
-from contracts.step_storage import make_message
-from contracts.tools import INJECTED_TOKEN, TWIN_SPEC, Command
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.transports.twin import TransportTwinImpl
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
@@ -57,6 +51,12 @@ from acme.om.trust.placement import PlacementInterface
 from acme.om.trust.root import TrustLayer, TrustManagers, absent_client
 from acme.om.trust.types.identities import Executor, ExecutorKind
 from acme.om.windows.impl.gate import CallGateBudgetImpl
+from contracts.doubles import APP, context
+from contracts.factories import make_org
+from contracts.loops import Clock, Lookup
+from contracts.project_storage import make_binding, make_project
+from contracts.step_storage import make_message
+from contracts.tools import INJECTED_TOKEN, TWIN_SPEC, Command
 
 ALLOWED = PolicyLayer(
     rules=(
