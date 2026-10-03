@@ -270,6 +270,21 @@ async def test_an_event_finds_its_session_by_id_then_pull_request_then_branch(
         await platform.intake.bind_work(platform.owner, by_id, HandleKind.BRANCH, BRANCH)
 
 
+async def test_a_sessions_work_is_read_oldest_first_and_an_unknown_session_is_not_found(
+    platform: Wired,
+) -> None:
+    session_id = await bound(platform)
+    await platform.intake.bind_work(platform.owner, session_id, HandleKind.BRANCH, BRANCH)
+    viewer = platform.person(Role.VIEWER)
+    work = await platform.intake.get_work(viewer, session_id)
+    assert [(binding.kind, binding.handle) for binding in work] == [
+        (HandleKind.PULL_REQUEST, PR),
+        (HandleKind.BRANCH, BRANCH),
+    ]
+    with pytest.raises(NotFound):
+        await platform.intake.get_work(platform.owner, new_id())
+
+
 async def test_the_sessions_own_act_and_an_unnamed_session_deliver_nothing(
     platform: Wired,
 ) -> None:

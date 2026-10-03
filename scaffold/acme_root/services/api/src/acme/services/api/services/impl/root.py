@@ -17,6 +17,7 @@ from acme.services.api.services import (
     AdminServiceInterface,
     AgentSessionsServiceInterface,
     EventsServiceInterface,
+    EvidenceServiceInterface,
     FleetServiceInterface,
     HostsServiceInterface,
     MediaServiceInterface,
@@ -34,6 +35,7 @@ from acme.services.api.services.impl.agent_sessions import AgentSessionsServiceI
 from acme.services.api.services.impl.automations import AutomationsServiceImpl
 from acme.services.api.services.impl.budgets import BudgetsServiceImpl
 from acme.services.api.services.impl.events import EventsServiceImpl
+from acme.services.api.services.impl.evidence import EvidenceServiceImpl
 from acme.services.api.services.impl.fleet import FleetServiceImpl
 from acme.services.api.services.impl.hosts import HostsServiceImpl
 from acme.services.api.services.impl.intake import IntakeServiceImpl
@@ -74,6 +76,7 @@ class ServicesImpl(ServicesInterface):
         automations: AutomationsServiceInterface,
         notifications: NotificationsServiceInterface,
         watch: WatchServiceInterface,
+        evidence: EvidenceServiceInterface,
         projects: ProjectsServiceInterface,
         knowledge: KnowledgeServiceInterface,
         playbooks: PlaybooksServiceInterface,
@@ -94,6 +97,7 @@ class ServicesImpl(ServicesInterface):
         self._automations = automations
         self._notifications = notifications
         self._watch = watch
+        self._evidence = evidence
         self._projects = projects
         self._knowledge = knowledge
         self._playbooks = playbooks
@@ -143,6 +147,9 @@ class ServicesImpl(ServicesInterface):
 
     def get_watch_service(self) -> WatchServiceInterface:
         return self._watch
+
+    def get_evidence_service(self) -> EvidenceServiceInterface:
+        return self._evidence
 
     def get_projects_service(self) -> ProjectsServiceInterface:
         return self._projects
@@ -204,6 +211,13 @@ def build_services(
         automations=AutomationsServiceImpl(automations),
         notifications=NotificationsServiceImpl(notifications),
         watch=WatchServiceImpl(watch),
+        evidence=EvidenceServiceImpl(
+            managers.agent_sessions,
+            managers.evidence,
+            managers.workspaces,
+            managers.steps,
+            intake,
+        ),
         projects=ProjectsServiceImpl(managers.projects, managers.workspaces),
         knowledge=KnowledgeServiceImpl(knowledge),
         playbooks=PlaybooksServiceImpl(playbooks),

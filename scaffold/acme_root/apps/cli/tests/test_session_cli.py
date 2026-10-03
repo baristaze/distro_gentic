@@ -105,3 +105,21 @@ def test_following_a_loop_that_parked_exits_by_it(stack: Stack) -> None:
 
     assert followed.exit_code == main.EXIT_UNSUCCESSFUL, followed.output
     assert followed.output.split() == ["4", "parked", "person,", "until", "approval"]
+
+
+def test_the_orgs_sessions_are_listed_one_a_line_in_a_status(stack: Stack) -> None:
+    first, second = started(stack), started(stack)
+    stack.acme("session", "say", second, "Investigate the drop.")
+
+    every = stack.acme("session", "list")
+    pending = stack.acme("session", "list", "--status", "pending")
+
+    assert every.exit_code == 0, every.output
+    lines = every.output.splitlines()
+    assert [line.split()[0] for line in lines] == sorted([first, second])
+    assert {tuple(line.split()[1:3]) for line in lines} == {
+        ("idle", "assistant"),
+        ("pending", "assistant"),
+    }
+    assert pending.exit_code == 0, pending.output
+    assert pending.output.split()[:5] == [second, "pending", "assistant", "the", "dropped"]
