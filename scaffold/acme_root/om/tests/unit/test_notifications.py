@@ -3,7 +3,8 @@ tells exactly the people who can clear it, on the platform's own list and
 on every account of theirs an integration holds, with the link to the one
 action that clears it, and only to a route the API's document holds. One
 test per park: a call held for approval, a budget a person must raise, a
-call far above its session's norm, and any other park on a person."""
+call far above its session's norm, a question the agent asks its person,
+and any other park on a person."""
 
 import json
 import re
@@ -14,8 +15,9 @@ from uuid import UUID
 
 import pytest
 from contracts.intake import Wired, wired
-from contracts.loops import reply, said, use
+from contracts.loops import call, reply, said, use
 
+from acme.om.agent_sessions.rules import QUESTION
 from acme.om.agents.types.request import Start
 from acme.om.agents.types.run import LoopRun, RunEnd
 from acme.om.base import new_id, utcnow
@@ -171,6 +173,63 @@ async def test_a_park_on_a_person_tells_its_requester_alone(platform: Wired) -> 
         ("deadline", f"/v1/agent-sessions/{started.id}/controls")
     }
     assert routed(notified)
+
+
+async def asked(platform: Wired, requester: TenantContext, question: str) -> LoopRun:
+    """A session of `requester`'s whose agent asked them `question`, and
+    then answers once it is answered."""
+    started = await platform.managers.agents.start_session(
+        requester, Start(id=new_id(), kind="asking", title="the records")
+    )
+    platform.anthropic.add(
+        reply(said("Which week?"), call("ask_person", question=question)),
+        reply(said("The report for week 12 is fixed.")),
+    )
+    run = await run_after(platform, requester, started.id, "Fix the weekly report.")
+    assert run.end is RunEnd.PARKED and run.park == QUESTION
+    return run
+
+
+async def test_a_question_tells_its_requester_to_answer_with_a_message_once(
+    platform: Wired,
+) -> None:
+    found = await people(platform)
+    requester = found[Role.MEMBER]
+    await platform.intake.link_account(platform.owner, "chat", "U-MEMBER", requester.user_id)
+    question = 'Which week\'s report is "wrong"?\n\nThe last one,' + " or the one before," * 200
+    run = await asked(platform, requester, question)
+
+    notified = await platform.notifications.notify_park(platform.service, run)
+
+    assert told(notified) == {(requester.user_id, PORTAL), (requester.user_id, "chat")}
+    link = f"/v1/agent-sessions/{run.session_id}/messages"
+    assert {(n.action, n.link) for n in notified} == {("answer_question", link)}
+    assert routed(notified)
+    # The question, on one line, escaped, and cut short.
+    (text,) = {n.text for n in notified}
+    assert 'asks you: "Which week\'s report is \\"wrong\\"? The last one, or the one' in text
+    assert '…" Answer with a message' in text and len(text) < 400
+    (posted,) = platform.chat.posted
+    assert posted.text == f"{text} {link}"
+    # The answer is a message, and clears the park: nothing is told again.
+    resumed = await run_after(platform, requester, run.session_id, "Week 12.")
+    assert resumed.end is RunEnd.ENDED
+    assert await platform.notifications.notify_park(platform.service, resumed) == ()
+    mine = await platform.notifications.get_notifications(requester, 10)
+    assert set(mine) == set(notified) and len(platform.chat.posted) == 1
+
+
+async def test_a_question_that_holds_a_link_is_not_quoted(platform: Wired) -> None:
+    found = await people(platform)
+    run = await asked(
+        platform, found[Role.MEMBER], "Is ![the chart](https://example.test/c.png?d=1) right?"
+    )
+
+    (notified,) = await platform.notifications.notify_park(platform.service, run)
+
+    assert notified.text == (
+        "the records asks you a question: read it in the session, and answer with a message."
+    )
 
 
 async def test_a_call_far_above_its_norm_tells_who_approves_it_never_its_requester(
