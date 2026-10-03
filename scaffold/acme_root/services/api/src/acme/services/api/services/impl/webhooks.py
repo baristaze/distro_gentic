@@ -3,7 +3,7 @@ from collections.abc import Callable
 from datetime import datetime
 
 from acme.infra.queues import Queues, QueuesInterface
-from acme.integrations.events import IntegrationInterface
+from acme.integrations.events import Acknowledged, IntegrationInterface
 from acme.integrations.exceptions import DeliveryRefused
 from acme.integrations.identity import IdentityProviderInterface
 from acme.om.base import utcnow
@@ -55,6 +55,9 @@ class WebhooksServiceImpl(WebhooksServiceInterface):
     ) -> DeliveryReceivedView:
         integration = self._integrations(name)
         provided = integration.verify_delivery(delivery.payload, delivery.headers, self._clock())
+        if isinstance(provided, Acknowledged):
+            # The system's check of this address: answered, and nothing queued.
+            return DeliveryReceivedView(received=True, challenge=provided.challenge)
         # The installation is the system's own id: the tenant is the one that
         # connected it, never one the delivery names.
         tenant = await self._intake.tenant_of(rctx, name, provided.installation)

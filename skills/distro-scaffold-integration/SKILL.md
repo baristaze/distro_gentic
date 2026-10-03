@@ -56,7 +56,7 @@ and of its twin `IntegrationTwinImpl` in `events/twin.py`.
 |------|-------|
 | `integrations/src/<name>/integrations/events/<system>_wire.py` | the system's signature check and the reading of its delivery into a `ProvidedEvent`, which the client and its twin both call |
 | `integrations/src/<name>/integrations/events/<system>.py` | `<System>Impl(IntegrationInterface)`, the real client, over `httpx` |
-| `integrations/src/<name>/integrations/events/<system>_twin.py` | `<System>TwinImpl(IntegrationInterface)`, the system's twin, with `deliver` and `grant(installation, at)` for tests and the local stack, each in the system's wire shape |
+| `integrations/src/<name>/integrations/events/<system>_twin.py` | `<System>TwinImpl(IntegrationInterface)`, the system's twin, with `deliver` and `grant(installation, at)` for tests and the local stack, each in the system's wire shape; none when the system serves its twin through the generic `IntegrationTwinImpl` of `events/twin.py`, as the forge and the chat do |
 | `integrations/tests/fixtures/<system>/` | recorded deliveries, each with its headers, and recorded answers to a post |
 | `integrations/tests/test_<system>.py` | the cases of step 6 |
 
@@ -65,7 +65,7 @@ and of its twin `IntegrationTwinImpl` in `events/twin.py`.
 | File | Change |
 |------|--------|
 | `integrations/src/<name>/integrations/settings.py` | `<integration>_integration: Literal["<system>", "twin", "none"] \| None = None`, and the system's settings: its base URL, its timeout, the platform's own account on it, and its secrets as `SecretStr \| None` in `_key_off_is_none` |
-| `integrations/src/<name>/integrations/impl/configured.py` | in `integrations_for`, `<integration>` served by `<System>Impl` or `<System>TwinImpl` as its setting says, else as `integrations` says; in `refuse_unsafe`, the system's twin refused when deployed |
+| `integrations/src/<name>/integrations/impl/configured.py` | in `integrations_for`, `<integration>` served by `<System>Impl` or its twin, `<System>TwinImpl` or the generic `IntegrationTwinImpl` as the forge and the chat are, as its setting says, else as `integrations` says; in `refuse_unsafe`, the system's twin refused when deployed |
 | `.env.example` | `ACME_<INTEGRATION>_INTEGRATION` and the system's settings, commented, with `ACME_` read as the tree's prefix; a secret's line names the variable, never a value |
 | `integrations/tests/test_configured.py` | the cases of step 6 for the setting |
 | `deployment/terraform/modules/secrets/main.tf`, `outputs.tf`, `deployment/terraform/modules/environment/main.tf`, `deployment/terraform/modules/README.md` | each secret of the system, shape `workos_api_key`: a secret, `off` until set, injected as `ACME_<SYSTEM>_<KEY>` into the `secrets` of `module "api"` and `module "maintenance"` in `modules/environment/main.tf`, the processes that build the integrations in the cloud; each of them gets every secret the client's presence check reads (step 5), or it serves the integration absent |
@@ -100,14 +100,20 @@ and of its twin `IntegrationTwinImpl` in `events/twin.py`.
    a stale one when the system signs a timestamp. A delivery that fails
    the check, names no delivery id, or is no event the router reads,
    raises `DeliveryRefused`, naming what failed and never the secret.
-   Its key is `delivery_key(<integration>, <the system's delivery id>)`,
+   One that checks out and is the system's check of its address (a
+   challenge answered before any event) answers `Acknowledged`, with the
+   `challenge` the system sent, if any: the ingress answers it and
+   queues nothing. A delivery's key is
+   `delivery_key(<integration>, <the system's delivery id>)`,
    so a retried delivery is one event. The body is data: no field of it
    decides who the author is beyond what the system signed, and none
    decides what served it. `verify_installation(grant, now)`, which is
    async, confirms the grant by the system's scheme for it: its signature
    over the grant, checked the same way, or a call to the system when the
-   grant is a code or an unsigned id. It never trusts an id alone. It
-   answers the installation the system names; a grant that fails is
+   grant is a code or an unsigned id. It never trusts an id alone, and
+   an installation counts only when the system's own record names the
+   person connecting it as its installer. It answers the installation
+   the system names; a grant that fails is
    `DeliveryRefused`, and a system it cannot ask is
    `ProviderUnavailable`. The installation is the system's word, never
    what the person typed.
@@ -129,8 +135,15 @@ and of its twin `IntegrationTwinImpl` in `events/twin.py`.
    `posted`. The
    configured root refuses it outside `local` and `test`, as it refuses
    every twin.
-5. `post(address, text, mark)` reaches a person or the session's work:
-   `address` is their account on the system, the `external_id` of their
+5. `post(address, text, mark, installation=...)` reaches a person or the
+   session's work. `installation_of(target)` answers the installation
+   that holds a repository or a pull request, the system's own answer
+   for it, and `ProviderRefused` when none holds it. A forge's `post`,
+   `push`, and `open_pull_request` write only through the
+   `installation` their caller names, once it finds the session's tenant
+   connected that one. A chat ignores it, and a chat whose credential
+   reaches one workspace refuses a grant from another. `address` is
+   their account on the system, the `external_id` of their
    account link, as the notifications manager passes it
    (`om/src/<name>/om/notifications/impl/manager.py`), or a pull request
    or a ticket, as the `comment` tool passes it
@@ -172,7 +185,8 @@ and of its twin `IntegrationTwinImpl` in `events/twin.py`.
    - a grant names its installation, over a recorded grant and the
      system's recorded confirmation for the client and over the twin's
      `grant(installation, at)` for the twin; a forged, a stale, or an
-     unconfirmed one is `DeliveryRefused`;
+     unconfirmed one is `DeliveryRefused`, and so is one the system's
+     record names another person as the installer of;
    - a post answers a `PostedMessage` with the integration's provenance
      and the mark it was given, and the twin records it; a post the
      system refuses with its key is `ProviderUnavailable`;

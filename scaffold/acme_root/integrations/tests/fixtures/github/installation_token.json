@@ -1,0 +1,6 @@
+{
+  "token": "v1.0f3d9c2e7b1a4c6d8e5f2a9b7c1d3e4f5a6b7c8d",
+  "expires_at": "2026-10-03T13:00:00Z",
+  "permissions": {"contents": "write", "pull_requests": "write", "issues": "write"},
+  "repository_selection": "selected"
+}

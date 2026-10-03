@@ -17,6 +17,7 @@ from contracts.loops import ASSISTANT, reply, said, use
 from contracts.project_storage import in_project, make_project
 from pydantic import ValidationError
 
+from acme.integrations.events.twin import twin_installation
 from acme.integrations.model_providers.calls import ModelCall
 from acme.om.agents.types.request import Start
 from acme.om.agents.types.run import RunEnd
@@ -42,7 +43,7 @@ from acme.om.evidence.rules import policy_key
 from acme.om.evidence.types.provenance import Provenance
 from acme.om.exceptions import BudgetRefused, NotAuthorized, NotFound, ValidationFailed
 from acme.om.intake.rules import described
-from acme.om.intake.tools import COMMENT
+from acme.om.intake.tools import COMMENT, FORGE
 from acme.om.intake.types.event import (
     Arrival,
     Author,
@@ -51,7 +52,7 @@ from acme.om.intake.types.event import (
     FeedbackEvent,
     WorkNames,
 )
-from acme.om.intake.types.link import HandleKind
+from acme.om.intake.types.link import HandleKind, Installation
 from acme.om.models.types.fill import MAIN, Eligibility
 from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.steps.rules import message_step
@@ -562,6 +563,18 @@ async def test_a_comment_through_a_sessions_tool_carries_its_cause_and_hop_and_f
     before the post answers does, or by the forge's own id for it. Either
     way its cause is the session that commented, and the automation it
     feeds fires once, a hop on, however often the event is delivered."""
+    # The tenant connected the forge's installation that holds the
+    # repository the comment lands on, its owner's.
+    await platform.storage.get_intake_storage().create_installation(
+        platform.owner.org_id,
+        Installation(
+            id=new_id(),
+            created_at=utcnow(),
+            integration=FORGE,
+            installation=twin_installation("acme"),
+            created_by=creator.user_id,
+        ),
+    )
     other = await platform.start()
     await platform.intake.bind_work(platform.owner, other, HandleKind.PULL_REQUEST, OTHER_PR)
     everything = Trigger(kind=TriggerKind.EVENT)

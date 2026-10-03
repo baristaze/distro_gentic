@@ -38,6 +38,7 @@ from acme.om.placement.impl.manager import PlacementOptions
 from acme.om.platform_agents.impl.manager import PlatformAgentsOptions
 from acme.om.playbooks.impl.manager import PlaybooksOptions
 from acme.om.playbooks.root import PlaybooksLayer
+from acme.om.product_kinds import PRODUCT_KINDS
 from acme.om.projects.impl.manager import ProjectsOptions
 from acme.om.relay.impl.manager import RelayOptions
 from acme.om.retention.impl.manager import RetentionOptions
@@ -103,7 +104,8 @@ def worker_managers(
     its batch from the settings. The worker is the one process that purges,
     so it is the one that sets them. Its budget gate is billing's money
     gate, the one whose holds its sweep settles; `ports` are the platform's
-    ports the product sets, None each for the platform's own. Outside
+    ports the product sets, None each for the platform's own, and their
+    `kinds` the product's, which `build` reads from `PRODUCT_KINDS`. Outside
     `local`, a quiet null for any of them, or a budget gate that is not the
     money gate, is refused at boot."""
     batch = settings.worker_purge_batch
@@ -259,7 +261,9 @@ class WorkerContainer:
             settings,
             storage,
             infra,
-            worker_managers(storage, infra, integrations, settings),
+            worker_managers(
+                storage, infra, integrations, settings, PlatformPorts(kinds=PRODUCT_KINDS)
+            ),
             integrations,
         )
 

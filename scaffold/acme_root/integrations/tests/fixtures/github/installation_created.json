@@ -1,0 +1,20 @@
+{
+  "id": 41001,
+  "guid": "4f0d9b3a-8f3b-11f1-8c2e-6a9d3f1b7e05",
+  "delivered_at": "2026-10-03T12:00:02Z",
+  "redelivery": false,
+  "status_code": 200,
+  "event": "installation",
+  "action": "created",
+  "installation_id": 71001,
+  "repository_id": null,
+  "request": {
+    "headers": {"X-GitHub-Event": "installation"},
+    "payload": {
+      "action": "created",
+      "installation": {"id": 71001, "account": {"login": "octo-org", "id": 7700}, "app_id": 9100},
+      "sender": {"login": "octocat", "id": 583231, "type": "User"}
+    }
+  },
+  "response": {"headers": {}, "payload": "{\"received\":true}"}
+}

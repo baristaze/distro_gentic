@@ -81,7 +81,7 @@ markers = [
     "integration: needs the local compose stack",
     "slow: takes more than a few seconds",
     "telemetry: needs the devx profile",
-    "live: calls a live model provider and spends; `make test-live` runs it by hand",
+    "live: reaches a live system, a model provider (which spends), a forge, or a chat; `make test-live` runs it by hand",
     "benchmark: judges an acceptance scenario and records the run; `make benchmark` runs it, never a gate",
 ]
 

@@ -16,7 +16,7 @@ from acme.integrations.root import IntegrationsInterface
 from acme.om.agents.types.kind import AgentKind
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, OperatorRole, RequestContext, Role
-from acme.om.root import PlatformPorts
+from acme.om.root import PlatformPorts, ProductKinds
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.tenancy.rules import totp_code, totp_step
@@ -69,8 +69,7 @@ def build_container(
         InfraLocalImpl(tmp_path),
         settings,
         integrations,
-        agent_kinds=agent_kinds,
-        ports=ports,
+        ports=ports or PlatformPorts(kinds=ProductKinds(agents=agent_kinds)),
     )
 
 
@@ -112,7 +111,7 @@ async def sign_in(client: httpx.AsyncClient, container: AppContainer) -> dict[st
     )
     # Written below the manager, so it announces nothing: a case that counts
     # the org's stream counts what it did itself.
-    project = first_project(ctx).model_copy(update={"id": UUID(PROJECT_ID)})
+    project = first_project(ctx, org.slug).model_copy(update={"id": UUID(PROJECT_ID)})
     await container.storage.get_project_storage().create_project(org.id, project, ())
     return await sign_in_as(client, OWNER["email"], org.id)
 

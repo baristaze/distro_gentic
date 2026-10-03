@@ -311,13 +311,24 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         version: str,
         source: str,
         protected: tuple[str, ...],
+        source_project: UUID,
     ) -> bytes:
         ctx.require(Permission.READ)
         binding = await self._projects.binding_of(ctx, project_id)
         if binding is None:
             raise Unavailable(f"project {project_id} binds no repository to validate")
         credential = await self._fetch_credential(ctx, project_id)
-        return await self._reader.tree(binding, version, source, protected, credential)
+        if source_project == project_id:
+            return await self._reader.tree(binding, version, source, protected, credential)
+        # A source of its own: a hidden suite's repository, which no
+        # workspace of the project checks out.
+        held = await self._projects.binding_of(ctx, source_project)
+        if held is None:
+            raise Unavailable(f"project {source_project} binds no repository to read a source from")
+        held_credential = await self._fetch_credential(ctx, source_project)
+        return await self._reader.tree(
+            binding, version, source, protected, credential, held, held_credential
+        )
 
     # Egress, and what acts outward.
 
@@ -518,11 +529,11 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         # The session's commits go out as a bundle the platform makes, and
         # source control pushes the one head to the session's branch alone.
         bundle = await self._git.outgoing(ctx, workspace, head, epoch=epoch)
-        await self._source_control.push(binding, f"refs/heads/{held.branch}", head, bundle)
+        await self._source_control.push(ctx, binding, f"refs/heads/{held.branch}", head, bundle)
         await self._git.landed(ctx, workspace, held.branch, head, epoch=epoch)
         if not held.branch_seen:
             await self._write(ctx, session_id, {"branch_seen": True})
-        return await self._source_control.open_pull_request(binding, held.branch, title, body)
+        return await self._source_control.open_pull_request(ctx, binding, held.branch, title, body)
 
     async def purge_session(self, org_id: UUID, session_id: UUID) -> bool:
         return await self._storage.purge_workspace(org_id, session_id)

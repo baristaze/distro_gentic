@@ -159,7 +159,7 @@ migrate: ## Make the database logins, then apply every role's migration chain to
 # that reads sources, each when its file is absent; `uv run acme-ops token
 # --env local --identity operator|provisioner` mints a fresh one into it,
 # since each lasts an hour.
-seed: ## Create two local orgs with an owner, a member, and an admin of both to sign in as, each with its account, project, and retention policy, the published matrix, and the two local operators; a no-op once they exist
+seed: ## Create two local orgs with an owner, a member, and an admin of both to sign in as, each with its account, project, retention policy, and the forge twin's installation of its repository, the published matrix, and the two local operators; a no-op once they exist
 	uv run --package acme-api acme-api bootstrap --if-absent \
 		--org "$(SEED_ORG)" --slug "$(SEED_SLUG)" --name "$(SEED_NAME)" \
 		--email "$(SEED_EMAIL)"
@@ -231,7 +231,9 @@ test-integration: ## Integration tests over the compose stack
 
 # A session's loop on a live model provider, once, by hand: it spends, within
 # a budget the case sets, so no gate runs it. Needs a migrated stack and
-# ANTHROPIC_API_KEY (or ACME_ANTHROPIC_API_KEY) in the shell.
+# ANTHROPIC_API_KEY (or ACME_ANTHROPIC_API_KEY) in the shell. The forge's
+# and the chat's clients against GitHub and Slack run with it, each skipped
+# without its settings.
 test-live: ## One loop end to end on a live model provider; spends, so run by hand
 	uv run pytest -q -s -m live
 

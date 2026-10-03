@@ -1,0 +1,18 @@
+{
+  "token": "Jhj5dZrVaK7ZwHHjRyZWjbDl",
+  "team_id": "T0TEAM001",
+  "api_app_id": "A0APP0001",
+  "event": {
+    "type": "message",
+    "channel": "C0CHAN001",
+    "channel_type": "channel",
+    "user": "U0PERSON2",
+    "text": "same here, it broke after the last release",
+    "ts": "1790000100.000200",
+    "thread_ts": "1790000050.000150",
+    "team": "T0TEAM001"
+  },
+  "type": "event_callback",
+  "event_id": "Ev0REPLY0001",
+  "event_time": 1790000100
+}

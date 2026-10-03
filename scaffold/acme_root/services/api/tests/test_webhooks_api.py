@@ -55,7 +55,7 @@ async def test_a_signed_delivery_is_queued_once_with_its_event(
     )
     answered = await client.post(ROUTE, content=body, headers={SIGNATURE_HEADER: signature})
     assert answered.status_code == 200, answered.text
-    assert answered.json() == {"received": True}
+    assert answered.json() == {"received": True, "challenge": None}
 
     [sent] = await queued(container)
     message = json.loads(sent.decode("utf-8"))
