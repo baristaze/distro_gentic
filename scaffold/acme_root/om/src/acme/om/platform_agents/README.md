@@ -13,15 +13,21 @@ workspace it works in, and which of its calls run without asking.
 
 - **The engineer** takes an objective to a validated, reviewable change.
   It works in a container of its own, from which nothing leaves: it reads
-  and writes files and runs commands. It opens its pull request on its
+  files, searches the code, changes a file one place at a time or writes
+  it whole, and runs commands. It searches and reads the
+  [knowledge](../knowledge/README.md) its session reaches, and suggests
+  an entry for a person to review. It opens its pull request on its
   own branch, which puts its committed head on the repository, asks for a
   validation of that head on a fresh executor, and submits its result
   through the
   [result gate](../evidence/README.md), citing the runs that validation
   wrote. A success counts only when the validation at its head passed.
 - **Analysis** reads what a run produced (its logs, telemetry, and
-  recordings) in a workspace of its own, changes nothing, and answers
-  with its findings.
+  recordings) in a workspace of its own, searches it and the knowledge
+  its session reaches, changes nothing, and answers with its findings.
+- **A kind's versions**: a session keeps the version of its kind it
+  started on, so the engineer and analysis before they searched and
+  edited by one place are still shipped beside them.
 - **The planner** turns findings into tasks. It reads where sessions
   stand, hands new engineering work to an engineer, and answers with its
   plan: each task and the session it goes to.
@@ -51,6 +57,22 @@ workspace it works in, and which of its calls run without asking.
 - **Apply a draft.** A person who manages the tenant writes the policy a
   draft holds, at the version the draft was drawn from. A policy changed
   since is refused, never written over.
+- **Edit a file.** The engineer's `edit_file` replaces one place: a
+  text that matches exactly one place in the file, or a range of its
+  lines. A match of more than one place is refused, so an edit never
+  lands where the model did not mean, and so is a file past the bound one
+  read takes, or one that is not text. A path the session's project
+  protects is refused at the call, as `write_file` refuses it.
+- **Search the code.** `search_code` runs the workspace's own search,
+  through the transport, wherever the workspace runs, never in the
+  platform's process. Its answer is bounded in matches, in each match's
+  width, and in the output it reads, and says whether more were left
+  out. Its path is one inside the workspace.
+- **Search and read knowledge.** `search_knowledge` answers the reviewed
+  entries the session reaches and the passages of the corpus that share
+  the most of a query's words; `read_knowledge` reads one whole by its
+  slug, a corpus document by its path. `suggest_knowledge` suggests an
+  entry for the session's project, which waits for a person's review.
 - **Open a pull request.** The engineer's `open_pull_request` takes a
   title and a body, and nothing else. The workspace's committed head goes
   to the session's own branch on its project's repository, with a push
