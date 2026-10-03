@@ -158,7 +158,7 @@ async def viewer_of(
     return await sign_in_as(client, "vic@example.test", org_id)
 
 
-async def test_a_member_lists_the_tenants_sessions_in_a_status_a_page_at_a_time(
+async def test_a_member_lists_the_tenants_sessions_newest_first_a_page_at_a_time(
     client: httpx.AsyncClient, owner: dict[str, str]
 ) -> None:
     started = [await start(client, owner, f"session {index}") for index in range(3)]
@@ -179,7 +179,8 @@ async def test_a_member_lists_the_tenants_sessions_in_a_status_a_page_at_a_time(
 
     assert first.status_code == 200, first.text
     paged = [s["id"] for s in first.json()["items"] + second.json()["items"]]
-    assert paged == sorted(s["id"] for s in started)
+    # Ids are time-ordered to the millisecond: the newest first is by id, descending.
+    assert paged == sorted((s["id"] for s in started), reverse=True)
     assert second.json()["next_cursor"] is None
     assert [s["id"] for s in pending.json()["items"]] == [woken]
     assert {s["id"] for s in idle.json()["items"]} == {started[0]["id"], started[2]["id"]}

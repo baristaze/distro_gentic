@@ -2,6 +2,8 @@ import { Fragment } from "react";
 import { createBrowserRouter, Navigate, Outlet, useLocation, type RouteObject } from "react-router-dom";
 import { HomePage } from "../features/home/HomePage";
 import { NewOrgPage } from "../features/new_org/NewOrgPage";
+import { SessionPage } from "../features/session/SessionPage";
+import { SessionsPage } from "../features/sessions/SessionsPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
 import { CallbackPage } from "../features/sign_in/CallbackPage";
 import { DevSignInPage } from "../features/sign_in/DevSignInPage";
@@ -52,6 +54,8 @@ export const routes: RouteObject[] = [
     errorElement: <RouteError />,
     children: [
       { path: "/", element: <HomePage /> },
+      { path: "/sessions", element: <SessionsPage /> },
+      { path: "/sessions/:sessionId", element: <SessionPage /> },
       { path: "/settings", element: <SettingsPage /> },
       { path: "/orgs/new", element: <NewOrgPage /> },
     ],
