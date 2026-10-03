@@ -36,8 +36,10 @@ the record that it is theirs is an entry in the tenant's event stream.
   that lasts minutes.
 - **A claimant appends.** A product's claimant appends to a stream of
   a kind its own kind writes, for the item it holds under a live lease
-  and its claim token, at most a bounded batch at a time. Any other item
-  or kind is not found, and nothing lands.
+  and its claim token, at most a bounded batch at a time, each entry
+  with the hash it crossed the wall with. Any other item or kind is not
+  found, an entry that does not match its hash is refused, and nothing
+  lands.
 - **Open an item's read.** A viewer who may read the item's tenant gets
   a handle to the item's streams of one kind, as a session's.
 - **Read live.** The handle reads the session's open streams, each from
@@ -117,7 +119,8 @@ current epoch, unless `stop`. ADR 2007 records the scoped read. An
 item's handle is `rules.signed`/`rules.verified_item` over an
 `ItemGrant`, under its own purpose prefix. `append_as` checks the kind's
 writer (`StreamKind.claimant`), the bounds `MAX_APPEND_ENTRIES` and
-`MAX_APPEND_BYTES`, then `hosts.held_as` and the lease, and appends
+`MAX_APPEND_BYTES`, each entry's `stream_part` crossing
+(`crossing.verified`), then `hosts.held_as` and the lease, and appends
 through `KindStreamsInterface` in the item's group. ADR 2030.
 -->
 

@@ -39,10 +39,23 @@ before it writes again (`409`). Any other item, and any other kind, is
 the same `404`, and nothing lands.
 
 **An append is bounded.** One append carries at most 64 entries and
-64 KiB of their bytes, refused before anything reads it. It spends the
-credential's budget of writes, as every call of a claimant's does
-(ADR 0059). Each stream is then held to its kind's bounds, its oldest
-entry going first, never its newest.
+64 KiB of their bytes, refused before anything reads it. An entry's
+number is at most 10^14 - 2: the shared cache spells an entry's id from
+its number, and past that it spells no id, so the entry would land
+nothing and say so to no one. It spends the credential's budget of
+writes, as every call of a claimant's does (ADR 0059). Each stream is
+then held to its kind's bounds, its oldest entry going first, never its
+newest.
+
+**What crosses is verified by hash.** An entry's bytes cross the
+tenant's wall, as a host's part does, so each entry carries the crossing
+its sender declared of them: a `stream_part`, its SHA-256, and its size
+(ADR 2014). The bytes are checked against it before anything reads
+them, and an append with one entry that does not match is refused
+whole, `422 crossing_refused`, before anything lands. The hash is the
+entry's own rather than the append's, so an entry's bounds are what the
+claimant sent: a hash over the joined bytes would not see a boundary
+moved.
 
 **The group is the item's.** A stream of a claimant's kind sits in the
 group of the item it was written for, keyed by the kind (ADR 2025).
@@ -69,5 +82,6 @@ tenant opens no handle.
   still hold an item until the sweep requeues it.
 - The live-read key signs both handles. A process without one refuses
   every read of either.
-- `distro-scaffold-work-kind` sets the claimant on a stream kind it adds,
-  and names the platform's routes instead of the product's.
+- `distro-scaffold-work-kind` sets the claimant on a stream kind it adds
+  that its claimant writes, and names the platform's routes instead of
+  the product's.

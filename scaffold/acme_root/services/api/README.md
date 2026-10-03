@@ -151,7 +151,9 @@ app, and `main.py` is the `acme-api` command: `serve`, `migrate`,
   claim was handed (a `Claim-Token` header on the read); any other item
   is `404`. While it holds the item, it appends to a stream of a kind its
   own kind writes, a bounded batch at a time, which a member of the
-  item's tenant reads by a handle, as a session's.
+  item's tenant reads by a handle, as a session's. Each entry carries
+  the hash it crossed the wall with, and an append with one that does
+  not match is `422 crossing_refused`.
   (`/v1/claimants/enrollments`, `/v1/claimants/me/credentials`,
   `/v1/claimants/me/claims`, `/v1/claimants/me/items/{item_id}`,
   `.../lease`, `.../report`, `.../streams/{kind}`,
