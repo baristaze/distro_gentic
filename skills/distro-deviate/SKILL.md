@@ -52,8 +52,8 @@ resolves it; any other prefix is a layer's beneath.
    section that states its rule, so when a lens cites several sections,
    the first one's tag decides. When the rule itself allows what the
    arguments describe, such as an `optional` section whose trigger has
-   not arrived (stations, in a platform that has none), there is
-   nothing to record: say so, quote the words that allow it, and stop.
+   not arrived, there is nothing to record: say so, quote the words
+   that allow it, and stop.
 2. The ADR goes in the repository's records folder, where a review
    opens it by the number cited beside the code:
    `scaffold/acme_root/docs/adr/` when the repository holds
