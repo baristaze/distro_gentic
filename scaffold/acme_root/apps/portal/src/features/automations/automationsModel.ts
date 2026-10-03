@@ -46,13 +46,25 @@ export function spanLine(seconds: number): string {
   return parts.join(" ") || "0 seconds";
 }
 
-function durationLine(duration: string | null): string {
+/** How often, in words: "every day", "every 2 hours". */
+export function everyLine(duration: string | null): string {
   const seconds = duration === null ? null : secondsOf(duration);
-  return seconds === null ? (duration ?? "") : spanLine(seconds);
+  if (seconds === null) return `every ${duration ?? ""}`.trim();
+  const span = spanLine(seconds);
+  return `every ${span.replace(/^1 /, "")}`;
+}
+
+/** Per a period, in words: "a day", "an hour", or "every 2 days". */
+export function perLine(duration: string): string {
+  const seconds = secondsOf(duration);
+  if (seconds === 3_600) return "an hour";
+  if (seconds === 86_400) return "a day";
+  if (seconds === 604_800) return "a week";
+  return everyLine(duration);
 }
 
 export function triggerLine(trigger: AutomationView["trigger"]): string {
-  if (trigger.kind === "schedule") return `every ${durationLine(trigger.every)}`;
+  if (trigger.kind === "schedule") return everyLine(trigger.every);
   const filters = [
     trigger.integrations.length ? `from ${trigger.integrations.join(", ")}` : "",
     trigger.arrivals.length ? `arriving as ${trigger.arrivals.join(", ")}` : "",
@@ -68,8 +80,8 @@ export function actionLine(action: AutomationView["action"], projects: readonly 
 }
 
 export function limitsLine(limits: AutomationView["limits"]): string {
-  const period = durationLine(limits.period);
-  return `${costLine(limits.cost_cap_micros)} a ${period} (${costLine(limits.run_cap_micros)} a run), ${limits.rate} firings a ${period}, ${limits.concurrency} at once${limits.queue ? `, a queue of ${limits.queue_depth}` : ""}`;
+  const period = perLine(limits.period);
+  return `${costLine(limits.cost_cap_micros)} ${period} (${costLine(limits.run_cap_micros)} a run), ${limits.rate} firings ${period}, ${limits.concurrency} at once${limits.queue ? `, a queue of ${limits.queue_depth}` : ""}`;
 }
 
 export interface AutomationRow {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AutomationView } from "@acme/client";
-import { automationRequest, automationRow, draftOf, EMPTY_DRAFT, principalRoles, secondsOf, spanLine, type AutomationDraft } from "./automationsModel";
+import { automationRequest, automationRow, draftOf, EMPTY_DRAFT, everyLine, limitsLine, principalRoles, secondsOf, spanLine, type AutomationDraft } from "./automationsModel";
 
 const SESSION = "0b8e5d2a-1c3f-4e6a-9b7d-2f4c6e8a0b1c";
 const draft = (fields: Partial<AutomationDraft>): AutomationDraft => ({
@@ -40,6 +40,9 @@ describe("durations", () => {
   it("says a span in words", () => {
     expect(spanLine(86_400)).toBe("1 day");
     expect(spanLine(9_000)).toBe("2 hours 30 minutes");
+    expect(everyLine("P1D")).toBe("every day");
+    expect(everyLine("PT7200S")).toBe("every 2 hours");
+    expect(limitsLine(saved.limits)).toBe("3.00 an hour (1.00 a run), 5 firings an hour, 2 at once, a queue of 7");
   });
 });
 

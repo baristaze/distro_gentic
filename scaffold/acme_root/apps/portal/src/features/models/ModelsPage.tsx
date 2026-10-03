@@ -113,7 +113,7 @@ export function ModelsPage() {
           {vm.roles === null ? (
             <Muted>Loading</Muted>
           ) : (
-            <DataTable label="Roles" columns={roleColumns} rows={vm.roles} rowKey={(row) => row.role} empty="The matrix offers no role yet." />
+            <DataTable label="Roles" columns={roleColumns} rows={vm.roles} rowKey={(row) => row.role} empty="No role offers the org a choice." />
           )}
         </div>
       </Card>

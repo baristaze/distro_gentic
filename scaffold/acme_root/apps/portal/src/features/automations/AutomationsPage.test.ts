@@ -56,7 +56,7 @@ describe("the automations list", () => {
   it("shows the org's own automations and none of another's", async () => {
     await mount(routes, "/automations");
     expect(container.querySelector("table[aria-label='Automations']")!.textContent).toContain("Ajax nightly");
-    expect(container.textContent).toContain("every 1 day");
+    expect(container.textContent).toContain("every day");
     expect(container.textContent).not.toContain("Beta nightly");
     expect(container.querySelector("[data-principal]")!.textContent).toBe("No role is granted to the principal yet.");
   });
