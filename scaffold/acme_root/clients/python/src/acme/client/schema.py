@@ -421,6 +421,25 @@ class EnrollmentTokenView(BaseModel):
     revoked_at: Annotated[AwareDatetime | None, Field(title='Revoked At')]
 
 
+class EntryBody(BaseModel):
+    """
+    One numbered entry of a stream: its bytes in base64.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    data: Annotated[str, Field(max_length=87384, title='Data')]
+    n: Annotated[int, Field(ge=0, title='N')]
+
+
+class EntryView(BaseModel):
+    """
+    One numbered entry of a stream: its bytes in base64.
+    """
+    data: Annotated[str, Field(title='Data')]
+    n: Annotated[int, Field(title='N')]
+
+
 class EventView(BaseModel):
     """
     One record of the tenant's append-only stream, paged by `after_seq`.
@@ -700,6 +719,30 @@ class IssuedTotpSecretView(BaseModel):
     authenticator app reads. A replay carries none.
     """
     otpauth_uri: Annotated[str | None, Field(title='Otpauth Uri')]
+
+
+class ItemReadView(BaseModel):
+    """
+    A handle to one item's streams of one kind until `expires_at`. Read
+    it at `GET /v1/live/items?handle=`; a viewer asks for a new one when it
+    ends.
+    """
+    expires_at: Annotated[AwareDatetime, Field(title='Expires At')]
+    handle: Annotated[str, Field(title='Handle')]
+    item_id: Annotated[UUID, Field(title='Item Id')]
+    kind: Annotated[str, Field(title='Kind')]
+
+
+class ItemStreamView(BaseModel):
+    """
+    One open stream of the item: the oldest entry still held, the
+    entries after the last one read, and whether entries never read were
+    let go.
+    """
+    dropped: Annotated[bool, Field(title='Dropped')]
+    entries: Annotated[list[EntryView], Field(title='Entries')]
+    first: Annotated[int, Field(title='First')]
+    stream: Annotated[UUID, Field(title='Stream')]
 
 
 class KnowledgeRequest(BaseModel):
@@ -1662,6 +1705,21 @@ class ClaimView(BaseModel):
     item: ClaimedWorkView | None
 
 
+class ClaimantAppendRequest(BaseModel):
+    """
+    What a claimant appends to one stream of its kind for the item it
+    holds, under its claim token: the stream it names, and its entries in
+    their order, an entry numbered at or below the stream's last landing
+    nothing. It is held to its bounds before anything reads it.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    claim_token: Annotated[UUID, Field(title='Claim Token')]
+    entries: Annotated[list[EntryBody], Field(max_length=64, min_length=1, title='Entries')]
+    stream: Annotated[UUID, Field(title='Stream')]
+
+
 class ClaimantReportRequest(BaseModel):
     """
     A claimant's answer for an item it holds: done, or failed with why,
@@ -1909,6 +1967,12 @@ class IssuedUploadView(BaseModel):
     expires_at: Annotated[AwareDatetime, Field(title='Expires At')]
     fields: Annotated[list[UploadFieldView], Field(title='Fields')]
     url: Annotated[str | None, Field(title='Url')]
+
+
+class ItemPageView(BaseModel):
+    item_id: Annotated[UUID, Field(title='Item Id')]
+    kind: Annotated[str, Field(title='Kind')]
+    streams: Annotated[list[ItemStreamView], Field(title='Streams')]
 
 
 class LastOwnerDetail(BaseModel):

@@ -817,6 +817,38 @@
         "title": "ClaimView",
         "type": "object"
       },
+      "ClaimantAppendRequest": {
+        "additionalProperties": false,
+        "description": "What a claimant appends to one stream of its kind for the item it\nholds, under its claim token: the stream it names, and its entries in\ntheir order, an entry numbered at or below the stream's last landing\nnothing. It is held to its bounds before anything reads it.",
+        "properties": {
+          "claim_token": {
+            "format": "uuid",
+            "title": "Claim Token",
+            "type": "string"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/EntryBody"
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "title": "Entries",
+            "type": "array"
+          },
+          "stream": {
+            "format": "uuid",
+            "title": "Stream",
+            "type": "string"
+          }
+        },
+        "required": [
+          "claim_token",
+          "stream",
+          "entries"
+        ],
+        "title": "ClaimantAppendRequest",
+        "type": "object"
+      },
       "ClaimantClaimView": {
         "description": "What a claim answers: the item, or none when nothing is ready.",
         "properties": {
@@ -1786,6 +1818,47 @@
           "created_by"
         ],
         "title": "EnrollmentTokenView",
+        "type": "object"
+      },
+      "EntryBody": {
+        "additionalProperties": false,
+        "description": "One numbered entry of a stream: its bytes in base64.",
+        "properties": {
+          "data": {
+            "maxLength": 87384,
+            "title": "Data",
+            "type": "string"
+          },
+          "n": {
+            "minimum": 0.0,
+            "title": "N",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "n",
+          "data"
+        ],
+        "title": "EntryBody",
+        "type": "object"
+      },
+      "EntryView": {
+        "description": "One numbered entry of a stream: its bytes in base64.",
+        "properties": {
+          "data": {
+            "title": "Data",
+            "type": "string"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "n",
+          "data"
+        ],
+        "title": "EntryView",
         "type": "object"
       },
       "ErrorBody": {
@@ -3067,6 +3140,97 @@
           "expires_at"
         ],
         "title": "IssuedUploadView",
+        "type": "object"
+      },
+      "ItemPageView": {
+        "properties": {
+          "item_id": {
+            "format": "uuid",
+            "title": "Item Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "streams": {
+            "items": {
+              "$ref": "#/components/schemas/ItemStreamView"
+            },
+            "title": "Streams",
+            "type": "array"
+          }
+        },
+        "required": [
+          "item_id",
+          "kind",
+          "streams"
+        ],
+        "title": "ItemPageView",
+        "type": "object"
+      },
+      "ItemReadView": {
+        "description": "A handle to one item's streams of one kind until `expires_at`. Read\nit at `GET /v1/live/items?handle=`; a viewer asks for a new one when it\nends.",
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "handle": {
+            "title": "Handle",
+            "type": "string"
+          },
+          "item_id": {
+            "format": "uuid",
+            "title": "Item Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item_id",
+          "kind",
+          "handle",
+          "expires_at"
+        ],
+        "title": "ItemReadView",
+        "type": "object"
+      },
+      "ItemStreamView": {
+        "description": "One open stream of the item: the oldest entry still held, the\nentries after the last one read, and whether entries never read were\nlet go.",
+        "properties": {
+          "dropped": {
+            "title": "Dropped",
+            "type": "boolean"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/EntryView"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "first": {
+            "title": "First",
+            "type": "integer"
+          },
+          "stream": {
+            "format": "uuid",
+            "title": "Stream",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stream",
+          "first",
+          "dropped",
+          "entries"
+        ],
+        "title": "ItemStreamView",
         "type": "object"
       },
       "KnowledgeRequest": {
@@ -12133,6 +12297,111 @@
         ]
       }
     },
+    "/v1/claimants/me/items/{item_id}/streams/{kind}": {
+      "post": {
+        "description": "Appends to a stream of a kind the claimant's own kind writes, for\nthe item it holds under the body's claim token. Any other item, and\nany other kind, is not found; each call spends the credential's\nbudget of writes.",
+        "operationId": "append_v1_claimants_me_items__item_id__streams__kind__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "pattern": "^[a-z][a-z0-9_]{0,31}$",
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimantAppendRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Append",
+        "tags": [
+          "claimants"
+        ]
+      }
+    },
     "/v1/claimants/{claimant_id}": {
       "delete": {
         "description": "Ends the claimant and its credentials at once; it is handed no more\nwork. An owner's or an admin's.",
@@ -15183,6 +15452,102 @@
           }
         },
         "summary": "Read Live",
+        "tags": [
+          "watch"
+        ]
+      }
+    },
+    "/v1/live/items": {
+      "get": {
+        "description": "The open streams the handle names, each after the last entry read\n(`after=<stream>:<last>`, once a stream). The handle is the authority:\none that does not verify as an item's, or has expired, reads nothing.",
+        "operationId": "read_item_live_v1_live_items_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "handle",
+            "required": true,
+            "schema": {
+              "maxLength": 1024,
+              "minLength": 1,
+              "title": "Handle",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemPageView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Item Live",
         "tags": [
           "watch"
         ]
@@ -18843,6 +19208,108 @@
         "summary": "List Users",
         "tags": [
           "tenancy"
+        ]
+      }
+    },
+    "/v1/work-items/{item_id}/streams/{kind}/live": {
+      "post": {
+        "description": "A handle to the item's open streams of a kind a product's claimant\nwrites, for a viewer who may read its tenant, that lasts minutes.",
+        "operationId": "open_item_live_v1_work_items__item_id__streams__kind__live_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "pattern": "^[a-z][a-z0-9_]{0,31}$",
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemReadView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Open Item Live",
+        "tags": [
+          "watch"
         ]
       }
     },
