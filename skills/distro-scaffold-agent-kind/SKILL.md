@@ -72,7 +72,35 @@ The shape of a kind is the four profiles in
    `om/src/<name>/om/matrix/root.py`, requires every role a shipped kind
    names. A kind in `SHIPPED` is in every process, so no container
    changes. A product's own kind, one no other product built on the
-   platform would ship, is the engine's: `agentic-scaffold-agent-kind`.
+   platform would ship, is the engine's: `agentic-scaffold-agent-kind`,
+   with its wiring changed in this base. From that skill a product
+   still writes the kind's versions, its tools, and its bounds (its
+   steps 2 to 4), `om/tests/unit/test_agent_kinds.py` with the catalog
+   cases of its step 5, read over `PRODUCT_KINDS.agents`, and the kind in
+   `om/src/<name>/om/agents/README.md`. It writes none of that skill's
+   wiring: no `om/src/<name>/om/agents/kinds.py` and no `AGENT_KINDS`,
+   no `agent_kinds=` in a container's call to `build_managers`, and
+   neither the API's nor the maintenance worker's container test that
+   reads that call. Its kinds, every version it still runs, its tools,
+   and the classes they declare go in `PRODUCT_KINDS`, in
+   `om/src/<name>/om/product_kinds.py` (`agents`, `tools`, `classes` of
+   `ProductKinds` in `om/src/<name>/om/root.py`), which every process's
+   entry point hands its root as `PlatformPorts.kinds`. Its container
+   test holds instead that the kind declared in `PRODUCT_KINDS.agents`
+   reaches each container's `build`, shape
+   `workers/session_runner/tests/test_product_parts.py`: the API's
+   container starts a session of it, the session runner runs it, and
+   the maintenance worker knows it.
+   `tools` takes the managers late, as a callable, and returns the
+   product's tools, each reading a manager when it is called, as
+   `with_shipped` builds the platform's. The shape to copy is the tool in
+   `om/tests/contracts/product.py`, `ReadTitleImpl`, which
+   `ledger_product`'s `tools` builds over the late-bound managers.
+   `tools` is handed the managers alone, and no integrations root
+   reaches `PRODUCT_KINDS.tools`. So a tool that calls an outside system
+   takes its client from the integrations the product builds at its
+   root: the closure that is `tools` holds the client and passes it to
+   the tool, as `ledger_product`'s `tools` passes `read`.
 2. A kind is versioned, and a session keeps the version it started on.
    A change to a kind that the last commit holds
    (`git show HEAD:om/src/<name>/om/platform_agents/kinds.py`) is the

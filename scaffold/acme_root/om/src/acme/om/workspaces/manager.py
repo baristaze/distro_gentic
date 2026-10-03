@@ -100,14 +100,17 @@ class WorkspacesManagerInterface(ABC):
         version: str,
         source: str,
         protected: tuple[str, ...],
+        source_project: UUID,
     ) -> bytes:
         """Platform-internal: the tree a validation of the project runs on,
         as a tar, read from its bound repository outside every workspace
         with its fetch credential (`RepositoryReaderInterface.tree`): the
         commit `version`, with every path a `protected` pattern matches
-        taken from the commit `source`. No credential and no history goes
-        with it. `Unavailable` when the project binds no repository, or a
-        commit cannot be read."""
+        taken from the commit `source` of the repository `source_project`
+        binds, read with that project's fetch credential: the project's
+        own, or a hidden suite's of the same tenant. No credential and no
+        history goes with it. `Unavailable` when either project binds no
+        repository, or a commit cannot be read."""
         ...
 
     # Egress, and what acts outward.

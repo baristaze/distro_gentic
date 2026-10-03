@@ -51,7 +51,7 @@ from acme.om.evidence.types.record import RunOutcome, RunPurpose
 from acme.om.evidence.types.validation import Delivery
 from acme.om.placement.types.work import WorkspaceOperation, WorkspacePayload
 from acme.om.relay.rules import READ_BYTES
-from acme.om.root import PlatformPorts
+from acme.om.root import PlatformPorts, ProductKinds
 from acme.om.storage.root import StorageInterface
 from acme.om.work.types.work_item import WorkKind, WorkStatus
 from acme.om.workspaces.impl.reader import RepositoryReaderGitImpl
@@ -194,8 +194,11 @@ def runner(storage: StorageInterface, api: Stack, where: Path) -> Runner:
         storage,
         api.container.infra,
         IntegrationsOverImpl(IdentityProviderAbsentImpl(), scripted_model_providers()),
-        agent_kinds=(KIND,),
-        ports=PlatformPorts(workspace_projects=OnDisk(repository), work_product=work),
+        ports=PlatformPorts(
+            workspace_projects=OnDisk(repository),
+            work_product=work,
+            kinds=ProductKinds(agents=(KIND,)),
+        ),
     )
     return Runner(container=container, repository=repository, work=work)
 

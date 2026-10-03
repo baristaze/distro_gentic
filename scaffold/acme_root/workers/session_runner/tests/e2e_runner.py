@@ -30,7 +30,7 @@ def main() -> int:
 
     from acme.om.agent_sessions.types.agent_session import AgentSession
     from acme.om.context import TenantContext
-    from acme.om.root import PlatformPorts
+    from acme.om.root import PlatformPorts, ProductKinds
     from acme.om.storage.impl.postgres import StoragePostgresImpl
     from acme.om.workspaces.impl.projects import WorkspaceProjectsBoundImpl
     from acme.om.workspaces.projects import WorkspaceProjectsInterface
@@ -63,13 +63,14 @@ def main() -> int:
         settings.role_urls(), settings.role_pools(), system_urls=settings.system_role_urls()
     )
     ports = PlatformPorts(
+        kinds=ProductKinds(agents=E2E_KINDS),
         executor=ScriptedExecutor(capabilities=frozenset()),
         workspace_projects=RepositoriesOnDisk(
             WorkspaceProjectsBoundImpl(rows.get_project_storage()),
             Path(os.environ["E2E_REPOSITORIES"]),
         ),
     )
-    return run(agent_kinds=E2E_KINDS, ports=ports)
+    return run(ports=ports)
 
 
 if __name__ == "__main__":

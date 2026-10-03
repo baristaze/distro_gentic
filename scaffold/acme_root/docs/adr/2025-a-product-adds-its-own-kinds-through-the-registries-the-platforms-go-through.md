@@ -36,9 +36,14 @@ Five registries, each refusing a name registered twice:
 - An **executor**, by the validation environment it runs
   (`evidence/executor.py`). The fresh executor runs `platform`.
 
-A product hands its kinds to every root in one place,
-`PlatformPorts.kinds`, so each process builds the same registry. A name
-the platform holds is refused at boot.
+A product hands its kinds to every root in one place, `PRODUCT_KINDS`
+in `product_kinds.py`, with its agent kinds, its tools, and the classes
+they declare. Every process's entry point passes it as
+`PlatformPorts.kinds`, so each process builds the same registry. A
+work, claimant, secret owner, or stream kind whose name the platform
+holds is refused at boot, and so is an executor for the platform's own
+environment. An agent kind is refused only at a version the catalog
+already holds, so a later version of a shipped kind is accepted.
 
 **The gateway's rule holds for every claimant.** Placement claims for a
 claimant only the kinds that name its kind back, from the lanes its

@@ -16,6 +16,7 @@ from acme.integrations.root import IntegrationsInterface
 from acme.om.agents.types.kind import AgentKind
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, OperatorRole, RequestContext, Role
+from acme.om.root import PlatformPorts, ProductKinds
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.tenancy.rules import totp_code, totp_step
@@ -66,7 +67,7 @@ def build_container(
         InfraLocalImpl(tmp_path),
         settings,
         integrations,
-        agent_kinds=agent_kinds,
+        ports=PlatformPorts(kinds=ProductKinds(agents=agent_kinds)),
     )
 
 

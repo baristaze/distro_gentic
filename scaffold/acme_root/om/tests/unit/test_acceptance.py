@@ -11,6 +11,7 @@ from contracts.acceptance import (
     COMPLETE,
     EXPORT,
     HEAD,
+    SUITE_PROJECT,
     SUITES,
     TREE,
     DefectExecutor,
@@ -118,22 +119,26 @@ async def test_the_workspace_holds_no_file_of_the_hidden_suite_and_the_verdict_s
     assert [(found.check, found.version, found.passing) for found in verdict.hidden] == [
         (COMPLETE.name, HEAD, True)
     ]
-    # The executor fetched the suite from its own source, for the verdict's
-    # run alone; every run the session asked for came from the base.
-    sources = [(request.purpose, request.source) for request in run.evidence.executor.requests]
-    assert sources == [
-        (RunPurpose.BASELINE, BASE),
-        (RunPurpose.VALIDATION, BASE),
-        (RunPurpose.VALIDATION, EXPORT.hidden.source),
+    # The executor fetched the suite from its own source, its paths
+    # protected, for the verdict's run alone; every run the session asked
+    # for came from the project's base.
+    sources = [
+        (request.purpose, request.source_project, request.source, request.protected)
+        for request in run.evidence.executor.requests
     ]
-    # A scenario that keeps its hidden suite at the base is refused.
-    in_tree = EXPORT.model_copy(
-        update={"hidden": EXPORT.hidden.model_copy(update={"source": BASE})}
-    )
-    with pytest.raises(ValidationFailed, match="the agent's workspace checks out"):
-        await run.harness.judge(
-            run.ctx, in_tree, run.session, Result(claim=Claim.SUCCEEDED), surfaces()
-        )
+    assert sources == [
+        (RunPurpose.BASELINE, None, BASE, ("tests/**",)),
+        (RunPurpose.VALIDATION, None, BASE, ("tests/**",)),
+        (RunPurpose.VALIDATION, SUITE_PROJECT, EXPORT.hidden.source, EXPORT.hidden.paths),
+    ]
+    # A scenario that keeps its hidden suite at the base, or in the
+    # project's own repository, is refused.
+    for kept in ({"source": BASE}, {"project": EXPORT.project}):
+        in_tree = EXPORT.model_copy(update={"hidden": EXPORT.hidden.model_copy(update=kept)})
+        with pytest.raises(ValidationFailed, match="workspace checks out"):
+            await run.harness.judge(
+                run.ctx, in_tree, run.session, Result(claim=Claim.SUCCEEDED), surfaces()
+            )
 
 
 # The other links.
