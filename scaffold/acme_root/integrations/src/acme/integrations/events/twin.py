@@ -156,13 +156,14 @@ class IntegrationTwinImpl(IntegrationInterface):
         except ValidationError:
             raise DeliveryRefused("the body is not an event") from None
 
-    async def post(self, address: str, text: str) -> PostedMessage:
+    async def post(self, address: str, text: str, mark: str | None = None) -> PostedMessage:
         message = PostedMessage(
             id=self._id("message"),
             address=address,
             text=text,
             provenance=TWIN,
             posted_at=datetime.now(UTC),
+            mark=mark,
         )
         self.posted.append(message)
         return message

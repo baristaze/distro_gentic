@@ -66,7 +66,8 @@ class ProvidedEvent(BaseModel):
 
 class PostedMessage(BaseModel):
     """A message the platform posted to an address of the integration, as the
-    integration recorded it, with what served it."""
+    integration recorded it, with what served it, and the mark it carries
+    when the platform named the act."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -75,6 +76,7 @@ class PostedMessage(BaseModel):
     text: str
     provenance: Provenance
     posted_at: datetime
+    mark: str | None = None
 
 
 class IntegrationInterface(ABC):
@@ -110,9 +112,12 @@ class IntegrationInterface(ABC):
         ...
 
     @abstractmethod
-    async def post(self, address: str, text: str) -> PostedMessage:
+    async def post(self, address: str, text: str, mark: str | None = None) -> PostedMessage:
         """Posts `text` to an address of the integration, such as a person's
-        chat account; `ProviderUnavailable` when it cannot."""
+        chat account or a pull request; `ProviderUnavailable` when it cannot.
+        `mark` is the platform's name for the act: the system carries it on
+        what it makes, so every delivery of or after it names it among its
+        refs."""
         ...
 
     @abstractmethod
@@ -150,7 +155,7 @@ class IntegrationAbsentImpl(IntegrationInterface):
     def verify_installation(self, grant: str, now: datetime) -> str:
         raise ProviderUnavailable(f"no {self._name} integration is configured")
 
-    async def post(self, address: str, text: str) -> PostedMessage:
+    async def post(self, address: str, text: str, mark: str | None = None) -> PostedMessage:
         raise ProviderUnavailable(f"no {self._name} integration is configured")
 
     def describe(self) -> str:
