@@ -162,6 +162,9 @@ class HostsServiceImpl(HostsServiceInterface):
     async def get_hosts(self, ctx: TenantContext, pool_id: UUID) -> list[HostView]:
         return [status_view(status) for status in await self._hosts.get_hosts(ctx, pool_id)]
 
+    async def get_claimants(self, ctx: TenantContext, pool_id: UUID) -> list[ClaimantView]:
+        return [claimant_view(found) for found in await self._hosts.get_claimants(ctx, pool_id)]
+
     async def issue_enrollment_token(
         self, ctx: TenantContext, pool_id: UUID, body: IssueEnrollmentTokenRequest | None
     ) -> IssuedEnrollmentTokenView:

@@ -12615,6 +12615,102 @@
         ]
       }
     },
+    "/v1/host-pools/{pool_id}/claimants": {
+      "get": {
+        "description": "The pool's claimants of every kind, a host among them, revoked ones\nincluded, each with its kind and when it was last seen: the id its\nowner revokes one by.",
+        "operationId": "get_claimants_v1_host_pools__pool_id__claimants_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pool_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Pool Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ClaimantView"
+                  },
+                  "title": "Response Get Claimants V1 Host Pools  Pool Id  Claimants Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Claimants",
+        "tags": [
+          "claimants"
+        ]
+      }
+    },
     "/v1/host-pools/{pool_id}/enrollment-tokens": {
       "post": {
         "description": "A token that enrolls claimants of a kind into the pool, in the clear\nonce: hosts, unless the body names a product's kind. A retry mints\nanother, so it takes no Idempotency-Key; the one never read expires on\nits own.",

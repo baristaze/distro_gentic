@@ -53,6 +53,15 @@ class HostsManagerInterface(ABC):
         ...
 
     @abstractmethod
+    async def get_claimants(
+        self, ctx: TenantContext, pool_id: UUID
+    ) -> tuple[EnrolledClaimant, ...]:
+        """The pool's claimants of every kind, a host among them, revoked
+        ones included, each with when it was last seen: what its owner
+        revokes one by. NotFound when the tenant holds no such pool."""
+        ...
+
+    @abstractmethod
     async def issue_enrollment_token(
         self, ctx: TenantContext, pool_id: UUID, kind: str = HOST
     ) -> IssuedEnrollmentToken:

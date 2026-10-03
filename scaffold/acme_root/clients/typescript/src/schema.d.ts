@@ -1087,6 +1087,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/host-pools/{pool_id}/claimants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Claimants
+         * @description The pool's claimants of every kind, a host among them, revoked ones
+         *     included, each with its kind and when it was last seen: the id its
+         *     owner revokes one by.
+         */
+        get: operations["get_claimants_v1_host_pools__pool_id__claimants_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/host-pools/{pool_id}/enrollment-tokens": {
         parameters: {
             query?: never;
@@ -7428,6 +7450,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PoolView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_claimants_v1_host_pools__pool_id__claimants_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                pool_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClaimantView"][];
                 };
             };
             /** @description Validation Error */

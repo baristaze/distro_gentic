@@ -130,6 +130,19 @@ class HostsStoragePostgresImpl(PgStorageBase, HostsStorageInterface):
             rows = (await session.execute(stmt)).scalars().all()
             return [to_model(row, Host) for row in rows]
 
+    async def read_claimants(
+        self, org_id: UUID, pool_id: UUID, limit: int
+    ) -> list[EnrolledClaimant]:
+        stmt = (
+            select(Hosts)
+            .where(Hosts.org_id == org_id, Hosts.pool_id == pool_id)
+            .order_by(Hosts.id)
+            .limit(limit)
+        )
+        async with self._session_for(stmt, org_id=org_id) as session:
+            rows = (await session.execute(stmt)).scalars().all()
+            return [to_model(row, EnrolledClaimant) for row in rows]
+
     async def count_hosts(self, seen_since: datetime, floor: int) -> dict[tuple[bool, bool], int]:
         seen = Hosts.last_seen_at > seen_since
         at_floor = Hosts.exec_version >= floor

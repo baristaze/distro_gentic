@@ -13,9 +13,10 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 from api_support import build_container, seed_request
+from tenant_support import person, tenant
 
 from acme.om.base import Platform, new_id, utcnow
-from acme.om.context import Permission, TenantContext
+from acme.om.context import Permission, Role, TenantContext
 from acme.om.placement.kinds import ClaimantKindSpec
 from acme.om.placement.types.claimant import Claimant
 from acme.om.root import PlatformPorts, ProductKinds
@@ -232,3 +233,45 @@ async def test_a_claimants_credential_crosses_no_kind_pool_or_tenant_and_a_revok
     assert (revoked.json()["kind"], revoked.json()["revoked_at"] is not None) == (BATCH, True)
     after = await client.post("/v1/claimants/me/claims", headers=bearer(node["token"]))
     assert after.status_code == 401, after.text
+
+
+async def test_an_owner_lists_a_pools_claimants_and_revokes_one_by_the_id_the_list_gives(
+    client: httpx.AsyncClient, owner: dict[str, str], container: AppContainer
+) -> None:
+    pool_id = await a_pool(client, owner)
+    node = await a_node(client, await a_token(client, owner, pool_id), name="node-7")
+    host = await client.post(
+        "/v1/hosts/enrollments",
+        headers=bearer(await a_token(client, owner, pool_id, kind=None)),
+        json={"name": "host-1", "advertisement": PROBED, "exec_version": 1},
+    )
+    assert host.status_code == 200, host.text
+
+    listed = await client.get(f"/v1/host-pools/{pool_id}/claimants", headers=owner)
+    assert listed.status_code == 200, listed.text
+    kinds = {found["kind"]: found for found in listed.json()}
+    assert set(kinds) == {BATCH, "host"}, listed.text
+    assert kinds["host"]["id"] == host.json()["host_id"]
+    ours = kinds[BATCH]
+    assert (ours["name"], ours["pool_id"], ours["revoked_at"]) == ("node-7", pool_id, None)
+    assert ours["last_seen_at"] is not None
+
+    # A member of another tenant reads nothing of the pool.
+    beta = await tenant(client, container, "beta")
+    theirs = await a_pool(client, beta.owner)
+    for outsider in (beta.owner, await person(client, container, beta.org_id, Role.MEMBER)):
+        crossed = await client.get(f"/v1/host-pools/{pool_id}/claimants", headers=outsider)
+        assert crossed.status_code == 404, crossed.text
+        own = await client.get(f"/v1/host-pools/{theirs}/claimants", headers=outsider)
+        assert own.status_code == 200 and own.json() == [], own.text
+
+    # The id the list gives revokes it, and the list shows it revoked.
+    revoked = await client.delete(f"/v1/claimants/{ours['id']}", headers=owner)
+    assert revoked.status_code == 200, revoked.text
+    assert revoked.json()["id"] == node["claimant_id"]
+    refused = await client.post("/v1/claimants/me/claims", headers=bearer(node["token"]))
+    assert refused.status_code == 401, refused.text
+    after = await client.get(f"/v1/host-pools/{pool_id}/claimants", headers=owner)
+    shown = {found["id"]: found for found in after.json()}
+    assert shown[ours["id"]]["revoked_at"] is not None
+    assert shown[kinds["host"]["id"]]["revoked_at"] is None

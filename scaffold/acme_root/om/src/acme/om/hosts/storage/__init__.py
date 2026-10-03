@@ -89,6 +89,15 @@ class HostsStorageInterface(ABC):
         ...
 
     @abstractmethod
+    async def read_claimants(
+        self, org_id: UUID, pool_id: UUID, limit: int
+    ) -> list[EnrolledClaimant]:
+        """The pool's claimants of every kind in id order, a host's row
+        among them, as their claimant's fields alone, revoked ones
+        included, at most `limit`."""
+        ...
+
+    @abstractmethod
     async def count_hosts(self, seen_since: datetime, floor: int) -> dict[tuple[bool, bool], int]:
         """Cross-tenant, for the platform's gauge of hosts, in the system
         scope: the hosts not revoked, of the host kind alone, by whether they called since

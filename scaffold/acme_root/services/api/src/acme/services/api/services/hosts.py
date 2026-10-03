@@ -50,6 +50,11 @@ class HostsServiceInterface(ABC):
     async def get_hosts(self, ctx: TenantContext, pool_id: UUID) -> list[HostView]: ...
 
     @abstractmethod
+    async def get_claimants(self, ctx: TenantContext, pool_id: UUID) -> list[ClaimantView]:
+        """The pool's claimants of every kind, a host among them."""
+        ...
+
+    @abstractmethod
     async def issue_enrollment_token(
         self, ctx: TenantContext, pool_id: UUID, body: IssueEnrollmentTokenRequest | None
     ) -> IssuedEnrollmentTokenView:

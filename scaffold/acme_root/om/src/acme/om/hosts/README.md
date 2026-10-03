@@ -49,6 +49,9 @@ enrolls and calls the same way, as a kind of its own
   pool's, read off its identity. A product's claimant claims with nothing
   in its call, and reads, renews, and reports the item it holds under its
   claim token, each through placement and read off its identity.
+- **List.** A member reads a pool's hosts, each with whether it is online,
+  and the pool's claimants of every kind, revoked ones among them, each
+  with its kind and when it was last seen.
 - **Revoke.** An owner or an admin ends a token, or a claimant and every
   credential it holds, at once.
 - **Place a session.** A principal pins it to a pool, or moves it back to

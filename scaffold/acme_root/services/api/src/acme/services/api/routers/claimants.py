@@ -1,5 +1,5 @@
-"""Routes of a product's claimant, the way a host's are. A tenant's: revoke
-one. A claimant's own: enroll once with an enrollment token of its kind,
+"""Routes of a product's claimant, the way a host's are. A tenant's: list a
+pool's, and revoke one. A claimant's own: enroll once with an enrollment token of its kind,
 then rotate its credential, claim, and read, renew, and report the item
 it holds, with that credential alone. Each function is one call into the
 hosts service."""
@@ -23,6 +23,14 @@ from acme.services.api.types.claimants import (
 )
 
 router = APIRouter(tags=["claimants"])
+
+
+@router.get("/host-pools/{pool_id}/claimants", response_model=list[ClaimantView])
+async def get_claimants(ctx: Ctx, hosts: HostsService, pool_id: UUID) -> list[ClaimantView]:
+    """The pool's claimants of every kind, a host among them, revoked ones
+    included, each with its kind and when it was last seen: the id its
+    owner revokes one by."""
+    return await hosts.get_claimants(ctx, pool_id)
 
 
 @router.delete("/claimants/{claimant_id}", response_model=ClaimantView)

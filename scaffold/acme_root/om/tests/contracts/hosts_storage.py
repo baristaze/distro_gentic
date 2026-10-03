@@ -39,6 +39,7 @@ CROSS_TENANT_CASES: frozenset[str] = frozenset(
         "read_host",
         "read_claimant",
         "read_hosts",
+        "read_claimants",
         "rotate_credential",
         "mark_seen",
         "revoke_claimant",
@@ -487,6 +488,27 @@ class HostsStorageContract:
         await storage.enroll(org, claimant, make_credential(claimant.id), ())
         assert await storage.read_claimant(new_id(), claimant.id) is None
         assert await storage.read_claimant(org, claimant.id) == claimant
+
+    async def test_read_claimants_answers_the_pools_every_kind_and_no_other_tenants(
+        self, storage: HostsStorageInterface
+    ) -> None:
+        """A pool's claimants are its hosts and its product's claimants
+        alike, revoked ones included, each as a claimant's read returns it.
+        Another tenant, or another pool, reads none of them."""
+        org, pool_id = new_id(), new_id()
+        host = make_host(pool_id)
+        await storage.enroll(org, host, make_credential(host.id), ())
+        claimant = make_claimant(pool_id)
+        await storage.enroll(org, claimant, make_credential(claimant.id), ())
+        elsewhere = make_claimant(new_id())
+        await storage.enroll(org, elsewhere, make_credential(elsewhere.id), ())
+        at = utcnow()
+        revoked = await storage.revoke_claimant(org, claimant.id, at, new_id(), ())
+        assert revoked is not None
+        expected = sorted([claimant_of(host), revoked], key=lambda found: found.id)
+        assert await storage.read_claimants(org, pool_id, 10) == expected
+        assert await storage.read_claimants(org, pool_id, 1) == expected[:1]
+        assert await storage.read_claimants(new_id(), pool_id, 10) == []
 
     # Placements.
 

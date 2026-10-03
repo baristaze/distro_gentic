@@ -80,7 +80,7 @@ class HostsOptions(Platform):
     # How long a host holds what it claimed before the sweep takes it back.
     claim_lease: timedelta = timedelta(seconds=60)
     max_pools: int = 200
-    max_hosts: int = 1000  # the most hosts of one pool read at once
+    max_hosts: int = 1000  # the most hosts, or claimants, of one pool read at once
     purge_batch: int = 1000
 
 
@@ -180,6 +180,15 @@ class HostsManagerImpl(HostsManagerInterface):
         return tuple(
             HostStatus(host=host, online=online(host, now, window))
             for host in await self._storage.read_hosts(ctx.org_id, pool_id, self._options.max_hosts)
+        )
+
+    async def get_claimants(
+        self, ctx: TenantContext, pool_id: UUID
+    ) -> tuple[EnrolledClaimant, ...]:
+        ctx.require(Permission.READ)
+        await self._pool(ctx, pool_id)
+        return tuple(
+            await self._storage.read_claimants(ctx.org_id, pool_id, self._options.max_hosts)
         )
 
     async def issue_enrollment_token(

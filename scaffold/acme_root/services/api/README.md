@@ -128,11 +128,11 @@ app, and `main.py` is the `acme-api` command: `serve`, `migrate`,
 - **Hosts.** An owner or an admin makes a host pool, under an
   Idempotency-Key, and issues a token that enrolls hosts into it, or a
   product's claimant kind the body names, shown once; lists a pool's
-  hosts with whether each is online; and revokes a token, a host, or a
-  product's claimant. A principal reads and sets where a
+  hosts with whether each is online, and its claimants of every kind;
+  and revokes a token, a host, or a product's claimant. A principal reads and sets where a
   session runs: the cloud, or one of the org's pools; a pinned session
   with no host online reads `waiting`. (`/v1/host-pools`,
-  `/v1/host-pools/{pool_id}/hosts`, `.../enrollment-tokens`,
+  `/v1/host-pools/{pool_id}/hosts`, `.../claimants`, `.../enrollment-tokens`,
   `/v1/host-enrollment-tokens/{token_id}`, `/v1/hosts/{host_id}`,
   `/v1/claimants/{claimant_id}`, `/v1/agent-sessions/{session_id}/placement`)
 - **A host's own calls.** A workspace host enrolls once, with an

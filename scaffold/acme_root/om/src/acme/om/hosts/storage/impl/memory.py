@@ -107,6 +107,14 @@ class HostsStorageMemoryImpl(MemoryStorageBase, HostsStorageInterface):
         ]
         return hosts[:limit]
 
+    async def read_claimants(
+        self, org_id: UUID, pool_id: UUID, limit: int
+    ) -> list[EnrolledClaimant]:
+        claimants = [
+            claimant_of(row) for row in self._rows(self._hosts, org_id) if row.pool_id == pool_id
+        ]
+        return claimants[:limit]
+
     async def count_hosts(self, seen_since: datetime, floor: int) -> dict[tuple[bool, bool], int]:
         found: dict[tuple[bool, bool], int] = {}
         for _, host in self._rows_across_tenants(self._hosts):
