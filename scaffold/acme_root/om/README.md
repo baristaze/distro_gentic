@@ -174,9 +174,8 @@ success only on its runs.
 ## Where work runs
 
 Each kind of work a session makes runs where what it needs is: its loop
-on the platform's runners, a command on the machine that holds its
-workspace, work on a station beside the station. A **lane** is where an
-item waits for that place.
+on the platform's runners, and a command on the machine that holds its
+workspace. A **lane** is where an item waits for that place.
 
 An org's **fair share** says which lane its loops wait in, its plan's or
 one of its own, and how many of them run at once. The platform's
@@ -198,15 +197,6 @@ A call the agent may not repeat runs once, whatever crashes. The host
 holds one **control stream** open to the platform, which stops a command
 at once.
 
-A **station** is a scarce, located thing work needs, in a **lab** that
-one **station daemon** serves inside an org's wall, and in a **pool** of
-stations of its kind. A session that needs one joins a **line** and waits
-in it, parked. A free station goes to the first in line that waits, as a
-**lease** with a **fencing token** that grows with every grant, and the
-session sends **jobs** under it. The daemon fences every job by its
-token and holds the station's limits, which are its owner's and never
-the platform's.
-
 ## The agents the platform ships
 
 The platform ships four kinds of agent. The **engineer** takes an
@@ -218,7 +208,7 @@ run their part of the platform: it explains the product from its
 documentation and cites it, reads where a session stands, drafts the
 tool policy for a person to apply, and hands engineering work to an
 engineer. It acts on a person's own permissions, and it has no
-workspace, no repository, no shell, and no station.
+workspace, no repository, and no shell.
 
 Nothing chooses an agent for a message: a person chooses by choosing
 the session they type in.
@@ -318,9 +308,6 @@ arrive twice, so the second copy gets the first one's answer.
   items it holds.
 - A validation session names its org, and its station work is a work
   item that names the session.
-- A lab, a pool, a station, a daemon's credentials, a line entry, a
-  lease, and a job name their org. A daemon is handed only its own lab's
-  work, and renews only the lease of a job it claimed.
 - A session's workspace names its org and its session, one each, and an
   egress allowlist its org and its project, one each.
 - The matrix and what its operators record of a model are the
@@ -356,7 +343,6 @@ arrive twice, so the second copy gets the first one's answer.
 - [Knowledge](src/acme/om/knowledge/README.md)
 - [Notifications](src/acme/om/notifications/README.md)
 - [The platform's agents](src/acme/om/platform_agents/README.md)
-- [Stations](src/acme/om/stations/README.md)
 - [Workspaces](src/acme/om/workspaces/README.md)
 - [Events](src/acme/om/events/README.md)
 - [Outbox rows](src/acme/om/outbox/README.md)
