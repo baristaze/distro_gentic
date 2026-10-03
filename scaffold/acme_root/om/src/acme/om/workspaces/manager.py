@@ -116,8 +116,8 @@ class WorkspacesManagerInterface(ABC):
     ) -> EgressDecision:
         """The egress proxy's answer to one connection of the session's
         workspace, by the egress it pinned (`rules.egress_decision`): a
-        metadata endpoint, the host itself, the platform's internal network,
-        and a station's never; then none, open, or the allowlist's
+        metadata endpoint, the host itself, and the platform's internal
+        network never; then none, open, or the allowlist's
         destinations and methods. A session never pinned reaches nothing."""
         ...
 

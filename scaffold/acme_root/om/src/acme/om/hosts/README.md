@@ -52,8 +52,8 @@ of](../../../../README.md).
   writes names the person who issued its token.
 - **Its identity is its credential's.** A claim takes the host, its
   tenant, and its pool from the credential, never from the call.
-- **A stale host is handed nothing.** `exec` and `station` are public
-  wire types with a version and a floor (`rules.WIRE_FLOOR`). A host
+- **A stale host is handed nothing.** `exec` is a public wire type with
+  a version and a floor (`rules.WIRE_FLOOR`). A host
   below the floor is refused at its claim and its enrollment, and does
   not count as online.
 - **A pinned session waits, and says so.** Its placement reads `waiting`

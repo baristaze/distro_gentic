@@ -15,7 +15,6 @@ members = [
     "acme-om",
     "acme-ops",
     "acme-session-runner",
-    "acme-station-daemon",
     "acme-workspace",
 ]
 
@@ -238,21 +237,6 @@ requires-dist = [
     { name = "acme-maintenance", editable = "workers/maintenance" },
     { name = "acme-om", editable = "om" },
     { name = "pydantic-settings", specifier = ">=2.15" },
-]
-
-[[package]]
-name = "acme-station-daemon"
-version = "0.1.0"
-source = { editable = "apps/station_daemon" }
-dependencies = [
-    { name = "acme-client" },
-    { name = "typer" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "acme-client", editable = "clients/python" },
-    { name = "typer", specifier = ">=0.15" },
 ]
 
 [[package]]

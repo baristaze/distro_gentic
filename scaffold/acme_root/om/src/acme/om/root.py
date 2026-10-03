@@ -109,9 +109,6 @@ from acme.om.retention.impl.manager import RetentionManagerImpl, RetentionOption
 from acme.om.retention.impl.sessions import AgentSessionsRetainedImpl
 from acme.om.retention.keys import TenantKeysInterface
 from acme.om.retention.projects import SessionProjectInterface
-from acme.om.stations import StationsManagerInterface
-from acme.om.stations.impl.manager import StationsManagerImpl, StationsOptions
-from acme.om.stations.impl.sessions import AgentSessionsInLineImpl
 from acme.om.steps import StepsManagerInterface
 from acme.om.steps.impl.manager import StepsManagerImpl, StepsOptions
 from acme.om.steps.storage import StepStorageInterface
@@ -193,7 +190,6 @@ class Managers:
     platform_agents: PlatformAgentsManagerInterface
     projects: ProjectsManagerInterface
     benchmarks: BenchmarksManagerInterface
-    stations: StationsManagerInterface
 
 
 @dataclass(frozen=True)
@@ -371,7 +367,6 @@ def build_managers(
     platform_agents_options: PlatformAgentsOptions | None = None,
     platform_agents: PlatformAgents | None = None,
     intake: Callable[[], IntakeManagerInterface] | None = None,
-    stations_options: StationsOptions | None = None,
     environment: str = LOCAL,
     tenant_keys: TenantKeysInterface | None = None,
     session_projects: SessionProjectInterface | None = None,
@@ -457,9 +452,6 @@ def build_managers(
     tenant's wall, whose workspace is then the one a host of its pool
     prepared and holds. None takes infra's transport as it is, and makes
     every workspace on this machine.
-    `stations_options` is the lives of a daemon's credentials, the margin a
-    lease that ran out waits before its station is granted again, and how
-    long a renewal holds a station; None keeps the defaults.
 
     `platform_agents` ships the platform's agents, with the corpus its
     assistant answers from: their kinds join `agent_kinds` and their tools
@@ -623,9 +615,7 @@ def build_managers(
         workspace_reader
         or RepositoryReaderGitImpl(
             walled=workspace_rules.NEVER_REACHED
-            + workspace_rules.networks(
-                (*workspaces_options.internal_networks, *workspaces_options.station_networks)
-            ),
+            + workspace_rules.networks(workspaces_options.internal_networks),
             on_disk=environment == LOCAL,
         ),
         workspaces_options,
@@ -677,15 +667,8 @@ def build_managers(
     # pinned once its project row stands, before its snapshot. Every other
     # namespace reaches the sessions through the decorators, so no such
     # session stands outside its origin's project, or unpinned.
-    in_project = AgentSessionsInProjectImpl(
+    agent_sessions = AgentSessionsInProjectImpl(
         AgentSessionsPinnedImpl(retained, workspaces), storage.get_project_storage()
-    )
-    # A session that parks on a station's line is offered the stations of
-    # every line it stands in, so one that joined while its loop ran is
-    # granted a free station once it waits. The stations are built below
-    # on this manager, so the edge is bound at call time.
-    agent_sessions = AgentSessionsInLineImpl(
-        in_project, lambda ctx, session_id: managers.stations.offer_parked(ctx, session_id)
     )
     # The gate reads the budgets of a call's scopes and holds on the ledger.
     budgets = BudgetsManagerImpl(
@@ -969,20 +952,5 @@ def build_managers(
         platform_agents=platform,
         projects=projects,
         benchmarks=BenchmarksManagerImpl(storage.get_benchmark_storage()),
-        # The line a session waits in for a station, the lease a grant gives,
-        # and a lab daemon's calls: its claims through placement, its
-        # renewals, and its runs' records through evidence; a validation
-        # session's run finishes it.
-        stations=StationsManagerImpl(
-            storage.get_stations_storage(),
-            placement,
-            agent_sessions,
-            evidence,
-            platform,
-            work,
-            tenancy,
-            outbox,
-            stations_options or StationsOptions(),
-        ),
     )
     return managers

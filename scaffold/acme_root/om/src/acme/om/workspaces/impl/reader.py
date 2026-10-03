@@ -14,8 +14,8 @@ and holds no credential.
 The platform reads only where a workspace may reach. The repository is
 read over http or https, at a host whose every address lies outside the
 networks the platform walls off: a metadata endpoint, its own host, its
-internal network, the stations'. Git is held to the addresses checked,
-and follows no redirect. In `local`, the developer's own machine, a
+internal network. Git is held to the addresses checked, and follows no
+redirect. In `local`, the developer's own machine, a
 repository on disk is read too.
 
 A private repository is read with its project's fetch credential. It

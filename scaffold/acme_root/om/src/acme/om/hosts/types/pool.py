@@ -10,7 +10,7 @@ from acme.om.base import Identifiable, Trackable
 PoolName = Annotated[str, StringConstraints(min_length=1, max_length=64)]
 
 Region = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9-]{0,31}$")]
-"""A region's name, short and plain: `eu-west`, `lab-istanbul`."""
+"""A region's name, short and plain: `eu-west`, `office-istanbul`."""
 
 Label = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9-]{0,62}$")]
 
