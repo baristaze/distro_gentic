@@ -216,19 +216,37 @@ class Managers:
     benchmarks: BenchmarksManagerInterface
 
 
+ProductTools = Callable[[Callable[[], Managers]], tuple[ToolInterface, ...]]
+"""A product's tools, built over the managers as the root answers them once
+it has built them: a tool keeps the callable and reads a manager through it
+when it is called, as the platform's own tools do."""
+
+
+def no_tools(managers: Callable[[], Managers]) -> tuple[ToolInterface, ...]:
+    """A product with no tools of its own."""
+    return ()
+
+
 @dataclass(frozen=True)
 class ProductKinds:
-    """What a product adds to the platform's kinds: its work kinds, each with
-    its payload, its permission, its lane, and the claimant kind that takes
-    it through the gateway; its claimant kinds; its secret owner kinds
-    (`TrustLayer`); its stream kinds, each with its bounds
-    (`watch.root.build_stream`); and its executors, by the validation
-    environment each runs. Each registers beside the platform's own, which
-    go through the same registries, and a name the platform holds is
-    refused, so a product adds kinds and never changes one of the
-    platform's. A product's work kind names its claimant kind, since no
-    worker of the platform's runs it."""
+    """What a product adds to the platform's kinds: its agent kinds, every
+    version it still runs; its tools, and the authorization classes they
+    declare beside the platform's; its work kinds, each with its payload,
+    its permission, its lane, and the claimant kind that takes it through
+    the gateway; its claimant kinds; its secret owner kinds (`TrustLayer`);
+    its stream kinds, each with its bounds (`watch.root.build_stream`); and
+    its executors, by the validation environment each runs. Its agent kinds
+    join the platform's catalog, which refuses a version declared twice, and
+    its tools the platform's, where a registry refuses two of one name. Every
+    other kind registers beside the platform's own, which go through the
+    same registries, and a name the platform holds is refused, so a product
+    adds kinds and never changes one of the platform's. A product's work
+    kind names its claimant kind, since no worker of the platform's runs
+    it."""
 
+    agents: tuple[AgentKind, ...] = ()
+    tools: ProductTools = no_tools
+    classes: tuple[str, ...] = ()
     work: tuple[WorkKindSpec, ...] = ()
     claimants: tuple[ClaimantKindSpec, ...] = ()
     secret_owners: tuple[SecretOwnerInterface, ...] = ()
@@ -250,7 +268,9 @@ class PlatformPorts:
     projects' rows for a session's project, which its workspace binds and
     its retention narrows by. Outside `local`, a root refuses a quiet null
     for any of them. `kinds` is what the product adds to the platform's
-    kinds, so every root reads the one registry: none adds nothing."""
+    kinds, so every root reads the one registry: none adds nothing. Each
+    process's entry point hands its root `PRODUCT_KINDS`
+    (`acme.om.product_kinds`), where a product declares them once."""
 
     budget_gate: BudgetGateInterface | None = None
     result_gate: ResultGateInterface | None = None
@@ -517,10 +537,13 @@ def build_managers(
     sees each call the engine runs. None takes the tools manager as it is.
 
     `product_kinds` is what a product adds to the platform's kinds
-    (`PlatformPorts.kinds`): its work kinds and claimant kinds, which the
-    work queue and placement read beside the platform's, and its executors,
-    which run a check that names their environment. A name the platform
-    holds is refused at boot. None adds nothing.
+    (`PlatformPorts.kinds`): its agent kinds, tools, and classes, which
+    join `agent_kinds`, `tool_catalog`, and `domain_classes`, each tool
+    reading the managers built here at call time; its work kinds and
+    claimant kinds, which the work queue and placement read beside the
+    platform's; and its executors, which run a check that names their
+    environment. A name the platform holds is refused at boot. None adds
+    nothing.
 
     `placement_options` is the fair share of a tenant no operator gave one,
     and the delay a loop over its share waits; None keeps the defaults.
@@ -579,6 +602,13 @@ def build_managers(
     never from a network no workspace reaches, and from disk in `local`
     alone. `workspaces_options` names those networks, and the sweep's
     batch."""
+    # The kinds every manager reads through: the platform's own, and the
+    # product's beside them. A product's tools read the managers built
+    # below, as the platform's own do, so each edge is bound at call time.
+    product = product_kinds or ProductKinds()
+    agent_kinds = (*agent_kinds, *product.agents)
+    tool_catalog = (*tool_catalog, *product.tools(lambda: managers))
+    domain_classes = (*domain_classes, *product.classes)
     if platform_agents is not None:
         # Their tools read the managers built below, so each edge is bound
         # at call time.
@@ -621,9 +651,6 @@ def build_managers(
     events = EventsManagerImpl(
         storage.get_event_storage(), tenancy, events_options or EventsOptions()
     )
-    # The kinds every manager reads through: the platform's own, and the
-    # product's beside them.
-    product = product_kinds or ProductKinds()
     work_kinds = platform_work_kinds().extended(product.work)
     claimant_kinds = ClaimantKinds(
         (*platform_claimant_kinds(), *product.claimants), reserved=PLATFORM_PREFIXES

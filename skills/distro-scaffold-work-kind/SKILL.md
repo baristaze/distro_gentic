@@ -47,11 +47,7 @@ It never goes in `ProductKinds`, which refuses a kind with no claimant.
 
 | File | Holds |
 |------|-------|
-| `om/src/<name>/om/product_kinds.py` (the first kind) | the product's kinds: each kind's payload, its lane, its `WorkKindSpec`, each claimant kind's `ClaimantKindSpec`, each `StreamKind`, and `PRODUCT_KINDS`, the one `ProductKinds` every root reads |
 | `om/tests/unit/test_<kind>_kind.py` | the cases of step 6, `<kind>` the kind's name in lower case |
-
-From the second kind on, `product_kinds.py` exists: the kind is added
-to it, and that is no collision.
 
 ## Changed
 
@@ -63,15 +59,14 @@ in `om/src/<name>/om/placement/kinds.py`, `StreamKind` in
 `om/src/<name>/om/watch/kinds.py`, and `ProductKinds` and
 `PlatformPorts` in `om/src/<name>/om/root.py`.
 
-The first kind only:
-
 | File | Change |
 |------|--------|
-| `services/api/src/<name>/services/api/container.py` | `AppContainer.build` passes `ports=PlatformPorts(kinds=PRODUCT_KINDS)` to `over` |
-| `workers/maintenance/src/<name>/workers/maintenance/container.py` | `WorkerContainer.build` passes `PlatformPorts(kinds=PRODUCT_KINDS)` to `worker_managers` |
-| `workers/session_runner/src/<name>/workers/session_runner/entry.py` | `run(ports=PlatformPorts(kinds=PRODUCT_KINDS))`, both imported inside `main` after the trust store is installed |
+| `om/src/<name>/om/product_kinds.py` | the kind's payload, its lane, and its `WorkKindSpec`; its claimant kind's `ClaimantKindSpec`, unless the product registered it already; with `--stream`, its `StreamKind`; each in `PRODUCT_KINDS`, the one `ProductKinds` the product declares |
 
-When a root already passes ports of the product's, `kinds=` joins them.
+Every process's entry point hands its root `PRODUCT_KINDS`: `build` of
+the API's, the session runner's, and the maintenance worker's
+container. So no container changes. An entry point of the product's that
+sets ports of its own sets `kinds=PRODUCT_KINDS` among them.
 
 ## Procedure
 

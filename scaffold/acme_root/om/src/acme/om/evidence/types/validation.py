@@ -40,8 +40,11 @@ class ExecutionRequest(Platform):
     their checks, fixtures, and runner taken from `source`, the protected
     source, and under an environment the executor sets. `protected` holds
     the patterns of those paths: every path one matches comes from
-    `source`, whatever the tree at `version` holds there. Nothing of the
-    agent's workspace or environment is in it. Each check runs at most its
+    `source`, whatever the tree at `version` holds there. `source` is a
+    commit of the repository `project` binds, or of the one
+    `source_project` binds when the request names it: a hidden suite's
+    source of its own. Nothing of the agent's workspace or environment is
+    in it. Each check runs at most its
     count of trials; one with a rate stops where `rates.stops_at` says its
     rule stops, at the confidence given here, and nowhere else."""
 
@@ -54,6 +57,7 @@ class ExecutionRequest(Platform):
     trials: tuple[int, ...] = Field(min_length=1)
     rates: tuple[RateRule | None, ...] = ()
     protected: tuple[PATTERN, ...] = ()
+    source_project: str | None = Field(default=None, pattern=PROJECT)
 
     @model_validator(mode="after")
     def _a_count_a_check(self) -> Self:
