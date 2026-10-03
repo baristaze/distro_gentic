@@ -1,21 +1,28 @@
+import base64
 from collections.abc import Sequence
 from uuid import UUID
 
 from acme.om.context import RequestContext, TenantContext
 from acme.om.exceptions import ValidationFailed
+from acme.om.hosts.types.host import ClaimantIdentity
 from acme.om.steps.types.stream import StreamPart, TextPart, ThinkingPart, ToolInputPart
 from acme.om.watch import WatchManagerInterface
 from acme.om.watch.types.control import HandCommand
-from acme.om.watch.types.live import MAX_SEEN, Seen
+from acme.om.watch.types.live import MAX_SEEN, ItemSeen, Seen
 from acme.services.api.services.impl.agent_sessions import session_view
 from acme.services.api.services.watch import WatchServiceInterface
 from acme.services.api.types.agent_sessions import AgentSessionView
+from acme.services.api.types.claimants import ClaimantAppendRequest
 from acme.services.api.types.watch import (
     CommandPartView,
     CommandProgressView,
     CommandRequest,
+    EntryView,
     GiveBackRequest,
     HandRunView,
+    ItemPageView,
+    ItemReadView,
+    ItemStreamView,
     LivePageView,
     LivePartView,
     LiveReadView,
@@ -35,6 +42,20 @@ def seen_of(after: Sequence[str]) -> tuple[Seen, ...]:
             seen.append(Seen(step_id=UUID(step), n=int(n)))
         except ValueError:
             raise ValidationFailed(f"{mark[:80]!r} is not <step_id>:<last>") from None
+    return tuple(seen)
+
+
+def item_seen_of(after: Sequence[str]) -> tuple[ItemSeen, ...]:
+    """Each `<stream>:<last>` a reader names, read; anything else is refused."""
+    if len(after) > MAX_SEEN:
+        raise ValidationFailed(f"a read names at most {MAX_SEEN} streams")
+    seen: list[ItemSeen] = []
+    for mark in after:
+        stream, _, n = mark.partition(":")
+        try:
+            seen.append(ItemSeen(stream=UUID(stream), n=int(n)))
+        except ValueError:
+            raise ValidationFailed(f"{mark[:80]!r} is not <stream>:<last>") from None
     return tuple(seen)
 
 
@@ -71,6 +92,43 @@ class WatchServiceImpl(WatchServiceInterface):
                     first=stream.first,
                     dropped=stream.dropped,
                     parts=[part_view(part) for part in stream.parts],
+                )
+                for stream in page.streams
+            ],
+        )
+
+    async def append_as(
+        self,
+        rctx: RequestContext,
+        claimant: ClaimantIdentity,
+        item_id: UUID,
+        kind: str,
+        body: ClaimantAppendRequest,
+    ) -> None:
+        await self._watch.append_as(rctx, claimant, item_id, kind, body.appended())
+
+    async def open_item_live(self, ctx: TenantContext, item_id: UUID, kind: str) -> ItemReadView:
+        live = await self._watch.open_item_live(ctx, item_id, kind)
+        return ItemReadView(
+            item_id=live.item_id, kind=live.kind, handle=live.handle, expires_at=live.expires_at
+        )
+
+    async def read_item_live(
+        self, rctx: RequestContext, handle: str, after: Sequence[str]
+    ) -> ItemPageView:
+        page = await self._watch.read_item_live(rctx, handle, item_seen_of(after))
+        return ItemPageView(
+            item_id=page.item_id,
+            kind=page.kind,
+            streams=[
+                ItemStreamView(
+                    stream=stream.stream,
+                    first=stream.first,
+                    dropped=stream.dropped,
+                    entries=[
+                        EntryView(n=entry.n, data=base64.b64encode(entry.data).decode())
+                        for entry in stream.entries
+                    ],
                 )
                 for stream in page.streams
             ],

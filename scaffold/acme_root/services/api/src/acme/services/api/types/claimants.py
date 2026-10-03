@@ -1,8 +1,11 @@
 """The wire types of a product's claimant: its enrollment, its credential,
-the work it claims and answers for, and the claimant as its owner reads
-it. A claimant's requests carry no kind, no pool, no tenant, and no lane:
-those are its credential's."""
+the work it claims and answers for, what it appends to its kind's stream
+for the item it holds, and the claimant as its owner reads it. A
+claimant's requests carry no kind, no pool, no tenant, and no lane: those
+are its credential's."""
 
+import base64
+import binascii
 from datetime import datetime
 from typing import Any, Self
 from uuid import UUID
@@ -10,9 +13,21 @@ from uuid import UUID
 from pydantic import Field, model_validator
 
 from acme.om.base import EMPTY_UUID
+from acme.om.exceptions import ValidationFailed
 from acme.om.placement.types.claimant import ClaimantReport, ReportOutcome
+from acme.om.watch.kinds import MAX_APPEND_BYTES, MAX_APPEND_ENTRIES
+from acme.om.watch.types.live import Appended, Entry
 from acme.om.work.types.work_item import WorkStatus
 from acme.services.api.types.common import RequestBody, View
+
+MAX_APPEND_CHARS = 4 * -(-MAX_APPEND_BYTES // 3)
+"""The base64 of an append's most bytes: no entry's data runs longer."""
+
+
+def _size(data: str) -> int:
+    """The bytes base64 text spells, read off its length before it is
+    decoded."""
+    return len(data) * 3 // 4 - (len(data) - len(data.rstrip("=")))
 
 
 class ClaimantEnrollRequest(RequestBody):
@@ -98,3 +113,37 @@ class ClaimantReportRequest(RequestBody):
         return ClaimantReport(
             item_id=item_id, claim_token=self.claim_token, outcome=self.outcome, error=self.error
         )
+
+
+class EntryBody(RequestBody):
+    """One numbered entry of a stream: its bytes in base64."""
+
+    n: int = Field(ge=0)
+    data: str = Field(max_length=MAX_APPEND_CHARS)
+
+
+class ClaimantAppendRequest(RequestBody):
+    """What a claimant appends to one stream of its kind for the item it
+    holds, under its claim token: the stream it names, and its entries in
+    their order, an entry numbered at or below the stream's last landing
+    nothing. It is held to its bounds before anything reads it."""
+
+    claim_token: UUID
+    stream: UUID
+    entries: list[EntryBody] = Field(min_length=1, max_length=MAX_APPEND_ENTRIES)
+
+    @model_validator(mode="after")
+    def _within_an_appends_bytes(self) -> Self:
+        if sum(_size(entry.data) for entry in self.entries) > MAX_APPEND_BYTES:
+            raise ValueError(f"an append carries at most {MAX_APPEND_BYTES} bytes")
+        return self
+
+    def appended(self) -> Appended:
+        entries: list[Entry] = []
+        for entry in self.entries:
+            try:
+                data = base64.b64decode(entry.data, validate=True)
+            except binascii.Error:
+                raise ValidationFailed("an entry's data is base64") from None
+            entries.append(Entry(n=entry.n, data=data))
+        return Appended(claim_token=self.claim_token, stream=self.stream, entries=tuple(entries))

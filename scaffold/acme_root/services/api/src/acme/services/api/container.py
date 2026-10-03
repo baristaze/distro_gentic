@@ -39,7 +39,7 @@ from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.trust.root import build_trust_operator
 from acme.om.watch.impl.manager import WatchOptions
-from acme.om.watch.root import build_stream, build_watch
+from acme.om.watch.root import build_kind_streams, build_stream, build_watch
 from acme.om.watch.stream import StreamServiceInterface
 from acme.om.workspaces.impl.executor import ExecutorOptions
 from acme.services.api.gateway.ratelimit import RateLimit, RateLimitOptions, RefusedAddresses
@@ -250,7 +250,13 @@ class AppContainer:
         intake = build_intake(storage, managers, integrations=integrations)
         # The streams the runners write, read from the shared cache.
         stream = build_stream(infra, lambda: managers.events, product_kinds=ports.kinds)
-        watch = build_watch(managers, stream, WatchOptions(live_read_key=settings.live_read_key))
+        # A product's claimants write its streams for the items they hold.
+        watch = build_watch(
+            managers,
+            stream,
+            WatchOptions(live_read_key=settings.live_read_key),
+            kind_streams=build_kind_streams(infra, ports.kinds),
+        )
         services = build_services(
             managers,
             infra,

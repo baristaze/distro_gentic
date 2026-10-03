@@ -12,7 +12,9 @@ from acme.om.base import Platform, derived_id, new_id, utcnow
 from acme.om.context import Permission, RequestContext, TenantContext
 from acme.om.events import EventsManagerInterface
 from acme.om.events.manager import audit_event
-from acme.om.exceptions import NotAuthorized, NotFound, Unavailable
+from acme.om.exceptions import LeaseLost, NotAuthorized, NotFound, Unavailable, ValidationFailed
+from acme.om.hosts import HostsManagerInterface
+from acme.om.hosts.types.host import ClaimantIdentity
 from acme.om.intake.rules import in_person
 from acme.om.relay import RelayManagerInterface
 from acme.om.relay.exceptions import NoWorkspaceHost
@@ -21,11 +23,26 @@ from acme.om.relay.types.exec import REQUESTS, ExecCall, ExecProgress, RunReques
 from acme.om.steps import StepsManagerInterface
 from acme.om.steps.types.header import ParkReason
 from acme.om.watch.exceptions import CommandRunning, LiveReadRefused, NotHandedOver
+from acme.om.watch.kinds import MAX_APPEND_BYTES, MAX_APPEND_ENTRIES, KindStreamsInterface
 from acme.om.watch.manager import WatchManagerInterface
-from acme.om.watch.rules import signed, verified
+from acme.om.watch.rules import signed, verified, verified_item
 from acme.om.watch.stream import StreamServiceInterface
 from acme.om.watch.types.control import HandCommand, HandRun
-from acme.om.watch.types.live import MAX_SEEN, Grant, LivePage, LiveRead, Seen
+from acme.om.watch.types.live import (
+    MAX_SEEN,
+    Appended,
+    Entry,
+    Grant,
+    ItemGrant,
+    ItemPage,
+    ItemRead,
+    ItemSeen,
+    ItemStream,
+    LivePage,
+    LiveRead,
+    Seen,
+)
+from acme.om.work import WorkManagerInterface
 from acme.om.workspaces import WorkspacesManagerInterface
 
 TAKEN = "watch.control.taken"
@@ -54,6 +71,10 @@ class WatchManagerImpl(WatchManagerInterface):
         stream: StreamServiceInterface,
         options: WatchOptions,
         clock: Callable[[], datetime] = utcnow,
+        *,
+        hosts: HostsManagerInterface,
+        work: WorkManagerInterface,
+        kind_streams: KindStreamsInterface | None = None,
     ) -> None:
         self._sessions = sessions
         self._agents = agents
@@ -65,6 +86,9 @@ class WatchManagerImpl(WatchManagerInterface):
         self._stream = stream
         self._options = options
         self._clock = clock
+        self._hosts = hosts
+        self._work = work
+        self._kind_streams = kind_streams
 
     # The live read.
 
@@ -84,6 +108,62 @@ class WatchManagerImpl(WatchManagerInterface):
             raise LiveReadRefused("the handle has expired; ask for a new one")
         streams = await self._stream.read(grant.session_id, seen[:MAX_SEEN])
         return LivePage(session_id=grant.session_id, streams=streams)
+
+    # A product's streams, by the item a claimant holds.
+
+    async def append_as(
+        self,
+        rctx: RequestContext,
+        claimant: ClaimantIdentity,
+        item_id: UUID,
+        kind: str,
+        appended: Appended,
+    ) -> None:
+        streams = self._written_by(kind, claimant.kind)
+        if len(appended.entries) > MAX_APPEND_ENTRIES:
+            raise ValidationFailed(f"an append carries at most {MAX_APPEND_ENTRIES} entries")
+        if sum(len(entry.data) for entry in appended.entries) > MAX_APPEND_BYTES:
+            raise ValidationFailed(f"an append carries at most {MAX_APPEND_BYTES} bytes")
+        item = await self._hosts.held_as(rctx, claimant, item_id, appended.claim_token)
+        # A lease that lapsed is no longer held, though no sweep requeued
+        # the item yet: the claimant renews it before it writes again.
+        if item.lease_expires_at is None or item.lease_expires_at <= self._clock():
+            raise LeaseLost(f"{claimant.kind} {claimant.id} no longer holds work item {item_id}")
+        entries = [(entry.n, entry.data) for entry in appended.entries]
+        await streams.append(kind, item.id, appended.stream, entries)
+
+    async def open_item_live(self, ctx: TenantContext, item_id: UUID, kind: str) -> ItemRead:
+        ctx.require(Permission.READ)
+        self._written(kind)
+        await self._work.get_item(ctx, item_id)
+        expires_at = self._clock() + self._options.live_read_life
+        grant = ItemGrant(item_id=item_id, kind=kind, viewer_id=ctx.user_id, expires_at=expires_at)
+        handle = signed(self._key(), grant)
+        return ItemRead(item_id=item_id, kind=kind, handle=handle, expires_at=expires_at)
+
+    async def read_item_live(
+        self, rctx: RequestContext, handle: str, seen: Sequence[ItemSeen]
+    ) -> ItemPage:
+        grant = verified_item(self._key(), handle)
+        if grant is None:
+            raise LiveReadRefused("the handle is not one the platform signed for an item")
+        if self._clock() >= grant.expires_at:
+            raise LiveReadRefused("the handle has expired; ask for a new one")
+        after = {mark.stream: mark.n for mark in seen[:MAX_SEEN]}
+        slices = await self._written(grant.kind).read(grant.kind, grant.item_id, after)
+        return ItemPage(
+            item_id=grant.item_id,
+            kind=grant.kind,
+            streams=tuple(
+                ItemStream(
+                    stream=held.stream,
+                    first=held.first,
+                    entries=tuple(Entry(n=n, data=data) for n, data in held.entries),
+                    dropped=after.get(held.stream, -1) + 1 < held.first,
+                )
+                for held in slices
+            ),
+        )
 
     # Take control, give back.
 
@@ -182,6 +262,19 @@ class WatchManagerImpl(WatchManagerInterface):
         return session
 
     # Helpers.
+
+    def _written(self, kind: str) -> KindStreamsInterface:
+        """The product's streams, for a kind a claimant writes; any other is
+        not found."""
+        if self._kind_streams is None or self._kind_streams.writer(kind) is None:
+            raise NotFound(f"no stream kind {kind} is written by a claimant")
+        return self._kind_streams
+
+    def _written_by(self, kind: str, claimant: str) -> KindStreamsInterface:
+        """The product's streams, for a kind the claimant's own kind writes."""
+        if self._kind_streams is None or self._kind_streams.writer(kind) != claimant:
+            raise NotFound(f"no stream kind {kind} is written by {claimant}")
+        return self._kind_streams
 
     def _key(self) -> bytes:
         key = self._options.live_read_key

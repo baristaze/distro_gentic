@@ -116,3 +116,38 @@ class GiveBackRequest(RequestBody):
     # A command of the person's still running refuses the giving back,
     # unless this asks it stopped first.
     stop: bool = False
+
+
+class ItemReadView(View):
+    """A handle to one item's streams of one kind until `expires_at`. Read
+    it at `GET /v1/live/items?handle=`; a viewer asks for a new one when it
+    ends."""
+
+    item_id: UUID
+    kind: str
+    handle: str
+    expires_at: datetime
+
+
+class EntryView(View):
+    """One numbered entry of a stream: its bytes in base64."""
+
+    n: int
+    data: str
+
+
+class ItemStreamView(View):
+    """One open stream of the item: the oldest entry still held, the
+    entries after the last one read, and whether entries never read were
+    let go."""
+
+    stream: UUID
+    first: int
+    dropped: bool
+    entries: list[EntryView]
+
+
+class ItemPageView(View):
+    item_id: UUID
+    kind: str
+    streams: list[ItemStreamView]
