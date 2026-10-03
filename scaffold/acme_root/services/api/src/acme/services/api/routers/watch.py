@@ -40,8 +40,9 @@ async def read_live(
     after: Annotated[list[str] | None, Query()] = None,
 ) -> LivePageView:
     """The open streams of the handle's session, each after the last part
-    read (`after=<step_id>:<n>`, once a stream). The handle is the
-    authority: one that does not verify, or has expired, reads nothing."""
+    read (`after=<step_id>:<last>`, once a stream, the `last` of that part).
+    The handle is the authority: one that does not verify, or has expired,
+    reads nothing."""
     return await watch.read_live(rctx, handle, after or [])
 
 
