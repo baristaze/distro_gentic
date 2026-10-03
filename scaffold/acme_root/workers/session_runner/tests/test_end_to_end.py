@@ -676,3 +676,57 @@ async def test_a_real_loop_runs_end_to_end_on_a_live_provider(
     assert session["status"] == "idle" and steps[-1]["outcome"] == "succeeded", report
     assert "tool_response" in report["steps"]  # pyright: ignore[reportOperatorIssue]
     assert 0 < spend.spent_cost_micros <= LIVE_BUDGET_MICROS and spend.held_cost_micros == 0
+
+
+ANSWER = "The total is twelve, as the records of the last quarter show it. " * 4
+"""An answer of seventeen scripted parts, streamed one every PACE seconds."""
+
+PACE = "0.15"
+
+
+async def test_a_step_the_runner_streams_is_read_live_through_the_api_by_its_handle(
+    stack: Stack,
+) -> None:
+    """The runner, a process of its own, streams a model's answer into the
+    shared cache; this process reads it through the API, by a handle alone,
+    while the stream is open. Once the step is stored, the stream is gone,
+    the step holds the answer whole, and the stream's opening and
+    completion are in the tenant's event stream."""
+    person = await owner_of(stack)
+    stack.runner("runner-live", [answers(ANSWER)], ACME_MODEL_SCRIPT_PACE_SECONDS=PACE)
+    session_id = await started(stack, person)
+    opened = await stack.client.post(
+        f"/v1/agent-sessions/{session_id}/live", headers=person.headers
+    )
+    handle = opened.json()["handle"]
+
+    await say(stack, person, session_id, "What is the total?")
+    live: dict[str, Any] | None = None
+    deadline = asyncio.get_running_loop().time() + SETTLE_SECONDS
+    while live is None and asyncio.get_running_loop().time() < deadline:
+        read = await stack.client.get("/v1/live", params={"handle": handle})
+        assert read.status_code == 200, read.text
+        streams = read.json()["streams"]
+        if streams and len(streams[0]["parts"]) >= 2:
+            live = streams[0]
+        else:
+            await asyncio.sleep(0.05)
+    assert live is not None, "no open stream was read while the runner streamed"
+    so_far = "".join(part["text"] for part in live["parts"])
+    assert ANSWER.startswith(so_far) and len(so_far) < len(ANSWER), so_far
+
+    await settled(stack, person, session_id)
+    (response,) = of_type(await history(stack, person, session_id), "model_response")
+    assert (response["id"], response["text"]) == (live["step_id"], ANSWER)
+    after = await stack.client.get("/v1/live", params={"handle": handle})
+    assert after.json()["streams"] == []
+    events = await stack.container.managers.events.get_events(person.ctx, 0, 500)
+    changes = [
+        (event.kind, str(event.target_id), event.payload["step_id"])
+        for event in events
+        if event.kind.startswith("watch.stream.")
+    ]
+    assert changes == [
+        ("watch.stream.opened", session_id, live["step_id"]),
+        ("watch.stream.completed", session_id, live["step_id"]),
+    ]
