@@ -209,7 +209,10 @@ class InfraConfiguredImpl(InfraInterface):
             timeout = timedelta(seconds=settings.docker_timeout_seconds)
             return (
                 WorkspaceContainerImpl(
-                    settings.workspace_image, timeout, settings.workspace_deployment
+                    settings.workspace_image,
+                    timeout,
+                    settings.workspace_deployment,
+                    timedelta(seconds=settings.docker_pull_timeout_seconds),
                 ),
                 TransportContainerImpl(records, self._secrets, broker, timeout),
             )

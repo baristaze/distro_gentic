@@ -27,6 +27,7 @@ CROSS_TENANT_CASES: frozenset[str] = frozenset(
         "read_latest_for_target",
         "write_item_if_failed",
         "write_item_if_held",
+        "write_item_if_queued",
     }
 )
 """Every method of `WorkStorageInterface` that takes a tenant has a case in
@@ -296,6 +297,28 @@ class WorkStorageContract:
         assert await storage.read_item(org, item.id) == back
         assert await storage.write_item_if_failed(org, back) is None, "moved once"
         assert await storage.write_item_if_failed(org, make_item(lane=lane)) is None, "unknown"
+
+    async def test_write_if_queued_is_conditional_on_no_worker_holding_the_item(
+        self, storage: WorkStorageInterface, lane: str
+    ) -> None:
+        org, other_org = new_id(), new_id()
+        item = make_item(lane=lane)
+        await storage.create_item(org, item)
+        ended = item.model_copy(update={"status": WorkStatus.DONE, "last_error": "not wanted"})
+        assert await storage.write_item_if_queued(other_org, ended) is None
+        assert await storage.read_item(org, item.id) == item
+        assert await storage.write_item_if_queued(org, ended) == ended
+        assert await storage.read_item(org, item.id) == ended
+        assert await storage.write_item_if_queued(org, ended) is None, "ended once"
+        assert await storage.claim_next(lane, [WorkKind.NOOP], "w1", LEASE) is None
+        taken = make_item(lane=lane)
+        await storage.create_item(org, taken)
+        claimed = await storage.claim_next(lane, [WorkKind.NOOP], "w1", LEASE)
+        assert claimed is not None and claimed[1].id == taken.id
+        late = claimed[1].model_copy(update={"status": WorkStatus.DONE})
+        assert await storage.write_item_if_queued(org, late) is None, "a claim lands first"
+        assert await storage.read_item(org, taken.id) == claimed[1]
+        assert await storage.write_item_if_queued(org, make_item(lane=lane)) is None, "unknown"
 
     async def test_a_re_claim_after_a_requeue_mints_a_new_token(
         self, storage: WorkStorageInterface, lane: str

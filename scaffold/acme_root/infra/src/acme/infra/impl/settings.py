@@ -10,6 +10,8 @@ from dotenv import dotenv_values
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from acme.infra.workspaces.container import DEFAULT_IMAGE
+
 ENVIRONMENTS = frozenset({"local", "test", "dev", "staging", "production"})
 """The one set of environment names, shared with deployment/terraform."""
 
@@ -101,7 +103,7 @@ class InfraSettings(BaseSettings):
     # carry its own.
     workspace_backend: Literal["none", "host", "container"] = "none"
     workspaces_root: Path = Path(".local/workspaces")
-    workspace_image: str = "python:3.14-slim"
+    workspace_image: str = DEFAULT_IMAGE
     workspace_deployment: str = Field(default="acme-local", min_length=1)
 
     aws_region: str = "us-east-1"
@@ -115,6 +117,10 @@ class InfraSettings(BaseSettings):
     # A Docker command that prepares, releases, or reaches into a container
     # workspace; the first prepare may pull the image.
     docker_timeout_seconds: float = 120.0
+    # `docker pull` of the workspace image, which a prepare runs when the
+    # image is absent: the image is large, and a pull cut short leaves
+    # nothing, so it has a limit of its own.
+    docker_pull_timeout_seconds: float = 900.0
 
     log_level: str = "INFO"
     log_json: bool = False

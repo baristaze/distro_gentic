@@ -67,11 +67,23 @@ class WorkspacePayload(Platform):
     """A workspace to prepare, release, or purge. Preparing goes to the lane
     of the session's placement, since any host of the pool may make it;
     releasing and purging go to the lane of the host that holds it, since
-    a workspace lives where it was prepared."""
+    a workspace lives where it was prepared.
+
+    The work's target is the session. A prepare names the spec it is held
+    to and, after it, what it asks of its host, which the host holds to its
+    owner's ceilings before anything is made, as an `exec` item's does; a
+    field left None asks the most."""
 
     operation: WorkspaceOperation
     pool_id: UUID | None = None
     host_id: UUID | None = None
+    session_id: UUID | None = None
+    spec: IsolationSpec | None = None
+    isolation: HostIsolation | None = None
+    egress: tuple[str, ...] | None = None  # None is open egress
+    reads: tuple[str, ...] = ()
+    by_person: bool = False
+    project_id: UUID | None = None
 
     @model_validator(mode="after")
     def _names_where_it_runs(self) -> WorkspacePayload:

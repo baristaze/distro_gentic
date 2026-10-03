@@ -15,6 +15,9 @@ from datetime import datetime
 from pathlib import Path
 
 DEFAULT_API_URL = "http://127.0.0.1:8000"
+DEFAULT_IMAGE = "python:3.14"
+"""The image a container workspace runs unless its owner names another: the
+engine's own default, which holds Python and `git`."""
 CREDENTIAL_FILE = "credential.json"
 CEILINGS_FILE = "ceilings.toml"
 SECRETS_FILE = "secrets"
@@ -33,6 +36,8 @@ class Settings:
     name: str
     enrollment_token: str | None
     workspace_user: str | None
+    workspace_image: str = DEFAULT_IMAGE
+    pull_timeout_seconds: float = 900.0
     max_clock_skew_seconds: float = 60.0
     beat_seconds: float = 30.0
 
@@ -56,6 +61,19 @@ class Settings:
         return self.home / RECORDS_FOLDER
 
 
+def _seconds(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        value = 0.0
+    if not value > 0:
+        raise BadSetting(f"{name} is a number of seconds above zero, not {raw!r}")
+    return value
+
+
 def settings_from_env() -> Settings:
     home = os.environ.get("ACME_HOST_HOME")
     return Settings(
@@ -64,6 +82,8 @@ def settings_from_env() -> Settings:
         name=os.environ.get("ACME_HOST_NAME") or socket.gethostname()[:64] or "host",
         enrollment_token=os.environ.get("ACME_ENROLLMENT_TOKEN") or None,
         workspace_user=os.environ.get("ACME_HOST_WORKSPACE_USER") or None,
+        workspace_image=os.environ.get("ACME_HOST_WORKSPACE_IMAGE") or DEFAULT_IMAGE,
+        pull_timeout_seconds=_seconds("ACME_HOST_PULL_TIMEOUT_SECONDS", 900.0),
     )
 
 

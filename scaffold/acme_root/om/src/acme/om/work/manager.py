@@ -109,10 +109,34 @@ class WorkManagerInterface(ABC):
         ...
 
     @abstractmethod
+    async def get_item(self, ctx: TenantContext, item_id: UUID) -> WorkItem:
+        """The tenant's item as the queue holds it now, its claim included:
+        what a namespace whose worker answers outside its claim settles.
+        NotFound when the tenant has none under `item_id`."""
+        ...
+
+    @abstractmethod
     async def has_open(self, ctx: TenantContext, kind: WorkKind, target_id: UUID) -> bool:
         """Whether an item of `kind` on `target_id` waits for a worker or
         runs: one of the tenant's, queued or claimed. An item handed back
         until later is queued."""
+        ...
+
+    @abstractmethod
+    async def latest_for_target(
+        self, ctx: TenantContext, kind: WorkKind, target_id: UUID
+    ) -> WorkItem | None:
+        """The tenant's item of `kind` on `target_id` made last, whatever its
+        status; None when there is none."""
+        ...
+
+    @abstractmethod
+    async def end_queued(self, ctx: TenantContext, item: WorkItem, reason: str) -> WorkItem | None:
+        """Ends an item no worker took, as done, with `reason` as its last
+        word: work its asker no longer wants, such as a prepare on a pool its
+        session left. Written only while the item is queued: None when a
+        worker claimed it first, or it ended. Asked with the permission its
+        kind is enqueued with."""
         ...
 
     @abstractmethod

@@ -112,10 +112,14 @@ rebuilt from.
 - The root decorates the engine's sessions manager, so every session is
   pinned as it is created, and the engine's tools manager, so every
   workspace is held to its pin. The loop sees the engine's interfaces.
-- The checkout runs in the workspace through the engine's transport,
-  under the epoch of the run that holds the session. Nothing it runs
-  reaches the repository: a bundle comes in through the transport's
-  files, and one goes out the same way.
+- The checkout runs in the workspace through the transport the tools
+  take, under the epoch of the run that holds the session: for a session
+  pinned to its tenant's hosts, the relay to the host that holds it.
+  Nothing it runs reaches the repository: a bundle comes in through the
+  transport's files, and one goes out the same way.
+- A pinned session's workspace is made by a host of its pool, not by this
+  process (`placed.PlacedWorkspacesInterface`, the relay's): it is held to
+  the same pin, and its loop waits on the resource until a host holds it.
 - A session's project and the repository it binds are the projects'
   rows, read through `WorkspaceProjectsInterface`; a repository is read
   over HTTPS on the platform's host (`impl/reader.py`), and a branch cut
