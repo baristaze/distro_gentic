@@ -209,7 +209,7 @@ async def test_a_killed_runs_instance_is_released_past_the_grace_with_its_work_o
     assert ref.startswith(f"{SNAPSHOT_PREFIX}/{session_branch(killed)}/")
     assert git(remote, "show", f"{ref}:notes.txt") == "half done", "its work is on the snapshot"
     told = await managers.workspaces.get_workspace(host.owner, killed)
-    assert told.notice is not None and ref in told.notice, "the next loop is told"
+    assert any(ref in notice for notice in told.notices), "the next loop is told"
     assert await host.held() == {live}, "the live loop's instance is left alone"
     assert (here / "notes.txt").read_text() == "half done\n", "a release keeps the files"
     assert stray.is_dir(), "a directory no prepare marked is left alone"
