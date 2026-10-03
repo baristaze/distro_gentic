@@ -223,9 +223,11 @@ def wired(
     *,
     storage: StorageInterface | None = None,
     owner: TenantContext | None = None,
+    project_required: bool = False,
 ) -> Wired:
     """`storage` None is the memory storage, and `owner` None a fresh
-    tenant's owner; a suite over Postgres hands in both."""
+    tenant's owner; a suite over Postgres hands in both. `project_required`
+    is the automations' as a stack outside `local` sets it."""
     infra = InfraLocalImpl(tmp_path)
     anthropic = ModelProviderScriptedImpl(ProviderName.ANTHROPIC)
     openai = ModelProviderScriptedImpl(ProviderName.OPENAI)
@@ -326,7 +328,13 @@ def wired(
         owner=owner,
         service=service,
         intake=intake,
-        automations=build_automations(storage, managers, principal_context=members, clock=clock),
+        automations=build_automations(
+            storage,
+            managers,
+            project_required=project_required,
+            principal_context=members,
+            clock=clock,
+        ),
         playbooks=playbooks.build(managers),
         knowledge=knowledge.build(managers),
         notifications=build_notifications(storage, managers, integrations, intake, clock=clock),

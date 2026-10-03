@@ -184,7 +184,11 @@ async def test_a_schedule_fires_once_a_slot_across_several_workers_over_postgres
     # database, tick the tenant at once, in each of two slots.
     workers = [
         build_automations(
-            storage, platform.managers, principal_context=platform.members, clock=platform.clock
+            storage,
+            platform.managers,
+            project_required=False,
+            principal_context=platform.members,
+            clock=platform.clock,
         )
         for _ in range(4)
     ]

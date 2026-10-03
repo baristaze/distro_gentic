@@ -11,6 +11,10 @@ every worker sweeps on its own timer, idempotent and serialized by the
 database ([Maintenance Without a Scheduler][g-sweep]). So every worker
 ticks every tenant, and a schedule must not fire once per worker.
 
+A session's project keys its budget and its policies
+([ADR 2016](2016-a-sessions-project-is-set-before-it-and-never-moves.md)),
+and a session started in none takes its tenant's alone.
+
 The engine names a steady principal "its creator, or a service principal
 the tenant grants", and asks the adopter's transition for a principal's
 live context at every call. The tenancy manager answers for a member and
@@ -45,6 +49,16 @@ and knows no creator. A session already running when the grant is
 raised, or its creator moved below it, makes its remaining calls at the
 grant.
 
+**An automation's session starts in a project.** Its start names a
+project of the tenant, read when the automation is saved: another
+tenant's is refused there, as one that never existed is. The firing
+starts the session through the projects' start, so it is in its project
+from its first moment, and the project's budget and policies hold every
+call it makes. Outside a local stack, a start that names no project is
+refused when it is saved, and one stored with none is refused at each
+firing, before its limits reserve anything: its run records why, and no
+session starts.
+
 ## Consequences
 
 - An automation run as the principal starts nothing its role cannot
@@ -53,6 +67,8 @@ grant.
   may do. A grant raised above an automation's creator stops its next
   firing, not a session it already started.
 - Before a principal is granted, no automation that runs as it is made.
+- An automation stored with no project fires only refused runs outside
+  `local`. One that names a project is made in its place.
 - The transition is a second site that builds a tenant context beside the
   tenancy manager's, and the stage checks list it.
 - A schedule's period is its own, not the sweep's: a sweep interval longer

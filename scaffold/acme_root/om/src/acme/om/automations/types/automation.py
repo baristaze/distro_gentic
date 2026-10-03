@@ -55,14 +55,16 @@ class ActionKind(StrEnum):
 
 
 class Action(Platform):
-    """What a firing does: start a session of `agent_kind` with the brief, or
-    send the brief to a standing session. The brief is the creator's word;
-    the event that fired it reaches the session beside it, as data."""
+    """What a firing does: start a session of `agent_kind` with the brief, in
+    the tenant's project `project_id`, or send the brief to a standing
+    session, which keeps the project it has. The brief is the creator's
+    word; the event that fired it reaches the session beside it, as data."""
 
     kind: ActionKind
     brief: Stored = Field(min_length=1, max_length=MAX_BRIEF)
     agent_kind: Stored | None = Field(default=None, min_length=1, max_length=MAX_KIND)
     title: Stored | None = Field(default=None, min_length=1, max_length=MAX_TITLE)
+    project_id: UUID | None = None
     session_id: UUID | None = None
 
     @model_validator(mode="after")
@@ -72,6 +74,8 @@ class Action(Platform):
             raise ValueError("a start names its agent kind and title, and a message does not")
         if starts == (self.session_id is not None):
             raise ValueError("a message names its standing session, and a start does not")
+        if not starts and self.project_id is not None:
+            raise ValueError("a message names no project: its session keeps its own")
         return self
 
 
@@ -150,6 +154,7 @@ class Refusal(StrEnum):
     CONCURRENCY = "concurrency"
     PRINCIPAL = "principal"  # its creator left, or the principal is ungranted or above its creator
     ACTION = "action"  # its action was refused: an unknown kind, a session gone
+    PROJECT = "project"  # its start names no project, where a session starts in one
     UNATTRIBUTED = "unattributed"  # the platform's own act, with no session recorded for it
 
 

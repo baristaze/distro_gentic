@@ -30,10 +30,11 @@ from acme.om.budgets.types.budget import Budget, BudgetScopeKind, WindowKind
 from acme.om.context import Permission, Role, TenantContext
 from acme.om.events import EventsManagerInterface
 from acme.om.events.manager import audit_event
-from acme.om.exceptions import NotAuthorized, NotFound, PlatformException
+from acme.om.exceptions import NotAuthorized, NotFound, PlatformException, ValidationFailed
 from acme.om.intake.rules import in_person
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import versioned_row
+from acme.om.projects import ProjectsManagerInterface
 from acme.om.steps.rules import message_step
 from acme.om.steps.types.content import Content, TextBlock
 from acme.om.steps.types.header import InputHeader
@@ -67,12 +68,20 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         tenancy: TenancyManagerInterface,
         relay: OutboxRelayInterface,
         events: EventsManagerInterface,
+        projects: ProjectsManagerInterface,
         principal_context: PrincipalContext,
         options: AutomationsOptions,
         clock: Callable[[], datetime] = utcnow,
+        *,
+        project_required: bool,
     ) -> None:
+        """`project_required` refuses a start that names no project: what
+        every stack but a local one sets, so no per-project policy is
+        skipped by a session an automation starts."""
         self._storage = storage
         self._agents = agents
+        self._projects = projects
+        self._project_required = project_required
         self._sessions = sessions
         self._budgets = budgets
         self._tenancy = tenancy
@@ -94,6 +103,7 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
                 raise NotAuthorized(
                     f"a {ctx.role.value} makes no automation that runs as a {granted.role.value}"
                 )
+        await self._check_project(ctx, automation)
         now = self._clock()
         made = Automation.model_validate(
             {
@@ -230,20 +240,16 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
     async def _admit(
         self, ctx: TenantContext, automation: Automation, run: AutomationRun
     ) -> AutomationRun:
-        """Asks the limits, and runs the action of a run they start."""
+        """Asks the limits, and runs the action of a run they start. A start
+        that names no project where one is required, and an automation whose
+        principal cannot act, are refused before the limits hold anything."""
+        if self._outside_projects(automation):
+            # Saved before a project was required, or under a local stack:
+            # its session would take no project's budget or policy.
+            return await self._refuse(ctx, run, Refusal.PROJECT)
         creator = await self._runs_as(ctx, automation)
         if creator is None:
-            refused = run.model_copy(
-                update={
-                    "status": RunStatus.REFUSED,
-                    "refusal": Refusal.PRINCIPAL,
-                    "event_text": "",
-                }
-            )
-            if run.status is RunStatus.QUEUED:
-                await self._storage.write_run(ctx.org_id, refused)
-                return refused
-            return await self._storage.create_run(ctx.org_id, refused)
+            return await self._refuse(ctx, run, Refusal.PRINCIPAL)
         await self._close_finished(ctx, automation)
         landed = await self._storage.admit(ctx.org_id, run, automation.limits, self._clock())
         if landed.status is not RunStatus.STARTED or landed.session_id is not None:
@@ -280,13 +286,17 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         opened = action.kind is ActionKind.START_SESSION
         if opened:
             assert action.agent_kind is not None and action.title is not None
-            session = await self._agents.start_session(
-                creator,
-                Start(
-                    id=derived_id(run.id, run.created_at, "session"),
-                    kind=action.agent_kind,
-                    title=action.title,
-                ),
+            start = Start(
+                id=derived_id(run.id, run.created_at, "session"),
+                kind=action.agent_kind,
+                title=action.title,
+            )
+            # In its project from its first moment, so the project's budget
+            # and policies hold every call it makes.
+            session = (
+                await self._agents.start_session(creator, start)
+                if action.project_id is None
+                else await self._projects.start_session(creator, action.project_id, start)
             )
             budget = Budget(
                 id=derived_id(run.id, run.created_at, "budget"),
@@ -377,6 +387,40 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
             if done:
                 closed = run.model_copy(update={"closed_at": now, "event_text": ""})
                 await self._storage.write_run(ctx.org_id, closed)
+
+    async def _refuse(
+        self, ctx: TenantContext, run: AutomationRun, refusal: Refusal
+    ) -> AutomationRun:
+        """The run refused before the limits were asked: it starts nothing
+        and reserves nothing. A queued run is rewritten, and a new one made."""
+        refused = run.model_copy(
+            update={"status": RunStatus.REFUSED, "refusal": refusal, "event_text": ""}
+        )
+        if run.status is RunStatus.QUEUED:
+            await self._storage.write_run(ctx.org_id, refused)
+            return refused
+        return await self._storage.create_run(ctx.org_id, refused)
+
+    async def _check_project(self, ctx: TenantContext, automation: Automation) -> None:
+        """A start's project is one of the caller's tenant: another tenant's
+        is `NotFound`, as one that never existed is. One that names none is
+        `ValidationFailed` where a session starts in a project."""
+        project_id = automation.action.project_id
+        if project_id is not None:
+            await self._projects.get_project(ctx, project_id)
+        elif self._outside_projects(automation):
+            raise ValidationFailed(
+                "an automation's session starts in a project: name its project_id"
+            )
+
+    def _outside_projects(self, automation: Automation) -> bool:
+        """A start that names no project where a session starts in one."""
+        action = automation.action
+        return (
+            self._project_required
+            and action.kind is ActionKind.START_SESSION
+            and action.project_id is None
+        )
 
     async def _runs_as(self, ctx: TenantContext, automation: Automation) -> TenantContext | None:
         """The live context the automation's action runs under, read at the

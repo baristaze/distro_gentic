@@ -9,6 +9,7 @@ import json
 from datetime import timedelta
 from pathlib import Path
 from typing import cast
+from uuid import UUID
 
 import pytest
 from worker_support import build_container, ended, sign_in
@@ -29,6 +30,7 @@ from acme.om.base import new_id, utcnow
 from acme.om.context import TenantContext
 from acme.om.events.types.event import Event
 from acme.om.evidence.types.provenance import Provenance
+from acme.om.exceptions import ValidationFailed
 from acme.om.intake.impl.manager import ROUTED
 from acme.om.intake.rules import described
 from acme.om.intake.types.event import (
@@ -40,6 +42,7 @@ from acme.om.intake.types.event import (
     FeedbackEvent,
     WorkNames,
 )
+from acme.om.projects.types.project import Project, Repository
 from acme.workers.maintenance.container import WorkerContainer
 from acme.workers.maintenance.deliveries import DeliveryConsumer, DeliveryOptions
 from acme.workers.maintenance.main import build_consumer
@@ -190,13 +193,25 @@ def feedback_body(org_id: str, event: FeedbackEvent) -> bytes:
     ).encode()
 
 
-async def test_an_event_from_outside_is_routed_and_fires_automations_once(
-    tmp_path: Path,
-) -> None:
-    container = build_container(tmp_path)
-    ctx = await sign_in(container)
+async def a_project(container: WorkerContainer, ctx: TenantContext) -> UUID:
+    """A project of the tenant, which an automation's session starts in."""
     now = utcnow()
-    automation = Automation(
+    project = Project(
+        id=new_id(),
+        created_at=now,
+        updated_at=now,
+        created_by=ctx.user_id,
+        updated_by=ctx.user_id,
+        name="the arm",
+        repository=Repository(host="github.com", path="ajax/arm"),
+    )
+    return (await container.managers.projects.create_project(ctx, project)).id
+
+
+def triage(ctx: TenantContext, project_id: UUID | None, limits: Limits) -> Automation:
+    """An automation that starts a triage session on a failing check."""
+    now = utcnow()
+    return Automation(
         id=new_id(),
         created_at=now,
         updated_at=now,
@@ -205,10 +220,32 @@ async def test_an_event_from_outside_is_routed_and_fires_automations_once(
         name="triage failing checks",
         trigger=Trigger(kind=TriggerKind.EVENT, arrivals=("check",)),
         action=Action(
-            kind=ActionKind.START_SESSION, brief="Find why.", agent_kind="triage", title="CI"
+            kind=ActionKind.START_SESSION,
+            brief="Find why.",
+            agent_kind="triage",
+            title="CI",
+            project_id=project_id,
         ),
-        limits=Limits(cost_cap_micros=10, run_cap_micros=1, rate=5, concurrency=1),
+        limits=limits,
     )
+
+
+async def test_outside_a_local_stack_an_automation_starts_in_a_project(tmp_path: Path) -> None:
+    container = build_container(tmp_path)
+    ctx = await sign_in(container)
+    limits = Limits(cost_cap_micros=10, run_cap_micros=1, rate=5, concurrency=1)
+    with pytest.raises(ValidationFailed):
+        await container.automations.create_automation(ctx, triage(ctx, None, limits))
+
+
+async def test_an_event_from_outside_is_routed_and_fires_automations_once(
+    tmp_path: Path,
+) -> None:
+    container = build_container(tmp_path)
+    ctx = await sign_in(container)
+    now = utcnow()
+    limits = Limits(cost_cap_micros=10, run_cap_micros=1, rate=5, concurrency=1)
+    automation = triage(ctx, await a_project(container, ctx), limits)
     await container.automations.create_automation(ctx, automation)
     event = FeedbackEvent(
         id=new_id(),
@@ -237,19 +274,8 @@ async def test_an_event_at_the_text_cap_is_routed_and_fires_once(tmp_path: Path)
     container = build_container(tmp_path)
     ctx = await sign_in(container)
     now = utcnow()
-    automation = Automation(
-        id=new_id(),
-        created_at=now,
-        updated_at=now,
-        created_by=ctx.user_id,
-        updated_by=ctx.user_id,
-        name="triage failing checks",
-        trigger=Trigger(kind=TriggerKind.EVENT, arrivals=("check",)),
-        action=Action(
-            kind=ActionKind.START_SESSION, brief="Find why.", agent_kind="triage", title="CI"
-        ),
-        limits=Limits(cost_cap_micros=10, run_cap_micros=1, rate=5, concurrency=1, queue=True),
-    )
+    limits = Limits(cost_cap_micros=10, run_cap_micros=1, rate=5, concurrency=1, queue=True)
+    automation = triage(ctx, await a_project(container, ctx), limits)
     await container.automations.create_automation(ctx, automation)
     event = FeedbackEvent(
         id=new_id(),

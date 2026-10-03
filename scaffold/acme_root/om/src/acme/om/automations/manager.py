@@ -1,6 +1,6 @@
 """The automations swimlane: events turned into bounded work. A trigger, an
-event with filters or a schedule, leads to an action: start a session, or
-message a standing one. An automation runs as its creator or as the
+event with filters or a schedule, leads to an action: start a session in
+a project of the tenant, or message a standing one. An automation runs as its creator or as the
 tenant's automation principal, inside limits of its own: a cost cap, a rate, a concurrency, and whether to queue when
 limited. It ignores the events its own sessions caused unless it declares
 otherwise, and a chain of automations stops at a hop limit. Every firing
@@ -26,7 +26,12 @@ class AutomationsManagerInterface(ABC):
         going for itself. Its creator is the caller, whom it runs as. One
         that runs as the automation principal is `NotAuthorized` before a
         principal is granted, and to a caller whose role is below the
-        grant. An id written already answers the automation as stored."""
+        grant. A start's project is the tenant's: another tenant's is
+        `NotFound`, as one that never existed is. Where a session starts in
+        a project (every stack but a local one), a start that names none is
+        `ValidationFailed`, and one stored with none is refused at each
+        firing, starting nothing. An id written already answers the
+        automation as stored."""
         ...
 
     @abstractmethod
