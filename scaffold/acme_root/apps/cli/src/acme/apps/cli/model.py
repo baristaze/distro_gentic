@@ -92,6 +92,16 @@ def step_line(step: StepView) -> str:
     return f"{step.seq:>5}  {step.type.value:<15} {detail}".rstrip()
 
 
+def session_line(session: AgentSessionView) -> str:
+    """One line for a session in a list: its id, its status, its kind, and
+    its title, marked when it is archived."""
+    title = " ".join(session.title.split())
+    if len(title) > LINE_TEXT:
+        title = title[: LINE_TEXT - 1] + "…"
+    archived = " (archived)" if session.archived_at is not None else ""
+    return f"{session.id}  {session.status.value:<8} {session.kind:<12} {title}{archived}"
+
+
 def settled(session: AgentSessionView) -> bool:
     """Whether a session's loop has stopped moving: it ended, or it waits on
     an unlock."""

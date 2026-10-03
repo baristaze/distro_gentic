@@ -10,6 +10,7 @@ from acme.services.api.services.automations import AutomationsServiceInterface
 from acme.services.api.services.benchmarks import BenchmarksServiceInterface
 from acme.services.api.services.budgets import BudgetsServiceInterface
 from acme.services.api.services.events import EventsServiceInterface
+from acme.services.api.services.evidence import EvidenceServiceInterface
 from acme.services.api.services.fleet import FleetServiceInterface
 from acme.services.api.services.hosts import HostsServiceInterface
 from acme.services.api.services.intake import IntakeServiceInterface
@@ -35,6 +36,7 @@ __all__ = [
     "BenchmarksServiceInterface",
     "BudgetsServiceInterface",
     "EventsServiceInterface",
+    "EvidenceServiceInterface",
     "FleetServiceInterface",
     "HostsServiceInterface",
     "IntakeServiceInterface",
@@ -113,6 +115,9 @@ class ServicesInterface(ABC):
 
     @abstractmethod
     def get_ledgers_service(self) -> LedgersServiceInterface: ...
+
+    @abstractmethod
+    def get_evidence_service(self) -> EvidenceServiceInterface: ...
 
     @abstractmethod
     def get_projects_service(self) -> ProjectsServiceInterface: ...

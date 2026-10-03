@@ -536,7 +536,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List Sessions
+         * @description The tenant's sessions in a status, or in any, a page at a time by id.
+         */
+        get: operations["list_sessions_v1_agent_sessions_get"];
         put?: never;
         /**
          * Start Session
@@ -560,6 +564,72 @@ export interface paths {
         get: operations["get_session_v1_agent_sessions__session_id__get"];
         put?: never;
         post?: never;
+        /**
+         * Delete Session
+         * @description An idle session marked deleted: it answers as one that never existed
+         *     until it is restored, and its retention ends the chance.
+         */
+        delete: operations["delete_session_v1_agent_sessions__session_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-sessions/{session_id}/approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Approvals
+         * @description The calls the session holds for a person's decision.
+         */
+        get: operations["get_approvals_v1_agent_sessions__session_id__approvals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-sessions/{session_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archive Session
+         * @description An idle session archived: it keeps what arrives and wakes for nothing
+         *     until a person's message brings it back.
+         */
+        post: operations["archive_session_v1_agent_sessions__session_id__archive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-sessions/{session_id}/bounds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Bounds
+         * @description The loop limits of the session's kind, and its tree's bounds.
+         */
+        get: operations["get_bounds_v1_agent_sessions__session_id__bounds_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -580,6 +650,26 @@ export interface paths {
          * @description An approval or a denial of the tool call at `request_seq`, as stored.
          */
         post: operations["decide_call_v1_agent_sessions__session_id__calls__request_seq__decision_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-sessions/{session_id}/children": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Children
+         * @description The sessions this one spawned, a page at a time by id.
+         */
+        get: operations["list_children_v1_agent_sessions__session_id__children_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -691,6 +781,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/agent-sessions/{session_id}/delivery": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Delivery
+         * @description Its branch, the pull requests and branches bound to it, and the result
+         *     it submitted that the gate accepted.
+         */
+        get: operations["get_delivery_v1_agent_sessions__session_id__delivery_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-sessions/{session_id}/executions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Executions
+         * @description The runs of checks the session recorded or the executor ran for it,
+         *     oldest first, a page at a time.
+         */
+        get: operations["list_executions_v1_agent_sessions__session_id__executions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/agent-sessions/{session_id}/live": {
         parameters: {
             query?: never;
@@ -756,6 +888,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/agent-sessions/{session_id}/questions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Questions
+         * @description What the session waits on a person for, other than a call's decision.
+         */
+        get: operations["get_questions_v1_agent_sessions__session_id__questions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-sessions/{session_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Session
+         * @description A deleted session back as it was, with its history.
+         */
+        post: operations["restore_session_v1_agent_sessions__session_id__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/agent-sessions/{session_id}/steps": {
         parameters: {
             query?: never;
@@ -768,6 +940,64 @@ export interface paths {
          * @description The history in order, strictly after `after_seq`.
          */
         get: operations["get_steps_v1_agent_sessions__session_id__steps_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-sessions/{session_id}/tool-calls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Tool Calls
+         * @description Each tool call with its decision and its answer, strictly after
+         *     `after_seq`.
+         */
+        get: operations["get_tool_calls_v1_agent_sessions__session_id__tool_calls_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-sessions/{session_id}/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Usage
+         * @description The tokens the session's model calls used, per model and in total.
+         */
+        get: operations["get_usage_v1_agent_sessions__session_id__usage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-sessions/{session_id}/validations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Validations */
+        get: operations["list_validations_v1_agent_sessions__session_id__validations_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -806,6 +1036,23 @@ export interface paths {
         post?: never;
         /** Revoke Api Key */
         delete: operations["revoke_api_key_v1_api_keys__api_key_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Approvals */
+        get: operations["list_approvals_v1_approvals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2186,6 +2433,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Usage */
+        get: operations["get_usage_v1_usage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/users": {
         parameters: {
             query?: never;
@@ -2351,11 +2615,24 @@ export interface components {
             shell: string;
         };
         /**
+         * AgentSessionPageView
+         * @description One page of sessions, by id. `next_cursor` fetches the next page and
+         *     is null on the last one.
+         */
+        AgentSessionPageView: {
+            /** Items */
+            items: components["schemas"]["AgentSessionView"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /**
          * AgentSessionView
          * @description A session: its kind, its title, and its status, which follows its
          *     steps. `pending` while an input waits for a run, `running` while a run
          *     holds its loop, `parked` while the loop waits, `idle` when no loop is
-         *     open.
+         *     open. A sub-agent names the session that spawned it, and every session
+         *     the root of its tree. `deleted_at` is set only on the answer to a
+         *     delete: a deleted session is on no read until it is restored.
          */
         AgentSessionView: {
             /** Archived At */
@@ -2370,6 +2647,8 @@ export interface components {
              * Format: uuid
              */
             created_by: string;
+            /** Deleted At */
+            deleted_at: string | null;
             /**
              * Id
              * Format: uuid
@@ -2379,7 +2658,14 @@ export interface components {
             kind: string;
             /** Kind Version */
             kind_version: number;
+            /** Parent Id */
+            parent_id: string | null;
             park: components["schemas"]["ParkView"] | null;
+            /**
+             * Root Id
+             * Format: uuid
+             */
+            root_id: string;
             status: components["schemas"]["SessionStatus"];
             /** Title */
             title: string;
@@ -2433,6 +2719,48 @@ export interface components {
              * Format: uuid
              */
             user_id: string;
+        };
+        /**
+         * ApprovalPageView
+         * @description The calls held across one page of the tenant's parked sessions, by
+         *     session id. `next_cursor` reads the next page of sessions and is null
+         *     on the last one; a page may hold no call and still have a next.
+         */
+        ApprovalPageView: {
+            /** Items */
+            items: components["schemas"]["ApprovalView"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /**
+         * ApprovalView
+         * @description A tool call held for a person's decision: its session, the seq it is
+         *     decided at, its tool and the class of power it exercises, and the
+         *     principal it runs under. Its input stays in the history; the request
+         *     names only its hash.
+         */
+        ApprovalView: {
+            /** Authorization Class */
+            authorization_class: string;
+            /**
+             * Principal Id
+             * Format: uuid
+             */
+            principal_id: string;
+            /**
+             * Requested At
+             * Format: date-time
+             */
+            requested_at: string;
+            /** Seq */
+            seq: number;
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+            /** Tool */
+            tool: string;
         };
         /**
          * ApproverRuleBody
@@ -2672,10 +3000,47 @@ export interface components {
             trials: components["schemas"]["TrialView"][];
         };
         /**
+         * BoundsView
+         * @description The bounds a session runs under: its kind's loop limits, the deadline
+         *     its kind gives a tree it roots, and its tree's record.
+         */
+        BoundsView: {
+            /** Kind */
+            kind: string;
+            /** Kind Deadline Seconds */
+            kind_deadline_seconds: number | null;
+            /** Kind Version */
+            kind_version: number;
+            loop: components["schemas"]["LoopLimitsView"];
+            tree: components["schemas"]["TreeBoundsView"];
+        };
+        /**
          * BudgetScopeKind
          * @enum {string}
          */
         BudgetScopeKind: "session" | "tree" | "person" | "project" | "team" | "tenant";
+        /**
+         * BudgetUsageView
+         * @description A budget and its current window: what open holds reserve and what
+         *     settled calls spent, in reference cost (millionths) and native tokens,
+         *     against the budget's amount.
+         */
+        BudgetUsageView: {
+            budget: components["schemas"]["BudgetView"];
+            /** Held Cost Micros */
+            held_cost_micros: number;
+            /** Held Tokens */
+            held_tokens: number;
+            /** Spent Cost Micros */
+            spent_cost_micros: number;
+            /** Spent Tokens */
+            spent_tokens: number;
+            /**
+             * Window Start
+             * Format: date-time
+             */
+            window_start: string;
+        };
         /**
          * BudgetView
          * @description A budget: its scope, its window, its amount, and the version a change
@@ -2699,6 +3064,15 @@ export interface components {
             window_kind: components["schemas"]["WindowKind"];
             /** Window Seconds */
             window_seconds: number | null;
+        };
+        /** CasesView */
+        CasesView: {
+            /** Failed */
+            failed: number;
+            /** Passed */
+            passed: number;
+            /** Skipped */
+            skipped: number;
         };
         /**
          * ChooseRequest
@@ -3006,6 +3380,24 @@ export interface components {
             received: boolean;
         };
         /**
+         * DeliveryView
+         * @description What a session delivered: its project, its branch and whether the
+         *     remote has held it, the pull requests and branches bound to it, and its
+         *     latest accepted result. A session that never had a workspace has no
+         *     branch.
+         */
+        DeliveryView: {
+            /** Branch */
+            branch: string | null;
+            /** Branch Seen */
+            branch_seen: boolean;
+            /** Project Id */
+            project_id: string | null;
+            report: components["schemas"]["ReportView"] | null;
+            /** Work */
+            work: components["schemas"]["WorkHandleView"][];
+        };
+        /**
          * DevSignInRequest
          * @description Local and test only: a sign-in by address alone, with no browser round
          *     trip, for the seed, the traffic generator, and the tests. A
@@ -3252,6 +3644,70 @@ export interface components {
          */
         ExecState: "queued" | "running" | "done" | "interrupted";
         /**
+         * ExecutionPageView
+         * @description One page of a session's runs, oldest first. `next_cursor` fetches the
+         *     next page and is null on the last one.
+         */
+        ExecutionPageView: {
+            /** Items */
+            items: components["schemas"]["ExecutionView"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /**
+         * ExecutionView
+         * @description One run of one check: why it ran, the version and whether the tree
+         *     was dirty, the image, host, and isolation it ran on, who wrote its
+         *     results, its timing, its outcome and its cases, and the weakest
+         *     provenance of what served it. A `work` run names the agent's tool call;
+         *     a baseline or a validation run names its validation.
+         */
+        ExecutionView: {
+            /** Abort */
+            abort: string | null;
+            cases: components["schemas"]["CasesView"];
+            /** Check */
+            check: string;
+            /** Check Version */
+            check_version: string;
+            /** Dirty */
+            dirty: boolean;
+            /** Executor */
+            executor: string;
+            /**
+             * Finished At
+             * Format: date-time
+             */
+            finished_at: string;
+            /** Host */
+            host: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Image */
+            image: string;
+            /** Isolation */
+            isolation: string;
+            outcome: components["schemas"]["RunOutcome"];
+            /** Project */
+            project: string;
+            provenance: components["schemas"]["Provenance"];
+            purpose: components["schemas"]["RunPurpose"];
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Step Id */
+            step_id: string | null;
+            /** Validation Id */
+            validation_id: string | null;
+            /** Version */
+            version: string;
+        };
+        /**
          * FetchCredentialRequest
          * @description A read-only credential of the project's repository, as source control
          *     takes it over HTTPS. It goes to the tenant's store and is never read
@@ -3416,6 +3872,28 @@ export interface components {
             /** Role */
             role: string;
         };
+        /**
+         * FillUsageView
+         * @description What one model, at its provider, used in the session's calls: the
+         *     calls that answered, and their tokens by class, no token counted
+         *     twice.
+         */
+        FillUsageView: {
+            /** Cache Read */
+            cache_read: number;
+            /** Cache Write */
+            cache_write: number;
+            /** Calls */
+            calls: number;
+            /** Fill */
+            fill: string;
+            /** Input */
+            input: number;
+            /** Output */
+            output: number;
+            /** Thinking */
+            thinking: number;
+        };
         /** FillView */
         FillView: {
             /** Context Window */
@@ -3508,6 +3986,11 @@ export interface components {
              */
             user_id: string;
         };
+        /**
+         * HandleKind
+         * @enum {string}
+         */
+        HandleKind: "pull_request" | "branch";
         /** HeartbeatRequest */
         HeartbeatRequest: {
             advertisement: components["schemas"]["AdvertisementBody"];
@@ -4134,6 +4617,23 @@ export interface components {
         LogoutRequest: {
             /** Return To */
             return_to?: string | null;
+        };
+        /**
+         * LoopLimitsView
+         * @description The bounds of one loop of the session's kind: the model calls before
+         *     the step guard parks it for a person, the tool errors or identical
+         *     calls in a row that end it, the nudges it gives, and how long one run
+         *     drives it before handing it on.
+         */
+        LoopLimitsView: {
+            /** Error Streak */
+            error_streak: number;
+            /** Nudges */
+            nudges: number;
+            /** Run Time Seconds */
+            run_time_seconds: number;
+            /** Step Guard */
+            step_guard: number;
         };
         /**
          * LoopOutcome
@@ -4890,10 +5390,51 @@ export interface components {
             /** Size Bytes */
             size_bytes: number;
         };
+        /**
+         * QuestionView
+         * @description What a session asks of a person now: a park on a person that is no
+         *     call's decision, such as a step guard to lift, a deadline to move, or a
+         *     principal to name. `unlock` is what clears it, sent as a control; `seq`
+         *     is the step that parked it.
+         */
+        QuestionView: {
+            /**
+             * Asked At
+             * Format: date-time
+             */
+            asked_at: string;
+            /** Seq */
+            seq: number;
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+            /** Unlock */
+            unlock: string;
+        };
         /** RenameProjectRequest */
         RenameProjectRequest: {
             /** Name */
             name: string;
+        };
+        /**
+         * ReportView
+         * @description The result the session submitted and the gate accepted: the outcome
+         *     its loop ended with, whether a gate that knows the evidence judged it,
+         *     and the step that answered it.
+         */
+        ReportView: {
+            /**
+             * Accepted At
+             * Format: date-time
+             */
+            accepted_at: string;
+            outcome: components["schemas"]["LoopOutcome"];
+            /** Seq */
+            seq: number;
+            /** Verified */
+            verified: boolean;
         };
         /**
          * RepositoryBody
@@ -4978,6 +5519,18 @@ export interface components {
             role: string;
         };
         /**
+         * RunOutcome
+         * @enum {string}
+         */
+        RunOutcome: "passed" | "failed" | "errored" | "aborted";
+        /**
+         * RunPurpose
+         * @description Why a run ran. Only the executor writes a `baseline` or a
+         *     `validation` run; the agent's own runs are `work`.
+         * @enum {string}
+         */
+        RunPurpose: "work" | "baseline" | "validation";
+        /**
          * RunsAs
          * @description Whose authority an automation's action runs on.
          * @enum {string}
@@ -5053,6 +5606,27 @@ export interface components {
          * @enum {string}
          */
         SessionStatus: "pending" | "running" | "parked" | "idle";
+        /**
+         * SessionUsageView
+         * @description What a session's model calls used, as each provider reported it, per
+         *     model and in total.
+         */
+        SessionUsageView: {
+            /** Cache Read */
+            cache_read: number;
+            /** Cache Write */
+            cache_write: number;
+            /** Calls */
+            calls: number;
+            /** Fills */
+            fills: components["schemas"]["FillUsageView"][];
+            /** Input */
+            input: number;
+            /** Output */
+            output: number;
+            /** Thinking */
+            thinking: number;
+        };
         /**
          * SessionView
          * @description Only the hash of a token is ever kept, so a session view carries no secret.
@@ -5421,6 +5995,55 @@ export interface components {
             head: number;
         };
         /**
+         * ToolCallPageView
+         * @description One page of a session's tool calls, in order, after the seq the
+         *     request named. With `has_more`, the next page starts after the last
+         *     call's seq.
+         */
+        ToolCallPageView: {
+            /** Has More */
+            has_more: boolean;
+            /** Items */
+            items: components["schemas"]["ToolCallView"][];
+        };
+        /**
+         * ToolCallView
+         * @description One tool call of a session: its request, a person's decision on it
+         *     when one was asked, and its response once it answered. A call with no
+         *     response is open: held for a decision, or running.
+         */
+        ToolCallView: {
+            /** Authorization Class */
+            authorization_class: string;
+            /** Decided By */
+            decided_by: string | null;
+            decision: components["schemas"]["Verdict"] | null;
+            failure: components["schemas"]["ToolFailure"] | null;
+            /**
+             * Loop Id
+             * Format: uuid
+             */
+            loop_id: string;
+            /**
+             * Principal Id
+             * Format: uuid
+             */
+            principal_id: string;
+            /**
+             * Requested At
+             * Format: date-time
+             */
+            requested_at: string;
+            /** Responded At */
+            responded_at: string | null;
+            /** Response Seq */
+            response_seq: number | null;
+            /** Seq */
+            seq: number;
+            /** Tool */
+            tool: string;
+        };
+        /**
          * ToolFailure
          * @description The class of a tool failure, decided where the failure happens. The
          *     model reads it with advice on what to do next.
@@ -5476,6 +6099,29 @@ export interface components {
              * Format: uuid
              */
             identity_id: string;
+        };
+        /**
+         * TreeBoundsView
+         * @description What the session's tree shares: how deep and how many sub-agents it
+         *     may have, how many run at once, the one deadline, and how many were
+         *     spawned so far.
+         */
+        TreeBoundsView: {
+            /** Concurrency */
+            concurrency: number | null;
+            /** Count */
+            count: number;
+            /** Deadline */
+            deadline: string | null;
+            /** Height */
+            height: number;
+            /**
+             * Root Id
+             * Format: uuid
+             */
+            root_id: string;
+            /** Size */
+            size: number;
         };
         /**
          * TrialView
@@ -5571,6 +6217,17 @@ export interface components {
             value: string;
         };
         /**
+         * UsagePageView
+         * @description One page of the tenant's budgets with their usage, by budget id.
+         *     `next_cursor` fetches the next page and is null on the last one.
+         */
+        UsagePageView: {
+            /** Items */
+            items: components["schemas"]["BudgetUsageView"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /**
          * UserPageView
          * @description One page of the tenant's members. `next_cursor` fetches the next page
          *     and is null on the last one, so a client reads every member instead of
@@ -5613,10 +6270,62 @@ export interface components {
             type: string;
         };
         /**
+         * ValidationView
+         * @description One pass of the policy's checks on a fresh executor: the version it
+         *     ran at and the version its checks came from, who ran it, the hash of
+         *     the results it wrote, and its runs.
+         */
+        ValidationView: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Executor */
+            executor: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Project */
+            project: string;
+            purpose: components["schemas"]["RunPurpose"];
+            /** Records */
+            records: string[];
+            /** Results Sha256 */
+            results_sha256: string;
+            /** Source */
+            source: string;
+            /** Version */
+            version: string;
+        };
+        /**
+         * Verdict
+         * @description A person's decision on one exact call, as the history holds it.
+         * @enum {string}
+         */
+        Verdict: "approved" | "denied" | "expired" | "pending";
+        /**
          * WindowKind
          * @enum {string}
          */
         WindowKind: "life" | "hour" | "day" | "week" | "month" | "span";
+        /**
+         * WorkHandleView
+         * @description A pull request or a branch the session opened as its work, by the
+         *     name source control gives it.
+         */
+        WorkHandleView: {
+            /**
+             * Bound At
+             * Format: date-time
+             */
+            bound_at: string;
+            /** Handle */
+            handle: string;
+            kind: components["schemas"]["HandleKind"];
+        };
         /**
          * WorkKind
          * @enum {string}
@@ -6693,6 +7402,43 @@ export interface operations {
             };
         };
     };
+    list_sessions_v1_agent_sessions_get: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["SessionStatus"] | null;
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSessionPageView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     start_session_v1_agent_sessions_post: {
         parameters: {
             query?: never;
@@ -6766,6 +7512,146 @@ export interface operations {
             };
         };
     };
+    delete_session_v1_agent_sessions__session_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSessionView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_approvals_v1_agent_sessions__session_id__approvals_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    archive_session_v1_agent_sessions__session_id__archive_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSessionView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_bounds_v1_agent_sessions__session_id__bounds_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BoundsView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     decide_call_v1_agent_sessions__session_id__calls__request_seq__decision_post: {
         parameters: {
             query?: never;
@@ -6794,6 +7680,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StepView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_children_v1_agent_sessions__session_id__children_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSessionPageView"];
                 };
             };
             /** @description Validation Error */
@@ -6999,6 +7923,79 @@ export interface operations {
             };
         };
     };
+    get_delivery_v1_agent_sessions__session_id__delivery_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_executions_v1_agent_sessions__session_id__executions_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExecutionPageView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     open_live_v1_agent_sessions__session_id__live_post: {
         parameters: {
             query?: never;
@@ -7148,6 +8145,76 @@ export interface operations {
             };
         };
     };
+    get_questions_v1_agent_sessions__session_id__questions_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_session_v1_agent_sessions__session_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSessionView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_steps_v1_agent_sessions__session_id__steps_get: {
         parameters: {
             query?: {
@@ -7173,6 +8240,116 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StepPageView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_tool_calls_v1_agent_sessions__session_id__tool_calls_get: {
+        parameters: {
+            query?: {
+                after_seq?: number;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolCallPageView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_usage_v1_agent_sessions__session_id__usage_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionUsageView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_validations_v1_agent_sessions__session_id__validations_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationView"][];
                 };
             };
             /** @description Validation Error */
@@ -7282,6 +8459,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiKeyView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_approvals_v1_approvals_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalPageView"];
                 };
             };
             /** @description Validation Error */
@@ -10540,6 +11753,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ToolPolicyView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_usage_v1_usage_get: {
+        parameters: {
+            query?: {
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsagePageView"];
                 };
             };
             /** @description Validation Error */
