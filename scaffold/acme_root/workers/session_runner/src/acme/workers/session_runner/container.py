@@ -45,6 +45,7 @@ from acme.om.trust.root import TrustLayer
 from acme.om.trust.types.identities import Executor, ExecutorKind
 from acme.om.watch.root import build_stream
 from acme.om.watch.stream import StreamServiceInterface
+from acme.om.workspaces.impl.executor import ExecutorOptions
 from acme.workers.session_runner.settings import SessionRunnerSettings
 
 log = logging.getLogger(__name__)
@@ -212,6 +213,7 @@ class RunnerContainer:
             budget_gate=ports.budget_gate or build_money_gate(storage),
             result_gate=ports.result_gate,
             executor=ports.executor,
+            executor_options=ExecutorOptions(image=settings.workspace_image),
             work_product=ports.work_product,
             session_projects=ports.session_projects,
             workspace_projects=ports.workspace_projects,

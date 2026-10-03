@@ -146,7 +146,7 @@ from acme.om.work.impl.operator import WorkOperatorManagerImpl
 from acme.om.workspaces import WorkspacesManagerInterface
 from acme.om.workspaces import rules as workspace_rules
 from acme.om.workspaces.git import RepositoryReaderInterface, WorkspaceGitInterface
-from acme.om.workspaces.impl.executor import ExecutorWorkspacesImpl
+from acme.om.workspaces.impl.executor import ExecutorOptions, ExecutorWorkspacesImpl
 from acme.om.workspaces.impl.forge import SourceControlAbsentImpl, SourceControlForgeImpl
 from acme.om.workspaces.impl.git import GitOptions, WorkspaceGitTransportImpl
 from acme.om.workspaces.impl.manager import WorkspacesManagerImpl, WorkspacesOptions
@@ -380,6 +380,7 @@ def build_managers(
     retention_options: RetentionOptions | None = None,
     evidence_options: EvidenceOptions | None = None,
     executor: ExecutorInterface | None = None,
+    executor_options: ExecutorOptions | None = None,
     work_product: WorkProductInterface | None = None,
     projects_options: ProjectsOptions | None = None,
 ) -> Managers:
@@ -435,8 +436,10 @@ def build_managers(
     The evidence takes the platform's two ports: `executor`, the fresh
     executor validation runs on, and `work_product`, which reads what a
     session delivered, and which the result gate reads too. None wires the
-    platform's executor, a fresh instance of the cloud's for each run, or in
-    `local` the loud null, which refuses every validation; and the
+    platform's executor, a fresh instance of the cloud's for each run, made
+    and recorded as `executor_options` say, the image the process's
+    workspaces run among them, or in `local` the loud null, which refuses
+    every validation; and the
     workspaces' work product, the session's branch as its repository holds it, with the
     workspace this process holds for the session telling what was not
     delivered; one it does not hold, or one of no bound repository, is
@@ -845,6 +848,7 @@ def build_managers(
                 lambda: managers.relay,
                 lambda stage: TransportRelayImpl(lambda: managers.relay, stage),
             ),
+            executor_options,
         )
     evidence = EvidenceManagerImpl(
         storage.get_evidence_storage(),
