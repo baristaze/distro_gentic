@@ -148,14 +148,28 @@ class RelayManagerImpl(RelayManagerInterface):
     async def bind_workspace(
         self, ctx: TenantContext, session_id: UUID, host_id: UUID, location: str
     ) -> WorkspaceBinding:
+        return await self._bind(ctx, session_id, host_id, location, None)
+
+    async def _bind(
+        self,
+        ctx: TenantContext,
+        session_id: UUID,
+        host_id: UUID,
+        location: str,
+        instance_of: UUID | None,
+    ) -> WorkspaceBinding:
+        """Binds the workspace under `session_id` to the host: a session's
+        own, or an instance made for the session `instance_of` names, which
+        is held to that session's pool."""
         ctx.require(Permission.WRITE)
-        placed = await self._hosts.placement_of(ctx, session_id)
+        owner = instance_of or session_id
+        placed = await self._hosts.placement_of(ctx, owner)
         if placed.pool is None:
-            raise ValidationFailed(f"session {session_id} runs in the cloud; no host holds it")
+            raise ValidationFailed(f"session {owner} runs in the cloud; no host holds it")
         statuses = await self._hosts.get_hosts(ctx, placed.pool.id)
         host = next((status.host for status in statuses if status.host.id == host_id), None)
         if host is None or host.revoked_at is not None:
-            raise ValidationFailed(f"host {host_id} is no live host of session {session_id}'s pool")
+            raise ValidationFailed(f"host {host_id} is no live host of session {owner}'s pool")
         stored = await self._storage.read_binding(ctx.org_id, session_id)
         now = self._clock()
         if stored is None:
@@ -169,6 +183,7 @@ class RelayManagerImpl(RelayManagerInterface):
                 host_id=host.id,
                 host_name=host.name,
                 location=location,
+                instance_of=instance_of,
             )
         else:
             binding = stored.model_copy(
@@ -198,40 +213,36 @@ class RelayManagerImpl(RelayManagerInterface):
             raise ValidationFailed(f"session {session_id} runs in the cloud; no host prepares it")
         if await self._asked_of(ctx, session_id, placed.pool.id):
             return False
-        # Where on the host it is made is the host's to choose, so a prepare
-        # reads no path of the host's.
-        isolation, egress, _ = asks(spec, "")
-        project = await self._projects.project_of(ctx, session_id)
-        payload = WorkspacePayload(
-            operation=WorkspaceOperation.PREPARE,
-            pool_id=placed.pool.id,
-            session_id=session_id,
-            spec=spec,
-            isolation=isolation,
-            egress=egress,
-            project_id=None if project is None else project.id,
-        )
-        now = self._clock()
-        row = new_id()
-        await self._work.enqueue(
-            ctx,
-            WorkItem(
-                id=row,
-                created_at=now,
-                updated_at=now,
-                created_by=ctx.user_id,
-                updated_by=ctx.user_id,
-                kind=WorkKind.WORKSPACE,
-                target_id=session_id,
-                idempotency_key=row,
-                request_id=ctx.request_id,
-                traceparent=ctx.traceparent,
-                payload=payload.model_dump(mode="json"),
-                status=WorkStatus.QUEUED,
-                available_at=now,
-            ),
-        )
+        await self._ask_prepare(ctx, session_id, placed.pool.id, spec, None)
         OUTCOMES.labels(subsystem="relay", outcome="prepare_asked").inc()
+        return True
+
+    async def ask_instance(
+        self, ctx: TenantContext, session_id: UUID, instance_id: UUID, spec: IsolationSpec
+    ) -> None:
+        ctx.require(Permission.WRITE)
+        placed = await self._hosts.placement_of(ctx, session_id)
+        if placed.pool is None:
+            raise ValidationFailed(f"session {session_id} runs in the cloud; no host makes it")
+        await self._ask_prepare(ctx, instance_id, placed.pool.id, spec, session_id)
+        OUTCOMES.labels(subsystem="relay", outcome="instance_asked").inc()
+
+    async def ask_purge(self, ctx: TenantContext, instance_id: UUID, spec: IsolationSpec) -> bool:
+        ctx.require(Permission.WRITE)
+        binding = await self._storage.read_binding(ctx.org_id, instance_id)
+        if binding is None:
+            latest = await self._work.latest_for_target(ctx, WorkKind.WORKSPACE, instance_id)
+            if latest is not None and latest.status is WorkStatus.QUEUED:
+                await self._work.end_queued(ctx, latest, "its run ended before a host made it")
+            return False
+        payload = WorkspacePayload(
+            operation=WorkspaceOperation.PURGE,
+            host_id=binding.host_id,
+            session_id=instance_id,
+            spec=spec,
+        )
+        await self._enqueue_workspace(ctx, instance_id, payload)
+        OUTCOMES.labels(subsystem="relay", outcome="purge_asked").inc()
         return True
 
     async def holder(self, ctx: TenantContext, session_id: UUID) -> WorkspaceBinding | None:
@@ -239,7 +250,7 @@ class RelayManagerImpl(RelayManagerInterface):
         binding = await self._storage.read_binding(ctx.org_id, session_id)
         if binding is None:
             return None
-        placed = await self._hosts.placement_of(ctx, session_id)
+        placed = await self._hosts.placement_of(ctx, binding.instance_of or session_id)
         if placed.pool is None:
             return None
         statuses = await self._hosts.get_hosts(ctx, placed.pool.id)
@@ -269,26 +280,7 @@ class RelayManagerImpl(RelayManagerInterface):
             session_id=session_id,
             spec=spec,
         )
-        now = self._clock()
-        row = new_id()
-        await self._work.enqueue(
-            ctx,
-            WorkItem(
-                id=row,
-                created_at=now,
-                updated_at=now,
-                created_by=ctx.user_id,
-                updated_by=ctx.user_id,
-                kind=WorkKind.WORKSPACE,
-                target_id=session_id,
-                idempotency_key=row,
-                request_id=ctx.request_id,
-                traceparent=ctx.traceparent,
-                payload=payload.model_dump(mode="json"),
-                status=WorkStatus.QUEUED,
-                available_at=now,
-            ),
-        )
+        await self._enqueue_workspace(ctx, session_id, payload)
         OUTCOMES.labels(subsystem="relay", outcome="release_asked").inc()
         return True
 
@@ -296,7 +288,9 @@ class RelayManagerImpl(RelayManagerInterface):
         self, rctx: RequestContext, host: HostIdentity, item_id: UUID, answer: PrepareAnswer
     ) -> WorkspaceBinding | None:
         ctx = await self._service(rctx, host.org_id)
-        row, session_id = await self._prepare_held(ctx, host, item_id)
+        row, payload = await self._prepare_held(ctx, host, item_id)
+        assert payload.session_id is not None  # `_prepare_held` holds it
+        session_id = payload.session_id
         if answer.refused is not None:
             # Back to the pool's lane after a wait, for a host that can give
             # it; the loop waits on the resource meanwhile.
@@ -306,12 +300,15 @@ class RelayManagerImpl(RelayManagerInterface):
             return None
         assert answer.location is not None  # the answer's own rule
         binding = await self._storage.read_binding(host.org_id, session_id)
+        owner = payload.instance_of or session_id
         if (
             binding is None
             or binding.host_id == host.host_id
-            or not await self._holds(ctx, session_id, binding.host_id)
+            or not await self._holds(ctx, owner, binding.host_id)
         ):
-            binding = await self.bind_workspace(ctx, session_id, host.host_id, answer.location)
+            binding = await self._bind(
+                ctx, session_id, host.host_id, answer.location, payload.instance_of
+            )
         try:
             await self._work.complete(ctx, row)
         except LeaseLost, NotFound:
@@ -321,7 +318,9 @@ class RelayManagerImpl(RelayManagerInterface):
 
     async def released(self, rctx: RequestContext, host: HostIdentity, item_id: UUID) -> None:
         ctx = await self._service(rctx, host.org_id)
-        row = await self._workspace_held(ctx, host, item_id, WorkspaceOperation.RELEASE)
+        row = await self._workspace_held(
+            ctx, host, item_id, (WorkspaceOperation.RELEASE, WorkspaceOperation.PURGE)
+        )
         try:
             await self._work.complete(ctx, row)
         except LeaseLost, NotFound:
@@ -376,7 +375,7 @@ class RelayManagerImpl(RelayManagerInterface):
             if met is None:
                 raise NotFound(f"exec item {item_id} not found")
             return await self._attach(ctx, met, call)
-        await self._enqueue(ctx, item, call.by_person)
+        await self._enqueue(ctx, item, call.by_person, binding.instance_of or item.session_id)
         OUTCOMES.labels(subsystem="relay", outcome="sent").inc()
         return item
 
@@ -667,6 +666,58 @@ class RelayManagerImpl(RelayManagerInterface):
 
     # Helpers.
 
+    async def _ask_prepare(
+        self,
+        ctx: TenantContext,
+        target: UUID,
+        pool_id: UUID,
+        spec: IsolationSpec,
+        instance_of: UUID | None,
+    ) -> None:
+        """A prepare of the workspace under `target` on the pool's lane, held
+        to the project of the session it is for."""
+        # Where on the host it is made is the host's to choose, so a prepare
+        # reads no path of the host's.
+        isolation, egress, _ = asks(spec, "")
+        project = await self._projects.project_of(ctx, instance_of or target)
+        payload = WorkspacePayload(
+            operation=WorkspaceOperation.PREPARE,
+            pool_id=pool_id,
+            session_id=target,
+            spec=spec,
+            isolation=isolation,
+            egress=egress,
+            project_id=None if project is None else project.id,
+            instance_of=instance_of,
+        )
+        await self._enqueue_workspace(ctx, target, payload)
+
+    async def _enqueue_workspace(
+        self, ctx: TenantContext, target: UUID, payload: WorkspacePayload
+    ) -> None:
+        """`workspace` work for the workspace under `target`, on the lane its
+        payload names."""
+        now = self._clock()
+        row = new_id()
+        await self._work.enqueue(
+            ctx,
+            WorkItem(
+                id=row,
+                created_at=now,
+                updated_at=now,
+                created_by=ctx.user_id,
+                updated_by=ctx.user_id,
+                kind=WorkKind.WORKSPACE,
+                target_id=target,
+                idempotency_key=row,
+                request_id=ctx.request_id,
+                traceparent=ctx.traceparent,
+                payload=payload.model_dump(mode="json"),
+                status=WorkStatus.QUEUED,
+                available_at=now,
+            ),
+        )
+
     async def _service(self, rctx: RequestContext, org_id: UUID) -> TenantContext:
         """The tenant's service context: the relay runs below any principal,
         for the runner's transport and for a host, which is no person."""
@@ -708,23 +759,25 @@ class RelayManagerImpl(RelayManagerInterface):
 
     async def _prepare_held(
         self, ctx: TenantContext, host: HostIdentity, item_id: UUID
-    ) -> tuple[WorkItem, UUID]:
-        """The prepare the host holds under a live claim, and its session."""
-        row = await self._workspace_held(ctx, host, item_id, WorkspaceOperation.PREPARE)
+    ) -> tuple[WorkItem, WorkspacePayload]:
+        """The prepare the host holds under a live claim, and what it asks:
+        always a session's workspace, or an instance made for one."""
+        row = await self._workspace_held(ctx, host, item_id, (WorkspaceOperation.PREPARE,))
         payload = WorkspacePayload.model_validate(row.payload)
         if payload.pool_id != host.pool_id or payload.session_id is None:
             raise ItemNotHeld(f"workspace item {item_id} is not held by this host")
-        return row, payload.session_id
+        return row, payload
 
     async def _workspace_held(
         self,
         ctx: TenantContext,
         host: HostIdentity,
         item_id: UUID,
-        operation: WorkspaceOperation,
+        operations: tuple[WorkspaceOperation, ...],
     ) -> WorkItem:
-        """The workspace item of `operation` the host holds under a live
-        claim. A release is the host's own, named in its payload."""
+        """The workspace item of one of `operations` the host holds under a
+        live claim. A release or a purge is the host's own, named in its
+        payload."""
         try:
             row: WorkItem | None = await self._work.get_item(ctx, item_id)
         except NotFound:
@@ -732,11 +785,11 @@ class RelayManagerImpl(RelayManagerInterface):
         held = (
             row is not None
             and row.kind is WorkKind.WORKSPACE
-            and _operation(row) is operation
+            and _operation(row) in operations
             and row.status is WorkStatus.CLAIMED
             and row.claimed_by == worker_of(host)
         )
-        if held and operation is not WorkspaceOperation.PREPARE:
+        if held and WorkspaceOperation.PREPARE not in operations:
             assert row is not None
             held = WorkspacePayload.model_validate(row.payload).host_id == host.host_id
         if not held or row is None:
@@ -745,7 +798,8 @@ class RelayManagerImpl(RelayManagerInterface):
 
     async def _holds(self, ctx: TenantContext, session_id: UUID, host_id: UUID) -> bool:
         """Whether the host is a live host of the session's pool: one that was
-        neither revoked nor moved holds what it prepared."""
+        neither revoked nor moved holds what it prepared, for the session or
+        for an instance made for it."""
         placed = await self._hosts.placement_of(ctx, session_id)
         if placed.pool is None:
             return False
@@ -780,7 +834,9 @@ class RelayManagerImpl(RelayManagerInterface):
             written = await self._storage.write_item(ctx.org_id, again, item.version)
             if written is None:
                 raise PreconditionFailed(f"exec item {item.id} moved while it was sent again")
-            await self._enqueue(ctx, written, call.by_person)
+            binding = await self._storage.read_binding(ctx.org_id, item.session_id)
+            owner = item.session_id if binding is None else binding.instance_of or item.session_id
+            await self._enqueue(ctx, written, call.by_person, owner)
             return written
         newer = call.epoch is not None and (item.epoch is None or item.epoch < call.epoch)
         if item.state is ExecState.QUEUED and newer:
@@ -791,14 +847,17 @@ class RelayManagerImpl(RelayManagerInterface):
             return written or await self._item(ctx.org_id, item.id)
         return item
 
-    async def _enqueue(self, ctx: TenantContext, item: ExecItem, by_person: bool) -> None:
+    async def _enqueue(
+        self, ctx: TenantContext, item: ExecItem, by_person: bool, owner: UUID
+    ) -> None:
         """The item's queue row, on the lane of the host that holds the
         workspace. An unsafe one is claimed once: a lost lease fails it in
         the queue's own sweep, never back to the queue. It names the
-        session's project, which a host's owner may hold its work to, and
-        whether a person sent it by hand, which the owner may refuse."""
+        project of `owner`, the session the workspace is or was made for,
+        which a host's owner may hold its work to, and whether a person sent
+        it by hand, which the owner may refuse."""
         isolation, egress, reads = asks(item.spec, item.location)
-        project = await self._projects.project_of(ctx, item.session_id)
+        project = await self._projects.project_of(ctx, owner)
         payload = ExecPayload(
             host_id=item.host_id,
             item_id=item.id,

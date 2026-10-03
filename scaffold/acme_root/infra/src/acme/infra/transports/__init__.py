@@ -48,6 +48,7 @@ __all__ = [
     "CommandSpec",
     "CredentialBrokerInterface",
     "FileEntry",
+    "FileTooLarge",
     "OutputSink",
     "PathOutsideWorkspace",
     "RecordSeal",
@@ -77,6 +78,18 @@ class StaleCommand(InfraException):
 
     http_status = 412
     code = "stale_command"
+
+
+class FileTooLarge(InfraException):
+    """A file longer than one read through the transport carries, asked for
+    more than that: refused whole, never cut short, with the bound it passed
+    in its message."""
+
+    http_status = 413
+    code = "file_too_large"
+
+    def __init__(self, limit: int) -> None:
+        super().__init__(f"the file is past the {limit} bytes one read carries")
 
 
 class PathOutsideWorkspace(InfraValidationFailed):
@@ -248,7 +261,8 @@ class TransportInterface(ABC):
 
     @abstractmethod
     async def read_file(self, workspace: Workspace, path: str, max_bytes: int) -> bytes:
-        """At most `max_bytes` of the file."""
+        """At most `max_bytes` of the file. A transport that carries fewer in
+        one read refuses a file longer than it carries (`FileTooLarge`)."""
         ...
 
     @abstractmethod

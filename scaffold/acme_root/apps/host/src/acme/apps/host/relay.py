@@ -5,9 +5,10 @@ item whose spec asks other than its fields say is refused, with nothing
 made or run. A prepare makes the workspace through the host's own provider
 for the session's isolation and answers where it is, which binds the
 session to this host; a release lets its instance go and keeps its
-files. An `exec` item runs through its own local transport, in the
-workspace it holds, prepared again first, so an instance that stopped
-since starts anew over its files. The output streams back a part
+files, and a purge destroys an instance and its files. An `exec` item
+runs through its own local transport, in the workspace it holds,
+prepared again first, so an instance that stopped since starts anew over
+its files. The output streams back a part
 at a time and the result is pushed once, each with the hash the host
 declares of the bytes it sends. While the item runs the host renews its
 lease, and a stop from the control stream ends the command at once: the
@@ -273,11 +274,14 @@ class ExecutorRelayImpl(ExecutorInterface):
         as refused, so another host of the pool may. Where the workspace is
         made is the host's to choose, so a prepare reads no path of its own.
         When another host holds the session's workspace already, this one's
-        goes. A release lets an instance go (`_release`); a purge has no
-        executor here yet."""
+        goes. A release lets an instance go (`_release`); a purge destroys
+        one (`_purge`)."""
         payload = item.payload
         if payload.get("operation") == "release":
             await self._release(item)
+            return
+        if payload.get("operation") == "purge":
+            await self._purge(item)
             return
         if payload.get("operation") != "prepare":
             log.warning(
@@ -333,6 +337,31 @@ class ExecutorRelayImpl(ExecutorInterface):
                 )
                 await provider.release(workspace)
                 log.info("item %s: the instance of session %s is released", item.id, session_id)
+        try:
+            async with self._client() as client:
+                await client.answer_release(item.id)
+        except (ApiError, *WIRE_FAILURES) as error:
+            log.warning("item %s: its answer was not taken: %s", item.id, error)
+
+    async def _purge(self, item: ClaimedWorkView) -> None:
+        """A purge: the instance this host's provider made under the item's
+        workspace id goes with its files, and its transport's records with
+        it, so nothing of the run it served is left for another. Purging one
+        already gone does nothing. One that fails to go is not answered: its
+        lease runs out, and it is claimed again."""
+        try:
+            spec = IsolationSpec.model_validate(item.payload["spec"])
+            instance_id = UUID(str(item.payload["session_id"]))
+        except KeyError, ValueError, ValidationError:
+            log.warning("item %s: the purge names no workspace or spec", item.id)
+            return
+        provider = self._workspaces.get(spec.mode)
+        if provider is not None:
+            await provider.purge(item.org_id, instance_id)
+        transport = self._transports.get(spec.mode)
+        if transport is not None:
+            await transport.purge_records(instance_id)
+        log.info("item %s: the instance %s is destroyed", item.id, instance_id)
         try:
             async with self._client() as client:
                 await client.answer_release(item.id)

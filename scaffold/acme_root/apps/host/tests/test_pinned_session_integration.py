@@ -17,7 +17,7 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from host_support import Stack, directory_host, stack
+from host_support import Stack, directory_host, postgres, stack
 from runner_support import TOOLS, answers, assistant, runs
 
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
@@ -31,8 +31,6 @@ from acme.om.base import new_id, utcnow
 from acme.om.steps.rules import message_step
 from acme.om.steps.types.header import LoopOutcome, ParkReason
 from acme.om.steps.types.step import StepType
-from acme.om.storage.impl.postgres import StoragePostgresImpl
-from acme.om.storage.settings import MigrationSettings
 from acme.om.work.types.work_item import WorkKind
 from acme.services.api.seed import seed_platform
 from acme.workers.session_runner.container import RunnerContainer
@@ -46,15 +44,6 @@ KIND = assistant()
 SETTINGS = SessionRunnerSettings.model_validate(
     {"_env_file": None, "environment": "test", "runner_id": "runner-pinned"}
 )
-
-
-def postgres() -> StoragePostgresImpl:
-    """A storage root over the database the integration suites read."""
-    settings = MigrationSettings()
-    settings.refuse_remote()
-    return StoragePostgresImpl(
-        settings.role_urls(), settings.role_pools(), system_urls=settings.system_role_urls()
-    )
 
 
 @pytest.fixture

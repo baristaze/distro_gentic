@@ -72,7 +72,9 @@ class WorkspacePayload(Platform):
     The work's target is the session. A prepare names the spec it is held
     to and, after it, what it asks of its host, which the host holds to its
     owner's ceilings before anything is made, as an `exec` item's does; a
-    field left None asks the most."""
+    field left None asks the most. A prepare of an instance a run makes for
+    a session under an id of its own targets the instance, and names the
+    session in `instance_of`: the pool and the project are that session's."""
 
     operation: WorkspaceOperation
     pool_id: UUID | None = None
@@ -84,6 +86,7 @@ class WorkspacePayload(Platform):
     reads: tuple[str, ...] = ()
     by_person: bool = False
     project_id: UUID | None = None
+    instance_of: UUID | None = None
 
     @model_validator(mode="after")
     def _names_where_it_runs(self) -> WorkspacePayload:

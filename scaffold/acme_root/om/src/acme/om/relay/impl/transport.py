@@ -19,6 +19,7 @@ from acme.infra.transports import (
     CommandResult,
     CommandSpec,
     FileEntry,
+    FileTooLarge,
     OutputSink,
     RecordSeal,
     StaleCommand,
@@ -31,6 +32,7 @@ from acme.om.exceptions import PlatformException, ToolFailed, Unavailable
 from acme.om.placement.types.work import ExecEffect
 from acme.om.relay.exceptions import ContentNotKept, NoWorkspaceHost, StaleExec
 from acme.om.relay.manager import RelayManagerInterface
+from acme.om.relay.rules import READ_BYTES
 from acme.om.relay.types.exec import (
     REQUESTS,
     ExecCall,
@@ -170,11 +172,17 @@ class TransportRelayImpl(TransportInterface):
         return None
 
     async def read_file(self, workspace: Workspace, path: str, max_bytes: int) -> bytes:
-        request = ReadRequest(path=path, max_bytes=max_bytes)
+        """One item, whose result crosses the wall whole: it asks for no more
+        than `READ_BYTES` and a byte, so a longer file is refused at once
+        (`FileTooLarge`), never waited on as a result that cannot cross."""
+        request = ReadRequest(path=path, max_bytes=min(max_bytes, READ_BYTES + 1))
         progress = await self._file(workspace, request, "read_only", None)
         outcome, output = _ended(progress)
         _completed(outcome, output)
-        return base64.b64decode(output.data or "")
+        data = base64.b64decode(output.data or "")
+        if len(data) > READ_BYTES:
+            raise FileTooLarge(READ_BYTES)
+        return data
 
     async def write_file(self, workspace: Workspace, path: str, data: bytes, epoch: int) -> None:
         request = WriteRequest(path=path, data=base64.b64encode(data).decode())

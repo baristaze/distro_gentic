@@ -30,6 +30,12 @@ platform's cloud. Each call crosses the wall as `exec`
 - **A release**: `workspace` work on the lane of the host that holds the
   session's workspace, asking it to let the instance go and keep its
   files.
+- **An instance of a session's**: a workspace a run makes for a session
+  under an id of its own, for that run alone, on a host of the session's
+  pool. Its binding names the session, whose pool routes it and whose
+  project the host's owner holds its work to.
+- **A purge**: `workspace` work on the lane of the host that holds an
+  instance, asking it to destroy the instance and its files.
 
 ## What can happen
 
@@ -48,6 +54,12 @@ platform's cloud. Each call crosses the wall as `exec`
   waits at a time. Only that host answers it, and its answer completes
   the work. A release that waits when a prepare is asked is ended, since
   no live host is left holding the workspace.
+- **Make an instance.** A run that validates a pinned session's delivery
+  asks the session's pool for a new instance, as a prepare, and waits for
+  a host's answer to bind it. Its checks run there as `exec` work. When
+  the run ends, whatever ended it, the holding host is asked to purge the
+  instance, or the prepare that waits is ended, and the relay's rows of
+  the instance go at once. Only that host answers the purge.
 - **Send.** The runner's transport sends each operation of a call. A new
   one goes on the lane of the host that holds the workspace. One the
   call sent before is met as it stands, so a run that resumes after a
@@ -75,6 +87,8 @@ platform's cloud. Each call crosses the wall as `exec`
   a lost run sent is refused at its claim.
 - **What crosses is checked.** A part or a result whose bytes do not
   match the hash the host declared is refused before it is read.
+- **A read crosses whole.** A file is read in one item, and a file longer
+  than one result carries is refused at once, never waited on.
 - **The first settlement wins.** A result for an item a stop, its lease,
   or the sweep already settled lands nothing.
 - **Every row belongs to one org.**
@@ -101,7 +115,11 @@ gateway serves the host's calls and its control stream. The maintenance
 worker settles items whose lease ran out and purges a tenant's rows. The
 runner's tools find a pinned session's workspace on its host
 (`impl/workspaces.PlacedWorkspacesRelayedImpl`), and the host's answer to a
-prepare binds it with `bind_workspace` (`prepared`). The runner's sweep
+prepare binds it with `bind_workspace` (`prepared`). The evidence's
+executor makes an instance through `impl/instances.PlacedInstancesRelayedImpl`,
+which asks for it with `ask_instance`, reaches it through the relay's
+transport, and ends it with `ask_purge` and `purge_session`; the host
+answers a purge as it answers a release (`released`). The runner's sweep
 reads the bindings (`bindings`), reaches a holding host through `holder`,
 and asks it to let an instance go with `ask_release`; the host answers
 with `released`.

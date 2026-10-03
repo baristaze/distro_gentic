@@ -5,9 +5,11 @@ attaches to it rather than starting another. An expired lease completes an
 unsafe item `interrupted` and requeues a repeatable one to its workspace's
 host alone. A stop reaches the host's control stream at once, and nothing a
 stale writer sends acts. A part or a result whose hash does not verify is
-refused at the relay."""
+refused at the relay. A file is read in one item, whose result crosses
+whole: a file longer than one carries is refused at once."""
 
 import asyncio
+import base64
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -16,9 +18,16 @@ from uuid import UUID
 
 import pytest
 from contracts.agent_session_storage import make_session
+from contracts.project_storage import in_project
 
 from acme.infra.impl.local import InfraLocalImpl
-from acme.infra.transports import CommandResult, CommandSpec, RecordSeal, StaleCommand
+from acme.infra.transports import (
+    CommandResult,
+    CommandSpec,
+    FileTooLarge,
+    RecordSeal,
+    StaleCommand,
+)
 from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec, Workspace
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
@@ -41,7 +50,7 @@ from acme.om.relay.exceptions import ItemNotHeld, NoWorkspaceHost, StaleExec
 from acme.om.relay.impl.manager import RelayOptions
 from acme.om.relay.impl.placement import PlacementRelayedImpl
 from acme.om.relay.impl.transport import TransportPlacedImpl, TransportRelayImpl
-from acme.om.relay.rules import exec_id, key_time
+from acme.om.relay.rules import READ_BYTES, RESULT_CHARS, exec_id, key_time
 from acme.om.relay.types.exec import (
     ExecCall,
     ExecOutcome,
@@ -49,6 +58,8 @@ from acme.om.relay.types.exec import (
     ExecProgress,
     ExecResult,
     ExecState,
+    PrepareAnswer,
+    ReadRequest,
     RunRequest,
     StopKind,
 )
@@ -207,9 +218,12 @@ class Host:
             data,
         )
 
-    async def finish(self, row: WorkItem, exit_code: int = 0, stdout: str = "") -> None:
+    async def finish(
+        self, row: WorkItem, exit_code: int = 0, stdout: str = "", data: bytes | None = None
+    ) -> None:
+        read = None if data is None else base64.b64encode(data).decode()
         result = ExecResult(
-            outcome=ExecOutcome(exit_code=exit_code), output=ExecOutput(stdout=stdout)
+            outcome=ExecOutcome(exit_code=exit_code), output=ExecOutput(stdout=stdout, data=read)
         )
         data = result.model_dump_json().encode()
         await self.managers.relay.push_result(
@@ -566,6 +580,46 @@ async def test_a_part_or_a_result_whose_hash_does_not_verify_is_refused(wall: Wa
     assert (await waiting).stdout == "ok"
 
 
+# A file crosses whole in one item's result, or is refused at once.
+
+
+async def test_a_relayed_read_crosses_whole_and_a_longer_file_is_refused_at_once(
+    wall: Wall,
+) -> None:
+    host = Host(wall.managers, wall.holder)
+    asked: list[ReadRequest] = []
+
+    async def answers(data: bytes) -> None:
+        row = await host.claim_soon()
+        detail = await wall.managers.relay.detail(request(), wall.holder, host.item_id(row))
+        asked.append(cast(ReadRequest, detail.request))
+        await host.finish(row, data=data)
+
+    # A bound past what one result carries asks for that much and a byte.
+    bound = 64 * 1024 * 1024 + 1
+    reads = transport(wall.managers)
+    short = b'{"kind": "end", "outcome": "passed"}\n'
+    read, _ = await asyncio.gather(
+        reads.read_file(wall.workspace, "out/0-0.jsonl", bound), answers(short)
+    )
+    assert read == short
+    longer = b"r" * (READ_BYTES + 1)
+    with pytest.raises(FileTooLarge, match=f"past the {READ_BYTES} bytes"):
+        await asyncio.wait_for(
+            asyncio.gather(
+                reads.read_file(wall.workspace, "out/0-1.jsonl", bound), answers(longer)
+            ),
+            timeout=10,
+        )
+    assert [read.max_bytes for read in asked] == [READ_BYTES + 1] * 2
+    # And the most it asks for crosses within what a host's result carries.
+    result = ExecResult(
+        outcome=ExecOutcome(exit_code=0),
+        output=ExecOutput(data=base64.b64encode(longer).decode()),
+    )
+    assert len(base64.b64encode(result.model_dump_json().encode())) <= RESULT_CHARS
+
+
 # Where a call runs: the placement picks the transport, and names the host.
 
 
@@ -631,6 +685,104 @@ async def test_a_release_goes_to_the_holding_host_once_and_only_it_answers_it(
     # A revoked host is reached by nothing, a release included.
     await managers.hosts.revoke_host(owner, wall.holder.host_id)
     assert await managers.relay.holder(owner, session_id) is None
+
+
+# An instance a run makes for a session: made by a host of the session's
+# pool alone, held to the session's project, and purged by the host that
+# holds it.
+
+
+async def pool_of(managers: Managers, owner: TenantContext, name: str) -> HostPool:
+    now = utcnow()
+    return await managers.hosts.create_pool(
+        owner,
+        HostPool(
+            id=new_id(),
+            created_at=now,
+            updated_at=now,
+            created_by=owner.user_id,
+            updated_by=owner.user_id,
+            name=name,
+            region="eu-west",
+        ),
+    )
+
+
+async def test_an_instance_is_made_by_its_sessions_pool_alone_and_purged_by_its_host(
+    wall: Wall,
+) -> None:
+    managers, owner, session_id = wall.managers, wall.owner, wall.workspace.id
+    project_id = await in_project(wall.storage.get_project_storage(), owner.org_id, session_id)
+    elsewhere = await enrolled(managers, owner, await pool_of(managers, owner, "lab"), "host-3")
+    stranger, _ = await managers.tenancy.bootstrap(
+        request(), "Bolt", "bolt", "bob@bolt.test", "Bob"
+    )
+    foreign = await enrolled(managers, stranger, await pool_of(managers, stranger, "build"), "h")
+    instance = new_id()
+
+    await managers.relay.ask_instance(owner, session_id, instance, CONTAINER)
+
+    for outside in (elsewhere, foreign):
+        assert await Host(managers, outside).claim() is None, "no host outside the pool"
+    row = await Host(managers, wall.other).claim_soon()
+    payload = WorkspacePayload.model_validate(row.payload)
+    assert (payload.operation, payload.session_id, payload.instance_of) == (
+        WorkspaceOperation.PREPARE,
+        instance,
+        session_id,
+    )
+    assert payload.project_id == project_id, "held to the session's project"
+    binding = await managers.relay.prepared(
+        request(), wall.other, row.id, PrepareAnswer(location="/srv/work/instance")
+    )
+    assert binding is not None
+    assert (binding.session_id, binding.host_id, binding.instance_of) == (
+        instance,
+        wall.other.host_id,
+        session_id,
+    )
+    own = await managers.relay.binding_of(owner, session_id)
+    assert own is not None and own.host_id == wall.holder.host_id, "the session's own stays"
+
+    # Its command goes to the host that made it, held to the session's
+    # project, and to no other.
+    workspace = Workspace(id=instance, org_id=owner.org_id, spec=CONTAINER, location="")
+    sent = asyncio.ensure_future(transport(managers).run(workspace, command(1), seal=NO_SEAL))
+    for outside in (wall.holder, elsewhere, foreign):
+        assert await Host(managers, outside).claim() is None
+    ran = await Host(managers, wall.other).claim_soon()
+    exec_payload = ExecPayload.model_validate(ran.payload)
+    assert (exec_payload.session_id, exec_payload.project_id) == (instance, project_id)
+    await Host(managers, wall.other).finish(ran, stdout="ok")
+    assert (await sent).stdout == "ok"
+
+    # Its run ends: the host that holds it is asked to purge it, and only it
+    # answers; the relay's rows of it go at once.
+    assert await managers.relay.ask_purge(owner, instance, CONTAINER)
+    await managers.relay.purge_session(owner.org_id, instance)
+    assert await managers.relay.binding_of(owner, instance) is None
+    for outside in (wall.holder, elsewhere, foreign):
+        assert await Host(managers, outside).claim() is None
+    purge = await Host(managers, wall.other).claim_soon()
+    purged = WorkspacePayload.model_validate(purge.payload)
+    assert (purged.operation, purged.session_id) == (WorkspaceOperation.PURGE, instance)
+    with pytest.raises(ItemNotHeld):
+        await managers.relay.released(request(), wall.holder, purge.id)
+    await managers.relay.released(request(), wall.other, purge.id)
+    done = await managers.work.latest_for_target(owner, WorkKind.WORKSPACE, instance)
+    assert done is not None and done.status is WorkStatus.DONE
+
+
+async def test_an_instance_no_host_made_before_its_run_ended_is_never_made(wall: Wall) -> None:
+    managers, owner = wall.managers, wall.owner
+    instance = new_id()
+    await managers.relay.ask_instance(owner, wall.workspace.id, instance, CONTAINER)
+
+    assert not await managers.relay.ask_purge(owner, instance, CONTAINER), "no host to ask"
+
+    assert await Host(managers, wall.other).claim() is None, "the prepare that waited is ended"
+    ended = await managers.work.latest_for_target(owner, WorkKind.WORKSPACE, instance)
+    assert ended is not None and ended.status is WorkStatus.DONE
 
 
 def _call(wall: Wall, spec: CommandSpec) -> ExecCall:

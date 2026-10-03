@@ -889,8 +889,8 @@ class ApiClient:
         return PreparedView.model_validate(answer)
 
     async def answer_release(self, item_id: UUID) -> None:
-        """A release this host claimed: the instance is gone, and its files
-        stay."""
+        """A release or a purge this host claimed: the instance is gone. A
+        release keeps its files; a purge keeps none."""
         await self.request("POST", f"/v1/hosts/me/workspaces/{item_id}/released")
 
     async def extend_exec_lease(self, item_id: UUID) -> ExecLeaseView:

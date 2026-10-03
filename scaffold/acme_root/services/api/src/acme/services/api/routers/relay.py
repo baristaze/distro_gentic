@@ -67,6 +67,6 @@ async def prepared(
 
 @router.post("/hosts/me/workspaces/{item_id}/released", status_code=204)
 async def released(rctx: Rctx, relay: RelayService, host: Host, item_id: UUID) -> None:
-    """The host's answer to a release it claimed: the instance is gone, and
-    its files stay on the host."""
+    """The host's answer to a release or a purge it claimed: the instance is
+    gone. A release keeps its files on the host; a purge keeps none."""
     await relay.released(rctx, host, item_id)

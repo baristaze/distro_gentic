@@ -11,11 +11,16 @@ egress is none. Each check's
 command template runs with `{version}` and `{out}` filled, in the tree,
 under the environment of the instance's image and its transport, never one
 an agent set. Each trial's results stream is read back within the bound,
-and the executor hashes what it read.
+and within what one read of its transport carries, and the executor hashes
+what it read.
 
-The instance is the cloud's, made by the provider and reached by the
-transport the platform's own processes hold. A session inside its tenant's
-wall never runs on them: its checks are refused here, loudly."""
+For a session of the cloud, the instance is the cloud's, made by the
+provider and reached by the transport the platform's own processes hold. A
+session inside its tenant's wall never runs on them: its instance is made
+by a host of its pool, to the isolation the session is pinned to, which
+its pool gives it, and reached through the relay
+(`PlacedInstancesInterface`). A root that wires no such way refuses its
+checks, loudly."""
 
 import json
 from collections.abc import Awaitable, Callable
@@ -43,6 +48,7 @@ from acme.om.evidence.rates import stops_at
 from acme.om.evidence.types.contract import SCHEMAS, CheckDeclaration, Offer
 from acme.om.evidence.types.validation import ExecutionRequest, ExecutorReport
 from acme.om.exceptions import Unavailable, ValidationFailed
+from acme.om.workspaces.placed import PlacedInstancesInterface
 
 ARCHIVE = "tree.tar"
 """Where the tree's tar is written in the instance, until it is unpacked."""
@@ -60,14 +66,21 @@ commit, the protected source, and the protected patterns: the workspaces'
 (`WorkspacesManagerInterface.checks_tree`)."""
 MISSING = 404
 """The status a transport answers for a file the instance does not hold."""
+TOO_LARGE = 413
+"""The status a transport answers for a file longer than one read of it
+carries, with that bound in its message."""
 SPOKEN = 10_000
 """The most of a command's own output kept: a check writes its results to
 `{out}`, never to its output."""
+Pinned = Callable[[TenantContext, UUID], Awaitable[IsolationSpec | None]]
+"""The isolation a session is pinned to when it runs inside its tenant's
+wall; None for a session of the cloud."""
 
 
 class ExecutorOptions(Platform):
-    # The isolation each instance is made at: a container, as the cloud's
-    # executors are.
+    # The isolation each instance of the cloud's is made at: a container
+    # with no egress, as the cloud's executors are. One on a host of a pinned
+    # session's pool is made to the session's own isolation instead.
     isolation: IsolationMode = IsolationMode.CONTAINER
     limits: ResourceLimits = ResourceLimits()
     # What the instance's image offers a check, as its declaration names it.
@@ -94,14 +107,16 @@ class ExecutorWorkspacesImpl(ExecutorInterface):
         provider: WorkspaceProviderInterface,
         transport: TransportInterface,
         tree: Tree,
-        inside_wall: Callable[[UUID, UUID], Awaitable[bool]],
+        pinned: Pinned,
+        placed: PlacedInstancesInterface | None = None,
         options: ExecutorOptions | None = None,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._provider = provider
         self._transport = transport
         self._tree = tree
-        self._inside_wall = inside_wall
+        self._pinned = pinned
+        self._placed = placed
         self._options = options or ExecutorOptions()
         self._clock = clock
 
@@ -109,10 +124,11 @@ class ExecutorWorkspacesImpl(ExecutorInterface):
         return Offer(capabilities=self._options.capabilities, schemas=SCHEMAS)
 
     async def run(self, ctx: TenantContext, request: ExecutionRequest) -> ExecutorReport:
-        if await self._inside_wall(ctx.org_id, request.session_id):
+        pinned = await self._pinned(ctx, request.session_id)
+        if pinned is not None and self._placed is None:
             raise Unavailable(
-                f"session {request.session_id} runs inside its tenant's wall, "
-                "so its checks never run on the platform's machines"
+                f"session {request.session_id} runs inside its tenant's wall, and this "
+                "process reaches no host of its pool, so its checks never run here"
             )
         try:
             project_id = UUID(request.project)
@@ -120,27 +136,52 @@ class ExecutorWorkspacesImpl(ExecutorInterface):
             raise Unavailable(f"{request.project} is no project's id to validate") from None
         tree = await self._tree(ctx, project_id, request.version, request.source, request.protected)
         instance = new_id()
-        spec = IsolationSpec(
-            mode=self._options.isolation,
-            egress=EgressPolicy(mode=EgressMode.NONE),
-            limits=self._options.limits,
-        )
-        try:
-            workspace = await self._provider.prepare(ctx.org_id, instance, spec)
-            results = await self._checks(workspace, request, tree)
-        finally:
-            await self._provider.purge(ctx.org_id, instance)
-            await self._transport.purge_records(instance)
+        if pinned is None:
+            spec = IsolationSpec(
+                mode=self._options.isolation,
+                egress=EgressPolicy(mode=EgressMode.NONE),
+                limits=self._options.limits,
+            )
+            try:
+                workspace = await self._provider.prepare(ctx.org_id, instance, spec)
+                results = await self._checks(self._transport, workspace, request, tree)
+            finally:
+                await self._provider.purge(ctx.org_id, instance)
+                await self._transport.purge_records(instance)
+        else:
+            assert self._placed is not None  # refused above
+            try:
+                workspace, transport = await self._placed.make(
+                    ctx,
+                    request.session_id,
+                    instance,
+                    pinned,
+                    self._clock() + self._options.setup_time,
+                )
+                results = await self._checks(transport, workspace, request, tree)
+            finally:
+                await self._placed.destroy(ctx, instance, pinned)
         return ExecutorReport(
             executor=f"executor:{instance}", results=results, sha256=digest(results)
         )
 
-    async def _checks(self, workspace: Workspace, request: ExecutionRequest, tree: bytes) -> bytes:
+    async def _checks(
+        self,
+        transport: TransportInterface,
+        workspace: Workspace,
+        request: ExecutionRequest,
+        tree: bytes,
+    ) -> bytes:
         """Every trial the request asks for, each check's stopping where its
-        rate's rule stops it, and their results streams, one after another."""
-        await self._transport.write_file(workspace, ARCHIVE, tree, EPOCH)
+        rate's rule stops it, and their results streams, one after another,
+        in `workspace` through `transport`."""
+        await transport.write_file(workspace, ARCHIVE, tree, EPOCH)
         unpacked = await self._command(
-            workspace, ("sh", "-c", UNPACK, "sh", TREE, OUT, ARCHIVE), ".", self._options.setup_time
+            transport,
+            workspace,
+            ("sh", "-c", UNPACK, "sh", TREE, OUT, ARCHIVE),
+            ".",
+            self._options.setup_time,
         )
         if unpacked.exit_code != 0 or not unpacked.stdout.strip():
             raise Unavailable(f"the tree did not unpack in its instance: {unpacked.stderr[-300:]}")
@@ -156,7 +197,9 @@ class ExecutorWorkspacesImpl(ExecutorInterface):
                 if rate is not None and stops_at(rate, failed, rate.confidence) is not None:
                     break
                 out = f"{OUT}/{index}-{trial}.jsonl"
-                stream = await self._trial(workspace, request, check, f"{root}/{out}", out, read)
+                stream = await self._trial(
+                    transport, workspace, request, check, f"{root}/{out}", out, read
+                )
                 read += len(stream)
                 failed.append(_ended(stream) != "passed")
                 streams.append(stream.rstrip(b"\n"))
@@ -164,6 +207,7 @@ class ExecutorWorkspacesImpl(ExecutorInterface):
 
     async def _trial(
         self,
+        transport: TransportInterface,
         workspace: Workspace,
         request: ExecutionRequest,
         check: CheckDeclaration,
@@ -175,13 +219,16 @@ class ExecutorWorkspacesImpl(ExecutorInterface):
         command writes its results stream, and run in the tree; and the
         stream read back from `path`, the same file from the instance's root,
         within what is left of the bound. A check that wrote none is refused: a run nobody can read is
-        no evidence."""
+        no evidence. So is a stream longer than one read of the transport
+        carries, such as the relay's into a tenant's wall."""
         argv = tuple(part.format(version=request.version, out=out) for part in check.command)
-        await self._command(workspace, argv, TREE, self._options.trial_time)
+        await self._command(transport, workspace, argv, TREE, self._options.trial_time)
         left = self._options.max_results_bytes - read
         try:
-            stream = await self._transport.read_file(workspace, path, left + 1)
+            stream = await transport.read_file(workspace, path, left + 1)
         except InfraException as failed:
+            if failed.http_status == TOO_LARGE:
+                raise ValidationFailed(f"the results of {check.name}: {failed.message}") from None
             if failed.http_status != MISSING:
                 raise
             raise ValidationFailed(f"{check.name} wrote no results stream") from None
@@ -192,7 +239,12 @@ class ExecutorWorkspacesImpl(ExecutorInterface):
         return stream
 
     async def _command(
-        self, workspace: Workspace, argv: tuple[str, ...], cwd: str, time: timedelta
+        self,
+        transport: TransportInterface,
+        workspace: Workspace,
+        argv: tuple[str, ...],
+        cwd: str,
+        time: timedelta,
     ) -> CommandResult:
         command = CommandSpec(
             argv=argv,
@@ -203,7 +255,7 @@ class ExecutorWorkspacesImpl(ExecutorInterface):
             max_output=SPOKEN,
             effect="unsafe",
         )
-        return await self._transport.run(workspace, command, seal=SEAL)
+        return await transport.run(workspace, command, seal=SEAL)
 
 
 def _ended(stream: bytes) -> str | None:

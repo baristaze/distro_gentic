@@ -98,4 +98,5 @@ protected, and reports the answer as its target. The work product a
 session delivered, and the executor validation runs on, are the
 platform's ports (`work_product.py`, `executor.py`), which a root wires.
 Outside `local`, the executor is an instance of the
-[workspaces](../workspaces/README.md) made for each run.
+[workspaces](../workspaces/README.md) made for each run: the cloud's, or
+one a host of a pinned session's pool makes.
