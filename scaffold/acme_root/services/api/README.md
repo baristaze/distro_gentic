@@ -100,6 +100,30 @@ app, and `main.py` is the `acme-api` command: `serve`, `migrate`,
   loop. Another org's session answers as one that never existed. (`/v1/agent-sessions`,
   `/v1/agent-sessions/{session_id}`, `.../messages`, `.../controls`,
   `.../calls/{request_seq}/decision`, `.../steps`)
+- **Projects.** An owner or an admin creates a project bound to its
+  repository, under an Idempotency-Key, renames it, and removes it while
+  no session belongs to it (`409 project_in_use` otherwise); any member
+  lists and reads them. The repository never moves. Its fetch credential
+  is written and never read back: the answer says who gave it when, and
+  it leaves the tenant's store with its project. (`/v1/projects`,
+  `/v1/projects/{project_id}`, `.../credential`)
+- **Knowledge and playbooks.** The entries in a state, the suggestions
+  waiting on a review among them, and one entry; a person writes one in
+  person, edits it on the version `If-Match` names, and keeps or rejects
+  a suggestion. A person publishes a playbook's next version with its
+  gates, and the latest version of a name is read. (`/v1/knowledge`,
+  `/v1/knowledge/{entry_id}`, `.../review`, `/v1/playbooks`,
+  `/v1/playbooks/{name}`)
+- **Automations.** A person makes one in person, under an
+  Idempotency-Key, in a project of the tenant; any member lists and
+  reads them; its creator edits one that runs as its creator, and a
+  person whose role holds the grant one that runs as the automation
+  principal. The principal's grant is read and set beside them.
+  (`/v1/automations`, `/v1/automations/{automation_id}`,
+  `/v1/automations/principal`)
+- **Tool policy.** Any member reads the tenant's layer; an owner or an
+  admin writes it whole on the version `If-Match` names.
+  (`/v1/tools/policy`)
 - **Hosts.** An owner or an admin makes a host pool, under an
   Idempotency-Key, and issues a token that enrolls hosts into it,
   shown once; lists a pool's hosts with whether each is online; and
