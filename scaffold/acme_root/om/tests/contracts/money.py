@@ -24,6 +24,7 @@ from acme.om.root import Managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.tools.manager import ToolsManagerInterface
+from acme.om.tools.tool import ToolInterface
 from acme.om.windows.gate import CallGateInterface
 from contracts.loops import ASSISTANT, DELIVERY, Clock, Loop, loop_over
 
@@ -71,10 +72,11 @@ def money_over(
     models_layer: ModelsLayer | None = None,
     tools_layer: Callable[[ToolsManagerInterface], ToolsManagerInterface] | None = None,
     kinds: tuple[AgentKind, ...] = (ASSISTANT, DELIVERY),
+    extra: tuple[ToolInterface, ...] = (),
 ) -> Money:
     """`storage` None is the memory storage, and `owner` None a fresh
     tenant's owner; a suite over Postgres hands in both. The layers go to
-    the loop's root as they are, and `kinds` to the loop."""
+    the loop's root as they are, and `kinds` and `extra` to the loop."""
     storage = storage or StorageMemoryImpl()
     accounts = storage.get_account_storage()
     ledger = storage.get_money_ledger_storage()
@@ -114,6 +116,7 @@ def money_over(
         models_layer=models_layer,
         tools_layer=tools_layer,
         kinds=kinds,
+        extra=extra,
     )
     ((gate, calls),) = built
     payments = PaymentProviderTwinImpl()

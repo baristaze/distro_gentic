@@ -719,9 +719,12 @@ class LoopManagerImpl(LoopManagerInterface):
         the loop does anything else: none of them is ever run as new. A call
         that would wait for a person, or whose principal lapsed, is answered
         as stopped with its outcome unknown, rather than parked open. A
-        cancel that waits answers them all so. A call that parks the loop as
-        it is settled, on the job it started or on the budget that refused
-        one, parks it there, so nothing asks or starts it a second time."""
+        cancel that waits answers them all so. The first call that parks the
+        loop as it is settled, on the job it started or on the budget that
+        refused one, parks it there once every other call is settled, so
+        nothing asks or starts it a second time. A job's call after it is
+        left open for the run that resumes, whose start of it attaches to
+        the work under its key."""
         history = await self._history(run.ctx, run.session_id)
         response = rules.latest_response(history, run.loop_id)
         if response is None:
@@ -732,12 +735,17 @@ class LoopManagerImpl(LoopManagerInterface):
         loop = rules.OpenLoop(run.loop_id, run.start_seq, None)
         if rules.asked(history, loop, ControlCommand.CANCEL) is not None:
             return await self._cancelled(run)
+        park: Park | None = None
         for use, request in lost:
+            tool = run.registry.get(use.name)
+            if park is not None and tool is not None and tool.spec.mode is ToolMode.JOB:
+                continue
             settled = await self._settle_call(run, history, use, request, fresh=False)
             if settled.cancelled:
                 return await self._cancelled(run)
-            if settled.park is not None:
-                return await self._park(run, settled.park)
+            park = park or settled.park
+        if park is not None:
+            return await self._park(run, park)
         return None
 
     async def _requests(

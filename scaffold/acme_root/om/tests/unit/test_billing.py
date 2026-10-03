@@ -15,7 +15,7 @@ from uuid import UUID
 import pytest
 from contracts.benchmark_storage import operator
 from contracts.budget_storage import make_budget
-from contracts.loops import ASSISTANT, BUILDER, DELIVERY, call, reply, said, use
+from contracts.loops import ASSISTANT, BUILDER, DELIVERY, Lookup, call, reply, said, use
 from contracts.money import Money, money_over
 from contracts.project_storage import in_project
 
@@ -65,10 +65,12 @@ from acme.om.context import (
 from acme.om.exceptions import BudgetRefused, GateParked, NotAuthorized, SpenderUnknown
 from acme.om.models.types.fill import MAIN, Eligibility
 from acme.om.projects.impl.policies import SessionProjectsBoundImpl
-from acme.om.steps.types.header import LoopOutcome, ParkReason
+from acme.om.steps.types.header import LoopOutcome, ParkReason, ToolRequestHeader
 from acme.om.steps.types.step import StepType
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tools.types.call import JobCompletion
+from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule
+from acme.om.tools.types.tool import Effect, ToolClass
 from acme.om.windows.gate import CallGateInterface
 from acme.om.windows.impl.gate import CallGateBudgetImpl
 from acme.om.windows.rules import call_shape
@@ -614,6 +616,66 @@ async def test_a_run_that_recovers_a_jobs_call_starts_it_once_under_one_hold(
     jobs = [h.id for h in holds if isinstance(h, FundedHold) and h.hold.purpose == "compute"]
     assert jobs == [parked.park.job.hold_id], "one job, one hold"
     assert len(loop.jobs["compute"].deadlines) == 1, "started once"
+
+
+async def test_a_recovered_job_parks_the_loop_once_every_other_lost_call_is_settled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A lost run passed over a spending job that waited for approval, ran a
+    later unsafe call, and was lost before that call's answer. The run that
+    recovers starts the job under one hold, settles the unsafe call by its
+    effect, and only then parks on the job: the unsafe call runs once."""
+    poke = Lookup("poke", effect=Effect.UNSAFE, authorization_class=ToolClass.WRITE)
+    asks = PolicyLayer(
+        rules=(
+            PolicyRule(authorization_class=ToolClass.READ, decision=Decision.ALLOW),
+            PolicyRule(authorization_class=ToolClass.WRITE, decision=Decision.ALLOW),
+            PolicyRule(tool="compute", decision=Decision.APPROVE),
+        )
+    )
+    kind = BUILDER.model_copy(
+        update={"name": "asker", "tools": ("compute", "poke"), "policy": asks}
+    )
+    money = money_over(tmp_path, kinds=(kind,), extra=(poke,))
+    await money.open(plan="team")
+    loop, owner = money.loop, money.loop.owner
+    session_id = await loop.start("asker")
+    await loop.say(session_id, "Compute it, and poke it.")
+    loop.anthropic.add(
+        reply(call("compute", q="everything"), call("poke", q="once")), reply(said("Done."))
+    )
+    windows = loop.managers.windows
+    real = windows.bound_tool_response
+
+    async def lost(*args: object, **kwargs: object) -> object:
+        monkeypatch.setattr(windows, "bound_tool_response", real)
+        raise RuntimeError("the run is lost here")
+
+    monkeypatch.setattr(windows, "bound_tool_response", lost)
+    with pytest.raises(RuntimeError):
+        await loop.loops.run(owner, session_id)
+    assert len(poke.ran_as) == 1 and loop.jobs["compute"].started == {}
+    request = next(
+        s
+        for s in await loop.history(session_id)
+        if isinstance(s.header, ToolRequestHeader) and s.header.tool == "compute"
+    )
+    await loop.managers.tools.decide_call(owner, session_id, request.seq, approve=True)
+
+    parked = await loop.loops.run(owner, session_id)
+
+    assert parked.park is not None and parked.park.job is not None
+    handle = loop.jobs["compute"].started[request.id]
+    await loop.loops.complete_job(
+        owner, session_id, JobCompletion(key=request.id, handle=handle, text="done")
+    )
+    done = await loop.loops.run(owner, session_id)
+    assert done.outcome is LoopOutcome.SUCCEEDED
+    assert len(poke.ran_as) == 1, "the unsafe call ran once"
+    assert len(loop.jobs["compute"].deadlines) == 1, "the job started once"
+    holds = await money.ledger.read_entries(owner.org_id, kind=EntryKind.HOLD, limit=20)
+    jobs = [h.id for h in holds if isinstance(h, FundedHold) and h.hold.purpose == "compute"]
+    assert jobs == [parked.park.job.hold_id], "under one hold"
 
 
 async def test_a_spending_job_after_a_sessions_model_calls_is_judged_by_its_budget_alone(
