@@ -32,7 +32,7 @@ from acme.services.api.realtime.timeouts import (
     SERVER_PING_INTERVAL_SECONDS,
     SERVER_PING_TIMEOUT_SECONDS,
 )
-from acme.services.api.seed import seed_platform
+from acme.services.api.seed import FORGE, seed_platform
 from acme.services.api.settings import ApiSettings
 from acme.services.api.token_secrets import TOKEN_HOLDERS, put_token, token_secret_name
 
@@ -249,8 +249,9 @@ def add_member(args: argparse.Namespace) -> int:
 
 def seed_platform_of(args: argparse.Namespace) -> int:
     """A local org made ready to run a session: its account on a plan, its
-    first project, its retention policy, and the published matrix. A no-op
-    for what is there already."""
+    first project, its retention policy, the published matrix, and the
+    forge twin's installation that holds the project's repository, where
+    the forge is its twin. A no-op for what is there already."""
 
     async def run() -> int:
         settings = ApiSettings()
@@ -265,7 +266,12 @@ def seed_platform_of(args: argparse.Namespace) -> int:
                 print(f"no org {args.slug}; bootstrap it first", file=sys.stderr)
                 return 1
             owner = await container.managers.tenancy.member_context(rctx, org.id, org.created_by)
-            seeded = await seed_platform(container.storage, container.managers, owner)
+            seeded = await seed_platform(
+                container.storage,
+                container.managers,
+                owner,
+                forge=container.integrations.get_integration(FORGE),
+            )
         finally:
             await container.close()
         project = "seeded before" if seeded.project is None else seeded.project.id
@@ -347,7 +353,8 @@ def main(argv: list[str] | None = None) -> int:
     p_seed = sub.add_parser(
         "seed-platform",
         help="give a local org its account on a plan, its first project, its retention "
-        "policy, and the published matrix; a no-op for what exists",
+        "policy, the published matrix, and the forge twin's installation of its repository; "
+        "a no-op for what exists",
     )
     p_seed.add_argument("--slug", required=True, help="the org, bootstrapped first")
 

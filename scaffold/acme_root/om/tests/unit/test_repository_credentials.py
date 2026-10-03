@@ -120,7 +120,7 @@ class Forged:
         transport.handler = checkout
 
     async def tenant_of(self, integration: str, installation: str) -> UUID | None:
-        """The engineer's tenant connected the forge's one installation."""
+        """The engineer's tenant connected the forge's installation."""
         return self.loop.owner.org_id
 
     async def engineer(self) -> UUID:

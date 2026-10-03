@@ -17,14 +17,18 @@ over `<timestamp>.installation:<installation>`, and carried as
 `<installation>;t=<timestamp>, v1=<signature>`.
 
 The forge's twin holds the refs the platform points and the pull requests
-it opens, by name and head. Its system has one installation, which holds
-every repository; a forge write goes through it, and a write through any
-other installation, or through none, is refused, as a real forge's is. Made to write (`writes`), it also pushes each
-ref's commits to the repository for real, from the platform's bundle, as a
-forge does (`git.py`), with a repository's `credential` where it is given
-one: the local stack's forge twin writes, so the next loop finds what was
-pushed. Made not to, it holds names alone, with no commits behind them.
-Any other integration's twin holds no repository."""
+it opens, by name and head. Its system has one installation per repository
+owner, `twin_installation_<owner>`, which holds every repository of that
+owner, the segment before the repository's name; a forge write goes
+through the installation of its repository's owner, and a write through
+any other installation, or through none, is refused, as a real forge's is.
+So two tenants each connect an installation of their own. Made to write
+(`writes`), it also pushes each ref's commits to the repository for real,
+from the platform's bundle, as a forge does (`git.py`), with a
+repository's `credential` where it is given one: the local stack's forge
+twin writes, so the next loop finds what was pushed. Made not to, it holds
+names alone, with no commits behind them. Any other integration's twin
+holds no repository, and a chat's ignores the installation a post names."""
 
 import hashlib
 import hmac
@@ -33,6 +37,7 @@ import json
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from urllib.parse import urlsplit
 
 from pydantic import ValidationError
 
@@ -55,7 +60,26 @@ TWIN_SECRET = "twin-integration-secret"
 TWIN = "twin"
 FORGE = "forge"
 TWIN_INSTALLATION = "twin_installation"
-"""The one installation of a twin's system: it holds every repository."""
+"""What every installation of a twin's system is named from: there is one
+per repository owner, named by `twin_installation`."""
+
+
+def twin_installation(owner: str) -> str:
+    """The installation of a twin's system that holds every repository of
+    `owner`."""
+    return f"{TWIN_INSTALLATION}_{owner.lower()}"
+
+
+def owner_of(target: str) -> str | None:
+    """The owner of the repository `target` names: the segment before the
+    repository's name, in its address (`https://host/owner/name.git`, or a
+    path) or in a pull request's name (`owner/name#12`); None when it names
+    a single segment."""
+    path = target.partition("#")[0]
+    if "://" in path:
+        path = urlsplit(path).path
+    segments = [segment for segment in path.split("/") if segment]
+    return segments[-2].lower() if len(segments) > 1 else None
 
 
 def sign(payload: bytes, secret: str, at: datetime) -> str:
@@ -111,10 +135,8 @@ class IntegrationTwinImpl(IntegrationInterface):
         secret: str = TWIN_SECRET,
         writes: bool = False,
         credential: tuple[str, str] | None = None,
-        installation: str = TWIN_INSTALLATION,
     ) -> None:
         self._name = name
-        self._installation = installation
         self._secret = secret
         self._writes = writes
         self._credential = credential
@@ -188,13 +210,13 @@ class IntegrationTwinImpl(IntegrationInterface):
 
     async def installation_of(self, target: str) -> str:
         self._holds_repositories()
-        return self._installation
+        return self._installation_of(target)
 
     async def post(
         self, address: str, text: str, mark: str | None = None, *, installation: str | None = None
     ) -> PostedMessage:
-        if self._name == FORGE or installation is not None:
-            self._through(installation)
+        if self._name == FORGE:
+            self._through(installation, address)
         message = PostedMessage(
             id=self._id("message"),
             address=address,
@@ -210,7 +232,7 @@ class IntegrationTwinImpl(IntegrationInterface):
         self, repository: str, ref: str, head: str, bundle: bytes, *, installation: str
     ) -> None:
         self._holds_repositories()
-        self._through(installation)
+        self._through(installation, repository)
         if self._writes:
             await push_bundle(repository, ref, head, bundle, self._credential)
         self.refs[(repository, ref)] = head
@@ -226,7 +248,7 @@ class IntegrationTwinImpl(IntegrationInterface):
         installation: str,
     ) -> OpenedPullRequest:
         self._holds_repositories()
-        self._through(installation)
+        self._through(installation, repository)
         if (repository, f"refs/heads/{head}") not in self.refs:
             raise ProviderRefused(f"{repository} has no branch {head}")
         for opened in self.pull_requests:
@@ -250,9 +272,20 @@ class IntegrationTwinImpl(IntegrationInterface):
         if self._name != FORGE:
             raise ProviderRefused(f"the {self._name} twin holds no repository")
 
-    def _through(self, installation: str | None) -> None:
-        if installation != self._installation:
-            raise ProviderRefused(f"installation {installation} reaches nothing of the twin's")
+    def _installation_of(self, target: str) -> str:
+        """The installation of the owner of the repository `target` names,
+        or of the one a pull request the twin opened is on."""
+        owner = owner_of(target)
+        if owner is None:
+            opened = next((pull for pull in self.pull_requests if pull.id == target), None)
+            owner = None if opened is None else owner_of(opened.repository)
+        if owner is None:
+            raise ProviderRefused(f"{target} names no repository of the twin's")
+        return twin_installation(owner)
+
+    def _through(self, installation: str | None, target: str) -> None:
+        if installation != self._installation_of(target):
+            raise ProviderRefused(f"installation {installation} holds no {target}")
 
     def describe(self) -> str:
         return f"{self._name}=twin"

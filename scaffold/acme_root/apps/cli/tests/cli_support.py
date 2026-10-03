@@ -140,7 +140,7 @@ def stack(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Stack]:
         )
     )
     # Its first project, which a session the CLI starts names.
-    project = first_project(owner).model_copy(update={"id": UUID(PROJECT_ID)})
+    project = first_project(owner, org.slug).model_copy(update={"id": UUID(PROJECT_ID)})
     run(container.storage.get_project_storage().create_project(org.id, project, ()))
     # Two people: the owner, and Bob as a member.
     run(add_member(container, org.id, BOB["email"], Role.MEMBER))

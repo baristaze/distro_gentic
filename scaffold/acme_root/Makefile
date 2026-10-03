@@ -159,7 +159,7 @@ migrate: ## Make the database logins, then apply every role's migration chain to
 # that reads sources, each when its file is absent; `uv run acme-ops token
 # --env local --identity operator|provisioner` mints a fresh one into it,
 # since each lasts an hour.
-seed: ## Create two local orgs with an owner, a member, and an admin of both to sign in as, each with its account, project, and retention policy, the published matrix, and the two local operators; a no-op once they exist
+seed: ## Create two local orgs with an owner, a member, and an admin of both to sign in as, each with its account, project, retention policy, and the forge twin's installation of its repository, the published matrix, and the two local operators; a no-op once they exist
 	uv run --package acme-api acme-api bootstrap --if-absent \
 		--org "$(SEED_ORG)" --slug "$(SEED_SLUG)" --name "$(SEED_NAME)" \
 		--email "$(SEED_EMAIL)"

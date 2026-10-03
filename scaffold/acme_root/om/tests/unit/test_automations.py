@@ -17,7 +17,7 @@ from contracts.loops import ASSISTANT, reply, said, use
 from contracts.project_storage import in_project, make_project
 from pydantic import ValidationError
 
-from acme.integrations.events.twin import TWIN_INSTALLATION
+from acme.integrations.events.twin import twin_installation
 from acme.integrations.model_providers.calls import ModelCall
 from acme.om.agents.types.request import Start
 from acme.om.agents.types.run import RunEnd
@@ -563,15 +563,15 @@ async def test_a_comment_through_a_sessions_tool_carries_its_cause_and_hop_and_f
     before the post answers does, or by the forge's own id for it. Either
     way its cause is the session that commented, and the automation it
     feeds fires once, a hop on, however often the event is delivered."""
-    # The tenant connected the forge's one installation, which holds the
-    # repository the comment lands on.
+    # The tenant connected the forge's installation that holds the
+    # repository the comment lands on, its owner's.
     await platform.storage.get_intake_storage().create_installation(
         platform.owner.org_id,
         Installation(
             id=new_id(),
             created_at=utcnow(),
             integration=FORGE,
-            installation=TWIN_INSTALLATION,
+            installation=twin_installation("acme"),
             created_by=creator.user_id,
         ),
     )

@@ -33,7 +33,7 @@ from acme.infra.workspaces import (
     WorkspaceProviderInterface,
 )
 from acme.infra.workspaces.host import WorkspaceHostImpl
-from acme.integrations.events.twin import TWIN_INSTALLATION, IntegrationTwinImpl
+from acme.integrations.events.twin import IntegrationTwinImpl
 from acme.integrations.exceptions import ProviderUnavailable
 from acme.integrations.impl.configured import integrations_for
 from acme.integrations.settings import IntegrationsSettings
@@ -330,7 +330,7 @@ async def test_a_session_works_a_private_repository_with_no_credential_in_its_wo
     connected: list[UUID] = []
 
     async def tenant_of(integration: str, installation: str) -> UUID | None:
-        """The tenant connected the forge's one installation."""
+        """The tenant connected the forge's installation."""
         return connected[0] if connected else None
 
     infra = HostInfra(tmp_path / "host")
@@ -435,10 +435,11 @@ async def test_the_local_stacks_forge_twin_pushes_to_a_private_repository_with_i
         )
     )
     forge = built["forge"]
+    installation = await forge.installation_of(private_git.url)
 
     if given:
         await forge.push(
-            private_git.url, "refs/heads/sessions/one", head, bundle, installation=TWIN_INSTALLATION
+            private_git.url, "refs/heads/sessions/one", head, bundle, installation=installation
         )
         assert git(Path(remote), "rev-parse", "refs/heads/sessions/one") == head
     else:
@@ -448,7 +449,7 @@ async def test_the_local_stacks_forge_twin_pushes_to_a_private_repository_with_i
                 "refs/heads/sessions/one",
                 head,
                 bundle,
-                installation=TWIN_INSTALLATION,
+                installation=installation,
             )
         held = git(Path(remote), "for-each-ref", "--format=%(refname) %(objectname)")
         assert held == f"refs/heads/main {main}", "nothing was written"

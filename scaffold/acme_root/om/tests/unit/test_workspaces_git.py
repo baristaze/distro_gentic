@@ -163,7 +163,7 @@ class Checkout:
         )
 
     async def tenant_of(self, integration: str, installation: str) -> UUID | None:
-        """The tenant that connected the forge's one installation: `connected`
+        """The tenant that connected the forge's installation: `connected`
         when a case names one, else the checkout's own."""
         return self.connected or self.ctx.org_id
 

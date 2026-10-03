@@ -14,7 +14,7 @@ import pytest
 from contracts.intake import APP, Wired, wired
 
 from acme.integrations.events import OpenedPullRequest, PostedMessage
-from acme.integrations.events.twin import TWIN_INSTALLATION, IntegrationTwinImpl
+from acme.integrations.events.twin import IntegrationTwinImpl, twin_installation
 from acme.om.base import new_id, utcnow
 from acme.om.context import CredentialKind, RequestContext, Role, TenantContext, build_context
 from acme.om.exceptions import NotAuthorized, ToolFailed
@@ -27,7 +27,7 @@ from acme.om.workspaces.impl.forge import SourceControlForgeImpl
 from acme.om.workspaces.types.source import RepositoryBinding
 
 REPOSITORY = "https://forge.example/beta/widgets.git"
-"""The repository the forge's one installation holds."""
+"""The repository the forge's installation of its owner, `beta`, holds."""
 ADDRESS = "beta/widgets#12"
 HEAD = "9" * 40
 
@@ -82,7 +82,7 @@ def member_of(org_id: UUID) -> TenantContext:
 @pytest.fixture
 async def platform(tmp_path: Path) -> Wired:
     """Tenant A is the platform's owner; another tenant connected the
-    forge's one installation, which holds the repository."""
+    forge's installation that holds the repository."""
     return wired(tmp_path)
 
 
@@ -94,7 +94,7 @@ async def connected_by_another(platform: Wired) -> UUID:
             id=new_id(),
             created_at=utcnow(),
             integration=FORGE,
-            installation=TWIN_INSTALLATION,
+            installation=twin_installation("beta"),
             created_by=new_id(),
         ),
     )
