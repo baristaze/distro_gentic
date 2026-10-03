@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 from contracts.loops import ASSISTANT, loop_over, reply, said
-from contracts.workspaces import GitTwin, ProjectsTwin
+from contracts.workspaces import GitTwin, ProjectsTwin, ReaderTwin
 
 from acme.infra.impl.configured import InfraConfiguredImpl
 from acme.infra.impl.settings import InfraSettings
@@ -155,6 +155,7 @@ async def test_the_work_a_loop_left_is_recorded_and_told_over_postgres(
         kinds=(TWINNED,),
         workspace_projects=ProjectsTwin(),
         workspace_git=git,
+        workspace_reader=ReaderTwin(),
     )
     session_id = await loop.start("twinned")
     for text, leaves_work in (("First.", False), ("Second.", True), ("Third.", False)):
