@@ -1,10 +1,14 @@
+import json
 import logging
+import secrets
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import UUID
 
-from pydantic import Field, ValidationError
+from pydantic import Field, SecretStr, ValidationError
 
+from acme.infra.exceptions import SecretNotFound
+from acme.infra.secrets import SecretsInterface
 from acme.infra.workspaces import IsolationMode, IsolationSpec, Workspace, WorkspaceLost
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agents.types.kind import AgentKindCatalog
@@ -12,6 +16,7 @@ from acme.om.base import Platform, utcnow
 from acme.om.context import Permission, TenantContext
 from acme.om.evidence.types.validation import Delivery
 from acme.om.exceptions import (
+    NotAuthorized,
     NotFound,
     PreconditionFailed,
     Unavailable,
@@ -22,13 +27,25 @@ from acme.om.exceptions import (
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import OutboxRow, versioned_row
 from acme.om.tenancy import TenancyManagerInterface
+from acme.om.tenancy.rules import hash_token
 from acme.om.workspaces import rules
 from acme.om.workspaces.git import RepositoryReaderInterface, WorkspaceGitInterface
 from acme.om.workspaces.manager import WorkspacesManagerInterface
-from acme.om.workspaces.projects import PullRequestsInterface, WorkspaceProjectsInterface
+from acme.om.workspaces.projects import (
+    PullRequestsInterface,
+    SourceControlInterface,
+    WorkspaceProjectsInterface,
+)
 from acme.om.workspaces.storage import WorkspaceStorageInterface
+from acme.om.workspaces.types.credential import FetchCredential, PushToken, RepositoryCredential
 from acme.om.workspaces.types.egress import EgressAllowlist, EgressDecision, EgressRequest
-from acme.om.workspaces.types.source import BranchPlan, RepositoryBinding, RepositoryWrite
+from acme.om.workspaces.types.source import (
+    BranchPlan,
+    OpenedPullRequest,
+    RepositoryBinding,
+    RepositoryWrite,
+    WriteKind,
+)
 from acme.om.workspaces.types.workspace import SessionWorkspace
 
 log = logging.getLogger(__name__)
@@ -47,6 +64,9 @@ class WorkspacesOptions(Platform):
     # How often a write of the cache's state is tried against a writer that
     # landed first.
     write_tries: int = Field(default=3, ge=1)
+    # The longest a push token lives; a prepare or a release of the loop's
+    # workspace ends it sooner.
+    push_token_lifetime: timedelta = Field(default=timedelta(minutes=15), gt=timedelta(0))
 
 
 class WorkspacesManagerImpl(WorkspacesManagerInterface):
@@ -61,6 +81,8 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         git: WorkspaceGitInterface,
         reader: RepositoryReaderInterface,
         options: WorkspacesOptions,
+        secrets_store: SecretsInterface,
+        source_control: SourceControlInterface,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._storage = storage
@@ -72,6 +94,8 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         self._git = git
         self._reader = reader
         self._options = options
+        self._secrets = secrets_store
+        self._source_control = source_control
         self._clock = clock
         self._internal = rules.networks(options.internal_networks) + rules.networks(
             options.station_networks
@@ -182,7 +206,8 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
                     fate.value,
                 )
             seen = state.remote
-        if held.notice is not None or seen != held.branch_seen or kept is not None:
+        changed = held.notice is not None or seen != held.branch_seen or kept is not None
+        if changed or held.push_digest is not None:
             await self._update(ctx, workspace.id, notice=None, branch_seen=seen, snapshot_ref=kept)
         return workspace.model_copy(update={"changed": "\n\n".join(told) or None})
 
@@ -198,7 +223,7 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         snapshot = await self._git.snapshot(ctx, workspace, binding, held.branch, ref)
         seen = held.branch_seen or snapshot.remote_branch
         if snapshot.commit is None:
-            if seen != held.branch_seen:
+            if seen != held.branch_seen or held.push_digest is not None:
                 await self._update(ctx, workspace.id, notice=held.notice, branch_seen=seen)
             return
         log.info(
@@ -222,7 +247,9 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         # What was delivered is read from the repository, outside the
         # workspace; the checkout tells only what was not: work uncommitted,
         # or committed and not pushed.
-        delivered = await self._reader.delivered(binding, held.branch)
+        delivered = await self._reader.delivered(
+            binding, held.branch, await self._fetch_credential(ctx, binding.project_id)
+        )
         local = await self._git.checkout(ctx, workspace)
         try:
             return Delivery(
@@ -308,13 +335,135 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         binding = await self._binding(ctx, held)
         return not rules.is_work_product(write, binding, held.branch)
 
+    # The repository's credentials, which the agent never holds.
+
+    async def put_fetch_credential(
+        self, ctx: TenantContext, project_id: UUID, credential: FetchCredential
+    ) -> RepositoryCredential:
+        ctx.require(Permission.MANAGE_MEMBERS)
+        if await self._projects.binding_of(ctx, project_id) is None:
+            raise NotFound(f"project {project_id} binds no repository of this tenant")
+        now = self._clock()
+        stored = await self._storage.read_credential(ctx.org_id, project_id)
+        if stored is None:
+            # The record lands before the value, so the purge finds every
+            # value it must take out of the store.
+            record = RepositoryCredential(
+                id=project_id,
+                created_at=now,
+                updated_at=now,
+                created_by=ctx.user_id,
+                updated_by=ctx.user_id,
+            )
+            if not await self._storage.create_credential(ctx.org_id, record):
+                raise PreconditionFailed(
+                    f"the fetch credential of {project_id} was given meanwhile"
+                )
+        else:
+            record = stored.model_copy(
+                update={"version": stored.version + 1, "updated_at": now, "updated_by": ctx.user_id}
+            )
+            await self._storage.write_credential(ctx.org_id, record, stored.version)
+        value = json.dumps(
+            {"username": credential.username, "password": credential.password.get_secret_value()}
+        )
+        await self._secrets.put(
+            ctx.org_id, rules.fetch_secret_name(project_id), value, deadline=ctx.deadline
+        )
+        log.info(
+            "user %s of org %s gave project %s a fetch credential",
+            ctx.user_id,
+            ctx.org_id,
+            project_id,
+        )
+        return record
+
+    async def mint_push_token(self, ctx: TenantContext, session_id: UUID) -> PushToken:
+        ctx.require(Permission.WRITE)
+        held = await self._storage.read_workspace(ctx.org_id, session_id)
+        if held is None:
+            raise NotFound(f"session {session_id} has no workspace")
+        binding = await self._binding(ctx, held)
+        if binding is None:
+            raise Unavailable(f"session {session_id} works on no bound repository")
+        token = rules.PUSH_TOKEN_PREFIX + secrets.token_urlsafe(32)
+        expires_at = self._clock() + self._options.push_token_lifetime
+        await self._write(
+            ctx, session_id, {"push_digest": hash_token(token), "push_expires_at": expires_at}
+        )
+        return PushToken(
+            token=SecretStr(token),
+            repository=binding.repository,
+            branch=held.branch,
+            expires_at=expires_at,
+        )
+
+    async def open_pull_request(
+        self, ctx: TenantContext, session_id: UUID, token: str, head: str, title: str, body: str
+    ) -> OpenedPullRequest:
+        ctx.require(Permission.WRITE)
+        held = await self._storage.read_workspace(ctx.org_id, session_id)
+        if held is None:
+            raise NotFound(f"session {session_id} has no workspace")
+        binding = await self._binding(ctx, held)
+        if binding is None:
+            raise Unavailable(f"session {session_id} works on no bound repository")
+        if not rules.COMMIT.fullmatch(head):
+            raise ValidationFailed("the head of a pull request is a commit's full id")
+        digest, now = hash_token(token), self._clock()
+        for write in (
+            RepositoryWrite(
+                repository=binding.repository, kind=WriteKind.PUSH, ref=f"refs/heads/{held.branch}"
+            ),
+            RepositoryWrite(
+                repository=binding.repository, kind=WriteKind.PULL_REQUEST, ref=held.branch
+            ),
+        ):
+            refusal = rules.push_refusal(held, binding, digest, write, now)
+            if refusal is not None:
+                log.warning(
+                    "session %s of org %s: a push token was refused: %s",
+                    session_id,
+                    ctx.org_id,
+                    refusal,
+                )
+                raise NotAuthorized(refusal)
+        await self._source_control.push_branch(binding, held.branch, head)
+        return await self._source_control.open_pull_request(binding, held.branch, title, body)
+
     async def purge_tenant(self, ctx: TenantContext) -> int:
         ctx.require(Permission.WRITE)
         if not await self._tenancy.tenant_expired(ctx):
             return 0
-        return await self._storage.purge_tenant(ctx.org_id, self._options.purge_batch)
+        # Each fetch credential's value leaves the store before its record,
+        # and the records that go are exactly the ones whose values went.
+        held = await self._storage.read_credentials(ctx.org_id, self._options.purge_batch)
+        for record in held:
+            await self._secrets.delete(
+                ctx.org_id, rules.fetch_secret_name(record.id), deadline=ctx.deadline
+            )
+        gone = await self._storage.purge_credentials(ctx.org_id, [record.id for record in held])
+        return gone + await self._storage.purge_tenant(ctx.org_id, self._options.purge_batch)
 
     # Helpers.
+
+    async def _fetch_credential(
+        self, ctx: TenantContext, project_id: UUID
+    ) -> FetchCredential | None:
+        """The project's fetch credential, from the tenant's store, for the
+        one read that asks; None when the project was given none."""
+        if await self._storage.read_credential(ctx.org_id, project_id) is None:
+            return None
+        try:
+            value = await self._secrets.get(
+                ctx.org_id, rules.fetch_secret_name(project_id), deadline=ctx.deadline
+            )
+        except SecretNotFound:
+            raise Unavailable(f"the fetch credential of project {project_id} is gone") from None
+        try:
+            return FetchCredential.model_validate_json(value)
+        except ValidationError:
+            raise Unavailable(f"the fetch credential of project {project_id} is not one") from None
 
     async def _land(
         self,
@@ -378,21 +527,31 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         branch_seen: bool,
         snapshot_ref: str | None = None,
     ) -> None:
-        """The cache's state, written over the stored row and read again when
-        a writer landed first."""
+        """The cache's state, written over the stored row; the loop's push
+        token, if one is live, ends with it."""
+        changes: dict[str, object] = {
+            "notice": notice,
+            "branch_seen": branch_seen,
+            "push_digest": None,
+            "push_expires_at": None,
+        }
+        if snapshot_ref is not None:
+            changes["snapshot_ref"] = snapshot_ref
+        await self._write(ctx, session_id, changes)
+
+    async def _write(self, ctx: TenantContext, session_id: UUID, fields: dict[str, object]) -> None:
+        """`fields` written over the stored row, read again when a writer
+        landed first."""
         for attempt in range(self._options.write_tries):
             stored = await self._storage.read_workspace(ctx.org_id, session_id)
             if stored is None:
                 return
-            changes: dict[str, object] = {
-                "notice": notice,
-                "branch_seen": branch_seen,
+            changes = {
+                **fields,
                 "version": stored.version + 1,
                 "updated_at": self._clock(),
                 "updated_by": ctx.user_id,
             }
-            if snapshot_ref is not None:
-                changes["snapshot_ref"] = snapshot_ref
             try:
                 await self._storage.write_workspace(
                     ctx.org_id, stored.model_copy(update=changes), stored.version

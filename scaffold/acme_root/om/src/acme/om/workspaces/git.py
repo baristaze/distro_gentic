@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 
 from acme.infra.workspaces import Workspace
 from acme.om.context import TenantContext
+from acme.om.workspaces.types.credential import FetchCredential
 from acme.om.workspaces.types.source import (
     BranchState,
     Checkout,
@@ -70,10 +71,14 @@ class RepositoryReaderInterface(ABC):
     (`acme.om.workspaces.impl.reader.RepositoryReaderGitImpl`)."""
 
     @abstractmethod
-    async def delivered(self, binding: RepositoryBinding, branch: str) -> Delivered:
+    async def delivered(
+        self, binding: RepositoryBinding, branch: str, credential: FetchCredential | None = None
+    ) -> Delivered:
         """The bound repository's default branch and the session's `branch`
         there, fetched by the repository's URL: where the branch meets the
         default branch, its head, and every path changed between them, a
-        moved file by both its paths. `Unavailable` when the repository
-        cannot be read."""
+        moved file by both its paths. A private repository is read with the
+        project's fetch `credential`, which reaches only the read's own git
+        and the repository's URL. `Unavailable` when the repository cannot be
+        read."""
         ...
