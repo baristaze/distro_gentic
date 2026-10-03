@@ -2,10 +2,16 @@
 // cost or a count. No React, no fetch.
 import type { UserView } from "@acme/client";
 
-/** A member by name, else by address; one no longer in the org, or not yet
- * read, is said so, never shown as an id. */
-export function personName(users: readonly Pick<UserView, "id" | "display_name" | "email">[] | undefined, id: string | null): string {
+/** A member by name, else by address; the org's automation principal, whose
+ * id its runs' calls and records carry, as itself; one no longer in the org,
+ * or not yet read, is said so, never shown as an id. */
+export function personName(
+  users: readonly Pick<UserView, "id" | "display_name" | "email">[] | undefined,
+  id: string | null,
+  principalId: string | null = null,
+): string {
   if (id === null) return "no one";
+  if (id === principalId) return "the automation principal";
   const user = users?.find((each) => each.id === id);
   if (!user) return "a former member";
   return user.display_name.trim() || user.email;

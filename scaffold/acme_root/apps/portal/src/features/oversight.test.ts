@@ -4,7 +4,7 @@
 // answers as the API does: each org reads its own, and nothing of
 // another's reaches its screens.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentSessionView, ApprovalView, BudgetUsageView, EventView } from "@acme/client";
+import { ApiError, type AgentSessionView, type ApprovalView, type BudgetUsageView, type EventView } from "@acme/client";
 import { ApprovalsPage } from "./approvals/ApprovalsPage";
 import { AuditPage } from "./audit/AuditPage";
 import { container, mount, newNet, notFound, PEOPLE, unmount, type Call } from "./screenTesting";
@@ -81,6 +81,56 @@ describe.each(["a", "b"] as const)("a member of org %s", (org) => {
     expect(table.textContent).toContain(PEOPLE[org].display_name);
     expect(table.textContent).toContain(org === "a" ? "2.50 spent, of 10.00" : "9.00 spent, of 10.00");
     expect(table.textContent).not.toContain(PEOPLE[other].display_name);
+  });
+});
+
+describe("the org's records, past one page and past a trim", () => {
+  it("shows a held call that only a later page of parked sessions holds", async () => {
+    net.answer = (call) => {
+      if (call.path.startsWith("/v1/approvals?")) {
+        return call.path.includes("cursor=p2") ? { items: APPROVALS.a, next_cursor: null } : { items: [], next_cursor: "p2" };
+      }
+      return answer(call);
+    };
+    await mount(routes, "/approvals");
+    const table = container.querySelector("table[aria-label='Approvals']")!;
+    expect(table.textContent).toContain(APPROVALS.a[0]!.tool);
+    expect(container.textContent).not.toContain("No call waits on a person.");
+  });
+
+  it("reads the audit on from the floor once older events are trimmed", async () => {
+    const kept: EventView = { seq: 41, kind: "projects.project.updated", target_id: "pa", produced_at: at, actor_id: PEOPLE.a.id };
+    net.answer = (call) => {
+      if (call.path.startsWith("/v1/events?")) {
+        const after = Number(new URLSearchParams(call.path.split("?")[1]).get("after_seq"));
+        if (after < 40) throw new ApiError(410, "stream_truncated", "gone", "req-1", undefined, { floor: 40, head: 41 });
+        return [kept];
+      }
+      return answer(call);
+    };
+    await mount(routes, "/audit");
+    expect(net.calls.map((call) => call.path).filter((path) => path.startsWith("/v1/events?"))).toEqual([
+      "/v1/events?after_seq=0&limit=100",
+      "/v1/events?after_seq=40&limit=100",
+    ]);
+    expect(container.textContent).not.toContain("The audit could not be read.");
+    expect(container.querySelector("table[aria-label='Events']")!.textContent).toContain("project updated");
+  });
+
+  it("credits the automation principal with what its runs did", async () => {
+    const principal = { id: "pr1", role: "member", granted_by: PEOPLE.a.id, created_at: at };
+    net.answer = (call) => {
+      if (call.path === "/v1/automations/principal") return principal;
+      if (call.path.startsWith("/v1/events?")) return [{ ...EVENTS.a[0]!, actor_id: principal.id }];
+      if (call.path.startsWith("/v1/approvals?")) return { items: [{ ...APPROVALS.a[0]!, principal_id: principal.id }], next_cursor: null };
+      return answer(call);
+    };
+    await mount(routes, "/audit");
+    expect(container.querySelector("table[aria-label='Events']")!.textContent).toContain("the automation principal");
+    expect(container.textContent).not.toContain("a former member");
+    await unmount();
+    await mount(routes, "/approvals");
+    expect(container.querySelector("table[aria-label='Approvals']")!.textContent).toContain("the automation principal");
   });
 });
 

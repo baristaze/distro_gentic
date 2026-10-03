@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { AppNav } from "../../app/AppNav";
 import { errorMessage } from "../../app/errorMessage";
-import { Banner, Button, Card, DataTable, Muted, Page, type Column } from "../../design/kit";
+import { Banner, Card, DataTable, Muted, Page, type Column } from "../../design/kit";
 import { tokens } from "../../design/tokens";
 import { ProviderNotice } from "../providers/ProviderNotice";
 import { shortTime } from "../sessions/sessionsModel";
@@ -31,13 +31,6 @@ export function ApprovalsPage() {
           ) : (
             <DataTable label="Approvals" columns={COLUMNS} rows={vm.rows} rowKey={(row) => row.key} empty="No call waits on a person." />
           )}
-          {vm.hasMore ? (
-            <div>
-              <Button tone="plain" onClick={vm.loadMore} disabled={vm.loadingMore}>
-                {vm.loadingMore ? "Loading" : "Load more"}
-              </Button>
-            </div>
-          ) : null}
         </div>
       </Card>
     </Page>

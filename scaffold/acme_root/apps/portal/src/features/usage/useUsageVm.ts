@@ -1,4 +1,5 @@
 import { personName } from "../../app/recordModel";
+import { useAutomationPrincipal } from "../../queries/automations";
 import { useProjects } from "../../queries/projects";
 import { useUsage } from "../../queries/usage";
 import { useUsers } from "../../queries/tenancy";
@@ -10,8 +11,9 @@ export function useUsageVm() {
   const usage = useUsage();
   const users = useUsers();
   const projects = useProjects();
+  const principal = useAutomationPrincipal();
   const nameOf = {
-    person: (id: string) => personName(users.data, id),
+    person: (id: string) => personName(users.data, id, principal.data?.id),
     project: (id: string) => projects.data?.find((project) => project.id === id)?.name ?? "no longer held",
   };
   return {
