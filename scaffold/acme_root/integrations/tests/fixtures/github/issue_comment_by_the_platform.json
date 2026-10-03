@@ -1,0 +1,19 @@
+{
+  "action": "created",
+  "issue": {
+    "id": 2100,
+    "number": 12,
+    "title": "Totals are off by one",
+    "pull_request": {"url": "https://api.github.com/repos/octo-org/widgets/pulls/12"},
+    "user": {"login": "octocat", "id": 583231, "type": "User"}
+  },
+  "comment": {
+    "id": 1002,
+    "body": "Fixed the empty cart case.\n\n<!-- platform-act: 0b0e9a52-6a7e-4f43-9d1c-3c2b8c1f7e11 -->",
+    "created_at": "2026-10-03T12:05:00Z",
+    "user": {"login": "acme-app[bot]", "id": 9100001, "type": "Bot"}
+  },
+  "repository": {"id": 7001, "full_name": "octo-org/widgets", "private": true},
+  "sender": {"login": "acme-app[bot]", "id": 9100001, "type": "Bot"},
+  "installation": {"id": 71001}
+}

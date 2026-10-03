@@ -8,8 +8,12 @@ from collections.abc import Mapping
 from datetime import timedelta
 
 import httpx
+from cryptography.exceptions import UnsupportedAlgorithm
 
 from acme.integrations.events import INTEGRATIONS, IntegrationAbsentImpl, IntegrationInterface
+from acme.integrations.events.github import GitHubImpl, load_private_key
+from acme.integrations.events.slack import SlackImpl
+from acme.integrations.events.slack_wire import CHAT
 from acme.integrations.events.twin import FORGE, IntegrationTwinImpl
 from acme.integrations.exceptions import ProviderUnavailable, UnsafeIntegration
 from acme.integrations.identity import IdentityProviderInterface
@@ -44,6 +48,14 @@ def refuse_unsafe(settings: IntegrationsSettings, environment: str, deployed: bo
         raise UnsafeIntegration(
             f"ACME_INTEGRATIONS=twin is refused when ACME_ENVIRONMENT={environment}"
         )
+    if deployed and settings.forge_integration == "twin":
+        raise UnsafeIntegration(
+            f"ACME_FORGE_INTEGRATION=twin is refused when ACME_ENVIRONMENT={environment}"
+        )
+    if deployed and settings.chat_integration == "twin":
+        raise UnsafeIntegration(
+            f"ACME_CHAT_INTEGRATION=twin is refused when ACME_ENVIRONMENT={environment}"
+        )
     if deployed and settings.forge_twin_username:
         raise UnsafeIntegration(
             f"ACME_FORGE_TWIN_USERNAME is refused when ACME_ENVIRONMENT={environment}"
@@ -55,20 +67,110 @@ def refuse_unsafe(settings: IntegrationsSettings, environment: str, deployed: bo
 
 
 def integrations_for(settings: IntegrationsSettings) -> dict[str, IntegrationInterface]:
-    """Each integration the platform names, from settings: its twin, or the
-    absent one, which refuses every call as unavailable. The forge's twin
-    writes what is pushed to the repository, so a session's branch and its
-    snapshots are there for its next loop, with the credential its settings
-    give it where the repository asks one."""
-    if settings.integrations == "twin":
-        built: dict[str, IntegrationInterface] = {
-            name: IntegrationTwinImpl(name) for name in INTEGRATIONS
-        }
+    """Each integration the platform names, from settings: the forge and the
+    chat each as its own setting says, else as `integrations` does. Each is
+    its system's client, its twin, or the absent one, which refuses every
+    call as unavailable. The forge's twin writes what is pushed to the
+    repository, so a session's branch and its snapshots are there for its
+    next loop, with the credential its settings give it where the repository
+    asks one."""
+    built: dict[str, IntegrationInterface] = {
+        name: IntegrationTwinImpl(name)
+        if settings.integrations == "twin"
+        else IntegrationAbsentImpl(name)
+        for name in INTEGRATIONS
+    }
+    forge = settings.forge_integration or settings.integrations
+    if forge == "github":
+        built[FORGE] = github_for(settings)
+    elif forge == "twin":
         built[FORGE] = IntegrationTwinImpl(
             FORGE, writes=True, credential=forge_twin_credential(settings)
         )
-        return built
-    return {name: IntegrationAbsentImpl(name) for name in INTEGRATIONS}
+    else:
+        built[FORGE] = IntegrationAbsentImpl(FORGE)
+    chat = settings.chat_integration or settings.integrations
+    if chat == "slack":
+        built[CHAT] = slack_for(settings)
+    elif chat == "twin":
+        built[CHAT] = IntegrationTwinImpl(CHAT)
+    else:
+        built[CHAT] = IntegrationAbsentImpl(CHAT)
+    return built
+
+
+def _unset(named: dict[str, object]) -> str | None:
+    """What a client lacks, by the settings it reads; None when it has all."""
+    missing = [name for name, value in named.items() if not value]
+    return f"{', '.join(missing)} not set" if missing else None
+
+
+def github_for(settings: IntegrationsSettings) -> IntegrationInterface:
+    """The forge as a GitHub App, or absent, naming what it lacks: a client
+    that cannot tell the platform's own account would wake a session with
+    each of its own acts."""
+    missing = _unset(
+        {
+            "ACME_GITHUB_APP_ID": settings.github_app_id,
+            "ACME_GITHUB_PRIVATE_KEY": settings.github_private_key,
+            "ACME_GITHUB_WEBHOOK_SECRET": settings.github_webhook_secret,
+            "ACME_GITHUB_CLIENT_ID": settings.github_client_id,
+            "ACME_GITHUB_CLIENT_SECRET": settings.github_client_secret,
+            "ACME_GITHUB_ACCOUNT": settings.github_account,
+        }
+    )
+    key, secret, client = (
+        settings.github_private_key,
+        settings.github_webhook_secret,
+        settings.github_client_secret,
+    )
+    if missing is not None or key is None or secret is None or client is None:
+        return IntegrationAbsentImpl(FORGE, missing)
+    try:
+        private_key = load_private_key(key.get_secret_value())
+    except ValueError, TypeError, UnsupportedAlgorithm:
+        return IntegrationAbsentImpl(FORGE, "ACME_GITHUB_PRIVATE_KEY is no RSA private key")
+    return GitHubImpl(
+        http=httpx.AsyncClient(timeout=settings.github_timeout_seconds),
+        app_id=settings.github_app_id,
+        private_key=private_key,
+        webhook_secret=secret,
+        client_id=settings.github_client_id,
+        client_secret=client,
+        account=settings.github_account,
+        api_url=settings.github_api_url,
+        web_url=settings.github_web_url,
+    )
+
+
+def slack_for(settings: IntegrationsSettings) -> IntegrationInterface:
+    """The chat as a Slack app, or absent, naming what it lacks, as the
+    forge's client is."""
+    missing = _unset(
+        {
+            "ACME_SLACK_BOT_TOKEN": settings.slack_bot_token,
+            "ACME_SLACK_SIGNING_SECRET": settings.slack_signing_secret,
+            "ACME_SLACK_CLIENT_ID": settings.slack_client_id,
+            "ACME_SLACK_CLIENT_SECRET": settings.slack_client_secret,
+            "ACME_SLACK_ACCOUNT": settings.slack_account,
+        }
+    )
+    token, secret, client = (
+        settings.slack_bot_token,
+        settings.slack_signing_secret,
+        settings.slack_client_secret,
+    )
+    if missing is not None or token is None or secret is None or client is None:
+        return IntegrationAbsentImpl(CHAT, missing)
+    return SlackImpl(
+        http=httpx.AsyncClient(timeout=settings.slack_timeout_seconds),
+        bot_token=token,
+        signing_secret=secret,
+        client_id=settings.slack_client_id,
+        client_secret=client,
+        account=settings.slack_account,
+        api_url=settings.slack_api_url,
+    )
 
 
 def forge_twin_credential(settings: IntegrationsSettings) -> tuple[str, str] | None:

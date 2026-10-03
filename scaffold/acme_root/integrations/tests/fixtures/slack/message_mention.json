@@ -1,0 +1,20 @@
+{
+  "token": "Jhj5dZrVaK7ZwHHjRyZWjbDl",
+  "team_id": "T0TEAM001",
+  "api_app_id": "A0APP0001",
+  "event": {
+    "type": "message",
+    "channel": "C0CHAN001",
+    "channel_type": "channel",
+    "user": "U0PERSON1",
+    "text": "<@U0PLATFRM> the totals are off on an empty cart, take a look",
+    "ts": "1790000000.000100",
+    "event_ts": "1790000000.000100",
+    "team": "T0TEAM001",
+    "user_profile": {"display_name": "ann", "real_name": "Ann Example"}
+  },
+  "type": "event_callback",
+  "event_id": "Ev0MENTION01",
+  "event_time": 1790000000,
+  "authorizations": [{"team_id": "T0TEAM001", "user_id": "U0PLATFRM", "is_bot": true}]
+}
