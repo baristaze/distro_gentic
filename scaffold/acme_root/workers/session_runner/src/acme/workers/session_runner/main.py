@@ -27,7 +27,7 @@ from acme.infra.observability import (
 )
 from acme.infra.trust import install_trust_store
 from acme.om.agents.types.kind import AgentKind
-from acme.om.evidence import ExecutorInterface, WorkProductInterface
+from acme.om.root import PlatformPorts
 from acme.om.tools.tool import ToolInterface
 from acme.om.work.types.work_item import WorkKind
 from acme.workers.maintenance.health import Probe, WorkerHttpServer
@@ -94,8 +94,7 @@ async def serve(
     agent_kinds: tuple[AgentKind, ...] = (),
     tool_catalog: tuple[ToolInterface, ...] = (),
     domain_classes: tuple[str, ...] = (),
-    executor: ExecutorInterface | None = None,
-    work_product: WorkProductInterface | None = None,
+    ports: PlatformPorts | None = None,
 ) -> int:
     settings = SessionRunnerSettings()
     boot(settings)
@@ -104,8 +103,7 @@ async def serve(
         agent_kinds=agent_kinds,
         tool_catalog=tool_catalog,
         domain_classes=domain_classes,
-        executor=executor,
-        work_product=work_product,
+        ports=ports,
     )
     await container.start()
     runner = build_runner(container, lane)
@@ -155,13 +153,11 @@ def main(
     agent_kinds: tuple[AgentKind, ...] = (),
     tool_catalog: tuple[ToolInterface, ...] = (),
     domain_classes: tuple[str, ...] = (),
-    executor: ExecutorInterface | None = None,
-    work_product: WorkProductInterface | None = None,
+    ports: PlatformPorts | None = None,
 ) -> int:
-    """`agent_kinds`, `tool_catalog`, `domain_classes`, and the evidence's
-    ports, `executor` and `work_product`, are the product's: a product's
-    own entry point passes them, as its containers pass them to the
-    managers."""
+    """`agent_kinds`, `tool_catalog`, `domain_classes`, and the platform's
+    `ports` are the product's: a product's own entry point passes them, as
+    its containers pass them to the managers."""
     parser = argparse.ArgumentParser(prog="acme-session-runner")
     sub = parser.add_subparsers(dest="command", required=True)
     p_serve = sub.add_parser("serve", help="claim the loops of agent sessions and run them")
@@ -176,8 +172,7 @@ def main(
             agent_kinds=agent_kinds,
             tool_catalog=tool_catalog,
             domain_classes=domain_classes,
-            executor=executor,
-            work_product=work_product,
+            ports=ports,
         )
     )
 

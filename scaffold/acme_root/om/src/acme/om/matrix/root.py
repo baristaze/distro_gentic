@@ -10,7 +10,8 @@ The layer gives the engine four things: the matrix as its resolver, a face
 over its models manager that resolves within the tenant's retention and
 switches a retired model at the next loop, the key each call goes out on,
 the tenant's own when it pays its providers, and the version each session
-is pinned to, which its calls' tokens and spend count under."""
+is pinned to and its tenant's plan tier, which its calls' tokens and spend
+count under."""
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -84,6 +85,7 @@ class MatrixLayer:
             models=self.models,
             credentials=self.credentials,
             version=self.version,
+            tier=self.tier,
         )
 
     def resolver(self, prices: ModelPricesInterface) -> MatrixResolverImpl:
@@ -124,6 +126,12 @@ class MatrixLayer:
         its first loop resolved them."""
         pin = await self._storage.get_matrix_tenant_storage().read_pin(ctx.org_id, session_id)
         return None if pin is None else pin.matrix_version
+
+    async def tier(self, ctx: TenantContext, session_id: UUID) -> str:
+        """The plan tier the session's tenant is served at, the one the
+        matrix resolves its fills by: its share's, else the default."""
+        share = await self._storage.get_placement_storage().read_share(ctx.org_id)
+        return self.options.default_tier if share is None else share.plan_tier
 
     def credentials(self, providers: ModelProvidersInterface) -> CallCredentialsInterface:
         clients = self._clients

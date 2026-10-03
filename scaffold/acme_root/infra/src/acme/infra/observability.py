@@ -106,14 +106,14 @@ HOSTS = Gauge("acme_hosts", "Workspace hosts not revoked, by state", ["state"])
 MODEL_TOKENS = Counter(
     "acme_model_tokens_total",
     "Prompt and output tokens of settled model calls, by the matrix version the session "
-    "was pinned to and kind",
-    ["matrix_version", "kind"],
+    "was pinned to, its tenant's plan tier, and kind",
+    ["matrix_version", "plan_tier", "kind"],
 )
 MODEL_SPEND_MICROS = Counter(
     "acme_model_spend_micros_total",
     "Reference cost of settled model calls, in millionths, by the matrix version the session "
-    "was pinned to",
-    ["matrix_version"],
+    "was pinned to and its tenant's plan tier",
+    ["matrix_version", "plan_tier"],
 )
 
 

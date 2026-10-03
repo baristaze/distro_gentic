@@ -53,11 +53,13 @@ from acme.om.exceptions import (
 from acme.om.models.types.fill import Fill, ModelRole
 from acme.om.windows.gate import CallGateInterface
 from acme.om.windows.impl.gate import (
-    UNPINNED,
+    UNLABELLED,
+    CallLabels,
     PinnedVersion,
+    PlanTierOf,
+    call_labels,
     count_settled,
     scopes_of,
-    version_label,
 )
 from acme.om.windows.rules import call_shape
 
@@ -252,8 +254,8 @@ class MoneyCallGateImpl(CallGateInterface):
     the row it was read from; its usage is billed from that same row, after
     the next version is read and in another process too. Every settled call
     counts its tokens and its spend under the matrix version `version` reads
-    of its session at the hold; a settle in another process counts them
-    under `none`."""
+    of its session at the hold, and the plan tier `tier` reads; a settle in
+    another process counts them under `none`."""
 
     def __init__(
         self,
@@ -262,12 +264,14 @@ class MoneyCallGateImpl(CallGateInterface):
         sessions: AgentSessionsManagerInterface,
         *,
         version: PinnedVersion | None = None,
+        tier: PlanTierOf | None = None,
     ) -> None:
         self._gate = gate
         self._prices = prices
         self._sessions = sessions
         self._version = version
-        self._labels: dict[UUID, str] = {}
+        self._tier = tier
+        self._labels: dict[UUID, CallLabels] = {}
 
     async def authorize(
         self,
@@ -281,7 +285,7 @@ class MoneyCallGateImpl(CallGateInterface):
         credential: str,
     ) -> UUID:
         session = await self._sessions.get_session(ctx, session_id)
-        label = await version_label(self._version, ctx, session_id)
+        labels = await call_labels(self._version, self._tier, ctx, session_id)
         priced = PricedAt(
             version=self._prices.version, provider=fill.provider.value, model=fill.model
         )
@@ -296,7 +300,7 @@ class MoneyCallGateImpl(CallGateInterface):
         answer = await self._gate.authorize_priced(ctx, request, priced, credential=credential)
         if isinstance(answer, Refusal):
             raise BudgetRefused(answer)
-        self._labels[answer.id] = label
+        self._labels[answer.id] = labels
         return answer.id
 
     async def settle(
@@ -318,6 +322,6 @@ class MoneyCallGateImpl(CallGateInterface):
                 )
                 price = self._prices.price_at(version, provider, model)
             bill = Billed(usage=usage_spend(usage, price))
-        label = self._labels.pop(hold_id, UNPINNED)
+        labels = self._labels.pop(hold_id, UNLABELLED)
         settlement = await self._gate.settle(ctx, hold_id, bill)
-        count_settled(label, usage if billed else None, settlement)
+        count_settled(labels, usage if billed else None, settlement)

@@ -314,6 +314,7 @@ def loop_over(
                 managers.pricing,
                 managers.agent_sessions,
                 version=None if models_layer is None else models_layer.version,
+                tier=None if models_layer is None else models_layer.tier,
             )
             if call_gate is None
             else call_gate(managers, clock)

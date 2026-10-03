@@ -34,6 +34,17 @@ PinnedVersion = Callable[[TenantContext, UUID], Awaitable[int | None]]
 """Reads the matrix version a session's fills came from last."""
 
 
+PlanTierOf = Callable[[TenantContext, UUID], Awaitable[str]]
+"""Reads the plan tier a session's tenant is served at: the tier of its
+share, one of the few names the operators give, so the set is bounded."""
+
+CallLabels = tuple[str, str]
+"""The matrix version and the plan tier a call counts under."""
+
+UNLABELLED: CallLabels = (UNPINNED, UNPINNED)
+"""The labels of a call no version and no tier was read for."""
+
+
 async def version_label(version: PinnedVersion | None, ctx: TenantContext, session_id: UUID) -> str:
     """The label a session's calls count under: its pinned matrix version, a
     published one, so the set is bounded; `none` when nothing pinned it."""
@@ -41,11 +52,25 @@ async def version_label(version: PinnedVersion | None, ctx: TenantContext, sessi
     return UNPINNED if pinned is None else str(pinned)
 
 
-def count_settled(label: str, usage: Usage | None, settlement: Settlement) -> None:
+async def call_labels(
+    version: PinnedVersion | None,
+    tier: PlanTierOf | None,
+    ctx: TenantContext,
+    session_id: UUID,
+) -> CallLabels:
+    """The labels a session's calls count under: its pinned matrix version,
+    and its tenant's plan tier, `none` where a root wired nothing to read
+    it."""
+    plan_tier = UNPINNED if tier is None else await tier(ctx, session_id)
+    return await version_label(version, ctx, session_id), plan_tier
+
+
+def count_settled(labels: CallLabels, usage: Usage | None, settlement: Settlement) -> None:
     """A settled model call's tokens, when the provider reported them, and
     the spend its settlement took, under the matrix version its session was
-    pinned to. The cache's share of the prompt is `cache_read` against the
-    rest: a fall in it is a cache rebuilt."""
+    pinned to and its tenant's plan tier. The cache's share of the prompt is
+    `cache_read` against the rest: a fall in it is a cache rebuilt."""
+    version, tier = labels
     if usage is not None:
         for kind, tokens in (
             ("input", usage.input),
@@ -53,9 +78,11 @@ def count_settled(label: str, usage: Usage | None, settlement: Settlement) -> No
             ("cache_write", usage.cache_write),
             ("output", usage.output + usage.thinking),
         ):
-            MODEL_TOKENS.labels(matrix_version=label, kind=kind).inc(tokens)
+            MODEL_TOKENS.labels(matrix_version=version, plan_tier=tier, kind=kind).inc(tokens)
     if settlement.spent.cost_micros:
-        MODEL_SPEND_MICROS.labels(matrix_version=label).inc(settlement.spent.cost_micros)
+        MODEL_SPEND_MICROS.labels(matrix_version=version, plan_tier=tier).inc(
+            settlement.spent.cost_micros
+        )
 
 
 class CallGateNullImpl(CallGateInterface):
@@ -91,8 +118,8 @@ class CallGateBudgetImpl(CallGateInterface):
     with nothing held. A settlement prices the usage the provider reported
     at the same list price; a call the provider never processed releases
     its hold. Every settled call counts its tokens and its spend, under
-    the matrix version `version` reads of its session; None counts them
-    all under `none`."""
+    the matrix version `version` reads of its session and the plan tier
+    `tier` reads; None counts them under `none`."""
 
     def __init__(
         self,
@@ -101,12 +128,14 @@ class CallGateBudgetImpl(CallGateInterface):
         sessions: AgentSessionsManagerInterface,
         *,
         version: PinnedVersion | None = None,
+        tier: PlanTierOf | None = None,
     ) -> None:
         self._gate = gate
         self._pricing = pricing
         self._sessions = sessions
         self._version = version
-        self._held: dict[UUID, tuple[ModelPrice | None, str]] = {}
+        self._tier = tier
+        self._held: dict[UUID, tuple[ModelPrice | None, CallLabels]] = {}
 
     async def authorize(
         self,
@@ -122,7 +151,7 @@ class CallGateBudgetImpl(CallGateInterface):
         # Whose key the call goes out on changes who pays the provider, never
         # what is gated: the same budgets, at the same list price.
         session = await self._sessions.get_session(ctx, session_id)
-        label = await version_label(self._version, ctx, session_id)
+        labels = await call_labels(self._version, self._tier, ctx, session_id)
         price = self._pricing.price_of(fill.provider.value, fill.model)
         request = HoldRequest(
             spender_id=spender.id,
@@ -134,13 +163,13 @@ class CallGateBudgetImpl(CallGateInterface):
         answer = await self._gate.authorize(ctx, request)
         if isinstance(answer, Refusal):
             raise BudgetRefused(answer)
-        self._held[answer.id] = (price, label)
+        self._held[answer.id] = (price, labels)
         return answer.id
 
     async def settle(
         self, ctx: TenantContext, hold_id: UUID, usage: Usage | None, *, billed: bool
     ) -> None:
-        price, label = self._held.pop(hold_id, (None, UNPINNED))
+        price, labels = self._held.pop(hold_id, (None, UNLABELLED))
         bill: Bill
         if not billed:
             bill = NotBilled(proof=NotBilledProof.REFUSED_BEFORE_PROCESSING)
@@ -149,7 +178,7 @@ class CallGateBudgetImpl(CallGateInterface):
         else:
             bill = Billed(usage=usage_spend(usage, price))
         settlement = await self._gate.settle(ctx, hold_id, bill)
-        count_settled(label, usage if billed else None, settlement)
+        count_settled(labels, usage if billed else None, settlement)
 
 
 def scopes_of(

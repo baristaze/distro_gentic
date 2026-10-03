@@ -218,6 +218,37 @@ class MoneyLedgerStorageContract:
         cost = (await storage.read_counts(org, [line_keys(line)[0]]))[line_keys(line)[0]]
         assert (cost.held, cost.spent) == (0, 3_000)
 
+    async def test_read_open_answers_the_slices_unsettled_holds_oldest_first(
+        self, storage: MoneyLedgerStorageInterface
+    ) -> None:
+        """The sweep's read across tenants: every hold opened in the slice
+        that no settlement closed, each with its tenant, oldest first, a batch
+        at most; never one settled, nor one opened outside the slice."""
+        first, second, now = new_id(), new_id(), utcnow()
+
+        def opened(at: datetime) -> FundedHold:
+            funded = a_funded_hold(a_line(cost_micros=100_000), paid_by=funding(included=100))
+            return funded.model_copy(
+                update={"hold": funded.hold.model_copy(update={"created_at": at})}
+            )
+
+        old, older, settled = (opened(now - timedelta(hours=h)) for h in (2, 3, 4))
+        recent, ancient = opened(now - timedelta(minutes=5)), opened(now - timedelta(days=2))
+        for org, hold in (
+            (first, old),
+            (second, older),
+            (first, settled),
+            (first, recent),
+            (second, ancient),
+        ):
+            assert isinstance(await storage.open_hold(org, hold), FundedHold)
+        await storage.close_hold(first, *closing(settled, 3))
+        floor, cut = now - timedelta(days=1), now - timedelta(hours=1)
+        found = await storage.read_open(floor, cut, 10)
+        assert [(org, hold.id) for org, hold in found] == [(second, older.id), (first, old.id)]
+        assert found[0][1] == older.hold
+        assert [hold.id for _, hold in await storage.read_open(floor, cut, 1)] == [older.id]
+
     async def test_a_spend_past_its_hold_is_charged_in_full(
         self, storage: MoneyLedgerStorageInterface
     ) -> None:

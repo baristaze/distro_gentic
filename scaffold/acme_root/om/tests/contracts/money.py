@@ -95,6 +95,7 @@ def money_over(
             book,
             managers.agent_sessions,
             version=None if models_layer is None else models_layer.version,
+            tier=None if models_layer is None else models_layer.tier,
         )
         built.append((gate, calls))
         return calls

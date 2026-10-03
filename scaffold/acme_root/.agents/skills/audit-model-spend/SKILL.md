@@ -29,7 +29,7 @@ seven days by default.
 ## Role and credential
 
 Investigator, read-only, and no tenant's rows: every number is a
-series by matrix version and kind of token, never by tenant. `--env local` needs
+series by matrix version, plan tier, and kind of token, never by tenant. `--env local` needs
 the compose stack with the `devx` profile up (`make devx-up`) and the
 env file; no cloud credential. `--env staging` and `--env production`
 run under `acme-<env>-investigate`, checked with
@@ -50,15 +50,15 @@ block below does. Never print a token.
    platform's size or an error of its own, and the run goes on. Make
    the report's folder, `~/Downloads/acme_model_spend_<yyyy-mm-dd>/`
    (`mkdir -p`).
-2. Read the window's spend by matrix version, and its tokens by matrix
-   version and kind, once each. Locally:
+2. Read the window's spend by matrix version and plan tier, and its
+   tokens by matrix version, plan tier, and kind, once each. Locally:
 
    ```bash
    set -a; . ~/.config/acme/ops/<env>.env; set +a
    curl -sG "$ACME_PROMETHEUS_URL/api/v1/query" \
-     --data-urlencode 'query=sum by (matrix_version) (increase(acme_model_spend_micros_total[<since>])) / 1e6'
+     --data-urlencode 'query=sum by (matrix_version, plan_tier) (increase(acme_model_spend_micros_total[<since>])) / 1e6'
    curl -sG "$ACME_PROMETHEUS_URL/api/v1/query" \
-     --data-urlencode 'query=sum by (matrix_version, kind) (increase(acme_model_tokens_total[<since>]))'
+     --data-urlencode 'query=sum by (matrix_version, plan_tier, kind) (increase(acme_model_tokens_total[<since>]))'
    ```
 
    In the cloud, by the dashboard's schemas, an hour a datapoint:
@@ -68,8 +68,8 @@ block below does. Never print a token.
      --start-time <start> --end-time <end> --output text \
      --query 'MetricDataResults[?length(Values) > `0`].[Id,Label,sum(Values)]' \
      --metric-data-queries '[
-       {"Id":"spend","Period":3600,"Label":"${PROP('"'"'Dim.matrix_version'"'"')}","Expression":"SEARCH('"'"'{\"Acme\",OTelLib,environment,matrix_version,service} MetricName=\"acme_model_spend_micros_total\" environment=\"<env>\"'"'"', '"'"'Sum'"'"', 3600)"},
-       {"Id":"tokens","Period":3600,"Label":"${PROP('"'"'Dim.matrix_version'"'"')} ${PROP('"'"'Dim.kind'"'"')}","Expression":"SEARCH('"'"'{\"Acme\",OTelLib,environment,kind,matrix_version,service} MetricName=\"acme_model_tokens_total\" environment=\"<env>\"'"'"', '"'"'Sum'"'"', 3600)"}
+       {"Id":"spend","Period":3600,"Label":"${PROP('"'"'Dim.matrix_version'"'"')} ${PROP('"'"'Dim.plan_tier'"'"')}","Expression":"SEARCH('"'"'{\"Acme\",OTelLib,environment,matrix_version,plan_tier,service} MetricName=\"acme_model_spend_micros_total\" environment=\"<env>\"'"'"', '"'"'Sum'"'"', 3600)"},
+       {"Id":"tokens","Period":3600,"Label":"${PROP('"'"'Dim.matrix_version'"'"')} ${PROP('"'"'Dim.plan_tier'"'"')} ${PROP('"'"'Dim.kind'"'"')}","Expression":"SEARCH('"'"'{\"Acme\",OTelLib,environment,kind,matrix_version,plan_tier,service} MetricName=\"acme_model_tokens_total\" environment=\"<env>\"'"'"', '"'"'Sum'"'"', 3600)"}
      ]'
    ```
 

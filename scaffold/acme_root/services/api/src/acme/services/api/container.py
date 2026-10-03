@@ -18,7 +18,14 @@ from acme.infra.trust import install_trust_store
 from acme.integrations.impl.configured import IntegrationsConfiguredImpl, absent_integrations
 from acme.integrations.root import IntegrationsInterface
 from acme.om.agents.types.kind import AgentKind
-from acme.om.root import Managers, TenancyOperatorOptions, TenancyOptions, build_managers
+from acme.om.billing.root import build_money_gate, refuse_open_money
+from acme.om.root import (
+    Managers,
+    PlatformPorts,
+    TenancyOperatorOptions,
+    TenancyOptions,
+    build_managers,
+)
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
@@ -173,6 +180,7 @@ class AppContainer:
         integrations: IntegrationsInterface | None = None,
         *,
         agent_kinds: tuple[AgentKind, ...] = (),
+        ports: PlatformPorts | None = None,
     ) -> AppContainer:
         settings = settings or ApiSettings.model_validate(
             {
@@ -183,7 +191,9 @@ class AppContainer:
         )
         # No identity provider unless the test hands one in.
         integrations = integrations or absent_integrations()
-        return cls.over(settings, storage, infra, integrations, agent_kinds=agent_kinds)
+        return cls.over(
+            settings, storage, infra, integrations, agent_kinds=agent_kinds, ports=ports
+        )
 
     @classmethod
     def over(
@@ -194,10 +204,16 @@ class AppContainer:
         integrations: IntegrationsInterface,
         *,
         agent_kinds: tuple[AgentKind, ...] = (),
+        ports: PlatformPorts | None = None,
     ) -> AppContainer:
         """Managers, then services, over whichever roots the caller chose.
         `agent_kinds` are the product's: a session starts on one of them, and
-        the session runner runs its loop with the same kinds."""
+        the session runner runs its loop with the same kinds. `ports` are the
+        platform's ports the product sets, None each for the platform's own:
+        billing's money gate, and the evidence's result gate. Outside
+        `local`, a quiet null for any of them, or a budget gate that is not
+        the money gate, is refused at boot."""
+        ports = ports or PlatformPorts()
         managers = build_managers(
             storage,
             infra,
@@ -206,7 +222,14 @@ class AppContainer:
             integrations,
             environment=settings.environment,
             agent_kinds=agent_kinds,
+            budget_gate=ports.budget_gate or build_money_gate(storage),
+            result_gate=ports.result_gate,
+            executor=ports.executor,
+            work_product=ports.work_product,
+            session_projects=ports.session_projects,
+            workspace_projects=ports.workspace_projects,
         )
+        refuse_open_money(settings.environment, managers)
         stream = StreamServiceMemoryImpl()
         watch = build_watch(managers, stream, WatchOptions(live_read_key=settings.live_read_key))
         services = build_services(

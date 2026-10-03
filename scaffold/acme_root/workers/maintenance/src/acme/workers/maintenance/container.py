@@ -19,6 +19,7 @@ from acme.om.automations.impl.manager import AutomationsOptions
 from acme.om.automations.root import build_automations
 from acme.om.base import new_id
 from acme.om.billing.impl.sweep import HoldSweepImpl, HoldSweepOptions
+from acme.om.billing.root import build_money_gate, refuse_open_money
 from acme.om.billing.sweep import ProviderBillsUnknownImpl
 from acme.om.budgets.impl.manager import BudgetsOptions
 from acme.om.events.impl.manager import EventsOptions
@@ -40,7 +41,7 @@ from acme.om.playbooks.root import PlaybooksLayer
 from acme.om.projects.impl.manager import ProjectsOptions
 from acme.om.relay.impl.manager import RelayOptions
 from acme.om.retention.impl.manager import RetentionOptions
-from acme.om.root import Managers, build_managers
+from acme.om.root import Managers, PlatformPorts, build_managers
 from acme.om.stations.impl.manager import StationsOptions
 from acme.om.steps.impl.manager import StepsOptions
 from acme.om.storage.impl.postgres import StoragePostgresImpl
@@ -96,12 +97,18 @@ def worker_managers(
     infra: InfraInterface,
     integrations: IntegrationsInterface,
     settings: MaintenanceSettings,
+    ports: PlatformPorts | None = None,
 ) -> Managers:
     """The managers, each one the sweep purges through with its retention and
     its batch from the settings. The worker is the one process that purges,
-    so it is the one that sets them."""
+    so it is the one that sets them. Its budget gate is billing's money
+    gate, the one whose holds its sweep settles; `ports` are the platform's
+    ports the product sets, None each for the platform's own. Outside
+    `local`, a quiet null for any of them, or a budget gate that is not the
+    money gate, is refused at boot."""
     batch = settings.worker_purge_batch
-    return build_managers(
+    ports = ports or PlatformPorts()
+    managers = build_managers(
         storage,
         infra,
         TenancyOptions(
@@ -144,7 +151,15 @@ def worker_managers(
         relay_options=RelayOptions(purge_batch=batch),
         stations_options=StationsOptions(purge_batch=batch),
         workspaces_options=WorkspacesOptions(purge_batch=batch),
+        budget_gate=ports.budget_gate or build_money_gate(storage),
+        result_gate=ports.result_gate,
+        executor=ports.executor,
+        work_product=ports.work_product,
+        session_projects=ports.session_projects,
+        workspace_projects=ports.workspace_projects,
     )
+    refuse_open_money(settings.environment, managers)
+    return managers
 
 
 class WorkerContainer:
@@ -187,11 +202,11 @@ class WorkerContainer:
             storage, managers, options=KnowledgeOptions(purge_batch=batch)
         )
         # The platform's duties the sweep carries across tenants: a hold
-        # nobody settled settles through the gate whose ledger holds it, at
-        # the provider's bill, else whole; and a session pending with no
-        # loop has its run asked for again.
+        # nobody settled settles through the money gate whose ledger holds
+        # it, at the provider's bill, else whole; and a session pending with
+        # no loop has its run asked for again.
         self.holds = HoldSweepImpl(
-            storage.get_ledger_storage(),
+            storage.get_money_ledger_storage(),
             managers.budget_gate,
             managers.tenancy,
             ProviderBillsUnknownImpl(),
@@ -247,6 +262,8 @@ class WorkerContainer:
         infra: InfraInterface,
         settings: MaintenanceSettings | None = None,
         integrations: IntegrationsInterface | None = None,
+        *,
+        ports: PlatformPorts | None = None,
     ) -> WorkerContainer:
         settings = settings or MaintenanceSettings.model_validate(
             {"_env_file": None, "environment": "test", "worker_id": "maintenance-test"}
@@ -258,7 +275,7 @@ class WorkerContainer:
             settings,
             storage,
             infra,
-            worker_managers(storage, infra, integrations, settings),
+            worker_managers(storage, infra, integrations, settings, ports),
             integrations,
         )
 

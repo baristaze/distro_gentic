@@ -30,7 +30,7 @@ from acme.om.billing.types.ledger import (
     Turned,
     WindowRaise,
 )
-from acme.om.budgets.types.hold import Settlement
+from acme.om.budgets.types.hold import Hold, Settlement
 from acme.om.exceptions import NotFound, PreconditionFailed, TenantMismatch
 from acme.om.outbox.storage import OutboxLandingInterface
 from acme.om.outbox.types.row import OutboxRow
@@ -194,6 +194,25 @@ class MoneyLedgerStorageMemoryImpl(MemoryStorageBase, MoneyLedgerStorageInterfac
                 _Row(org_id, EntryKind.APPROVAL, approval, session_id=approval.session_id)
             )
             return approval
+
+    async def read_open(
+        self, after: datetime, before: datetime, limit: int
+    ) -> list[tuple[UUID, Hold]]:
+        closed = {
+            (row.org_id, row.hold_id) for row in self._entries if row.kind is EntryKind.SETTLEMENT
+        }
+        found = sorted(
+            (
+                (row.org_id, row.entry.hold)
+                for row in self._entries
+                if row.kind is EntryKind.HOLD
+                and isinstance(row.entry, FundedHold)
+                and after <= row.entry.hold.created_at < before
+                and (row.org_id, row.hold_id) not in closed
+            ),
+            key=lambda pair: (pair[1].created_at, pair[1].id),
+        )
+        return found[:limit]
 
     async def read_entries(
         self,

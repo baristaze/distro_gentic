@@ -31,6 +31,9 @@ class LedgerEntries(IdentifiableMixin, CreatedMixin, Base):
             "ix_ledger_entries_org_id_session_id_created_at", "org_id", "session_id", "created_at"
         ),
         Index("ix_ledger_entries_org_id_kind_created_at", "org_id", "kind", "created_at"),
+        # The holds no settlement closed, across tenants, one slice of their
+        # opening times at a time: what the sweep reads.
+        Index("ix_ledger_entries_kind_created_at", "kind", "created_at"),
     )
     kind: Mapped[str]
     hold_id: Mapped[UUID | None]

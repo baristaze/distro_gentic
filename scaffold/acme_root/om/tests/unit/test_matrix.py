@@ -36,7 +36,7 @@ from acme.integrations.model_providers.types import ErrorKind, ProviderName
 from acme.om.agents.types.request import Start
 from acme.om.agents.types.run import RunEnd
 from acme.om.attribution.types.principal import Principal, PrincipalKind
-from acme.om.base import new_id
+from acme.om.base import new_id, utcnow
 from acme.om.billing.types.account import AccountRequest, FundingMode
 from acme.om.billing.types.ledger import EntryKind, FundedHold
 from acme.om.context import Role, TenantContext
@@ -56,6 +56,8 @@ from acme.om.matrix.types.matrix import (
 )
 from acme.om.matrix.types.record import ModelRef
 from acme.om.models.types.fill import MAIN, SUMMARIZER, Eligibility, Fill, SwitchReason
+from acme.om.placement.rules import DEFAULT_TIER
+from acme.om.placement.types.share import FairShare
 from acme.om.privacy.types.session_privacy import StorageMode
 from acme.om.retention import rules as retention_rules
 from acme.om.retention.types.policy import RetentionPolicy
@@ -372,6 +374,10 @@ async def test_a_running_session_keeps_its_matrix_version_across_a_publish(
     assert (await fleet.matrix.matrix.get_pin(fleet.owner, fresh)).matrix_version == (second.number)
 
 
+STANDARD = DEFAULT_TIER
+"""The plan tier of a tenant no operator gave a share."""
+
+
 def counted(name: str, **labels: str) -> float:
     return REGISTRY.get_sample_value(name, labels) or 0.0
 
@@ -391,8 +397,10 @@ async def test_a_calls_tokens_and_spend_count_under_its_sessions_pinned_version(
     old, new = str(first.number), str(second.number)
     before = {
         label: (
-            counted("acme_model_tokens_total", matrix_version=label, kind="input"),
-            counted("acme_model_spend_micros_total", matrix_version=label),
+            counted(
+                "acme_model_tokens_total", matrix_version=label, plan_tier=STANDARD, kind="input"
+            ),
+            counted("acme_model_spend_micros_total", matrix_version=label, plan_tier=STANDARD),
         )
         for label in (old, new)
     }
@@ -401,19 +409,63 @@ async def test_a_calls_tokens_and_spend_count_under_its_sessions_pinned_version(
     assert await loop_once(fleet, session_id, "And the average?") is RunEnd.ENDED
 
     tokens, spend = before[old]
-    assert counted("acme_model_tokens_total", matrix_version=old, kind="input") == tokens + 120
-    assert counted("acme_model_spend_micros_total", matrix_version=old) > spend
     assert (
-        counted("acme_model_tokens_total", matrix_version=new, kind="input"),
-        counted("acme_model_spend_micros_total", matrix_version=new),
+        counted("acme_model_tokens_total", matrix_version=old, plan_tier=STANDARD, kind="input")
+        == tokens + 120
+    )
+    assert counted("acme_model_spend_micros_total", matrix_version=old, plan_tier=STANDARD) > spend
+    assert (
+        counted("acme_model_tokens_total", matrix_version=new, plan_tier=STANDARD, kind="input"),
+        counted("acme_model_spend_micros_total", matrix_version=new, plan_tier=STANDARD),
     ) == before[new], "the running session kept its version"
 
     fresh = await fleet.loop.start()
     fleet.loop.anthropic.add(reply(said("The total is 12.")))
     assert await loop_once(fleet, fresh) is RunEnd.ENDED
     tokens, spend = before[new]
-    assert counted("acme_model_tokens_total", matrix_version=new, kind="input") == tokens + 120
-    assert counted("acme_model_spend_micros_total", matrix_version=new) > spend
+    assert (
+        counted("acme_model_tokens_total", matrix_version=new, plan_tier=STANDARD, kind="input")
+        == tokens + 120
+    )
+    assert counted("acme_model_spend_micros_total", matrix_version=new, plan_tier=STANDARD) > spend
+
+
+async def test_a_call_counts_under_its_tenants_plan_tier_beside_its_version(
+    tmp_path: Path,
+) -> None:
+    """A call through a published version counts under that version and the
+    plan tier its tenant's share names, never under `none`."""
+    fleet = await fleet_over(tmp_path)
+    version = str((await fleet.publish()).number)
+    org_id = fleet.owner.org_id
+    now, by = utcnow(), fleet.owner.user_id
+    share = FairShare(
+        id=new_id(),
+        created_at=now,
+        updated_at=now,
+        created_by=by,
+        updated_by=by,
+        plan_tier="pro",
+        concurrency=4,
+    )
+    assert await fleet.loop.storage.get_placement_storage().create_share(org_id, share)
+    labelled = {"matrix_version": version, "plan_tier": "pro"}
+    tokens = counted("acme_model_tokens_total", **labelled, kind="input")
+    spend = counted("acme_model_spend_micros_total", **labelled)
+    unlabelled = counted(
+        "acme_model_tokens_total", matrix_version="none", plan_tier="none", kind="input"
+    )
+
+    session_id = await fleet.loop.start()
+    fleet.loop.anthropic.add(reply(said("The total is 12.")))
+    assert await loop_once(fleet, session_id) is RunEnd.ENDED
+
+    assert counted("acme_model_tokens_total", **labelled, kind="input") == tokens + 120
+    assert counted("acme_model_spend_micros_total", **labelled) > spend
+    assert (
+        counted("acme_model_tokens_total", matrix_version="none", plan_tier="none", kind="input")
+        == unlabelled
+    ), "nothing counted under none"
 
 
 async def test_a_retired_model_switches_at_the_next_loop_with_a_switched_step(

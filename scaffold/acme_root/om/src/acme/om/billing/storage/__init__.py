@@ -23,7 +23,7 @@ from acme.om.billing.types.ledger import (
     Turned,
     WindowRaise,
 )
-from acme.om.budgets.types.hold import Settlement
+from acme.om.budgets.types.hold import Hold, Settlement
 from acme.om.outbox.types.row import OutboxRow
 
 Entry = FundedHold | Settlement | Charge | Credit | Grant | WindowRaise | Approval
@@ -86,6 +86,16 @@ class MoneyLedgerStorageInterface(ABC):
         closes once: one closed already answers its first settlement and
         charge, and nothing moves. A hold the tenant does not hold is
         `NotFound`, and nothing moves."""
+        ...
+
+    @abstractmethod
+    async def read_open(
+        self, after: datetime, before: datetime, limit: int
+    ) -> list[tuple[UUID, Hold]]:
+        """Cross-tenant, for the sweep, in the system scope: at most `limit`
+        holds opened at or after `after` and before `before` that no
+        settlement has closed, whatever their tenant, each with its tenant,
+        oldest first."""
         ...
 
     @abstractmethod
