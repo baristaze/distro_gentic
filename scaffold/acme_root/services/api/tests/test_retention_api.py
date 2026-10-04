@@ -10,7 +10,7 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from api_support import PROJECT_ID, build_container, seed_request
+from api_support import PROJECT_ID, build_container, client_over, seed_request, sign_in
 from contracts.step_storage import (
     make_request,
     make_response,
@@ -46,9 +46,7 @@ async def org_of(container: AppContainer) -> UUID:
     return org.id
 
 
-async def session_saying(
-    client: httpx.AsyncClient, container: AppContainer, owner: Headers
-) -> str:
+async def session_saying(client: httpx.AsyncClient, container: AppContainer, owner: Headers) -> str:
     """A session with a whole turn: what a person said, the model's call and
     answer, and a tool's call and result."""
     started = await client.post(
@@ -120,6 +118,24 @@ async def test_an_admin_erases_a_sessions_content_and_its_shape_stays(
     again = await client.post(f"/v1/retention/sessions/{session_id}/erase", headers=owner)
     assert again.status_code == 200, again.text
     assert again.json() == erased.json()
+
+
+async def test_an_erasure_answers_with_the_report_of_a_service_that_holds_each_key(
+    tmp_path: Path,
+) -> None:
+    """In `local`, the key service holds each session's key, destroys it, and
+    reports it: the answer carries that report, its key named, no key in it."""
+    container = build_container(tmp_path, agent_kinds=(ASSISTANT,), environment="local")
+    async with client_over(container) as client:
+        owner = await sign_in(client, container)
+        session_id = await session_saying(client, container, owner)
+
+        erased = await client.post(f"/v1/retention/sessions/{session_id}/erase", headers=owner)
+
+        assert erased.status_code == 200, erased.text
+        report = erased.json()["destruction"]
+        assert report is not None and report["key_name"].endswith(session_id)
+        assert set(report) == {"service", "key_name", "destroyed_at", "receipt"}
 
 
 async def test_an_admin_writes_the_policy_and_the_sweep_holds_sessions_to_it(

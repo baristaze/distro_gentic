@@ -23,11 +23,12 @@ class RetentionServiceImpl(RetentionServiceInterface):
         self, ctx: TenantContext, body: RetentionRequest, version: int | None
     ) -> RetentionView:
         # The manager keeps the stored row's id and provenance; the copy here
-        # carries the policy and the version the caller read, 0 for none.
+        # carries the policy and the version the caller read, 0 for none. A
+        # field left out takes the policy's default, which narrows nothing.
         current = await self._retention.get_policy(ctx)
         policy = built(
             TenantRetention,
-            {**current.model_dump(), **body.model_dump(), "version": version or 0},
+            {**current.model_dump(), **body.model_dump(exclude_none=True), "version": version or 0},
         )
         return RetentionView.model_validate(await self._retention.write_policy(ctx, policy))
 

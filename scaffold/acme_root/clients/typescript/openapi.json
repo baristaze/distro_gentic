@@ -4430,15 +4430,15 @@
       },
       "JsonValue": {},
       "KeyDestructionView": {
-        "description": "A session's key destroyed, as the tenant's key service reported it.",
+        "description": "A session's key destroyed, as the tenant's key service reported it:\nthe service, the key's name in it, when by its clock, and its receipt.\nNo key material crosses.",
         "properties": {
           "destroyed_at": {
             "format": "date-time",
             "title": "Destroyed At",
             "type": "string"
           },
-          "key": {
-            "title": "Key",
+          "key_name": {
+            "title": "Key Name",
             "type": "string"
           },
           "receipt": {
@@ -4452,7 +4452,7 @@
         },
         "required": [
           "service",
-          "key",
+          "key_name",
           "destroyed_at",
           "receipt"
         ],
@@ -6977,7 +6977,7 @@
       },
       "RetentionPolicyBody": {
         "additionalProperties": false,
-        "description": "How long what a session says is kept, and its shape, each counted\nfrom the session's creation, none for no end; where its content may\nrest; whether nothing it says may be kept anywhere; and its region. A\nfield left out narrows nothing. A content that outlives its shape, and\nzero retention that keeps content at rest, are refused.",
+        "description": "How long what a session says is kept, and its shape, each counted\nfrom the session's creation, none for no end; where its content may\nrest, sealed when left out; whether nothing it says may be kept\nanywhere; and its region. A field left out narrows nothing. A content\nthat outlives its shape, and zero retention that keeps content at\nrest, are refused.",
         "properties": {
           "content_lifetime": {
             "anyOf": [
@@ -7016,8 +7016,14 @@
             "title": "Shape Lifetime"
           },
           "storage_mode": {
-            "$ref": "#/components/schemas/StorageMode",
-            "default": "sealed"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StorageMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "zero_retention": {
             "default": false,

@@ -845,10 +845,12 @@ class JsonValue(RootModel[Any]):
 
 class KeyDestructionView(BaseModel):
     """
-    A session's key destroyed, as the tenant's key service reported it.
+    A session's key destroyed, as the tenant's key service reported it:
+    the service, the key's name in it, when by its clock, and its receipt.
+    No key material crosses.
     """
     destroyed_at: Annotated[AwareDatetime, Field(title='Destroyed At')]
-    key: Annotated[str, Field(title='Key')]
+    key_name: Annotated[str, Field(title='Key Name')]
     receipt: Annotated[str, Field(title='Receipt')]
     service: Annotated[str, Field(title='Service')]
 
@@ -2807,9 +2809,10 @@ class RetentionPolicyBody(BaseModel):
     """
     How long what a session says is kept, and its shape, each counted
     from the session's creation, none for no end; where its content may
-    rest; whether nothing it says may be kept anywhere; and its region. A
-    field left out narrows nothing. A content that outlives its shape, and
-    zero retention that keeps content at rest, are refused.
+    rest, sealed when left out; whether nothing it says may be kept
+    anywhere; and its region. A field left out narrows nothing. A content
+    that outlives its shape, and zero retention that keeps content at
+    rest, are refused.
     """
     model_config = ConfigDict(
         extra='forbid',
@@ -2817,7 +2820,7 @@ class RetentionPolicyBody(BaseModel):
     content_lifetime: Annotated[timedelta | None, Field(title='Content Lifetime')] = None
     region: Annotated[Region1 | None, Field(title='Region')] = None
     shape_lifetime: Annotated[timedelta | None, Field(title='Shape Lifetime')] = None
-    storage_mode: StorageMode | None = 'sealed'
+    storage_mode: StorageMode | None = None
     zero_retention: Annotated[bool | None, Field(title='Zero Retention')] = False
 
 

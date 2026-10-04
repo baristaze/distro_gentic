@@ -15,13 +15,14 @@ from acme.services.api.types.common import RequestBody, View
 class RetentionPolicyBody(RequestBody):
     """How long what a session says is kept, and its shape, each counted
     from the session's creation, none for no end; where its content may
-    rest; whether nothing it says may be kept anywhere; and its region. A
-    field left out narrows nothing. A content that outlives its shape, and
-    zero retention that keeps content at rest, are refused."""
+    rest, sealed when left out; whether nothing it says may be kept
+    anywhere; and its region. A field left out narrows nothing. A content
+    that outlives its shape, and zero retention that keeps content at
+    rest, are refused."""
 
     content_lifetime: timedelta | None = Field(default=None, gt=timedelta(0))
     shape_lifetime: timedelta | None = Field(default=None, gt=timedelta(0))
-    storage_mode: StorageMode = StorageMode.SEALED
+    storage_mode: StorageMode | None = None
     zero_retention: bool = False
     region: str | None = Field(default=None, pattern=REGION)
 
@@ -67,10 +68,12 @@ class RetentionView(View):
 
 
 class KeyDestructionView(View):
-    """A session's key destroyed, as the tenant's key service reported it."""
+    """A session's key destroyed, as the tenant's key service reported it:
+    the service, the key's name in it, when by its clock, and its receipt.
+    No key material crosses."""
 
     service: str
-    key: str
+    key_name: str = Field(validation_alias="key")
     destroyed_at: datetime
     receipt: str
 

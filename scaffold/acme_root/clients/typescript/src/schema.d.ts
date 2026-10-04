@@ -4966,7 +4966,9 @@ export interface components {
         JsonValue: unknown;
         /**
          * KeyDestructionView
-         * @description A session's key destroyed, as the tenant's key service reported it.
+         * @description A session's key destroyed, as the tenant's key service reported it:
+         *     the service, the key's name in it, when by its clock, and its receipt.
+         *     No key material crosses.
          */
         KeyDestructionView: {
             /**
@@ -4974,8 +4976,8 @@ export interface components {
              * Format: date-time
              */
             destroyed_at: string;
-            /** Key */
-            key: string;
+            /** Key Name */
+            key_name: string;
             /** Receipt */
             receipt: string;
             /** Service */
@@ -6134,9 +6136,10 @@ export interface components {
          * RetentionPolicyBody
          * @description How long what a session says is kept, and its shape, each counted
          *     from the session's creation, none for no end; where its content may
-         *     rest; whether nothing it says may be kept anywhere; and its region. A
-         *     field left out narrows nothing. A content that outlives its shape, and
-         *     zero retention that keeps content at rest, are refused.
+         *     rest, sealed when left out; whether nothing it says may be kept
+         *     anywhere; and its region. A field left out narrows nothing. A content
+         *     that outlives its shape, and zero retention that keeps content at
+         *     rest, are refused.
          */
         RetentionPolicyBody: {
             /** Content Lifetime */
@@ -6145,8 +6148,7 @@ export interface components {
             region?: string | null;
             /** Shape Lifetime */
             shape_lifetime?: string | null;
-            /** @default sealed */
-            storage_mode: components["schemas"]["StorageMode"];
+            storage_mode?: components["schemas"]["StorageMode"] | null;
             /**
              * Zero Retention
              * @default false
