@@ -84,8 +84,10 @@ class HostsStorageInterface(ABC):
 
     @abstractmethod
     async def read_hosts(self, org_id: UUID, pool_id: UUID, limit: int) -> list[Host]:
-        """The pool's hosts in id order, revoked ones included, at most
-        `limit`; a claimant of another kind is none of them."""
+        """The pool's live hosts, the one seen last first, at most `limit`: a
+        revoked host is none of them, nor is a claimant of another kind. A
+        host re-enrolls as a new row, so revoked rows pile up, and a list
+        that held them would leave the newest hosts past its end."""
         ...
 
     @abstractmethod

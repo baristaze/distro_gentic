@@ -18,6 +18,7 @@ from uuid import UUID
 
 import pytest
 from contracts.agent_session_storage import make_session
+from contracts.hosts_storage import make_credential, make_host
 from contracts.project_storage import in_project
 
 from acme.infra.impl.local import InfraLocalImpl
@@ -388,6 +389,26 @@ async def test_a_repeatable_items_lease_runs_out_and_it_goes_back_to_its_workspa
 
 # Check 3: a stop reaches the host's control stream at once, and a command
 # carrying a stale writer epoch is refused.
+
+
+async def test_a_host_past_a_thousand_revoked_rows_of_its_pool_binds_and_holds(
+    wall: Wall,
+) -> None:
+    # Each host re-enrolled as a new row, and each old row stays revoked.
+    for _ in range(1000):
+        gone = make_host(wall.pool.id).model_copy(
+            update={"revoked_at": utcnow(), "revoked_by": wall.owner.user_id}
+        )
+        await wall.storage.get_hosts_storage().enroll(
+            wall.owner.org_id, gone, make_credential(gone.id), ()
+        )
+    newest = await enrolled(wall.managers, wall.owner, wall.pool, "host-3")
+    relay, owner, session_id = wall.managers.relay, wall.owner, wall.workspace.id
+    bound = await relay.bind_workspace(owner, session_id, newest.host_id, WHERE)
+    assert bound.host_id == newest.host_id
+    assert await relay.holder(owner, session_id) == bound
+    listed = {status.host.id for status in await wall.managers.hosts.get_hosts(owner, wall.pool.id)}
+    assert listed == {wall.holder.host_id, wall.other.host_id, newest.host_id}
 
 
 async def test_a_cancel_or_an_interrupt_reaches_the_hosts_control_stream(wall: Wall) -> None:

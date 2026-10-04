@@ -183,6 +183,15 @@ class HostsManagerImpl(HostsManagerInterface):
             for host in await self._storage.read_hosts(ctx.org_id, pool_id, self._options.max_hosts)
         )
 
+    async def get_host(
+        self, ctx: TenantContext, pool_id: UUID, host_id: UUID
+    ) -> HostStatus | None:
+        ctx.require(Permission.READ)
+        host = await self._storage.read_host(ctx.org_id, host_id)
+        if host is None or host.pool_id != pool_id:
+            return None
+        return HostStatus(host=host, online=online(host, self._clock(), self._options.online_window))
+
     async def get_claimants(
         self, ctx: TenantContext, pool_id: UUID
     ) -> tuple[EnrolledClaimant, ...]:

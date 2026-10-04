@@ -32,8 +32,7 @@ class PlacedWorkspacesRelayedImpl(PlacedWorkspacesInterface):
             return None
         binding = await self._relay().binding_of(ctx, session_id)
         if binding is not None:
-            statuses = await self._hosts().get_hosts(ctx, placed.pool.id)
-            holder = next((s for s in statuses if s.host.id == binding.host_id), None)
+            holder = await self._hosts().get_host(ctx, placed.pool.id, binding.host_id)
             if holder is not None and holder.host.revoked_at is None:
                 if not holder.online:
                     # A workspace lives where it was prepared: the session

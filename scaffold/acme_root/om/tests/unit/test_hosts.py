@@ -295,8 +295,9 @@ async def test_a_copy_rotated_after_the_hosts_own_rotation_ends_the_host(
     for credential in (copy, rotated.credential):
         with pytest.raises(CredentialExpired):
             await hosts.authenticate(request(), credential)
-    (status,) = await hosts.get_hosts(owner, pool.id)
-    assert status.host.revoked_at == clock.now and not status.online
+    assert await hosts.get_hosts(owner, pool.id) == ()
+    status = await hosts.get_host(owner, pool.id, issued.claimant_id)
+    assert status is not None and status.host.revoked_at == clock.now and not status.online
 
 
 async def test_a_copy_rotating_every_half_hour_does_not_outlive_its_hour(
@@ -340,8 +341,9 @@ async def test_a_copy_that_rotates_first_ends_at_the_hosts_next_beat(
     # refused, and the host and every credential it holds are revoked.
     with pytest.raises(CredentialExpired):
         await hosts.authenticate(request(), issued.credential)
-    (status,) = await hosts.get_hosts(owner, pool.id)
-    assert status.host.revoked_at == clock.now and not status.online
+    assert await hosts.get_hosts(owner, pool.id) == ()
+    status = await hosts.get_host(owner, pool.id, issued.claimant_id)
+    assert status is not None and status.host.revoked_at == clock.now and not status.online
     with pytest.raises(CredentialExpired):
         await hosts.authenticate(request(), held.credential)
 
@@ -364,8 +366,9 @@ async def test_a_revoked_host_is_refused_and_handed_nothing(
         await hosts.rotate(request(), identity)
     with pytest.raises(CredentialExpired):
         await hosts.heartbeat(request(), identity, HostReport(advertisement=PROBED, exec_version=1))
-    (status,) = await hosts.get_hosts(owner, pool.id)
-    assert not status.online
+    assert await hosts.get_hosts(owner, pool.id) == ()
+    status = await hosts.get_host(owner, pool.id, host.claimant_id)
+    assert status is not None and status.host.revoked_at is not None and not status.online
 
 
 async def test_only_an_owner_or_an_admin_lets_hosts_in(

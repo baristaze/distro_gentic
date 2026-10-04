@@ -165,8 +165,8 @@ class RelayManagerImpl(RelayManagerInterface):
         placed = await self._hosts.placement_of(ctx, owner)
         if placed.pool is None:
             raise ValidationFailed(f"session {owner} runs in the cloud; no host holds it")
-        statuses = await self._hosts.get_hosts(ctx, placed.pool.id)
-        host = next((status.host for status in statuses if status.host.id == host_id), None)
+        status = await self._hosts.get_host(ctx, placed.pool.id, host_id)
+        host = None if status is None else status.host
         if host is None or host.revoked_at is not None:
             raise ValidationFailed(f"host {host_id} is no live host of session {owner}'s pool")
         stored = await self._storage.read_binding(ctx.org_id, session_id)
@@ -252,11 +252,8 @@ class RelayManagerImpl(RelayManagerInterface):
         placed = await self._hosts.placement_of(ctx, binding.instance_of or session_id)
         if placed.pool is None:
             return None
-        statuses = await self._hosts.get_hosts(ctx, placed.pool.id)
-        live = any(
-            s.host.id == binding.host_id and s.host.revoked_at is None and s.online
-            for s in statuses
-        )
+        status = await self._hosts.get_host(ctx, placed.pool.id, binding.host_id)
+        live = status is not None and status.host.revoked_at is None and status.online
         return binding if live else None
 
     async def ask_release(self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec) -> bool:
@@ -802,8 +799,8 @@ class RelayManagerImpl(RelayManagerInterface):
         placed = await self._hosts.placement_of(ctx, session_id)
         if placed.pool is None:
             return False
-        statuses = await self._hosts.get_hosts(ctx, placed.pool.id)
-        return any(s.host.id == host_id and s.host.revoked_at is None for s in statuses)
+        status = await self._hosts.get_host(ctx, placed.pool.id, host_id)
+        return status is not None and status.host.revoked_at is None
 
     async def _attach(self, ctx: TenantContext, item: ExecItem, call: ExecCall) -> ExecItem:
         """The item a call that sent it before meets: as it stands, so the

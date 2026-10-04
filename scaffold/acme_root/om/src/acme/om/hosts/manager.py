@@ -48,8 +48,17 @@ class HostsManagerInterface(ABC):
 
     @abstractmethod
     async def get_hosts(self, ctx: TenantContext, pool_id: UUID) -> tuple[HostStatus, ...]:
-        """The pool's hosts, each with whether it is online now. NotFound
-        when the tenant holds no such pool."""
+        """The pool's live hosts, each with whether it is online now, the one
+        seen last first. NotFound when the tenant holds no such pool."""
+        ...
+
+    @abstractmethod
+    async def get_host(
+        self, ctx: TenantContext, pool_id: UUID, host_id: UUID
+    ) -> HostStatus | None:
+        """The host, with whether it is online now, when it is one of the
+        pool's, revoked or not: read by its id, so a pool of any size
+        answers. None when the tenant holds no such host in that pool."""
         ...
 
     @abstractmethod
