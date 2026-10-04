@@ -58,8 +58,8 @@ test:              ## the checkers and generators pass their own tests (pytest t
 plugin:            ## validate the plugin, marketplace, skills, and agents with Claude Code (skipped when claude is not installed)
 	@if command -v claude >/dev/null 2>&1; then \
 	  claude plugin validate . --strict \
-	  && for dir in skills agents; do if [ -d "$$dir" ]; then claude plugin validate "$$dir" --strict || exit 1; fi; done \
-	  && $(PYTHON) scripts/check_plugin.py; \
+	  && claude plugin validate .claude-plugin/plugin.json --strict \
+	  && for dir in skills agents; do if [ -d "$$dir" ]; then claude plugin validate "$$dir" --strict || exit 1; fi; done; \
 	else echo "plugin: claude not installed, skipped"; fi
 
 gen-skills:        ## regenerate the review skills from the template and the lens files
