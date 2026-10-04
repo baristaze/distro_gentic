@@ -1280,6 +1280,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/budgets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Budgets
+         * @description The tenant's budgets by id, after the id `after` names.
+         */
+        get: operations["list_budgets_v1_budgets_get"];
+        put?: never;
+        /**
+         * Create Budget
+         * @description A budget every model call charged to its scope is held to, from the
+         *     next call on.
+         */
+        post: operations["create_budget_v1_budgets_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/budgets/{budget_id}": {
         parameters: {
             query?: never;
@@ -3624,6 +3649,29 @@ export interface components {
             /** Item Id */
             item_id?: string | null;
             kind: components["schemas"]["ControlKind"];
+        };
+        /**
+         * CreateBudgetRequest
+         * @description A budget over a scope and a window, in reference cost (millionths),
+         *     native tokens, or both. A person's and a project's scope is keyed by its
+         *     id; a tenant's is the tenant itself, so its key is left out or names the
+         *     tenant. A span window has a length in seconds, and no other window has.
+         */
+        CreateBudgetRequest: {
+            /** Cost Micros */
+            cost_micros?: number | null;
+            /** Scope Key */
+            scope_key?: string | null;
+            /**
+             * Scope Kind
+             * @enum {string}
+             */
+            scope_kind: "person" | "project" | "tenant";
+            /** Tokens */
+            tokens?: number | null;
+            window_kind: components["schemas"]["WindowKind"];
+            /** Window Seconds */
+            window_seconds?: number | null;
         };
         /**
          * CreateOrgRequest
@@ -9537,6 +9585,80 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AutomationView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_budgets_v1_budgets_get: {
+        parameters: {
+            query?: {
+                after?: string | null;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_budget_v1_budgets_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                "idempotency-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateBudgetRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetView"];
                 };
             };
             /** @description Validation Error */
