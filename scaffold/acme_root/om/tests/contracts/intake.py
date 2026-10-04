@@ -50,7 +50,7 @@ from acme.om.notifications.root import build_notifications
 from acme.om.playbooks.manager import PlaybooksManagerInterface
 from acme.om.playbooks.root import PlaybooksLayer
 from acme.om.projects.impl.policies import SessionProjectsBoundImpl
-from acme.om.root import Managers, build_managers, engine_tools
+from acme.om.root import Managers, ProductActions, build_managers, engine_tools, no_actions
 from acme.om.steps.types.step import Step
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
@@ -230,10 +230,12 @@ def wired(
     storage: StorageInterface | None = None,
     owner: TenantContext | None = None,
     project_required: bool = False,
+    actions: ProductActions = no_actions,
 ) -> Wired:
     """`storage` None is the memory storage, and `owner` None a fresh
     tenant's owner; a suite over Postgres hands in both. `project_required`
-    is the automations' as a stack outside `local` sets it."""
+    is the automations' as a stack outside `local` sets it, and `actions`
+    the product's own kinds of automation action."""
     infra = InfraLocalImpl(tmp_path)
     anthropic = ModelProviderScriptedImpl(ProviderName.ANTHROPIC)
     openai = ModelProviderScriptedImpl(ProviderName.OPENAI)
@@ -340,6 +342,7 @@ def wired(
             project_required=project_required,
             principal_context=members,
             clock=clock,
+            actions=actions,
         ),
         playbooks=playbooks.build(managers),
         knowledge=knowledge.build(managers),

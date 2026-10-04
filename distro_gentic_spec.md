@@ -480,7 +480,9 @@ evidence ([Execution Records](#execution-records)).
 
 **Automations** turn events into bounded work. A trigger, an event with
 filters or a schedule, leads to an action: start a session, or message a
-standing session (a CI triage session, say). An automation runs as its
+standing session (a CI triage session, say). A product adds actions of
+its own, each with a check that says when the work it started ended, so
+its run stays at work until then. An automation runs as its
 creator or as the tenant's automation principal, and has limits of its
 own: a cost cap, a rate, a concurrency, and whether to queue when
 limited. An automation ignores the events its own sessions caused,

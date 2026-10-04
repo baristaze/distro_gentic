@@ -73,7 +73,14 @@ export function triggerLine(trigger: AutomationView["trigger"]): string {
   return filters.length ? `on an event ${filters.join(", ")}` : "on any event";
 }
 
+/** Whether an action is one of the platform's two, which the form edits; any
+ * other kind is a product's own, which its product writes. */
+export function platformAction(kind: string): kind is AutomationDraft["actionKind"] {
+  return kind === "start_session" || kind === "message_session";
+}
+
 export function actionLine(action: AutomationView["action"], projects: readonly Pick<ProjectView, "id" | "name">[]): string {
+  if (!platformAction(action.kind)) return `run the product's action ${action.kind}`;
   if (action.kind === "message_session") return `message the session ${action.session_id ?? ""}`.trim();
   const project = action.project_id ? (projects.find((each) => each.id === action.project_id)?.name ?? "a project") : null;
   return `start a session of the kind ${action.agent_kind ?? ""}${project ? ` in ${project}` : ""}`;
@@ -203,9 +210,11 @@ function periodOf(period: string): Pick<AutomationDraft, "period" | "savedPeriod
   return known ? { period: known.value, savedPeriod: null } : { period, savedPeriod: period };
 }
 
-/** The form as the saved automation stands, to edit. */
-export function draftOf(automation: AutomationView): AutomationDraft {
+/** The form as the saved automation stands, to edit; null for a product's
+ * own action, which the form does not edit. */
+export function draftOf(automation: AutomationView): AutomationDraft | null {
   const { trigger, action, limits } = automation;
+  if (!platformAction(action.kind)) return null;
   const every = trigger.every ? everyOf(trigger.every) : { every: EMPTY_DRAFT.every, everyUnit: EMPTY_DRAFT.everyUnit, savedEvery: null };
   return {
     name: automation.name,
@@ -219,7 +228,7 @@ export function draftOf(automation: AutomationView): AutomationDraft {
     title: action.title ?? "",
     projectId: action.project_id ?? "",
     sessionId: action.session_id ?? "",
-    brief: action.brief,
+    brief: action.brief ?? "",
     costCap: String(limits.cost_cap_micros / 1_000_000),
     runCap: String(limits.run_cap_micros / 1_000_000),
     ...periodOf(limits.period),

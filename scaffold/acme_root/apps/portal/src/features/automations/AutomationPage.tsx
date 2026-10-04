@@ -64,9 +64,11 @@ export function AutomationPage() {
           </dd>
         </dl>
       </Card>
-      <Card title="Brief" id="brief">
-        <Markdown text={automation.brief} />
-      </Card>
+      {automation.brief ? (
+        <Card title="Brief" id="brief">
+          <Markdown text={automation.brief} />
+        </Card>
+      ) : null}
       {vm.mayWrite ? (
         <Card title="Edit" id="edit">
           {vm.draft ? (

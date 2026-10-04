@@ -30,6 +30,7 @@ from acme.om.attribution.impl.manager import (
     AttributionOptions,
     members_context,
 )
+from acme.om.automations.actions import AutomationActionInterface
 from acme.om.base import utcnow
 from acme.om.benchmarks import BenchmarksManagerInterface
 from acme.om.benchmarks.impl.manager import BenchmarksManagerImpl
@@ -228,6 +229,16 @@ def no_tools(managers: Callable[[], Managers]) -> tuple[ToolInterface, ...]:
     return ()
 
 
+ProductActions = Callable[[Callable[[], Managers]], tuple[AutomationActionInterface, ...]]
+"""A product's own kinds of automation action, built over the managers as
+the root answers them, as a product's tools are."""
+
+
+def no_actions(managers: Callable[[], Managers]) -> tuple[AutomationActionInterface, ...]:
+    """A product with no automation action of its own."""
+    return ()
+
+
 @dataclass(frozen=True)
 class ProductKinds:
     """What a product adds to the platform's kinds: its agent kinds, every
@@ -237,8 +248,10 @@ class ProductKinds:
     its permission, its lane, and the claimant kind that takes it through
     the gateway; its claimant kinds; its secret owner kinds (`TrustLayer`);
     its stream kinds, each with its bounds (`watch.root.build_stream`) and the
-    claimant kind of its own that writes it, if any; and its executors, by
-    the validation environment each runs. Its agent kinds join the platform's
+    claimant kind of its own that writes it, if any; its executors, by
+    the validation environment each runs; and its kinds of automation
+    action, each acting in a firing and saying when the run it started
+    ended (`automations.actions`). Its agent kinds join the platform's
     catalog, which refuses a version declared twice, and its tools the
     platform's, where a registry refuses two of one name. Every other kind
     registers beside the platform's own, which go through the same registries,
@@ -258,6 +271,7 @@ class ProductKinds:
     secret_owners: tuple[SecretOwnerInterface, ...] = ()
     streams: tuple[StreamKind, ...] = ()
     executors: Mapping[str, ExecutorInterface] = field(default_factory=lambda: {})
+    actions: ProductActions = no_actions
 
     def __post_init__(self) -> None:
         for spec in self.work:

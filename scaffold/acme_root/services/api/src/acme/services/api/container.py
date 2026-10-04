@@ -297,8 +297,13 @@ class AppContainer:
             # Outside a local stack, a session starts in a project.
             project_required=settings.environment != LOCAL,
             intake=intake,
+            # A person writes an automation here, so a product's action kind
+            # is held to its shape when it is saved.
             automations=build_automations(
-                storage, managers, project_required=settings.environment != LOCAL
+                storage,
+                managers,
+                project_required=settings.environment != LOCAL,
+                actions=ports.kinds.actions,
             ),
             notifications=build_notifications(storage, managers, integrations, intake),
             matrix=matrix,

@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from uuid import UUID
 
 from pydantic import Field
+from pydantic import ValidationError as ShapeError
 
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.types.agent_session import SessionStatus
@@ -11,16 +12,19 @@ from acme.om.agents import AgentsManagerInterface
 from acme.om.agents.types.request import Start
 from acme.om.attribution import PrincipalContext
 from acme.om.attribution.types.principal import Principal, PrincipalKind
+from acme.om.automations.actions import AutomationActionInterface, AutomationActions
 from acme.om.automations.manager import AutomationsManagerInterface
 from acme.om.automations.rules import hop_after, ignored, matches, slot
 from acme.om.automations.storage import AutomationStorageInterface
 from acme.om.automations.types.automation import (
+    PLATFORM_ACTIONS,
     ActionKind,
     Automation,
     AutomationPrincipal,
     AutomationRun,
     Firing,
     Refusal,
+    RunOutcome,
     RunsAs,
     RunStatus,
 )
@@ -52,8 +56,9 @@ GRANTED = "automations.principal.granted"
 class AutomationsOptions(Platform):
     # The most automations one firing reads a page, and runs one read takes.
     page: int = Field(default=200, gt=0)
-    # A started run that names no session after this was lost before its
-    # action ran: it is closed, and its reservation goes with its period.
+    # A started run that names no session, and no work of a product's
+    # action, after this was lost before its action ran: it is closed, and
+    # its reservation goes with its period.
     lost_after: timedelta = timedelta(minutes=5)
     max_page: int = Field(default=200, gt=0)
     purge_batch: int = Field(default=1000, gt=0)
@@ -75,10 +80,12 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         clock: Callable[[], datetime] = utcnow,
         *,
         project_required: bool,
+        actions: AutomationActions | None = None,
     ) -> None:
         """`project_required` refuses a start that names no project: what
         every stack but a local one sets, so no per-project policy is
-        skipped by a session an automation starts."""
+        skipped by a session an automation starts. `actions` are the
+        product's own kinds of action; None declares none."""
         self._storage = storage
         self._agents = agents
         self._projects = projects
@@ -91,12 +98,14 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         self._live = principal_context
         self._options = options
         self._clock = clock
+        self._actions = actions or AutomationActions(())
 
     async def create_automation(self, ctx: TenantContext, automation: Automation) -> Automation:
         ctx.require(Permission.WRITE)
         if not in_person(ctx):
             raise NotAuthorized("an automation is made by a person, never by an agent's call")
         await self._check_principal(ctx, automation)
+        self._check_kind(automation)
         await self._check_project(ctx, automation)
         now = self._clock()
         made = Automation.model_validate(
@@ -125,6 +134,7 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
                 "an automation that runs as its creator is edited by its creator alone"
             )
         await self._check_principal(ctx, automation)
+        self._check_kind(automation)
         await self._check_project(ctx, automation)
         # The editor is its creator from here on: one that runs as its
         # creator is its creator's to edit, and one that runs as the
@@ -281,12 +291,17 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
             # Saved before a project was required, or under a local stack:
             # its session would take no project's budget or policy.
             return await self._refuse(ctx, run, Refusal.PROJECT)
+        if self._unknown_kind(automation):
+            # Its product's kind left this process's registry since it was
+            # saved: nothing would act on it.
+            return await self._refuse(ctx, run, Refusal.ACTION)
         creator = await self._runs_as(ctx, automation)
         if creator is None:
             return await self._refuse(ctx, run, Refusal.PRINCIPAL)
         await self._close_finished(ctx, automation)
         landed = await self._storage.admit(ctx.org_id, run, automation.limits, self._clock())
-        if landed.status is not RunStatus.STARTED or landed.session_id is not None:
+        acted = landed.session_id is not None or landed.work_id is not None
+        if landed.status is not RunStatus.STARTED or acted:
             return landed
         try:
             return await self._act(ctx, creator, automation, landed)
@@ -315,9 +330,13 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         """The action of a started run, as its creator. A started session is
         held to the run's reservation by a budget on its tree before anything
         wakes it; the event reaches it as data, and the brief as the
-        creator's message."""
+        creator's message. A product's action is its kind's to run."""
         action = automation.action
-        opened = action.kind is ActionKind.START_SESSION
+        kind = self._actions.get(action.kind)
+        if kind is not None:
+            return await self._act_product(ctx, creator, kind, automation, run)
+        assert action.brief is not None  # a session's action carries one
+        opened = action.kind == ActionKind.START_SESSION
         if opened:
             assert action.agent_kind is not None and action.title is not None
             start = Start(
@@ -374,6 +393,27 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         await self._storage.write_run(ctx.org_id, acted)
         return acted
 
+    async def _act_product(
+        self,
+        ctx: TenantContext,
+        creator: TenantContext,
+        kind: AutomationActionInterface,
+        automation: Automation,
+        run: AutomationRun,
+    ) -> AutomationRun:
+        """A product's action, run by its kind as the automation runs; the
+        run keeps the id of the work it started, and is at work until the
+        kind's check says that work ended."""
+        try:
+            params = kind.params.model_validate(automation.action.plain_params())
+        except ShapeError as exc:
+            # Saved under an earlier shape of its kind: refused, never acted on.
+            raise ValidationFailed(f"the params of {kind.name} are malformed: {exc}") from exc
+        work_id = await kind.act(creator, run, params)
+        acted = run.model_copy(update={"work_id": work_id, "event_text": ""})
+        await self._storage.write_run(ctx.org_id, acted)
+        return acted
+
     def _event_step(self, ctx: TenantContext, run: AutomationRun, session_id: UUID) -> Step:
         """The event that fired a run, as data: it never waits to wake the
         session, since the brief that follows it does."""
@@ -404,13 +444,18 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         return moved
 
     async def _close_finished(self, ctx: TenantContext, automation: Automation) -> None:
-        """Closes the runs whose sessions are no longer at work, so the
-        concurrency counts the ones that are."""
+        """Closes the runs whose sessions are no longer at work, and those
+        whose product's work ended as its kind's check says, with the
+        outcome it said, so the concurrency counts the ones that are."""
         now = self._clock()
         for run in await self._storage.read_open_runs(
             ctx.org_id, automation.id, self._options.page
         ):
-            if run.session_id is None:
+            outcome: RunOutcome | None = None
+            if run.work_id is not None:
+                outcome = await self._ended(ctx, automation, run)
+                done = outcome is not None
+            elif run.session_id is None:
                 done = now - run.created_at >= self._options.lost_after
             else:
                 try:
@@ -419,8 +464,26 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
                 except NotFound:
                     done = True
             if done:
-                closed = run.model_copy(update={"closed_at": now, "event_text": ""})
+                closed = run.model_copy(
+                    update={"closed_at": now, "event_text": "", "outcome": outcome}
+                )
                 await self._storage.write_run(ctx.org_id, closed)
+
+    async def _ended(
+        self, ctx: TenantContext, automation: Automation, run: AutomationRun
+    ) -> RunOutcome | None:
+        """How a product's work ended, as its kind's check says. A check
+        that fails, or a kind this process no longer knows, leaves the run
+        open: its work may still be at work, so it is never closed as
+        lost, and the next firing asks again."""
+        kind = self._actions.get(automation.action.kind)
+        if kind is None:
+            return None
+        try:
+            return await kind.ended(ctx, run)
+        except Exception:
+            log.exception("the check of run %s of org %s failed", run.id, ctx.org_id)
+            return None
 
     async def _refuse(
         self, ctx: TenantContext, run: AutomationRun, refusal: Refusal
@@ -449,6 +512,25 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
                 f"a {ctx.role.value} makes no automation that runs as a {granted.role.value}"
             )
 
+    def _check_kind(self, automation: Automation) -> None:
+        """A product's action names a kind a product declares, and its params
+        hold to that kind's shape: otherwise it is `ValidationFailed`, so no
+        automation is written that could never act."""
+        action = automation.action
+        if action.kind in PLATFORM_ACTIONS:
+            return
+        kind = self._actions.get(action.kind)
+        if kind is None:
+            raise ValidationFailed(f"no product declares the action kind {action.kind}")
+        try:
+            kind.params.model_validate(action.plain_params())
+        except ShapeError as exc:
+            raise ValidationFailed(f"the params of {action.kind} are malformed: {exc}") from exc
+
+    def _unknown_kind(self, automation: Automation) -> bool:
+        kind = automation.action.kind
+        return kind not in PLATFORM_ACTIONS and self._actions.get(kind) is None
+
     async def _check_project(self, ctx: TenantContext, automation: Automation) -> None:
         """A start's project is one of the caller's tenant: another tenant's
         is `NotFound`, as one that never existed is. One that names none is
@@ -466,7 +548,7 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         action = automation.action
         return (
             self._project_required
-            and action.kind is ActionKind.START_SESSION
+            and action.kind == ActionKind.START_SESSION
             and action.project_id is None
         )
 

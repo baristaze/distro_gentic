@@ -2,12 +2,25 @@
 the tenant, reads and lists them, and its creator edits it. A viewer makes
 none, and nobody but its creator edits one that runs as its creator, since
 it runs on the creator's authority. Another tenant's automation and project
-are not found; a malformed automation is refused whole."""
+are not found; a malformed automation, and one whose action kind no
+product declares, is refused whole. A product's own action, whose params
+nest lists and mappings, is made, read, and listed whole."""
+
+from collections.abc import Callable
+from pathlib import Path
+from uuid import UUID
 
 import httpx
+from api_support import build_container
+from httpx import ASGITransport
 from tenant_support import Headers, person, refused, tenant
 
-from acme.om.context import Role
+from acme.om.automations.actions import AutomationActionInterface
+from acme.om.automations.types.automation import AutomationRun, RunOutcome
+from acme.om.base import Platform, new_id
+from acme.om.context import Role, TenantContext
+from acme.om.root import Managers, PlatformPorts, ProductKinds
+from acme.services.api.app import create_app
 from acme.services.api.container import AppContainer
 
 PROJECT = {
@@ -138,6 +151,11 @@ async def test_a_malformed_automation_is_refused_whole(
         {**body, "action": {**action, "title": None}},
         {**body, "action": {**action, "project_id": None}},
         {**body, "action": {**action, "kind": "message_session"}},
+        {**body, "action": {**action, "brief": None}},
+        {**body, "action": {**action, "params": {"steps": 2}}},
+        # A kind no product declares could never act.
+        {**body, "action": {"kind": "run_job", "params": {"steps": 2}}},
+        {**body, "action": {"kind": "Run Job"}},
         {**body, "limits": {**limits, "run_cap_micros": 6_000_000}},
         {**body, "limits": {**limits, "rate": 0}},
         {**body, "created_by": "00000000-0000-0000-0000-000000000000"},
@@ -146,3 +164,51 @@ async def test_a_malformed_automation_is_refused_whole(
         response = await client.post("/v1/automations", headers=ajax.owner, json=each)
         refused(response, 422, "validation_failed")
     assert (await client.get("/v1/automations", headers=ajax.owner)).json() == []
+
+
+class Sweep(Platform):
+    steps: int
+    on: tuple[str, ...]
+    where: dict[str, tuple[str, ...]]
+
+
+class SweepAction(AutomationActionInterface):
+    """A product's kind whose params nest a list and a mapping."""
+
+    name = "sweep"
+    params = Sweep
+
+    async def act(self, ctx: TenantContext, run: AutomationRun, params: Platform) -> UUID:
+        return new_id()
+
+    async def ended(self, ctx: TenantContext, run: AutomationRun) -> RunOutcome | None:
+        return None
+
+
+def sweeping(managers: Callable[[], Managers]) -> tuple[AutomationActionInterface, ...]:
+    return (SweepAction(),)
+
+
+async def test_a_products_action_with_nested_params_is_made_read_and_listed(
+    tmp_path: Path,
+) -> None:
+    container = build_container(tmp_path, ports=PlatformPorts(kinds=ProductKinds(actions=sweeping)))
+    app = create_app(container)
+    async with app.router.lifespan_context(app):
+        transport = ASGITransport(app=app, raise_app_exceptions=False)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            ajax = await tenant(client, container, "ajax")
+            params = {"steps": 2, "on": ["a", "b"], "where": {"region": ["north", "south"]}}
+            body = {
+                **automation(await project_of(client, ajax.owner)),
+                "action": {"kind": "sweep", "params": params},
+            }
+            made = await client.post("/v1/automations", headers=ajax.owner, json=body)
+            assert made.status_code == 201, made.text
+            assert made.json()["action"]["params"] == params
+            read = await client.get(f"/v1/automations/{made.json()['id']}", headers=ajax.owner)
+            assert read.status_code == 200, read.text
+            assert read.json() == made.json()
+            listed = await client.get("/v1/automations", headers=ajax.owner)
+            assert listed.status_code == 200, listed.text
+            assert listed.json() == [made.json()]

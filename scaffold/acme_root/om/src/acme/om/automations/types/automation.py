@@ -2,20 +2,27 @@
 as the tenant's automation principal, inside limits of its own. And a
 run: the record of one firing, whatever became of it."""
 
+import json
 from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import ClassVar, Self
 from uuid import UUID
 
-from pydantic import Field, model_validator
+from pydantic import Field, SerializerFunctionWrapHandler, model_serializer, model_validator
 
 from acme.om.agents.types.request import MAX_TITLE
 from acme.om.attribution.types.principal import MAX_KIND
-from acme.om.base import Created, Identifiable, Platform, Trackable
+from acme.om.base import Created, FrozenMapping, Identifiable, Platform, Trackable
 from acme.om.context import Role
 from acme.om.steps.types.content import MAX_NAME, Stored
 
 MAX_BRIEF = 20_000
+
+MAX_PARAMS = 20_000
+"""The most characters a product's action's params take, as JSON."""
+
+ACTION_NAME = r"^[a-z][a-z0-9_]{0,63}$"
+"""An action kind's name, the platform's and a product's alike."""
 
 MIN_EVERY = timedelta(minutes=1)
 """The shortest period a schedule fires at."""
@@ -50,32 +57,70 @@ class Trigger(Platform):
 
 
 class ActionKind(StrEnum):
+    """The platform's own actions. A product adds its own beside them
+    (`automations.actions`), under a name none of these holds."""
+
     START_SESSION = "start_session"
     MESSAGE_SESSION = "message_session"  # a standing session, such as a CI triage one
 
 
+PLATFORM_ACTIONS = frozenset(kind.value for kind in ActionKind)
+
+
 class Action(Platform):
     """What a firing does: start a session of `agent_kind` with the brief, in
-    the tenant's project `project_id`, or send the brief to a standing
-    session, which keeps the project it has. The brief is the creator's
-    word; the event that fired it reaches the session beside it, as data."""
+    the tenant's project `project_id`; send the brief to a standing
+    session, which keeps the project it has; or a product's own action,
+    which its kind runs with `params`. The brief is the creator's word; the
+    event that fired it reaches the session beside it, as data. A product's
+    action reaches no session, so it carries no brief, and `params` are
+    held to its kind's shape when the automation is written."""
 
-    kind: ActionKind
-    brief: Stored = Field(min_length=1, max_length=MAX_BRIEF)
+    kind: Stored = Field(pattern=ACTION_NAME)
+    brief: Stored | None = Field(default=None, min_length=1, max_length=MAX_BRIEF)
     agent_kind: Stored | None = Field(default=None, min_length=1, max_length=MAX_KIND)
     title: Stored | None = Field(default=None, min_length=1, max_length=MAX_TITLE)
     project_id: UUID | None = None
     session_id: UUID | None = None
+    params: FrozenMapping = Field(default_factory=dict, validate_default=True)
 
     @model_validator(mode="after")
     def _names_what_it_acts_on(self) -> Self:
-        starts = self.kind is ActionKind.START_SESSION
+        if self.kind not in PLATFORM_ACTIONS:
+            return self._a_products_action()
+        starts = self.kind == ActionKind.START_SESSION
+        if self.brief is None:
+            raise ValueError("a session's action carries the creator's brief")
+        if self.params:
+            raise ValueError("a session's action carries no params")
         if starts != (self.agent_kind is not None and self.title is not None):
             raise ValueError("a start names its agent kind and title, and a message does not")
         if starts == (self.session_id is not None):
             raise ValueError("a message names its standing session, and a start does not")
         if not starts and self.project_id is not None:
             raise ValueError("a message names no project: its session keeps its own")
+        return self
+
+    @model_serializer(mode="wrap")
+    def _params_only_when_set(self, handler: SerializerFunctionWrapHandler) -> dict[str, object]:
+        """A platform action's stored value carries no `params`, so the
+        previous release, which forbids a field it does not know, reads it
+        through a roll and after a downgrade."""
+        dumped: dict[str, object] = handler(self)
+        if not self.params:
+            dumped.pop("params", None)
+        return dumped
+
+    def plain_params(self) -> dict[str, object]:
+        """The params as plain JSON, as a product's kind reads them."""
+        return self.model_dump(mode="json", include={"params"}).get("params", {})
+
+    def _a_products_action(self) -> Self:
+        names = (self.brief, self.agent_kind, self.title, self.project_id, self.session_id)
+        if any(name is not None for name in names):
+            raise ValueError("a product's action carries its params, and no brief or session")
+        if len(json.dumps(self.plain_params())) > MAX_PARAMS:
+            raise ValueError(f"a product's action's params take at most {MAX_PARAMS} characters")
         return self
 
 
@@ -146,6 +191,13 @@ class RunStatus(StrEnum):
     REFUSED = "refused"  # it never runs
 
 
+class RunOutcome(StrEnum):
+    """How a product's action's run ended, as its kind's check said."""
+
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
 class Refusal(StrEnum):
     """Why a firing did not run."""
 
@@ -156,7 +208,7 @@ class Refusal(StrEnum):
     CONCURRENCY = "concurrency"
     QUEUE_FULL = "queue_full"  # a limit stopped it, and `queue_depth` runs wait already
     PRINCIPAL = "principal"  # its creator left, or the principal is ungranted or above its creator
-    ACTION = "action"  # its action was refused: an unknown kind, a session gone
+    ACTION = "action"  # its action was refused: a kind no product declares, a session gone
     PROJECT = "project"  # its start names no project, where a session starts in one
     UNATTRIBUTED = "unattributed"  # the platform's own act, with no session recorded for it
 
@@ -166,10 +218,13 @@ class AutomationRun(Identifiable, Created):
     chain: one for a firing on a person's event or a schedule, one more
     than the run whose session caused the event otherwise. `session_id` is
     the session it started or messaged; `budget_id` holds a started tree
-    to `reserved_micros`, its share of the cost cap. A run counts against
-    its limits from `started_at`. `event_text` is the event as the session
-    will read it, kept only until the run starts or is refused: the
-    session's own history keeps it from then on."""
+    to `reserved_micros`, its share of the cost cap. `work_id` is what a
+    product's action started, as its kind named it; the run is at work
+    until the kind's check says it ended, and `outcome` is what the check
+    said. A run counts against its limits from `started_at`. `event_text`
+    is the event as the session or the product's action will read it, kept
+    only until the run starts or is refused: the session's own history
+    keeps it from then on."""
 
     automation_id: UUID
     event_id: UUID | None = None
@@ -181,6 +236,8 @@ class AutomationRun(Identifiable, Created):
     opened: bool = False  # it started `session_id`, rather than messaged it
     budget_id: UUID | None = None
     reserved_micros: int = Field(default=0, ge=0)
+    work_id: UUID | None = None
+    outcome: RunOutcome | None = None
     event_text: Stored = Field(default="", max_length=MAX_BRIEF)
     started_at: datetime | None = None
     closed_at: datetime | None = None
