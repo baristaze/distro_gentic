@@ -4,13 +4,15 @@ stored; and the tenant's automation principal, the role a person grants it
 and the grant as it stands."""
 
 from datetime import datetime, timedelta
+from typing import Annotated
 from uuid import UUID
 
-from pydantic import Field, JsonValue
+from pydantic import BeforeValidator, Field, JsonValue
 
 from acme.om.agents.types.request import MAX_TITLE
 from acme.om.attribution.types.principal import MAX_KIND
 from acme.om.automations.types.automation import ACTION_NAME, MAX_BRIEF, RunsAs, TriggerKind
+from acme.om.base import thaw_mapping
 from acme.om.context import Role
 from acme.om.steps.types.content import MAX_NAME
 from acme.services.api.types.common import RequestBody, View
@@ -63,7 +65,9 @@ class ActionView(View):
     title: str | None
     project_id: UUID | None
     session_id: UUID | None
-    params: dict[str, JsonValue]
+    # The stored params are frozen, a nested list a tuple and a nested
+    # mapping a read-only view, so they are thawed back to JSON here.
+    params: Annotated[dict[str, JsonValue], BeforeValidator(thaw_mapping)]
 
 
 class LimitsBody(RequestBody):
