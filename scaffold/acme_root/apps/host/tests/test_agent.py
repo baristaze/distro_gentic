@@ -67,11 +67,13 @@ def agent(
     token: str | None,
     executor: Recording | None = None,
     clock: Clock | None = None,
+    ceilings: Ceilings = CEILINGS,
+    metadata_answers: bool = False,
 ) -> HostAgent:
     return HostAgent(
         api.settings(home, token),
-        CEILINGS,
-        probes(IsolationMode.container),
+        ceilings,
+        probes(IsolationMode.container, metadata_answers=metadata_answers),
         api.client,
         executor,
         now=clock or (lambda: datetime.now(UTC)),
@@ -230,6 +232,31 @@ async def test_a_host_runs_only_its_pools_work_and_only_within_its_ceilings(
     assert by_id[persons.id] == ["a person's command, which this host does not accept"]
     assert len(by_id[silent.id]) == 5
     assert [item.id for item in ran.ran] == [fits.id]
+
+
+async def test_a_host_that_reaches_a_metadata_service_refuses_open_egress(
+    api: Stack, tmp_path: Path
+) -> None:
+    pool = await api.pool()
+    ran = Recording()
+    wide = replace(CEILINGS, egress=None)
+    host = agent(api, tmp_path, await api.token(pool.id), ran, ceilings=wide, metadata_answers=True)
+    await host.start()
+    prepare = {"operation": WorkspaceOperation.PREPARE.value, "pool_id": str(pool.id)}
+    opened = await enqueue(
+        api, WorkKind.WORKSPACE, {**prepare, **fitting(egress=None)}, pool_lane(pool.id)
+    )
+    listed = await enqueue(api, WorkKind.WORKSPACE, {**prepare, **fitting()}, pool_lane(pool.id))
+    handled = []
+    while (one := await host.tick()) is not None:
+        handled.append(one)
+    await host.idle()
+    by_id = {one.item.id: one.refused for one in handled}
+    assert by_id == {
+        opened.id: ["open egress on a host that reaches its cloud's metadata service"],
+        listed.id: [],
+    }
+    assert [item.id for item in ran.ran] == [listed.id]
 
 
 async def test_a_host_below_the_floor_is_handed_nothing(

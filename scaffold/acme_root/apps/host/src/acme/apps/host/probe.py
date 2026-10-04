@@ -1,15 +1,17 @@
 """What a host checks at startup, before it enrolls or claims: that it
 reaches what it needs (its trust store, its proxy, the platform, a sane
 clock), so a misconfigured host fails at startup and never mid-session;
-and which isolation modes it can provide. It advertises its operating
-system and shell, its capabilities, and the modes whose probe passed, and
-nothing else: there is no setting that names a mode, so a mode no probe
-showed is never advertised."""
+which isolation modes it can provide; and whether it reaches a cloud's
+metadata service, which keeps open egress off it. It advertises its
+operating system and shell, its capabilities, and the modes whose probe
+passed, and nothing else: there is no setting that names a mode, so a
+mode no probe showed is never advertised."""
 
 import os
 import platform
 import pwd
 import shutil
+import socket
 import ssl
 import subprocess
 from collections.abc import Awaitable, Callable, Mapping
@@ -111,6 +113,40 @@ async def platform_and_clock(
     return [reached, Probe("clock", sane, f"{skew:.0f}s from the platform's clock")]
 
 
+# The metadata probe: open egress runs only where it passes.
+
+METADATA_SERVICES: tuple[tuple[str, int], ...] = (
+    ("169.254.169.254", 80),  # AWS, Azure, GCP, and most other clouds
+    ("fd00:ec2::254", 80),  # AWS, over IPv6
+    ("metadata.google.internal", 80),  # GCP, by its name
+)
+"""Where a cloud hands a machine's own credentials to whatever asks from
+the machine."""
+
+METADATA_TIMEOUT_SECONDS = 2.0
+"""The longest one connection to a metadata service is waited on."""
+
+
+def metadata(
+    services: tuple[tuple[str, int], ...] = METADATA_SERVICES,
+    connect: Callable[[tuple[str, int], float], socket.socket] = socket.create_connection,
+) -> Probe:
+    """No cloud metadata service answers this host. A workspace's commands
+    leave from the host's own network, since a rootless engine sends a
+    container's connections out as the host's user, so a service the host
+    reaches is one a workspace under open egress reaches too, and it would
+    hand the machine's cloud credentials to whatever the workspace runs.
+    The probe passes when none of them takes a connection."""
+    for host, port in services:
+        try:
+            connection = connect((host, port), METADATA_TIMEOUT_SECONDS)
+        except OSError:
+            continue
+        connection.close()
+        return Probe("metadata", False, f"{host}:{port} answers, so open egress is refused")
+    return Probe("metadata", True, "no cloud metadata service answers")
+
+
 # The isolation probes: each passes only when the mode can run here.
 
 
@@ -177,6 +213,7 @@ class Probes:
     platform_and_clock: Callable[
         [ApiClient, float, Callable[[], datetime]], Awaitable[list[Probe]]
     ] = platform_and_clock
+    metadata: Callable[[], Probe] = metadata
     isolation: Mapping[IsolationMode, Callable[[], Probe]] = field(default_factory=dict)
     capabilities: Mapping[str, Callable[[], bool]] = field(default_factory=lambda: {"git": git})
 
@@ -193,11 +230,14 @@ def real_probes(workspace_user: str | None) -> Probes:
 
 @dataclass(frozen=True)
 class Probed:
-    """What the startup found: every probe's result, and the advertisement
-    built from those that passed."""
+    """What the startup found: every probe's result, the advertisement
+    built from those that passed, and whether an item may run with open
+    egress here, which it may only when no cloud metadata service
+    answered."""
 
     results: list[Probe]
     advertisement: AdvertisementBody
+    open_egress: bool
 
 
 async def startup(
@@ -207,7 +247,8 @@ async def startup(
     now: Callable[[], datetime] = lambda: datetime.now(UTC),
 ) -> Probed:
     """Runs every probe. A failed startup probe raises `Misconfigured`; a
-    failed isolation probe leaves its mode out of the advertisement."""
+    failed isolation probe leaves its mode out of the advertisement; a
+    failed metadata probe keeps open egress off the host."""
     checks = [probes.trust_store(), probes.proxy()]
     checks += await probes.platform_and_clock(client, max_skew_seconds, now)
     failed = [probe for probe in checks if not probe.passed]
@@ -224,4 +265,9 @@ async def startup(
             ],
         }
     )
-    return Probed(results=checks + list(modes.values()), advertisement=advertised)
+    reach = probes.metadata()
+    return Probed(
+        results=[*checks, reach, *modes.values()],
+        advertisement=advertised,
+        open_egress=reach.passed,
+    )

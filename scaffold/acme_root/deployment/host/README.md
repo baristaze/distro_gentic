@@ -90,6 +90,31 @@ sudo systemctl restart acme-host
 With no engine the host still starts, and advertises no container mode,
 so no session is placed on it that needs one.
 
+### Its cloud's metadata service
+
+A machine in a cloud reaches its metadata service, which hands the
+machine's own credentials (its instance role, its service account, its
+managed identity) to whatever asks from the machine. A workspace's
+commands leave as `acme-host`, the user the host and its rootless engine
+both run as, so under open egress a command could read them and send
+them on. The host tries the metadata addresses as it starts, and while
+one answers it refuses every item that asks for open egress; the
+installer and the host's journal say so. To let open egress run on such
+a machine, drop them for `acme-host`, keep the rule the way the machine
+keeps its others (`/etc/nftables.conf`), and restart the host:
+
+```bash
+sudo nft add table inet acme_host
+sudo nft add chain inet acme_host out '{ type filter hook output priority 0; }'
+sudo nft add rule inet acme_host out meta skuid acme-host ip daddr 169.254.169.254 drop
+sudo nft add rule inet acme_host out meta skuid acme-host ip6 daddr fd00:ec2::254 drop
+sudo systemctl restart acme-host
+```
+
+A rule in the unit (`IPAddressDeny=`) does not do it: the engine runs
+outside the unit, so the host would find the service closed while its
+containers still reach it.
+
 ## macOS
 
 ```bash

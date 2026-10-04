@@ -21,6 +21,12 @@
 # in. Setting the engine up is its own step (deployment/host/README.md). A
 # rootful engine is never offered to the host.
 #
+# On a machine in a cloud, the host refuses open egress while the cloud's
+# metadata service answers: a workspace's commands leave as the host's user,
+# and that service hands the machine's credentials to whatever asks. The
+# installer says when it answers here; deployment/host/README.md says how to
+# drop it for the host's user.
+#
 # On macOS it hands over to install-macos.sh.
 set -euo pipefail
 # Whatever the shell's umask, the release and the unit's files are readable
@@ -198,6 +204,11 @@ CONF
 fi
 systemctl daemon-reload
 systemctl enable acme-host.service >/dev/null
+
+if timeout 2 bash -c ': >/dev/tcp/169.254.169.254/80' 2>/dev/null; then
+  echo "==> this machine reaches its cloud's metadata service: the host refuses open egress"
+  echo "    until it is dropped for ${USER_NAME} (deployment/host/README.md)"
+fi
 
 if [ "${START}" = 0 ]; then
   echo "==> installed, not started (--no-start)"

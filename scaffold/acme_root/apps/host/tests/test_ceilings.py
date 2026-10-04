@@ -46,7 +46,7 @@ def item(payload: dict[str, Any], kind: str = "EXEC") -> ClaimedWorkView:
 
 
 def refused(payload: dict[str, Any], ceilings: Ceilings = CEILINGS) -> list[str]:
-    return refusals(ceilings, PROBED, ask_of(item(payload)))
+    return refusals(ceilings, PROBED, ask_of(item(payload)), open_egress=True)
 
 
 def test_the_owners_file_is_read_and_a_missing_one_starts_nothing(tmp_path: Path) -> None:
@@ -118,9 +118,9 @@ def test_an_item_silent_on_its_reads_is_read_as_reading_everything() -> None:
 def test_letting_go_of_a_workspace_runs_nothing_and_is_never_refused() -> None:
     for operation in ("release", "purge"):
         ask = ask_of(item({"operation": operation, "host_id": str(uuid4())}, "WORKSPACE"))
-        assert refusals(CEILINGS, PROBED, ask) == []
+        assert refusals(CEILINGS, PROBED, ask, open_egress=True) == []
     prepare = ask_of(item({"operation": "prepare", "pool_id": str(uuid4())}, "WORKSPACE"))
-    assert refusals(CEILINGS, PROBED, prepare) != []
+    assert refusals(CEILINGS, PROBED, prepare, open_egress=True) != []
 
 
 def test_nothing_an_item_carries_widens_a_ceiling() -> None:
@@ -136,3 +136,15 @@ def test_nothing_an_item_carries_widens_a_ceiling() -> None:
     with pytest.raises(dataclasses.FrozenInstanceError):
         CEILINGS.people_commands = True  # type: ignore[misc]
     assert CEILINGS.people_commands is False
+
+
+def test_open_egress_runs_only_on_a_host_that_reaches_no_metadata_service() -> None:
+    wide = dataclasses.replace(CEILINGS, egress=None)
+    opened = ask_of(item({**FITS, "egress": None}))
+    listed = ask_of(item(FITS))
+    assert refusals(wide, PROBED, opened, open_egress=True) == []
+    assert refusals(wide, PROBED, opened, open_egress=False) == [
+        "open egress on a host that reaches its cloud's metadata service"
+    ]
+    # An allowlist names where its commands go, and runs either way.
+    assert refusals(wide, PROBED, listed, open_egress=False) == []

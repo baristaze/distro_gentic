@@ -4,6 +4,8 @@ passed."""
 
 import dataclasses
 import getpass
+import socket
+from collections.abc import Callable
 from datetime import timedelta
 from pathlib import Path
 
@@ -19,7 +21,15 @@ from acme.apps.host.main import (
     _guarded,
     host_network,
 )
-from acme.apps.host.probe import Misconfigured, Probe, directory, proxy, startup
+from acme.apps.host.probe import (
+    METADATA_SERVICES,
+    Misconfigured,
+    Probe,
+    directory,
+    metadata,
+    proxy,
+    startup,
+)
 from acme.client.client import ApiClient, ApiError
 from acme.client.types import IsolationMode
 from acme.om.base import utcnow
@@ -40,6 +50,46 @@ async def test_a_host_that_probed_no_mode_advertises_none(api: Stack) -> None:
     async with api.client(None) as client:
         probed = await startup(probes(), client, 60)
     assert probed.advertisement.isolation_modes == []
+
+
+def test_the_metadata_probe_fails_when_a_metadata_service_takes_a_connection() -> None:
+    hosts = {host for host, _ in METADATA_SERVICES}
+    assert {"169.254.169.254", "metadata.google.internal", "fd00:ec2::254"} <= hosts
+    with socket.socket() as listening:
+        listening.bind(("127.0.0.1", 0))
+        listening.listen()
+        answers = ("127.0.0.1", listening.getsockname()[1])
+        reached = metadata((("192.0.2.1", 80), answers), connect=refusing_but(answers))
+    assert not reached.passed and reached.name == "metadata"
+    assert f"127.0.0.1:{answers[1]} answers" in reached.detail
+    # Nothing takes a connection: a closed port, a name that does not resolve.
+    with socket.socket() as closed:
+        closed.bind(("127.0.0.1", 0))
+        port = closed.getsockname()[1]
+    assert metadata((("127.0.0.1", port), ("metadata.invalid", 80))).passed
+
+
+def refusing_but(answers: tuple[str, int]) -> Callable[[tuple[str, int], float], socket.socket]:
+    """A connect that reaches `answers` alone, as an off-cloud network does
+    every other address."""
+
+    def connect(address: tuple[str, int], timeout: float) -> socket.socket:
+        if address != answers:
+            raise OSError("no route to host")
+        return socket.create_connection(address, timeout)
+
+    return connect
+
+
+async def test_a_host_that_reaches_a_metadata_service_starts_and_keeps_open_egress_off(
+    api: Stack,
+) -> None:
+    async with api.client(None) as client:
+        reached = await startup(probes(IsolationMode.container, metadata_answers=True), client, 60)
+        clear = await startup(probes(IsolationMode.container), client, 60)
+    assert not reached.open_egress and clear.open_egress
+    assert reached.advertisement == clear.advertisement
+    assert "metadata" in {result.name for result in reached.results if not result.passed}
 
 
 async def test_a_misconfigured_host_fails_at_startup_and_says_why(api: Stack) -> None:
