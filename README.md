@@ -16,13 +16,13 @@ spec that tells the story, and tools that hold the detail.
 - **[`distro_gentic_spec.md`](distro_gentic_spec.md)**: the spec. It
   says what the platform adds, what it guarantees, and why. Start with
   its [Core](distro_gentic_spec.md#the-core).
-- **`lenses/`**: the checkable detail under each rule of the spec, one
+- **[`lenses/`](lenses/)**: the checkable detail under each rule of the spec, one
   file per group, in the guideline's lens format.
-- **`skills/`**: skills named `distro-*` that review a change through
+- **[`skills/`](skills/)**: skills named `distro-*` that review a change through
   the lenses, explain a rule, record a deviation, and scaffold the
   platform's parts. They follow the [Agent
   Skills](https://agentskills.io/specification) standard.
-- **`scaffold/`**: the platform's domain-free core, built on the
+- **[`scaffold/`](scaffold/)**: the platform's domain-free core, built on the
   engine's scaffold. A product renders it under its own name.
 
 [The Repository](distro_gentic_spec.md#the-repository) in the spec says
@@ -52,6 +52,9 @@ In Claude Code, the repository is a plugin marketplace:
 /plugin marketplace add baristaze/distro_gentic
 /plugin install distro-gentic@distro-gentic
 ```
+
+While the repository is private, only an account that can clone it can
+add the marketplace.
 
 The full review, `distro-review-full`, judges all three layers: the
 platform's rules itself, and the engine's and the guideline's through

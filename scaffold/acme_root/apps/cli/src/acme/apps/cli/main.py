@@ -4,6 +4,7 @@ a session with an agent: started, spoken to, steered, and read.
 `listen` stays and prints every change in the org as it happens, and
 `session steps --follow` every step of a loop until it stops. Every
 command is a thin call into the client; the API decides, the CLI shows.
+A product's own command groups mount after these (`product_commands`).
 Exit codes: 0 done, 1 the API refused, 2 usage, 3 not signed in, 4 the API
 is unreachable, 5 a followed loop stopped without succeeding."""
 
@@ -23,6 +24,7 @@ import httpx
 import typer
 
 from acme.apps.cli import config
+from acme.apps.cli.groups import mount_groups
 from acme.apps.cli.listen import listen as run_listener
 from acme.apps.cli.model import (
     choose_org,
@@ -33,6 +35,7 @@ from acme.apps.cli.model import (
     settled,
     step_line,
 )
+from acme.apps.cli.product_commands import PRODUCT_COMMANDS
 from acme.client.client import ApiClient, ApiError
 from acme.client.realtime import ChannelRefused
 from acme.client.types import (
@@ -701,6 +704,10 @@ def listen(api: Api = None) -> None:
         run(run_listener, api)
     except KeyboardInterrupt:
         typer.echo("stopped", err=True)
+
+
+# A product's groups mount last, so every name above is taken.
+mount_groups(app, PRODUCT_COMMANDS, run)
 
 
 def main() -> int:
