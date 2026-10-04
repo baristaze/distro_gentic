@@ -8,9 +8,9 @@ The engine gates every model call and every spending job before it
 starts, and keeps its own ledger of holds and settlements (ADR 1006).
 The platform adds what stands behind the gate: who pays, the buckets
 that pay, the charge, limits counted in the tenant's time zone, and an
-anomaly guard. Each of these posts or reads money, and two places that
-count money drift apart. A cap read at one price and a bill read at
-another is the same drift.
+anomaly guard. Each posts or reads money, and two places that count
+money drift apart, as a cap read at one price and a bill read at
+another do.
 
 ## Decision
 
@@ -39,9 +39,9 @@ after the next version is read and in another process too.
 **A gate that parks.** Funds no bucket covers park the session on its
 budget, naming the funds. A call far above its session's norm parks it
 for a person and pages the operator. The engine's refusal names only
-budgets, so the engine gains `GateParked`, an exception that carries
-its own park, and the loop parks on it. The loop also parks for a
-person on `SpenderUnknown`, as it does on `NoSpender`.
+budgets, so the engine gains `GateParked`, an exception that carries its
+own park, and the loop parks on it. The loop also parks for a person on
+`SpenderUnknown`, as it does on `NoSpender`.
 
 **Windows in the tenant's zone.** Days and weeks follow the tenant's
 time zone, kept as the zones it set, in order; months follow the

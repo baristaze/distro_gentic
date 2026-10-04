@@ -8,9 +8,8 @@ The engine never picks a model: an injected resolver turns a session's
 model roles into fills, once, and a switch is a step of the history (ADR
 1005). The platform decides for the whole fleet which model serves which
 job, and changes that decision without a release of code. It also pays
-a provider on a tenant's own key when the tenant holds one. Billing
-refused every call of such a tenant, since the loop called on the
-platform's key alone (ADR 2011).
+a provider on a tenant's own key when the tenant holds one, and billing
+refuses a call on the platform's key for such a tenant (ADR 2011).
 
 ## Decision
 
@@ -18,9 +17,9 @@ platform's key alone (ADR 2011).
 models layer, or none. A layer answers three things: the resolver, a
 face over the models manager every namespace reaches, and the client
 each model call runs on with the name of its credential. The matrix is
-that layer. The engine's resolver now hears which session it resolves
-for, its models manager renews a fill set at the start of each loop, and
-its loop and its compaction ask which client a call runs on. The engine
+that layer. The engine's resolver hears which session it resolves for,
+its models manager renews a fill set at the start of each loop, and its
+loop and its compaction ask which client a call runs on. The engine
 keeps its own answers: the table, no renewal, and the platform's key.
 
 **The matrix is data, by version.** Its versions, the benchmark results,
@@ -49,11 +48,11 @@ every role the version serves. Results are written once.
 **A session is pinned.** Its first resolution that answers pins it to
 the version published then, and one that answers nothing pins nothing,
 so the next publication can answer it; a later publication changes
-nothing a pinned session holds. At the
-start of each loop, and never inside one, a fill whose model was retired,
-or that a tightened retention no longer admits, switches to what the
-latest version answers, and the session is pinned to that version. A
-fallback a tightened retention no longer admits counts as tried.
+nothing a pinned session holds. At the start of each loop, and never
+inside one, a fill whose model was retired, or that a tightened
+retention no longer admits, switches to what the latest version
+answers, and the session is pinned to that version. A fallback a
+tightened retention no longer admits counts as tried.
 
 **The tenant's key reaches its call.** Before each call the loop and the
 compaction ask for the call's client by the tenant's funding: the
@@ -74,8 +73,8 @@ met it, naming a permission.
 ## Consequences
 
 - No process wires the layer yet: a root opts in with
-  `build_managers(models_layer=...)`, and builds the matrix managers over
-  what it returns.
+  `build_managers(models_layer=...)`, and builds the matrix managers
+  over what it returns.
 - A session parked for a missing or refused key wakes when a person
   resumes it; saving a key wakes nothing by itself.
 - A tenant's own choice of fill holds while the session's pinned version

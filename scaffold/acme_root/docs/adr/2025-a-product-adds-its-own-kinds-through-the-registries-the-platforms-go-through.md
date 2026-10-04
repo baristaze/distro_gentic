@@ -4,19 +4,12 @@
 
 ## Context
 
-Sessions Are Work: "one session produces several kinds of work, and
-each must run where its environment is." A product built on the
+The spec's Sessions Are Work has one session produce several kinds of
+work, each running where its environment is. A product built on the
 platform has work of its own: a long job on machines of its own, a
 secret one of its own resources holds, a live stream of its own, a
-check that runs only in its own environment.
-
-Each of these was a closed list. The kinds of work were an enum with
-two tables beside it, a payload and a permission per kind. The
-claimants were an enum of one, the host, and placement read each
-kind's lane in an `if` per kind. A secret's owner was a project and
-nothing else, a live stream was a step's, and evidence held one
-executor. A product with work of its own had no hook: it forked the
-base, or put its domain back into the platform.
+check that runs only in its own environment. With no hook for each, it
+forks the base, or puts its domain back into the platform.
 
 ## Decision
 

@@ -98,6 +98,21 @@ async def test_a_tree_is_the_head_with_its_protected_paths_from_the_base(tmp_pat
     }, "the head's code, and the base's checks and fixtures, nothing planted, no git"
 
 
+async def test_a_tree_takes_its_untouched_paths_from_the_base_beneath_its_source(
+    tmp_path: Path,
+) -> None:
+    binding, base, head = delivered(tmp_path)
+
+    tar = await RepositoryReaderGitImpl(on_disk=True).tree(
+        binding, head, head, ("checks/fixture.txt",), base=base, untouched=("checks/**",)
+    )
+
+    assert members(tar) == {
+        "app.py": b"v2",
+        "checks/run.py": b"the base's runner",
+    }, "the base's untouched paths, nothing planted, and the source's own where it holds none"
+
+
 async def test_a_tree_is_read_at_a_commit_and_within_its_bound(tmp_path: Path) -> None:
     binding, base, head = delivered(tmp_path)
 

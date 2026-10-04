@@ -10,10 +10,8 @@ validation policy passed at the committed head, on a clean tree, on
 results the executor wrote. The checks, their fixtures, and the policy
 itself are protected, and a change that touches one voids validation.
 
-Three things are left open. Where the policy lives, since a policy kept
-in the tree is a file the agent can change. Whether the gate trusts a
-verdict stored with a validation, or judges again. And what a success
-that validated nothing ends as.
+A policy kept in the tree is a file the agent can change, and a verdict
+stored with a validation is one the gate would have to trust.
 
 ## Decision
 
@@ -46,15 +44,13 @@ not change, or whose change the policy asks no check of, ends
 
 **The work product and the executor are ports, and this gate is the
 root's.** A process wires the ports, the session runner from its
-product's entry; the loud nulls refuse every read and every run. The
-root builds this gate over the work product it is given whenever no gate
-is passed, and refuses a quiet null result gate outside `local`, as it
+product's entry; the loud nulls refuse every read and every run. When no
+gate is passed, the root builds this gate over the work product it is
+given, and outside `local` it refuses a quiet null result gate, as it
 refuses a quiet budget gate.
 
 ## Consequences
 
-- A success is only as good as the runs behind it, and every one of them
-  is kept.
 - A policy change applies to the next judgment, not the next validation:
   a check the policy adds is unmet until a validation runs it.
 - A process that wires no work product counts no success: a delivered

@@ -4,17 +4,16 @@
 
 ## Context
 
-Intake: "External events arrive through the guideline's inbound queue;
-the platform adds the routing." A system that delivers to the platform,
-a forge or a chat, names the installation the delivery came through, by
-its own id. That id is the system's, never the platform's: it names no
-tenant until a tenant claims it. The ingress has to find the one tenant a
-delivery belongs to before anything is queued, and a delivery must never
-reach a tenant it does not belong to.
+The spec's Intake routes the external events that arrive through the
+guideline's inbound queue. A system that delivers to the platform, a
+forge or a chat, names the installation the delivery came through by its
+own id, which is the system's, never the platform's, and names no tenant
+until a tenant claims it. The ingress must find the one tenant a
+delivery belongs to before anything is queued, and never reach another.
 
-A system's ids are often short and sequential. A tenant that could claim
-an installation by typing its id could claim another tenant's, or the next
-one to be made, and read every event it carries.
+A system's ids are often short and sequential, so a tenant that could
+claim an installation by typing its id could claim another tenant's, or
+the next one made, and read every event it carries.
 
 ## Decision
 
@@ -38,8 +37,6 @@ never a system's installation.
 
 ## Consequences
 
-- A real system's delivery reaches its tenant once that tenant connects
-  the installation, and no other tenant's.
 - The read by installation is one of storage's enumerated cross-tenant
   reads, and a transition from the request stage.
 - Each integration checks its own system's grant. Its twin signs its

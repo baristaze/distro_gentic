@@ -4,12 +4,10 @@
 
 ## Context
 
-Automations: "A trigger, an event with filters or a schedule, leads to an
-action ... An automation runs as its creator or as the tenant's
-automation principal." The guideline keeps time without a scheduler:
-every worker sweeps on its own timer, idempotent and serialized by the
-database ([Maintenance Without a Scheduler][g-sweep]). So every worker
-ticks every tenant, and a schedule must not fire once per worker.
+The guideline keeps time without a scheduler: every worker sweeps on its
+own timer, idempotent and serialized by the database ([Maintenance
+Without a Scheduler][g-sweep]). So every worker ticks every tenant, and
+a schedule must not fire once per worker.
 
 A session's project keys its budget and its policies
 ([ADR 2016](2016-a-sessions-project-is-set-before-it-and-never-moves.md)),
@@ -38,7 +36,8 @@ own transition, `automation_principals`, from the grant read at each
 call: the granted role's permissions and nothing else, whichever kind a
 step names it as. Every other principal falls through to the members'
 transition. A root that runs the sessions an automation starts hands the
-same transition to the managers, so their calls are answered by the grant.
+same transition to the managers, so their calls are answered by the
+grant.
 An automation that runs as the principal is made only once the principal
 is granted, and only by a person whose own role is at least the grant.
 Each firing reads the grant and its creator's role then, and is refused,
@@ -66,12 +65,9 @@ session starts.
 - Changing the grant's role changes what every such session's next call
   may do. A grant raised above an automation's creator stops its next
   firing, not a session it already started.
-- Before a principal is granted, no automation that runs as it is made.
-- An automation stored with no project fires only refused runs outside
-  `local`. One that names a project is made in its place.
 - The transition is a second site that builds a tenant context beside the
   tenancy manager's, and the stage checks list it.
-- A schedule's period is its own, not the sweep's: a sweep interval longer
-  than a period fires the schedule at the sweep's pace.
+- A schedule's period is its own, not the sweep's: a sweep interval
+  longer than a period fires the schedule at the sweep's pace.
 
 [g-sweep]: https://github.com/baristaze/swe_guidelines/blob/v0.48.0/architecture.md#maintenance-without-a-scheduler

@@ -4,21 +4,17 @@
 
 ## Context
 
-Evidence: "Validation never runs in the agent's workspace. It runs on a
-fresh executor, from the delivered commit, with the checks, fixtures,
-and runner taken from the protected source, under an environment the
-agent did not set. The executor writes and hashes the results." The
-Agents a Platform Ships: "A validation session runs a delivery's checks
-with no agent at all, on a fresh executor (a workspace nobody used,
-never the agent's), on the same queue, and writes the same execution
-record."
+The spec's Evidence and Agents a Platform Ships have a validation
+session run a delivery's checks on a fresh executor, never in the
+agent's workspace, with no agent at all, and write the execution record
+every run is.
 
 The executor port has a loud null and nothing else, so no delivery's
 checks run and the result gate confirms no success. A validation session
-is a record of its own that calls no model, as it should be, but its
-work goes to a lab's lane for a daemon to run
-([ADR 2013](2013-a-validation-session-is-station-work-with-a-record-of-its-own.md)):
-the platform's evidence waits on a domain it does not hold.
+is a record of its own that calls no model, but its work goes to a lab's
+lane for a daemon to run
+([ADR 2013](2013-a-validation-session-is-station-work-with-a-record-of-its-own.md)),
+so the platform's evidence waits on a domain it does not hold.
 
 ## Decision
 
@@ -35,8 +31,8 @@ credential and no history. Each check's command template runs with
 image and its transport. Each trial's results stream is read back within
 the run's bound, and the executor hashes what it read. A trial that
 crashes, runs past its time, or writes no run it can read is an errored
-run, so every trial counts. The instance and
-its command records are destroyed when the run ends, whatever ended it.
+run, so every trial counts. The instance and its command records are
+destroyed when the run ends, whatever ended it.
 
 Outside `local`, every root wires this executor in place of the loud
 null. `local` keeps the loud null unless its process hands one in.
@@ -55,11 +51,11 @@ checks run, and the results stream is read back, each as `exec` work,
 and the executor hashes what it read. A trial's stream is read in one
 item, whose result crosses the wall whole: a stream longer than one
 carries is read no further, never waited on, and its trial is an errored
-run that names that bound. When the
-run ends, whatever ended it, the holding host is asked to purge the
-instance, or the prepare that waits is ended, and the relay's rows of the
-instance go at once. A root that reaches no
-pool refuses the run, loudly (`Unavailable`), never a run elsewhere.
+run that names that bound. When the run ends, whatever ended it, the
+holding host is asked to purge the instance, or the prepare that waits
+is ended, and the relay's rows of the instance go at once. A root that
+reaches no pool refuses the run, loudly (`Unavailable`), never a run
+elsewhere.
 
 **A validation session is platform work.** It names its project, a check
 its project's policy declares, the delivered commit it runs at, and the
