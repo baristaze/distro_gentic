@@ -476,7 +476,7 @@ async def test_a_platform_automation_reads_as_the_previous_releases_after_a_down
     finally:
         await engine.dispose()
 
-    await downgrade(DatabaseRole.CORE, core, "202610036200")
+    await downgrade(DatabaseRole.CORE, core, "202610036300")
     previous = await actions_of(core, org)
     await upgrade(DatabaseRole.CORE, core)
 
