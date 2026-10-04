@@ -142,6 +142,8 @@ class Executor:
         source: str,
         protected: tuple[str, ...],
         source_project: UUID,
+        base: str | None,
+        untouched: tuple[str, ...],
     ) -> bytes:
         assert source_project == project_id, "a validation's source is its project's own"
         self.trees.append((project_id, version, source, protected))

@@ -129,7 +129,9 @@ class AcceptanceHarnessImpl(AcceptanceHarnessInterface):
         source, which no workspace holds: the executor fetches it for this
         run alone, from the repository its project binds, and every path
         its patterns match comes from there, whatever the head holds there.
-        Its runs belong to the verdict: none is stored where the session's
+        Every other path the scenario forbids comes from its base, so a head
+        that rewrites what scores a run is judged by the base's copy. Its
+        runs belong to the verdict: none is stored where the session's
         evidence is."""
         if delivery is None:
             return (), ()
@@ -146,6 +148,8 @@ class AcceptanceHarnessImpl(AcceptanceHarnessInterface):
             source=scenario.hidden.source,
             source_project=scenario.hidden.project,
             protected=scenario.hidden.paths,
+            base=scenario.base,
+            untouched=scenario.forbidden,
             checks=scenario.hidden.checks,
             trials=(1,) * len(scenario.hidden.checks),
         )
