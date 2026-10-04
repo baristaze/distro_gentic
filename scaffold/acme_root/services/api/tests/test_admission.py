@@ -5,12 +5,15 @@ that say so."""
 
 import asyncio
 import itertools
+from collections.abc import MutableMapping
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
 from api_support import build_container
 from fastapi import FastAPI
+from test_hosts_api import a_host, a_pool, a_token, bearer
 
 from acme.services.api.container import AppContainer
 
@@ -159,3 +162,70 @@ async def test_the_probes_answer_while_admission_is_saturated(
     ends_first.set()
     ends_second.set()
     assert [(await held).status_code for held in (read, first, second)] == [200, 200, 200]
+
+
+async def open_control(app: FastAPI, token: str) -> tuple[asyncio.Task[None], asyncio.Event]:
+    """Opens a host's control stream and returns it once its first line has
+    arrived, so it is in flight; with the event that disconnects it. It is
+    driven over ASGI directly, because the test client hands back a response
+    only once its body has ended, and the stream runs for a minute."""
+    opened, gone = asyncio.Event(), asyncio.Event()
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0", "spec_version": "2.3"},
+        "http_version": "1.1",
+        "method": "GET",
+        "scheme": "http",
+        "path": "/v1/hosts/me/control",
+        "raw_path": b"/v1/hosts/me/control",
+        "query_string": b"",
+        "root_path": "",
+        "headers": [(b"host", b"test")]
+        + [(k.lower().encode(), v.encode()) for k, v in bearer(token).items()],
+        "client": ("127.0.0.1", 50000),
+        "server": ("test", 80),
+    }
+    request_sent = False
+
+    async def receive() -> MutableMapping[str, Any]:
+        nonlocal request_sent
+        if not request_sent:
+            request_sent = True
+            return {"type": "http.request", "body": b"", "more_body": False}
+        await gone.wait()
+        return {"type": "http.disconnect"}
+
+    statuses: list[int] = []
+
+    async def send(message: MutableMapping[str, Any]) -> None:
+        if message["type"] == "http.response.start":
+            statuses.append(message["status"])
+        elif message["type"] == "http.response.body" and message.get("body"):
+            opened.set()
+
+    stream = asyncio.create_task(app(scope, receive, send))
+    await asyncio.wait_for(opened.wait(), timeout=5)
+    assert statuses == [200]
+    return stream, gone
+
+
+async def test_a_hosts_control_stream_holds_no_read_slot(
+    app: FastAPI, client: httpx.AsyncClient, owner: dict[str, str]
+) -> None:
+    """A host holds its control stream open for a minute at a time, so a
+    fleet of hosts, each holding a read slot, would starve the reads of
+    every caller. More streams are open here than the read lane has slots,
+    and an ordinary read is still admitted."""
+    pool_id = await a_pool(client, owner)
+    streams = []
+    for name in ("host-1", "host-2"):
+        host = await a_host(client, await a_token(client, owner, pool_id), name)
+        streams.append(await open_control(app, host["token"]))
+    assert len(streams) > READS
+
+    read = await client.get("/v1/agent-sessions", headers=owner)
+
+    assert read.status_code == 200, read.text
+    for stream, gone in streams:
+        gone.set()
+        await asyncio.wait_for(stream, timeout=5)
