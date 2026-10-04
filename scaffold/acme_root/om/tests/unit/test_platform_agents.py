@@ -45,10 +45,18 @@ from acme.infra.workspaces.host import WorkspaceHostImpl
 from acme.integrations.model_providers.calls import ModelCall, ModelReply
 from acme.om import base
 from acme.om.agent_sessions.types.agent_session import SessionStatus
-from acme.om.agents.types.kind import AgentKind, DoneRule
+from acme.om.agents.types.kind import (
+    NO_WORKSPACE,
+    AgentKind,
+    AgentKindCatalog,
+    DoneRule,
+    TreeLimits,
+)
+from acme.om.agents.types.request import Spawn
 from acme.om.agents.types.result import Claim
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.base import new_id, utcnow
+from acme.om.budgets.types.budget import BudgetScope, BudgetScopeKind
 from acme.om.context import (
     AppContext,
     AppType,
@@ -74,6 +82,7 @@ from acme.om.platform_agents.catalog import (
 from acme.om.platform_agents.kinds import (
     ANALYSIS_KIND,
     ENGINEER_KIND,
+    ENGINEER_SHARE,
     PLATFORM_ASSISTANT_KIND,
     SHIPPED,
 )
@@ -167,6 +176,7 @@ def test_every_shipped_agent_is_a_profile_that_sets_its_powers() -> None:
     assert names == [
         ("engineer", 1),
         ("engineer", 2),
+        ("engineer", 3),
         ("analysis", 1),
         ("analysis", 2),
         ("planner", 1),
@@ -193,6 +203,50 @@ def test_every_shipped_agent_is_a_profile_that_sets_its_powers() -> None:
         ANALYSIS_KIND.tools
     )
     assert {classes[tool] for tool in ANALYSIS_KIND.tools} == {"read", "execute"}
+
+
+# A spawn starts every shipped kind that delivers, under its share.
+
+LEAD = AgentKind(
+    name="lead",
+    version=1,
+    tools=(kinds.SUBMIT_RESULT,),
+    done_rule=DoneRule.RESULT_TOOL,
+    result_tool=kinds.SUBMIT_RESULT,
+    authority=AuthorityMode.STEADY,
+    tree=TreeLimits(height=2, count=1),
+    isolation=NO_WORKSPACE,
+)
+"""A product's kind that delegates: it can grant the engineer its result
+tool, and its tree has room for one child."""
+
+
+def test_every_shipped_kind_a_spawn_can_start_names_a_share() -> None:
+    """A spawn refuses a kind that names no share. A kind that delivers
+    through its result tool is one a product's kind may spawn, so its latest
+    version names one; a kind a person starts directly names none."""
+    catalog = AgentKindCatalog(kinds=SHIPPED)
+    latest = [catalog.latest(name) for name in dict.fromkeys(kind.name for kind in SHIPPED)]
+    spawned = [kind for kind in latest if kind.done_rule is DoneRule.RESULT_TOOL]
+    assert [kind.name for kind in spawned] == [kinds.ENGINEER]
+    for kind in spawned:
+        assert kind.share is not None and (kind.share.cost_micros or 0) > 0, kind.name
+    assert all(kind.share is None for kind in latest if kind not in spawned)
+
+
+async def test_a_products_kind_spawns_the_engineer_under_its_share(tmp_path: Path) -> None:
+    platform = platform_over(tmp_path, kinds=(LEAD,))
+    lead_id = await platform.start(LEAD.name)
+    asked = Spawn(
+        id=new_id(), kind=kinds.ENGINEER, title="the total", objective="Fix the report's total."
+    )
+
+    child = await platform.managers.agents.spawn(platform.owner, lead_id, asked)
+
+    assert (child.kind, child.kind_version) == (kinds.ENGINEER, ENGINEER_KIND.version)
+    page = await platform.managers.budgets.get_budgets(platform.owner, None, 50)
+    own = BudgetScope(kind=BudgetScopeKind.SESSION, key=str(child.id))
+    assert [budget.amount for budget in page.items if budget.scope == own] == [ENGINEER_SHARE]
 
 
 # Each shipped kind reaches an accepted end; the engineer's success only on

@@ -25,6 +25,7 @@ a person chooses by choosing the session they type in."""
 from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
 from acme.om.agents.types.kind import NO_WORKSPACE, AgentKind, DoneRule, TreeLimits
 from acme.om.attribution.types.authority import AuthorityMode
+from acme.om.budgets.types.amount import Amount
 from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule
 from acme.om.tools.types.tool import ToolClass
 
@@ -97,7 +98,7 @@ ENGINEER_V1 = AgentKind(
 """The engineer before it edited by one place, searched the code, and used
 the knowledge base: kept while a session may still run it."""
 
-ENGINEER_KIND = AgentKind(
+ENGINEER_V2 = AgentKind(
     name=ENGINEER,
     version=2,
     tools=(
@@ -136,6 +137,19 @@ ENGINEER_KIND = AgentKind(
     policy=allowing(ToolClass.READ, ToolClass.WRITE, ToolClass.EXECUTE, ToolClass.INTEGRATION),
     isolation=WORKSPACE,
 )
+"""The engineer before it named a share: kept while a session may still run
+it."""
+
+ENGINEER_SHARE = Amount(cost_micros=50_000_000)
+"""What one engineer a spawn starts may spend over its life, in reference
+cost. It is a choice: about ten of its loops at the step guard over a
+cached window, and several of the main role's worst-case calls at a full
+window, so its first call is never refused. Its tree's budget still bounds
+it, and a share never raises that budget."""
+
+ENGINEER_KIND = ENGINEER_V2.model_copy(update={"version": 3, "share": ENGINEER_SHARE})
+"""The engineer. It delivers through its result tool, so a product's kind
+may spawn it, and a spawn refuses a kind that names no share."""
 
 ANALYSIS_V1 = AgentKind(
     name=ANALYSIS,
@@ -211,6 +225,7 @@ PLATFORM_ASSISTANT_KIND = AgentKind(
 
 SHIPPED: tuple[AgentKind, ...] = (
     ENGINEER_V1,
+    ENGINEER_V2,
     ENGINEER_KIND,
     ANALYSIS_V1,
     ANALYSIS_KIND,
