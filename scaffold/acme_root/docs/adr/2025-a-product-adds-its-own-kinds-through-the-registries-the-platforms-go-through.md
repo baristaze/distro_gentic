@@ -74,6 +74,11 @@ before it is kept, and the result gate reads the record alike.
 - A product's work kind names its claimant kind, since no worker of the
   platform's runs it. A kind that names a claimant kind nobody
   registered is refused at boot.
+- A product declares the ceiling of each of its own classes beside
+  them (`ProductKinds.ceilings`), and the root joins it to the
+  platform's, so a product never edits the platform's rules. A ceiling
+  of a platform class, of a class not the product's, or of a class the
+  platform already caps is refused at boot.
 - A product's claimant authenticates as a host does: the product's own
   route resolves its credential to a claimant, then calls placement.
   The platform issues no credential of a product's kind.
