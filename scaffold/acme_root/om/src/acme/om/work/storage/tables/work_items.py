@@ -31,6 +31,15 @@ class WorkItems(IdentifiableMixin, TrackableMixin, Base):
             "available_at",
             postgresql_where=text("status = 'queued'"),
         ),
+        # Whether a target has an item open, and its latest of a kind, newest
+        # first: per workspace event, and per binding on every sweep pass.
+        Index(
+            "ix_work_items_org_id_kind_target_id_created_at",
+            "org_id",
+            "kind",
+            "target_id",
+            "created_at",
+        ),
     )
     kind: Mapped[str]
     target_id: Mapped[UUID]
