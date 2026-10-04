@@ -57,10 +57,10 @@ alone.
   `resource`, and costs a claim and a refusal at each retry. It never
   runs on less.
 - A loop parked for a workspace resumes at its retry time. Nothing wakes
-  it sooner, such as a host coming online.
+  it sooner yet, such as a host coming online.
 - A release whose push does not land keeps the instance and its work,
   and the loop's release logs it; the next release tries again.
-- A session with no pin, such as one made by a process that does not
+- A session with no pin, made before pins or by a process that does not
   declare its kind, is pinned at its first prepare that asks for a
   workspace, to what that loop asks, and held to it from then on.
 - The snapshot and the checkout run in the workspace through the

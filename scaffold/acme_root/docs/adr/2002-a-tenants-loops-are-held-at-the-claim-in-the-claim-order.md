@@ -46,14 +46,14 @@ is reserved.
 - A runner that lost its lease stops counting once the lease runs out,
   so a tenant at its limit recovers its loop at the next claim.
 - Two claims of one lane that commit together can each miss the other,
-  and a tenant can run one loop past its share until either ends.
-  Holding that moment would take a lock on every claim; the excess is
-  bounded and short.
+  for the moment a claim takes, and a tenant can run one loop past its
+  share until either ends. Holding that moment would take a lock on
+  every claim; the excess is bounded and short.
 - A loop over its share is claimed again after each delay, so a full
   tenant's queue costs a claim, a count, and a hand-back per loop per
   delay.
-- Each lane in use needs runners of its own. A tenant given a tier or a
-  lane no runner serves leaves its loops waiting, which the queue's age
-  alarm reads.
+- Each lane in use needs runners of its own. An operator who gives a
+  tenant a tier or a lane no runner serves leaves its loops waiting,
+  which the queue's age alarm reads.
 - The engine's work manager gains the lane hook and the count of the
   claims ahead, so the next move of the base merges over both.

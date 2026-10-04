@@ -8,8 +8,13 @@ A session pinned to a tenant's host pool runs its tools on the host that
 holds its workspace, inside the tenant's wall, while its loop runs in
 the platform's cloud. The engine sees one transport interface, and the
 runner picks what is behind it by the session's placement. The host
-opens every connection; the platform never calls in, and everything that
-crosses the wall is checked against its hash.
+opens every connection; the platform never calls in.
+
+A tool call into the wall travels as `exec` work keyed by the call's
+idempotency key. An expired lease requeues a `read_only` or
+`idempotent` item to the host that holds its workspace, and ends an
+`unsafe` one `interrupted`. Everything that crosses the wall is checked
+against its hash.
 
 ## Decision
 

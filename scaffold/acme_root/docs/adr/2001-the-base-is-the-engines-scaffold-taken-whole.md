@@ -26,8 +26,8 @@ own decision records are numbered from 2001.
 
 - The engine's next release, and the guideline's it pins, arrive by one
   merge. A merge commit keeps the base, never a squash.
-- A product takes one base, which holds the engine's and the
-  guideline's.
+- A product takes one base, the platform's scaffold, which holds the
+  engine's and the guideline's.
 - The platform's own migrations follow the engine's: the first of each
   role's own chain takes that role's scaffold head as its parent.
 - The three ranges never share a number, so a merge never renumbers a

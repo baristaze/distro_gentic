@@ -15,12 +15,12 @@ content read, and the grant job could not narrow it to one tenant. And
 `write` includes `read`, so anything `write` implied would reach every
 tenant at once.
 
-The spec puts a tenant's secrets and provider keys in the platform's
-hands. The engine asks `manage_keys` of a call that binds a secret
-reference (ADR 1012), and every member holds `manage_keys`, to manage
-the keys they sign in with. A member who could set the tenant's
-provider key would send every session's content to a provider account
-they hold.
+The spec's Secrets by Placement and The Tenant's Provider Keys put a
+tenant's secrets and keys in the platform's hands. The engine asks
+`manage_keys` of a call that binds a secret reference (ADR 1012), and
+every member holds `manage_keys`, to manage the keys they sign in with.
+A member who could set the tenant's provider key would send every
+session's content to a provider account they hold.
 
 ## Decision
 

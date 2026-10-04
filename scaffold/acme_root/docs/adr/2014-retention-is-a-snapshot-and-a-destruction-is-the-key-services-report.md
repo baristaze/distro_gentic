@@ -6,9 +6,10 @@
 
 The spec's Data, Retention, and the Wall seals step content under a key
 per session, kept in a key service the tenant can revoke, or bring its
-own. A retention policy is declared per tenant and narrowed per project,
-and a session takes a snapshot of it when it is created. The audit holds
-each key destruction as the key service reported it.
+own. A retention policy is declared per tenant and narrowed per project.
+A session takes a snapshot of it when it is created: tightening reaches
+existing sessions at the next sweep, and loosening never reaches back.
+The audit holds each key destruction as the key service reported it.
 
 The engine seals each session's content under its own key, wrapped by
 the tenant's key service, which keeps no copy: the engine's revocation

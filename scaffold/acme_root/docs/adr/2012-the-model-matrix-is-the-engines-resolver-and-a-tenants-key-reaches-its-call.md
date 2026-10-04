@@ -72,9 +72,9 @@ met it, naming a permission.
 
 ## Consequences
 
-- No process wires the layer: a root opts in with
-  `build_managers(models_layer=...)`, and builds the matrix managers over
-  what it returns.
+- No process wires the layer yet: a root opts in with
+  `build_managers(models_layer=...)`, and builds the matrix managers
+  over what it returns.
 - A session parked for a missing or refused key wakes when a person
   resumes it; saving a key wakes nothing by itself.
 - A tenant's own choice of fill holds while the session's pinned version
