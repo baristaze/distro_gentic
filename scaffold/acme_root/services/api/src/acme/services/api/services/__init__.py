@@ -26,6 +26,7 @@ from acme.services.api.services.realtime import RealtimeServiceInterface
 from acme.services.api.services.relay import RelayServiceInterface
 from acme.services.api.services.tenancy import TenancyServiceInterface
 from acme.services.api.services.tools import ToolsServiceInterface
+from acme.services.api.services.validations import ValidationsServiceInterface
 from acme.services.api.services.watch import WatchServiceInterface
 from acme.services.api.services.webhooks import WebhooksServiceInterface
 
@@ -53,6 +54,7 @@ __all__ = [
     "ServicesInterface",
     "TenancyServiceInterface",
     "ToolsServiceInterface",
+    "ValidationsServiceInterface",
     "WatchServiceInterface",
     "WebhooksServiceInterface",
 ]
@@ -130,3 +132,6 @@ class ServicesInterface(ABC):
 
     @abstractmethod
     def get_tools_service(self) -> ToolsServiceInterface: ...
+
+    @abstractmethod
+    def get_validations_service(self) -> ValidationsServiceInterface: ...

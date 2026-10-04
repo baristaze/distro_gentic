@@ -105,7 +105,7 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         if not in_person(ctx):
             raise NotAuthorized("an automation is made by a person, never by an agent's call")
         await self._check_principal(ctx, automation)
-        self._check_kind(automation)
+        await self._check_kind(ctx, automation)
         await self._check_project(ctx, automation)
         now = self._clock()
         made = Automation.model_validate(
@@ -134,7 +134,7 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
                 "an automation that runs as its creator is edited by its creator alone"
             )
         await self._check_principal(ctx, automation)
-        self._check_kind(automation)
+        await self._check_kind(ctx, automation)
         await self._check_project(ctx, automation)
         # The editor is its creator from here on: one that runs as its
         # creator is its creator's to edit, and one that runs as the
@@ -512,10 +512,15 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
                 f"a {ctx.role.value} makes no automation that runs as a {granted.role.value}"
             )
 
-    def _check_kind(self, automation: Automation) -> None:
+    async def _check_kind(self, ctx: TenantContext, automation: Automation) -> None:
         """A product's action names a kind a product declares, and its params
         hold to that kind's shape: otherwise it is `ValidationFailed`, so no
-        automation is written that could never act."""
+        automation is written that could never act. An enabled one is then
+        its kind's to check against its writer and whom it runs as, whose
+        refusal answers as is, so a writer its firings would refuse is told
+        now. A disabled one is
+        not asked: nothing deletes an automation, so turning it off always
+        goes through, and turning it on again is an edit the kind checks."""
         action = automation.action
         if action.kind in PLATFORM_ACTIONS:
             return
@@ -523,9 +528,11 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         if kind is None:
             raise ValidationFailed(f"no product declares the action kind {action.kind}")
         try:
-            kind.params.model_validate(action.plain_params())
+            params = kind.params.model_validate(action.plain_params())
         except ShapeError as exc:
             raise ValidationFailed(f"the params of {action.kind} are malformed: {exc}") from exc
+        if automation.enabled:
+            await kind.check_writer(ctx, params, automation.runs_as)
 
     def _unknown_kind(self, automation: Automation) -> bool:
         kind = automation.action.kind

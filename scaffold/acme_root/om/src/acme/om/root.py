@@ -256,8 +256,8 @@ class ProductKinds:
     its stream kinds, each with its bounds (`watch.root.build_stream`) and the
     claimant kind of its own that writes it, if any; its executors, by
     the validation environment each runs; and its kinds of automation
-    action, each acting in a firing and saying when the run it started
-    ended (`automations.actions`). Its agent kinds join the platform's
+    action, each acting in a firing, saying when the run it started
+    ended, and checking the person who writes one (`automations.actions`). Its agent kinds join the platform's
     catalog, which refuses a version declared twice, and its tools the
     platform's, where a registry refuses two of one name. Every other kind
     registers beside the platform's own, which go through the same registries,

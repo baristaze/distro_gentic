@@ -71,7 +71,13 @@ from acme.om.evidence.impl.ports import WorkProductMemoryImpl
 from acme.om.evidence.rules import policy_key
 from acme.om.evidence.types.record import RunPurpose
 from acme.om.evidence.types.validation import Delivery
-from acme.om.exceptions import NotAuthorized, NotFound, PreconditionFailed, UnsafeConfiguration
+from acme.om.exceptions import (
+    NotAuthorized,
+    NotFound,
+    PreconditionFailed,
+    UnsafeConfiguration,
+    ValidationFailed,
+)
 from acme.om.platform_agents import kinds, rules
 from acme.om.platform_agents.catalog import (
     PlatformAgents,
@@ -763,9 +769,13 @@ async def test_a_validation_session_is_its_tenants_and_a_reader_starts_none(
     tmp_path: Path,
 ) -> None:
     platform = platform_over(tmp_path)
+    project_id = new_id()
+    await platform.managers.evidence.write_policy(
+        platform.owner, make_policy(policy_key(project_id))
+    )
     validations = platform.managers.platform_agents
     start = ValidationStart(
-        id=new_id(), project_id=new_id(), check_name="smoke", head=HEAD, base=BASE
+        id=new_id(), project_id=project_id, check_name="unit", head=HEAD, base=BASE
     )
     session = await validations.start_validation(platform.owner, start)
 
@@ -776,6 +786,18 @@ async def test_a_validation_session_is_its_tenants_and_a_reader_starts_none(
         await validations.start_validation(
             member_of(platform, Permission.READ), start.model_copy(update={"id": new_id()})
         )
+    # A project whose policy is another tenant's, or a check its policy does
+    # not declare, is refused before anything is written.
+    crossing = start.model_copy(update={"id": new_id()})
+    with pytest.raises(NotFound, match="declares no validation policy"):
+        await other.managers.platform_agents.start_validation(other.owner, crossing)
+    undeclared = start.model_copy(update={"id": new_id(), "check_name": "lint"})
+    with pytest.raises(ValidationFailed, match="declares no check lint"):
+        await validations.start_validation(platform.owner, undeclared)
+    for refused in (crossing, undeclared):
+        with pytest.raises(NotFound):
+            await validations.get_validation(platform.owner, refused.id)
+    assert [i.target_id for i in items_of(platform)] == [session.id]
 
 
 # The engineer's edit and search, in a directory on this host, with real

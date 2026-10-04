@@ -1,6 +1,6 @@
 # ADR 2031: A product adds its own kind of automation action
 
-**Status**: accepted (2026-10-03)
+**Status**: accepted (2026-10-03), amended by [ADR 2032](2032-a-products-automation-action-checks-its-writer-when-the-automation-is-written.md)
 
 ## Context
 
