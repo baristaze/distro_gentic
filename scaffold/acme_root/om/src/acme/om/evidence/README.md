@@ -85,8 +85,10 @@ of](../../../../README.md).
   a commit of another project's repository, never in the project's
   repository the workspace checks out, and the executor fetches it only
   to run it. The paths it names are protected in that run: they come from
-  its source, whatever the head holds there. A scan of every surface the
-  agent reads finds any mention of it.
+  its source, whatever the head holds there. Every other path the
+  scenario forbids comes from its base, so the head's copy of what scores
+  the suite never scores it. A scan of every surface the agent reads finds
+  any mention of it.
 - **Acceptance judges the chain, never the files.** A failing baseline at
   the base before the change, every hypothesis resolved, a validation the
   gate accepts, a result that cites it, and the hidden suite passing at

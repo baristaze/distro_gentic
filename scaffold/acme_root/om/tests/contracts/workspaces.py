@@ -188,6 +188,9 @@ class ReaderTwin(RepositoryReaderInterface):
         credential: FetchCredential | None = None,
         source_binding: RepositoryBinding | None = None,
         source_credential: FetchCredential | None = None,
+        *,
+        base: str | None = None,
+        untouched: tuple[str, ...] = (),
     ) -> bytes:
         self.credentials.append(credential)
         found = self.trees.get((version, source))
