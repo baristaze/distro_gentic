@@ -55,6 +55,7 @@ from acme.services.api.services.impl.realtime import RealtimeServiceImpl
 from acme.services.api.services.impl.relay import RelayServiceImpl
 from acme.services.api.services.impl.tenancy import TenancyServiceImpl
 from acme.services.api.services.impl.tools import ToolsServiceImpl
+from acme.services.api.services.impl.validations import ValidationsServiceImpl
 from acme.services.api.services.impl.watch import WatchServiceImpl
 from acme.services.api.services.impl.webhooks import WebhooksServiceImpl
 from acme.services.api.services.intake import IntakeServiceInterface
@@ -66,6 +67,7 @@ from acme.services.api.services.playbooks import PlaybooksServiceInterface
 from acme.services.api.services.projects import ProjectsServiceInterface
 from acme.services.api.services.provider_keys import ProviderKeysServiceInterface
 from acme.services.api.services.tools import ToolsServiceInterface
+from acme.services.api.services.validations import ValidationsServiceInterface
 
 
 class ServicesImpl(ServicesInterface):
@@ -95,6 +97,7 @@ class ServicesImpl(ServicesInterface):
         knowledge: KnowledgeServiceInterface,
         playbooks: PlaybooksServiceInterface,
         tools: ToolsServiceInterface,
+        validations: ValidationsServiceInterface,
     ) -> None:
         self._tenancy = tenancy
         self._admin = admin
@@ -120,6 +123,7 @@ class ServicesImpl(ServicesInterface):
         self._knowledge = knowledge
         self._playbooks = playbooks
         self._tools = tools
+        self._validations = validations
 
     def get_tenancy_service(self) -> TenancyServiceInterface:
         return self._tenancy
@@ -193,6 +197,9 @@ class ServicesImpl(ServicesInterface):
     def get_tools_service(self) -> ToolsServiceInterface:
         return self._tools
 
+    def get_validations_service(self) -> ValidationsServiceInterface:
+        return self._validations
+
 
 def build_services(
     managers: Managers,
@@ -259,4 +266,5 @@ def build_services(
         knowledge=KnowledgeServiceImpl(knowledge),
         playbooks=PlaybooksServiceImpl(playbooks),
         tools=ToolsServiceImpl(managers.tools),
+        validations=ValidationsServiceImpl(managers.platform_agents, managers.evidence),
     )

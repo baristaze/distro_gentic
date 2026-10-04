@@ -1,7 +1,7 @@
 """A validation session as the worker runs it: its item is claimed from
 the platform's own lane and handled by the worker's own handler, which
 runs the check on the executor once and finishes the session with the
-record it wrote. A check its project's policy does not declare fails for
+record it wrote. A check its project's policy no longer declares fails for
 good."""
 
 from datetime import timedelta
@@ -80,17 +80,25 @@ async def test_the_worker_runs_a_validation_session_once_to_its_record(tmp_path:
     assert len(executor.requests) == 1, "handled again, it runs nothing"
 
 
-async def test_a_check_its_policy_does_not_declare_fails_for_good(tmp_path: Path) -> None:
+async def test_a_check_its_policy_no_longer_declares_fails_for_good(tmp_path: Path) -> None:
     executor = ScriptedExecutor(capabilities=frozenset())
     container = WorkerContainer.for_tests(
         StorageMemoryImpl(), InfraLocalImpl(tmp_path), ports=PlatformPorts(executor=executor)
     )
     owner = await sign_in(container)
-    await started(container, owner, "lint")
+    session_id = await started(container, owner, "unit")
+    # The policy renames the check after the session started.
+    session = await container.managers.platform_agents.get_validation(owner, session_id)
+    evidence = container.managers.evidence
+    policy = await evidence.get_policy(owner, policy_key(session.project_id))
+    renamed = tuple(each.model_copy(update={"name": "lint"}) for each in policy.checks)
+    await evidence.write_policy(
+        owner, policy.model_copy(update={"checks": renamed, "requirements": ()})
+    )
     handler = build_loop(container)._handlers[WorkKind.VALIDATION]  # pyright: ignore[reportPrivateUsage]
 
     ctx, item = await claimed(container)
-    with pytest.raises(WorkRefused, match="declares no check lint"):
+    with pytest.raises(WorkRefused, match="declares no check unit"):
         await handler.handle(ctx, item)
     assert executor.requests == []
 

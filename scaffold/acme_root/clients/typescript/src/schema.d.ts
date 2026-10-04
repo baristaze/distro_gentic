@@ -2731,6 +2731,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/validation-sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Validation
+         * @description A session queued for the platform's worker, which runs its check once.
+         *     404 when the tenant holds no validation policy for the project; 422
+         *     when the policy declares no such check.
+         */
+        post: operations["start_validation_v1_validation_sessions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/validation-sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Validation
+         * @description The session: `queued` while its check waits or runs, `finished` with
+         *     its verdict and its run once the run is recorded.
+         */
+        get: operations["get_validation_v1_validation_sessions__session_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/work-items/{item_id}/streams/{kind}/live": {
         parameters: {
             query?: never;
@@ -6440,6 +6483,25 @@ export interface components {
             size_bytes: number;
         };
         /**
+         * StartValidationRequest
+         * @description A check the project's policy declares, to run at `head`, the delivered
+         *     commit, with the checks, fixtures, and runner taken from `base`. Each is
+         *     a commit's full id, never a name that moves.
+         */
+        StartValidationRequest: {
+            /** Base */
+            base: string;
+            /** Check */
+            check: string;
+            /** Head */
+            head: string;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+        };
+        /**
          * StepPageView
          * @description One page of a session's history, after the seq the request named.
          *     With `has_more`, the next page starts after the last step's seq.
@@ -6856,6 +6918,58 @@ export interface components {
             /** Error Type */
             type: string;
         };
+        /**
+         * ValidationSessionView
+         * @description A validation session: what it runs, at which commit and from which,
+         *     and where it stands. Once its run is recorded, `passed` is the verdict
+         *     and `run` is that run; both are null while it waits. The run passes
+         *     when it passed, at least one of its cases did, and what served it meets
+         *     the strictest grade the project's policy asks of the check, a twin when
+         *     no requirement names it: a run on a double, or with a dependency that
+         *     was not there, never passes. `reason` says why it did not pass, and is
+         *     null otherwise.
+         */
+        ValidationSessionView: {
+            /** Base */
+            base: string;
+            /** Check */
+            check: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /** Finished At */
+            finished_at: string | null;
+            /** Head */
+            head: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Passed */
+            passed: boolean | null;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Reason */
+            reason: string | null;
+            run: components["schemas"]["ExecutionView"] | null;
+            status: components["schemas"]["ValidationStatus"];
+        };
+        /**
+         * ValidationStatus
+         * @enum {string}
+         */
+        ValidationStatus: "queued" | "finished";
         /**
          * ValidationView
          * @description One pass of the policy's checks on a fresh executor: the version it
@@ -12881,6 +12995,79 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserPageView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_validation_v1_validation_sessions_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                "idempotency-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartValidationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationSessionView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_validation_v1_validation_sessions__session_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationSessionView"];
                 };
             };
             /** @description Validation Error */

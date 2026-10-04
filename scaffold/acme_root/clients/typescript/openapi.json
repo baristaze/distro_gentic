@@ -7686,6 +7686,40 @@
         "title": "StartUploadRequest",
         "type": "object"
       },
+      "StartValidationRequest": {
+        "additionalProperties": false,
+        "description": "A check the project's policy declares, to run at `head`, the delivered\ncommit, with the checks, fixtures, and runner taken from `base`. Each is\na commit's full id, never a name that moves.",
+        "properties": {
+          "base": {
+            "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$",
+            "title": "Base",
+            "type": "string"
+          },
+          "check": {
+            "pattern": "^[a-z][a-z0-9_.-]{0,99}$",
+            "title": "Check",
+            "type": "string"
+          },
+          "head": {
+            "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$",
+            "title": "Head",
+            "type": "string"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "check",
+          "head",
+          "base"
+        ],
+        "title": "StartValidationRequest",
+        "type": "object"
+      },
       "StepPageView": {
         "description": "One page of a session's history, after the seq the request named.\nWith `has_more`, the next page starts after the last step's seq.",
         "properties": {
@@ -8702,6 +8736,114 @@
         ],
         "title": "ValidationError",
         "type": "object"
+      },
+      "ValidationSessionView": {
+        "description": "A validation session: what it runs, at which commit and from which,\nand where it stands. Once its run is recorded, `passed` is the verdict\nand `run` is that run; both are null while it waits. The run passes\nwhen it passed, at least one of its cases did, and what served it meets\nthe strictest grade the project's policy asks of the check, a twin when\nno requirement names it: a run on a double, or with a dependency that\nwas not there, never passes. `reason` says why it did not pass, and is\nnull otherwise.",
+        "properties": {
+          "base": {
+            "title": "Base",
+            "type": "string"
+          },
+          "check": {
+            "title": "Check",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "format": "uuid",
+            "title": "Created By",
+            "type": "string"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "head": {
+            "title": "Head",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "passed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Passed"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExecutionView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/ValidationStatus"
+          }
+        },
+        "required": [
+          "id",
+          "created_at",
+          "created_by",
+          "project_id",
+          "check",
+          "head",
+          "base",
+          "status",
+          "finished_at",
+          "passed",
+          "reason",
+          "run"
+        ],
+        "title": "ValidationSessionView",
+        "type": "object"
+      },
+      "ValidationStatus": {
+        "enum": [
+          "queued",
+          "finished"
+        ],
+        "title": "ValidationStatus",
+        "type": "string"
       },
       "ValidationView": {
         "description": "One pass of the policy's checks on a fresh executor: the version it\nran at and the version its checks came from, who ran it, the hash of\nthe results it wrote, and its runs.",
@@ -24933,6 +25075,208 @@
         "summary": "List Users",
         "tags": [
           "tenancy"
+        ]
+      }
+    },
+    "/v1/validation-sessions": {
+      "post": {
+        "description": "A session queued for the platform's worker, which runs its check once.\n404 when the tenant holds no validation policy for the project; 422\nwhen the policy declares no such check.",
+        "operationId": "start_validation_v1_validation_sessions_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartValidationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationSessionView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Validation",
+        "tags": [
+          "platform_agents"
+        ]
+      }
+    },
+    "/v1/validation-sessions/{session_id}": {
+      "get": {
+        "description": "The session: `queued` while its check waits or runs, `finished` with\nits verdict and its run once the run is recorded.",
+        "operationId": "get_validation_v1_validation_sessions__session_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationSessionView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Validation",
+        "tags": [
+          "platform_agents"
         ]
       }
     },

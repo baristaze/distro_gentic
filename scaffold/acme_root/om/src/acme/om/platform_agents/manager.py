@@ -22,8 +22,12 @@ class PlatformAgentsManagerInterface(ABC):
     ) -> ValidationSession:
         """A validation session, and its work on the queue, in one write:
         the platform's worker claims it and runs the check
-        (`run_validation`). Requires the write permission. A start asked
-        again under the same id answers the session as stored."""
+        (`run_validation`). Requires the write permission. Refused before
+        anything is written when the tenant holds no validation policy for
+        its project (`NotFound`, as another tenant's project is), or the
+        policy declares no such check (`ValidationFailed`). A start asked
+        again under the same id, of a check still declared, answers the
+        session as stored."""
         ...
 
     @abstractmethod
