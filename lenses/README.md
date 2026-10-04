@@ -116,5 +116,5 @@ registers, and every identifier a lens quotes to the section it cites.
 That a lens stays inside its rule, stricter and never contrary, is held
 by review, not by a program.
 
-[e-lenses]: https://github.com/baristaze/agentic_core/blob/v0.1.0/lenses/README.md
-[g-lenses]: https://github.com/baristaze/swe_guidelines/blob/v0.48.0/lenses/README.md
+[e-lenses]: https://github.com/baristaze/agentic_core/blob/v0.4.0/lenses/README.md
+[g-lenses]: https://github.com/baristaze/swe_guidelines/blob/v0.50.0/lenses/README.md
