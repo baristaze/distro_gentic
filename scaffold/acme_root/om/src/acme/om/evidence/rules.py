@@ -409,7 +409,7 @@ def batch_refusal(
 def check_grade(policy: ValidationPolicy, check: str) -> Grade:
     """The grade a run of `check` passes at: the strictest grade among the
     policy's requirements that name it, and a twin when none does."""
-    grades = [requirement.grade for requirement in policy.requirements if requirement.check == check]
+    grades = [each.grade for each in policy.requirements if each.check == check]
     return max(grades, key=lambda grade: grade.floor.strength, default=Grade.TWIN)
 
 
