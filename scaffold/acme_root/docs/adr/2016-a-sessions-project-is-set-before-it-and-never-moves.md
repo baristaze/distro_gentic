@@ -69,5 +69,3 @@ nothing when it fires
 - A start that fails after its row is written leaves the row. A retry
   under the same id and project goes on from it; any other use of the
   id is refused.
-- The API's start and an automation's each name a project, and outside
-  `local` each refuses a session without one.

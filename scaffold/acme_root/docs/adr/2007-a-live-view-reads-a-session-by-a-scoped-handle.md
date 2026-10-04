@@ -50,8 +50,6 @@ every live read and says so at start.
 
 ## Consequences
 
-- A live view holds two connections: the channel, for what changed, and
-  a read of one session's content while it is open on screen.
 - A handle is a bearer: whoever holds it reads one session for at most
   five minutes. A member removed from the tenant keeps reading for what
   is left of a handle they hold, and no longer.

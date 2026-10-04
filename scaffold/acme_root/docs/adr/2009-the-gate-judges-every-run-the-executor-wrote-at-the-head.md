@@ -51,8 +51,6 @@ refuses a quiet budget gate.
 
 ## Consequences
 
-- A success is only as good as the runs behind it, and every one of them
-  is kept.
 - A policy change applies to the next judgment, not the next validation:
   a check the policy adds is unmet until a validation runs it.
 - A process that wires no work product counts no success: a delivered

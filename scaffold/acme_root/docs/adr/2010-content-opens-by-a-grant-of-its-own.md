@@ -41,8 +41,6 @@ records asks `read`. No call returns a value.
 
 ## Consequences
 
-- An operator who must read a customer's content asks for a grant in that
-  tenant, and the customer sees it, its end, and every opening.
 - A support agent's token reads shape in every tenant and content in
   none, whatever it is told.
 - A member manages the keys they sign in with and no secret of the

@@ -49,8 +49,7 @@ the repository, and the base are the platform's records.
 - A private repository's delivery is read once its project has a fetch
   credential, and reads as unavailable without one. The result gate
   then fails closed.
-- No credential a model could reach outlives its loop. A token taken
-  from a tool's call is refused once its loop's workspace goes.
+- No credential a model could reach outlives its loop.
 - The tenant's purge takes each value out of the store before its
   record, so no value is left behind a record that is gone.
 - A tenant with no forge connected opens no pull request: every write

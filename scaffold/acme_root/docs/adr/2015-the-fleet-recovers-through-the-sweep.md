@@ -4,15 +4,8 @@
 
 ## Context
 
-The spec's Failure at Fleet Scale has every session that meets a
-provider's outage signal park, naming the provider, and wakes the parked
-sessions, staggered, once the signal's retry time passes. Sessions die
-with their runners, and the platform notices through the guideline's
-sweep, which every cloud worker runs and no host does. The platform adds
-its duties to that sweep: a hold nobody settled settles at usage
-retrieved from the provider, else at its full amount, and is released
-only when the provider provably did not bill; and a session with a
-pending input and no queued loop is woken.
+The spec's Failure at Fleet Scale has the platform add its duties to the
+guideline's sweep, which every cloud worker runs and no host does.
 
 The engine settles a lost call's hold when the session's next run finds
 the call open. A hold whose run died before its request was written, or

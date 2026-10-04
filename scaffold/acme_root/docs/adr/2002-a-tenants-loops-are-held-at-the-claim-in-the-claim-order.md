@@ -43,8 +43,6 @@ is reserved.
 
 ## Consequences
 
-- Of two loops claimed together, the later in the claim order waits and
-  the earlier runs, so neither waits on the other forever.
 - A runner that lost its lease stops counting once the lease runs out,
   so a tenant at its limit recovers its loop at the next claim.
 - Two claims of one lane that commit together can each miss the other,

@@ -4,12 +4,12 @@
 
 ## Context
 
-The spec asks for three things. A trial count, or a sequential test
-valid under optional stopping, is declared before the trials.
-Acceptance judges the chain of evidence against a hidden suite, never
-the presence of files. Benchmarks keep scored runs against a baseline,
-pinned to what produced them, with candidate and baseline trials
-interleaved on one executor.
+The spec asks for a trial count, or a sequential test valid under
+optional stopping, declared before the trials; acceptance that judges
+the chain of evidence against a hidden suite, never the presence of
+files; and benchmarks that keep scored runs against a baseline, pinned
+to what produced them, with candidate and baseline trials interleaved on
+one executor.
 
 ## Decision
 

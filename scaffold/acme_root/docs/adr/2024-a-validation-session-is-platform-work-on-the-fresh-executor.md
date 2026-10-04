@@ -4,14 +4,10 @@
 
 ## Context
 
-The spec's Evidence has validation never run in the agent's workspace:
-it runs on a fresh executor, from the delivered commit, with the checks,
-fixtures, and runner taken from the protected source, under an
-environment the agent did not set, and the executor writes and hashes
-the results. Its Agents a Platform Ships has a validation session run a
-delivery's checks with no agent at all, on a fresh executor (a
-workspace nobody used, never the agent's), on the same queue, and write
-the same execution record.
+The spec's Evidence and Agents a Platform Ships have a validation
+session run a delivery's checks on a fresh executor, never in the
+agent's workspace, with no agent at all, and write the execution record
+every run is.
 
 The executor port has a loud null and nothing else, so no delivery's
 checks run and the result gate confirms no success. A validation session

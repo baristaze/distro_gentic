@@ -4,13 +4,10 @@
 
 ## Context
 
-The spec's Automations: a trigger, an event with filters or a schedule,
-leads to an action, and an automation runs as its creator or as the
-tenant's automation principal. The guideline keeps time without a
-scheduler: every worker sweeps on its own timer, idempotent and
-serialized by the database ([Maintenance Without a Scheduler][g-sweep]).
-So every worker ticks every tenant, and a schedule must not fire once
-per worker.
+The guideline keeps time without a scheduler: every worker sweeps on its
+own timer, idempotent and serialized by the database ([Maintenance
+Without a Scheduler][g-sweep]). So every worker ticks every tenant, and
+a schedule must not fire once per worker.
 
 A session's project keys its budget and its policies
 ([ADR 2016](2016-a-sessions-project-is-set-before-it-and-never-moves.md)),
