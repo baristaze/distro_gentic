@@ -895,7 +895,7 @@ provider calls and credentials:
 | `ops-host-idle` | supporter | Why a host takes no work: what it advertises against what its lane needs |
 | `ops-integration-silent` | investigator | Why an integration's events stopped: deliveries, signatures, dead letters |
 | `ops-provider-outage` | investigator | Which provider and credential fails, its outage signal, and how many sessions park on it |
-| `audit-model-spend` | investigator | Spend by matrix version and plan tier, cache hits and misses, the cost of rebuilt caches |
+| `audit-matrix-spend` | investigator | Spend by matrix version and plan tier, cache hits and misses, the cost of rebuilt caches |
 
 The operator dashboard, declared as code, adds the platform's signals,
 each with a bounded label: parks by reason and age, loop lanes' depth by
