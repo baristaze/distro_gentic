@@ -1706,6 +1706,21 @@ class StartUploadRequest(BaseModel):
     size_bytes: Annotated[int, Field(gt=0, title='Size Bytes')]
 
 
+class StartValidationRequest(BaseModel):
+    """
+    A check the project's policy declares, to run at `head`, the delivered
+    commit, with the checks, fixtures, and runner taken from `base`. Each is
+    a commit's full id, never a name that moves.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    base: Annotated[str, Field(pattern='^([0-9a-f]{40}|[0-9a-f]{64})$', title='Base')]
+    check: Annotated[str, Field(pattern='^[a-z][a-z0-9_.-]{0,99}$', title='Check')]
+    head: Annotated[str, Field(pattern='^([0-9a-f]{40}|[0-9a-f]{64})$', title='Head')]
+    project_id: Annotated[UUID, Field(title='Project Id')]
+
+
 class StepType(StrEnum):
     """
     What a step records. The type answers questions, so no caller
@@ -1883,6 +1898,11 @@ class ValidationError(BaseModel):
     loc: Annotated[list[str | int], Field(title='Location')]
     msg: Annotated[str, Field(title='Message')]
     type: Annotated[str, Field(title='Error Type')]
+
+
+class ValidationStatus(StrEnum):
+    queued = 'queued'
+    finished = 'finished'
 
 
 class ValidationView(BaseModel):
@@ -2932,6 +2952,26 @@ class UserPageView(BaseModel):
     """
     items: Annotated[list[UserView], Field(title='Items')]
     next_cursor: Annotated[str | None, Field(title='Next Cursor')]
+
+
+class ValidationSessionView(BaseModel):
+    """
+    A validation session: what it runs, at which commit and from which,
+    and where it stands. Once its run is recorded, `passed` is the verdict
+    (the run passed, and at least one of its cases did) and `run` is that
+    run; both are null while it waits.
+    """
+    base: Annotated[str, Field(title='Base')]
+    check: Annotated[str, Field(title='Check')]
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    created_by: Annotated[UUID, Field(title='Created By')]
+    finished_at: Annotated[AwareDatetime | None, Field(title='Finished At')]
+    head: Annotated[str, Field(title='Head')]
+    id: Annotated[UUID, Field(title='Id')]
+    passed: Annotated[bool | None, Field(title='Passed')]
+    project_id: Annotated[UUID, Field(title='Project Id')]
+    run: ExecutionView | None
+    status: ValidationStatus
 
 
 class AgentSessionPageView(BaseModel):
