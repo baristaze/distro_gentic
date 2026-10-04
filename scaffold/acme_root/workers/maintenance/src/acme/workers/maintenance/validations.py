@@ -21,7 +21,8 @@ log = logging.getLogger(__name__)
 
 
 class ValidationHandlerImpl(WorkHandlerInterface):
-    """A validation session's check: run once, and the session finished."""
+    """A validation session's check: run (its declared trials when rated),
+    and the session finished."""
 
     REQUIRES: ClassVar[tuple[Permission, ...]] = (Permission.WRITE,)
     """`run_validation` writes the session's validation and finishes it."""

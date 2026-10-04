@@ -39,9 +39,10 @@ class PlatformAgentsManagerInterface(ABC):
     @abstractmethod
     async def run_validation(self, ctx: TenantContext, session_id: UUID) -> ValidationSession:
         """Platform-internal, the work its start asked for: the session's
-        check run once on a fresh executor, through the evidence namespace,
-        at its head with the checks, fixtures, and runner from its base, and
-        the session finished with the execution record that run wrote. A
+        check run on a fresh executor, through the evidence namespace, at
+        its head with the checks, fixtures, and runner from its base (once,
+        or its declared trials when a requirement rates it), and the session
+        finished with the execution record its last run wrote. A
         finished session runs nothing. Asked again after the run was kept,
         it runs nothing more and finishes with that run."""
         ...

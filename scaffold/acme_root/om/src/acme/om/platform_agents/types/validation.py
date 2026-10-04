@@ -51,7 +51,8 @@ class ValidationSession(Identifiable, Trackable):
     head: str = Field(pattern=COMMIT)
     base: str = Field(pattern=COMMIT)
     status: ValidationStatus = ValidationStatus.QUEUED
-    # The execution record of its run, once the run is recorded.
+    # The execution record of its run, once the run is recorded: a rated
+    # check's last trial, whose validation holds the whole batch.
     run_id: UUID | None = None
     finished_at: datetime | None = None
     # Every write after the create is a compare-and-set on it.

@@ -428,6 +428,24 @@ def run_refusal(record: ExecutionRecord, grade: Grade) -> str | None:
     return None
 
 
+def session_refusal(
+    policy: ValidationPolicy,
+    record: ExecutionRecord,
+    batch: Sequence[ExecutionRecord],
+    head: str,
+    order: Mapping[UUID, int],
+) -> str | None:
+    """Why a validation session's last run, `record`, leaves its check
+    unpassed. A check no requirement rates is that one run, read as
+    `run_refusal` reads it. A rated check is read as its requirements read
+    `batch`, the trials its validation ran, in `order`: one trial never
+    passes a rate declared over more, and a failed trial still counts."""
+    naming = [each for each in policy.requirements if each.check == record.check]
+    if all(each.rate is None for each in naming):
+        return run_refusal(record, check_grade(policy, record.check))
+    return "; ".join(unmet_requirements(naming, batch, head, order)) or None
+
+
 # Acceptance: the hidden suite.
 
 
