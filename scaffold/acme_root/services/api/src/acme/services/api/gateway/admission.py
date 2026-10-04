@@ -39,6 +39,17 @@ read the counter that says by how much. None of them does tenant work,
 liveness does no I/O at all, and readiness carries a deadline of its own. The
 paths are matched as they arrive, because routing has not run this far out."""
 
+STREAM_PATHS = frozenset({"/v1/hosts/me/control"})
+"""The long-lived HTTP streams, which admission lets through uncounted as it
+does a socket, and for the same reason: each is held open for as long as its
+subscriber wants it. A host holds its control stream (`realtime/control.py`)
+for a minute at a time and opens the next at once, so a fleet of hosts
+counted as reads would take every slot of the read lane and refuse every
+other read. The stream bounds itself instead: by its span, and by the
+credential it was opened with."""
+
+UNCOUNTED_PATHS = UNBOUNDED_PATHS | STREAM_PATHS
+
 DEADLINE_KEY = "deadline"
 """Where the admitted request's deadline rides in the scope's state, beside
 its request id, until the gateway mints the request stage from both."""
@@ -46,7 +57,7 @@ its request id, until the gateway mints the request stage from both."""
 
 def deadline_of(scope: Scope) -> datetime | None:
     """The deadline admission gave the request; None for what admission lets
-    through uncounted: a socket, and the operational routes."""
+    through uncounted: a socket, a stream, and the operational routes."""
     return scope.get("state", {}).get(DEADLINE_KEY)
 
 
@@ -80,9 +91,9 @@ class AdmissionMiddleware:
     A request it admits carries its deadline from there on.
     A count is a plain integer: one event loop owns it, and it is read and
     written with no await in between, so nothing interleaves. A socket is not
-    counted: it is held open for as long as its subscriber wants it, and a
-    bound on requests in flight that a long-lived connection can fill is not
-    a bound on requests."""
+    counted, nor is a long-lived HTTP stream: each is held open for as long as
+    its subscriber wants it, and a bound on requests in flight that a
+    long-lived connection can fill is not a bound on requests."""
 
     def __init__(
         self,
@@ -102,7 +113,7 @@ class AdmissionMiddleware:
         return self.reads if scope["method"] in READ_METHODS else self.writes
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or scope["path"] in UNBOUNDED_PATHS:
+        if scope["type"] != "http" or scope["path"] in UNCOUNTED_PATHS:
             await self.app(scope, receive, send)
             return
         lane = self.lane_of(scope)
