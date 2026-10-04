@@ -50,18 +50,19 @@ class AutomationActionInterface(ABC):
         in the concurrency."""
         ...
 
+    @abstractmethod
     async def check_writer(self, ctx: TenantContext, params: Platform) -> None:
         """Refuses the person writing an enabled automation of this kind,
         under `ctx`, their own context in person, with `params` already held
         to the kind's shape. A writer it refuses is told when the automation
         is written, not by a refused run at each firing: it raises
         `NotAuthorized` with the reason, which the create or the edit answers
-        as is, and any other `PlatformException` answers as itself. A
-        disabled automation is never asked about, so its writer can always
-        turn it off. The firing still runs `act` under the run's live
-        context, which refuses what changed since. Admits every writer the
-        platform admits unless the kind says otherwise."""
-        return None
+        as is, and any other `PlatformException` answers as itself. A kind
+        with no rule of its own returns, and admits every writer the platform
+        admits. A disabled automation is never asked about, so its writer can
+        always turn it off. The firing still runs `act` under the run's live
+        context, which refuses what changed since."""
+        ...
 
 
 class AutomationActions:

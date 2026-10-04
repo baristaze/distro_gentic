@@ -186,6 +186,9 @@ class SweepAction(AutomationActionInterface):
     async def ended(self, ctx: TenantContext, run: AutomationRun) -> RunOutcome | None:
         return None
 
+    async def check_writer(self, ctx: TenantContext, params: Platform) -> None:
+        return None
+
 
 def sweeping(managers: Callable[[], Managers]) -> tuple[AutomationActionInterface, ...]:
     return (SweepAction(),)

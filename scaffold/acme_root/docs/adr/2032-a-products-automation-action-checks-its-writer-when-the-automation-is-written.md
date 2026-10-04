@@ -20,8 +20,9 @@ gains `check_writer(ctx, params)`. The create and the edit of an
 automation of that kind call it after the params hold to the kind's
 shape, under the writer's own context, in person. A refusal answers as
 the kind raised it: `NotAuthorized` is a 403 with the kind's reason.
-By default the check admits every writer the platform admits, so a kind
-that has no rule of its own needs no change.
+Every kind declares it, as an interface's every operation is declared.
+A kind with no rule of its own returns, and admits every writer the
+platform admits.
 
 **It checks the writer, not whom the automation runs as.** The writer
 is the person who sets the work going, and the one who can fix a
@@ -40,6 +41,8 @@ live context, and its refusal still refuses the run.
 
 ## Consequences
 
+- A product's kind adds `check_writer` when its product takes this
+  release. One that returns keeps every writer it had.
 - The check runs once a write, under the writer's context. It reads
   only what that person may read.
 - An automation stored before its kind added a rule keeps firing until
