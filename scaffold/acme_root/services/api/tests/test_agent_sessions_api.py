@@ -23,6 +23,7 @@ from contracts.tools import Command
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.context import Role
+from acme.om.intake.tools import COMMENT
 from acme.om.tools.types.tool import ToolClass
 from acme.om.work.storage.impl.memory import WorkStorageMemoryImpl
 from acme.om.work.types.work_item import WorkKind
@@ -39,13 +40,16 @@ ASSISTANT = AgentKind(
 # call: it changes the tenant's configuration.
 CONFIGURER = ASSISTANT.model_copy(update={"name": "configurer", "tools": ("set_role",)})
 PRODUCT_TOOLS = (Command("set_role", authorization_class=ToolClass.CONFIGURATION),)
+# A kind that acts as the platform's account through the session runner's
+# `comment`, which the container's own catalog classes.
+COMMENTER = ASSISTANT.model_copy(update={"name": "commenter", "tools": (COMMENT,)})
 
 
 @pytest.fixture
 def container(tmp_path: Path) -> AppContainer:
     """The test container with the kinds the product runs and its tools."""
     return build_container(
-        tmp_path, agent_kinds=(ASSISTANT, CONFIGURER), tool_catalog=PRODUCT_TOOLS
+        tmp_path, agent_kinds=(ASSISTANT, CONFIGURER, COMMENTER), tool_catalog=PRODUCT_TOOLS
     )
 
 
@@ -102,6 +106,23 @@ async def test_a_session_is_started_spoken_to_steered_and_read(
     rest = await client.get(f"{path}/steps", headers=owner, params={"after_seq": 1})
     assert [s["type"] for s in rest.json()["items"]] == ["control"]
     assert rest.json()["has_more"] is False
+
+
+async def test_a_kind_that_names_the_comment_tool_starts_and_is_spoken_to(
+    client: httpx.AsyncClient, owner: dict[str, str]
+) -> None:
+    started = await client.post(
+        "/v1/agent-sessions",
+        headers=created(owner),
+        json={"kind": "commenter", "title": "the report", "project_id": PROJECT_ID},
+    )
+    assert started.status_code == 201, started.text
+    said = await client.post(
+        f"/v1/agent-sessions/{started.json()['id']}/messages",
+        headers=created(owner),
+        json={"text": "Say on the pull request that the fix is in."},
+    )
+    assert said.status_code == 201, said.text
 
 
 async def test_a_retried_send_is_one_step(client: httpx.AsyncClient, owner: dict[str, str]) -> None:
