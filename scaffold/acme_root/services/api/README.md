@@ -125,6 +125,12 @@ app, and `main.py` is the `acme-api` command: `serve`, `migrate`,
 - **Tool policy.** Any member reads the tenant's layer; an owner or an
   admin writes it whole on the version `If-Match` names.
   (`/v1/tools/policy`)
+- **Retention.** Any member reads the tenant's retention policy; an
+  owner or an admin writes it whole on the version `If-Match` names, the
+  first with none. An owner or an admin erases one session's content for
+  good: its key is revoked and destroyed, the audit holds it, and its
+  shape stays. (`/v1/retention/policy`,
+  `/v1/retention/sessions/{id}/erase`)
 - **Hosts.** An owner or an admin makes a host pool, under an
   Idempotency-Key, and issues a token that enrolls hosts into it, or a
   product's claimant kind the body names, shown once; lists a pool's

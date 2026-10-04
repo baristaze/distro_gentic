@@ -33,6 +33,7 @@ from acme.services.api.routers import (
     projects,
     provider_keys,
     relay,
+    retention,
     tenancy,
     tools,
     usage,
@@ -72,6 +73,9 @@ HOSTED: dict[str, tuple[APIRouter, ...]] = {
     "playbooks": (playbooks.router,),
     # The tenant's layer of tool policy.
     "tools": (tools.router,),
+    # How long the tenant keeps its sessions' content and shape, and one
+    # session's content erased before then.
+    "retention": (retention.router,),
     # What waits on a person, and their mark that they read it.
     "notifications": (notifications.router,),
     # A live read of a session by a scoped handle, and take control, a

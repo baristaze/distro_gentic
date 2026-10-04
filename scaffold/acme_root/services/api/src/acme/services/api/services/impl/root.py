@@ -53,6 +53,7 @@ from acme.services.api.services.impl.projects import ProjectsServiceImpl
 from acme.services.api.services.impl.provider_keys import ProviderKeysServiceImpl
 from acme.services.api.services.impl.realtime import RealtimeServiceImpl
 from acme.services.api.services.impl.relay import RelayServiceImpl
+from acme.services.api.services.impl.retention import RetentionServiceImpl
 from acme.services.api.services.impl.tenancy import TenancyServiceImpl
 from acme.services.api.services.impl.tools import ToolsServiceImpl
 from acme.services.api.services.impl.watch import WatchServiceImpl
@@ -65,6 +66,7 @@ from acme.services.api.services.notifications import NotificationsServiceInterfa
 from acme.services.api.services.playbooks import PlaybooksServiceInterface
 from acme.services.api.services.projects import ProjectsServiceInterface
 from acme.services.api.services.provider_keys import ProviderKeysServiceInterface
+from acme.services.api.services.retention import RetentionServiceInterface
 from acme.services.api.services.tools import ToolsServiceInterface
 
 
@@ -95,6 +97,7 @@ class ServicesImpl(ServicesInterface):
         knowledge: KnowledgeServiceInterface,
         playbooks: PlaybooksServiceInterface,
         tools: ToolsServiceInterface,
+        retention: RetentionServiceInterface,
     ) -> None:
         self._tenancy = tenancy
         self._admin = admin
@@ -120,6 +123,7 @@ class ServicesImpl(ServicesInterface):
         self._knowledge = knowledge
         self._playbooks = playbooks
         self._tools = tools
+        self._retention = retention
 
     def get_tenancy_service(self) -> TenancyServiceInterface:
         return self._tenancy
@@ -193,6 +197,9 @@ class ServicesImpl(ServicesInterface):
     def get_tools_service(self) -> ToolsServiceInterface:
         return self._tools
 
+    def get_retention_service(self) -> RetentionServiceInterface:
+        return self._retention
+
 
 def build_services(
     managers: Managers,
@@ -259,4 +266,5 @@ def build_services(
         knowledge=KnowledgeServiceImpl(knowledge),
         playbooks=PlaybooksServiceImpl(playbooks),
         tools=ToolsServiceImpl(managers.tools),
+        retention=RetentionServiceImpl(managers.retention),
     )

@@ -29,6 +29,7 @@ from acme.services.api.services import (
     ProviderKeysServiceInterface,
     RealtimeServiceInterface,
     RelayServiceInterface,
+    RetentionServiceInterface,
     ServicesInterface,
     TenancyServiceInterface,
     ToolsServiceInterface,
@@ -144,6 +145,10 @@ def tools_service(connection: HTTPConnection) -> ToolsServiceInterface:
     return services_of(connection).get_tools_service()
 
 
+def retention_service(connection: HTTPConnection) -> RetentionServiceInterface:
+    return services_of(connection).get_retention_service()
+
+
 TenancyService = Annotated[TenancyServiceInterface, Depends(tenancy_service)]
 AdminService = Annotated[AdminServiceInterface, Depends(admin_service)]
 EventsService = Annotated[EventsServiceInterface, Depends(events_service)]
@@ -168,3 +173,4 @@ ProjectsService = Annotated[ProjectsServiceInterface, Depends(projects_service)]
 KnowledgeService = Annotated[KnowledgeServiceInterface, Depends(knowledge_service)]
 PlaybooksService = Annotated[PlaybooksServiceInterface, Depends(playbooks_service)]
 ToolsService = Annotated[ToolsServiceInterface, Depends(tools_service)]
+RetentionService = Annotated[RetentionServiceInterface, Depends(retention_service)]
