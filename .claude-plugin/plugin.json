@@ -1,6 +1,6 @@
 {
   "name": "distro-gentic",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "The agentic platform's spec with lens-based review skills and scaffolding skills, in the shape of the Software Design and Architecture Guidelines",
   "author": {
     "name": "Baris Taze",
