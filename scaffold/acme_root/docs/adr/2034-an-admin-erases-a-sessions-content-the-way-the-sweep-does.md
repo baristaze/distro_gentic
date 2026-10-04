@@ -43,6 +43,11 @@ write carries no `If-Match`. Each write after names the version it read.
 A first write that meets a declared policy is refused, so no write
 replaces one its author never read.
 
+**A lifetime is at most a century.** A lifetime is added to a session's
+creation date, and a date ends in year 9999. The route refuses a content
+or shape lifetime past 36500 days with a 422 that names the field, so no
+tenant's policy makes the sweep fail for every tenant.
+
 **No hard delete on demand.** A session's rows go only by the engine's
 purge, one retention after its shape's lifetime
 ([ADR 1010](1010-a-history-is-purged-by-a-login-of-its-own.md)). A tenant

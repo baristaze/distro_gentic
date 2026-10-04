@@ -6977,7 +6977,7 @@
       },
       "RetentionPolicyBody": {
         "additionalProperties": false,
-        "description": "How long what a session says is kept, and its shape, each counted\nfrom the session's creation, none for no end; where its content may\nrest, sealed when left out; whether nothing it says may be kept\nanywhere; and its region. A field left out narrows nothing. A content\nthat outlives its shape, and zero retention that keeps content at\nrest, are refused.",
+        "description": "How long what a session says is kept, and its shape, each counted\nfrom the session's creation, none for no end; where its content may\nrest, sealed when left out; whether nothing it says may be kept\nanywhere; and its region. A field left out narrows nothing. A lifetime\npast a century, a content that outlives its shape, and zero retention\nthat keeps content at rest are refused.",
         "properties": {
           "content_lifetime": {
             "anyOf": [

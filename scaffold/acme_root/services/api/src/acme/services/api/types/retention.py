@@ -11,17 +11,22 @@ from acme.om.privacy.types.session_privacy import StorageMode
 from acme.om.retention.types.policy import MAX_PROJECTS, REGION
 from acme.services.api.types.common import RequestBody, View
 
+# The longest lifetime a tenant writes: a century. A lifetime is added to a
+# session's creation date, and a date has a last year; a policy that
+# overflows it would stop the sweep that holds every tenant to its own.
+MAX_LIFETIME = timedelta(days=36500)
+
 
 class RetentionPolicyBody(RequestBody):
     """How long what a session says is kept, and its shape, each counted
     from the session's creation, none for no end; where its content may
     rest, sealed when left out; whether nothing it says may be kept
-    anywhere; and its region. A field left out narrows nothing. A content
-    that outlives its shape, and zero retention that keeps content at
-    rest, are refused."""
+    anywhere; and its region. A field left out narrows nothing. A lifetime
+    past a century, a content that outlives its shape, and zero retention
+    that keeps content at rest are refused."""
 
-    content_lifetime: timedelta | None = Field(default=None, gt=timedelta(0))
-    shape_lifetime: timedelta | None = Field(default=None, gt=timedelta(0))
+    content_lifetime: timedelta | None = Field(default=None, gt=timedelta(0), le=MAX_LIFETIME)
+    shape_lifetime: timedelta | None = Field(default=None, gt=timedelta(0), le=MAX_LIFETIME)
     storage_mode: StorageMode | None = None
     zero_retention: bool = False
     region: str | None = Field(default=None, pattern=REGION)

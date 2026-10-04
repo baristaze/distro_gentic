@@ -6137,9 +6137,9 @@ export interface components {
          * @description How long what a session says is kept, and its shape, each counted
          *     from the session's creation, none for no end; where its content may
          *     rest, sealed when left out; whether nothing it says may be kept
-         *     anywhere; and its region. A field left out narrows nothing. A content
-         *     that outlives its shape, and zero retention that keeps content at
-         *     rest, are refused.
+         *     anywhere; and its region. A field left out narrows nothing. A lifetime
+         *     past a century, a content that outlives its shape, and zero retention
+         *     that keeps content at rest are refused.
          */
         RetentionPolicyBody: {
             /** Content Lifetime */
