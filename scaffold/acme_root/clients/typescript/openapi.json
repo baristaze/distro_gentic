@@ -4429,6 +4429,36 @@
         "type": "object"
       },
       "JsonValue": {},
+      "KeyDestructionView": {
+        "description": "A session's key destroyed, as the tenant's key service reported it.",
+        "properties": {
+          "destroyed_at": {
+            "format": "date-time",
+            "title": "Destroyed At",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "receipt": {
+            "title": "Receipt",
+            "type": "string"
+          },
+          "service": {
+            "title": "Service",
+            "type": "string"
+          }
+        },
+        "required": [
+          "service",
+          "key",
+          "destroyed_at",
+          "receipt"
+        ],
+        "title": "KeyDestructionView",
+        "type": "object"
+      },
       "KeyStatus": {
         "enum": [
           "live",
@@ -6575,6 +6605,44 @@
         "title": "PreparedView",
         "type": "object"
       },
+      "ProjectRetentionBody": {
+        "additionalProperties": false,
+        "description": "What one project of the tenant narrows; it never widens the tenant's.",
+        "properties": {
+          "policy": {
+            "$ref": "#/components/schemas/RetentionPolicyBody"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "policy"
+        ],
+        "title": "ProjectRetentionBody",
+        "type": "object"
+      },
+      "ProjectRetentionView": {
+        "properties": {
+          "policy": {
+            "$ref": "#/components/schemas/RetentionPolicyView"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "policy"
+        ],
+        "title": "ProjectRetentionView",
+        "type": "object"
+      },
       "ProjectView": {
         "properties": {
           "created_at": {
@@ -6907,6 +6975,171 @@
         "title": "ResultRequest",
         "type": "object"
       },
+      "RetentionPolicyBody": {
+        "additionalProperties": false,
+        "description": "How long what a session says is kept, and its shape, each counted\nfrom the session's creation, none for no end; where its content may\nrest; whether nothing it says may be kept anywhere; and its region. A\nfield left out narrows nothing. A content that outlives its shape, and\nzero retention that keeps content at rest, are refused.",
+        "properties": {
+          "content_lifetime": {
+            "anyOf": [
+              {
+                "format": "duration",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Lifetime"
+          },
+          "region": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z0-9][a-z0-9-]{0,31}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Region"
+          },
+          "shape_lifetime": {
+            "anyOf": [
+              {
+                "format": "duration",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shape Lifetime"
+          },
+          "storage_mode": {
+            "$ref": "#/components/schemas/StorageMode",
+            "default": "sealed"
+          },
+          "zero_retention": {
+            "default": false,
+            "title": "Zero Retention",
+            "type": "boolean"
+          }
+        },
+        "title": "RetentionPolicyBody",
+        "type": "object"
+      },
+      "RetentionPolicyView": {
+        "properties": {
+          "content_lifetime": {
+            "anyOf": [
+              {
+                "format": "duration",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Lifetime"
+          },
+          "region": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Region"
+          },
+          "shape_lifetime": {
+            "anyOf": [
+              {
+                "format": "duration",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shape Lifetime"
+          },
+          "storage_mode": {
+            "$ref": "#/components/schemas/StorageMode"
+          },
+          "zero_retention": {
+            "title": "Zero Retention",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "content_lifetime",
+          "shape_lifetime",
+          "storage_mode",
+          "zero_retention",
+          "region"
+        ],
+        "title": "RetentionPolicyView",
+        "type": "object"
+      },
+      "RetentionRequest": {
+        "additionalProperties": false,
+        "description": "The tenant's whole policy, written over the version `If-Match` names,\nor, with no `If-Match`, as the tenant's first.",
+        "properties": {
+          "policy": {
+            "$ref": "#/components/schemas/RetentionPolicyBody"
+          },
+          "projects": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectRetentionBody"
+            },
+            "maxItems": 500,
+            "title": "Projects",
+            "type": "array"
+          }
+        },
+        "title": "RetentionRequest",
+        "type": "object"
+      },
+      "RetentionView": {
+        "description": "The tenant's policy; version 0, the loosest, until its first write.",
+        "properties": {
+          "policy": {
+            "$ref": "#/components/schemas/RetentionPolicyView"
+          },
+          "projects": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectRetentionView"
+            },
+            "title": "Projects",
+            "type": "array"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "updated_by": {
+            "format": "uuid",
+            "title": "Updated By",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "policy",
+          "projects",
+          "version",
+          "updated_at",
+          "updated_by"
+        ],
+        "title": "RetentionView",
+        "type": "object"
+      },
       "RetireRequest": {
         "additionalProperties": false,
         "description": "A model its provider retired, by name, as a fill names it.",
@@ -7092,6 +7325,101 @@
         ],
         "title": "SessionControl",
         "type": "string"
+      },
+      "SessionRetentionView": {
+        "description": "One session's snapshot: the policy it took, when its content and its\nshape expire, and when each did. `destruction` is the key service's\nreport of the key it destroyed, none when the service holds the tenant's\nkey alone and the platform's revocation is the destruction.",
+        "properties": {
+          "content_expired_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Expired At"
+          },
+          "content_expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Expires At"
+          },
+          "destruction": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/KeyDestructionView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "policy": {
+            "$ref": "#/components/schemas/RetentionPolicyView"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "shape_expired_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shape Expired At"
+          },
+          "shape_expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shape Expires At"
+          }
+        },
+        "required": [
+          "session_id",
+          "project_id",
+          "policy",
+          "content_expires_at",
+          "shape_expires_at",
+          "content_expired_at",
+          "destruction",
+          "shape_expired_at"
+        ],
+        "title": "SessionRetentionView",
+        "type": "object"
       },
       "SessionStandingView": {
         "description": "Why a session is or is not moving. `changed_at` is its last change:\nwhen it parked, for a parked one. `pool_id` null is the cloud, where\n`hosts_online` is null; `share_set` false is the default share.",
@@ -8013,6 +8341,15 @@
           "pause"
         ],
         "title": "StopReason",
+        "type": "string"
+      },
+      "StorageMode": {
+        "description": "Where a session's content lives.",
+        "enum": [
+          "sealed",
+          "memory_only"
+        ],
+        "title": "StorageMode",
         "type": "string"
       },
       "StorageUsageView": {
@@ -24344,6 +24681,287 @@
         "summary": "Mint Ticket",
         "tags": [
           "realtime"
+        ]
+      }
+    },
+    "/v1/retention/policy": {
+      "get": {
+        "operationId": "get_policy_v1_retention_policy_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetentionView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Policy",
+        "tags": [
+          "retention"
+        ]
+      },
+      "put": {
+        "description": "The policy as written, on the version `If-Match` names; with no\n`If-Match`, the tenant's first. `412 precondition_failed` when the\npolicy moved, or when a first meets one declared. Sessions created from\nnow on take it; existing ones take what it tightens at the next sweep,\nand nothing it loosens.",
+        "operationId": "write_policy_v1_retention_policy_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "description": "The version the caller read, as an entity tag: `\"3\"`. 412 `precondition_failed` when the record changed since.",
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The version the caller read, as an entity tag: `\"3\"`. 412 `precondition_failed` when the record changed since.",
+              "title": "If-Match"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetentionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetentionView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Write Policy",
+        "tags": [
+          "retention"
+        ]
+      }
+    },
+    "/v1/retention/sessions/{session_id}/erase": {
+      "post": {
+        "description": "Erases what the session said, for good: its key is revoked and\ndestroyed, and the audit holds the destruction. Its steps keep their\nplace, type, and shape, and read as saying nothing; the session takes no\ncontent again. A session marked deleted is erased too. Once: a second\ncall answers as the first left it. `404 not_found` for a session the\ntenant does not hold, which is how another tenant's reads.",
+        "operationId": "erase_content_v1_retention_sessions__session_id__erase_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionRetentionView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Erase Content",
+        "tags": [
+          "retention"
         ]
       }
     },
