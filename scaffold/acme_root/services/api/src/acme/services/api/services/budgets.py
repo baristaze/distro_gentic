@@ -1,14 +1,34 @@
-"""The budgets service: read a tenant's budget, set its amount on the
-version the caller read, and read the tenant's usage across its budgets."""
+"""The budgets service: set a tenant's budget, list and read its budgets,
+set one's amount on the version the caller read, and read the tenant's
+usage across its budgets."""
 
 from abc import ABC, abstractmethod
 from uuid import UUID
 
 from acme.om.context import TenantContext
-from acme.services.api.types.budgets import AmountRequest, BudgetView, UsagePageView
+from acme.services.api.types.budgets import (
+    AmountRequest,
+    BudgetView,
+    CreateBudgetRequest,
+    UsagePageView,
+)
 
 
 class BudgetsServiceInterface(ABC):
+    @abstractmethod
+    async def create_budget(
+        self, ctx: TenantContext, body: CreateBudgetRequest, budget_id: UUID
+    ) -> BudgetView:
+        """The budget under the id the edge gives it; a retry under that id
+        answers the budget as stored. A tenant key that names another tenant,
+        or a window or an amount its rules refuse, is `ValidationFailed`."""
+        ...
+
+    @abstractmethod
+    async def list_budgets(
+        self, ctx: TenantContext, after: UUID | None, limit: int
+    ) -> list[BudgetView]: ...
+
     @abstractmethod
     async def get_budget(self, ctx: TenantContext, budget_id: UUID) -> BudgetView: ...
 
