@@ -36,6 +36,7 @@ from acme.services.api.routers import (
     tenancy,
     tools,
     usage,
+    validations,
     watch,
 )
 
@@ -51,6 +52,8 @@ HOSTED: dict[str, tuple[APIRouter, ...]] = {
     "agent_sessions": (agent_sessions.router, approvals.router),
     # What a session ran to show its work, and what it delivered.
     "evidence": (evidence.router,),
+    # A check of a project's policy run with no agent, as CI asks for one.
+    "platform_agents": (validations.router,),
     # A tenant's pools and hosts, and a host's own calls: enroll, rotate,
     # beat, and claim; and a product's claimant's, through the same path.
     "hosts": (hosts.router, claimants.router),
