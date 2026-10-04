@@ -1,6 +1,6 @@
 # ADR 2025: A product adds its own kinds through the registries the platform's go through
 
-**Status**: accepted (2026-10-03), amended by [ADR 2029](2029-a-products-claimant-enrolls-and-claims-the-way-a-host-does.md)
+**Status**: accepted (2026-10-03), amended by [ADR 2029](2029-a-products-claimant-enrolls-and-claims-the-way-a-host-does.md) and [ADR 2031](2031-a-product-adds-its-own-kind-of-automation-action.md)
 
 ## Context
 

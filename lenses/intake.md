@@ -139,8 +139,8 @@ evidence is EVD-03.)
 
 **Principle.** Automations turn events into bounded work. A trigger, an
 event with filters or a schedule, leads to an action: start a session,
-or message a standing session. An automation runs as its creator or as
-the tenant's automation principal.
+message a standing session, or a product's own action. An automation
+runs as its creator or as the tenant's automation principal.
 
 **Source.** Work In, Results Out, Automations.
 
@@ -159,8 +159,10 @@ the person whose event triggered it.
 a concurrency, and whether to queue when limited. It ignores the events
 its own sessions caused, unless it declares otherwise, and a chain of
 automations stops at a hop limit, so an agent's comment cannot start an
-endless chain. Every firing is a recorded run. Autonomy stops exactly
-where policy says: at an approval, a bound, or a limit.
+endless chain. Every firing is a recorded run, and the run of a
+product's action stays at work until its check says the work ended.
+Autonomy stops exactly where policy says: at an approval, a bound, or a
+limit.
 
 **Source.** Work In, Results Out, Automations; What Closes a Loop.
 
@@ -171,7 +173,8 @@ the record of each firing.
 **Violation.** An automation without a cost cap, a rate, or a
 concurrency, or one whose limits are not enforced; an automation that
 fires on its own sessions' events without declaring it; a chain with no
-hop count or no limit; a firing with no recorded run.
+hop count or no limit; a firing with no recorded run; a run of a
+product's action closed before its check says its work ended.
 
 **Severity.** high
 
