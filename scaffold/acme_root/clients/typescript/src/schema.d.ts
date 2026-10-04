@@ -2762,16 +2762,23 @@ export interface components {
         };
         /**
          * ActionBody
-         * @description Start a session of `agent_kind` titled `title` in the tenant's project
-         *     `project_id`, or send the brief to the standing session `session_id`.
-         *     The brief is the creator's word.
+         * @description `start_session`: start a session of `agent_kind` titled `title` in the
+         *     tenant's project `project_id`. `message_session`: send the brief to the
+         *     standing session `session_id`. The brief is the creator's word. Any
+         *     other kind is one the product declares, which takes its `params` and no
+         *     brief; a kind no product declares is refused.
          */
         ActionBody: {
             /** Agent Kind */
             agent_kind?: string | null;
             /** Brief */
-            brief: string;
-            kind: components["schemas"]["ActionKind"];
+            brief?: string | null;
+            /** Kind */
+            kind: string;
+            /** Params */
+            params?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
             /** Project Id */
             project_id?: string | null;
             /** Session Id */
@@ -2779,18 +2786,18 @@ export interface components {
             /** Title */
             title?: string | null;
         };
-        /**
-         * ActionKind
-         * @enum {string}
-         */
-        ActionKind: "start_session" | "message_session";
         /** ActionView */
         ActionView: {
             /** Agent Kind */
             agent_kind: string | null;
             /** Brief */
-            brief: string;
-            kind: components["schemas"]["ActionKind"];
+            brief: string | null;
+            /** Kind */
+            kind: string;
+            /** Params */
+            params: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
             /** Project Id */
             project_id: string | null;
             /** Session Id */
@@ -4841,6 +4848,7 @@ export interface components {
              */
             stream: string;
         };
+        JsonValue: unknown;
         /**
          * KeyStatus
          * @enum {string}

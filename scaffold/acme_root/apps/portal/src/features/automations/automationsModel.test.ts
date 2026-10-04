@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AutomationView } from "@acme/client";
-import { automationRequest, automationRow, draftOf, EMPTY_DRAFT, everyLine, limitsLine, principalRoles, secondsOf, spanLine, type AutomationDraft } from "./automationsModel";
+import { actionLine, automationRequest, automationRow, draftOf, EMPTY_DRAFT, everyLine, limitsLine, principalRoles, secondsOf, spanLine, type AutomationDraft } from "./automationsModel";
 
 const SESSION = "0b8e5d2a-1c3f-4e6a-9b7d-2f4c6e8a0b1c";
 const draft = (fields: Partial<AutomationDraft>): AutomationDraft => ({
@@ -18,7 +18,7 @@ const saved: AutomationView = {
   id: "a1",
   name: "Triage",
   trigger: { kind: "event", integrations: ["forge"], arrivals: ["comment"], effects: [], every: null },
-  action: { kind: "message_session", brief: "Look.", agent_kind: null, title: null, project_id: null, session_id: SESSION },
+  action: { kind: "message_session", brief: "Look.", agent_kind: null, title: null, project_id: null, session_id: SESSION, params: {} },
   limits: { cost_cap_micros: 3_000_000, run_cap_micros: 1_000_000, period: "PT1H", rate: 5, concurrency: 2, queue: true, queue_depth: 7, hop_limit: 2 },
   runs_as: "automation_principal",
   own_events: true,
@@ -84,7 +84,7 @@ describe("automationRequest", () => {
     expect(problem({ concurrency: "" })).toBe("Set the most runs at work at once, as a whole number above zero.");
   });
   it("edits a saved automation and keeps what the form does not show", () => {
-    const made = automationRequest(draftOf(saved), { kept: saved });
+    const made = automationRequest(draftOf(saved) ?? EMPTY_DRAFT, { kept: saved });
     expect(made).toEqual({
       request: {
         name: "Triage",
@@ -108,6 +108,12 @@ it("shows a row in words", () => {
     runsAs: "the automation principal",
     enabled: false,
   });
+});
+
+it("shows a product's own action by its kind, and offers no form to edit it", () => {
+  const product: AutomationView = { ...saved, action: { kind: "run_job", brief: null, agent_kind: null, title: null, project_id: null, session_id: null, params: { steps: 2 } } };
+  expect(actionLine(product.action, [])).toBe("run the product's action run_job");
+  expect(draftOf(product)).toBeNull();
 });
 
 it("offers the principal no role above the granter's own", () => {

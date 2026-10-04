@@ -7,7 +7,7 @@ import { useAutomation, useUpdateAutomation } from "../../queries/automations";
 import { useProjects } from "../../queries/projects";
 import { useMe, useUsers } from "../../queries/tenancy";
 import { projectChoice, projectRequired } from "../sessions/sessionsModel";
-import { actionLine, automationRequest, draftOf, limitsLine, RUNS_AS_LABEL, triggerLine, type AutomationDraft } from "./automationsModel";
+import { actionLine, automationRequest, draftOf, limitsLine, platformAction, RUNS_AS_LABEL, triggerLine, type AutomationDraft } from "./automationsModel";
 
 /** One automation: what fires it, what it does, its limits, and whose
  * authority it runs on; and the form to edit it, for a member who may
@@ -59,7 +59,8 @@ export function useAutomationVm(id: string) {
           updatedAt: view.updated_at,
         }
       : null,
-    mayWrite: me.data?.permissions.includes("write") ?? false,
+    // A product's own action is its product's to write, never this form's.
+    mayWrite: (me.data?.permissions.includes("write") ?? false) && (view ? platformAction(view.action.kind) : false),
     editing: draft !== null,
     edit: () => {
       if (!view) return;

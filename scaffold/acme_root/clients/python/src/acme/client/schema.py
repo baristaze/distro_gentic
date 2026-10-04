@@ -24,22 +24,12 @@ class AgentKind(RootModel[str]):
     root: Annotated[str, Field(max_length=200, min_length=1, title='Agent Kind')]
 
 
+class Brief(RootModel[str]):
+    root: Annotated[str, Field(max_length=20000, min_length=1, title='Brief')]
+
+
 class Title(RootModel[str]):
     root: Annotated[str, Field(max_length=200, min_length=1, title='Title')]
-
-
-class ActionKind(StrEnum):
-    start_session = 'start_session'
-    message_session = 'message_session'
-
-
-class ActionView(BaseModel):
-    agent_kind: Annotated[str | None, Field(title='Agent Kind')]
-    brief: Annotated[str, Field(title='Brief')]
-    kind: ActionKind
-    project_id: Annotated[UUID | None, Field(title='Project Id')]
-    session_id: Annotated[UUID | None, Field(title='Session Id')]
-    title: Annotated[str | None, Field(title='Title')]
 
 
 class Actor(StrEnum):
@@ -843,6 +833,10 @@ class ItemStreamView(BaseModel):
     entries: Annotated[list[EntryView], Field(title='Entries')]
     first: Annotated[int, Field(title='First')]
     stream: Annotated[UUID, Field(title='Stream')]
+
+
+class JsonValue(RootModel[Any]):
+    root: Any
 
 
 class KeyStatus(StrEnum):
@@ -1931,19 +1925,32 @@ class WorkStatus(StrEnum):
 
 class ActionBody(BaseModel):
     """
-    Start a session of `agent_kind` titled `title` in the tenant's project
-    `project_id`, or send the brief to the standing session `session_id`.
-    The brief is the creator's word.
+    `start_session`: start a session of `agent_kind` titled `title` in the
+    tenant's project `project_id`. `message_session`: send the brief to the
+    standing session `session_id`. The brief is the creator's word. Any
+    other kind is one the product declares, which takes its `params` and no
+    brief; a kind no product declares is refused.
     """
     model_config = ConfigDict(
         extra='forbid',
     )
     agent_kind: Annotated[AgentKind | None, Field(title='Agent Kind')] = None
-    brief: Annotated[str, Field(max_length=20000, min_length=1, title='Brief')]
-    kind: ActionKind
+    brief: Annotated[Brief | None, Field(title='Brief')] = None
+    kind: Annotated[str, Field(pattern='^[a-z][a-z0-9_]{0,63}$', title='Kind')]
+    params: Annotated[dict[str, JsonValue] | None, Field(title='Params')] = None
     project_id: Annotated[UUID | None, Field(title='Project Id')] = None
     session_id: Annotated[UUID | None, Field(title='Session Id')] = None
     title: Annotated[Title | None, Field(title='Title')] = None
+
+
+class ActionView(BaseModel):
+    agent_kind: Annotated[str | None, Field(title='Agent Kind')]
+    brief: Annotated[str | None, Field(title='Brief')]
+    kind: Annotated[str, Field(title='Kind')]
+    params: Annotated[dict[str, JsonValue], Field(title='Params')]
+    project_id: Annotated[UUID | None, Field(title='Project Id')]
+    session_id: Annotated[UUID | None, Field(title='Session Id')]
+    title: Annotated[str | None, Field(title='Title')]
 
 
 class AddApiKeyRequest(BaseModel):

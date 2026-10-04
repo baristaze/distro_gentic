@@ -29,7 +29,7 @@
       },
       "ActionBody": {
         "additionalProperties": false,
-        "description": "Start a session of `agent_kind` titled `title` in the tenant's project\n`project_id`, or send the brief to the standing session `session_id`.\nThe brief is the creator's word.",
+        "description": "`start_session`: start a session of `agent_kind` titled `title` in the\ntenant's project `project_id`. `message_session`: send the brief to the\nstanding session `session_id`. The brief is the creator's word. Any\nother kind is one the product declares, which takes its `params` and no\nbrief; a kind no product declares is refused.",
         "properties": {
           "agent_kind": {
             "anyOf": [
@@ -45,13 +45,29 @@
             "title": "Agent Kind"
           },
           "brief": {
-            "maxLength": 20000,
-            "minLength": 1,
-            "title": "Brief",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 20000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brief"
           },
           "kind": {
-            "$ref": "#/components/schemas/ActionKind"
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "title": "Kind",
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Params",
+            "type": "object"
           },
           "project_id": {
             "anyOf": [
@@ -92,19 +108,10 @@
           }
         },
         "required": [
-          "kind",
-          "brief"
+          "kind"
         ],
         "title": "ActionBody",
         "type": "object"
-      },
-      "ActionKind": {
-        "enum": [
-          "start_session",
-          "message_session"
-        ],
-        "title": "ActionKind",
-        "type": "string"
       },
       "ActionView": {
         "properties": {
@@ -120,11 +127,26 @@
             "title": "Agent Kind"
           },
           "brief": {
-            "title": "Brief",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brief"
           },
           "kind": {
-            "$ref": "#/components/schemas/ActionKind"
+            "title": "Kind",
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Params",
+            "type": "object"
           },
           "project_id": {
             "anyOf": [
@@ -168,7 +190,8 @@
           "agent_kind",
           "title",
           "project_id",
-          "session_id"
+          "session_id",
+          "params"
         ],
         "title": "ActionView",
         "type": "object"
@@ -4339,6 +4362,7 @@
         "title": "ItemStreamView",
         "type": "object"
       },
+      "JsonValue": {},
       "KeyStatus": {
         "enum": [
           "live",
