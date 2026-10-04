@@ -44,6 +44,7 @@ from acme.infra.workspaces import (
 from acme.infra.workspaces.host import WorkspaceHostImpl
 from acme.integrations.model_providers.calls import ModelCall, ModelReply
 from acme.om import base
+from acme.om.agent_sessions.limits import Limits
 from acme.om.agent_sessions.types.agent_session import SessionStatus
 from acme.om.agents.types.kind import (
     NO_WORKSPACE,
@@ -183,6 +184,7 @@ def test_every_shipped_agent_is_a_profile_that_sets_its_powers() -> None:
         ("engineer", 1),
         ("engineer", 2),
         ("engineer", 3),
+        ("engineer", 4),
         ("analysis", 1),
         ("analysis", 2),
         ("planner", 1),
@@ -209,6 +211,18 @@ def test_every_shipped_agent_is_a_profile_that_sets_its_powers() -> None:
         ANALYSIS_KIND.tools
     )
     assert {classes[tool] for tool in ANALYSIS_KIND.tools} == {"read", "execute"}
+
+
+def test_the_engineers_step_guard_is_sized_for_a_change_and_its_share_follows_it() -> None:
+    """An engineer a spawn or an automation starts parks for a person past the
+    calls a change takes, never at the engine's default guard, and its share
+    pays for its loops at that guard."""
+    assert ENGINEER_KIND.limits.step_guard == kinds.ENGINEER_STEP_GUARD
+    assert ENGINEER_KIND.limits.step_guard > Limits().step_guard
+    assert ENGINEER_KIND.share == ENGINEER_SHARE
+    assert ENGINEER_SHARE.cost_micros == (
+        kinds.ENGINEER_LOOPS * ENGINEER_KIND.limits.step_guard * kinds.CACHED_CALL_MICROS
+    )
 
 
 # A spawn starts every shipped kind that delivers, under its share.

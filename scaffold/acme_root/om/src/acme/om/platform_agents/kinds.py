@@ -23,6 +23,7 @@ A validation session is not here: it runs a check with no agent at all
 a person chooses by choosing the session they type in."""
 
 from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
+from acme.om.agent_sessions.limits import Limits
 from acme.om.agents.types.kind import NO_WORKSPACE, AgentKind, DoneRule, TreeLimits
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.budgets.types.amount import Amount
@@ -140,14 +141,43 @@ ENGINEER_V2 = AgentKind(
 """The engineer before it named a share: kept while a session may still run
 it."""
 
-ENGINEER_SHARE = Amount(cost_micros=50_000_000)
-"""What one engineer a spawn starts may spend over its life, in reference
-cost. It is a choice: about ten of its loops at the step guard over a
-cached window, and several of the main role's worst-case calls at a full
-window, so its first call is never refused. Its tree's budget still bounds
-it, and a share never raises that budget."""
+ENGINEER_V3 = ENGINEER_V2.model_copy(
+    update={"version": 3, "share": Amount(cost_micros=50_000_000)}
+)
+"""The engineer before its step guard was sized for a change: kept while a
+session may still run it."""
 
-ENGINEER_KIND = ENGINEER_V2.model_copy(update={"version": 3, "share": ENGINEER_SHARE})
+ENGINEER_STEP_GUARD = 200
+"""The model calls one engineer loop makes before it parks for a person. It
+is a choice, sized from the task its prompt sets: a baseline validation,
+the searches and reads that place the change, edits one place a call, the
+commands that run its tests, a commit, its pull request, the validation of
+its head, then the fixes that validation asks for and a second one. A
+modest change takes about a hundred calls; twice that, so one rarely
+parks, and still a guard."""
+
+CACHED_CALL_MICROS = 100_000
+"""What one call of the main role over a cached window costs at list price,
+as the engineer's share counts it: a choice."""
+
+ENGINEER_LOOPS = 3
+"""The loops at the step guard one engineer's share pays for: its first,
+and two more a follow-up asks for."""
+
+ENGINEER_SHARE = Amount(cost_micros=ENGINEER_LOOPS * ENGINEER_STEP_GUARD * CACHED_CALL_MICROS)
+"""What one engineer a spawn starts may spend over its life, in reference
+cost: its loops at the step guard over a cached window, which is also many
+of the main role's worst-case calls at a full window, so its first call is
+never refused. Its tree's budget still bounds it, and a share never raises
+that budget."""
+
+ENGINEER_KIND = ENGINEER_V3.model_copy(
+    update={
+        "version": 4,
+        "share": ENGINEER_SHARE,
+        "limits": Limits(step_guard=ENGINEER_STEP_GUARD),
+    }
+)
 """The engineer. It delivers through its result tool, so a product's kind
 may spawn it, and a spawn refuses a kind that names no share."""
 
@@ -226,6 +256,7 @@ PLATFORM_ASSISTANT_KIND = AgentKind(
 SHIPPED: tuple[AgentKind, ...] = (
     ENGINEER_V1,
     ENGINEER_V2,
+    ENGINEER_V3,
     ENGINEER_KIND,
     ANALYSIS_V1,
     ANALYSIS_KIND,
