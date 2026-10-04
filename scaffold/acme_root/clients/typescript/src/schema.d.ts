@@ -3662,11 +3662,7 @@ export interface components {
             cost_micros?: number | null;
             /** Scope Key */
             scope_key?: string | null;
-            /**
-             * Scope Kind
-             * @enum {string}
-             */
-            scope_kind: "person" | "project" | "tenant";
+            scope_kind: components["schemas"]["SettableScope"];
             /** Tokens */
             tokens?: number | null;
             window_kind: components["schemas"]["WindowKind"];
@@ -6222,6 +6218,14 @@ export interface components {
             /** Plan Tier */
             plan_tier: string;
         };
+        /**
+         * SettableScope
+         * @description The scopes a person sets a budget over: the ones every model call is
+         *     charged to and that outlive a session. A session's and a tree's budgets
+         *     are its own bounds, and no call is charged to a team.
+         * @enum {string}
+         */
+        SettableScope: "person" | "project" | "tenant";
         /**
          * ShapePageView
          * @description One page of a session's shape, after the seq the request named.

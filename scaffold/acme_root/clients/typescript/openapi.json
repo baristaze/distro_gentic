@@ -1943,13 +1943,7 @@
             "title": "Scope Key"
           },
           "scope_kind": {
-            "enum": [
-              "person",
-              "project",
-              "tenant"
-            ],
-            "title": "Scope Kind",
-            "type": "string"
+            "$ref": "#/components/schemas/SettableScope"
           },
           "tokens": {
             "anyOf": [
@@ -7300,6 +7294,16 @@
         ],
         "title": "SetShareRequest",
         "type": "object"
+      },
+      "SettableScope": {
+        "description": "The scopes a person sets a budget over: the ones every model call is\ncharged to and that outlive a session. A session's and a tree's budgets\nare its own bounds, and no call is charged to a team.",
+        "enum": [
+          "person",
+          "project",
+          "tenant"
+        ],
+        "title": "SettableScope",
+        "type": "string"
       },
       "ShapePageView": {
         "description": "One page of a session's shape, after the seq the request named.",

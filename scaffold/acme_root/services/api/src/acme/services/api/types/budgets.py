@@ -3,7 +3,8 @@ stored, the new amount a person sets on it, and the tenant's usage, each
 budget with what its current window spent."""
 
 from datetime import datetime
-from typing import Literal, Self
+from enum import StrEnum
+from typing import Self
 from uuid import UUID
 
 from pydantic import Field, model_validator
@@ -11,10 +12,15 @@ from pydantic import Field, model_validator
 from acme.om.budgets.types.budget import BudgetScopeKind, WindowKind
 from acme.services.api.types.common import RequestBody, View
 
-SettableScope = Literal[BudgetScopeKind.PERSON, BudgetScopeKind.PROJECT, BudgetScopeKind.TENANT]
-"""The scopes a person sets a budget over: the ones every model call is
-charged to and that outlive a session. A session's and a tree's budgets are
-its own bounds, and no call is charged to a team."""
+
+class SettableScope(StrEnum):
+    """The scopes a person sets a budget over: the ones every model call is
+    charged to and that outlive a session. A session's and a tree's budgets
+    are its own bounds, and no call is charged to a team."""
+
+    PERSON = BudgetScopeKind.PERSON.value
+    PROJECT = BudgetScopeKind.PROJECT.value
+    TENANT = BudgetScopeKind.TENANT.value
 
 
 class CreateBudgetRequest(RequestBody):
@@ -32,7 +38,7 @@ class CreateBudgetRequest(RequestBody):
 
     @model_validator(mode="after")
     def _a_keyed_scope_names_its_key(self) -> Self:
-        if self.scope_kind is not BudgetScopeKind.TENANT and self.scope_key is None:
+        if self.scope_kind is not SettableScope.TENANT and self.scope_key is None:
             raise ValueError("a person's or a project's budget names its id in scope_key")
         return self
 

@@ -14,6 +14,7 @@ from acme.services.api.types.budgets import (
     BudgetUsageView,
     BudgetView,
     CreateBudgetRequest,
+    SettableScope,
     UsagePageView,
 )
 from acme.services.api.types.common import clamp_limit
@@ -29,7 +30,7 @@ class BudgetsServiceImpl(BudgetsServiceInterface):
         self, ctx: TenantContext, body: CreateBudgetRequest, budget_id: UUID
     ) -> BudgetView:
         key = body.scope_key
-        if body.scope_kind is BudgetScopeKind.TENANT:
+        if body.scope_kind is SettableScope.TENANT:
             # The gate charges a tenant's scope under the tenant's own id, so
             # any other key is a budget nothing would ever be held to.
             if key not in (None, ctx.org_id):
@@ -44,7 +45,7 @@ class BudgetsServiceImpl(BudgetsServiceInterface):
                 "updated_at": now,
                 "created_by": ctx.user_id,
                 "updated_by": ctx.user_id,
-                "scope_kind": body.scope_kind,
+                "scope_kind": BudgetScopeKind(body.scope_kind),
                 "scope_key": str(key),
                 "window_kind": body.window_kind,
                 "window_seconds": body.window_seconds,

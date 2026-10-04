@@ -277,12 +277,6 @@ class ControlView(BaseModel):
     kind: ControlKind
 
 
-class ScopeKind(StrEnum):
-    person = 'person'
-    project = 'project'
-    tenant = 'tenant'
-
-
 class WindowSeconds(RootModel[int]):
     root: Annotated[int, Field(ge=1, title='Window Seconds')]
 
@@ -1570,6 +1564,17 @@ class SetShareRequest(BaseModel):
     plan_tier: Annotated[str, Field(pattern='^[a-z][a-z0-9-]{0,31}$', title='Plan Tier')]
 
 
+class SettableScope(StrEnum):
+    """
+    The scopes a person sets a budget over: the ones every model call is
+    charged to and that outlive a session. A session's and a tree's budgets
+    are its own bounds, and no call is charged to a team.
+    """
+    person = 'person'
+    project = 'project'
+    tenant = 'tenant'
+
+
 class ShareView(BaseModel):
     """
     A tenant's fair share as the operator wrote it, at its version.
@@ -2230,7 +2235,7 @@ class CreateBudgetRequest(BaseModel):
     )
     cost_micros: Annotated[CostMicros | None, Field(title='Cost Micros')] = None
     scope_key: Annotated[UUID | None, Field(title='Scope Key')] = None
-    scope_kind: Annotated[ScopeKind, Field(title='Scope Kind')]
+    scope_kind: SettableScope
     tokens: Annotated[Tokens | None, Field(title='Tokens')] = None
     window_kind: WindowKind
     window_seconds: Annotated[WindowSeconds | None, Field(title='Window Seconds')] = None
