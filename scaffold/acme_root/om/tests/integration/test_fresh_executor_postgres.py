@@ -19,6 +19,7 @@ from contracts.checks_repository import RUNNER, UNIT, OnDisk, Repository
 from contracts.evidence_storage import make_policy
 from contracts.loops import DELIVERY
 from contracts.project_storage import in_project
+from contracts.tools import stand_ins
 
 from acme.infra.impl.configured import InfraConfiguredImpl
 from acme.infra.impl.settings import InfraSettings
@@ -130,6 +131,7 @@ class Delivered:
             storage,
             self.infra,
             agent_kinds=(DELIVERY,),
+            tool_catalog=stand_ins(*DELIVERY.tools),
             environment="production",
             work_product=self.work,
             workspace_projects=OnDisk(self.repository),

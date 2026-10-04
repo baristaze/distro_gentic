@@ -17,6 +17,7 @@ from uuid import UUID
 import pytest
 from contracts.agent_session_storage import make_session
 from contracts.step_storage import make_message
+from contracts.tools import stand_ins
 from sqlalchemy import text
 
 from acme.infra.impl.local import InfraLocalImpl
@@ -32,6 +33,10 @@ from acme.om.storage.impl.pg_base import LoginSessions, set_scope
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.roles import DatabaseRole
 from acme.om.storage.settings import MigrationSettings
+
+# What `make_session` names, so the agents manager classes every tool it
+# offers.
+TOOLS = stand_ins("read_log", "run_tests")
 
 pytestmark = pytest.mark.integration
 
@@ -62,7 +67,12 @@ def keys() -> KeyServiceLocalImpl:
 
 @pytest.fixture
 def managers(storage: StoragePostgresImpl, keys: KeyServiceLocalImpl, tmp_path: Path) -> Managers:
-    return build_managers(storage, InfraLocalImpl(tmp_path), tenant_keys=TenantKeysImpl(keys))
+    return build_managers(
+        storage,
+        InfraLocalImpl(tmp_path),
+        tool_catalog=TOOLS,
+        tenant_keys=TenantKeysImpl(keys),
+    )
 
 
 def sweeper(
