@@ -22,11 +22,16 @@ MAX_TEXT = 2_000
 class Ask(Platform):
     """What a park asks of people: the one action that clears it, its link
     (empty while no route of the API serves the action), what the
-    notification says, and exactly who may take the action."""
+    notification says, and exactly who may take the action. `posted` is
+    what a post on an integration says instead, when it quotes the
+    session's content, such as an agent's question: that content is sealed
+    under the session's key and lives as long as its content may, so the
+    row keeps `text` alone, which quotes none of it."""
 
     action: Stored = Field(min_length=1, max_length=MAX_NAME)
     link: Stored = Field(default="", max_length=MAX_NAME)
     text: Stored = Field(min_length=1, max_length=MAX_TEXT)
+    posted: Stored | None = Field(default=None, min_length=1, max_length=MAX_TEXT)
     read_at: datetime | None = None
     recipients: tuple[UUID, ...]
 

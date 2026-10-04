@@ -55,6 +55,18 @@ class NotificationStoragePostgresImpl(PgStorageBase, NotificationStorageInterfac
         held = await self.read_notification(org_id, notification_id)
         return held if held is not None and held.recipient == recipient else None
 
+    async def purge_session(self, org_id: UUID, session_id: UUID, limit: int) -> int:
+        stmt = delete_batch(
+            Notifications,
+            Notifications.org_id == org_id,
+            Notifications.session_id == session_id,
+            limit=limit,
+        )
+        async with self._session_for(stmt, org_id=org_id) as session:
+            gone = deleted(await session.execute(stmt))
+            await session.commit()
+            return gone
+
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:
         stmt = delete_batch(Notifications, Notifications.org_id == org_id, limit=limit)
         async with self._session_for(stmt, org_id=org_id) as session:
