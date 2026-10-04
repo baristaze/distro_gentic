@@ -8,7 +8,7 @@ from enum import StrEnum
 from typing import ClassVar, Self
 from uuid import UUID
 
-from pydantic import Field, model_validator
+from pydantic import Field, SerializerFunctionWrapHandler, model_serializer, model_validator
 
 from acme.om.agents.types.request import MAX_TITLE
 from acme.om.attribution.types.principal import MAX_KIND
@@ -101,9 +101,19 @@ class Action(Platform):
             raise ValueError("a message names no project: its session keeps its own")
         return self
 
+    @model_serializer(mode="wrap")
+    def _params_only_when_set(self, handler: SerializerFunctionWrapHandler) -> dict[str, object]:
+        """A platform action's stored value carries no `params`, so the
+        previous release, which forbids a field it does not know, reads it
+        through a roll and after a downgrade."""
+        dumped: dict[str, object] = handler(self)
+        if not self.params:
+            dumped.pop("params", None)
+        return dumped
+
     def plain_params(self) -> dict[str, object]:
         """The params as plain JSON, as a product's kind reads them."""
-        return self.model_dump(mode="json", include={"params"})["params"]
+        return self.model_dump(mode="json", include={"params"}).get("params", {})
 
     def _a_products_action(self) -> Self:
         names = (self.brief, self.agent_kind, self.title, self.project_id, self.session_id)

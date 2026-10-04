@@ -205,3 +205,16 @@ def test_a_products_kind_registered_twice_is_refused_at_boot(tmp_path: Path) -> 
         wired(tmp_path, actions=declaring(JobAction(), JobAction()))
     with pytest.raises(ValueError, match="lower case"):
         wired(tmp_path, actions=declaring(JobAction("Run Job")))
+
+
+def test_a_platform_actions_stored_value_carries_no_params() -> None:
+    """The previous release forbids a field it does not know, so it reads
+    what this one writes for the platform's actions through a roll and
+    after a downgrade; a product's action keeps its params."""
+    platform = job_automation(
+        action=Action(kind=ActionKind.MESSAGE_SESSION, brief="Look.", session_id=new_id())
+    )
+    stored = platform.model_dump(mode="json")["action"]
+    assert "params" not in stored
+    assert Automation.model_validate(platform.model_dump(mode="json")) == platform
+    assert job_automation().model_dump(mode="json")["action"]["params"] == {"steps": 2}

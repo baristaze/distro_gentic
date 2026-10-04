@@ -1,8 +1,9 @@
 -- The previous release knows the platform's two actions alone, and reads
 -- an action of any other kind as malformed, so the automations of a
--- product's kind go, with their runs. The fence is lifted for this
--- transaction alone, since the migration login owns the tables and FORCE
--- binds the owner.
+-- product's kind go, with their runs. It forbids a field it does not know,
+-- so a platform action that carries `params` loses the key. The fence is
+-- lifted for this transaction alone, since the migration login owns the
+-- tables and FORCE binds the owner.
 
 ALTER TABLE core.automation_runs NO FORCE ROW LEVEL SECURITY;
 ALTER TABLE core.automations NO FORCE ROW LEVEL SECURITY;
@@ -12,6 +13,8 @@ DELETE FROM core.automation_runs AS r
     AND a.action ->> 'kind' NOT IN ('start_session', 'message_session');
 DELETE FROM core.automations
     WHERE action ->> 'kind' NOT IN ('start_session', 'message_session');
+UPDATE core.automations SET action = action - 'params'
+    WHERE action ? 'params';
 ALTER TABLE core.automation_runs FORCE ROW LEVEL SECURITY;
 ALTER TABLE core.automations FORCE ROW LEVEL SECURITY;
 

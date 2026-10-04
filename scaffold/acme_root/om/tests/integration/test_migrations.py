@@ -2,18 +2,23 @@
 revision of every role downgrades and upgrades again, the logins are safe to
 make twice, a migration behind a held lock gives up within its bound, a
 data migration passes the fence it runs under and fails when it misses rows,
-and a workspace's notices move to the one notice and back, every tenant's."""
+a workspace's notices move to the one notice and back, every tenant's, and
+a platform automation this release writes reads as the previous release's
+after a downgrade, which drops the automations of a product's kind."""
 
 import asyncio
 import time
 from uuid import UUID
 
 import pytest
+from contracts.automation_storage import make_automation
 from contracts.event_storage import make_event
 from contracts.workspace_storage import make_workspace
 from sqlalchemy import Connection, text
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from acme.om.automations.storage.impl.postgres import AutomationStoragePostgresImpl
+from acme.om.automations.types.automation import Action
 from acme.om.base import new_id
 from acme.om.events.storage.impl.postgres import EventStoragePostgresImpl
 from acme.om.storage.impl.pg_base import LoginSessions
@@ -208,4 +213,59 @@ async def test_a_workspaces_notices_move_to_the_one_notice_and_back_for_every_te
 
     for org, session_id in held.items():
         assert await notices_of(core, org, session_id) == ["newer"]
+    assert await check(DatabaseRole.CORE, core) == []
+
+
+PREVIOUS_ACTION = {"kind", "brief", "agent_kind", "title", "project_id", "session_id"}
+"""The fields of an action the release before product action kinds holds,
+which forbids any other."""
+
+
+async def actions_of(url: str, org: UUID) -> dict[UUID, dict[str, object]]:
+    """A tenant's stored actions by automation, as the migration login reads
+    them inside the tenant's fence."""
+    engine = create_async_engine(url)
+    try:
+        async with engine.begin() as connection:
+            await connection.exec_driver_sql(f"SET LOCAL app.org_id = '{org}'")
+            read = await connection.exec_driver_sql("SELECT id, action FROM core.automations")
+            return {row[0]: row[1] for row in read}
+    finally:
+        await engine.dispose()
+
+
+async def test_a_platform_automation_reads_as_the_previous_releases_after_a_downgrade(
+    pg_sessions: LoginSessions, migrated: dict[DatabaseRole, str]
+) -> None:
+    """This release writes a platform action with no `params`, and the
+    downgrade strips the key from one that carries it; an automation of a
+    product's kind goes."""
+    storage = AutomationStoragePostgresImpl(pg_sessions)
+    org = new_id()
+    written, carried = make_automation(), make_automation()
+    product = make_automation().model_copy(
+        update={"action": Action(kind="run_job", params={"steps": 2})}
+    )
+    for automation in (written, carried, product):
+        assert await storage.create_automation(org, automation, ())
+    core = migrated[DatabaseRole.CORE]
+    assert "params" not in (await actions_of(core, org))[written.id]
+    engine = create_async_engine(core)
+    try:
+        async with engine.begin() as connection:
+            await connection.exec_driver_sql(f"SET LOCAL app.org_id = '{org}'")
+            await connection.exec_driver_sql(
+                """UPDATE core.automations SET action = action || '{"params": {}}'"""
+                f" WHERE id = '{carried.id}'"
+            )
+    finally:
+        await engine.dispose()
+
+    await downgrade(DatabaseRole.CORE, core, "202610036100")
+    previous = await actions_of(core, org)
+    await upgrade(DatabaseRole.CORE, core)
+
+    assert set(previous) == {written.id, carried.id}
+    assert all(set(action) == PREVIOUS_ACTION for action in previous.values())
+    assert await storage.read_automation(org, written.id) == written
     assert await check(DatabaseRole.CORE, core) == []
