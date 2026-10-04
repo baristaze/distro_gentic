@@ -48,6 +48,10 @@ is made of](../../../../README.md).
     a loop still open is marked at a later pass.
   - What a pass cannot finish waits for its next attempt, out of every
     pass's read meanwhile, so no session holds back another.
+- **Erase a session's content.** The tenant's owners and admins erase
+  one session's content before its life ends, the way the sweep does at
+  its end: its key revoked and destroyed, the destruction audited, the
+  shape kept. The snapshot records it, so no sweep repeats it.
 - **Revoke the tenant's key.** The tenant does it in its own key service.
   From then on nothing of that tenant's content opens, and every other
   tenant reads and writes as before.
@@ -80,7 +84,8 @@ namespace; the sweep marks a session through the engine's own manager.
 (`KeyServiceByTenantImpl`), the tenants' services (`TenantKeysImpl`), and
 the local key service (`KeyServiceLocalImpl`), which the root wires in
 `local` alone. The pure rules are `rules.py`; the crossing check is
-`crossing.py`. ADR 2014 records the decisions.
+`crossing.py`. ADR 2014 records the decisions, and ADR 2034 the
+erasure.
 -->
 
 ## How another namespace composes it

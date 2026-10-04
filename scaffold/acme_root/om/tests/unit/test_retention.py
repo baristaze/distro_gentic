@@ -532,6 +532,70 @@ async def test_a_revoked_tenant_key_makes_its_content_unreadable_and_nothing_els
     assert await roots.said(other, fresh.id) == ["a new session"]
 
 
+# One session's content, erased before its life ends.
+
+
+async def test_an_admins_erasure_is_the_sweeps_destruction_audited_once_under_the_admin(
+    roots: Roots,
+) -> None:
+    """The admin's erasure destroys the key in the key service, revokes it
+    through the engine, and audits the service's report under the admin's
+    name; the shape stays, a second erasure changes nothing, and the sweep
+    at the content's end takes nothing up again."""
+    owner = await roots.tenant()
+    await roots.declare(owner, a_policy(WEEK, MONTH))
+    org = await roots.storage.get_tenancy_storage().read_org(owner.org_id)
+    assert org is not None
+    admin = context(Role.ADMIN, org)
+    session = await roots.session_saying(owner)
+
+    erased = await roots.managers.retention.erase_content(admin, session.id)
+
+    assert await roots.said(owner, session.id) == []
+    ring = await roots.storage.get_privacy_storage().read_keys(owner.org_id, session.id)
+    assert ring.keys and ring.revoked and all(key.is_destroyed() for key in ring.keys)
+    (report,) = roots.platform.log(owner.org_id)
+    assert erased.destruction == report and erased.content_expired_at is not None
+    events = await roots.managers.events.get_events(owner, 0, 100)
+    (entry,) = [event for event in events if event.kind == KEY_DESTROYED]
+    assert entry.actor_id == admin.user_id and entry.payload["receipt"] == report.receipt
+    assert await roots.managers.agent_sessions.get_session(owner, session.id), "the shape stays"
+    assert await roots.managers.retention.erase_content(owner, session.id) == erased
+    assert await roots.sweep(WEEK + DAY) == 0, "nothing is due"
+    assert len(await roots.audited(owner)) == 1
+    assert roots.platform.log(owner.org_id) == (report,)
+
+
+async def test_a_session_marked_deleted_is_erased_and_a_restore_reads_nothing(
+    roots: Roots,
+) -> None:
+    owner = await roots.tenant()
+    session = await roots.session_saying(owner)
+    await roots.managers.agent_sessions.delete_session(owner, session.id)
+
+    await roots.managers.retention.erase_content(owner, session.id)
+
+    await roots.managers.agent_sessions.restore_session(owner, session.id)
+    assert await roots.said(owner, session.id) == []
+
+
+async def test_a_member_erases_nothing_and_another_tenant_finds_no_session(
+    roots: Roots,
+) -> None:
+    owner, other = await roots.tenant(), await roots.tenant()
+    org = await roots.storage.get_tenancy_storage().read_org(owner.org_id)
+    assert org is not None
+    session = await roots.session_saying(owner)
+
+    with pytest.raises(NotAuthorized):
+        await roots.managers.retention.erase_content(context(Role.MEMBER, org), session.id)
+    with pytest.raises(NotFound):
+        await roots.managers.retention.erase_content(other, session.id)
+
+    assert await roots.said(owner, session.id) == [SAID]
+    assert roots.platform.log(owner.org_id) == () and await roots.audited(owner) == []
+
+
 # The policy's own rules.
 
 

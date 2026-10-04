@@ -24,6 +24,7 @@ from acme.services.api.services.projects import ProjectsServiceInterface
 from acme.services.api.services.provider_keys import ProviderKeysServiceInterface
 from acme.services.api.services.realtime import RealtimeServiceInterface
 from acme.services.api.services.relay import RelayServiceInterface
+from acme.services.api.services.retention import RetentionServiceInterface
 from acme.services.api.services.tenancy import TenancyServiceInterface
 from acme.services.api.services.tools import ToolsServiceInterface
 from acme.services.api.services.validations import ValidationsServiceInterface
@@ -51,6 +52,7 @@ __all__ = [
     "ProviderKeysServiceInterface",
     "RealtimeServiceInterface",
     "RelayServiceInterface",
+    "RetentionServiceInterface",
     "ServicesInterface",
     "TenancyServiceInterface",
     "ToolsServiceInterface",
@@ -132,6 +134,9 @@ class ServicesInterface(ABC):
 
     @abstractmethod
     def get_tools_service(self) -> ToolsServiceInterface: ...
+
+    @abstractmethod
+    def get_retention_service(self) -> RetentionServiceInterface: ...
 
     @abstractmethod
     def get_validations_service(self) -> ValidationsServiceInterface: ...

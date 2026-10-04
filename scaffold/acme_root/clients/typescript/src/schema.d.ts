@@ -462,47 +462,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/orgs/{org_id}/sessions/{session_id}/usage": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Session Usage
-         * @description What one session's model calls used and cost, in every storage mode
-         *     (ADR 1014). Requires the read permission.
-         *
-         *     The answer is a `SessionUsageView`: `session_id`; `items`, a page of the
-         *     session's usage records, oldest first, each with `id`, `created_at`,
-         *     `hold_id`, `session_id`, `tree_id`, `loop_id`, `step_id` (the call's
-         *     response step), `agent_kind`, `kind_version`, `role`, `provider`, `model`, `input_tokens`,
-         *     `cache_read_tokens`, `cache_write_tokens`, `output_tokens`,
-         *     `thinking_tokens`, `cost_micros` (reference cost in millionths, null when
-         *     no price applied), `latency_ms`, and `settled_whole` (a call whose usage
-         *     was never reported whole, counted at its whole hold, its tokens partial
-         *     at most); `next_cursor`, the next page's `cursor`, or null; `loops`, one
-         *     `{loop_id, rollup}` per loop in the order it first called;
-         *     `has_more_loops`; and `total`, the session's rollup. A rollup holds
-         *     `calls`, the five token classes, `cost_micros`, `unpriced` (calls no
-         *     price applied to, whose cost no figure holds), `settled_whole` (calls
-         *     counted at their whole hold), and `latency_ms`. The rollups cover every
-         *     record, whatever the page.
-         *
-         *     A record holds ids, counts, money, a duration, and labels, and no
-         *     content. `404 not_found` for an unknown org, and for a session the org
-         *     holds no record of, which is how another tenant's session reads.
-         */
-        get: operations["get_session_usage_v1_admin_orgs__org_id__sessions__session_id__usage_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/admin/orgs/{org_id}/share": {
         parameters: {
             query?: never;
@@ -2677,6 +2636,56 @@ export interface paths {
         put?: never;
         /** Mint Ticket */
         post: operations["mint_ticket_v1_realtime_tickets_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/retention/policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Policy */
+        get: operations["get_policy_v1_retention_policy_get"];
+        /**
+         * Write Policy
+         * @description The policy as written, on the version `If-Match` names; with no
+         *     `If-Match`, the tenant's first. `412 precondition_failed` when the
+         *     policy moved, or when a first meets one declared. Sessions created from
+         *     now on take it; existing ones take what it tightens at the next sweep,
+         *     and nothing it loosens.
+         */
+        put: operations["write_policy_v1_retention_policy_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/retention/sessions/{session_id}/erase": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Erase Content
+         * @description Erases what the session said, for good: its key is revoked and
+         *     destroyed, and the audit holds the destruction. Its steps keep their
+         *     place, type, and shape, and read as saying nothing; the session takes no
+         *     content again. A session marked deleted is erased too. Once: a second
+         *     call answers as the first left it. `404 not_found` for a session the
+         *     tenant does not hold, which is how another tenant's reads.
+         */
+        post: operations["erase_content_v1_retention_sessions__session_id__erase_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4999,6 +5008,25 @@ export interface components {
         };
         JsonValue: unknown;
         /**
+         * KeyDestructionView
+         * @description A session's key destroyed, as the tenant's key service reported it:
+         *     the service, the key's name in it, when by its clock, and its receipt.
+         *     No key material crosses.
+         */
+        KeyDestructionView: {
+            /**
+             * Destroyed At
+             * Format: date-time
+             */
+            destroyed_at: string;
+            /** Key Name */
+            key_name: string;
+            /** Receipt */
+            receipt: string;
+            /** Service */
+            service: string;
+        };
+        /**
          * KeyStatus
          * @enum {string}
          */
@@ -5331,15 +5359,6 @@ export interface components {
             /** Running Ahead */
             running_ahead: number;
             status: components["schemas"]["WorkStatus"];
-        };
-        /** LoopUsageView */
-        LoopUsageView: {
-            /**
-             * Loop Id
-             * Format: uuid
-             */
-            loop_id: string;
-            rollup: components["schemas"]["UsageRollupView"];
         };
         /**
          * MatrixKeyBody
@@ -5962,6 +5981,27 @@ export interface components {
             /** Held */
             held: boolean;
         };
+        /**
+         * ProjectRetentionBody
+         * @description What one project of the tenant narrows; it never widens the tenant's.
+         */
+        ProjectRetentionBody: {
+            policy: components["schemas"]["RetentionPolicyBody"];
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+        };
+        /** ProjectRetentionView */
+        ProjectRetentionView: {
+            policy: components["schemas"]["RetentionPolicyView"];
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+        };
         /** ProjectView */
         ProjectView: {
             /**
@@ -6136,6 +6176,72 @@ export interface components {
             data: string;
         };
         /**
+         * RetentionPolicyBody
+         * @description How long what a session says is kept, and its shape, each counted
+         *     from the session's creation, none for no end; where its content may
+         *     rest, sealed when left out; whether nothing it says may be kept
+         *     anywhere; and its region. A field left out narrows nothing. A lifetime
+         *     past a century, a content that outlives its shape, and zero retention
+         *     that keeps content at rest are refused.
+         */
+        RetentionPolicyBody: {
+            /** Content Lifetime */
+            content_lifetime?: string | null;
+            /** Region */
+            region?: string | null;
+            /** Shape Lifetime */
+            shape_lifetime?: string | null;
+            storage_mode?: components["schemas"]["StorageMode"] | null;
+            /**
+             * Zero Retention
+             * @default false
+             */
+            zero_retention: boolean;
+        };
+        /** RetentionPolicyView */
+        RetentionPolicyView: {
+            /** Content Lifetime */
+            content_lifetime: string | null;
+            /** Region */
+            region: string | null;
+            /** Shape Lifetime */
+            shape_lifetime: string | null;
+            storage_mode: components["schemas"]["StorageMode"];
+            /** Zero Retention */
+            zero_retention: boolean;
+        };
+        /**
+         * RetentionRequest
+         * @description The tenant's whole policy, written over the version `If-Match` names,
+         *     or, with no `If-Match`, as the tenant's first.
+         */
+        RetentionRequest: {
+            policy?: components["schemas"]["RetentionPolicyBody"];
+            /** Projects */
+            projects?: components["schemas"]["ProjectRetentionBody"][];
+        };
+        /**
+         * RetentionView
+         * @description The tenant's policy; version 0, the loosest, until its first write.
+         */
+        RetentionView: {
+            policy: components["schemas"]["RetentionPolicyView"];
+            /** Projects */
+            projects: components["schemas"]["ProjectRetentionView"][];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Updated By
+             * Format: uuid
+             */
+            updated_by: string;
+            /** Version */
+            version: number;
+        };
+        /**
          * RetireRequest
          * @description A model its provider retired, by name, as a fill names it.
          */
@@ -6239,25 +6345,30 @@ export interface components {
          */
         SessionControl: "pause" | "resume" | "cancel" | "interrupt" | "compact" | "unlock";
         /**
-         * SessionModelUsageView
-         * @description What a session's model calls used, as each provider reported it, per
-         *     model and in total.
+         * SessionRetentionView
+         * @description One session's snapshot: the policy it took, when its content and its
+         *     shape expire, and when each did. `destruction` is the key service's
+         *     report of the key it destroyed, none when the service holds the tenant's
+         *     key alone and the platform's revocation is the destruction.
          */
-        SessionModelUsageView: {
-            /** Cache Read */
-            cache_read: number;
-            /** Cache Write */
-            cache_write: number;
-            /** Calls */
-            calls: number;
-            /** Fills */
-            fills: components["schemas"]["FillUsageView"][];
-            /** Input */
-            input: number;
-            /** Output */
-            output: number;
-            /** Thinking */
-            thinking: number;
+        SessionRetentionView: {
+            /** Content Expired At */
+            content_expired_at: string | null;
+            /** Content Expires At */
+            content_expires_at: string | null;
+            destruction: components["schemas"]["KeyDestructionView"] | null;
+            policy: components["schemas"]["RetentionPolicyView"];
+            /** Project Id */
+            project_id: string | null;
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+            /** Shape Expired At */
+            shape_expired_at: string | null;
+            /** Shape Expires At */
+            shape_expires_at: string | null;
         };
         /**
          * SessionStandingView
@@ -6301,27 +6412,24 @@ export interface components {
         SessionStatus: "pending" | "running" | "parked" | "idle";
         /**
          * SessionUsageView
-         * @description A page of a session's usage records, oldest first, with the rollup of
-         *     each loop, in the order it first called, and of the whole session. The
-         *     rollups cover every record, whatever the page; `has_more_loops` says the
-         *     session ran more loops than `loops` holds. With `next_cursor`, the next
-         *     page of `items` starts there.
+         * @description What a session's model calls used, as each provider reported it, per
+         *     model and in total.
          */
         SessionUsageView: {
-            /** Has More Loops */
-            has_more_loops: boolean;
-            /** Items */
-            items: components["schemas"]["UsageRecordView"][];
-            /** Loops */
-            loops: components["schemas"]["LoopUsageView"][];
-            /** Next Cursor */
-            next_cursor: string | null;
-            /**
-             * Session Id
-             * Format: uuid
-             */
-            session_id: string;
-            total: components["schemas"]["UsageRollupView"];
+            /** Cache Read */
+            cache_read: number;
+            /** Cache Write */
+            cache_write: number;
+            /** Calls */
+            calls: number;
+            /** Fills */
+            fills: components["schemas"]["FillUsageView"][];
+            /** Input */
+            input: number;
+            /** Output */
+            output: number;
+            /** Thinking */
+            thinking: number;
         };
         /**
          * SessionView
@@ -6631,29 +6739,12 @@ export interface components {
          */
         StepType: "message" | "event" | "control" | "model_request" | "model_response" | "tool_request" | "tool_response" | "summary" | "parked" | "resumed" | "loop_ended" | "switched" | "environment_changed";
         /**
-         * StepUsageView
-         * @description What a model call used, as its provider reported it, in disjoint
-         *     classes, so no token is counted twice.
-         */
-        StepUsageView: {
-            /** Cache Read */
-            cache_read: number;
-            /** Cache Write */
-            cache_write: number;
-            /** Input */
-            input: number;
-            /** Output */
-            output: number;
-            /** Thinking */
-            thinking: number;
-        };
-        /**
          * StepView
          * @description One step of a session's history, in its order. `text` is what it
          *     says: a message's words, a model's answer, a tool's result. The rest is
-         *     its header's, by type: the tools a model response called, why it
-         *     stopped, and what it used; a tool call's tool and the class of its
-         *     failure; a control's command; a park; a loop's outcome.
+         *     its header's, by type: the tools a model response called and why it
+         *     stopped, a tool call's tool and the class of its failure, a control's
+         *     command, a park, a loop's outcome.
          */
         StepView: {
             actor: components["schemas"]["Actor"];
@@ -6691,7 +6782,6 @@ export interface components {
             /** Tools */
             tools: string[];
             type: components["schemas"]["StepType"];
-            usage: components["schemas"]["StepUsageView"] | null;
         };
         /**
          * StopKind
@@ -6707,6 +6797,12 @@ export interface components {
          * @enum {string}
          */
         StopReason: "end_turn" | "tool_use" | "output_limit" | "refusal" | "content_filter" | "pause";
+        /**
+         * StorageMode
+         * @description Where a session's content lives.
+         * @enum {string}
+         */
+        StorageMode: "sealed" | "memory_only";
         /**
          * StorageUsageView
          * @description What the org keeps in the store, counted from its files: the stored ones
@@ -6967,110 +7063,6 @@ export interface components {
             items: components["schemas"]["BudgetUsageView"][];
             /** Next Cursor */
             next_cursor: string | null;
-        };
-        /**
-         * UsageRecordView
-         * @description One model call a provider billed, as the ledger keeps it: ids, tokens
-         *     by disjoint class, reference cost in millionths (null when no price
-         *     applied), the provider's latency, and the labels of what served it. It
-         *     holds no content, so it reads the same in every storage mode. `step_id`
-         *     is the call's response step; `hold_id` its hold; `tree_id` the
-         *     session's tree; `kind_version` the agent kind's version the session
-         *     ran. `settled_whole` marks a call whose usage was never reported whole
-         *     (a broken stream, a lost run): its cost is its whole hold, and its
-         *     tokens are what a partial reply reported, else 0.
-         */
-        UsageRecordView: {
-            /** Agent Kind */
-            agent_kind: string;
-            /** Cache Read Tokens */
-            cache_read_tokens: number;
-            /** Cache Write Tokens */
-            cache_write_tokens: number;
-            /** Cost Micros */
-            cost_micros: number | null;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Hold Id
-             * Format: uuid
-             */
-            hold_id: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Input Tokens */
-            input_tokens: number;
-            /** Kind Version */
-            kind_version: number;
-            /** Latency Ms */
-            latency_ms: number;
-            /**
-             * Loop Id
-             * Format: uuid
-             */
-            loop_id: string;
-            /** Model */
-            model: string;
-            /** Output Tokens */
-            output_tokens: number;
-            /** Provider */
-            provider: string;
-            /** Role */
-            role: string;
-            /**
-             * Session Id
-             * Format: uuid
-             */
-            session_id: string;
-            /** Settled Whole */
-            settled_whole: boolean;
-            /**
-             * Step Id
-             * Format: uuid
-             */
-            step_id: string;
-            /** Thinking Tokens */
-            thinking_tokens: number;
-            /**
-             * Tree Id
-             * Format: uuid
-             */
-            tree_id: string;
-        };
-        /**
-         * UsageRollupView
-         * @description The sum of some records. `unpriced` counts the calls no price applied
-         *     to, whose cost is in no figure here: a rollup with any is a floor.
-         *     `settled_whole` counts the calls settled at their whole hold, whose cost
-         *     is in `cost_micros` at the hold, as the ledger counts it.
-         */
-        UsageRollupView: {
-            /** Cache Read Tokens */
-            cache_read_tokens: number;
-            /** Cache Write Tokens */
-            cache_write_tokens: number;
-            /** Calls */
-            calls: number;
-            /** Cost Micros */
-            cost_micros: number;
-            /** Input Tokens */
-            input_tokens: number;
-            /** Latency Ms */
-            latency_ms: number;
-            /** Output Tokens */
-            output_tokens: number;
-            /** Settled Whole */
-            settled_whole: number;
-            /** Thinking Tokens */
-            thinking_tokens: number;
-            /** Unpriced */
-            unpriced: number;
         };
         /**
          * UserPageView
@@ -8186,45 +8178,6 @@ export interface operations {
             };
         };
     };
-    get_session_usage_v1_admin_orgs__org_id__sessions__session_id__usage_get: {
-        parameters: {
-            query?: {
-                cursor?: string | null;
-                limit?: number;
-            };
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                org_id: string;
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SessionUsageView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     set_share_v1_admin_orgs__org_id__share_put: {
         parameters: {
             query?: never;
@@ -9243,7 +9196,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SessionModelUsageView"];
+                    "application/json": components["schemas"]["SessionUsageView"];
                 };
             };
             /** @description Validation Error */
@@ -13016,6 +12969,113 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IssuedTicketView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_policy_v1_retention_policy_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetentionView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    write_policy_v1_retention_policy_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                /** @description The version the caller read, as an entity tag: `"3"`. 412 `precondition_failed` when the record changed since. */
+                "If-Match"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetentionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetentionView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    erase_content_v1_retention_sessions__session_id__erase_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionRetentionView"];
                 };
             };
             /** @description Validation Error */
