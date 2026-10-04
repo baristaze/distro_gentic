@@ -277,6 +277,10 @@ class ControlView(BaseModel):
     kind: ControlKind
 
 
+class WindowSeconds(RootModel[int]):
+    root: Annotated[int, Field(ge=1, title='Window Seconds')]
+
+
 class CreateOrgRequest(BaseModel):
     """
     An org with its owner, as `bootstrap` seeds one. The owner's identity
@@ -1560,6 +1564,17 @@ class SetShareRequest(BaseModel):
     plan_tier: Annotated[str, Field(pattern='^[a-z][a-z0-9-]{0,31}$', title='Plan Tier')]
 
 
+class SettableScope(StrEnum):
+    """
+    The scopes a person sets a budget over: the ones every model call is
+    charged to and that outlive a session. A session's and a tree's budgets
+    are its own bounds, and no call is charged to a team.
+    """
+    person = 'person'
+    project = 'project'
+    tenant = 'tenant'
+
+
 class ShareView(BaseModel):
     """
     A tenant's fair share as the operator wrote it, at its version.
@@ -2206,6 +2221,24 @@ class ControlRequest(BaseModel):
     )
     command: SessionControl
     request_seq: Annotated[RequestSeq | None, Field(title='Request Seq')] = None
+
+
+class CreateBudgetRequest(BaseModel):
+    """
+    A budget over a scope and a window, in reference cost (millionths),
+    native tokens, or both. A person's and a project's scope is keyed by its
+    id; a tenant's is the tenant itself, so its key is left out or names the
+    tenant. A span window has a length in seconds, and no other window has.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    cost_micros: Annotated[CostMicros | None, Field(title='Cost Micros')] = None
+    scope_key: Annotated[UUID | None, Field(title='Scope Key')] = None
+    scope_kind: SettableScope
+    tokens: Annotated[Tokens | None, Field(title='Tokens')] = None
+    window_kind: WindowKind
+    window_seconds: Annotated[WindowSeconds | None, Field(title='Window Seconds')] = None
 
 
 class CreateProjectRequest(BaseModel):
