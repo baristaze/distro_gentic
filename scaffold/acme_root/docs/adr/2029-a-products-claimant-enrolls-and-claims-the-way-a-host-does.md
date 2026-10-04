@@ -7,12 +7,11 @@
 A product registers its own claimant kind (ADR 2025), and placement
 claims for it only the kinds that name it back, from the lanes its
 identity names, never across a tenant's wall. That rule holds only for
-an identity the platform resolved. Yet the platform issued no credential
-of a product's kind: the only path from a credential to a claimant was
-the host's, with the host's kind built in. Each product built its
-claimant's enrollment, its rotating credential, its routes, and the
-mapping from a credential to a claimant on its own, and the tenant wall
-of every claim rested on that code.
+an identity the platform resolved. The only path from a credential to a
+claimant is the host's, with the host's kind built in, so without the
+platform's own a product builds its claimant's enrollment, its rotating
+credential, its routes, and the mapping from a credential to a claimant
+itself, and the tenant wall of every claim rests on that code.
 
 A host's path already holds what a claimant needs (ADR 2003): a token a
 tenant issues for one pool, a short-lived credential of a kind and a

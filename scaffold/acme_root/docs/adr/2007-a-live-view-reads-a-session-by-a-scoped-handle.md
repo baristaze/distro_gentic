@@ -4,16 +4,12 @@
 
 ## Context
 
-The guideline's NET-20 (Apps, Push-First Apps): "One realtime channel
-per app, not per feature. Every push rides the same connection as a
-typed envelope", and its lens names "a polling endpoint or a poll on a
-timer used while the channel is up" a violation.
-
-Watching and Steering, Live Streams: "The live read carries content,
-and it is a read, never a push. A viewer is handed a short-lived, scoped
-handle, the way a browser app is handed a presigned URL, and reads an
-open stream from the part it last saw." The spec records it as one of
-its two deviations.
+The guideline's NET-20 (Apps, Push-First Apps) holds one realtime
+channel per app, and its lens names a poll used while the channel is up
+a violation. The spec's Watching and Steering (Live Streams) makes the
+live read a read of content, never a push, through a short-lived scoped
+handle, the way a browser app is handed a presigned URL. The spec
+records it as one of its two deviations.
 
 A session's content is many small parts a second while a model writes.
 On the channel, every part would ride the tenant's socket to every
@@ -30,12 +26,13 @@ it.
 
 **Content is read through a handle.** A viewer who may read a session
 asks for a handle (`POST /v1/agent-sessions/{id}/live`). The handle is
-the grant it names (the session, the viewer, when it expires), signed with HMAC-SHA256 under a key of the platform's, over a
-purpose prefix, the way a presigned URL is signed. It lasts five
-minutes. A read (`GET /v1/live?handle=`) answers to the handle alone: it
-verifies the signature, then the expiry, then reads that session's open
-streams and nothing else. A reader names the last part it saw of each
-stream, and reads from the one after.
+the grant it names (the session, the viewer, when it expires), signed
+with HMAC-SHA256 under a key of the platform's, over a purpose prefix,
+the way a presigned URL is signed. It lasts five minutes. A read
+(`GET /v1/live?handle=`) answers to the handle alone: it verifies the
+signature, then the expiry, then reads that session's open streams and
+nothing else. A reader names the last part it saw of each stream, and
+reads from the one after.
 
 **The stream service is a cache.** It holds a bounded buffer per open
 stream (parts, bytes, streams a session, streams overall), and lets go
@@ -53,17 +50,17 @@ every live read and says so at start.
 
 ## Consequences
 
-- A live view holds two connections: the channel, for what changed,
-  and a read of one session's content while it is open on screen.
+- A live view holds two connections: the channel, for what changed, and
+  a read of one session's content while it is open on screen.
 - A handle is a bearer: whoever holds it reads one session for at most
   five minutes. A member removed from the tenant keeps reading for what
   is left of a handle they hold, and no longer.
 - A read costs no database: the signature is the authority, and the
   buffer is on the shared cache.
 - A rotated key ends every handle out; a viewer asks for a new one.
-- The session runner hands the loop the stream service as its sink,
-  and the API's watch reads the same streams on the shared cache, so a
-  viewer reads a step from a process other than the one that runs it.
-  A stream opened or completed is an entry in the tenant's event stream
+- The session runner hands the loop the stream service as its sink, and
+  the API's watch reads the same streams on the shared cache, so a
+  viewer reads a step from a process other than the one that runs it. A
+  stream opened or completed is an entry in the tenant's event stream
   and a hint on the channel; a completed stream leaves the cache, and
   its step holds what it said.

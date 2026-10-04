@@ -4,17 +4,12 @@
 
 ## Context
 
-The spec asks for three things the gate does not hold yet. A trial
-count, or a sequential test valid under optional stopping, is declared
-before the trials. Acceptance judges the chain of evidence against a
-hidden suite, never the presence of files. Benchmarks keep scored runs
-against a baseline, pinned to what produced them, with candidate and
-baseline trials interleaved on one executor.
-
-Each leaves a choice open. Which sequential test, and what its bound
-reports. What "the chain" is made of, and where the hidden suite's runs
-live. What a benchmark's baseline is, and when a run counts as a
-regression.
+The spec asks for three things. A trial count, or a sequential test
+valid under optional stopping, is declared before the trials.
+Acceptance judges the chain of evidence against a hidden suite, never
+the presence of files. Benchmarks keep scored runs against a baseline,
+pinned to what produced them, with candidate and baseline trials
+interleaved on one executor.
 
 ## Decision
 
@@ -36,8 +31,8 @@ again rather than trust the verdict the loop kept. It reads the baselines,
 the validations, and the hypotheses and findings from the evidence's
 storage, and the work product from its system. The chain is whole when a
 baseline at the scenario's base, taken before the session validated any
-change, at any head, fails a visible check; every hypothesis is resolved; the gate
-accepts a verified success; the result cites the validation at the head;
+change, at any head, fails a visible check; every hypothesis is
+resolved; the gate accepts a verified success; the result cites the validation at the head;
 the hidden suite passes there; no forbidden path changed; and no surface
 the agent reads names the hidden suite. The harness runs the hidden
 suite itself and keeps its runs with the verdict, since the session's
@@ -66,9 +61,9 @@ benchmark` over its own stack. That stack goes with the runner, so the
 job exports every benchmark it recorded, each trial's verdict with the
 hidden suite's runs and its cost, and the matrix's rows they fed, to a
 file it uploads as the run's artifact, before the stack goes. Each
-qualification an operator records cites that run's URL. The scaffold's case is a rehearsal with
-scripted sessions; a product adds its scenarios, its agents on real
-providers.
+qualification an operator records cites that run's URL. The scaffold's
+case is a rehearsal with scripted sessions; a product adds its
+scenarios, its agents on real providers.
 
 ## Consequences
 

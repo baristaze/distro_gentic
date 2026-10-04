@@ -4,9 +4,9 @@
 
 ## Context
 
-Operator Access: "Opening a session's content takes an operator
-permission of its own, which `read` never implies, so shape is an
-operator's to read and content is not, by default."
+The spec's Operator Access makes opening a session's content take an
+operator permission of its own, which `read` never implies: shape is an
+operator's to read and content is not, by default.
 
 The operator plane carries one permission a token, `read` or `write`,
 and the allowlist entry is a role that holds them (ADR 0018). Neither
@@ -15,12 +15,12 @@ content read, and the grant job could not narrow it to one tenant. And
 `write` includes `read`, so anything `write` implied would reach every
 tenant at once.
 
-Secrets by Placement and The Tenant's Provider Keys put a tenant's
-secrets and keys in the platform's hands. The engine asks `manage_keys`
-of a call that binds a secret reference (ADR 1012), and every member
-holds `manage_keys`, to manage the keys they sign in with. A member who
-could set the tenant's provider key would send every session's content
-to a provider account they hold.
+The spec puts a tenant's secrets and provider keys in the platform's
+hands. The engine asks `manage_keys` of a call that binds a secret
+reference (ADR 1012), and every member holds `manage_keys`, to manage
+the keys they sign in with. A member who could set the tenant's
+provider key would send every session's content to a provider account
+they hold.
 
 ## Decision
 

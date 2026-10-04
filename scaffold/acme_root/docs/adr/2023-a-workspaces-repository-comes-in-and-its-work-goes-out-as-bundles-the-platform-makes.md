@@ -6,15 +6,13 @@
 
 ADR 2022 keeps every repository credential out of a workspace: the
 platform reads a private repository with the project's fetch credential,
-and the forge writes with its own. Two paths still ran through the
-workspace itself. Its checkout fetched the bound repository from inside,
-with no credential, so a private repository never checked out. And the
-forge was handed a commit id that existed only in the workspace, so
-nothing carried the commits to the repository. A snapshot pushed from
-inside too.
-
-The engineer's workspace also has no egress. Whatever reaches the
-repository has to be done by the platform, outside it.
+and the forge writes with its own. Two paths would still run through the
+workspace itself. A checkout that fetches the bound repository from
+inside has no credential, so a private repository never checks out. A
+forge handed a commit id that exists only in the workspace has nothing
+that carries the commits to the repository, and a snapshot pushed from
+inside has the same fault. The engineer's workspace also has no egress,
+so whatever reaches the repository is done by the platform, outside it.
 
 ## Decision
 
@@ -25,8 +23,8 @@ the tags in their history, on its own host, with the project's
 fetch credential, as the read of a delivery does. It reads only where a
 workspace may reach: it resolves the repository's host first, refuses it
 when any address is in the networks no workspace reaches, holds git to
-those addresses, and follows no redirect. It hands the workspace a git bundle of them through the
-transport's files. The checkout fetches from that bundle and from
+those addresses, and follows no redirect. It hands the workspace a git
+bundle of them through the transport's files. The checkout fetches from that bundle and from
 nothing else. A cut starts from that snapshot when it came, and from the
 default branch as the bundle brought it otherwise.
 
@@ -51,16 +49,14 @@ and says to open the pull request.
 
 ## Consequences
 
-- A private repository checks out, and its session delivers, with no
-  credential in the workspace. The checkout cannot reach the repository
-  on its own.
+- The checkout cannot reach the repository on its own, so a private
+  repository checks out, and its session delivers, with no credential in
+  the workspace.
 - With no forge connected, a snapshot cannot be pushed: a release with
   work left keeps its instance, as a release whose push fails does.
 - Each checkout carries the default branch's whole history, read again
   on each loop. A bundle against what the workspace already holds waits
   until an attach's bundle passes a tenth of its bound, 51 MB by default.
-- A branch that a session rewrote is refused by the forge, and the
-  engineer adds a commit instead.
 - The local stack's twin forge pushes for real, with a repository's
   credential where it is given one, so the next loop finds the branch and
   the snapshots, and the local stack shows the whole path.
