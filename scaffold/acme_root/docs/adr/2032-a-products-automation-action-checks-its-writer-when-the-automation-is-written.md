@@ -1,0 +1,47 @@
+# ADR 2032: A product's automation action checks its writer when the automation is written
+
+**Status**: accepted (2026-10-04)
+
+## Context
+
+A product adds its own kind of automation action (ADR 2031). When an
+automation of that kind is written, the platform holds its params to the
+kind's shape, and nothing more. No hook sees who writes it. A product
+whose action needs a person it trusts, an approver of a physical run for
+one, refuses only in the firing, under the run's context. So a member
+outside the approvers writes an automation that is saved, and refused at
+every firing after. They learn it from a string of refused runs, not
+when they could fix it.
+
+## Decision
+
+**A product's kind checks its writer.** `AutomationActionInterface`
+gains `check_writer(ctx, params)`. The create and the edit of an
+automation of that kind call it after the params hold to the kind's
+shape, under the writer's own context, in person. A refusal answers as
+the kind raised it: `NotAuthorized` is a 403 with the kind's reason.
+By default the check admits every writer the platform admits, so a kind
+that has no rule of its own needs no change.
+
+**It checks the writer, not whom the automation runs as.** The writer
+is the person who sets the work going, and the one who can fix a
+refusal. An edit makes its editor the creator, so the person checked is
+the person the automation runs as, or the creator the principal's grant
+is held to.
+
+**A disabled automation is never asked about.** Nothing deletes an
+automation, so turning one off is how its writer stops it. A writer the
+kind no longer admits can still do that. Turning it on again is an edit,
+and the kind checks that editor.
+
+**The firing still refuses what changed.** A writer's standing can
+change after the write. The kind's `act` still runs under the run's
+live context, and its refusal still refuses the run.
+
+## Consequences
+
+- The check runs once a write, under the writer's context. It reads
+  only what that person may read.
+- An automation stored before its kind added a rule keeps firing until
+  it is edited, and its firings refuse what the kind refuses.
+- The platform's own two actions are never a product's to check.

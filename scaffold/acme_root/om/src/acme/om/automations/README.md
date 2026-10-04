@@ -25,7 +25,9 @@ is made of](../../../../README.md).
 - **Create** an automation, by a person in person. A start names a
   project of the tenant; outside a local stack, one that names none is
   refused. A product's action names a kind the product declares, and its
-  params hold to that kind's shape; any other is refused.
+  params hold to that kind's shape; any other is refused. An enabled one
+  is refused, with the kind's reason, when its kind refuses the person
+  writing it.
 - **Edit** an automation, by a person in person, held to the create's
   checks. One that runs as its creator is edited by its creator alone.
   One that runs as the automation principal takes its editor as its
@@ -88,6 +90,13 @@ is made of](../../../../README.md).
   the check says. A check that fails leaves the run open. A kind named as
   one of the platform's actions, or twice, is refused at boot, and an
   automation whose kind left the product is refused at each firing.
+- **A product's action checks its writer when it is written.** Its kind
+  may refuse the person who makes or edits an enabled automation of it,
+  so one its firings would refuse is never saved, and the person hears
+  why then. A disabled one is never asked about, so its writer can always
+  turn it off, and turning it on is an edit the kind checks. Its firings
+  still act under the run's live context, which refuses what changed
+  since.
 - **The brief is the creator's word; the event is data.**
 - **Every firing is a recorded run,** and one event makes one run.
 
@@ -103,7 +112,8 @@ process that writes or fires an automation hands it. The
 principal's live context is `root.automation_principals`, the transition
 a root hands `build_managers` too, so its sessions' calls are answered by
 the grant. A slot is `rules.slot`; ADR 2017 has the reasons, and ADR
-2031 those of a product's action.
+2031 those of a product's action, and ADR 2032 those of its check of the
+writer (`AutomationActionInterface.check_writer`).
 -->
 
 ## How another namespace composes it
