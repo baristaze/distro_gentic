@@ -17,7 +17,7 @@ from acme.services.api.types.agent_sessions import (
     DecisionRequest,
     MessageRequest,
     QuestionView,
-    SessionUsageView,
+    SessionModelUsageView,
     StartSessionRequest,
     StepPageView,
     StepView,
@@ -132,4 +132,4 @@ class AgentSessionsServiceInterface(ABC):
         ...
 
     @abstractmethod
-    async def get_usage(self, ctx: TenantContext, session_id: UUID) -> SessionUsageView: ...
+    async def get_usage(self, ctx: TenantContext, session_id: UUID) -> SessionModelUsageView: ...

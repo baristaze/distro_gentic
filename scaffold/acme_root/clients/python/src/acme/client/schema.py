@@ -1512,6 +1512,20 @@ class SessionControl(StrEnum):
     unlock = 'unlock'
 
 
+class SessionModelUsageView(BaseModel):
+    """
+    What a session's model calls used, as each provider reported it, per
+    model and in total.
+    """
+    cache_read: Annotated[int, Field(title='Cache Read')]
+    cache_write: Annotated[int, Field(title='Cache Write')]
+    calls: Annotated[int, Field(title='Calls')]
+    fills: Annotated[list[FillUsageView], Field(title='Fills')]
+    input: Annotated[int, Field(title='Input')]
+    output: Annotated[int, Field(title='Output')]
+    thinking: Annotated[int, Field(title='Thinking')]
+
+
 class SessionStatus(StrEnum):
     pending = 'pending'
     running = 'running'
@@ -1987,20 +2001,6 @@ class WorkStatus(StrEnum):
     claimed = 'claimed'
     done = 'done'
     failed = 'failed'
-
-
-class AcmeServicesApiTypesAgentSessionsSessionUsageView(BaseModel):
-    """
-    What a session's model calls used, as each provider reported it, per
-    model and in total.
-    """
-    cache_read: Annotated[int, Field(title='Cache Read')]
-    cache_write: Annotated[int, Field(title='Cache Write')]
-    calls: Annotated[int, Field(title='Calls')]
-    fills: Annotated[list[FillUsageView], Field(title='Fills')]
-    input: Annotated[int, Field(title='Input')]
-    output: Annotated[int, Field(title='Output')]
-    thinking: Annotated[int, Field(title='Thinking')]
 
 
 class ActionBody(BaseModel):
@@ -2877,6 +2877,22 @@ class SessionStandingView(BaseModel):
     status: SessionStatus
 
 
+class SessionUsageView(BaseModel):
+    """
+    A page of a session's usage records, oldest first, with the rollup of
+    each loop, in the order it first called, and of the whole session. The
+    rollups cover every record, whatever the page; `has_more_loops` says the
+    session ran more loops than `loops` holds. With `next_cursor`, the next
+    page of `items` starts there.
+    """
+    has_more_loops: Annotated[bool, Field(title='Has More Loops')]
+    items: Annotated[list[UsageRecordView], Field(title='Items')]
+    loops: Annotated[list[LoopUsageView], Field(title='Loops')]
+    next_cursor: Annotated[str | None, Field(title='Next Cursor')]
+    session_id: Annotated[UUID, Field(title='Session Id')]
+    total: UsageRollupView
+
+
 class StageRequest(BaseModel):
     """
     A new version of the matrix: the model roles it serves and its rows,
@@ -3003,22 +3019,6 @@ class UserPageView(BaseModel):
     """
     items: Annotated[list[UserView], Field(title='Items')]
     next_cursor: Annotated[str | None, Field(title='Next Cursor')]
-
-
-class AcmeServicesApiTypesAdminSessionUsageView(BaseModel):
-    """
-    A page of a session's usage records, oldest first, with the rollup of
-    each loop, in the order it first called, and of the whole session. The
-    rollups cover every record, whatever the page; `has_more_loops` says the
-    session ran more loops than `loops` holds. With `next_cursor`, the next
-    page of `items` starts there.
-    """
-    has_more_loops: Annotated[bool, Field(title='Has More Loops')]
-    items: Annotated[list[UsageRecordView], Field(title='Items')]
-    loops: Annotated[list[LoopUsageView], Field(title='Loops')]
-    next_cursor: Annotated[str | None, Field(title='Next Cursor')]
-    session_id: Annotated[UUID, Field(title='Session Id')]
-    total: UsageRollupView
 
 
 class AgentSessionPageView(BaseModel):

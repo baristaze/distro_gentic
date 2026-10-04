@@ -6196,6 +6196,27 @@ export interface components {
          */
         SessionControl: "pause" | "resume" | "cancel" | "interrupt" | "compact" | "unlock";
         /**
+         * SessionModelUsageView
+         * @description What a session's model calls used, as each provider reported it, per
+         *     model and in total.
+         */
+        SessionModelUsageView: {
+            /** Cache Read */
+            cache_read: number;
+            /** Cache Write */
+            cache_write: number;
+            /** Calls */
+            calls: number;
+            /** Fills */
+            fills: components["schemas"]["FillUsageView"][];
+            /** Input */
+            input: number;
+            /** Output */
+            output: number;
+            /** Thinking */
+            thinking: number;
+        };
+        /**
          * SessionStandingView
          * @description Why a session is or is not moving. `changed_at` is its last change:
          *     when it parked, for a parked one. `pool_id` null is the cloud, where
@@ -6235,6 +6256,30 @@ export interface components {
          * @enum {string}
          */
         SessionStatus: "pending" | "running" | "parked" | "idle";
+        /**
+         * SessionUsageView
+         * @description A page of a session's usage records, oldest first, with the rollup of
+         *     each loop, in the order it first called, and of the whole session. The
+         *     rollups cover every record, whatever the page; `has_more_loops` says the
+         *     session ran more loops than `loops` holds. With `next_cursor`, the next
+         *     page of `items` starts there.
+         */
+        SessionUsageView: {
+            /** Has More Loops */
+            has_more_loops: boolean;
+            /** Items */
+            items: components["schemas"]["UsageRecordView"][];
+            /** Loops */
+            loops: components["schemas"]["LoopUsageView"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+            total: components["schemas"]["UsageRollupView"];
+        };
         /**
          * SessionView
          * @description Only the hash of a token is ever kept, so a session view carries no secret.
@@ -7069,51 +7114,6 @@ export interface components {
          * @enum {string}
          */
         WorkStatus: "queued" | "claimed" | "done" | "failed";
-        /**
-         * SessionUsageView
-         * @description A page of a session's usage records, oldest first, with the rollup of
-         *     each loop, in the order it first called, and of the whole session. The
-         *     rollups cover every record, whatever the page; `has_more_loops` says the
-         *     session ran more loops than `loops` holds. With `next_cursor`, the next
-         *     page of `items` starts there.
-         */
-        acme__services__api__types__admin__SessionUsageView: {
-            /** Has More Loops */
-            has_more_loops: boolean;
-            /** Items */
-            items: components["schemas"]["UsageRecordView"][];
-            /** Loops */
-            loops: components["schemas"]["LoopUsageView"][];
-            /** Next Cursor */
-            next_cursor: string | null;
-            /**
-             * Session Id
-             * Format: uuid
-             */
-            session_id: string;
-            total: components["schemas"]["UsageRollupView"];
-        };
-        /**
-         * SessionUsageView
-         * @description What a session's model calls used, as each provider reported it, per
-         *     model and in total.
-         */
-        acme__services__api__types__agent_sessions__SessionUsageView: {
-            /** Cache Read */
-            cache_read: number;
-            /** Cache Write */
-            cache_write: number;
-            /** Calls */
-            calls: number;
-            /** Fills */
-            fills: components["schemas"]["FillUsageView"][];
-            /** Input */
-            input: number;
-            /** Output */
-            output: number;
-            /** Thinking */
-            thinking: number;
-        };
     };
     responses: never;
     parameters: never;
@@ -8097,7 +8097,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["acme__services__api__types__admin__SessionUsageView"];
+                    "application/json": components["schemas"]["SessionUsageView"];
                 };
             };
             /** @description Validation Error */
@@ -9129,7 +9129,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["acme__services__api__types__agent_sessions__SessionUsageView"];
+                    "application/json": components["schemas"]["SessionModelUsageView"];
                 };
             };
             /** @description Validation Error */

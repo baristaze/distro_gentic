@@ -49,7 +49,7 @@ from acme.services.api.types.agent_sessions import (
     MessageRequest,
     ParkView,
     QuestionView,
-    SessionUsageView,
+    SessionModelUsageView,
     StartSessionRequest,
     StepPageView,
     StepUsageView,
@@ -295,7 +295,7 @@ class AgentSessionsServiceImpl(AgentSessionsServiceInterface):
         bounded = clamp_limit(limit)
         return ToolCallPageView(items=calls[:bounded], has_more=len(calls) > bounded)
 
-    async def get_usage(self, ctx: TenantContext, session_id: UUID) -> SessionUsageView:
+    async def get_usage(self, ctx: TenantContext, session_id: UUID) -> SessionModelUsageView:
         await self._sessions.get_session(ctx, session_id)
         return usage_of(await self._history(ctx, session_id))
 

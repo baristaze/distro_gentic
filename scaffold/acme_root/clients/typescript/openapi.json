@@ -7111,6 +7111,53 @@
         "title": "SessionControl",
         "type": "string"
       },
+      "SessionModelUsageView": {
+        "description": "What a session's model calls used, as each provider reported it, per\nmodel and in total.",
+        "properties": {
+          "cache_read": {
+            "title": "Cache Read",
+            "type": "integer"
+          },
+          "cache_write": {
+            "title": "Cache Write",
+            "type": "integer"
+          },
+          "calls": {
+            "title": "Calls",
+            "type": "integer"
+          },
+          "fills": {
+            "items": {
+              "$ref": "#/components/schemas/FillUsageView"
+            },
+            "title": "Fills",
+            "type": "array"
+          },
+          "input": {
+            "title": "Input",
+            "type": "integer"
+          },
+          "output": {
+            "title": "Output",
+            "type": "integer"
+          },
+          "thinking": {
+            "title": "Thinking",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "calls",
+          "input",
+          "cache_read",
+          "cache_write",
+          "output",
+          "thinking",
+          "fills"
+        ],
+        "title": "SessionModelUsageView",
+        "type": "object"
+      },
       "SessionStandingView": {
         "description": "Why a session is or is not moving. `changed_at` is its last change:\nwhen it parked, for a parked one. `pool_id` null is the cloud, where\n`hosts_online` is null; `share_set` false is the default share.",
         "properties": {
@@ -7217,6 +7264,58 @@
         ],
         "title": "SessionStatus",
         "type": "string"
+      },
+      "SessionUsageView": {
+        "description": "A page of a session's usage records, oldest first, with the rollup of\neach loop, in the order it first called, and of the whole session. The\nrollups cover every record, whatever the page; `has_more_loops` says the\nsession ran more loops than `loops` holds. With `next_cursor`, the next\npage of `items` starts there.",
+        "properties": {
+          "has_more_loops": {
+            "title": "Has More Loops",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/UsageRecordView"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "loops": {
+            "items": {
+              "$ref": "#/components/schemas/LoopUsageView"
+            },
+            "title": "Loops",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "total": {
+            "$ref": "#/components/schemas/UsageRollupView"
+          }
+        },
+        "required": [
+          "session_id",
+          "items",
+          "next_cursor",
+          "loops",
+          "has_more_loops",
+          "total"
+        ],
+        "title": "SessionUsageView",
+        "type": "object"
       },
       "SessionView": {
         "description": "Only the hash of a token is ever kept, so a session view carries no secret.",
@@ -9016,105 +9115,6 @@
         ],
         "title": "WorkStatus",
         "type": "string"
-      },
-      "acme__services__api__types__admin__SessionUsageView": {
-        "description": "A page of a session's usage records, oldest first, with the rollup of\neach loop, in the order it first called, and of the whole session. The\nrollups cover every record, whatever the page; `has_more_loops` says the\nsession ran more loops than `loops` holds. With `next_cursor`, the next\npage of `items` starts there.",
-        "properties": {
-          "has_more_loops": {
-            "title": "Has More Loops",
-            "type": "boolean"
-          },
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/UsageRecordView"
-            },
-            "title": "Items",
-            "type": "array"
-          },
-          "loops": {
-            "items": {
-              "$ref": "#/components/schemas/LoopUsageView"
-            },
-            "title": "Loops",
-            "type": "array"
-          },
-          "next_cursor": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Next Cursor"
-          },
-          "session_id": {
-            "format": "uuid",
-            "title": "Session Id",
-            "type": "string"
-          },
-          "total": {
-            "$ref": "#/components/schemas/UsageRollupView"
-          }
-        },
-        "required": [
-          "session_id",
-          "items",
-          "next_cursor",
-          "loops",
-          "has_more_loops",
-          "total"
-        ],
-        "title": "SessionUsageView",
-        "type": "object"
-      },
-      "acme__services__api__types__agent_sessions__SessionUsageView": {
-        "description": "What a session's model calls used, as each provider reported it, per\nmodel and in total.",
-        "properties": {
-          "cache_read": {
-            "title": "Cache Read",
-            "type": "integer"
-          },
-          "cache_write": {
-            "title": "Cache Write",
-            "type": "integer"
-          },
-          "calls": {
-            "title": "Calls",
-            "type": "integer"
-          },
-          "fills": {
-            "items": {
-              "$ref": "#/components/schemas/FillUsageView"
-            },
-            "title": "Fills",
-            "type": "array"
-          },
-          "input": {
-            "title": "Input",
-            "type": "integer"
-          },
-          "output": {
-            "title": "Output",
-            "type": "integer"
-          },
-          "thinking": {
-            "title": "Thinking",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "calls",
-          "input",
-          "cache_read",
-          "cache_write",
-          "output",
-          "thinking",
-          "fills"
-        ],
-        "title": "SessionUsageView",
-        "type": "object"
       }
     }
   },
@@ -11913,7 +11913,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/acme__services__api__types__admin__SessionUsageView"
+                  "$ref": "#/components/schemas/SessionUsageView"
                 }
               }
             },
@@ -14806,7 +14806,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/acme__services__api__types__agent_sessions__SessionUsageView"
+                  "$ref": "#/components/schemas/SessionModelUsageView"
                 }
               }
             },

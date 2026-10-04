@@ -37,6 +37,7 @@ function step(seq: number, fields: Partial<StepView>): StepView {
     stop_reason: null,
     tool: null,
     tools: [],
+    usage: null,
     ...fields,
   };
 }

@@ -19,7 +19,7 @@ import type {
   QuestionView,
   SessionControl,
   SessionStatus,
-  SessionUsageView,
+  SessionModelUsageView,
   StartSessionRequest,
   StepPageView,
   StepView,
@@ -183,7 +183,7 @@ function useRead<T>(id: string, part: string, route: string, enabled: boolean) {
 export const useQuestions = (id: string, enabled = true) => useRead<QuestionView[]>(id, "questions", "questions", enabled);
 export const useApprovals = (id: string, enabled = true) => useRead<ApprovalView[]>(id, "approvals", "approvals", enabled);
 export const useBounds = (id: string, enabled = true) => useRead<BoundsView>(id, "bounds", "bounds", enabled);
-export const useUsage = (id: string, enabled = true) => useRead<SessionUsageView>(id, "usage", "usage", enabled);
+export const useUsage = (id: string, enabled = true) => useRead<SessionModelUsageView>(id, "usage", "usage", enabled);
 export const useDelivery = (id: string, enabled = true) => useRead<DeliveryView>(id, "delivery", "delivery", enabled);
 export const useValidations = (id: string, enabled = true) =>
   useRead<ValidationView[]>(id, "validations", "validations", enabled);
