@@ -19,6 +19,7 @@ from acme.integrations.model_providers.calls import ModelReply
 from acme.integrations.model_providers.registry import ModelProvidersOverImpl
 from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl, ScriptedFailure
 from acme.integrations.model_providers.types import ErrorKind, ProviderName, StopReason, Usage
+from acme.om.agent_sessions.impl.manager import AgentSessionsOptions
 from acme.om.agents.gate import ResultGateInterface
 from acme.om.agents.impl.gate import ResultGateNullImpl
 from acme.om.agents.impl.loop import LoopManagerImpl, LoopOptions
@@ -30,6 +31,7 @@ from acme.om.agents.types.run import RunEnd
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import Platform, new_id, utcnow
+from acme.om.budgets.types.amount import Amount
 from acme.om.context import CredentialKind, RequestContext, Role, TenantContext, build_context
 from acme.om.evidence import ExecutorInterface, WorkProductInterface
 from acme.om.models.impl.credentials import CallCredentialsPlatformImpl
@@ -44,6 +46,7 @@ from acme.om.storage.root import StorageInterface
 from acme.om.tenancy.rules import permissions_of
 from acme.om.tools.attachments import AttachmentReaderInterface
 from acme.om.tools.impl.attachments import AttachmentReaderNullImpl
+from acme.om.tools.impl.manager import ToolsOptions
 from acme.om.tools.tool import JobToolInterface, ToolInterface, ToolRuntime
 from acme.om.tools.types.call import JobHandle, JobStarted
 from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule, Target
@@ -200,6 +203,7 @@ ASSISTANT = AgentKind(
     done_rule=DoneRule.ANSWER,
     authority=AuthorityMode.DELEGATED,
     tree=TreeLimits(height=2, count=4),
+    share=Amount(tokens=1_000_000),
     prompts=("You answer questions about the records.",),
     policy=ALLOWED,
 )
@@ -239,6 +243,33 @@ HELPER = AgentKind(
     policy=ALLOWED,
 )
 """A kind that names the engine's own tools."""
+
+LEAD = AgentKind(
+    name="lead",
+    version=1,
+    tools=("lookup", "ask_person", "submit"),
+    done_rule=DoneRule.ANSWER,
+    authority=AuthorityMode.DELEGATED,
+    tree=TreeLimits(height=2, count=4),
+    prompts=("You split the work among sub-agents and answer from their reports.",),
+    policy=ALLOWED,
+)
+"""A root that spawns `worker`s: it holds every tool a worker may hold."""
+
+WORKER = AgentKind(
+    name="worker",
+    version=1,
+    tools=("lookup", "ask_person", "submit"),
+    done_rule=DoneRule.RESULT_TOOL,
+    result_tool="submit",
+    max_nudges=3,
+    authority=AuthorityMode.DELEGATED,
+    tree=TreeLimits(height=2, count=4),
+    share=Amount(tokens=1_000_000),
+    prompts=("You do the part you are given, and submit it with its evidence.",),
+    policy=ALLOWED,
+)
+"""A sub-agent kind: it asks its person, and submits a result."""
 
 
 class Clock:
@@ -338,6 +369,8 @@ def loop_over(
     models_layer: ModelsLayer | None = None,
     reader: AttachmentReaderInterface | None = None,
     extra: tuple[ToolInterface, ...] = (),
+    ceilings: PolicyLayer | None = None,
+    sessions: AgentSessionsOptions | None = None,
     **roots: Any,
 ) -> Loop:
     """`storage` None is the memory storage, and `owner` None a fresh
@@ -351,8 +384,9 @@ def loop_over(
     None is the budgets' gate behind the call gate; a suite of a gate of
     its own builds it from the managers and the clock. `models_layer` goes
     to the root as a platform's root hands it in, and the loop takes the
-    layer's call credentials; and `roots` is what else the managers are
-    built with."""
+    layer's call credentials. `ceilings` None keeps the platform's, and
+    `sessions` None is the sessions' own options; and `roots` is what else
+    the managers are built with."""
     infra = InfraLocalImpl(tmp_path)
     anthropic = ModelProviderScriptedImpl(ProviderName.ANTHROPIC)
     openai = ModelProviderScriptedImpl(ProviderName.OPENAI)
@@ -377,6 +411,8 @@ def loop_over(
         executor=executor,
         work_product=work_product,
         models_layer=models_layer,
+        tools_options=None if ceilings is None else ToolsOptions(ceilings=ceilings),
+        agent_sessions_options=sessions,
         **roots,
     )
     clock = Clock()
@@ -401,6 +437,7 @@ def loop_over(
                 managers.budget_gate,
                 managers.pricing,
                 managers.agent_sessions,
+                managers.budgets,
                 SessionProjectsBoundImpl(storage.get_project_storage()),
                 version=None if models_layer is None else models_layer.version,
                 tier=None if models_layer is None else models_layer.tier,

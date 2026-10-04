@@ -1,123 +1,159 @@
 ---
 name: audit-model-spend
-description: "Audit what the platform's model calls spend, in one environment, with a read-only credential: the spend by matrix version, the prompt tokens read from a cache, written to one, and sent uncached, the hit rate by matrix version, and what rebuilt caches cost, over a window; then a report with verdicts and proposed tickets. Every read is an aggregate of the signals (Prometheus locally, CloudWatch in the cloud), the same series the operator dashboard draws. Never changes anything."
-allowed-tools: Read, Grep, Glob, Write, Bash(aws:*), Bash(curl:*), Bash(jq:*), Bash(mkdir:*), Bash(uv run acme-ops size:*)
+description: "Audit what an org's model calls spend, in one environment, from the usage records the engine wrote, read through the operator plane's usage route with a read-only operator token for the sessions named: the spend by agent kind, kind version, model role, and model, the prompt tokens read from a cache, written to one, and sent uncached, the hit rate, and what rebuilt caches cost; then a report with verdicts and proposed tickets. Never changes anything."
+allowed-tools: Read, Write, Bash(curl:*), Bash(jq:*), Bash(uv run acme-ops size:*)
 ---
 
 # audit-model-spend
 
 Where the model money goes, and how much of it a cache could have
-saved. Every settled model call counts its prompt tokens by how they
-were billed (read from a cache, written to one, or sent uncached), its
-output, and its reference cost, each by the matrix version its session
-was pinned to: `none` when no matrix pinned it. A cache read is the
-cheap token; a cache write is a cache rebuilt, paid above
-the uncached rate. A fall in the hit rate is a cache that is rebuilt,
-which the dashboard shows before the bill does.
+saved. Every model call a provider billed left a usage record: its
+prompt tokens by how they were billed (read from a cache, written to
+one, or sent uncached), its output and thinking, its reference cost,
+and the agent kind, kind version, model role, and model that served it
+(ADR 1014). A call whose usage was never reported whole (a broken
+stream, a lost run) was settled at its whole hold: its record is
+marked `settled_whole`, its cost is the hold's, and its tokens are
+what a partial reply reported, else 0. A cache read is the cheap
+token; a cache write is a cache rebuilt, paid above the uncached rate.
+A low hit rate on one kind version is a prefix that keeps changing,
+which the bill shows only as a total.
 
 Read `../_shared/ops-preamble.md`, a path from this skill's folder,
-before the first step: the profiles, the account check, and the env
-file are there.
+before the first step: the env file and the token's refresh are there.
 
 ## Input
 
-`--env local|staging|production [--since 7d]`
+`--env local|staging|production --org <org_id> --session <session_id> [--session <session_id>]...`
 
-`--env` is required; ask for it when missing. `--since` is the window,
-seven days by default.
+`--env`, `--org`, and one `--session` at least are required; ask for
+them when missing. The audit reads at most 20 sessions: the first 20
+given, in the order given, and the report lists every one past the
+twentieth as not read. The operator plane lists no org's sessions, so
+the ids come from the person. Without them the audit stops and asks
+for them, saying where they are: the org's events feed names each new
+session as the `target_id` of an `agent_sessions.agent_session.created`
+event. It reads no feed and starts no other skill to find them.
 
 ## Role and credential
 
-Investigator, read-only, and no tenant's rows: every number is a
-series by matrix version, plan tier, and kind of token, never by tenant. `--env local` needs
-the compose stack with the `devx` profile up (`make devx-up`) and the
-env file; no cloud credential. `--env staging` and `--env production`
-run under `acme-<env>-investigate`, checked with
-`sts get-caller-identity` before any other `aws` command, as the
-preamble states. Refuse any profile wider than the investigate role.
+Supporter, the operator plane's read alone: the env file's operator
+token, whose permission is `read`. No cloud profile is needed or used.
+Every read is a plain read of one of two routes at `ACME_API_URL`:
+`/v1/admin/me`, and the usage route,
+`/v1/admin/orgs/<org_id>/sessions/<session_id>/usage`. A record holds
+ids, counts, money, a duration, and labels, and no content.
 
-Locally the env file gives Prometheus's URL. Never read the env file;
-a command that needs a value sources it in the same command, as every
-block below does. Never print a token.
+Before step 2 sources the env file, run `uv run acme-ops size --env
+<env>`, which refuses a file that holds the provisioner's token: then
+stop, and give the person the line it printed. Any other answer, the
+size or an error of its own, is not that refusal, and the run goes on.
+
+A `write` operator is refused by this skill even when the file holds
+its token (step 2). Never read the env file; a command that needs a
+value sources it in the same command, as every block below does.
+Never print a token. On a `401`, which a read prints as the error code
+`not_authenticated`, the token has expired: stop, and name the refresh
+the preamble gives.
 
 ## Procedure
 
-1. In the cloud, check the profile as Role and credential states,
-   before any other command; locally there is none to check. Then run
-   `uv run acme-ops size --env <env>`, which refuses an env file that
-   holds the provisioner's token. When it refuses, stop, and give the
-   person the line it printed. Any other answer is not that refusal, the
-   platform's size or an error of its own, and the run goes on. Make
-   the report's folder, `~/Downloads/acme_model_spend_<yyyy-mm-dd>/`
-   (`mkdir -p`).
-2. Read the window's spend by matrix version and plan tier, and its
-   tokens by matrix version, plan tier, and kind, once each. Locally:
+1. Run `uv run acme-ops size --env <env>`, as Role and credential
+   states.
+2. Read who the operator plane admitted:
 
    ```bash
    set -a; . ~/.config/acme/ops/<env>.env; set +a
-   curl -sG "$ACME_PROMETHEUS_URL/api/v1/query" \
-     --data-urlencode 'query=sum by (matrix_version, plan_tier) (increase(acme_model_spend_micros_total[<since>])) / 1e6'
-   curl -sG "$ACME_PROMETHEUS_URL/api/v1/query" \
-     --data-urlencode 'query=sum by (matrix_version, plan_tier, kind) (increase(acme_model_tokens_total[<since>]))'
+   curl -s -H "Authorization: Bearer $ACME_OPERATOR_TOKEN" "$ACME_API_URL/v1/admin/me" \
+     | jq '{operator_role, error: .error.code}'
    ```
 
-   In the cloud, by the dashboard's schemas, an hour a datapoint:
+   The run goes on only on `operator_role: read`. A `write` stops it,
+   and so do an `error` and an answer that is empty or that `jq`
+   cannot parse: the report then says the operator plane was not read,
+   and why.
+3. Read each session's records, 200 a page, summed by agent kind, kind
+   version, model role, provider, and model, so a page prints one line
+   per group and never a record:
 
    ```bash
-   aws cloudwatch get-metric-data --profile acme-<env>-investigate \
-     --start-time <start> --end-time <end> --output text \
-     --query 'MetricDataResults[?length(Values) > `0`].[Id,Label,sum(Values)]' \
-     --metric-data-queries '[
-       {"Id":"spend","Period":3600,"Label":"${PROP('"'"'Dim.matrix_version'"'"')} ${PROP('"'"'Dim.plan_tier'"'"')}","Expression":"SEARCH('"'"'{\"Acme\",OTelLib,environment,matrix_version,plan_tier,service} MetricName=\"acme_model_spend_micros_total\" environment=\"<env>\"'"'"', '"'"'Sum'"'"', 3600)"},
-       {"Id":"tokens","Period":3600,"Label":"${PROP('"'"'Dim.matrix_version'"'"')} ${PROP('"'"'Dim.plan_tier'"'"')} ${PROP('"'"'Dim.kind'"'"')}","Expression":"SEARCH('"'"'{\"Acme\",OTelLib,environment,kind,matrix_version,plan_tier,service} MetricName=\"acme_model_tokens_total\" environment=\"<env>\"'"'"', '"'"'Sum'"'"', 3600)"}
-     ]'
+   set -a; . ~/.config/acme/ops/<env>.env; set +a
+   curl -s -H "Authorization: Bearer $ACME_OPERATOR_TOKEN" "$ACME_API_URL/v1/admin/orgs/<org_id>/sessions/<session_id>/usage?limit=200" \
+     | jq -c '{error: .error.code, next_cursor, total, groups: ([.items[]?] | group_by([.agent_kind, .kind_version, .role, .provider, .model]) | map({group: (.[0] | [.agent_kind, .kind_version, .role, .provider, .model]), calls: length, input: (map(.input_tokens) | add), cache_read: (map(.cache_read_tokens) | add), cache_write: (map(.cache_write_tokens) | add), output: (map(.output_tokens) | add), thinking: (map(.thinking_tokens) | add), cost_micros: (map(.cost_micros // 0) | add), unpriced: (map(select(.cost_micros == null)) | length), settled_whole: (map(select(.settled_whole)) | length)}))}'
    ```
 
-   A `spend` line is millionths of a dollar; divide by 1,000,000. A
-   query that answers nothing is written as "none in the window", never
-   read again with a wider window.
-3. Compute, for each (matrix version, plan tier) pair on its own: the
-   hit rate, `cache_read / (input + cache_read + cache_write)`; the
-   share of the prompt written to a cache,
-   `cache_write / (input + cache_read + cache_write)`; and the spend's
-   share of the whole. The price of a cache write against an uncached
-   token is the price table's, in `om/src/acme/om/budgets/` (read it
-   with `Read`), so the cost of rebuilt caches is the cache writes at
-   the write rate's premium over the input rate, per pair, as an
-   estimate the report labels so. Each version's total across its tiers
-   is reported beside its pairs.
-4. Judge each (matrix version, plan tier) pair: a hit rate under half,
-   or cache writes above a tenth of the prompt, is a finding; so is a
-   pair whose spend share is far above its share of tokens. `none` is
-   every call whose session no matrix pinned, judged the same way, tier
-   by tier.
-5. Write the report, with each finding's proposed ticket: what to
-   change (a prompt's stable prefix, a cache breakpoint, a fill), the
+   When `next_cursor` is not null, read the next page of the same
+   session with `&cursor=<next_cursor>` added to the route, through
+   the same `jq`. Read at most 5 pages a session, 1,000 records. A
+   session cut there is audited on the records read, and the report
+   says how many of its `total` calls were not read. `total`, the
+   session's rollup, covers every record whatever the page. A later
+   page whose `total.calls` is above the first page's means the session
+   wrote records while it was read: it is a live session, audited on
+   the records read, and its `total` is the first page's.
+
+   A `404` (`not_found`) means the org is unknown, or it holds no
+   record of that session, which is also how another tenant's session
+   reads: the session is listed as not read, and the run goes on with
+   the next. An empty answer, or one `jq` cannot parse, ends the run as
+   in step 2, with the sessions already read audited. No read is made
+   a second time.
+4. Add the groups across the sessions read, page by page. Check a
+   session's groups against its `total` only when every record of it was
+   read, its last page's `next_cursor` null and the session not live:
+   the calls, the cost, and the calls settled whole agree, or the
+   difference is a finding. A session cut at 5 pages, or live, is
+   reported as exactly that, never as a difference. Then compute, for
+   each group: the prompt, input plus cache read plus cache write; the
+   hit rate, `cache_read / prompt`; the share of the prompt written to a
+   cache, `cache_write / prompt`; its share of the tokens; and its share
+   of the spend. A cost in dollars is `cost_micros` divided by
+   1,000,000. The rates of a cache write and an uncached input token are
+   the price table's, in `om/src/acme/om/budgets/impl/pricing.py` (read
+   it with `Read`), so the cost of rebuilt caches is each group's cache
+   writes at the write rate's premium over the input rate, as an
+   estimate the report labels so. Each kind version's total across its
+   roles and models is reported beside its groups.
+5. Judge each group. A hit rate under half is a finding, and so are
+   cache writes above a tenth of the prompt, and a group whose spend
+   share is far above its share of the tokens. A group with any unpriced
+   call is a finding of its own: its cost is in no figure, and every
+   total it is part of is a floor. Beside a group's unpriced count goes
+   its `settled_whole` count: calls whose tokens are partial or unknown,
+   each at its hold's cost, so the group's hit rate reads only the
+   tokens reported.
+6. Write the report, with each finding's proposed ticket: what to
+   change (the order of a kind version's prompt so its stable part
+   comes first, a cache breakpoint, a tool definition that moves, a
+   cheaper model role for a mechanical task, a missing price row), the
    evidence, and the effort. The audit proposes; it never fixes.
 
 ## What it never does
 
-- Never writes to a shared database or to an environment: it reads
-  aggregates and writes its report under `~/Downloads/`.
+- Never writes to a shared database or to an environment: it reads the
+  operator plane and writes its report under `~/Downloads/`.
 - Never modifies a tracked file, never commits, never opens a pull
   request.
-- No tenant's rows and no series by tenant: the matrix version is the
-  finest cut.
-- No secret value read or printed: the env file is sourced and never
-  read.
+- No record printed whole: the `jq` keeps sums by group. A record
+  holds no content, and the audit reads nothing else of a session.
+- No token but the read one: the env file is sourced and never read,
+  and a `write` operator stops the run.
+- No cloud: no `aws` command. The operator plane is the one source.
+- No unbounded read: never more than 20 sessions, and never more than
+  5 pages of one.
 
 ## Output
 
 `~/Downloads/acme_model_spend_<yyyy-mm-dd>.md`:
 
 ```markdown
-# Model spend: <env>, the last <since>
+# Model spend: <env>, org <org_id>, <n> sessions
 
 **Answer.** <one sentence: where the money goes, and what a cache would save>
 
-| Matrix version | Spend ($) | Share | Hit rate | Cache writes | Verdict |
-|---|---|---|---|---|---|
-| <version or none> | <n> | <p>% | <p>% | <p>% of prompt | ok / finding |
+| Kind | Version | Role | Model | Calls | Spend ($) | Share | Hit rate | Cache writes | Verdict |
+|---|---|---|---|---|---|---|---|---|---|
+| <kind> | <n> | <role> | <provider/model> | <n> | <n> | <p>% | <p>% | <p>% of prompt | ok / finding |
 
 ## Findings, by impact
 
@@ -129,5 +165,6 @@ block below does. Never print a token.
 
 ## Not verified
 
-- <anything else the run could not read>
+- <each session not read, and why; each session cut at 5 pages, or live>
+- <each group's calls settled whole: their full tokens, which no record holds>
 ```

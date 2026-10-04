@@ -9,7 +9,8 @@ of](../../../../README.md).
 
 - **Agent kind**: a profile over the one loop every agent runs: the
   tools it may call, when its work is done, the tool it reports a result
-  through, how its calls are allowed, and how large a tree it may grow.
+  through, how its calls are allowed, how large a tree it may grow, and
+  what one of its sessions may spend as a sub-agent.
   A product declares its kinds; each is versioned, and a session keeps
   the version it started on.
 - **Done rule**: an assistant is done when it answers without calling a
@@ -37,12 +38,17 @@ of](../../../../README.md).
 ## What can happen
 
 - **Start** a session on a kind. Its tree starts with it.
-- **Spawn** a sub-agent. It starts from a self-contained objective,
-  never its parent's history, one level down the tree.
+- **Spawn** a sub-agent. It starts from a self-contained objective of
+  bounded size, never its parent's history, one level down the tree.
 - **Move the deadline** of a tree, for every session in it at once. A
   session that waited on the old one goes on.
 - **Cancel.** Cancelling a parent cancels every session below it that is
   not idle, one about to begin its next loop included.
+- **Report.** A child's report reaches its parent's inbox when its loop
+  ends, and a note when it parks on a person. It names the child, says
+  how its loop stands and what it said last, and wakes the parent. A
+  report above the size bound a tool result has arrives as its head, its
+  tail, and the handle of the artifact that keeps it whole.
 - **Hand off.** The new session holds the objective and where it came
   from, and starts only when its person speaks to it.
 - **Submit** a result through the gate.
@@ -74,8 +80,20 @@ of](../../../../README.md).
 - **A tree is bounded.** A spawn past its height or its count is
   refused, and two spawns at once never pass the count.
 - **A tree shares one budget and one deadline.** A sub-agent draws on
-  what the tree has left; it never gets a budget or a deadline of its
-  own.
+  what the tree has left, and never gets a deadline of its own. Its
+  spawn gives it a budget on its own session, its kind's share, which
+  only caps its share and never adds to the tree's. A kind that names
+  no share is never spawned.
+- **A child's report is data in its parent.** It carries the child's
+  mark, and it marks the parent as data does. A child that holds private
+  data makes its parent hold them, so the rule of two holds the parent's
+  outward calls. Being no principal's message, it answers no question the
+  parent asked and brings back no archived parent. The parent never
+  polls: it wakes on each report, its run asked for as a person's message
+  asks, except the note of a cancel it sent down itself, so a parent whose
+  loop was cancelled never starts again on its children's word. The report of a loop's end is written before the loop
+  closes, under an id derived from the loop, so a run that ends the loop
+  again writes it once.
 - **The agent that hands work over cannot steer it.** The objective it
   wrote is data in the new session.
 - **Every tree belongs to one org,** and goes when the last of its
@@ -132,7 +150,9 @@ status and parks, its steps, its fill set, the window a request reads,
 the budget gate, policy and the transport, and attribution. It reads a
 session's kind to know when its loop is done and passes a submitted
 result through the gate; spawn and hand-off are called from the tools
-that offer them. The session runner calls the loop's one operation with
+that offer them. A child's loop hands its report to the agents manager,
+which bounds it through the windows and writes it into the parent's
+inbox. The session runner calls the loop's one operation with
 the session and the context its claim built: once each time the session
 turns pending, and again when a run's time is up. Nothing else drives a
 loop. A job's report comes in through the loop too, from whatever the

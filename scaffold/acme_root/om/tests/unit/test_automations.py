@@ -337,6 +337,7 @@ async def test_an_automations_session_starts_in_its_project_under_its_budget_and
         platform.managers.budget_gate,
         platform.managers.pricing,
         platform.managers.agent_sessions,
+        platform.managers.budgets,
         SessionProjectsBoundImpl(platform.storage.get_project_storage()),
     )
     fills = await platform.managers.models.resolve_fill_set(

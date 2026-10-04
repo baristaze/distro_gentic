@@ -10,9 +10,11 @@ compacts: the summarizer folds the oldest part into a `summary` step, and
 the steps themselves never change. A side model role reads a consistent
 suffix sized to its own fill. A tool result too large for a step is kept
 as an artifact the agent reads a page at a time, sealed under its session's
-key like the step it came from, and purged with its history."""
+key like the step it came from, and purged with its history. So is a
+child's report too large for a step of its parent's."""
 
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from uuid import UUID
 
 from acme.om.context import TenantContext
@@ -35,6 +37,7 @@ class WindowsManagerInterface(ABC):
         role: ModelRole = MAIN,
         *,
         plan: str | None = None,
+        history: Sequence[Step] | None = None,
     ) -> RenderedRequest:
         """The next request of `role` over the session's history, rendered
         with the fill the session's fill set names for it; the caller records
@@ -49,7 +52,9 @@ class WindowsManagerInterface(ABC):
         more and cannot be compacted is `CompactionFailed`. A main request
         over a tool call still open is `PreconditionFailed`. A side role
         reads a consistent suffix sized to its own fill and never compacts.
-        `plan` is the agent's current plan, which renders last."""
+        `plan` is the agent's current plan, which renders last. `history` is
+        the session's whole history as the caller holds it, read up to its
+        head, so a loop that keeps it is not read again; None reads it."""
         ...
 
     @abstractmethod
@@ -63,12 +68,14 @@ class WindowsManagerInterface(ABC):
         refused: RenderedRequest,
         *,
         plan: str | None = None,
+        history: Sequence[Step] | None = None,
     ) -> RenderedRequest:
         """The one retry a main request gets after its provider refused it as
         too long: a compaction, then the request rendered again and marked as
         the retry. A retry refused again, a side role's request, or a window
         with nothing left to fold is `ContextOverflow`, with nothing written:
-        the loop ends `errored` rather than compact again."""
+        the loop ends `errored` rather than compact again. `history` is as
+        `render_request` takes it."""
         ...
 
     @abstractmethod
@@ -77,6 +84,16 @@ class WindowsManagerInterface(ABC):
         result is within the size bound; above it, its whole text kept as an
         artifact of the session and the step holding the head, the tail, and
         the artifact's handle. Any other step is `ValidationFailed`."""
+        ...
+
+    @abstractmethod
+    async def bound_report(self, ctx: TenantContext, session_id: UUID, step: Step) -> Step:
+        """A child's report to its parent, an input an agent wrote into
+        `session_id`, as the history keeps it: as given when its text is
+        within the size bound a tool result has; above it, its whole text
+        kept as an artifact of the session and the step holding the head,
+        the tail, and the artifact's handle. Any other step is
+        `ValidationFailed`."""
         ...
 
     @abstractmethod

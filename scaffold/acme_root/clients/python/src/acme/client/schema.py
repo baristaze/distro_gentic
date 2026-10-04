@@ -1519,20 +1519,6 @@ class SessionStatus(StrEnum):
     idle = 'idle'
 
 
-class SessionUsageView(BaseModel):
-    """
-    What a session's model calls used, as each provider reported it, per
-    model and in total.
-    """
-    cache_read: Annotated[int, Field(title='Cache Read')]
-    cache_write: Annotated[int, Field(title='Cache Write')]
-    calls: Annotated[int, Field(title='Calls')]
-    fills: Annotated[list[FillUsageView], Field(title='Fills')]
-    input: Annotated[int, Field(title='Input')]
-    output: Annotated[int, Field(title='Output')]
-    thinking: Annotated[int, Field(title='Thinking')]
-
-
 class SessionView(BaseModel):
     """
     Only the hash of a token is ever kept, so a session view carries no secret.
@@ -1726,6 +1712,18 @@ class StepType(StrEnum):
     environment_changed = 'environment_changed'
 
 
+class StepUsageView(BaseModel):
+    """
+    What a model call used, as its provider reported it, in disjoint
+    classes, so no token is counted twice.
+    """
+    cache_read: Annotated[int, Field(title='Cache Read')]
+    cache_write: Annotated[int, Field(title='Cache Write')]
+    input: Annotated[int, Field(title='Input')]
+    output: Annotated[int, Field(title='Output')]
+    thinking: Annotated[int, Field(title='Thinking')]
+
+
 class StopKind(StrEnum):
     """
     What the control stream tells a host about one item it holds. Each
@@ -1870,6 +1868,59 @@ class UploadFieldView(BaseModel):
     value: Annotated[str, Field(title='Value')]
 
 
+class UsageRecordView(BaseModel):
+    """
+    One model call a provider billed, as the ledger keeps it: ids, tokens
+    by disjoint class, reference cost in millionths (null when no price
+    applied), the provider's latency, and the labels of what served it. It
+    holds no content, so it reads the same in every storage mode. `step_id`
+    is the call's response step; `hold_id` its hold; `tree_id` the
+    session's tree; `kind_version` the agent kind's version the session
+    ran. `settled_whole` marks a call whose usage was never reported whole
+    (a broken stream, a lost run): its cost is its whole hold, and its
+    tokens are what a partial reply reported, else 0.
+    """
+    agent_kind: Annotated[str, Field(title='Agent Kind')]
+    cache_read_tokens: Annotated[int, Field(title='Cache Read Tokens')]
+    cache_write_tokens: Annotated[int, Field(title='Cache Write Tokens')]
+    cost_micros: Annotated[int | None, Field(title='Cost Micros')]
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    hold_id: Annotated[UUID, Field(title='Hold Id')]
+    id: Annotated[UUID, Field(title='Id')]
+    input_tokens: Annotated[int, Field(title='Input Tokens')]
+    kind_version: Annotated[int, Field(title='Kind Version')]
+    latency_ms: Annotated[int, Field(title='Latency Ms')]
+    loop_id: Annotated[UUID, Field(title='Loop Id')]
+    model: Annotated[str, Field(title='Model')]
+    output_tokens: Annotated[int, Field(title='Output Tokens')]
+    provider: Annotated[str, Field(title='Provider')]
+    role: Annotated[str, Field(title='Role')]
+    session_id: Annotated[UUID, Field(title='Session Id')]
+    settled_whole: Annotated[bool, Field(title='Settled Whole')]
+    step_id: Annotated[UUID, Field(title='Step Id')]
+    thinking_tokens: Annotated[int, Field(title='Thinking Tokens')]
+    tree_id: Annotated[UUID, Field(title='Tree Id')]
+
+
+class UsageRollupView(BaseModel):
+    """
+    The sum of some records. `unpriced` counts the calls no price applied
+    to, whose cost is in no figure here: a rollup with any is a floor.
+    `settled_whole` counts the calls settled at their whole hold, whose cost
+    is in `cost_micros` at the hold, as the ledger counts it.
+    """
+    cache_read_tokens: Annotated[int, Field(title='Cache Read Tokens')]
+    cache_write_tokens: Annotated[int, Field(title='Cache Write Tokens')]
+    calls: Annotated[int, Field(title='Calls')]
+    cost_micros: Annotated[int, Field(title='Cost Micros')]
+    input_tokens: Annotated[int, Field(title='Input Tokens')]
+    latency_ms: Annotated[int, Field(title='Latency Ms')]
+    output_tokens: Annotated[int, Field(title='Output Tokens')]
+    settled_whole: Annotated[int, Field(title='Settled Whole')]
+    thinking_tokens: Annotated[int, Field(title='Thinking Tokens')]
+    unpriced: Annotated[int, Field(title='Unpriced')]
+
+
 class UserView(BaseModel):
     created_at: Annotated[AwareDatetime, Field(title='Created At')]
     display_name: Annotated[str, Field(title='Display Name')]
@@ -1936,6 +1987,20 @@ class WorkStatus(StrEnum):
     claimed = 'claimed'
     done = 'done'
     failed = 'failed'
+
+
+class AcmeServicesApiTypesAgentSessionsSessionUsageView(BaseModel):
+    """
+    What a session's model calls used, as each provider reported it, per
+    model and in total.
+    """
+    cache_read: Annotated[int, Field(title='Cache Read')]
+    cache_write: Annotated[int, Field(title='Cache Write')]
+    calls: Annotated[int, Field(title='Calls')]
+    fills: Annotated[list[FillUsageView], Field(title='Fills')]
+    input: Annotated[int, Field(title='Input')]
+    output: Annotated[int, Field(title='Output')]
+    thinking: Annotated[int, Field(title='Thinking')]
 
 
 class ActionBody(BaseModel):
@@ -2587,6 +2652,11 @@ class LoopStandingView(BaseModel):
     status: WorkStatus
 
 
+class LoopUsageView(BaseModel):
+    loop_id: Annotated[UUID, Field(title='Loop Id')]
+    rollup: UsageRollupView
+
+
 class MatrixRowBody(BaseModel):
     """
     A row: the questions it matches, and its fills, the first the fill and
@@ -2845,9 +2915,9 @@ class StepView(BaseModel):
     """
     One step of a session's history, in its order. `text` is what it
     says: a message's words, a model's answer, a tool's result. The rest is
-    its header's, by type: the tools a model response called and why it
-    stopped, a tool call's tool and the class of its failure, a control's
-    command, a park, a loop's outcome.
+    its header's, by type: the tools a model response called, why it
+    stopped, and what it used; a tool call's tool and the class of its
+    failure; a control's command; a park; a loop's outcome.
     """
     actor: Actor
     command: ControlCommand | None
@@ -2866,6 +2936,7 @@ class StepView(BaseModel):
     tool: Annotated[str | None, Field(title='Tool')]
     tools: Annotated[list[str], Field(title='Tools')]
     type: StepType
+    usage: StepUsageView | None
 
 
 class ToolCallView(BaseModel):
@@ -2932,6 +3003,22 @@ class UserPageView(BaseModel):
     """
     items: Annotated[list[UserView], Field(title='Items')]
     next_cursor: Annotated[str | None, Field(title='Next Cursor')]
+
+
+class AcmeServicesApiTypesAdminSessionUsageView(BaseModel):
+    """
+    A page of a session's usage records, oldest first, with the rollup of
+    each loop, in the order it first called, and of the whole session. The
+    rollups cover every record, whatever the page; `has_more_loops` says the
+    session ran more loops than `loops` holds. With `next_cursor`, the next
+    page of `items` starts there.
+    """
+    has_more_loops: Annotated[bool, Field(title='Has More Loops')]
+    items: Annotated[list[UsageRecordView], Field(title='Items')]
+    loops: Annotated[list[LoopUsageView], Field(title='Loops')]
+    next_cursor: Annotated[str | None, Field(title='Next Cursor')]
+    session_id: Annotated[UUID, Field(title='Session Id')]
+    total: UsageRollupView
 
 
 class AgentSessionPageView(BaseModel):

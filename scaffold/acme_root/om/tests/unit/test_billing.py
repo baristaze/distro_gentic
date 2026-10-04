@@ -54,6 +54,7 @@ from acme.om.budgets.types.amount import Spend
 from acme.om.budgets.types.breach import Refusal
 from acme.om.budgets.types.budget import BudgetScope, BudgetScopeKind, WindowKind
 from acme.om.budgets.types.hold import Billed, HoldRequest, Settlement
+from acme.om.budgets.types.usage import CallSite
 from acme.om.context import (
     AppContext,
     AppType,
@@ -185,10 +186,14 @@ async def test_a_cap_and_a_bill_read_the_same_row_of_one_versioned_table(tmp_pat
         money.gate,
         book,
         money.loop.managers.agent_sessions,
+        money.loop.managers.budgets,
         SessionProjectsBoundImpl(money.loop.storage.get_project_storage()),
     )
     usage = Usage(input=120_000, output=3_000)
-    await next_process.settle(owner, hold_id, usage, billed=True)
+    # Another process never held the call, and its site names no labels, so
+    # the bill lands and no usage record does.
+    site = CallSite(loop_id=new_id(), step_id=new_id(), latency_ms=0)
+    await next_process.settle(owner, hold_id, usage, billed=True, site=site)
 
     found = await entries_of(money, hold_id)
     settlement, charge = found["Settlement"], found["Charge"]
@@ -343,6 +348,7 @@ async def test_a_projects_budget_refuses_a_call_its_tenants_has_room_for(
             loop.managers.budget_gate,
             loop.managers.pricing,
             loop.managers.agent_sessions,
+            loop.managers.budgets,
             SessionProjectsBoundImpl(loop.storage.get_project_storage()),
         )
     ours, loose = await loop.start(), await loop.start()
@@ -365,7 +371,7 @@ async def test_a_projects_budget_refuses_a_call_its_tenants_has_room_for(
     held = await calls.authorize(
         owner, loose, spender(owner), MAIN, fill, call, credential="platform"
     )
-    await calls.settle(owner, held, None, billed=False)
+    await calls.settle(owner, held, None, billed=False, site=None)
 
 
 # A spending job passes the same gate.
@@ -388,6 +394,7 @@ async def test_a_projects_budget_refuses_a_job_its_tenants_has_room_for(
             loop.managers.budget_gate,
             loop.managers.pricing,
             loop.managers.agent_sessions,
+            loop.managers.budgets,
             SessionProjectsBoundImpl(loop.storage.get_project_storage()),
             clock=loop.clock,
         )

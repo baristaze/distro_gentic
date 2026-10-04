@@ -237,11 +237,14 @@ class AppContainer:
         platform's own: billing's money gate, and the evidence's result gate.
         Their `kinds` are the product's: a session starts on one of its agent
         kinds, and the session runner runs its loop with the same kinds,
-        since each process's `build` hands its root `PRODUCT_KINDS`. Outside
-        `local`, a quiet null for any of them, or a budget gate that is not
-        the money gate, is refused at boot. `platform_agents` ships the
-        platform's agents beside the product's kinds: a deployed process
-        reads them from its corpus root, and refuses to boot with none."""
+        since each process's `build` hands its root `PRODUCT_KINDS`. A start
+        or a message is checked against the class of every tool its registry
+        offers, the product's included, and a registry name the catalog
+        cannot class is refused. Outside `local`, a quiet null for any of
+        them, or a budget gate that is not the money gate, is refused at
+        boot. `platform_agents` ships the platform's agents beside the
+        product's kinds: a deployed process reads them from its corpus root,
+        and refuses to boot with none."""
         ports = ports or PlatformPorts()
         managers = build_managers(
             storage,

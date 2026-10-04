@@ -26,7 +26,7 @@ from acme.om.agent_sessions.types.agent_session import AgentSession, SessionStat
 from acme.om.agents import AgentsManagerInterface
 from acme.om.agents import loop_rules as rules
 from acme.om.agents.loop import LoopManagerInterface
-from acme.om.agents.rules import after_turn
+from acme.om.agents.rules import after_turn, notes_parent
 from acme.om.agents.sink import StreamSinkInterface
 from acme.om.agents.types.kind import AgentKind, AgentKindCatalog
 from acme.om.agents.types.result import Result, Turn
@@ -34,7 +34,8 @@ from acme.om.agents.types.run import LoopRun, RunEnd
 from acme.om.attribution import AttributionManagerInterface
 from acme.om.attribution.types.principal import AgentRef, Principal, PrincipalKind
 from acme.om.base import Platform, new_id, thaw_mapping, utcnow
-from acme.om.budgets.rules import budget_park
+from acme.om.budgets.rules import budget_park, elapsed_ms
+from acme.om.budgets.types.usage import CallLabels, CallSite
 from acme.om.context import Permission, TenantContext
 from acme.om.exceptions import (
     BudgetRefused,
@@ -344,7 +345,9 @@ class LoopManagerImpl(LoopManagerInterface):
             if stopped is not None:
                 return stopped
         while True:
-            history = await self._history(run.ctx, run.session_id)
+            # The run read its history whole once; each turn reads only what
+            # was added since, so a long session costs a turn no more.
+            history = await self._history(run.ctx, run.session_id, history)
             loop = rules.OpenLoop(run.loop_id, run.start_seq, None)
             if rules.asked(history, loop, ControlCommand.CANCEL) is not None:
                 return await self._cancelled(run)
@@ -390,6 +393,7 @@ class LoopManagerImpl(LoopManagerInterface):
             if repeated is not None:
                 # Written before the next request, which reads it.
                 await self._notice(run, repeated)
+                history = await self._history(run.ctx, run.session_id, history)
             stopped = await self._model_turn(run, history)
             if stopped is not None:
                 return stopped
@@ -430,11 +434,25 @@ class LoopManagerImpl(LoopManagerInterface):
         try:
             if run.refused is not None:
                 rendered = await self._windows.render_after_overflow(
-                    ctx, run.session_id, run.epoch, run.loop_id, prompts, run.refused, plan=plan
+                    ctx,
+                    run.session_id,
+                    run.epoch,
+                    run.loop_id,
+                    prompts,
+                    run.refused,
+                    plan=plan,
+                    history=history,
                 )
             else:
                 rendered = await self._windows.render_request(
-                    ctx, run.session_id, run.epoch, run.loop_id, prompts, MAIN, plan=plan
+                    ctx,
+                    run.session_id,
+                    run.epoch,
+                    run.loop_id,
+                    prompts,
+                    MAIN,
+                    plan=plan,
+                    history=history,
                 )
         except ModelCallFailed as failed:
             # The compaction's call to the summarizer failed: its own
@@ -508,10 +526,16 @@ class LoopManagerImpl(LoopManagerInterface):
             (request,) = await self._steps.append_steps(ctx, session_id, run.epoch, [request])
         except BaseException:
             # Never sent: nothing was billed.
-            await self._gate.settle(ctx, hold, None, billed=False)
+            await self._gate.settle(ctx, hold, None, billed=False, site=None)
             raise
         response_id = new_id()
         self._tell(run, self._sink.opened, response_id)
+        started = self._clock()
+
+        def site() -> CallSite:
+            elapsed = elapsed_ms(started, self._clock())
+            return CallSite(loop_id=run.loop_id, step_id=response_id, latency_ms=elapsed)
+
         try:
             try:
                 reply = await self._stream(run, used.client, rendered.call, response_id)
@@ -519,19 +543,23 @@ class LoopManagerImpl(LoopManagerInterface):
                 # Nothing streamed back: the call was refused before it was
                 # processed, and the hold is released. A stream that broke is
                 # usually billed, so it counts whole, and what arrived is kept.
-                await self._gate.settle(ctx, hold, None, billed=failed.partial is not None)
-                closing = (
-                    rules.abandoned_step(response_id, self._clock(), request)
-                    if failed.partial is None
-                    else rules.response_step(response_id, self._clock(), request, failed.partial)
-                )
+                if failed.partial is None:
+                    await self._gate.settle(ctx, hold, None, billed=False, site=None)
+                    closing = rules.abandoned_step(response_id, self._clock(), request)
+                else:
+                    await self._gate.settle(
+                        ctx, hold, None, billed=True, site=site(), partial=failed.partial.usage
+                    )
+                    closing = rules.response_step(
+                        response_id, self._clock(), request, failed.partial
+                    )
                 await self._steps.append_steps(ctx, session_id, run.epoch, [closing])
                 raise
             except BaseException:
                 with contextlib.suppress(Exception):
-                    await self._gate.settle(ctx, hold, None, billed=True)
+                    await self._gate.settle(ctx, hold, None, billed=True, site=site())
                 raise
-            await self._gate.settle(ctx, hold, reply.usage, billed=True)
+            await self._gate.settle(ctx, hold, reply.usage, billed=True, site=site())
             stored = rules.response_step(response_id, self._clock(), request, reply)
             (stored,) = await self._steps.append_steps(ctx, session_id, run.epoch, [stored])
             return stored
@@ -801,7 +829,7 @@ class LoopManagerImpl(LoopManagerInterface):
                 request,
                 use.input,
                 run.workspace,
-                holds_private=rules.holds_private(run.kind, run.registry),
+                holds_private=rules.holds_private(run.session, run.kind, run.registry, history),
                 # A fresh call's preflight keeps the tree's deadline. A call a
                 # lost run may have started is settled by its effect, which
                 # the transport's record answers whatever the time.
@@ -1186,6 +1214,10 @@ class LoopManagerImpl(LoopManagerInterface):
         if run.jobs:
             why = f"the loop ended {outcome.value}; the job was cancelled"
             await self._stop_jobs(run, list(run.jobs.values()), why)
+        if run.session.parent_id is not None:
+            # Before the loop is closed: a run lost in between leaves it open,
+            # and the run that ends it again repeats the report, written once.
+            await self._report(run, outcome=outcome)
         step = rules.ended_step(new_id(), self._clock(), run.session_id, run.loop_id, outcome)
         await self._steps.append_steps(run.ctx, run.session_id, run.epoch, [step])
         await self._sessions.project_status(run.ctx, run.session_id)
@@ -1195,7 +1227,19 @@ class LoopManagerImpl(LoopManagerInterface):
 
     async def _park(self, run: _Run, park: Park) -> LoopRun:
         await self._sessions.park(run.ctx, run.session_id, run.epoch, run.loop_id, park)
+        if run.session.parent_id is not None and notes_parent(park):
+            await self._report(run, park=park)
         return self._result(run, RunEnd.PARKED, park=park)
+
+    async def _report(
+        self, run: _Run, *, outcome: LoopOutcome | None = None, park: Park | None = None
+    ) -> None:
+        """A child tells its parent how its loop stands, read from the loop's
+        own steps: from its first, never the session's whole history."""
+        steps = await self._history(run.ctx, run.session_id, since=run.start_seq - 1)
+        loop = rules.OpenLoop(run.loop_id, run.start_seq, None)
+        report = rules.report_of(steps, loop, outcome=outcome, park=park)
+        await self._agents.report_to_parent(run.ctx, run.session_id, report)
 
     def _result(
         self,
@@ -1215,12 +1259,26 @@ class LoopManagerImpl(LoopManagerInterface):
         )
 
     async def _close_lost(self, run: _Run, request: Step) -> None:
+        """A request a lost run left unanswered: its hold settled whole, its
+        usage record named from the request and the session, since this
+        run's gate never held it, and the request closed as abandoned."""
         header = request.header
-        hold = header.hold_id if isinstance(header, ModelRequestHeader) else None
-        if hold is not None:
-            with contextlib.suppress(NotFound):
-                await self._gate.settle(run.ctx, hold, None, billed=True)
         closing = rules.abandoned_step(new_id(), self._clock(), request)
+        if isinstance(header, ModelRequestHeader) and header.hold_id is not None:
+            provider, _, model = header.fill.partition("/")
+            session = run.session
+            labels = CallLabels(
+                session_id=run.session_id,
+                tree_id=session.root_id,
+                agent_kind=session.kind,
+                kind_version=session.kind_version,
+                role=header.role,
+                provider=provider,
+                model=model,
+            )
+            site = CallSite(loop_id=run.loop_id, step_id=closing.id, latency_ms=0, labels=labels)
+            with contextlib.suppress(NotFound):
+                await self._gate.settle(run.ctx, header.hold_id, None, billed=True, site=site)
         await self._steps.append_steps(run.ctx, run.session_id, run.epoch, [closing])
 
     async def _release(self, run: _Run) -> None:
@@ -1309,10 +1367,15 @@ class LoopManagerImpl(LoopManagerInterface):
 
     # The history.
 
-    async def _history(self, ctx: TenantContext, session_id: UUID) -> list[Step]:
-        steps: list[Step] = []
+    async def _history(
+        self, ctx: TenantContext, session_id: UUID, read: Sequence[Step] = (), *, since: int = 0
+    ) -> list[Step]:
+        """The session's whole history, in `seq` order: `read`, what was read
+        of it already, and every step after it; with nothing read, every
+        step after `since`."""
+        steps = list(read)
         while True:
-            after = steps[-1].seq if steps else 0
+            after = steps[-1].seq if steps else since
             page = await self._steps.get_steps(ctx, session_id, after, self._options.page)
             steps.extend(page.items)
             if not page.has_more or not page.items:

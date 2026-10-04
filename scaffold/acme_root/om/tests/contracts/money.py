@@ -99,6 +99,7 @@ def money_over(
             gate,
             book,
             managers.agent_sessions,
+            managers.budgets,
             SessionProjectsBoundImpl(storage.get_project_storage()),
             version=None if models_layer is None else models_layer.version,
             tier=None if models_layer is None else models_layer.tier,

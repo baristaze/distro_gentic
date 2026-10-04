@@ -13,7 +13,7 @@ from uuid import UUID
 
 import pytest
 from prometheus_client import REGISTRY
-from runner_support import ABSENT, SONNET, answers
+from runner_support import ABSENT, SONNET, TOOLS, answers
 
 from acme.infra.impl.local import InfraLocalImpl
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
@@ -192,7 +192,7 @@ async def test_a_runner_that_lacks_the_kind_leaves_the_loop_to_a_retry(tmp_path:
         storage,
         infra,
         IntegrationsOverImpl(IdentityProviderAbsentImpl(), scripted_model_providers()),
-        ports=PlatformPorts(kinds=ProductKinds(agents=ABSENT)),
+        ports=PlatformPorts(kinds=ProductKinds(agents=ABSENT, tools=lambda _managers: TOOLS)),
     )
     lacking = RunnerContainer.over(
         settings(),
@@ -308,7 +308,7 @@ def runner_over(tmp_path: Path) -> RunnerContainer:
         StorageMemoryImpl(),
         InfraLocalImpl(tmp_path),
         IntegrationsOverImpl(IdentityProviderAbsentImpl(), providers),
-        ports=PlatformPorts(kinds=ProductKinds(agents=ABSENT)),
+        ports=PlatformPorts(kinds=ProductKinds(agents=ABSENT, tools=lambda _managers: TOOLS)),
     )
 
 

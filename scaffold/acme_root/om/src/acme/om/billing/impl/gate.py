@@ -29,6 +29,7 @@ from acme.om.billing.storage import AccountStorageInterface, MoneyLedgerStorageI
 from acme.om.billing.types.account import Account
 from acme.om.billing.types.ledger import Approval, FundedHold, PricedAt, Turned
 from acme.om.billing.types.plan import PlanCatalog, UnitScale
+from acme.om.budgets import BudgetsManagerInterface
 from acme.om.budgets.rules import call_exposure, job_exposure, settlement_of, usage_spend
 from acme.om.budgets.storage import BudgetStorageInterface
 from acme.om.budgets.types.amount import Spend
@@ -43,6 +44,7 @@ from acme.om.budgets.types.hold import (
     NotBilledProof,
     Settlement,
 )
+from acme.om.budgets.types.usage import CallLabels, CallSite
 from acme.om.context import Permission, TenantContext
 from acme.om.exceptions import (
     BudgetRefused,
@@ -56,12 +58,13 @@ from acme.om.projects.policies import SessionProjectsInterface
 from acme.om.windows.gate import CallGateInterface
 from acme.om.windows.impl.gate import (
     UNLABELLED,
-    CallLabels,
     PinnedVersion,
     PlanTierOf,
-    call_labels,
+    SpendLabels,
     count_settled,
+    record_settled,
     scopes_of,
+    spend_labels,
 )
 from acme.om.windows.rules import call_shape
 
@@ -266,7 +269,9 @@ class MoneyCallGateImpl(CallGateInterface):
     too. Every settled call counts its tokens and its spend under the
     matrix version `version` reads of its session at the hold, and the plan
     tier `tier` reads; a settle in another process counts them under
-    `none`. A spending job is held on the same scopes at its rate until its
+    `none`. A billed model call leaves its usage record through `budgets`,
+    as the budgets' gate does (`windows.impl.gate.record_settled`). A
+    spending job is held on the same scopes at its rate until its
     deadline (`budgets.rules.job_exposure`), with no row of the price
     table, and billed at the cost its runner reported, else whole; a job
     refused before any work began releases its hold. Its hold names that
@@ -277,6 +282,7 @@ class MoneyCallGateImpl(CallGateInterface):
         gate: MoneyGateInterface,
         prices: PriceBookInterface,
         sessions: AgentSessionsManagerInterface,
+        budgets: BudgetsManagerInterface,
         projects: SessionProjectsInterface,
         *,
         version: PinnedVersion | None = None,
@@ -286,11 +292,12 @@ class MoneyCallGateImpl(CallGateInterface):
         self._gate = gate
         self._prices = prices
         self._sessions = sessions
+        self._budgets = budgets
         self._projects = projects
         self._version = version
         self._tier = tier
         self._clock = clock
-        self._labels: dict[UUID, CallLabels] = {}
+        self._labels: dict[UUID, tuple[SpendLabels, CallLabels]] = {}
 
     async def authorize(
         self,
@@ -305,7 +312,7 @@ class MoneyCallGateImpl(CallGateInterface):
     ) -> UUID:
         session = await self._sessions.get_session(ctx, session_id)
         project_id = await self._projects.project_of(ctx, session_id)
-        labels = await call_labels(self._version, self._tier, ctx, session_id)
+        spend = await spend_labels(self._version, self._tier, ctx, session_id)
         priced = PricedAt(
             version=self._prices.version, provider=fill.provider.value, model=fill.model
         )
@@ -322,11 +329,29 @@ class MoneyCallGateImpl(CallGateInterface):
         answer = await self._gate.authorize_priced(ctx, request, priced, credential=credential)
         if isinstance(answer, Refusal):
             raise BudgetRefused(answer)
-        self._labels[answer.id] = labels
+        self._labels[answer.id] = (
+            spend,
+            CallLabels(
+                session_id=session_id,
+                tree_id=session.root_id,
+                agent_kind=session.kind,
+                kind_version=session.kind_version,
+                role=role,
+                provider=fill.provider.value,
+                model=fill.model,
+            ),
+        )
         return answer.id
 
     async def settle(
-        self, ctx: TenantContext, hold_id: UUID, usage: Usage | None, *, billed: bool
+        self,
+        ctx: TenantContext,
+        hold_id: UUID,
+        usage: Usage | None,
+        *,
+        billed: bool,
+        site: CallSite | None,
+        partial: Usage | None = None,
     ) -> None:
         bill: Bill
         if not billed:
@@ -344,9 +369,21 @@ class MoneyCallGateImpl(CallGateInterface):
                 )
                 price = self._prices.price_at(version, provider, model)
             bill = Billed(usage=usage_spend(usage, price))
-        labels = self._labels.pop(hold_id, UNLABELLED)
+        spend, labels = self._labels.pop(hold_id, (UNLABELLED, None))
         settlement = await self._gate.settle(ctx, hold_id, bill)
-        count_settled(labels, usage if billed else None, settlement)
+        count_settled(spend, usage if billed else None, settlement)
+        await record_settled(
+            self._budgets,
+            ctx,
+            hold_id,
+            labels,
+            bill,
+            settlement,
+            usage,
+            partial=partial,
+            site=site,
+            at=self._clock(),
+        )
 
     async def authorize_job(
         self,

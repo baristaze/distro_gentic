@@ -37,7 +37,7 @@ import pytest
 from api_support import seed_request, sign_in_as
 from contracts.evidence_storage import make_policy
 from httpx import ASGITransport
-from runner_support import E2E_KINDS, answers, runs, submits, validates
+from runner_support import E2E_KINDS, TOOLS, answers, runs, submits, validates
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -270,7 +270,7 @@ async def stack(emptied: None, tmp_path: Path) -> AsyncIterator[Stack]:
         postgres_storage(settings),
         InfraConfiguredImpl(settings),
         absent_integrations(),
-        ports=PlatformPorts(kinds=ProductKinds(agents=E2E_KINDS)),
+        ports=PlatformPorts(kinds=ProductKinds(agents=E2E_KINDS, tools=lambda _managers: TOOLS)),
     )
     app = create_app(container)
     workspaces = tmp_path / "workspaces"
