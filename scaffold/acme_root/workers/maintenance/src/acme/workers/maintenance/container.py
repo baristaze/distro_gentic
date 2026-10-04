@@ -42,7 +42,7 @@ from acme.om.product_kinds import PRODUCT_KINDS
 from acme.om.projects.impl.manager import ProjectsOptions
 from acme.om.relay.impl.manager import RelayOptions
 from acme.om.retention.impl.manager import RetentionOptions
-from acme.om.root import LOCAL, Managers, PlatformPorts, build_managers
+from acme.om.root import LOCAL, Managers, PlatformPorts, ProductKinds, build_managers
 from acme.om.steps.impl.manager import StepsOptions
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
@@ -173,7 +173,11 @@ class WorkerContainer:
         infra: InfraInterface,
         managers: Managers,
         integrations: IntegrationsInterface,
+        kinds: ProductKinds | None = None,
     ) -> None:
+        """`kinds` are the product's, whose automation actions its firings
+        and its ticks run; None adds none."""
+        kinds = kinds or ProductKinds()
         self.settings = settings
         self.storage = storage
         self.infra = infra
@@ -202,6 +206,7 @@ class WorkerContainer:
             managers,
             project_required=settings.environment != LOCAL,
             options=AutomationsOptions(purge_batch=batch),
+            actions=kinds.actions,
         )
         self.playbooks = PlaybooksLayer(storage, options=PlaybooksOptions(purge_batch=batch)).build(
             managers
@@ -265,6 +270,7 @@ class WorkerContainer:
                 storage, infra, integrations, settings, PlatformPorts(kinds=PRODUCT_KINDS)
             ),
             integrations,
+            PRODUCT_KINDS,
         )
 
     @classmethod
@@ -289,6 +295,7 @@ class WorkerContainer:
             infra,
             worker_managers(storage, infra, integrations, settings, ports),
             integrations,
+            None if ports is None else ports.kinds,
         )
 
     async def start(self) -> None:

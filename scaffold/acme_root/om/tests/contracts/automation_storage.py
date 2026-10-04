@@ -16,6 +16,7 @@ from acme.om.automations.types.automation import (
     AutomationRun,
     Limits,
     Refusal,
+    RunOutcome,
     RunStatus,
     Trigger,
     TriggerKind,
@@ -328,6 +329,22 @@ class AutomationStorageContract:
         run = await storage.create_run(org, make_run(automation.id))
         assert await storage.read_run(org, run.id) == run
         assert await storage.read_run(new_id(), run.id) is None
+
+    async def test_a_products_action_reads_back_whole_with_the_work_its_run_ended(
+        self, storage: AutomationStorageInterface
+    ) -> None:
+        org = new_id()
+        automation = make_automation().model_copy(
+            update={"action": Action(kind="run_job", params={"steps": 2, "on": ["a", "b"]})}
+        )
+        assert await storage.create_automation(org, automation, ())
+        assert await storage.read_automation(org, automation.id) == automation
+        run = await storage.create_run(org, make_run(automation.id))
+        ended = run.model_copy(
+            update={"work_id": new_id(), "outcome": RunOutcome.FAILED, "closed_at": utcnow()}
+        )
+        await storage.write_run(org, ended)
+        assert await storage.read_run(org, run.id) == ended
 
     async def test_one_principal_a_tenant_whose_grant_keeps_its_id(
         self, storage: AutomationStorageInterface

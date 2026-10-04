@@ -2,7 +2,8 @@
 the tenant, reads and lists them, and its creator edits it. A viewer makes
 none, and nobody but its creator edits one that runs as its creator, since
 it runs on the creator's authority. Another tenant's automation and project
-are not found; a malformed automation is refused whole."""
+are not found; a malformed automation, and one whose action kind no
+product declares, is refused whole."""
 
 import httpx
 from tenant_support import Headers, person, refused, tenant
@@ -138,6 +139,11 @@ async def test_a_malformed_automation_is_refused_whole(
         {**body, "action": {**action, "title": None}},
         {**body, "action": {**action, "project_id": None}},
         {**body, "action": {**action, "kind": "message_session"}},
+        {**body, "action": {**action, "brief": None}},
+        {**body, "action": {**action, "params": {"steps": 2}}},
+        # A kind no product declares could never act.
+        {**body, "action": {"kind": "run_job", "params": {"steps": 2}}},
+        {**body, "action": {"kind": "Run Job"}},
         {**body, "limits": {**limits, "run_cap_micros": 6_000_000}},
         {**body, "limits": {**limits, "rate": 0}},
         {**body, "created_by": "00000000-0000-0000-0000-000000000000"},

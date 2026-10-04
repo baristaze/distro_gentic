@@ -6,11 +6,11 @@ and the grant as it stands."""
 from datetime import datetime, timedelta
 from uuid import UUID
 
-from pydantic import Field
+from pydantic import Field, JsonValue
 
 from acme.om.agents.types.request import MAX_TITLE
 from acme.om.attribution.types.principal import MAX_KIND
-from acme.om.automations.types.automation import MAX_BRIEF, ActionKind, RunsAs, TriggerKind
+from acme.om.automations.types.automation import ACTION_NAME, MAX_BRIEF, RunsAs, TriggerKind
 from acme.om.context import Role
 from acme.om.steps.types.content import MAX_NAME
 from acme.services.api.types.common import RequestBody, View
@@ -41,25 +41,29 @@ class TriggerView(View):
 
 
 class ActionBody(RequestBody):
-    """Start a session of `agent_kind` titled `title` in the tenant's project
-    `project_id`, or send the brief to the standing session `session_id`.
-    The brief is the creator's word."""
+    """`start_session`: start a session of `agent_kind` titled `title` in the
+    tenant's project `project_id`. `message_session`: send the brief to the
+    standing session `session_id`. The brief is the creator's word. Any
+    other kind is one the product declares, which takes its `params` and no
+    brief; a kind no product declares is refused."""
 
-    kind: ActionKind
-    brief: str = Field(min_length=1, max_length=MAX_BRIEF)
+    kind: str = Field(pattern=ACTION_NAME)
+    brief: str | None = Field(default=None, min_length=1, max_length=MAX_BRIEF)
     agent_kind: str | None = Field(default=None, min_length=1, max_length=MAX_KIND)
     title: str | None = Field(default=None, min_length=1, max_length=MAX_TITLE)
     project_id: UUID | None = None
     session_id: UUID | None = None
+    params: dict[str, JsonValue] = Field(default_factory=lambda: {})
 
 
 class ActionView(View):
-    kind: ActionKind
-    brief: str
+    kind: str
+    brief: str | None
     agent_kind: str | None
     title: str | None
     project_id: UUID | None
     session_id: UUID | None
+    params: dict[str, JsonValue]
 
 
 class LimitsBody(RequestBody):

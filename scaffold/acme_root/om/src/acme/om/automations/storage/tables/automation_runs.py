@@ -33,6 +33,8 @@ class AutomationRuns(IdentifiableMixin, CreatedMixin, Base):
     opened: Mapped[bool]
     budget_id: Mapped[UUID | None]
     reserved_micros: Mapped[int] = mapped_column(BigInteger)
+    work_id: Mapped[UUID | None]
+    outcome: Mapped[str | None]
     event_text: Mapped[str]
     started_at: Mapped[datetime | None]
     closed_at: Mapped[datetime | None]
