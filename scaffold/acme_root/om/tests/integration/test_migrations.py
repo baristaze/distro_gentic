@@ -393,9 +393,8 @@ async def test_the_station_columns_leave_and_every_session_this_release_wrote_st
     assert await session_shape(core) == SESSION_SHAPE
     for org, session in held.items():
         assert await storage.read_validation(org, session.id) == session
-        assert await in_tenant(core, org, "SELECT count(*) FROM core.validation_sessions") == [
-            (1,)
-        ]
+        kept = await in_tenant(core, org, "SELECT count(*) FROM core.validation_sessions")
+        assert kept == [(1,)]
     assert await check(DatabaseRole.CORE, core) == []
 
 
