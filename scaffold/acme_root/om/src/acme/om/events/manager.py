@@ -36,6 +36,15 @@ class EventsManagerInterface(ABC):
         ...
 
     @abstractmethod
+    async def get_recent_events(
+        self, ctx: TenantContext, before_seq: int | None, limit: int
+    ) -> list[Event]:
+        """The tenant's newest events below `before_seq`, newest first; from
+        the head when `before_seq` is None. Never refused: a page that
+        reaches the floor is short, and a page below it is empty."""
+        ...
+
+    @abstractmethod
     async def purge_across_tenants(self) -> int:
         """Platform-internal: the sweep's trim, across tenants, once a pass. With
         an event retention set, one bounded batch of the oldest events past it
