@@ -83,9 +83,13 @@ The shape of a kind is the four profiles in
    neither the API's nor the maintenance worker's container test that
    reads that call. Its kinds, every version it still runs, its tools,
    and the classes they declare go in `PRODUCT_KINDS`, in
-   `om/src/<name>/om/product_kinds.py` (`agents`, `tools`, `classes` of
-   `ProductKinds` in `om/src/<name>/om/root.py`), which every process's
-   entry point hands its root as `PlatformPorts.kinds`. Its container
+   `om/src/<name>/om/product_kinds.py` (`agents`, `tools`, `classes`,
+   `ceilings` of `ProductKinds` in `om/src/<name>/om/root.py`), which
+   every process's entry point hands its root as `PlatformPorts.kinds`.
+   A class of the product's that must always wait for a person takes its
+   ceiling in `ceilings`, never a row in `DEFAULT_CEILINGS` in the
+   platform's `tools/rules.py`, whatever the engine's
+   `agentic-scaffold-tool` says for a class. Its container
    test holds instead that the kind declared in `PRODUCT_KINDS.agents`
    reaches each container's `build`, shape
    `workers/session_runner/tests/test_product_parts.py`: the API's
@@ -114,7 +118,8 @@ The shape of a kind is the four profiles in
    spawn, registered in `with_shipped`. The engine's
    `agentic-scaffold-tool` holds what a tool's spec, target, and
    failures must be; follow it where it is installed, and the shapes in
-   `tools.py` either way. Its test goes in
+   `tools.py` either way, except that a product's class takes its
+   ceiling in `PRODUCT_KINDS.ceilings` (step 1). Its test goes in
    `om/tests/unit/test_platform_agents.py`.
    A `result_tool` kind names its result tool among its tools.
 4. The profile sets its powers: `isolation` is `WORKSPACE` or

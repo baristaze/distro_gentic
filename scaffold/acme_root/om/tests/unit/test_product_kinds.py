@@ -3,7 +3,8 @@ payload, its claimant kind, and its lane; a secret owner kind with the
 placement that reaches it; a stream kind with its bounds; and an executor
 for a validation's environment. Each registers beside the platform's own,
 which go through the same registries, and each is held as the platform's
-is. The example is a `render` job on a `batch` pool."""
+is. A product's own class takes its ceiling beside the platform's. The
+example is a `render` job on a `batch` pool."""
 
 from dataclasses import replace
 from datetime import timedelta
@@ -32,6 +33,7 @@ from acme.om.agents.types.result import Claim, Result
 from acme.om.base import Platform, new_id, utcnow
 from acme.om.context import AppContext, AppType, Permission, RequestContext, Role, TenantContext
 from acme.om.evidence.executor import Executors
+from acme.om.evidence.rules import CEILINGS
 from acme.om.evidence.types.contract import PLATFORM_ENVIRONMENT
 from acme.om.evidence.types.policy import Requirement, ValidationPolicy
 from acme.om.evidence.types.provenance import Provenance
@@ -55,6 +57,10 @@ from acme.om.placement.types.claimant import Claimant, ClaimantReport, ReportOut
 from acme.om.root import Managers, ProductKinds, build_managers
 from acme.om.steps.types.header import LoopOutcome
 from acme.om.storage.impl.memory import StorageMemoryImpl
+from acme.om.tools.impl.manager import ToolsOptions
+from acme.om.tools.rules import decide
+from acme.om.tools.types.policy import Decision, PolicyCall, PolicyLayer, PolicyRule
+from acme.om.tools.types.tool import Effect, ToolClass
 from acme.om.trust.owners import ProjectOwnerImpl, SecretOwnerInterface, SecretOwners
 from acme.om.trust.rules import crossing
 from acme.om.trust.types.secret import PROJECT, SecretDeclaration, SecretStore, kept_as
@@ -342,6 +348,88 @@ def test_the_platforms_kinds_go_through_the_same_registries(managers: Managers) 
     platform = ScriptedExecutor()
     with pytest.raises(ValueError, match="registered twice"):
         Executors(platform, {PLATFORM_ENVIRONMENT: ScriptedExecutor(name="batch-1")})
+
+
+# A ceiling of a class of the product's own, beside the platform's.
+
+RENDER_CLASS = "render"
+"""A class of the product's whose every call waits for a person."""
+PREVIEW_CLASS = "preview"
+"""A class of the product's with no ceiling of its own."""
+EVERYTHING = PolicyLayer(rules=(PolicyRule(decision=Decision.ALLOW),))
+"""A tenant's layer that allows every call."""
+
+
+def engine_ceilings(managers: Managers) -> PolicyLayer:
+    """The ceilings the root hands the engine's tools manager, beneath the
+    layers the root puts on it."""
+    tools: object = managers.tools
+    while hasattr(tools, "_inner"):
+        tools = getattr(tools, "_inner")  # noqa: B009 (each layer's own field)
+    return tools._options.ceilings  # pyright: ignore[reportAttributeAccessIssue]
+
+
+def test_a_products_class_holds_its_ceiling_whatever_the_tenant_allows(tmp_path: Path) -> None:
+    product = ProductKinds(
+        classes=(RENDER_CLASS, PREVIEW_CLASS), ceilings={RENDER_CLASS: Decision.APPROVE}
+    )
+    render = PolicyCall(
+        tool="render_frames", authorization_class=RENDER_CLASS, effect=Effect.UNSAFE
+    )
+    preview = render.model_copy(update={"authorization_class": PREVIEW_CLASS})
+    for options in (None, ToolsOptions(purge_batch=5)):
+        managers = build_managers(
+            StorageMemoryImpl(),
+            InfraLocalImpl(tmp_path),
+            tools_options=options,
+            product_kinds=product,
+        )
+        ceilings = engine_ceilings(managers)
+        assert decide(render, PolicyLayer(), EVERYTHING, ceilings) is Decision.APPROVE
+        # A class with no ceiling runs as the tenant allows, and the
+        # platform's own ceilings stay as they were.
+        assert decide(preview, PolicyLayer(), EVERYTHING, ceilings) is Decision.ALLOW
+        assert all(rule in ceilings.rules for rule in CEILINGS.rules)
+
+
+def test_a_products_ceiling_never_touches_the_platforms(tmp_path: Path) -> None:
+    capped = ToolsOptions(
+        ceilings=PolicyLayer(
+            rules=(
+                *CEILINGS.rules,
+                PolicyRule(authorization_class=RENDER_CLASS, decision=Decision.DENY),
+            )
+        )
+    )
+    refused = (
+        # A platform class, even one the product lists among its own.
+        (ProductKinds(ceilings={ToolClass.DESTRUCTIVE: Decision.ALLOW}), None, "platform class"),
+        (
+            ProductKinds(classes=(ToolClass.NETWORK,), ceilings={ToolClass.NETWORK: Decision.DENY}),
+            None,
+            "platform class",
+        ),
+        # A class the product does not declare.
+        (
+            ProductKinds(classes=(RENDER_CLASS,), ceilings={PREVIEW_CLASS: Decision.APPROVE}),
+            None,
+            "no class of the product's",
+        ),
+        # A class a ceiling of the platform already caps.
+        (
+            ProductKinds(classes=(RENDER_CLASS,), ceilings={RENDER_CLASS: Decision.ALLOW}),
+            capped,
+            "already holds a ceiling",
+        ),
+    )
+    for product, options, reason in refused:
+        with pytest.raises(ValueError, match=reason):
+            build_managers(
+                StorageMemoryImpl(),
+                InfraLocalImpl(tmp_path),
+                tools_options=options,
+                product_kinds=product,
+            )
 
 
 # A secret owner kind, reached only from its owner's placement.
