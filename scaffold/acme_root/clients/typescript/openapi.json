@@ -8738,7 +8738,7 @@
         "type": "object"
       },
       "ValidationSessionView": {
-        "description": "A validation session: what it runs, at which commit and from which,\nand where it stands. Once its run is recorded, `passed` is the verdict\n(the run passed, and at least one of its cases did) and `run` is that\nrun; both are null while it waits.",
+        "description": "A validation session: what it runs, at which commit and from which,\nand where it stands. Once its run is recorded, `passed` is the verdict\nand `run` is that run; both are null while it waits. The run passes\nwhen it passed, at least one of its cases did, and what served it meets\nthe strictest grade the project's policy asks of the check, a twin when\nno requirement names it: a run on a double, or with a dependency that\nwas not there, never passes. `reason` says why it did not pass, and is\nnull otherwise.",
         "properties": {
           "base": {
             "title": "Base",
@@ -8795,6 +8795,17 @@
             "title": "Project Id",
             "type": "string"
           },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
           "run": {
             "anyOf": [
               {
@@ -8820,6 +8831,7 @@
           "status",
           "finished_at",
           "passed",
+          "reason",
           "run"
         ],
         "title": "ValidationSessionView",
