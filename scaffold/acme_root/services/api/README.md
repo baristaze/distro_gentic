@@ -253,7 +253,8 @@ app, and `main.py` is the `acme-api` command: `serve`, `migrate`,
   bound a request is refused at once with a 503 and a `Retry-After`,
   so a saturated process answers and says why instead of queueing
   work it cannot start. Admission fails closed and is counted in the
-  process's own memory.
+  process's own memory. A socket and a host's control stream are not
+  counted: each is held open for as long as its subscriber wants it.
 - **A deadline on every admitted request.** A request gets one when it
   takes its slot, `ACME_REQUEST_DEADLINE_SECONDS` (20) from then, and
   every call it makes to WorkOS or AWS shares it. A
