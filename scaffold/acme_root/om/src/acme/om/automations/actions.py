@@ -1,7 +1,9 @@
 """A product's own kinds of automation action, as a registry. The platform's
 two actions start a session or message one; a product adds an action that
-does its own work in the firing, and a check that says when the run it
-started ended, so the run closes on that end rather than as lost. Each
+does its own work in the firing, a check that says when the run it
+started ended, so the run closes on that end rather than as lost, and a
+check of the person who writes the automation, so one its firings would
+refuse is refused when it is written. Each
 root builds the one registry from what the product hands it
 (`root.ProductKinds.actions`), and a name the platform's actions hold, or
 one registered twice, is refused at boot."""
@@ -47,6 +49,19 @@ class AutomationActionInterface(ABC):
         context: None while it is at work, so the run stays open and counts
         in the concurrency."""
         ...
+
+    async def check_writer(self, ctx: TenantContext, params: Platform) -> None:
+        """Refuses the person writing an enabled automation of this kind,
+        under `ctx`, their own context in person, with `params` already held
+        to the kind's shape. A writer it refuses is told when the automation
+        is written, not by a refused run at each firing: it raises
+        `NotAuthorized` with the reason, which the create or the edit answers
+        as is, and any other `PlatformException` answers as itself. A
+        disabled automation is never asked about, so its writer can always
+        turn it off. The firing still runs `act` under the run's live
+        context, which refuses what changed since. Admits every writer the
+        platform admits unless the kind says otherwise."""
+        return None
 
 
 class AutomationActions:

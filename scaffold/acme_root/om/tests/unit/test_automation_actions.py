@@ -2,8 +2,9 @@
 as the automation runs, and the run it started stays at work until the
 kind's check says that work ended, whatever time passes, then closes as
 the check says. An action that names a kind no product declares is refused
-when it is written, and a product's kind named as one of the platform's
-actions is refused at boot."""
+when it is written, and so is a writer the kind's check of its writer
+refuses, while a disabled one is never asked about; a product's kind named
+as one of the platform's actions is refused at boot."""
 
 from collections.abc import Callable
 from pathlib import Path
@@ -30,7 +31,7 @@ from acme.om.automations.types.automation import (
 )
 from acme.om.base import Platform, derived_id, new_id, utcnow
 from acme.om.context import Role, TenantContext
-from acme.om.exceptions import ValidationFailed
+from acme.om.exceptions import NotAuthorized, ValidationFailed
 from acme.om.root import Managers
 
 JOB = "run_job"
@@ -52,6 +53,9 @@ class JobAction(AutomationActionInterface):
         self.acted_as: list[UUID] = []
         self.texts: list[str] = []
         self.broken = False
+        # None admits every writer; a set admits only the people it holds.
+        self.approvers: set[UUID] | None = None
+        self.writers: list[tuple[UUID, int]] = []
 
     async def act(self, ctx: TenantContext, run: AutomationRun, params: Platform) -> UUID:
         assert isinstance(params, Job)
@@ -66,6 +70,12 @@ class JobAction(AutomationActionInterface):
             raise RuntimeError("the product's store is down")
         assert run.work_id is not None
         return self.jobs[run.work_id]
+
+    async def check_writer(self, ctx: TenantContext, params: Platform) -> None:
+        assert isinstance(params, Job)
+        self.writers.append((ctx.user_id, params.steps))
+        if self.approvers is not None and ctx.user_id not in self.approvers:
+            raise NotAuthorized("only an approver sets up the job")
 
 
 def declaring(
@@ -178,6 +188,44 @@ async def test_an_action_of_a_kind_no_product_declares_is_refused_when_written(
         Action(kind=ActionKind.MESSAGE_SESSION, brief="Look.", session_id=new_id(), params={"a": 1})
     with pytest.raises(ValidationError):
         Action(kind=JOB, params={"blob": "x" * 20_001})
+
+
+async def test_a_writer_the_kinds_check_refuses_is_refused_when_the_automation_is_written(
+    platform: Wired, job: JobAction
+) -> None:
+    approver, outsider = platform.person(Role.ADMIN), platform.person(Role.ADMIN)
+    job.approvers = {approver.user_id}
+    with pytest.raises(NotAuthorized, match="only an approver sets up the job"):
+        await platform.automations.create_automation(outsider, job_automation())
+    assert await platform.automations.list_automations(approver, None, 10) == ()
+    made = await platform.automations.create_automation(approver, job_automation())
+    # The check reads the writer's own context, and the params in its shape.
+    assert job.writers == [(outsider.user_id, 2), (approver.user_id, 2)]
+    edited = await platform.automations.update_automation(
+        approver, made.id, job_automation(name="the job, twice")
+    )
+    assert edited.name == "the job, twice"
+    # A writer who is no longer an approver is refused an edit that leaves it
+    # enabled, and turns it off without a word from the kind.
+    job.approvers = set()
+    with pytest.raises(NotAuthorized, match="only an approver"):
+        await platform.automations.update_automation(
+            approver, made.id, job_automation(name="the job, thrice")
+        )
+    asked = len(job.writers)
+    off = await platform.automations.update_automation(
+        approver, made.id, job_automation(enabled=False)
+    )
+    assert not off.enabled and len(job.writers) == asked
+    # One written disabled is turned on only by a writer the kind admits.
+    dormant = await platform.automations.create_automation(outsider, job_automation(enabled=False))
+    with pytest.raises(NotAuthorized, match="only an approver"):
+        await platform.automations.update_automation(outsider, dormant.id, job_automation())
+    job.approvers = {outsider.user_id}
+    on = await platform.automations.update_automation(outsider, dormant.id, job_automation())
+    assert on.enabled
+    # Asked once for each enabled write, and never for a disabled one.
+    assert len(job.writers) == asked + 2
 
 
 async def test_an_automation_whose_kind_left_the_product_is_refused_at_each_firing(

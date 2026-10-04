@@ -4,7 +4,8 @@ none, and nobody but its creator edits one that runs as its creator, since
 it runs on the creator's authority. Another tenant's automation and project
 are not found; a malformed automation, and one whose action kind no
 product declares, is refused whole. A product's own action, whose params
-nest lists and mappings, is made, read, and listed whole."""
+nest lists and mappings, is made, read, and listed whole, and a writer its
+kind's check refuses is refused, with the kind's reason."""
 
 from collections.abc import Callable
 from pathlib import Path
@@ -19,6 +20,7 @@ from acme.om.automations.actions import AutomationActionInterface
 from acme.om.automations.types.automation import AutomationRun, RunOutcome
 from acme.om.base import Platform, new_id
 from acme.om.context import Role, TenantContext
+from acme.om.exceptions import NotAuthorized
 from acme.om.root import Managers, PlatformPorts, ProductKinds
 from acme.services.api.app import create_app
 from acme.services.api.container import AppContainer
@@ -212,3 +214,50 @@ async def test_a_products_action_with_nested_params_is_made_read_and_listed(
             listed = await client.get("/v1/automations", headers=ajax.owner)
             assert listed.status_code == 200, listed.text
             assert listed.json() == [made.json()]
+
+
+class ApprovedSweep(SweepAction):
+    """A product's kind that only its approvers set up."""
+
+    name = "approved_sweep"
+
+    def __init__(self) -> None:
+        self.approvers = {Role.OWNER}
+
+    async def check_writer(self, ctx: TenantContext, params: Platform) -> None:
+        if ctx.role not in self.approvers:
+            raise NotAuthorized(f"the role {ctx.role.value} is no approver of the sweep")
+
+
+async def test_a_writer_the_kinds_check_refuses_is_refused_with_its_reason(
+    tmp_path: Path,
+) -> None:
+    kind = ApprovedSweep()
+    ports = PlatformPorts(kinds=ProductKinds(actions=lambda managers: (kind,)))
+    container = build_container(tmp_path, ports=ports)
+    app = create_app(container)
+    async with app.router.lifespan_context(app):
+        transport = ASGITransport(app=app, raise_app_exceptions=False)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            ajax = await tenant(client, container, "ajax")
+            member = await person(client, container, ajax.org_id, Role.MEMBER)
+            params = {"steps": 2, "on": ["a"], "where": {}}
+            body = {
+                **automation(await project_of(client, ajax.owner)),
+                "action": {"kind": "approved_sweep", "params": params},
+            }
+            taken = await client.post("/v1/automations", headers=member, json=body)
+            refused(taken, 403, "not_authorized")
+            assert taken.json()["error"]["message"] == "the role member is no approver of the sweep"
+            made = await client.post("/v1/automations", headers=ajax.owner, json=body)
+            assert made.status_code == 201, made.text
+            url = f"/v1/automations/{made.json()['id']}"
+            kind.approvers = set()
+            edit = await client.put(url, headers=ajax.owner, json={**body, "name": "every hour"})
+            refused(edit, 403, "not_authorized")
+            assert edit.json()["error"]["message"] == "the role owner is no approver of the sweep"
+            kind.approvers = {Role.OWNER}
+            edit = await client.put(url, headers=ajax.owner, json={**body, "name": "every hour"})
+            assert edit.status_code == 200, edit.text
+            listed = await client.get("/v1/automations", headers=ajax.owner)
+            assert [a["name"] for a in listed.json()] == ["every hour"]
