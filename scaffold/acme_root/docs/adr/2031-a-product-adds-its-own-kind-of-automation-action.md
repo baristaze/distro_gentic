@@ -4,12 +4,12 @@
 
 ## Context
 
-Automations: "A trigger, an event with filters or a schedule, leads to an
-action: start a session, or message a standing session." Those were the
-only two, a closed enum. A product whose firing does its own work, a job
-that waits in a line of its own and ends without a session, had no
-hook. It edited the platform's automations, which every base move then
-fights, or it started a session only to run one job.
+The spec's Automations has a trigger, an event with filters or a
+schedule, lead to an action: start a session, or message a standing
+session. A product whose firing does its own work, a job that waits in a
+line of its own and ends without a session, has no hook beyond editing
+the platform's automations, which every base move then fights, or
+starting a session only to run one job.
 
 A run that names no session is closed once `lost_after` passes, since
 the platform reads it as a run lost before its action ran. A product's

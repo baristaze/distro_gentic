@@ -120,16 +120,25 @@ async def test_the_workspace_holds_no_file_of_the_hidden_suite_and_the_verdict_s
         (COMPLETE.name, HEAD, True)
     ]
     # The executor fetched the suite from its own source, its paths
-    # protected, for the verdict's run alone; every run the session asked
-    # for came from the project's base.
+    # protected, for the verdict's run alone, with the scenario's forbidden
+    # paths from its base; every run the session asked for came from the
+    # project's base.
     sources = [
-        (request.purpose, request.source_project, request.source, request.protected)
+        (
+            request.purpose,
+            request.source_project,
+            request.source,
+            request.protected,
+            request.base,
+            request.untouched,
+        )
         for request in run.evidence.executor.requests
     ]
+    hidden = (EXPORT.hidden.source, EXPORT.hidden.paths, BASE, EXPORT.forbidden)
     assert sources == [
-        (RunPurpose.BASELINE, None, BASE, ("tests/**",)),
-        (RunPurpose.VALIDATION, None, BASE, ("tests/**",)),
-        (RunPurpose.VALIDATION, SUITE_PROJECT, EXPORT.hidden.source, EXPORT.hidden.paths),
+        (RunPurpose.BASELINE, None, BASE, ("tests/**",), None, ()),
+        (RunPurpose.VALIDATION, None, BASE, ("tests/**",), None, ()),
+        (RunPurpose.VALIDATION, SUITE_PROJECT, *hidden),
     ]
     # A scenario that keeps its hidden suite at the base, or in the
     # project's own repository, is refused.

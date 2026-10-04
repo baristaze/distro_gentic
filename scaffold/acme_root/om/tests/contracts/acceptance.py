@@ -90,8 +90,9 @@ class DefectExecutor(ScriptedExecutor):
     """An executor over a defect: at a version in `broken` the visible check
     fails, and the hidden suite passes unless `hidden_passes` says not. It
     finds the hidden suite only in the suite's own source, with its paths
-    protected: asked for it from anywhere else, as from the project's tree,
-    its check fails."""
+    protected and the scenario's forbidden paths taken from its base: asked
+    for it any other way, as from the project's tree or with the head's
+    copy of what scores it, its check fails."""
 
     broken: frozenset[str] = frozenset({BASE})
     hidden_passes: bool = True
@@ -103,6 +104,7 @@ class DefectExecutor(ScriptedExecutor):
             and request.source_project == SUITE_PROJECT
             and request.source in SUITES
             and request.protected == EXPORT.hidden.paths
+            and (request.base, request.untouched) == (EXPORT.base, EXPORT.forbidden)
         )
 
         def outcome(check: str, trial: int) -> str:

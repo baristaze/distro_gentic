@@ -9,13 +9,13 @@ loop. It also runs checks with no agent at all: a validation session
 runs a check on a station, on the same queue and the same record as an
 agent's work.
 
-The engine's agent session is the obvious record to reuse. But its loop
+The engine's agent session is the obvious record to reuse, but its loop
 is the engine's: a message to it asks for a loop, a runner claims the
 loop, and the loop's first act after its gates is a model call. A kind
-must name a main model role. An agent session with no agent would be one
-whose loop must never run, held only by every path that could wake it.
-Its history is the model's too: its tool steps reference the model
-response that asked for them.
+must name a main model role, so an agent session with no agent would be
+one whose loop must never run, held shut only by every path that could
+wake it. Its history is the model's too: its tool steps reference the
+model response that asked for them.
 
 ## Decision
 
