@@ -79,7 +79,7 @@ export const keys = {
     all: ["approval"] as const,
     list: (limit: number) => ["approval", "list", limit] as const,
   },
-  // The org's events, oldest first, as the audit reads them.
+  // The org's events, newest first, as the audit reads them.
   audit: {
     all: ["audit"] as const,
     list: (limit: number) => ["audit", "list", limit] as const,

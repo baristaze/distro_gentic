@@ -4,7 +4,7 @@ import { useAuditEvents } from "../../queries/events";
 import { useUsers } from "../../queries/tenancy";
 import { auditRows } from "./auditModel";
 
-/** The org's events from the oldest kept, a page at a time, each with who
+/** The org's events from the newest, a page at a time, each with who
  * caused it: a member, or the automation principal its runs act as. */
 export function useAuditVm() {
   const events = useAuditEvents();

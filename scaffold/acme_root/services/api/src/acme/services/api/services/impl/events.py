@@ -12,3 +12,9 @@ class EventsServiceImpl(EventsServiceInterface):
     async def get_events(self, ctx: TenantContext, after_seq: int, limit: int) -> list[EventView]:
         events = await self._events.get_events(ctx, after_seq, clamp_limit(limit))
         return [EventView.model_validate(e) for e in events]
+
+    async def get_recent_events(
+        self, ctx: TenantContext, before_seq: int | None, limit: int
+    ) -> list[EventView]:
+        events = await self._events.get_recent_events(ctx, before_seq, clamp_limit(limit))
+        return [EventView.model_validate(e) for e in events]

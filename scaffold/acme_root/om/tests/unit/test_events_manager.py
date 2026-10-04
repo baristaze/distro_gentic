@@ -15,6 +15,7 @@ from acme.om.context import (
 )
 from acme.om.events.impl.manager import EventsManagerImpl, EventsOptions
 from acme.om.events.storage.impl.memory import EventStorageMemoryImpl
+from acme.om.events.types.event import Event
 from acme.om.exceptions import NotAuthorized, StreamTruncated
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tenancy.rules import permissions_of
@@ -212,3 +213,43 @@ async def test_a_read_below_the_floor_is_refused_with_the_head(retention: Retent
     other = context()
     await manager.append_event(other, make_event(other.org_id))
     assert [e.seq for e in await manager.get_events(other, 0, 10)] == [1]
+
+
+async def test_the_recent_read_pages_back_from_the_head_to_the_floor(
+    retention: Retention,
+) -> None:
+    manager = keeping(retention, 90)
+    ctx, other = context(Role.OWNER), context(Role.OWNER)
+    await append_aged(manager, ctx, 100, 100, 1, 1, 1, 1, 1)
+    await append_aged(manager, other, 1, 1, 1, 1, 1, 1, 1, 1, 1)
+    assert await manager.purge_across_tenants() == 2
+
+    def seqs(events: list[Event]) -> list[int]:
+        return [e.seq for e in events]
+
+    # Newest first from the head, then each page below the last one's oldest.
+    assert seqs(await manager.get_recent_events(ctx, None, 2)) == [7, 6]
+    assert seqs(await manager.get_recent_events(ctx, 6, 2)) == [5, 4]
+    # The page that reaches the floor is short, and the one below it empty.
+    assert seqs(await manager.get_recent_events(ctx, 4, 2)) == [3]
+    assert await manager.get_recent_events(ctx, 3, 2) == []
+    assert await manager.get_recent_events(ctx, 1, 2) == []
+    # A number past the head reads from the head.
+    assert seqs(await manager.get_recent_events(ctx, 1000, 2)) == [7, 6]
+    assert seqs(await manager.get_recent_events(ctx, None, 1000)) == [7, 6, 5, 4, 3]
+    # Every page is the caller's own: the other tenant's longer stream and
+    # untrimmed bottom never show, at the head or paging back.
+    assert all(e.org_id == ctx.org_id for e in await manager.get_recent_events(ctx, 1000, 1000))
+    assert seqs(await manager.get_recent_events(other, None, 1000)) == list(range(9, 0, -1))
+    assert all(e.org_id == other.org_id for e in await manager.get_recent_events(other, 3, 1000))
+    assert await manager.get_recent_events(context(), None, 10) == []
+
+
+async def test_the_recent_read_needs_read(manager: EventsManagerImpl) -> None:
+    member = context(Role.MEMBER)
+    await manager.append_event(member, make_event(member.org_id))
+    no_read = member.model_copy(
+        update={"security": member.security.model_copy(update={"permissions": ()})}
+    )
+    with pytest.raises(NotAuthorized):
+        await manager.get_recent_events(no_read, None, 10)

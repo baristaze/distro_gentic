@@ -32,7 +32,7 @@ export function AuditPage() {
           {vm.hasMore ? (
             <div>
               <Button tone="plain" onClick={vm.loadMore} disabled={vm.loadingMore}>
-                {vm.loadingMore ? "Loading" : "Load more"}
+                {vm.loadingMore ? "Loading" : "Load older"}
               </Button>
             </div>
           ) : null}
