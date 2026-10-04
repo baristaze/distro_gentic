@@ -30,8 +30,11 @@ class AutomationsManagerInterface(ABC):
         `NotFound`, as one that never existed is. Where a session starts in
         a project (every stack but a local one), a start that names none is
         `ValidationFailed`, and one stored with none is refused at each
-        firing, starting nothing. An id written already answers the
-        automation as stored."""
+        firing, starting nothing. A product's action names a kind a product
+        declares, with params of its shape, or is `ValidationFailed`; an
+        enabled one is refused as its kind's check of the caller, and of
+        whom it runs as, says (`AutomationActionInterface.check_writer`). An id written already
+        answers the automation as stored."""
         ...
 
     @abstractmethod

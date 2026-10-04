@@ -71,11 +71,14 @@ UNPACK = 'mkdir -p "$1" "$2" && tar -xf "$3" -C "$1" && rm -f "$3" && pwd'
 """Unpacks the tree and answers the instance's root, as its commands see it."""
 EPOCH = 1
 """The one epoch of an instance's commands: no other run ever reaches it."""
-Tree = Callable[[TenantContext, UUID, str, str, tuple[str, ...], UUID], Awaitable[bytes]]
+Tree = Callable[
+    [TenantContext, UUID, str, str, tuple[str, ...], UUID, str | None, tuple[str, ...]],
+    Awaitable[bytes],
+]
 """The tree a validation of a project runs on, as a tar, by the project, the
-commit, the protected source, the protected patterns, and the project whose
-repository holds the source: the workspaces'
-(`WorkspacesManagerInterface.checks_tree`)."""
+commit, the protected source, the protected patterns, the project whose
+repository holds the source, and the base and patterns of the paths no
+change may touch: the workspaces' (`WorkspacesManagerInterface.checks_tree`)."""
 MISSING = 404
 """The status a transport answers for a file the instance does not hold."""
 TOO_LARGE = 413
@@ -156,7 +159,14 @@ class ExecutorWorkspacesImpl(ExecutorInterface):
         except ValueError:
             raise Unavailable(f"no project's id to validate in {sorted(set(named))}") from None
         tree = await self._tree(
-            ctx, project_id, request.version, request.source, request.protected, source_id
+            ctx,
+            project_id,
+            request.version,
+            request.source,
+            request.protected,
+            source_id,
+            request.base,
+            request.untouched,
         )
         instance = new_id()
         if pinned is None:

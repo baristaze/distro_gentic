@@ -43,8 +43,11 @@ class ExecutionRequest(Platform):
     `source`, whatever the tree at `version` holds there. `source` is a
     commit of the repository `project` binds, or of the one
     `source_project` binds when the request names it: a hidden suite's
-    source of its own. Nothing of the agent's workspace or environment is
-    in it. Each check runs at most its
+    source of its own. `untouched` holds the patterns of the paths no
+    change may touch: every path one matches, and no `protected` one does,
+    comes from the commit `base` of the repository `project` binds, so the
+    head's own copy of what scores a run never scores it. Nothing of the
+    agent's workspace or environment is in it. Each check runs at most its
     count of trials; one with a rate stops where `rates.stops_at` says its
     rule stops, at the confidence given here, and nowhere else."""
 
@@ -58,9 +61,13 @@ class ExecutionRequest(Platform):
     rates: tuple[RateRule | None, ...] = ()
     protected: tuple[PATTERN, ...] = ()
     source_project: str | None = Field(default=None, pattern=PROJECT)
+    base: str | None = Field(default=None, pattern=VERSION)
+    untouched: tuple[PATTERN, ...] = ()
 
     @model_validator(mode="after")
     def _a_count_a_check(self) -> Self:
+        if bool(self.untouched) != (self.base is not None):
+            raise ValueError("a request names the base its untouched paths come from, or neither")
         if len(self.trials) != len(self.checks) or min(self.trials) < 1:
             raise ValueError("each check is asked for its own count of trials, at least one")
         if self.rates and len(self.rates) != len(self.checks):

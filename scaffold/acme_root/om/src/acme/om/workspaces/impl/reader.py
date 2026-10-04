@@ -73,6 +73,7 @@ Resolver = Callable[[str, int], Awaitable[Sequence[str]]]
 
 VERSION = "refs/tree/version"
 SOURCE = "refs/tree/source"
+BASE_AT = "refs/tree/base"
 COMMIT = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
 """A commit's full id, the one name a tree is read at."""
 EXECUTABLE = "100755"
@@ -263,8 +264,11 @@ class RepositoryReaderGitImpl(RepositoryReaderInterface):
         credential: FetchCredential | None = None,
         source_binding: RepositoryBinding | None = None,
         source_credential: FetchCredential | None = None,
+        *,
+        base: str | None = None,
+        untouched: tuple[str, ...] = (),
     ) -> bytes:
-        for commit in (version, source):
+        for commit in (version, source) if base is None else (version, source, base):
             if not COMMIT.fullmatch(commit):
                 raise Unavailable(f"a tree is read at a commit's full id, never at {commit!r}")
         with tempfile.TemporaryDirectory(prefix="tree-") as root:
@@ -277,10 +281,10 @@ class RepositoryReaderGitImpl(RepositoryReaderInterface):
                 held = source_binding.repository
                 held_remote = {**env, **await self._reached(held, source_credential)}
             await self._git(env, None, "init", "-q", "--bare", str(repo))
-            for commit, ref, fetched, reached in (
-                (version, VERSION, url, remote),
-                (source, SOURCE, held, held_remote),
-            ):
+            fetches = [(version, VERSION, url, remote), (source, SOURCE, held, held_remote)]
+            if base is not None:
+                fetches.append((base, BASE_AT, url, remote))
+            for commit, ref, fetched, reached in fetches:
                 await self._git(
                     reached,
                     repo,
@@ -298,8 +302,20 @@ class RepositoryReaderGitImpl(RepositoryReaderInterface):
             )
             covered = set(protected_paths(protected, at))
             overlaid = set(protected_paths(protected, taken))
+            kept: dict[str, bytes] = {}
+            if base is not None:
+                # What no change may touch comes from the base, beneath the
+                # source's own paths: the head's copy never runs.
+                covered |= set(protected_paths(untouched, at))
+                at_base = _entries(
+                    await self._run(env, repo, "ls-tree", "-r", "-z", "--full-tree", BASE_AT)
+                )
+                restored = set(protected_paths(untouched, at_base))
+                restored -= set(protected_paths(protected, at_base))
+                kept = {path: entry for path, entry in at_base.items() if path in restored}
             listing = [entry for path, entry in at.items() if path not in covered]
             listing += [entry for path, entry in taken.items() if path in overlaid]
+            listing += kept.values()
             index = {**env, "GIT_INDEX_FILE": str(Path(root) / "index")}
             await self._run(
                 index, repo, "update-index", "-z", "--index-info", stdin=b"".join(listing)

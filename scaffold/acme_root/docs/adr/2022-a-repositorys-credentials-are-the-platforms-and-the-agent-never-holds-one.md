@@ -4,17 +4,15 @@
 
 ## Context
 
-Trust: "A workspace never holds a platform credential." Workspace Hosts:
-the one credential the platform issues a host "is a push token minted
-per session, short-lived and scoped to the session's branch, never the
-integration's own credential." The Result Gate reads what a session
-delivered from the repository its project binds, so a private repository
-needs a credential where that read runs. The engineer delivers through
-its branch and its pull request, so something has to write them.
-
-Two questions follow: where a repository's credential lives, and who
-resolves it. An agent's workspace runs what a model wrote. Whatever it
-holds, a model can print, send, or push with.
+The spec holds that a workspace never holds a platform credential
+(Trust), and that the one credential the platform issues a host is a
+push token minted per session, short-lived and scoped to the session's
+branch, never the integration's own (Workspace Hosts). The Result Gate
+reads what a session delivered from the repository its project binds, so
+a private repository needs a credential where that read runs. The
+engineer delivers through its branch and its pull request, so something
+has to write them. An agent's workspace runs what a model wrote:
+whatever it holds, a model can print, send, or push with.
 
 ## Decision
 
@@ -51,8 +49,7 @@ the repository, and the base are the platform's records.
 - A private repository's delivery is read once its project has a fetch
   credential, and reads as unavailable without one. The result gate
   then fails closed.
-- No credential a model could reach outlives its loop. A token taken
-  from a tool's call is refused once its loop's workspace goes.
+- No credential a model could reach outlives its loop.
 - The tenant's purge takes each value out of the store before its
   record, so no value is left behind a record that is gone.
 - A tenant with no forge connected opens no pull request: every write

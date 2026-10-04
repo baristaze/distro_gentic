@@ -33,6 +33,7 @@ from acme.services.api.services import (
     ServicesInterface,
     TenancyServiceInterface,
     ToolsServiceInterface,
+    ValidationsServiceInterface,
     WatchServiceInterface,
     WebhooksServiceInterface,
 )
@@ -149,6 +150,10 @@ def retention_service(connection: HTTPConnection) -> RetentionServiceInterface:
     return services_of(connection).get_retention_service()
 
 
+def validations_service(connection: HTTPConnection) -> ValidationsServiceInterface:
+    return services_of(connection).get_validations_service()
+
+
 TenancyService = Annotated[TenancyServiceInterface, Depends(tenancy_service)]
 AdminService = Annotated[AdminServiceInterface, Depends(admin_service)]
 EventsService = Annotated[EventsServiceInterface, Depends(events_service)]
@@ -174,3 +179,4 @@ KnowledgeService = Annotated[KnowledgeServiceInterface, Depends(knowledge_servic
 PlaybooksService = Annotated[PlaybooksServiceInterface, Depends(playbooks_service)]
 ToolsService = Annotated[ToolsServiceInterface, Depends(tools_service)]
 RetentionService = Annotated[RetentionServiceInterface, Depends(retention_service)]
+ValidationsService = Annotated[ValidationsServiceInterface, Depends(validations_service)]

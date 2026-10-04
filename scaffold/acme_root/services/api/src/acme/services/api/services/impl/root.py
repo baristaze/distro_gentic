@@ -56,6 +56,7 @@ from acme.services.api.services.impl.relay import RelayServiceImpl
 from acme.services.api.services.impl.retention import RetentionServiceImpl
 from acme.services.api.services.impl.tenancy import TenancyServiceImpl
 from acme.services.api.services.impl.tools import ToolsServiceImpl
+from acme.services.api.services.impl.validations import ValidationsServiceImpl
 from acme.services.api.services.impl.watch import WatchServiceImpl
 from acme.services.api.services.impl.webhooks import WebhooksServiceImpl
 from acme.services.api.services.intake import IntakeServiceInterface
@@ -68,6 +69,7 @@ from acme.services.api.services.projects import ProjectsServiceInterface
 from acme.services.api.services.provider_keys import ProviderKeysServiceInterface
 from acme.services.api.services.retention import RetentionServiceInterface
 from acme.services.api.services.tools import ToolsServiceInterface
+from acme.services.api.services.validations import ValidationsServiceInterface
 
 
 class ServicesImpl(ServicesInterface):
@@ -98,6 +100,7 @@ class ServicesImpl(ServicesInterface):
         playbooks: PlaybooksServiceInterface,
         tools: ToolsServiceInterface,
         retention: RetentionServiceInterface,
+        validations: ValidationsServiceInterface,
     ) -> None:
         self._tenancy = tenancy
         self._admin = admin
@@ -124,6 +127,7 @@ class ServicesImpl(ServicesInterface):
         self._playbooks = playbooks
         self._tools = tools
         self._retention = retention
+        self._validations = validations
 
     def get_tenancy_service(self) -> TenancyServiceInterface:
         return self._tenancy
@@ -200,6 +204,9 @@ class ServicesImpl(ServicesInterface):
     def get_retention_service(self) -> RetentionServiceInterface:
         return self._retention
 
+    def get_validations_service(self) -> ValidationsServiceInterface:
+        return self._validations
+
 
 def build_services(
     managers: Managers,
@@ -267,4 +274,5 @@ def build_services(
         playbooks=PlaybooksServiceImpl(playbooks),
         tools=ToolsServiceImpl(managers.tools),
         retention=RetentionServiceImpl(managers.retention),
+        validations=ValidationsServiceImpl(managers.platform_agents, managers.evidence),
     )

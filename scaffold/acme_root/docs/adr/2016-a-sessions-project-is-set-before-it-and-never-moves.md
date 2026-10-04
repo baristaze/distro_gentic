@@ -17,14 +17,14 @@ project's narrowing never applies.
 
 **A project is its tenant's and binds one repository.** One who writes
 the tenant's configuration (`manage_members`) writes it, renames it, and
-removes it while no session belongs to it. Its repository never moves, so the work product of a session already in
-it stays where it was. A repository is a host and a path, kept in lower
+removes it while no session belongs to it. Its repository never moves, so the work product of a session already
+in it stays where it was. A repository is a host and a path, kept in lower
 case, since the hosts compare names without case.
 
 **A session's project is a row of its own, written before the session.**
 The engine's session is left as it is. The projects' start writes the
 row, keyed by the session's id, then starts the session through the
-agents. So a namespace asked while the session is created already finds
+agents, so a namespace asked while the session is created already finds
 the project. The start refuses a project another tenant holds, before
 anything is written.
 
@@ -69,5 +69,3 @@ nothing when it fires
 - A start that fails after its row is written leaves the row. A retry
   under the same id and project goes on from it; any other use of the
   id is refused.
-- The API's start and an automation's each name a project, and outside
-  `local` each refuses a session without one.

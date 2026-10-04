@@ -4,11 +4,10 @@
 
 ## Context
 
-Work In, Results Out: a session's work ends as a pull request, and the
-world answers on it and in chat. Until now each integration had a twin
-and nothing else, so a deployed platform reached no real forge and no
-real chat. Twins and Provenance keeps the twins for local and every
-gating suite.
+The spec's Work In, Results Out has a session's work end as a pull
+request, and the world answer on it and in chat. Its Twins and
+Provenance keeps the twins for local and every gating suite, so a
+deployed platform needs a real client beside each.
 
 A real client meets what a twin does not. The system signs its
 deliveries its own way, and some sign no time and no id. It checks the
@@ -51,9 +50,9 @@ person's token, and the installation counts only when GitHub lists it
 among the ones they may reach and its signed record of the install, the
 `installation` delivery it sent the App, names that person as the
 installer. Another member who may reach the installation cannot connect
-it first. Slack's grant is the code of the install,
-and the workspace is the one Slack names for it. What either trade
-answers besides is used once and kept nowhere.
+it first. Slack's grant is the code of the install, and the workspace
+is the one Slack names for it. What either trade answers besides is
+used once and kept nowhere.
 
 **The platform's own account is a setting.** The App's bot login and the
 Slack bot's user id name the platform's acts, so they never wake a
@@ -70,10 +69,9 @@ rename can free.
 - The ingress's answer carries a `challenge` when a system asks one.
 - The chat posts with one bot token, so it reaches the workspace that
   token was made in, and a grant from any other workspace is refused.
-- A write reaches only a repository an installation the writing tenant
-  connected holds. The client writes through the installation it is
-  named; the platform finds the tenant, where a project binds a
-  repository and intake maps an installation to its tenant.
+- The client writes through the installation it is named; the platform
+  finds the tenant, where a project binds a repository and intake maps
+  an installation to its tenant.
 - An installation is connected while GitHub still lists the record of
   its install among the App's recent deliveries; one installed long
   before is installed again to connect it.

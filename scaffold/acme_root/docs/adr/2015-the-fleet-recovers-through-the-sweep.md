@@ -4,21 +4,13 @@
 
 ## Context
 
-The platform's spec, Failure at Fleet Scale: when a provider fails,
-every session that meets its outage signal parks, naming the provider,
-and when the signal's retry time passes the parked sessions are woken,
-staggered. Sessions die with their runners, and the platform notices
-through the guideline's sweep, which every cloud worker runs and no host
-does. The platform adds its duties to that sweep: among them,
-a hold nobody settled settles at usage retrieved from the provider, else
-at its full amount, and is released only when the provider provably did
-not bill; and a session with a pending input and no queued loop is
-woken.
+The spec's Failure at Fleet Scale has the platform add its duties to the
+guideline's sweep, which every cloud worker runs and no host does.
 
-The engine already settles a lost call's hold when the session's next
-run finds the call open. A hold whose run died before its request was
-written, or whose session never runs again, is found by nothing. It
-reserves its lines until it settles, and its spend counts nowhere.
+The engine settles a lost call's hold when the session's next run finds
+the call open. A hold whose run died before its request was written, or
+whose session never runs again, is found by nothing: it reserves its
+lines until it settles, and its spend counts nowhere.
 
 ## Decision
 
@@ -58,9 +50,8 @@ is billed and thrown away. A step alone holds nothing: a run whose item
 failed for good may have written one a minute before. The pass asks for
 each other one's run as the person who made the session, as a wake does,
 under a key drawn from the session's version. A pass that finds it
-again asks nothing more.
-The run that takes it up asks an approval that expired meanwhile again,
-at its gate.
+again asks nothing more. The run that takes it up asks an approval that
+expired meanwhile again, at its gate.
 
 ## Consequences
 

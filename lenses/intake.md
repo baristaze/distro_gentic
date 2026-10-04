@@ -139,15 +139,23 @@ evidence is EVD-03.)
 
 **Principle.** Automations turn events into bounded work. A trigger, an
 event with filters or a schedule, leads to an action: start a session,
-message a standing session, or a product's own action. An automation
-runs as its creator or as the tenant's automation principal.
+message a standing session, or a product's own action. A product's
+action may refuse the person who writes the automation, or the
+principal it is set to run as, so one its firings would refuse is never
+saved. An automation runs as its creator or as the tenant's automation
+principal.
 
 **Source.** Work In, Results Out, Automations.
 
-**Look for.** The principal each automation's action runs under.
+**Look for.** The principal each automation's action runs under; where
+the create and the edit of an enabled automation of a product's action
+ask its kind's check of the writer (`check_writer`), under the writer's
+own context, with whom the automation runs as.
 
 **Violation.** An automation that acts as the system, as the agent, or as
-the person whose event triggered it.
+the person whose event triggered it; an enabled automation of a product's
+action written without its kind's check of the writer, or checked under
+a context other than the writer's or blind to whom it runs as.
 
 **Severity.** high
 

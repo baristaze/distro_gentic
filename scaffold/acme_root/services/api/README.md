@@ -107,6 +107,14 @@ app, and `main.py` is the `acme-api` command: `serve`, `migrate`,
   is written and never read back: the answer says who gave it when, and
   it leaves the tenant's store with its project. (`/v1/projects`,
   `/v1/projects/{project_id}`, `.../credential`)
+- **Validation sessions.** A member who may write starts one, under an
+  Idempotency-Key, as a CI job asks for one: a check its project's policy
+  declares, at a delivered head, with its checks from a base. The
+  platform's worker runs it once on a fresh executor. Any member reads
+  it, and once its run is recorded, its verdict and the run. A project
+  with no policy in the tenant is `404`, as another tenant's is, and a
+  check the policy does not declare is `422`. (`/v1/validation-sessions`,
+  `/v1/validation-sessions/{session_id}`)
 - **Knowledge and playbooks.** The entries in a state, the suggestions
   waiting on a review among them, and one entry; a person writes one in
   person, under an Idempotency-Key, edits it on the version `If-Match`

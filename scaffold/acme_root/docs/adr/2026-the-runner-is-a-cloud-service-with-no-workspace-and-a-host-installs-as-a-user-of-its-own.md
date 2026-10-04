@@ -7,12 +7,9 @@
 [ADR 1011](1011-a-sessions-loop-runs-in-a-worker-of-its-own.md) gives a
 session's loop a worker of its own, and leaves it out of the cloud: a
 deployed runner refuses a workspace on its host, and a Fargate task
-starts no container. The first environment that runs a loop deploys it,
-"with its image, its service, its alarms, and a place its workspaces
-run". Until then a session deployed to staging or production waits for a
-runner that never comes.
+starts no container.
 
-The place a tenant's work runs already exists: a host inside the
+The place a tenant's work runs is a host inside the
 tenant's wall, enrolled once
 ([ADR 2003](2003-a-host-enrolls-once-and-holds-its-owners-ceilings-on-its-own-disk.md)),
 to which every tool call crosses as keyed `exec` work

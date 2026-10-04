@@ -7,11 +7,10 @@
 A product registers its own stream kinds (ADR 2025), and its claimant
 claims through the gateway with a credential of its kind (ADR 2029). A
 long job on the product's own machines produces live output that people
-watch while it runs. Yet no claimant could write a stream: the writer of
-a product's streams was its own code, and the route a viewer read them
-through, and that viewer's authorization, were the product's to build. A
-product that built them put a side channel beside the tenant wall, and
-the wall of every read rested on its code.
+watch while it runs. With no claimant path to write a stream, the writer
+of a product's streams, the route a viewer reads them through, and that
+viewer's authorization are the product's to build: a side channel beside
+the tenant wall, and the wall of every read rests on its code.
 
 The platform already holds every part such a channel needs: the
 claimant's credential and the item it holds under its claim token

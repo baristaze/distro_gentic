@@ -5,6 +5,7 @@ from uuid import UUID
 from acme.om.base import Platform, utcnow
 from acme.om.context import Permission, TenantContext
 from acme.om.evidence import EvidenceManagerInterface
+from acme.om.evidence.rules import policy_key
 from acme.om.exceptions import NotFound, PreconditionFailed, ValidationFailed
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import OutboxRow, outbox_row, versioned_row
@@ -47,6 +48,14 @@ class PlatformAgentsManagerImpl(PlatformAgentsManagerInterface):
         self, ctx: TenantContext, start: ValidationStart
     ) -> ValidationSession:
         ctx.require(Permission.WRITE)
+        # Refused before anything is written: a check its project does not
+        # declare would only fail for good on the worker. The policy is read
+        # in the caller's tenant, so another tenant's project has none.
+        policy = await self._evidence.get_policy(ctx, policy_key(start.project_id))
+        if all(each.name != start.check_name for each in policy.checks):
+            raise ValidationFailed(
+                f"the project {start.project_id} declares no check {start.check_name}"
+            )
         now = self._clock()
         session = ValidationSession(
             id=start.id,
