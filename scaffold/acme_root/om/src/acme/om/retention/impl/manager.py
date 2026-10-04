@@ -42,7 +42,11 @@ log = logging.getLogger(__name__)
 CREATED = "retention.retention_policy.created"
 UPDATED = "retention.retention_policy.updated"
 KEY_DESTROYED = "retention.key.destroyed"
-"""The audit kind of a session's key destroyed past its content's life."""
+"""The audit kind of a session's key destroyed: past its content's life, by
+the sweep, or before it, by the tenant's admin, whom the entry names."""
+ERASE_WRITES = 3
+"""The writes an erasure makes of its snapshot at most, each after a sweep
+that wrote the snapshot meanwhile."""
 
 
 class RetentionOptions(Platform):
@@ -186,6 +190,33 @@ class RetentionManagerImpl(RetentionManagerInterface):
         if stored is None:
             raise NotFound(f"no retention snapshot of session {session_id}")
         return stored
+
+    async def erase_content(self, ctx: TenantContext, session_id: UUID) -> SessionRetention:
+        ctx.require(Permission.MANAGE_MEMBERS)
+        snapshot = await self.get_snapshot(ctx, session_id)
+        if snapshot.content_expired_at is not None:
+            return snapshot
+        # The sweep's own steps, once: the engine's revocation stands even
+        # when the key service reports nothing, so the content is gone here.
+        _, report = await self._expire_content(ctx.org_id, ctx, snapshot)
+        now = self._clock()
+        for _ in range(ERASE_WRITES):
+            done = SessionRetention.model_validate(
+                {
+                    **snapshot.model_dump(),
+                    "content_expired_at": now,
+                    "destruction": report,
+                    "version": snapshot.version + 1,
+                }
+            )
+            if await self._storage.write_snapshot(ctx.org_id, done, snapshot.version):
+                return done
+            snapshot = await self.get_snapshot(ctx, session_id)
+            if snapshot.content_expired_at is not None:
+                return snapshot
+        # A sweep that keeps writing the snapshot takes the erasure up at
+        # the content's expiry, and each of its steps answers as before.
+        return snapshot
 
     # The sweep.
 

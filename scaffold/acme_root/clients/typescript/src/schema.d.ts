@@ -2642,6 +2642,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/retention/policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Policy */
+        get: operations["get_policy_v1_retention_policy_get"];
+        /**
+         * Write Policy
+         * @description The policy as written, on the version `If-Match` names; with no
+         *     `If-Match`, the tenant's first. `412 precondition_failed` when the
+         *     policy moved, or when a first meets one declared. Sessions created from
+         *     now on take it; existing ones take what it tightens at the next sweep,
+         *     and nothing it loosens.
+         */
+        put: operations["write_policy_v1_retention_policy_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/retention/sessions/{session_id}/erase": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Erase Content
+         * @description Erases what the session said, for good: its key is revoked and
+         *     destroyed, and the audit holds the destruction. Its steps keep their
+         *     place, type, and shape, and read as saying nothing; the session takes no
+         *     content again. A session marked deleted is erased too. Once: a second
+         *     call answers as the first left it. `404 not_found` for a session the
+         *     tenant does not hold, which is how another tenant's reads.
+         */
+        post: operations["erase_content_v1_retention_sessions__session_id__erase_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/sessions": {
         parameters: {
             query?: never;
@@ -4958,6 +5008,25 @@ export interface components {
         };
         JsonValue: unknown;
         /**
+         * KeyDestructionView
+         * @description A session's key destroyed, as the tenant's key service reported it:
+         *     the service, the key's name in it, when by its clock, and its receipt.
+         *     No key material crosses.
+         */
+        KeyDestructionView: {
+            /**
+             * Destroyed At
+             * Format: date-time
+             */
+            destroyed_at: string;
+            /** Key Name */
+            key_name: string;
+            /** Receipt */
+            receipt: string;
+            /** Service */
+            service: string;
+        };
+        /**
          * KeyStatus
          * @enum {string}
          */
@@ -5912,6 +5981,27 @@ export interface components {
             /** Held */
             held: boolean;
         };
+        /**
+         * ProjectRetentionBody
+         * @description What one project of the tenant narrows; it never widens the tenant's.
+         */
+        ProjectRetentionBody: {
+            policy: components["schemas"]["RetentionPolicyBody"];
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+        };
+        /** ProjectRetentionView */
+        ProjectRetentionView: {
+            policy: components["schemas"]["RetentionPolicyView"];
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+        };
         /** ProjectView */
         ProjectView: {
             /**
@@ -6086,6 +6176,72 @@ export interface components {
             data: string;
         };
         /**
+         * RetentionPolicyBody
+         * @description How long what a session says is kept, and its shape, each counted
+         *     from the session's creation, none for no end; where its content may
+         *     rest, sealed when left out; whether nothing it says may be kept
+         *     anywhere; and its region. A field left out narrows nothing. A lifetime
+         *     past a century, a content that outlives its shape, and zero retention
+         *     that keeps content at rest are refused.
+         */
+        RetentionPolicyBody: {
+            /** Content Lifetime */
+            content_lifetime?: string | null;
+            /** Region */
+            region?: string | null;
+            /** Shape Lifetime */
+            shape_lifetime?: string | null;
+            storage_mode?: components["schemas"]["StorageMode"] | null;
+            /**
+             * Zero Retention
+             * @default false
+             */
+            zero_retention: boolean;
+        };
+        /** RetentionPolicyView */
+        RetentionPolicyView: {
+            /** Content Lifetime */
+            content_lifetime: string | null;
+            /** Region */
+            region: string | null;
+            /** Shape Lifetime */
+            shape_lifetime: string | null;
+            storage_mode: components["schemas"]["StorageMode"];
+            /** Zero Retention */
+            zero_retention: boolean;
+        };
+        /**
+         * RetentionRequest
+         * @description The tenant's whole policy, written over the version `If-Match` names,
+         *     or, with no `If-Match`, as the tenant's first.
+         */
+        RetentionRequest: {
+            policy?: components["schemas"]["RetentionPolicyBody"];
+            /** Projects */
+            projects?: components["schemas"]["ProjectRetentionBody"][];
+        };
+        /**
+         * RetentionView
+         * @description The tenant's policy; version 0, the loosest, until its first write.
+         */
+        RetentionView: {
+            policy: components["schemas"]["RetentionPolicyView"];
+            /** Projects */
+            projects: components["schemas"]["ProjectRetentionView"][];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Updated By
+             * Format: uuid
+             */
+            updated_by: string;
+            /** Version */
+            version: number;
+        };
+        /**
          * RetireRequest
          * @description A model its provider retired, by name, as a fill names it.
          */
@@ -6188,6 +6344,32 @@ export interface components {
          * @enum {string}
          */
         SessionControl: "pause" | "resume" | "cancel" | "interrupt" | "compact" | "unlock";
+        /**
+         * SessionRetentionView
+         * @description One session's snapshot: the policy it took, when its content and its
+         *     shape expire, and when each did. `destruction` is the key service's
+         *     report of the key it destroyed, none when the service holds the tenant's
+         *     key alone and the platform's revocation is the destruction.
+         */
+        SessionRetentionView: {
+            /** Content Expired At */
+            content_expired_at: string | null;
+            /** Content Expires At */
+            content_expires_at: string | null;
+            destruction: components["schemas"]["KeyDestructionView"] | null;
+            policy: components["schemas"]["RetentionPolicyView"];
+            /** Project Id */
+            project_id: string | null;
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+            /** Shape Expired At */
+            shape_expired_at: string | null;
+            /** Shape Expires At */
+            shape_expires_at: string | null;
+        };
         /**
          * SessionStandingView
          * @description Why a session is or is not moving. `changed_at` is its last change:
@@ -6615,6 +6797,12 @@ export interface components {
          * @enum {string}
          */
         StopReason: "end_turn" | "tool_use" | "output_limit" | "refusal" | "content_filter" | "pause";
+        /**
+         * StorageMode
+         * @description Where a session's content lives.
+         * @enum {string}
+         */
+        StorageMode: "sealed" | "memory_only";
         /**
          * StorageUsageView
          * @description What the org keeps in the store, counted from its files: the stored ones
@@ -12781,6 +12969,113 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IssuedTicketView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_policy_v1_retention_policy_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetentionView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    write_policy_v1_retention_policy_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                /** @description The version the caller read, as an entity tag: `"3"`. 412 `precondition_failed` when the record changed since. */
+                "If-Match"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetentionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetentionView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    erase_content_v1_retention_sessions__session_id__erase_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionRetentionView"];
                 };
             };
             /** @description Validation Error */

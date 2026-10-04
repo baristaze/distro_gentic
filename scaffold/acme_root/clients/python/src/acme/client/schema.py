@@ -843,6 +843,18 @@ class JsonValue(RootModel[Any]):
     root: Any
 
 
+class KeyDestructionView(BaseModel):
+    """
+    A session's key destroyed, as the tenant's key service reported it:
+    the service, the key's name in it, when by its clock, and its receipt.
+    No key material crosses.
+    """
+    destroyed_at: Annotated[AwareDatetime, Field(title='Destroyed At')]
+    key_name: Annotated[str, Field(title='Key Name')]
+    receipt: Annotated[str, Field(title='Receipt')]
+    service: Annotated[str, Field(title='Service')]
+
+
 class KeyStatus(StrEnum):
     live = 'live'
     rotated = 'rotated'
@@ -1409,6 +1421,10 @@ class RepositoryView(BaseModel):
     path: Annotated[str, Field(title='Path')]
 
 
+class Region1(RootModel[str]):
+    root: Annotated[str, Field(pattern='^[a-z0-9][a-z0-9-]{0,31}$', title='Region')]
+
+
 class RetireRequest(BaseModel):
     """
     A model its provider retired, by name, as a fill names it.
@@ -1763,6 +1779,14 @@ class StopReason(StrEnum):
     refusal = 'refusal'
     content_filter = 'content_filter'
     pause = 'pause'
+
+
+class StorageMode(StrEnum):
+    """
+    Where a session's content lives.
+    """
+    sealed = 'sealed'
+    memory_only = 'memory_only'
 
 
 class StorageUsageView(BaseModel):
@@ -2801,10 +2825,54 @@ class ResultRequest(BaseModel):
     data: Annotated[str, Field(max_length=16000000, title='Data')]
 
 
+class RetentionPolicyBody(BaseModel):
+    """
+    How long what a session says is kept, and its shape, each counted
+    from the session's creation, none for no end; where its content may
+    rest, sealed when left out; whether nothing it says may be kept
+    anywhere; and its region. A field left out narrows nothing. A lifetime
+    past a century, a content that outlives its shape, and zero retention
+    that keeps content at rest are refused.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    content_lifetime: Annotated[timedelta | None, Field(title='Content Lifetime')] = None
+    region: Annotated[Region1 | None, Field(title='Region')] = None
+    shape_lifetime: Annotated[timedelta | None, Field(title='Shape Lifetime')] = None
+    storage_mode: StorageMode | None = None
+    zero_retention: Annotated[bool | None, Field(title='Zero Retention')] = False
+
+
+class RetentionPolicyView(BaseModel):
+    content_lifetime: Annotated[timedelta | None, Field(title='Content Lifetime')]
+    region: Annotated[str | None, Field(title='Region')]
+    shape_lifetime: Annotated[timedelta | None, Field(title='Shape Lifetime')]
+    storage_mode: StorageMode
+    zero_retention: Annotated[bool, Field(title='Zero Retention')]
+
+
 class RoleFillView(BaseModel):
     fallbacks: Annotated[list[FillView], Field(title='Fallbacks')]
     fill: FillView
     role: Annotated[str, Field(title='Role')]
+
+
+class SessionRetentionView(BaseModel):
+    """
+    One session's snapshot: the policy it took, when its content and its
+    shape expire, and when each did. `destruction` is the key service's
+    report of the key it destroyed, none when the service holds the tenant's
+    key alone and the platform's revocation is the destruction.
+    """
+    content_expired_at: Annotated[AwareDatetime | None, Field(title='Content Expired At')]
+    content_expires_at: Annotated[AwareDatetime | None, Field(title='Content Expires At')]
+    destruction: KeyDestructionView | None
+    policy: RetentionPolicyView
+    project_id: Annotated[UUID | None, Field(title='Project Id')]
+    session_id: Annotated[UUID, Field(title='Session Id')]
+    shape_expired_at: Annotated[AwareDatetime | None, Field(title='Shape Expired At')]
+    shape_expires_at: Annotated[AwareDatetime | None, Field(title='Shape Expires At')]
 
 
 class SessionStandingView(BaseModel):
@@ -3154,6 +3222,45 @@ class MembershipPageView(BaseModel):
     """
     items: Annotated[list[MembershipView], Field(title='Items')]
     next_cursor: Annotated[str | None, Field(title='Next Cursor')]
+
+
+class ProjectRetentionBody(BaseModel):
+    """
+    What one project of the tenant narrows; it never widens the tenant's.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    policy: RetentionPolicyBody
+    project_id: Annotated[UUID, Field(title='Project Id')]
+
+
+class ProjectRetentionView(BaseModel):
+    policy: RetentionPolicyView
+    project_id: Annotated[UUID, Field(title='Project Id')]
+
+
+class RetentionRequest(BaseModel):
+    """
+    The tenant's whole policy, written over the version `If-Match` names,
+    or, with no `If-Match`, as the tenant's first.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    policy: RetentionPolicyBody | None = None
+    projects: Annotated[list[ProjectRetentionBody] | None, Field(max_length=500, title='Projects')] = None
+
+
+class RetentionView(BaseModel):
+    """
+    The tenant's policy; version 0, the loosest, until its first write.
+    """
+    policy: RetentionPolicyView
+    projects: Annotated[list[ProjectRetentionView], Field(title='Projects')]
+    updated_at: Annotated[AwareDatetime, Field(title='Updated At')]
+    updated_by: Annotated[UUID, Field(title='Updated By')]
+    version: Annotated[int, Field(title='Version')]
 
 
 class ShapePageView(BaseModel):

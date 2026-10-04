@@ -7,8 +7,9 @@ session takes the policy of its project as a snapshot, before its row is
 written. A tightening of the tenant's policy reaches every session at the
 next sweep; a loosening reaches none. When a session's content expires,
 the sweep destroys its key in the tenant's key service, revokes it through
-the engine, and audits the destruction as the key service reported it.
-When its shape expires, the sweep marks the session deleted, and the
+the engine, and audits the destruction as the key service reported it;
+the tenant's admin may erase one session's content the same way before
+then. When its shape expires, the sweep marks the session deleted, and the
 engine's purge removes it (ADR 1010)."""
 
 from abc import ABC, abstractmethod
@@ -48,6 +49,18 @@ class RetentionManagerInterface(ABC):
     @abstractmethod
     async def get_snapshot(self, ctx: TenantContext, session_id: UUID) -> SessionRetention:
         """The session's snapshot; `NotFound` when the tenant holds none."""
+        ...
+
+    @abstractmethod
+    async def erase_content(self, ctx: TenantContext, session_id: UUID) -> SessionRetention:
+        """Erases the session's content now, as one who manages the tenant's
+        members may, the way the sweep does past its content's life: the
+        engine revokes its key, a session marked deleted included, the
+        tenant's key service destroys it, and the audit holds the
+        destruction as the service reported it. The shape stays. The
+        snapshot records it, so no sweep takes it up again. Once: a session
+        whose content is gone is answered as it is. `NotFound` when the
+        tenant holds no snapshot of the session."""
         ...
 
     @abstractmethod
