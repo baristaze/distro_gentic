@@ -1531,6 +1531,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/events/recent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Recent Events
+         * @description The newest events below `before_seq`, newest first; from the head
+         *     when it is left out. A page that reaches the floor is short.
+         */
+        get: operations["list_recent_events_v1_events_recent_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/host-enrollment-tokens/{token_id}": {
         parameters: {
             query?: never;
@@ -10046,6 +10067,42 @@ export interface operations {
         parameters: {
             query?: {
                 after_seq?: number;
+                limit?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_recent_events_v1_events_recent_get: {
+        parameters: {
+            query?: {
+                before_seq?: number | null;
                 limit?: number;
             };
             header?: {

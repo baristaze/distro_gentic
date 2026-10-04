@@ -4,10 +4,10 @@
 // answers as the API does: each org reads its own, and nothing of
 // another's reaches its screens.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError, type AgentSessionView, type ApprovalView, type BudgetUsageView, type EventView } from "@acme/client";
+import type { AgentSessionView, ApprovalView, BudgetUsageView, EventView } from "@acme/client";
 import { ApprovalsPage } from "./approvals/ApprovalsPage";
 import { AuditPage } from "./audit/AuditPage";
-import { container, mount, newNet, notFound, PEOPLE, unmount, type Call } from "./screenTesting";
+import { buttons, container, mount, newNet, notFound, PEOPLE, press, unmount, type Call } from "./screenTesting";
 import { UsagePage } from "./usage/UsagePage";
 
 const net = vi.hoisted(() => ({}) as ReturnType<typeof newNet>);
@@ -36,7 +36,7 @@ const USAGE = { a: [usage("a", 2_500_000)], b: [usage("b", 9_000_000)] };
 
 function answer(call: Call): unknown {
   if (call.path.startsWith("/v1/approvals?")) return { items: APPROVALS[net.org], next_cursor: null };
-  if (call.path.startsWith("/v1/events?")) return EVENTS[net.org];
+  if (call.path.startsWith("/v1/events/recent?")) return EVENTS[net.org];
   if (call.path.startsWith("/v1/usage?")) return { items: USAGE[net.org], next_cursor: null };
   if (call.path.startsWith("/v1/projects?")) return [];
   return notFound(call.path);
@@ -98,30 +98,37 @@ describe("the org's records, past one page and past a trim", () => {
     expect(container.textContent).not.toContain("No call waits on a person.");
   });
 
-  it("reads the audit on from the floor once older events are trimmed", async () => {
-    const kept: EventView = { seq: 41, kind: "projects.project.updated", target_id: "pa", produced_at: at, actor_id: PEOPLE.a.id };
+  it("opens the audit on the newest events and pages older ones back to the floor", async () => {
+    // Kept: 71 to 250, the floor at 70. Each read answers the newest below `before_seq`.
+    const event = (seq: number): EventView => ({ seq, kind: "projects.project.updated", target_id: `p${seq}`, produced_at: at, actor_id: PEOPLE.a.id });
     net.answer = (call) => {
-      if (call.path.startsWith("/v1/events?")) {
-        const after = Number(new URLSearchParams(call.path.split("?")[1]).get("after_seq"));
-        if (after < 40) throw new ApiError(410, "stream_truncated", "gone", "req-1", undefined, { floor: 40, head: 41 });
-        return [kept];
+      if (call.path.startsWith("/v1/events/recent?")) {
+        const query = new URLSearchParams(call.path.split("?")[1]);
+        const top = Math.min(Number(query.get("before_seq") ?? 251) - 1, 250);
+        const bottom = Math.max(top - Number(query.get("limit")), 70);
+        return Array.from({ length: Math.max(top - bottom, 0) }, (_, at) => event(top - at));
       }
       return answer(call);
     };
     await mount(routes, "/audit");
-    expect(net.calls.map((call) => call.path).filter((path) => path.startsWith("/v1/events?"))).toEqual([
-      "/v1/events?after_seq=0&limit=100",
-      "/v1/events?after_seq=40&limit=100",
+    const seqs = () => [...container.querySelectorAll("table[aria-label='Events'] tbody tr")].map((row) => Number(row.querySelector("td")!.textContent));
+    expect(seqs().slice(0, 2)).toEqual([250, 249]);
+    expect(seqs()).toHaveLength(100);
+    await press("Load older");
+    expect(net.calls.map((call) => call.path).filter((path) => path.startsWith("/v1/events"))).toEqual([
+      "/v1/events/recent?limit=100",
+      "/v1/events/recent?limit=100&before_seq=151",
     ]);
-    expect(container.textContent).not.toContain("The audit could not be read.");
-    expect(container.querySelector("table[aria-label='Events']")!.textContent).toContain("project updated");
+    expect(seqs()).toHaveLength(180);
+    expect(seqs().at(-1)).toBe(71);
+    expect(buttons()).not.toContain("Load older");
   });
 
   it("credits the automation principal with what its runs did", async () => {
     const principal = { id: "pr1", role: "member", granted_by: PEOPLE.a.id, created_at: at };
     net.answer = (call) => {
       if (call.path === "/v1/automations/principal") return principal;
-      if (call.path.startsWith("/v1/events?")) return [{ ...EVENTS.a[0]!, actor_id: principal.id }];
+      if (call.path.startsWith("/v1/events/recent?")) return [{ ...EVENTS.a[0]!, actor_id: principal.id }];
       if (call.path.startsWith("/v1/approvals?")) return { items: [{ ...APPROVALS.a[0]!, principal_id: principal.id }], next_cursor: null };
       return answer(call);
     };

@@ -57,6 +57,21 @@ class EventsManagerImpl(EventsManagerInterface):
             raise StreamTruncated(floor=page.floor, head=page.head)
         return list(page.events)
 
+    async def get_recent_events(
+        self, ctx: TenantContext, before_seq: int | None, limit: int
+    ) -> list[Event]:
+        ctx.require(Permission.READ)
+        size = self._clamp(limit)
+        head = await self._storage.read_head(ctx.org_id)
+        top = head if before_seq is None else min(before_seq - 1, head)
+        if top <= 0:
+            return []
+        # Gapless above the floor: the `size` events up to `top` are the ones
+        # after `top - size`. Where the floor is above that, the read starts
+        # at the floor, and what it holds past `top` is left out.
+        events = await self._storage.read_after(ctx.org_id, max(0, top - size), size)
+        return [event for event in reversed(events) if event.seq <= top]
+
     async def purge_across_tenants(self) -> int:
         if self._options.retention is None:
             return 0
