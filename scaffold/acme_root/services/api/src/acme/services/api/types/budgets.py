@@ -1,8 +1,9 @@
-"""Wire types of a tenant's budgets: one budget as stored, the new amount a
-person sets on it, and the tenant's usage, each budget with what its
-current window spent."""
+"""Wire types of a tenant's budgets: a budget a person sets, one budget as
+stored, the new amount a person sets on it, and the tenant's usage, each
+budget with what its current window spent."""
 
 from datetime import datetime
+from enum import StrEnum
 from typing import Self
 from uuid import UUID
 
@@ -10,6 +11,36 @@ from pydantic import Field, model_validator
 
 from acme.om.budgets.types.budget import BudgetScopeKind, WindowKind
 from acme.services.api.types.common import RequestBody, View
+
+
+class SettableScope(StrEnum):
+    """The scopes a person sets a budget over: the ones every model call is
+    charged to and that outlive a session. A session's and a tree's budgets
+    are its own bounds, and no call is charged to a team."""
+
+    PERSON = BudgetScopeKind.PERSON.value
+    PROJECT = BudgetScopeKind.PROJECT.value
+    TENANT = BudgetScopeKind.TENANT.value
+
+
+class CreateBudgetRequest(RequestBody):
+    """A budget over a scope and a window, in reference cost (millionths),
+    native tokens, or both. A person's and a project's scope is keyed by its
+    id; a tenant's is the tenant itself, so its key is left out or names the
+    tenant. A span window has a length in seconds, and no other window has."""
+
+    scope_kind: SettableScope
+    scope_key: UUID | None = None
+    window_kind: WindowKind
+    window_seconds: int | None = Field(default=None, ge=1)
+    cost_micros: int | None = Field(default=None, ge=0)
+    tokens: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def _a_keyed_scope_names_its_key(self) -> Self:
+        if self.scope_kind is not SettableScope.TENANT and self.scope_key is None:
+            raise ValueError("a person's or a project's budget names its id in scope_key")
+        return self
 
 
 class BudgetView(View):

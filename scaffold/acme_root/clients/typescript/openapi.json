@@ -1937,6 +1937,72 @@
         "title": "ControlView",
         "type": "object"
       },
+      "CreateBudgetRequest": {
+        "additionalProperties": false,
+        "description": "A budget over a scope and a window, in reference cost (millionths),\nnative tokens, or both. A person's and a project's scope is keyed by its\nid; a tenant's is the tenant itself, so its key is left out or names the\ntenant. A span window has a length in seconds, and no other window has.",
+        "properties": {
+          "cost_micros": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Micros"
+          },
+          "scope_key": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Key"
+          },
+          "scope_kind": {
+            "$ref": "#/components/schemas/SettableScope"
+          },
+          "tokens": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tokens"
+          },
+          "window_kind": {
+            "$ref": "#/components/schemas/WindowKind"
+          },
+          "window_seconds": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Window Seconds"
+          }
+        },
+        "required": [
+          "scope_kind",
+          "window_kind"
+        ],
+        "title": "CreateBudgetRequest",
+        "type": "object"
+      },
       "CreateOrgRequest": {
         "additionalProperties": false,
         "description": "An org with its owner, as `bootstrap` seeds one. The owner's identity\nis created with its personal org when the email is new; the owner signs\nin through the identity provider with the address.",
@@ -7252,6 +7318,16 @@
         ],
         "title": "SetShareRequest",
         "type": "object"
+      },
+      "SettableScope": {
+        "description": "The scopes a person sets a budget over: the ones every model call is\ncharged to and that outlive a session. A session's and a tree's budgets\nare its own bounds, and no call is charged to a team.",
+        "enum": [
+          "person",
+          "project",
+          "tenant"
+        ],
+        "title": "SettableScope",
+        "type": "string"
       },
       "ShapePageView": {
         "description": "One page of a session's shape, after the seq the request named.",
@@ -16180,6 +16256,227 @@
         ]
       }
     },
+    "/v1/budgets": {
+      "get": {
+        "description": "The tenant's budgets by id, after the id `after` names.",
+        "operationId": "list_budgets_v1_budgets_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BudgetView"
+                  },
+                  "title": "Response List Budgets V1 Budgets Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Budgets",
+        "tags": [
+          "budgets"
+        ]
+      },
+      "post": {
+        "description": "A budget every model call charged to its scope is held to, from the\nnext call on.",
+        "operationId": "create_budget_v1_budgets_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBudgetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BudgetView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Budget",
+        "tags": [
+          "budgets"
+        ]
+      }
+    },
     "/v1/budgets/{budget_id}": {
       "get": {
         "operationId": "get_budget_v1_budgets__budget_id__get",
@@ -17251,6 +17548,119 @@
           }
         },
         "summary": "List Events",
+        "tags": [
+          "events"
+        ]
+      }
+    },
+    "/v1/events/recent": {
+      "get": {
+        "description": "The newest events below `before_seq`, newest first; from the head\nwhen it is left out. A page that reaches the floor is short.",
+        "operationId": "list_recent_events_v1_events_recent_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "before_seq",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before Seq"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EventView"
+                  },
+                  "title": "Response List Recent Events V1 Events Recent Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Recent Events",
         "tags": [
           "events"
         ]

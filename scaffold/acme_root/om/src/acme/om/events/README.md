@@ -22,6 +22,9 @@ is one of the kinds of thing [Acme is made of](../../../../README.md).
 - **Read after a number**, oldest first, a page at a time. A number
   below the floor is refused as gone (`410 stream_truncated`), with the
   floor and the head.
+- **Read back from the head**, newest first, a page at a time, each
+  below the oldest number the one before held. The audit opens here. A
+  page that reaches the floor is short, and nothing is refused.
 - **Read the head**, where a screen that opens the live channel starts.
 - **Trim.** Once a pass, across every org, the sweep deletes the events
   older than the retention (90 days by default) from the bottom of each
@@ -54,4 +57,5 @@ its own changes. A namespace that records something about the platform
 builds an audit entry with `audit_event(ctx, id, kind, target_id,
 facts)` and appends it through `EventsManagerInterface.append_event`
 ([ADR 0011](../../../../../docs/adr/0011-audit-entries-are-events.md)).
-A client reads the stream through `GET /v1/events`.
+A client reads the stream through `GET /v1/events`, and back from the
+head through `GET /v1/events/recent`.
