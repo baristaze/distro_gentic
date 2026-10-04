@@ -4,7 +4,8 @@ A session takes its tenant's policy as a snapshot when it is created. The
 sweep folds a tightening into the snapshot and never a loosening; when the
 content expires, the tenant's key service destroys the session's key, the
 engine revokes it, and the audit holds the destruction as the service
-reported it; when the shape expires, the session is marked deleted. A
+reported it; when the shape expires, the session is marked deleted, and a loop parked
+past it, on a person, is cancelled first. A
 tenant that revokes its own key makes its own content unreadable and no
 other tenant's. And a crossing whose bytes do not match the hash they
 crossed with is refused."""
@@ -17,14 +18,17 @@ from uuid import UUID
 import pytest
 from contracts.agent_session_storage import make_session
 from contracts.doubles import APP, context
-from contracts.step_storage import make_message
+from contracts.step_storage import make_message, make_request
 from contracts.tools import stand_ins
 
 from acme.infra.exceptions import KeyRefused
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.keys import KeyServiceInterface, WrappedKey
 from acme.infra.keys.memory import KeyServiceMemoryImpl
-from acme.om.agent_sessions.types.agent_session import AgentSession
+from acme.om.agent_sessions.types.agent_session import AgentSession, SessionStatus
+from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
+from acme.om.agents.types.request import Start
+from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.base import new_id, utcnow
 from acme.om.context import RequestContext, Role, TenantContext
 from acme.om.exceptions import NotAuthorized, NotFound, PreconditionFailed, ValidationFailed
@@ -39,11 +43,22 @@ from acme.om.retention.rules import tighter
 from acme.om.retention.types.policy import ProjectRetention, RetentionPolicy
 from acme.om.root import Managers, build_managers
 from acme.om.steps.types.content import ContentState
+from acme.om.steps.types.header import ControlCommand, ControlHeader, Park, ParkReason
+from acme.om.steps.types.step import Actor
 from acme.om.storage.impl.memory import StorageMemoryImpl
 
 # What `make_session` names, so the agents manager classes every tool it
 # offers.
 TOOLS = stand_ins("read_log", "run_tests")
+KIND = AgentKind(
+    name="delivery",
+    version=1,
+    tools=("read_log", "run_tests"),
+    done_rule=DoneRule.ANSWER,
+    authority=AuthorityMode.STEADY,
+    tree=TreeLimits(height=2, count=4),
+)
+"""The kind `make_session` names, which a run takes its loop up as."""
 
 DAY = timedelta(days=1)
 WEEK = timedelta(days=7)
@@ -77,6 +92,7 @@ class Roots:
             self.storage,
             InfraLocalImpl(tmp_path),
             tool_catalog=TOOLS,
+            agent_kinds=(KIND,),
             tenant_keys=self.keys,
             session_projects=self.projects,
         )
@@ -503,6 +519,48 @@ async def test_expired_shape_marks_the_session_deleted_for_good(roots: Roots) ->
         await roots.managers.agent_sessions.get_session(owner, session.id)
     with pytest.raises(NotFound):
         await roots.managers.agent_sessions.restore_session(owner, session.id)
+    assert (await roots.managers.retention.get_snapshot(owner, session.id)).shape_expired_at
+
+
+async def test_a_session_parked_on_a_person_past_its_shapes_life_is_cancelled_then_marked(
+    roots: Roots,
+) -> None:
+    """A loop parked on a person never ends by itself, so it would hold the
+    session's shape for good. Past the shape's life, the sweep cancels it
+    under the service context; the run that ends it leaves the session idle,
+    and the next pass marks it deleted."""
+    owner = await roots.tenant()
+    await roots.declare(owner, a_policy(WEEK, MONTH))
+    sessions, steps = roots.managers.agent_sessions, roots.managers.steps
+    start = Start(id=new_id(), kind=KIND.name, title="the weekly report")
+    session = await roots.managers.agents.start_session(owner, start)
+    (message,) = await steps.append_inputs(owner, session.id, [make_message(session.id)])
+    epoch = await steps.begin_run(owner, session.id)
+    await steps.append_steps(
+        owner, session.id, epoch, [make_request(session.id, message.id, (message.id,))]
+    )
+    person = Park(reason=ParkReason.PERSON, unlock="approval")
+    parked = await sessions.park(owner, session.id, epoch, message.id, person)
+    assert parked.status is SessionStatus.PARKED
+
+    await roots.sweep(MONTH + DAY)
+    await roots.sweep(MONTH + DAY)  # a pass before its next attempt asks for nothing more
+
+    waiting = await roots.managers.retention.get_snapshot(owner, session.id)
+    assert waiting.shape_expired_at is None and waiting.next_attempt_at is not None
+    history = (await steps.get_steps(owner, session.id, 0, 50)).items
+    cancels = [s for s in history if isinstance(s.header, ControlHeader)]
+    assert [(s.header.command, s.actor) for s in cancels] == [  # type: ignore[union-attr]
+        (ControlCommand.CANCEL, Actor.ENGINE)
+    ]
+    assert (await sessions.get_session(owner, session.id)).status is SessionStatus.PENDING
+
+    await roots.managers.loop.run(owner, session.id)
+    assert (await sessions.get_session(owner, session.id)).status is SessionStatus.IDLE
+    await roots.sweep(MONTH + DAY + roots.options.retry_after)
+
+    with pytest.raises(NotFound):
+        await sessions.get_session(owner, session.id)
     assert (await roots.managers.retention.get_snapshot(owner, session.id)).shape_expired_at
 
 

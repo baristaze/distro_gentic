@@ -72,7 +72,8 @@ class RetentionManagerInterface(ABC):
         expiry: each whose content expired has its key revoked through the
         engine, a session marked deleted included, and destroyed by the
         tenant's key service, and the destruction audited as the service
-        reported it; each whose shape expired is marked deleted. Content
+        reported it; each whose shape expired is marked deleted, its loop
+        cancelled first under the service context when it waits parked. Content
         never waits on shape. A content is expired only once the engine or
         the key service says its key is gone. What cannot finish yet, a
         loop still open or a step that failed, takes the session out of

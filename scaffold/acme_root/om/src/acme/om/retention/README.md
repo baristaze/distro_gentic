@@ -45,7 +45,9 @@ is made of](../../../../README.md).
     that sweep.
   - Past its shape's life, the session is marked deleted, and the
     engine's purge removes it. That mark is never undone. A session with
-    a loop still open is marked at a later pass.
+    a loop still open is marked at a later pass; a loop that waits parked
+    is cancelled first, since what it waits on, such as a person, may
+    never come.
   - What a pass cannot finish waits for its next attempt, out of every
     pass's read meanwhile, so no session holds back another.
 - **Erase a session's content.** The tenant's owners and admins erase

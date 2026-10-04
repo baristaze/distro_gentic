@@ -5,7 +5,7 @@ from uuid import UUID
 
 from acme.infra.exceptions import InfraException, KeyRefused
 from acme.om.agent_sessions import AgentSessionsManagerInterface
-from acme.om.agent_sessions.types.agent_session import AgentSession
+from acme.om.agent_sessions.types.agent_session import AgentSession, SessionStatus
 from acme.om.base import EMPTY_UUID, Platform, derived_id, new_id, utcnow
 from acme.om.context import Permission, RequestContext, TenantContext
 from acme.om.events import EventsManagerInterface
@@ -35,6 +35,8 @@ from acme.om.retention.rules import (
 from acme.om.retention.storage import RetentionStorageInterface
 from acme.om.retention.types.policy import TenantRetention
 from acme.om.retention.types.snapshot import SessionRetention
+from acme.om.steps.types.header import ControlCommand, ControlHeader
+from acme.om.steps.types.step import Actor, Origin, Step, StepType
 from acme.om.tenancy import TenancyManagerInterface
 
 log = logging.getLogger(__name__)
@@ -44,6 +46,9 @@ UPDATED = "retention.retention_policy.updated"
 KEY_DESTROYED = "retention.key.destroyed"
 """The audit kind of a session's key destroyed: past its content's life, by
 the sweep, or before it, by the tenant's admin, whom the entry names."""
+SHAPE_CANCEL = "retention.shape.cancel"
+"""What a parked loop's cancel derives its id from, once per shape's life:
+every pass that finds the loop still parked asks for the same cancel."""
 ERASE_WRITES = 3
 """The writes an erasure makes of its snapshot at most, each after a sweep
 that wrote the snapshot meanwhile."""
@@ -270,7 +275,7 @@ class RetentionManagerImpl(RetentionManagerInterface):
             else:
                 waits = True
         if shape_due(snapshot, now):
-            if ctx is None or await self._mark(ctx, snapshot.session_id):
+            if ctx is None or await self._mark(ctx, snapshot):
                 update["shape_expired_at"] = now
             else:
                 waits = True
@@ -366,17 +371,47 @@ class RetentionManagerImpl(RetentionManagerInterface):
         )
         await self._events.append_event(ctx, entry)
 
-    async def _mark(self, ctx: TenantContext, session_id: UUID) -> bool:
+    async def _mark(self, ctx: TenantContext, snapshot: SessionRetention) -> bool:
         """The session marked deleted, its shape past its life; the engine's
         purge removes it. False when a loop is still open: the next pass
-        tries again."""
+        tries again. A loop that waits parked, on a person or on anything
+        else that may never come, is cancelled under the service context,
+        so the run that ends it leaves the session for the next pass to
+        mark."""
         try:
-            await self._sessions.delete_session(ctx, session_id)
+            await self._sessions.delete_session(ctx, snapshot.session_id)
         except NotFound:
             return True
         except ValidationFailed:
+            await self._cancel_parked(ctx, snapshot)
             return False
         return True
+
+    async def _cancel_parked(self, ctx: TenantContext, snapshot: SessionRetention) -> None:
+        """A `cancel` control on a parked session's loop, through the inbox,
+        which clears the park and asks for the run that ends the loop. A
+        loop a run holds, or one an input is about to wake, ends by itself."""
+        session = await self._sessions.get_session(ctx, snapshot.session_id)
+        if session.status is not SessionStatus.PARKED:
+            return
+        expires = snapshot.shape_expires_at or snapshot.created_at
+        step_id = derived_id(snapshot.session_id, expires, SHAPE_CANCEL)
+        cancel = Step(
+            id=step_id,
+            created_at=self._clock(),
+            session_id=snapshot.session_id,
+            loop_id=step_id,
+            type=StepType.CONTROL,
+            actor=Actor.ENGINE,
+            origin=Origin.ENGINE,
+            header=ControlHeader(command=ControlCommand.CANCEL),
+        )
+        await self._sessions.receive(ctx, snapshot.session_id, [cancel])
+        log.info(
+            "session %s of org %s parked past its shape's life: its loop is cancelled",
+            snapshot.session_id,
+            ctx.org_id,
+        )
 
     async def purge_tenant(self, ctx: TenantContext) -> int:
         ctx.require(Permission.WRITE)
