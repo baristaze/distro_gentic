@@ -1,7 +1,7 @@
-# distro_gentic
+# A Platform for Closed-Loop Agent Fleets
 
-*Specification of a closed-loop, cloud-first, distributed agentic
-platform. Preliminary.*
+*`distro_gentic`, a specification of a closed-loop, cloud-first,
+distributed agentic platform. A personal edition, preliminary.*
 
 An engine runs an agent. A platform runs a fleet of them: for many
 tenants, unattended, for days at a time, on machines it does not always
