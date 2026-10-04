@@ -192,9 +192,7 @@ def sweeping(managers: Callable[[], Managers]) -> tuple[AutomationActionInterfac
 async def test_a_products_action_with_nested_params_is_made_read_and_listed(
     tmp_path: Path,
 ) -> None:
-    container = build_container(
-        tmp_path, ports=PlatformPorts(kinds=ProductKinds(actions=sweeping))
-    )
+    container = build_container(tmp_path, ports=PlatformPorts(kinds=ProductKinds(actions=sweeping)))
     app = create_app(container)
     async with app.router.lifespan_context(app):
         transport = ASGITransport(app=app, raise_app_exceptions=False)
