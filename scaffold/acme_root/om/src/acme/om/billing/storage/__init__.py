@@ -156,6 +156,7 @@ class MoneyLedgerStorageInterface(ABC):
     @abstractmethod
     async def count_tenant(self, org_id: UUID, limit: int) -> int:
         """How many entries and counts the tenant keeps, counted up to
-        `limit` and no further: what the sweep reads of a deleted tenant's
-        ledger, which no serving login deletes."""
+        `limit` and no further. A deleted tenant's ledger stays, since no
+        serving login deletes it, and the sweep marks the tenant purged
+        without reading it."""
         ...
