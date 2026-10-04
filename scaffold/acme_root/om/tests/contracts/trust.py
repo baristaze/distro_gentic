@@ -25,6 +25,7 @@ from acme.om.agents.types.request import Start
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import new_id
+from acme.om.budgets.types.amount import Amount
 from acme.om.context import (
     CredentialKind,
     RequestContext,
@@ -72,6 +73,7 @@ STEADY = AgentKind(
     done_rule=DoneRule.ANSWER,
     authority=AuthorityMode.STEADY,
     tree=TreeLimits(height=2, count=4),
+    share=Amount(tokens=1_000_000),
     prompts=("You keep the records, under the authority of whoever started you.",),
     policy=ALLOWED,
     isolation=TWIN_SPEC,

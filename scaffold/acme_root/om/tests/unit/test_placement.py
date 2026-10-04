@@ -14,6 +14,7 @@ import pytest
 from contracts.agent_session_storage import make_session
 from contracts.doubles import Members
 from contracts.loops import loop_over, reply, said, use
+from contracts.tools import stand_ins
 
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
@@ -54,6 +55,9 @@ from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
 LEASE = timedelta(seconds=30)
 APP = AppContext(type=AppType.PORTAL, version="portal@test")
 WORKER = AppContext(type=AppType.WORKER, version="worker@test")
+# What `make_session` names, so the agents manager classes every tool it
+# offers.
+TOOLS = stand_ins("read_log", "run_tests")
 
 
 def request(app: AppContext = WORKER) -> RequestContext:
@@ -81,7 +85,7 @@ def storage() -> StorageMemoryImpl:
 
 @pytest.fixture
 def managers(tmp_path: Path, storage: StorageMemoryImpl) -> Managers:
-    return build_managers(storage, InfraLocalImpl(tmp_path))
+    return build_managers(storage, InfraLocalImpl(tmp_path), tool_catalog=TOOLS)
 
 
 async def an_owner(managers: Managers, slug: str = "ajax") -> TenantContext:

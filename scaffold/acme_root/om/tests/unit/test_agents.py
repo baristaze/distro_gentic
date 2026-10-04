@@ -601,6 +601,7 @@ async def test_a_result_passes_the_gate_and_the_null_gate_marks_it_unverified(
         StorageMemoryImpl(),
         InfraLocalImpl(tmp_path),
         agent_kinds=KINDS,
+        tool_catalog=TOOLS,
         result_gate=ResultGateNullImpl(),
     )
     ctx = context(Role.MEMBER)

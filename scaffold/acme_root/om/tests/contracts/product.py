@@ -12,7 +12,7 @@ from acme.om.context import TenantContext
 from acme.om.platform_agents.tools import NativeToolImpl
 from acme.om.root import Managers, ProductKinds
 from acme.om.tools.tool import ToolInterface, ToolRuntime
-from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule
+from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule, Target
 from acme.om.tools.types.tool import Effect, ToolInput, ToolMode, ToolSpec
 
 LEDGER_CLASS = "ledger"
@@ -47,6 +47,11 @@ class ReadTitleImpl(NativeToolImpl):
     def __init__(self, managers: Callable[[], Managers], read: list[str]) -> None:
         self._managers = managers
         self._read = read
+
+    async def target(self, ctx: TenantContext, call_input: ToolInput) -> Target:
+        # It reads the session it runs in and nothing else, so its call stays
+        # in the session's own work, whatever its product class would say.
+        return Target(attributes={"outward": False})
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime

@@ -16,6 +16,7 @@ from uuid import UUID
 
 import httpx
 from api_support import build_container, seed_request
+from contracts.tools import stand_ins
 from fastapi import FastAPI
 
 from acme.apps.host.agent import HostAgent
@@ -127,6 +128,9 @@ class Dated(httpx.AsyncBaseTransport):
 
 
 OPEN_EGRESS = {"mode": "open", "hosts": []}
+SESSION_TOOLS = stand_ins("read_log", "run_tests")
+"""What `make_session` names, so the agents manager classes every tool it
+offers."""
 DETAIL = re.compile(r"/v1/hosts/me/exec/[0-9a-f-]+")
 
 
@@ -224,7 +228,7 @@ class Stack:
 async def stack(tmp_path: Path, storage: StorageInterface | None = None) -> AsyncIterator[Stack]:
     """Over the memory storage, or over `storage`, where a tenant of its own
     is bootstrapped under a fresh slug."""
-    container = build_container(tmp_path, storage)
+    container = build_container(tmp_path, storage, tool_catalog=SESSION_TOOLS)
     app: FastAPI = create_app(container)
     async with app.router.lifespan_context(app):
         slug = "ajax" if storage is None else f"ajax-{new_id().hex[-8:]}"

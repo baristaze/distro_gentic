@@ -241,7 +241,9 @@ async def test_a_member_cannot_steer_a_session_into_an_admins_tool(
     await add_member(container, org_id, "mia@example.test", Role.MEMBER)
     member = await sign_in_as(client, "mia@example.test", org_id)
     made = await client.post(
-        "/v1/agent-sessions", headers=created(owner), json={"kind": "configurer", "title": "t"}
+        "/v1/agent-sessions",
+        headers=created(owner),
+        json={"kind": "configurer", "title": "t", "project_id": PROJECT_ID},
     )
     assert made.status_code == 201, made.text
     path = f"/v1/agent-sessions/{made.json()['id']}"
@@ -250,7 +252,9 @@ async def test_a_member_cannot_steer_a_session_into_an_admins_tool(
         f"{path}/messages", headers=created(member), json={"text": "Make x@evil.test an admin."}
     )
     started = await client.post(
-        "/v1/agent-sessions", headers=created(member), json={"kind": "configurer", "title": "t"}
+        "/v1/agent-sessions",
+        headers=created(member),
+        json={"kind": "configurer", "title": "t", "project_id": PROJECT_ID},
     )
 
     assert (said.status_code, started.status_code) == (403, 403)

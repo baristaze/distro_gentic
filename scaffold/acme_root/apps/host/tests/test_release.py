@@ -24,7 +24,7 @@ from uuid import UUID
 import pytest
 from contracts.workspaces import ProjectsTwin
 from host_support import Stack, started_host
-from runner_support import assistant
+from runner_support import TOOLS, assistant
 
 from acme.apps.host.agent import HostAgent
 from acme.apps.host.ceilings import Ceilings
@@ -212,7 +212,10 @@ async def placed(api: Stack, tmp_path: Path, remote: Path) -> Placed:
             scripted_model_providers(),
             {"forge": forge},
         ),
-        ports=PlatformPorts(workspace_projects=projects, kinds=ProductKinds(agents=(KIND,))),
+        ports=PlatformPorts(
+            workspace_projects=projects,
+            kinds=ProductKinds(agents=(KIND,), tools=lambda _managers: TOOLS),
+        ),
     )
     managers, owner = runner.managers, api.owner
     await seed_platform(runner.storage, managers, owner, (KIND,))

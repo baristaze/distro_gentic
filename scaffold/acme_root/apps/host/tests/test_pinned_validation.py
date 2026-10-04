@@ -24,7 +24,7 @@ from contracts.checks_repository import UNIT, OnDisk, Repository
 from contracts.evidence_storage import make_policy
 from contracts.project_storage import in_project
 from host_support import Stack, directory_host, postgres, stack, started_host
-from runner_support import assistant
+from runner_support import TOOLS, assistant
 
 from acme.apps.host.agent import HostAgent
 from acme.apps.host.ceilings import Ceilings
@@ -197,7 +197,7 @@ def runner(storage: StorageInterface, api: Stack, where: Path) -> Runner:
         ports=PlatformPorts(
             workspace_projects=OnDisk(repository),
             work_product=work,
-            kinds=ProductKinds(agents=(KIND,)),
+            kinds=ProductKinds(agents=(KIND,), tools=lambda _managers: TOOLS),
         ),
     )
     return Runner(container=container, repository=repository, work=work)

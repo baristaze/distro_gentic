@@ -10,7 +10,7 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from runner_support import ABSENT
+from runner_support import ABSENT, TOOLS
 
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.topics import TopicPayload, Topics, WorkAvailablePayload
@@ -106,7 +106,7 @@ async def test_a_loop_over_its_tenants_share_goes_back_to_its_lane_with_no_attem
         storage,
         InfraLocalImpl(tmp_path),
         IntegrationsOverImpl(IdentityProviderAbsentImpl(), scripted_model_providers()),
-        ports=PlatformPorts(kinds=ProductKinds(agents=ABSENT)),
+        ports=PlatformPorts(kinds=ProductKinds(agents=ABSENT, tools=lambda _managers: TOOLS)),
     )
     managers = container.managers
     rctx = RequestContext(request_id=new_id(), app=APP)

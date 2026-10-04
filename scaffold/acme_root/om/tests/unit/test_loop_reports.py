@@ -81,7 +81,7 @@ def runs_asked(loop: Loop, session_id: UUID) -> int:
     work = loop.storage.get_work_storage()
     assert isinstance(work, WorkStorageMemoryImpl)
     items = [item for _, item in work._items.values()]  # pyright: ignore[reportPrivateUsage]
-    return len([i for i in items if i.kind is WorkKind.LOOP and i.target_id == session_id])
+    return len([i for i in items if i.kind == WorkKind.LOOP and i.target_id == session_id])
 
 
 async def cached(loop: Loop, session_id: UUID) -> SessionStatus:

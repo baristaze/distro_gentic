@@ -20,6 +20,7 @@ from contracts.evidence import (
 from contracts.evidence_storage import make_record, make_validation
 from contracts.factories import make_org
 from contracts.loops import DELIVERY
+from contracts.tools import stand_ins
 
 from acme.infra.impl.local import InfraLocalImpl
 from acme.om.agents.impl.gate import ResultGateNullImpl
@@ -491,6 +492,7 @@ async def test_a_root_given_no_gate_ends_every_success_through_the_evidence_gate
         StorageMemoryImpl(),
         InfraLocalImpl(tmp_path),
         agent_kinds=(DELIVERY,),
+        tool_catalog=stand_ins(*DELIVERY.tools),
         environment="staging",
     )
     ctx = context(Role.MEMBER)

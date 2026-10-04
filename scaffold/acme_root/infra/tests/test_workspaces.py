@@ -344,7 +344,14 @@ async def test_a_container_holds_a_copy_of_the_hosts_ca_under_open_egress_alone(
     docker.calls.clear()
     await networked.prepare(org, workspace_id, spec(IsolationMode.CONTAINER, OPEN))
     name = container_name(workspace_id)
-    assert [call[0] for call in docker.calls] == [*STARTED_AGAIN[:-1], "cp", "start"]
+    # Open egress finds its bridge, which the bare prepare made, before the create.
+    assert [call[0] for call in docker.calls] == [
+        *STARTED_AGAIN[:-2],
+        "network",
+        "create",
+        "cp",
+        "start",
+    ]
     assert docker.calls[-2] == ("cp", "-", f"{name}:/")
     fed = docker.fed["cp"]
     assert isinstance(fed, bytes)
