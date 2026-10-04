@@ -19,6 +19,7 @@ from uuid import UUID
 
 import pytest
 from contracts.account_storage import make_account
+from contracts.matrix_storage import make_choice, make_pin
 from contracts.money_ledger_storage import a_funded_hold, funding
 from prometheus_client import REGISTRY
 from worker_support import (
@@ -468,6 +469,28 @@ async def test_a_deleted_tenants_usage_records_stay_and_never_keep_it_from_being
     marked = await container.storage.get_tenancy_storage().read_org(org_id)
     assert marked is not None and marked.purged_at is not None, "its records left nothing to purge"
     assert await ledger.read_usage_records(org_id, session_id, None, 10) == records
+
+
+async def test_a_deleted_tenants_matrix_pins_and_choices_go_before_it_is_marked_purged(
+    tmp_path: Path,
+) -> None:
+    """A session's pin to a matrix version and the tenant's choice of fill,
+    which names who made it, go with the purge's models step: the tenant is
+    marked purged only once neither is left."""
+    container = build_container(tmp_path)
+    org_id, _ = await deleted_org(container, days_ago=40)
+    matrix = container.storage.get_matrix_tenant_storage()
+    pin = make_pin()
+    await matrix.write_pin(org_id, pin)
+    await matrix.write_override(org_id, make_choice())
+    loop = build_loop(container)
+
+    for _ in range(3):
+        await loop._sweep_once()  # pyright: ignore[reportPrivateUsage]
+    assert await matrix.read_pin(org_id, pin.session_id) is None
+    assert await matrix.read_overrides(org_id, 10) == []
+    marked = await container.storage.get_tenancy_storage().read_org(org_id)
+    assert marked is not None and marked.purged_at is not None, "nothing of it was left"
 
 
 def a_session() -> AgentSession:

@@ -33,6 +33,8 @@ from acme.om.intake.tools import CommentImpl
 from acme.om.knowledge.impl.manager import KnowledgeOptions
 from acme.om.knowledge.root import build_knowledge
 from acme.om.media.impl.manager import MediaOptions
+from acme.om.matrix.impl.resolver import MatrixOptions
+from acme.om.matrix.root import MatrixLayer
 from acme.om.models.impl.manager import ModelsOptions
 from acme.om.notifications.impl.manager import NotificationsOptions
 from acme.om.notifications.root import build_notifications
@@ -132,6 +134,13 @@ def worker_managers(
     answers `intake`, the one the container builds over these managers."""
     batch = settings.worker_purge_batch
     ports = ports or PlatformPorts()
+    # The matrix's face over the models manager, so the purge's models step
+    # takes a deleted tenant's pins and choices of fill before its fill sets.
+    matrix = MatrixLayer(
+        storage,
+        options=MatrixOptions(environment=settings.environment, purge_batch=batch),
+        kinds=ports.kinds.agents,
+    )
     managers = build_managers(
         storage,
         infra,
@@ -184,6 +193,7 @@ def worker_managers(
         session_projects=ports.session_projects,
         workspace_projects=ports.workspace_projects,
         product_kinds=ports.kinds,
+        models_layer=matrix.layer,
     )
     refuse_open_money(settings.environment, managers)
     return managers
