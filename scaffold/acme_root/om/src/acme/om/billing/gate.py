@@ -7,6 +7,7 @@ row of the price table its cap was read from, which its bill is read from
 too."""
 
 from abc import abstractmethod
+from datetime import datetime
 from uuid import UUID
 
 from acme.om.billing.types.ledger import FundedHold, PricedAt
@@ -25,6 +26,7 @@ class MoneyGateInterface(BudgetGateInterface):
         priced: PricedAt | None,
         *,
         credential: str | None = None,
+        deadline: datetime | None = None,
     ) -> FundedHold | Refusal:
         """`authorize`, for a call priced from the row `priced` names, going
         out on the key `credential` names (None when the caller cannot say).
@@ -35,7 +37,9 @@ class MoneyGateInterface(BudgetGateInterface):
         above its session's norm
         pages the operator and is `GateParked` for a person; a call no
         bucket covers is `GateParked` on the budget. Either way nothing is
-        held. A refusal lists every limit it breaches."""
+        held. A refusal lists every limit it breaches. A job's hold names
+        its `deadline`, and lives to it; a job is judged by its rate and its
+        budgets, so the session's norm neither asks about it nor counts it."""
         ...
 
     @abstractmethod

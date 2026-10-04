@@ -96,11 +96,13 @@ class MoneyLedgerStorageInterface(ABC):
     @abstractmethod
     async def read_open(
         self, after: datetime, before: datetime, limit: int
-    ) -> list[tuple[UUID, Hold]]:
+    ) -> list[tuple[UUID, Hold, datetime]]:
         """Cross-tenant, for the sweep, in the system scope: at most `limit`
-        holds opened at or after `after` and before `before` that no
-        settlement has closed, whatever their tenant, each with its tenant,
-        oldest first."""
+        holds due at or after `after` and before `before` that no
+        settlement has closed, whatever their tenant, each with its tenant
+        and the time it fell due, the earliest due first. A model call's
+        hold falls due at its opening, and a job's at its deadline, which it
+        lives to."""
         ...
 
     @abstractmethod

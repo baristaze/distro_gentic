@@ -4,7 +4,7 @@ from typing import Any
 from uuid import UUID
 
 from pydantic import ValidationError
-from sqlalchemy import Update, func, select, tuple_, update
+from sqlalchemy import Update, and_, func, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -128,6 +128,7 @@ def _row(
     hold_id: UUID | None = None,
     session_id: UUID | None = None,
     reference: str | None = None,
+    deadline: datetime | None = None,
 ) -> LedgerEntries:
     return LedgerEntries(
         id=entry.id,
@@ -138,6 +139,7 @@ def _row(
         session_id=session_id,
         reference=reference,
         body=entry.model_dump(mode="json"),
+        deadline=deadline,
     )
 
 
@@ -170,6 +172,7 @@ class MoneyLedgerStoragePostgresImpl(PgStorageBase, MoneyLedgerStorageInterface)
                         written,
                         hold_id=written.id,
                         session_id=written.session_id,
+                        deadline=written.deadline,
                     )
                 )
                 await db.commit()
@@ -276,10 +279,11 @@ class MoneyLedgerStoragePostgresImpl(PgStorageBase, MoneyLedgerStorageInterface)
 
     async def read_open(
         self, after: datetime, before: datetime, limit: int
-    ) -> list[tuple[UUID, Hold]]:
-        # The holds of the slice by their time, each kept while no settlement
-        # names it: the index by kind and time bounds the read, and the
-        # ledger's unique index by hold answers each probe.
+    ) -> list[tuple[UUID, Hold, datetime]]:
+        # The holds that fall due in the slice, each kept while no settlement
+        # names it: a model call's by its opening time, through the index by
+        # kind and that time, and a job's by its deadline, through the index
+        # of deadlines; the ledger's unique index by hold answers each probe.
         settlement = aliased(LedgerEntries)
         settled = select(settlement.id).where(
             settlement.org_id == LedgerEntries.org_id,
@@ -290,20 +294,28 @@ class MoneyLedgerStoragePostgresImpl(PgStorageBase, MoneyLedgerStorageInterface)
             select(LedgerEntries)
             .where(
                 LedgerEntries.kind == EntryKind.HOLD.value,
-                LedgerEntries.created_at >= after,
-                LedgerEntries.created_at < before,
+                or_(
+                    and_(
+                        LedgerEntries.deadline.is_(None),
+                        LedgerEntries.created_at >= after,
+                        LedgerEntries.created_at < before,
+                    ),
+                    and_(LedgerEntries.deadline >= after, LedgerEntries.deadline < before),
+                ),
                 ~settled.exists(),
             )
-            .order_by(LedgerEntries.created_at, LedgerEntries.id)
+            .order_by(
+                func.coalesce(LedgerEntries.deadline, LedgerEntries.created_at), LedgerEntries.id
+            )
             .limit(limit)
         )
         async with self._session_for(stmt, org_id=EMPTY_UUID) as session:
             await session.execute(PLAN_WITH_VALUES)
-            found: list[tuple[UUID, Hold]] = []
+            found: list[tuple[UUID, Hold, datetime]] = []
             for row in (await session.execute(stmt)).scalars():
                 entry = _entry(row)
                 assert isinstance(entry, FundedHold)
-                found.append((row.org_id, entry.hold))
+                found.append((row.org_id, entry.hold, entry.due_at))
             return found
 
     async def read_entries(

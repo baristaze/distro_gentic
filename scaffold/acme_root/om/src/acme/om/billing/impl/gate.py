@@ -29,8 +29,9 @@ from acme.om.billing.storage import AccountStorageInterface, MoneyLedgerStorageI
 from acme.om.billing.types.account import Account
 from acme.om.billing.types.ledger import Approval, FundedHold, PricedAt, Turned
 from acme.om.billing.types.plan import PlanCatalog, UnitScale
-from acme.om.budgets.rules import call_exposure, settlement_of, usage_spend
+from acme.om.budgets.rules import call_exposure, job_exposure, settlement_of, usage_spend
 from acme.om.budgets.storage import BudgetStorageInterface
+from acme.om.budgets.types.amount import Spend
 from acme.om.budgets.types.breach import Refusal
 from acme.om.budgets.types.hold import (
     Bill,
@@ -110,6 +111,7 @@ class MoneyGateImpl(MoneyGateInterface):
         priced: PricedAt | None,
         *,
         credential: str | None = None,
+        deadline: datetime | None = None,
     ) -> FundedHold | Refusal:
         ctx.require(Permission.WRITE)
         if request.spender_id is None:
@@ -123,7 +125,9 @@ class MoneyGateImpl(MoneyGateInterface):
         if len(found) > bound:
             # A line the gate does not read is spend outside it: refuse.
             raise ValidationFailed(f"more than {bound} budgets bind this call")
-        approval = await self._guard(ctx, request)
+        # A job's worst case is its declared rate to its deadline, which its
+        # budgets bound: no model call's norm judges it.
+        approval = None if deadline is not None else await self._guard(ctx, request)
         hold = FundedHold(
             hold=Hold(
                 id=new_id(),
@@ -139,6 +143,7 @@ class MoneyGateImpl(MoneyGateInterface):
             units=units_of(request.exposure.cost_micros, funding.micros_per_unit),
             priced=priced,
             approval_id=approval,
+            deadline=deadline,
         )
         answer = await self._ledger.open_hold(ctx.org_id, hold)
         if isinstance(answer, Turned):
@@ -190,7 +195,8 @@ class MoneyGateImpl(MoneyGateInterface):
         """The anomaly guard, before anything is held: a call whose expected
         cost is far above its session's norm pages the operator and parks
         for a person, unless a person approved it. Returns the approval it
-        rides on, if any."""
+        rides on, if any. The norm is the session's model calls': a job's
+        hold is no call, and counts in it not at all."""
         if request.session_id is None:
             return None
         guard = self._options.guard
@@ -206,6 +212,8 @@ class MoneyGateImpl(MoneyGateInterface):
             elif isinstance(entry, FundedHold):
                 if entry.approval_id is not None:
                     used.add(entry.approval_id)
+                    continue
+                if entry.deadline is not None:
                     continue
                 cost_of = entry.hold.exposure.cost_micros
                 if cost_of is not None and len(recent) < guard.recent:
@@ -258,7 +266,11 @@ class MoneyCallGateImpl(CallGateInterface):
     too. Every settled call counts its tokens and its spend under the
     matrix version `version` reads of its session at the hold, and the plan
     tier `tier` reads; a settle in another process counts them under
-    `none`."""
+    `none`. A spending job is held on the same scopes at its rate until its
+    deadline (`budgets.rules.job_exposure`), with no row of the price
+    table, and billed at the cost its runner reported, else whole; a job
+    refused before any work began releases its hold. Its hold names that
+    deadline and lives to it, and no session's norm judges it."""
 
     def __init__(
         self,
@@ -269,6 +281,7 @@ class MoneyCallGateImpl(CallGateInterface):
         *,
         version: PinnedVersion | None = None,
         tier: PlanTierOf | None = None,
+        clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._gate = gate
         self._prices = prices
@@ -276,6 +289,7 @@ class MoneyCallGateImpl(CallGateInterface):
         self._projects = projects
         self._version = version
         self._tier = tier
+        self._clock = clock
         self._labels: dict[UUID, CallLabels] = {}
 
     async def authorize(
@@ -333,3 +347,40 @@ class MoneyCallGateImpl(CallGateInterface):
         labels = self._labels.pop(hold_id, UNLABELLED)
         settlement = await self._gate.settle(ctx, hold_id, bill)
         count_settled(labels, usage if billed else None, settlement)
+
+    async def authorize_job(
+        self,
+        ctx: TenantContext,
+        session_id: UUID,
+        spender: Principal,
+        tool: str,
+        rate_micros_per_hour: int,
+        deadline: datetime,
+    ) -> UUID:
+        session = await self._sessions.get_session(ctx, session_id)
+        project_id = await self._projects.project_of(ctx, session_id)
+        request = HoldRequest(
+            spender_id=spender.id,
+            scopes=scopes_of(
+                ctx.org_id, session_id, session.root_id, spender, project_id=project_id
+            ),
+            exposure=job_exposure(rate_micros_per_hour, self._clock(), deadline),
+            session_id=session_id,
+            purpose=tool,
+        )
+        answer = await self._gate.authorize_priced(ctx, request, None, deadline=deadline)
+        if isinstance(answer, Refusal):
+            raise BudgetRefused(answer)
+        return answer.id
+
+    async def settle_job(
+        self, ctx: TenantContext, hold_id: UUID, cost_micros: int | None, *, started: bool
+    ) -> None:
+        bill: Bill
+        if not started:
+            bill = NotBilled(proof=NotBilledProof.REFUSED_BEFORE_PROCESSING)
+        elif cost_micros is None:
+            bill = BillUnknown()
+        else:
+            bill = Billed(usage=Spend(cost_micros=cost_micros, tokens=0))
+        await self._gate.settle(ctx, hold_id, bill)

@@ -1,4 +1,5 @@
 from collections.abc import Awaitable, Callable
+from datetime import datetime
 from uuid import UUID
 
 from acme.infra.observability import MODEL_SPEND_MICROS, MODEL_TOKENS
@@ -6,9 +7,11 @@ from acme.integrations.model_providers.calls import ModelCall
 from acme.integrations.model_providers.types import Usage
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.attribution.types.principal import Principal
+from acme.om.base import utcnow
 from acme.om.budgets import BudgetGateInterface
 from acme.om.budgets.pricing import ModelPrice, PricingInterface
-from acme.om.budgets.rules import call_exposure, usage_spend
+from acme.om.budgets.rules import call_exposure, job_exposure, usage_spend
+from acme.om.budgets.types.amount import Spend
 from acme.om.budgets.types.breach import Refusal
 from acme.om.budgets.types.budget import BudgetScope, BudgetScopeKind
 from acme.om.budgets.types.hold import (
@@ -109,6 +112,22 @@ class CallGateNullImpl(CallGateInterface):
     ) -> None:
         raise Unavailable("no budget gate is wired, so there is no hold to settle")
 
+    async def authorize_job(
+        self,
+        ctx: TenantContext,
+        session_id: UUID,
+        spender: Principal,
+        tool: str,
+        rate_micros_per_hour: int,
+        deadline: datetime,
+    ) -> UUID:
+        raise Unavailable("no budget gate is wired, so no job that spends is started")
+
+    async def settle_job(
+        self, ctx: TenantContext, hold_id: UUID, cost_micros: int | None, *, started: bool
+    ) -> None:
+        raise Unavailable("no budget gate is wired, so there is no hold to settle")
+
 
 class CallGateBudgetImpl(CallGateInterface):
     """The budgets' gate behind the narrow face the windows and the loop
@@ -121,7 +140,10 @@ class CallGateBudgetImpl(CallGateInterface):
     price; a call the provider never processed releases its hold. Every
     settled call counts its tokens and its spend, under the matrix version
     `version` reads of its session and the plan tier `tier` reads; None
-    counts them under `none`."""
+    counts them under `none`. A spending job is held on the same scopes at
+    its rate until its deadline (`budgets.rules.job_exposure`), and settles
+    at the cost its runner reported, else whole; a job refused before any
+    work began releases its hold."""
 
     def __init__(
         self,
@@ -132,6 +154,7 @@ class CallGateBudgetImpl(CallGateInterface):
         *,
         version: PinnedVersion | None = None,
         tier: PlanTierOf | None = None,
+        clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._gate = gate
         self._pricing = pricing
@@ -139,6 +162,7 @@ class CallGateBudgetImpl(CallGateInterface):
         self._projects = projects
         self._version = version
         self._tier = tier
+        self._clock = clock
         self._held: dict[UUID, tuple[ModelPrice | None, CallLabels]] = {}
 
     async def authorize(
@@ -186,6 +210,43 @@ class CallGateBudgetImpl(CallGateInterface):
             bill = Billed(usage=usage_spend(usage, price))
         settlement = await self._gate.settle(ctx, hold_id, bill)
         count_settled(labels, usage if billed else None, settlement)
+
+    async def authorize_job(
+        self,
+        ctx: TenantContext,
+        session_id: UUID,
+        spender: Principal,
+        tool: str,
+        rate_micros_per_hour: int,
+        deadline: datetime,
+    ) -> UUID:
+        session = await self._sessions.get_session(ctx, session_id)
+        project_id = await self._projects.project_of(ctx, session_id)
+        request = HoldRequest(
+            spender_id=spender.id,
+            scopes=scopes_of(
+                ctx.org_id, session_id, session.root_id, spender, project_id=project_id
+            ),
+            exposure=job_exposure(rate_micros_per_hour, self._clock(), deadline),
+            session_id=session_id,
+            purpose=tool,
+        )
+        answer = await self._gate.authorize(ctx, request)
+        if isinstance(answer, Refusal):
+            raise BudgetRefused(answer)
+        return answer.id
+
+    async def settle_job(
+        self, ctx: TenantContext, hold_id: UUID, cost_micros: int | None, *, started: bool
+    ) -> None:
+        bill: Bill
+        if not started:
+            bill = NotBilled(proof=NotBilledProof.REFUSED_BEFORE_PROCESSING)
+        elif cost_micros is None:
+            bill = BillUnknown()
+        else:
+            bill = Billed(usage=Spend(cost_micros=cost_micros, tokens=0))
+        await self._gate.settle(ctx, hold_id, bill)
 
 
 def scopes_of(

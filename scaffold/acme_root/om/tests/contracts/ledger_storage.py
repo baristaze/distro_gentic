@@ -235,9 +235,12 @@ class LedgerStorageContract:
         await storage.close_hold(first, settlement_of(settled, BillUnknown(), new_id(), now))
         floor, cut = now - timedelta(days=1), now - timedelta(hours=1)
         found = await storage.read_open(floor, cut, 10)
-        assert [(org, hold.id) for org, hold in found] == [(second, older.id), (first, old.id)]
+        assert [(org, hold.id, due) for org, hold, due in found] == [
+            (second, older.id, older.created_at),
+            (first, old.id, old.created_at),
+        ]
         assert found[0][1] == older
-        assert [hold.id for _, hold in await storage.read_open(floor, cut, 1)] == [older.id]
+        assert [hold.id for _, hold, _ in await storage.read_open(floor, cut, 1)] == [older.id]
 
     async def test_close_hold_of_a_hold_never_opened_is_not_found(
         self, storage: LedgerStorageInterface

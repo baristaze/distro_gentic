@@ -44,9 +44,10 @@ from acme.om.storage.root import StorageInterface
 from acme.om.tenancy.rules import permissions_of
 from acme.om.tools.attachments import AttachmentReaderInterface
 from acme.om.tools.impl.attachments import AttachmentReaderNullImpl
-from acme.om.tools.tool import ToolInterface, ToolRuntime
+from acme.om.tools.tool import JobToolInterface, ToolInterface, ToolRuntime
+from acme.om.tools.types.call import JobHandle, JobStarted
 from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule, Target
-from acme.om.tools.types.tool import Effect, ToolClass, ToolInput, ToolSpec
+from acme.om.tools.types.tool import Effect, ToolClass, ToolInput, ToolMode, ToolSpec
 from acme.om.windows.gate import CallGateInterface
 from acme.om.windows.impl.gate import CallGateBudgetImpl
 from contracts.doubles import APP, context
@@ -132,6 +133,52 @@ class Lookup(ToolInterface):
         return Found(text=f"{self._spec.name} found {call_input.q}")
 
 
+class Build(JobToolInterface):
+    """A job: its run starts work under the call's key and answers at once,
+    and starting it again under that key attaches to the same work. It
+    keeps each start and each cancel; the work itself is the test's to end.
+    `rate` makes it a job that spends."""
+
+    def __init__(self, name: str = "build", *, rate: int | None = None) -> None:
+        self._spec = ToolSpec(
+            name=name,
+            description=f"Starts the {name} job.",
+            input_model=Asked,
+            output_model=JobStarted,
+            timeout=timedelta(hours=2),
+            authorization_class=ToolClass.WRITE,
+            effect=Effect.IDEMPOTENT,
+            interruptible=True,
+            mode=ToolMode.JOB,
+            rate_micros_per_hour=rate,
+        )
+        self.started: dict[UUID, str] = {}
+        self.deadlines: list[datetime] = []
+        self.cancelled: list[JobHandle] = []
+
+    @property
+    def spec(self) -> ToolSpec:
+        return self._spec
+
+    async def target(self, ctx: TenantContext, call_input: ToolInput) -> Target:
+        return Target()
+
+    async def preflight(
+        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
+    ) -> None:
+        return None
+
+    async def run(
+        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
+    ) -> Platform:
+        handle = self.started.setdefault(runtime.key, f"{self._spec.name}-{len(self.started) + 1}")
+        self.deadlines.append(runtime.deadline)
+        return JobStarted(handle=handle)
+
+    async def cancel(self, ctx: TenantContext, job: JobHandle) -> None:
+        self.cancelled.append(job)
+
+
 class Submitted(ToolInput):
     claim: Claim
     evidence: tuple[UUID, ...] = ()
@@ -168,6 +215,18 @@ DELIVERY = AgentKind(
     prompts=("You deliver the work, and submit it with its evidence.",),
     policy=ALLOWED,
 )
+
+BUILDER = AgentKind(
+    name="builder",
+    version=1,
+    tools=("lookup", "build", "compute"),
+    done_rule=DoneRule.ANSWER,
+    authority=AuthorityMode.DELEGATED,
+    tree=TreeLimits(height=2, count=4),
+    prompts=("You start the work the person asks for, and say how it ended.",),
+    policy=ALLOWED,
+)
+"""A kind that starts jobs: `build`, and `compute`, which spends."""
 
 HELPER = AgentKind(
     name="helper",
@@ -225,6 +284,7 @@ class Loop:
     clock: Clock
     owner: TenantContext
     tools: dict[str, Lookup]
+    jobs: dict[str, Build]
 
     async def start(self, kind: str = "assistant") -> UUID:
         session = await self.managers.agents.start_session(
@@ -277,19 +337,22 @@ def loop_over(
     call_gate: Callable[[Managers, Clock], CallGateInterface] | None = None,
     models_layer: ModelsLayer | None = None,
     reader: AttachmentReaderInterface | None = None,
+    extra: tuple[ToolInterface, ...] = (),
     **roots: Any,
 ) -> Loop:
     """`storage` None is the memory storage, and `owner` None a fresh
     tenant's owner; a suite over Postgres hands in both. `jitter` is what
     the loop draws its retry waits from. The loop's catalog holds the
-    engine's tools before the suite's, over `reader`, None the null.
-    `result_gate` None is the engine's null gate, which accepts a result
-    and marks it unverified, as the engine's suites read it; `executor` and
-    `work_product` go to the root as they are. `call_gate` None is the
-    budgets' gate behind the call gate; a suite of a gate of its own builds
-    it from the managers and the clock. `models_layer` goes to the root as
-    a platform's root hands it in, and the loop takes the layer's call
-    credentials; and `roots` is what else the managers are built with."""
+    engine's tools before the suite's, over `reader`, None the null, and
+    `extra` after them: a product's own tool, which a kind of `kinds`
+    names. `result_gate` None is the engine's null gate, which accepts a
+    result and marks it unverified, as the engine's suites read it;
+    `executor` and `work_product` go to the root as they are. `call_gate`
+    None is the budgets' gate behind the call gate; a suite of a gate of
+    its own builds it from the managers and the clock. `models_layer` goes
+    to the root as a platform's root hands it in, and the loop takes the
+    layer's call credentials; and `roots` is what else the managers are
+    built with."""
     infra = InfraLocalImpl(tmp_path)
     anthropic = ModelProviderScriptedImpl(ProviderName.ANTHROPIC)
     openai = ModelProviderScriptedImpl(ProviderName.OPENAI)
@@ -298,6 +361,8 @@ def loop_over(
     )
     integrations = IntegrationsOverImpl(IdentityProviderAbsentImpl(), providers)
     catalog = tools()
+    jobs = {"build": Build(), "compute": Build("compute", rate=3_600_000)}
+    every = (*catalog.values(), *jobs.values(), *extra)
     storage = storage or StorageMemoryImpl()
     reader = reader or AttachmentReaderNullImpl()
     managers = build_managers(
@@ -306,7 +371,7 @@ def loop_over(
         integrations=integrations,
         agent_kinds=kinds,
         principal_context=live,
-        tool_catalog=tuple(catalog.values()),
+        tool_catalog=every,
         attachment_reader=reader,
         result_gate=result_gate or ResultGateNullImpl(),
         executor=executor,
@@ -339,6 +404,7 @@ def loop_over(
                 SessionProjectsBoundImpl(storage.get_project_storage()),
                 version=None if models_layer is None else models_layer.version,
                 tier=None if models_layer is None else models_layer.tier,
+                clock=clock,
             )
             if call_gate is None
             else call_gate(managers, clock)
@@ -350,14 +416,16 @@ def loop_over(
         ),
         outages or infra.get_outages(),
         sink,
-        engine_tools(managers.steps, reader) + tuple(catalog.values()),
+        engine_tools(managers.steps, reader) + every,
         options,
         clock,
         sleep,
         jitter=jitter,
     )
     owner = owner or context(Role.OWNER, make_org())
-    return Loop(infra, storage, managers, loops, anthropic, openai, sink, clock, owner, catalog)
+    return Loop(
+        infra, storage, managers, loops, anthropic, openai, sink, clock, owner, catalog, jobs
+    )
 
 
 def reply(*blocks: TextBlock | ToolUseBlock, model: str = SONNET) -> ModelReply:

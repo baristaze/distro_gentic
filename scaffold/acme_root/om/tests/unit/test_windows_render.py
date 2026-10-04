@@ -290,7 +290,7 @@ def test_only_a_principal_or_a_parent_instructs_and_only_their_messages_are_pinn
         assert rules.is_instruction(said) is instructs
         assert rules.pins(said) is instructs
     assert not rules.is_instruction(history.event("go"))
-    notice = history.changed("a person moved the arm")
+    notice = history.changed("a person changed the retry settings")
     assert rules.is_instruction(notice) and not rules.pins(notice), "a notice is never pinned"
 
 

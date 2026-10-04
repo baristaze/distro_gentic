@@ -124,13 +124,13 @@ class LedgerStorageMemoryImpl(MemoryStorageBase, LedgerStorageInterface):
 
     async def read_open(
         self, after: datetime, before: datetime, limit: int
-    ) -> list[tuple[UUID, Hold]]:
+    ) -> list[tuple[UUID, Hold, datetime]]:
         open_ = [
-            (org_id, hold)
+            (org_id, hold, hold.created_at)
             for org_id, hold in self._rows_across_tenants(self._holds)
             if after <= hold.created_at < before and hold.id not in self._settlements
         ]
-        return sorted(open_, key=lambda found: (found[1].created_at, found[1].id))[:limit]
+        return sorted(open_, key=lambda found: (found[2], found[1].id))[:limit]
 
     async def count_tenant(self, org_id: UUID, limit: int) -> int:
         holds = len(self._rows(self._holds, org_id))

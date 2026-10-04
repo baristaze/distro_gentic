@@ -32,7 +32,7 @@ from acme.om.steps import StepsManagerInterface
 from acme.om.steps.types.step import Step
 from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.tools.registry import ToolRegistry
-from acme.om.tools.types.call import Gate, JobHandle
+from acme.om.tools.types.call import Gate, JobHandle, JobNotStarted
 from acme.om.tools.types.policy import PolicyLayer, ToolPolicy
 from acme.om.workspaces.manager import WorkspacesManagerInterface
 from acme.om.workspaces.placed import PlacedWorkspacesInterface
@@ -294,7 +294,7 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         epoch: int,
         tree_deadline: datetime | None,
         kept_as: Mapping[str, str] | None = None,
-    ) -> JobHandle | Step:
+    ) -> JobHandle | JobNotStarted | Step:
         return await self._inner.start_job(
             ctx,
             registry,

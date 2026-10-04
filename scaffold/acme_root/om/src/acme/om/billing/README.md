@@ -46,10 +46,11 @@ of](../../../../README.md).
 - **Approve a call** that the anomaly guard parked.
 - **Read a tenant's ledger.** An operator reads its entries, the newest
   first, naming the tenant, under the operators' read.
-- **Settle what nobody settled.** A hold an hour open with no settlement
-  belongs to a run that died. The sweep settles it through its gate, at
-  the bill the provider gives, else whole, and releases it only on the
-  provider's proof (`sweep.py`).
+- **Settle what nobody settled.** A hold an hour past due with no
+  settlement belongs to a run that died. A model call's hold falls due at
+  its opening, and a job's at its deadline, which it lives to. The sweep
+  settles it through its gate, at the bill the provider gives, else
+  whole, and releases it only on the provider's proof (`sweep.py`).
 - **Purge a deleted tenant.** Its account goes with its other rows. Its
   ledger is counted and never deleted, so the sweep never marks the
   tenant purged while an entry remains (`purge.py`).
@@ -75,7 +76,9 @@ of](../../../../README.md).
   bucket covers, parks the session on its budget. The provider's pace
   parks it on the provider. Each is told in its own words.
 - **A call far above its session's norm waits for a person**, and the
-  operator is paged.
+  operator is paged. The norm is the session's model calls'. A job that
+  spends is judged by its declared rate and its budgets: it neither meets
+  the norm nor counts in it.
 - **What the ledger holds is written once.** No serving login rewrites
   or removes an entry.
 

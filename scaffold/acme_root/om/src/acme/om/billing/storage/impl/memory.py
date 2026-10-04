@@ -204,20 +204,20 @@ class MoneyLedgerStorageMemoryImpl(MemoryStorageBase, MoneyLedgerStorageInterfac
 
     async def read_open(
         self, after: datetime, before: datetime, limit: int
-    ) -> list[tuple[UUID, Hold]]:
+    ) -> list[tuple[UUID, Hold, datetime]]:
         closed = {
             (row.org_id, row.hold_id) for row in self._entries if row.kind is EntryKind.SETTLEMENT
         }
         found = sorted(
             (
-                (row.org_id, row.entry.hold)
+                (row.org_id, row.entry.hold, row.entry.due_at)
                 for row in self._entries
                 if row.kind is EntryKind.HOLD
                 and isinstance(row.entry, FundedHold)
-                and after <= row.entry.hold.created_at < before
+                and after <= row.entry.due_at < before
                 and (row.org_id, row.hold_id) not in closed
             ),
-            key=lambda pair: (pair[1].created_at, pair[1].id),
+            key=lambda found: (found[2], found[1].id),
         )
         return found[:limit]
 

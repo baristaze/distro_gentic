@@ -18,7 +18,7 @@ from acme.om.steps.types.step import Step
 from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.tools.registry import ToolRegistry
 from acme.om.tools.rules import response
-from acme.om.tools.types.call import Gate, GateOutcome, JobHandle
+from acme.om.tools.types.call import Gate, GateOutcome, JobHandle, JobNotStarted
 from acme.om.tools.types.policy import PolicyLayer, ToolPolicy
 from acme.om.trust.exceptions import SecretCrossesWall
 from acme.om.trust.manager import TrustManagerInterface
@@ -140,10 +140,11 @@ class ToolsManagerTrustedImpl(ToolsManagerInterface):
         epoch: int,
         tree_deadline: datetime | None,
         kept_as: Mapping[str, str] | None = None,
-    ) -> JobHandle | Step:
+    ) -> JobHandle | JobNotStarted | Step:
         resolved = await self._resolved(ctx, registry, request)
         if isinstance(resolved, Step):
-            return resolved
+            # Refused before its tool ran: nothing started.
+            return JobNotStarted(response=resolved)
         await self._trust().audit_call(ctx, request)
         return await self._inner.start_job(
             ctx,
