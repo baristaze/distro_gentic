@@ -198,7 +198,7 @@ async def test_a_products_action_with_nested_params_is_made_read_and_listed(
         transport = ASGITransport(app=app, raise_app_exceptions=False)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             ajax = await tenant(client, container, "ajax")
-            params = {"steps": 2, "on": ["a", "b"], "where": {"lab": ["north", "south"]}}
+            params = {"steps": 2, "on": ["a", "b"], "where": {"region": ["north", "south"]}}
             body = {
                 **automation(await project_of(client, ajax.owner)),
                 "action": {"kind": "sweep", "params": params},
