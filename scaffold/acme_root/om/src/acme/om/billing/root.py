@@ -19,7 +19,7 @@ from acme.om.billing.gate import MoneyGateInterface
 from acme.om.billing.impl.gate import MoneyGateImpl, MoneyGateOptions
 from acme.om.billing.impl.manager import BillingManagerImpl
 from acme.om.billing.impl.pager import OperatorPagerLogImpl
-from acme.om.billing.impl.purge import BillingPurgeImpl, BillingPurgeOptions
+from acme.om.billing.impl.purge import BillingPurgeImpl
 from acme.om.billing.manager import BillingManagerInterface
 from acme.om.billing.pager import OperatorPagerInterface
 from acme.om.billing.purge import BillingPurgeInterface
@@ -76,17 +76,10 @@ def build_billing(
     )
 
 
-def build_billing_purge(
-    storage: StorageInterface, managers: Managers, *, purge_batch: int
-) -> BillingPurgeInterface:
+def build_billing_purge(storage: StorageInterface, managers: Managers) -> BillingPurgeInterface:
     """Billing's part of a deleted tenant's purge, for the maintenance
-    worker: the account goes, and the ledger is counted."""
-    return BillingPurgeImpl(
-        storage.get_account_storage(),
-        storage.get_money_ledger_storage(),
-        managers.tenancy,
-        BillingPurgeOptions(purge_batch=purge_batch),
-    )
+    worker: the account goes, and the ledger stays."""
+    return BillingPurgeImpl(storage.get_account_storage(), managers.tenancy)
 
 
 def refuse_open_money(environment: str, managers: Managers) -> None:

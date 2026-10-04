@@ -18,6 +18,7 @@ from uuid import UUID
 
 import pytest
 from contracts.project_storage import make_project
+from contracts.tools import stand_ins
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
@@ -26,6 +27,7 @@ from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
 from acme.om.agents.types.request import Spawn, Start
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.base import new_id
+from acme.om.budgets.types.amount import Amount
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
 from acme.om.exceptions import NotFound
 from acme.om.projects.exceptions import ProjectFixed
@@ -48,6 +50,7 @@ DELIVERY = AgentKind(
     result_tool="submit",
     authority=AuthorityMode.STEADY,
     tree=TreeLimits(height=2, count=2),
+    share=Amount(cost_micros=5_000),
 )
 
 
@@ -66,7 +69,12 @@ async def storage(
 
 @pytest.fixture
 def managers(storage: StoragePostgresImpl, tmp_path: Path) -> Managers:
-    return build_managers(storage, InfraLocalImpl(tmp_path), agent_kinds=(DELIVERY,))
+    return build_managers(
+        storage,
+        InfraLocalImpl(tmp_path),
+        agent_kinds=(DELIVERY,),
+        tool_catalog=stand_ins(*DELIVERY.tools),
+    )
 
 
 async def an_org(managers: Managers) -> TenantContext:

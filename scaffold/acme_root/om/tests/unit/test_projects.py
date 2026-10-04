@@ -12,6 +12,7 @@ from contracts.doubles import context, model_request
 from contracts.factories import make_org
 from contracts.project_storage import make_project
 from contracts.step_storage import make_message
+from contracts.tools import stand_ins
 from pydantic import ValidationError
 
 from acme.infra.impl.local import InfraLocalImpl
@@ -20,6 +21,7 @@ from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
 from acme.om.agents.types.request import Handoff, Spawn, Start
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.base import new_id
+from acme.om.budgets.types.amount import Amount
 from acme.om.context import Role, TenantContext
 from acme.om.exceptions import NotAuthorized, NotFound, TenantMismatch
 from acme.om.projects.exceptions import ProjectFixed
@@ -36,6 +38,7 @@ DELIVERY = AgentKind(
     result_tool="submit",
     authority=AuthorityMode.STEADY,
     tree=TreeLimits(height=2, count=2),
+    share=Amount(cost_micros=5_000),
 )
 ASSISTANT = AgentKind(
     name="assistant",
@@ -45,12 +48,16 @@ ASSISTANT = AgentKind(
     authority=AuthorityMode.DELEGATED,
     tree=TreeLimits(height=1, count=0),
 )
+TOOLS = stand_ins(*DELIVERY.tools, *ASSISTANT.tools)
 
 
 @pytest.fixture
 def managers(tmp_path: Path) -> Managers:
     return build_managers(
-        StorageMemoryImpl(), InfraLocalImpl(tmp_path), agent_kinds=(DELIVERY, ASSISTANT)
+        StorageMemoryImpl(),
+        InfraLocalImpl(tmp_path),
+        agent_kinds=(DELIVERY, ASSISTANT),
+        tool_catalog=TOOLS,
     )
 
 
@@ -238,6 +245,7 @@ async def test_a_sessions_row_goes_with_its_purge_and_a_living_tenant_keeps_all(
         StorageMemoryImpl(),
         InfraLocalImpl(tmp_path),
         agent_kinds=(DELIVERY,),
+        tool_catalog=TOOLS,
         agent_sessions_options=AgentSessionsOptions(retention=timedelta(0)),
     )
     org = make_org()

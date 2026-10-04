@@ -31,7 +31,7 @@ from acme.services.api.types.agent_sessions import (
     FillUsageView,
     LoopLimitsView,
     QuestionView,
-    SessionUsageView,
+    SessionModelUsageView,
     ToolCallView,
     TreeBoundsView,
 )
@@ -127,7 +127,7 @@ def verdict_of(decided: ControlHeader, now: datetime) -> Verdict:
     return Verdict.EXPIRED if expires is not None and expires <= now else Verdict.APPROVED
 
 
-def usage_of(history: Sequence[Step]) -> SessionUsageView:
+def usage_of(history: Sequence[Step]) -> SessionModelUsageView:
     """The usage every model response reported, summed per model by the
     request it answers, and in total. A response with no usage reported
     counts as a call and adds no tokens."""
@@ -162,7 +162,7 @@ def usage_of(history: Sequence[Step]) -> SessionUsageView:
         )
         for fill, row in sorted(totals.items())
     ]
-    return SessionUsageView(
+    return SessionModelUsageView(
         calls=sum(f.calls for f in per_fill),
         input=sum(f.input for f in per_fill),
         cache_read=sum(f.cache_read for f in per_fill),

@@ -18,6 +18,7 @@ import pytest
 from contracts.agent_session_storage import make_session
 from contracts.doubles import APP, context
 from contracts.step_storage import make_message
+from contracts.tools import stand_ins
 
 from acme.infra.exceptions import KeyRefused
 from acme.infra.impl.local import InfraLocalImpl
@@ -39,6 +40,10 @@ from acme.om.retention.types.policy import ProjectRetention, RetentionPolicy
 from acme.om.root import Managers, build_managers
 from acme.om.steps.types.content import ContentState
 from acme.om.storage.impl.memory import StorageMemoryImpl
+
+# What `make_session` names, so the agents manager classes every tool it
+# offers.
+TOOLS = stand_ins("read_log", "run_tests")
 
 DAY = timedelta(days=1)
 WEEK = timedelta(days=7)
@@ -71,6 +76,7 @@ class Roots:
         self.managers: Managers = build_managers(
             self.storage,
             InfraLocalImpl(tmp_path),
+            tool_catalog=TOOLS,
             tenant_keys=self.keys,
             session_projects=self.projects,
         )

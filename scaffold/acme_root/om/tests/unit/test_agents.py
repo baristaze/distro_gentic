@@ -9,26 +9,34 @@ from uuid import UUID
 
 import pytest
 from contracts.agent_session_storage import make_session
+from contracts.budget_storage import make_budget
 from contracts.doubles import context, model_request
 from contracts.factories import make_org
 from contracts.step_storage import make_message, make_parked, make_request, make_response
+from contracts.tools import stand_ins
 from pydantic import ValidationError
 
 from acme.infra.impl.local import InfraLocalImpl
 from acme.om.agent_sessions.impl.manager import AgentSessionsOptions
 from acme.om.agent_sessions.limits import deadline_park
+from acme.om.agent_sessions.rules import lineage
 from acme.om.agent_sessions.types.agent_session import AgentSession, SessionStatus
 from acme.om.agents import ResultGateInterface
 from acme.om.agents.impl.gate import ResultGateNullImpl
+from acme.om.agents.loop_rules import holds_private
 from acme.om.agents.rules import after_turn, claim_refusal, tree_refusal
 from acme.om.agents.types.kind import AgentKind, AgentKindCatalog, DoneRule, TreeLimits
-from acme.om.agents.types.request import Handoff, Spawn, Start
+from acme.om.agents.types.request import MAX_OBJECTIVE, Handoff, Spawn, Start
 from acme.om.agents.types.result import Claim, Result, Turn, Verdict
 from acme.om.agents.types.tree import AgentTree
 from acme.om.attribution.rules import trust_of
 from acme.om.attribution.types.authority import AuthorityMode, Trust
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import new_id, utcnow
+from acme.om.budgets.types.amount import Amount, Spend
+from acme.om.budgets.types.breach import Refusal
+from acme.om.budgets.types.budget import BudgetScope, BudgetScopeKind, WindowKind
+from acme.om.budgets.types.hold import Hold, HoldRequest
 from acme.om.context import Role, TenantContext
 from acme.om.exceptions import (
     NotAuthorized,
@@ -49,6 +57,8 @@ from acme.om.steps.types.header import (
 )
 from acme.om.steps.types.step import Actor, Origin, Step, StepType
 from acme.om.storage.impl.memory import StorageMemoryImpl
+from acme.om.tools.registry import ToolRegistry
+from acme.om.windows.impl.gate import scopes_of
 
 DELIVERY = AgentKind(
     name="delivery",
@@ -60,6 +70,7 @@ DELIVERY = AgentKind(
     authority=AuthorityMode.STEADY,
     tree=TreeLimits(height=3, count=3),
     deadline=timedelta(hours=8),
+    share=Amount(cost_micros=5_000),
 )
 OLDER = DELIVERY.model_copy(update={"version": 1})
 HELPER = AgentKind(
@@ -70,6 +81,7 @@ HELPER = AgentKind(
     result_tool="submit",
     authority=AuthorityMode.STEADY,
     tree=TreeLimits(height=1, count=0),
+    share=Amount(cost_micros=1_000),
 )
 ASSISTANT = AgentKind(
     name="assistant",
@@ -78,11 +90,17 @@ ASSISTANT = AgentKind(
     done_rule=DoneRule.ANSWER,
     authority=AuthorityMode.DELEGATED,
     tree=TreeLimits(height=2, count=1),
+    share=Amount(cost_micros=1_000),
 )
 REPORTER = HELPER.model_copy(
     update={"name": "reporter", "tools": ("read_log", "report"), "result_tool": "report"}
 )
-KINDS = (OLDER, DELIVERY, HELPER, ASSISTANT, REPORTER)
+# A kind that reads no tenant record and no person's words.
+RESEARCHER = HELPER.model_copy(update={"name": "researcher", "private_data": False})
+# A kind that names no share, so no spawn starts it.
+UNSHARED = HELPER.model_copy(update={"name": "unshared", "share": None})
+KINDS = (OLDER, DELIVERY, HELPER, ASSISTANT, REPORTER, RESEARCHER, UNSHARED)
+TOOLS = stand_ins(*(tool for kind in KINDS for tool in kind.tools))
 
 
 def person_of(ctx: TenantContext) -> Principal:
@@ -180,7 +198,9 @@ class Refusing(ResultGateInterface):
 
 @pytest.fixture
 def managers(tmp_path: Path) -> Managers:
-    return build_managers(StorageMemoryImpl(), InfraLocalImpl(tmp_path), agent_kinds=KINDS)
+    return build_managers(
+        StorageMemoryImpl(), InfraLocalImpl(tmp_path), agent_kinds=KINDS, tool_catalog=TOOLS
+    )
 
 
 async def start(managers: Managers, ctx: TenantContext, kind: str = "delivery") -> AgentSession:
@@ -288,6 +308,80 @@ async def test_a_child_draws_on_its_trees_budget_and_deadline(managers: Managers
         Spawn.model_validate({**spawn().model_dump(), "budget": 10})
     with pytest.raises(ValidationError):
         Spawn.model_validate({**spawn().model_dump(), "deadline": later})
+
+
+def test_an_objective_past_its_bound_is_refused_with_the_bound_named() -> None:
+    """A parent's objective is a model's text: one past the bound is refused
+    with the bound in the refusal, which the model reads as its call's
+    answer, and a hand-over's objective is held to the same bound."""
+    at_bound = "x" * MAX_OBJECTIVE
+    assert Spawn(id=new_id(), kind="helper", title="t", objective=at_bound).objective == at_bound
+    for request in (Spawn, Handoff):
+        with pytest.raises(ValidationError, match=f"at most {MAX_OBJECTIVE} characters"):
+            request(id=new_id(), kind="helper", title="t", objective=at_bound + "x")
+
+
+def hold(ctx: TenantContext, session: AgentSession, cost_micros: int) -> HoldRequest:
+    """A model call of `session` with the worst case named, charged to the
+    scopes the call gate charges it to."""
+    scopes = scopes_of(ctx.org_id, session.id, session.root_id, person_of(ctx), project_id=None)
+    exposure = Spend(cost_micros=cost_micros, tokens=10)
+    return HoldRequest(spender_id=ctx.user_id, scopes=scopes, exposure=exposure, purpose="main")
+
+
+async def test_a_child_stops_at_its_share_while_its_tree_has_room(managers: Managers) -> None:
+    """A member's spawn writes the child's share as a budget on the child's
+    own session, once however often it is asked. The child's calls stop at
+    it, while the tree's budget, unchanged, still has room for its root."""
+    org = make_org()
+    admin, member = context(Role.ADMIN, org), context(Role.MEMBER, org)
+    root = await start(managers, member)
+    tree = await managers.budgets.create_budget(
+        admin,
+        make_budget(BudgetScopeKind.TREE, str(root.id), window=WindowKind.LIFE, cost_micros=10_000),
+    )
+    asked = spawn()
+    child = await managers.agents.spawn(member, root.id, asked)
+    assert await managers.agents.spawn(member, root.id, asked) == child
+    page = await managers.budgets.get_budgets(admin, None, 50)
+    (cap,) = [
+        b
+        for b in page.items
+        if b.scope == BudgetScope(kind=BudgetScopeKind.SESSION, key=str(child.id))
+    ]
+    assert (cap.window_kind, cap.amount) == (WindowKind.LIFE, HELPER.share)
+    gate = managers.budget_gate
+    assert isinstance(await gate.authorize(member, hold(member, child, 600)), Hold)
+    refused = await gate.authorize(member, hold(member, child, 600))
+    assert isinstance(refused, Refusal)
+    assert [breach.budget_id for breach in refused.breaches] == [cap.id], "its share, not the tree"
+    assert isinstance(await gate.authorize(member, hold(member, root, 600)), Hold)
+    assert (await managers.budgets.get_budget(admin, tree.id)).amount == tree.amount
+
+
+async def test_a_share_never_adds_to_its_trees_budget(managers: Managers) -> None:
+    """A share larger than what the tree has left binds nothing past it: the
+    child's call that fits its share and not its tree is refused by the
+    tree's budget."""
+    org = make_org()
+    admin, member = context(Role.ADMIN, org), context(Role.MEMBER, org)
+    root = await start(managers, member)
+    tree = await managers.budgets.create_budget(
+        admin,
+        make_budget(BudgetScopeKind.TREE, str(root.id), window=WindowKind.LIFE, cost_micros=500),
+    )
+    child = await managers.agents.spawn(member, root.id, spawn())
+    refused = await managers.budget_gate.authorize(member, hold(member, child, 800))
+    assert isinstance(refused, Refusal)
+    assert [breach.budget_id for breach in refused.breaches] == [tree.id]
+
+
+async def test_a_kind_that_names_no_share_is_never_spawned(managers: Managers) -> None:
+    ctx = context(Role.MEMBER)
+    root = await start(managers, ctx)
+    with pytest.raises(ValidationFailed, match="names no share"):
+        await managers.agents.spawn(ctx, root.id, spawn("unshared"))
+    assert (await managers.agents.tree_of(ctx, root.id)).size == 0, "no slot taken"
 
 
 async def test_a_moved_deadline_unlocks_every_session_of_the_tree_it_parked(
@@ -482,6 +576,24 @@ async def test_a_handoff_carries_its_mark(managers: Managers) -> None:
     assert handed.untrusted
 
 
+async def test_a_child_of_a_session_holding_private_data_holds_it_too(
+    managers: Managers,
+) -> None:
+    """A kind that reads no private data holds it under a parent that does:
+    the parent may write its records into the objective, so the rule of two
+    holds in the child as in the parent, whatever the child's maker sent."""
+    ctx = context(Role.MEMBER)
+    parent = await start(managers, ctx)
+    child = await managers.agents.spawn(ctx, parent.id, spawn("researcher"))
+    alone = await start(managers, ctx, "researcher")
+    assert parent.holds_private and child.holds_private and not alone.holds_private
+    registry = ToolRegistry(stand_ins(*RESEARCHER.tools))
+    assert holds_private(child, RESEARCHER, registry, ())
+    assert not holds_private(alone, RESEARCHER, registry, ())
+    sent = make_session(parent=parent).model_copy(update={"holds_private": False})
+    assert lineage(parent, sent)["holds_private"]
+
+
 async def test_a_result_passes_the_gate_and_the_null_gate_marks_it_unverified(
     tmp_path: Path,
 ) -> None:
@@ -489,6 +601,7 @@ async def test_a_result_passes_the_gate_and_the_null_gate_marks_it_unverified(
         StorageMemoryImpl(),
         InfraLocalImpl(tmp_path),
         agent_kinds=KINDS,
+        tool_catalog=TOOLS,
         result_gate=ResultGateNullImpl(),
     )
     ctx = context(Role.MEMBER)
@@ -501,11 +614,42 @@ async def test_a_result_passes_the_gate_and_the_null_gate_marks_it_unverified(
     failed = Result(claim=Claim.FAILED, evidence=(new_id(),))
     assert (await managers.agents.judge_result(ctx, sid, failed)).outcome is LoopOutcome.FAILED
     gated = build_managers(
-        StorageMemoryImpl(), InfraLocalImpl(tmp_path), agent_kinds=KINDS, result_gate=Refusing()
+        StorageMemoryImpl(),
+        InfraLocalImpl(tmp_path),
+        agent_kinds=KINDS,
+        tool_catalog=TOOLS,
+        result_gate=Refusing(),
     )
     gated_sid = (await start(gated, ctx)).id
     verdict = await gated.agents.judge_result(ctx, gated_sid, cited)
     assert (verdict.accepted, verdict.reason) == (False, "the cited run did not pass")
+
+
+async def test_a_tool_the_catalog_cannot_class_starts_nothing(tmp_path: Path) -> None:
+    """A kind that names a tool the catalog lacks offers a call no one can
+    check: its start is refused, and so is a message to a session that
+    names one, never let through as a tool with no class."""
+    unlisted = AgentKind(
+        name="unlisted",
+        version=1,
+        tools=("read_log", "grant_admin"),
+        done_rule=DoneRule.ANSWER,
+        authority=AuthorityMode.DELEGATED,
+        tree=TreeLimits(height=1, count=0),
+    )
+    managers = build_managers(
+        StorageMemoryImpl(),
+        InfraLocalImpl(tmp_path),
+        agent_kinds=(unlisted,),
+        tool_catalog=stand_ins("read_log"),
+    )
+    owner = context(Role.OWNER)
+    with pytest.raises(NotAuthorized, match="grant_admin"):
+        await start(managers, owner, "unlisted")
+    stored = make_session().model_copy(update={"tools": ("read_log", "grant_admin")})
+    await managers.agent_sessions.create_session(owner, stored)
+    with pytest.raises(NotAuthorized, match="grant_admin"):
+        await managers.agents.require_instructor(owner, stored.id)
 
 
 async def test_a_viewer_reads_a_tree_and_spawns_nothing(managers: Managers) -> None:
@@ -530,6 +674,7 @@ async def test_a_purged_session_leaves_no_authority_or_tree_behind(tmp_path: Pat
         storage,
         InfraLocalImpl(tmp_path),
         agent_kinds=KINDS,
+        tool_catalog=TOOLS,
         agent_sessions_options=AgentSessionsOptions(retention=timedelta(0)),
     )
     ctx = context(Role.MEMBER)
@@ -543,6 +688,15 @@ async def test_a_purged_session_leaves_no_authority_or_tree_behind(tmp_path: Pat
     with pytest.raises(NotFound):
         await authority(ctx, root.id)
     assert await trees.read_tree(ctx.org_id, root.id) is not None, "its child is left"
+    # Its objective woke it: its loop reads it and ends, and the idle child
+    # may be deleted.
+    (objective,) = (await managers.steps.get_steps(ctx, child.id, 0, 1)).items
+    request = make_request(child.id, objective.id, (objective.id,))
+    response = make_response(child.id, objective.id, request.id)
+    epoch = await managers.steps.begin_run(ctx, child.id)
+    done = [request, response, ended(child.id, objective.id)]
+    await managers.steps.append_steps(ctx, child.id, epoch, done)
+    assert (await sessions.project_status(ctx, child.id)).status is SessionStatus.IDLE
     await sessions.delete_session(ctx, child.id)
     await sessions.purge_across_tenants()
     with pytest.raises(NotFound):

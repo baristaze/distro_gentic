@@ -1,5 +1,6 @@
 from uuid import UUID
 
+from acme.integrations.model_providers.types import Usage
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.types.agent_session import (
     AgentSession,
@@ -48,9 +49,10 @@ from acme.services.api.types.agent_sessions import (
     MessageRequest,
     ParkView,
     QuestionView,
-    SessionUsageView,
+    SessionModelUsageView,
     StartSessionRequest,
     StepPageView,
+    StepUsageView,
     StepView,
     ToolCallPageView,
 )
@@ -107,6 +109,10 @@ def text_of(step: Step) -> str:
     return step.as_text()
 
 
+def usage_view(usage: Usage | None) -> StepUsageView | None:
+    return None if usage is None else StepUsageView.model_validate(usage.model_dump())
+
+
 def step_view(step: Step) -> StepView:
     header = step.header
     responded = header if isinstance(header, ModelResponseHeader) else None
@@ -123,6 +129,7 @@ def step_view(step: Step) -> StepView:
         text=text_of(step),
         tools=[use.name for use in step.as_tool_uses()] if responded is not None else [],
         stop_reason=None if responded is None else responded.stop_reason,
+        usage=usage_view(responded.usage) if responded is not None else None,
         tool=header.tool if isinstance(header, ToolRequestHeader) else None,
         failure=header.failure if isinstance(header, ToolResponseHeader) else None,
         command=header.command if isinstance(header, ControlHeader) else None,
@@ -288,7 +295,7 @@ class AgentSessionsServiceImpl(AgentSessionsServiceInterface):
         bounded = clamp_limit(limit)
         return ToolCallPageView(items=calls[:bounded], has_more=len(calls) > bounded)
 
-    async def get_usage(self, ctx: TenantContext, session_id: UUID) -> SessionUsageView:
+    async def get_usage(self, ctx: TenantContext, session_id: UUID) -> SessionModelUsageView:
         await self._sessions.get_session(ctx, session_id)
         return usage_of(await self._history(ctx, session_id))
 

@@ -10,6 +10,7 @@ import httpx
 import pytest
 from api_support import build_container, seed_request
 from contracts.agent_session_storage import make_session
+from contracts.tools import stand_ins
 from test_hosts_api import ASSISTANT, a_host, a_pool, a_token, bearer, created, tenant_of
 
 from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
@@ -22,11 +23,16 @@ from acme.services.api.container import AppContainer
 
 KEY = "a-live-read-key-for-tests-only-32+"
 SPEC = IsolationSpec(mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode=EgressMode.NONE))
+# What `make_session` names, so the agents manager classes every tool it
+# offers.
+TOOLS = stand_ins("read_log", "run_tests")
 
 
 @pytest.fixture
 def container(tmp_path: Path) -> AppContainer:
-    return build_container(tmp_path, agent_kinds=(ASSISTANT,), live_read_key=KEY)
+    return build_container(
+        tmp_path, agent_kinds=(ASSISTANT,), tool_catalog=TOOLS, live_read_key=KEY
+    )
 
 
 def part(session_id: UUID, step_id: UUID, n: int) -> TextPart:

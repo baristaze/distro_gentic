@@ -9,7 +9,7 @@ import type {
   ExecutionView,
   ParkView,
   QuestionView,
-  SessionUsageView,
+  SessionModelUsageView,
   StepView,
   ToolCallView,
 } from "@acme/client";
@@ -324,7 +324,7 @@ export function deliveryLines(delivery: DeliveryView): DeliveryLines {
 }
 
 /** "3 model calls: 1,200 tokens in, 340 out". */
-export function usageLine(usage: SessionUsageView): string {
+export function usageLine(usage: SessionModelUsageView): string {
   const count = (n: number) => n.toLocaleString("en-US");
   return `${count(usage.calls)} model ${usage.calls === 1 ? "call" : "calls"}: ${count(usage.input)} tokens in, ${count(usage.output)} out`;
 }

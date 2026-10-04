@@ -120,6 +120,8 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             "projects": managers.projects.purge_tenant,
             # Each session's retention snapshot, then the tenant's policy.
             "retention": managers.retention.purge_tenant,
+            # What a call held and spent is not a purge of its tenant's: no
+            # serving login deletes it, so it never holds the tenant's mark.
             "budgets": managers.budgets.purge_tenant,
             "billing": container.billing.purge_tenant,
             # Its secrets' names, its keys' records with their values in the
@@ -133,12 +135,6 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             "playbooks": container.playbooks.purge_tenant,
             "knowledge": container.knowledge.purge_tenant,
             "notifications": container.notifications.purge_tenant,
-            # Delete nothing: what a call held and spent stays, so a tenant
-            # whose ledger remains is never marked purged. Billing's ledger
-            # holds every hold, settlement, and charge behind the money
-            # gate; the engine's, those of a root on the engine's gate.
-            "ledger": managers.budgets.purge_ledger,
-            "money_ledger": container.billing.purge_ledger,
         },
         # Once a pass, across every tenant: each namespace's rows past their
         # retention.

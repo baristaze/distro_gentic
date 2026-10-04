@@ -15,6 +15,7 @@ from uuid import UUID
 import pytest
 from contracts.agent_session_storage import make_session
 from contracts.loops import ASSISTANT, Clock, loop_over, reply, said, use
+from contracts.tools import stand_ins
 from pydantic import SecretStr
 
 from acme.infra.impl.local import InfraLocalImpl
@@ -84,6 +85,9 @@ RUNNER = AppContext(type=AppType.WORKER, version="runner@test")
 CONTAINER = IsolationSpec(mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode=EgressMode.NONE))
 PROBED = Advertisement(os="Linux 6.8", shell="/bin/bash", isolation_modes=(Mode.CONTAINER,))
 KEY = SecretStr("k" * 32)
+# What `make_session` names, so the agents manager classes every tool it
+# offers.
+TOOLS = stand_ins("read_log", "run_tests")
 LIFE = timedelta(minutes=5)
 
 
@@ -124,6 +128,7 @@ async def watched(tmp_path: Path) -> Watched:
     managers = build_managers(
         StorageMemoryImpl(),
         InfraLocalImpl(tmp_path),
+        tool_catalog=TOOLS,
         hosts_options=HostsOptions(claim_lease=timedelta(seconds=30)),
         relay_options=RelayOptions(lease=timedelta(seconds=30)),
     )

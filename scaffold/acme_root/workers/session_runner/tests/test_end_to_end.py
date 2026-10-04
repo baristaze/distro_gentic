@@ -60,6 +60,7 @@ from acme.om.evidence.rules import policy_key
 from acme.om.exceptions import StaleWriter
 from acme.om.matrix.types.matrix import MatrixStatus
 from acme.om.placement.rules import DEFAULT_TIER, tier_lane
+from acme.om.platform_agents.catalog import PlatformAgents, read_corpus
 from acme.om.privacy.impl.sealed_steps import says_something
 from acme.om.root import PlatformPorts, ProductKinds
 from acme.om.steps.types.content import ContentState
@@ -262,7 +263,9 @@ def emptied() -> None:
 @pytest.fixture
 async def stack(emptied: None, tmp_path: Path) -> AsyncIterator[Stack]:
     # The developer's tracker and exporter are left off: an error a case
-    # raises on purpose is no report.
+    # raises on purpose is no report. The platform's agents ship over the
+    # repository's corpus, as they do in the runner and in a deployed api,
+    # so a start classes every tool its kind offers as the runner runs it.
     settings = ApiSettings(dev_sign_in_enabled=True, sentry_dsn=None, otel_endpoint=None)
     settings.refuse_remote()
     container = AppContainer.over(
@@ -271,6 +274,7 @@ async def stack(emptied: None, tmp_path: Path) -> AsyncIterator[Stack]:
         InfraConfiguredImpl(settings),
         absent_integrations(),
         ports=PlatformPorts(kinds=ProductKinds(agents=E2E_KINDS)),
+        platform_agents=PlatformAgents(corpus=read_corpus(REPO)),
     )
     app = create_app(container)
     workspaces = tmp_path / "workspaces"

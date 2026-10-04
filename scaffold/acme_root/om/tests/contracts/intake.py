@@ -314,6 +314,7 @@ def wired(
             managers.budget_gate,
             managers.pricing,
             managers.agent_sessions,
+            managers.budgets,
             SessionProjectsBoundImpl(storage.get_project_storage()),
         ),
         CallCredentialsPlatformImpl(providers),

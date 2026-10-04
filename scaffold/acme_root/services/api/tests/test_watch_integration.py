@@ -37,7 +37,11 @@ async def test_a_viewer_watches_and_a_person_takes_control_over_the_stack(
         pool_id = await a_pool(client, owner)
         host = await a_host(client, await a_token(client, owner, pool_id))
         ctx = await tenant_of(container, owner)
-        session = await managers.agent_sessions.create_session(ctx, make_session())
+        # The session offers no tool: the stack's catalog classes none of
+        # the names `make_session` gives, and a control is checked against
+        # the class of every tool the session offers.
+        offers_none = make_session().model_copy(update={"tools": ()})
+        session = await managers.agent_sessions.create_session(ctx, offers_none)
         await managers.hosts.place_session(ctx, session.id, UUID(pool_id))
         await managers.relay.bind_workspace(ctx, session.id, UUID(host["host_id"]), "/srv/w")
         await managers.workspaces.pinned(ctx, session.id, SPEC)

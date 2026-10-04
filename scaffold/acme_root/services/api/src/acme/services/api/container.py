@@ -21,7 +21,9 @@ from acme.integrations.root import IntegrationsInterface
 from acme.om.automations.root import build_automations
 from acme.om.base import new_id
 from acme.om.billing.root import build_billing, build_money_gate, refuse_open_money
+from acme.om.intake import IntakeManagerInterface
 from acme.om.intake.root import build_intake
+from acme.om.intake.tools import CommentImpl
 from acme.om.knowledge.root import build_knowledge
 from acme.om.matrix.impl.resolver import MatrixOptions
 from acme.om.matrix.root import MatrixLayer
@@ -237,12 +239,18 @@ class AppContainer:
         platform's own: billing's money gate, and the evidence's result gate.
         Their `kinds` are the product's: a session starts on one of its agent
         kinds, and the session runner runs its loop with the same kinds,
-        since each process's `build` hands its root `PRODUCT_KINDS`. Outside
-        `local`, a quiet null for any of them, or a budget gate that is not
-        the money gate, is refused at boot. `platform_agents` ships the
-        platform's agents beside the product's kinds: a deployed process
-        reads them from its corpus root, and refuses to boot with none."""
+        since each process's `build` hands its root `PRODUCT_KINDS`. A start
+        or a message is checked against the class of every tool its registry
+        offers, the product's included, and a registry name the catalog
+        cannot class is refused. Outside `local`, a quiet null for any of
+        them, or a budget gate that is not the money gate, is refused at
+        boot. `platform_agents` ships the platform's agents beside the
+        product's kinds: a deployed process reads them from its corpus root,
+        and refuses to boot with none. The session runner's `comment` joins
+        the catalog over the intake built here, so a kind that names it
+        starts and is messaged."""
         ports = ports or PlatformPorts()
+        held: list[IntakeManagerInterface] = []
         managers = build_managers(
             storage,
             infra,
@@ -250,6 +258,7 @@ class AppContainer:
             operator_options(settings),
             integrations,
             environment=settings.environment,
+            tool_catalog=(CommentImpl(lambda: held[0], integrations.get_integration),),
             platform_agents=platform_agents,
             budget_gate=ports.budget_gate or build_money_gate(storage),
             result_gate=ports.result_gate,
@@ -278,6 +287,7 @@ class AppContainer:
         # Where a tenant connects a system, and where a person reads and
         # clears what waits on them.
         intake = build_intake(storage, managers, integrations=integrations)
+        held.append(intake)
         # The streams the runners write, read from the shared cache.
         stream = build_stream(infra, lambda: managers.events, product_kinds=ports.kinds)
         # A product's claimants write its streams for the items they hold.

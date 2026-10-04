@@ -37,9 +37,14 @@ from acme.om.benchmarks.impl.manager import BenchmarksManagerImpl
 from acme.om.billing.gate import MoneyGateInterface
 from acme.om.billing.impl.gate import MoneyCallGateImpl
 from acme.om.billing.impl.prices import PriceBookTableImpl
-from acme.om.budgets import BudgetGateInterface, BudgetsManagerInterface
+from acme.om.budgets import (
+    BudgetGateInterface,
+    BudgetsManagerInterface,
+    BudgetsOperatorManagerInterface,
+)
 from acme.om.budgets.impl.gate import BudgetGateImpl, BudgetGateOptions
 from acme.om.budgets.impl.manager import BudgetsManagerImpl, BudgetsOptions
+from acme.om.budgets.impl.operator import BudgetsOperatorManagerImpl, BudgetsOperatorOptions
 from acme.om.budgets.impl.pricing import PricingTableImpl
 from acme.om.budgets.pricing import PricingInterface
 from acme.om.context import TenantContext
@@ -199,6 +204,7 @@ class Managers:
     privacy: PrivacyManagerInterface
     retention: RetentionManagerInterface
     budgets: BudgetsManagerInterface
+    budgets_operator: BudgetsOperatorManagerInterface
     budget_gate: BudgetGateInterface
     pricing: PricingInterface
     models: ModelsManagerInterface
@@ -896,18 +902,6 @@ def build_managers(
     refuse_quiet_nulls(environment, results, products)
     catalog = engine_tools(steps, attachment_reader or AttachmentReaderNullImpl()) + tool_catalog
     ToolRegistry(catalog, domain_classes)  # refuses two tools of one name at boot
-    agents = AgentsManagerImpl(
-        storage.get_agent_storage(),
-        agent_sessions,
-        steps,
-        attribution,
-        results,
-        kinds,
-        tenancy,
-        outbox,
-        agents_options or AgentsOptions(),
-        tool_classes={tool.spec.name: tool.spec.authorization_class for tool in catalog},
-    )
     # What a model request reads: rendered from the history, compacted by
     # the summarizer through the model providers, behind the gate, paid for
     # by the spender attribution names.
@@ -921,16 +915,17 @@ def build_managers(
         else models_layer.credentials(providers)
     )
     # The one gate every model call passes, priced from the one source, and
-    # the place each call's tokens and spend are counted.
+    # the place each call's tokens and spend are counted and its usage
+    # recorded.
     version = None if models_layer is None else models_layer.version
     tier = None if models_layer is None else models_layer.tier
     calls = call_gate or (
         CallGateBudgetImpl(
-            gate, pricing, agent_sessions, session_policies, version=version, tier=tier
+            gate, pricing, agent_sessions, budgets, session_policies, version=version, tier=tier
         )
         if book is None or not isinstance(gate, MoneyGateInterface)
         else MoneyCallGateImpl(
-            gate, book, agent_sessions, session_policies, version=version, tier=tier
+            gate, book, agent_sessions, budgets, session_policies, version=version, tier=tier
         )
     )
     windows = WindowsManagerImpl(
@@ -946,6 +941,22 @@ def build_managers(
         artifact_seal or ArtifactSealKeysImpl(session_keys, storage.get_privacy_storage()),
         compaction_policy or CompactionPolicy(),
         WindowsOptions(),
+    )
+    # A child's report reaches its parent through windows, which bounds it.
+    agents = AgentsManagerImpl(
+        storage.get_agent_storage(),
+        agent_sessions,
+        steps,
+        attribution,
+        results,
+        kinds,
+        tenancy,
+        outbox,
+        agents_options or AgentsOptions(),
+        budgets=budgets,
+        windows=windows,
+        tool_classes={tool.spec.name: tool.spec.authorization_class for tool in catalog},
+        secret_tools=frozenset(tool.spec.name for tool in catalog if tool.spec.secrets),
     )
     # Where the engine touches the world: the session's history for a
     # person's decisions, the events for the audit of each secret a call
@@ -1098,6 +1109,9 @@ def build_managers(
         privacy=privacy,
         retention=retention,
         budgets=budgets,
+        budgets_operator=BudgetsOperatorManagerImpl(
+            storage.get_ledger_storage(), storage.get_tenancy_storage(), BudgetsOperatorOptions()
+        ),
         budget_gate=gate,
         # The one source of prices: the list table.
         pricing=pricing,

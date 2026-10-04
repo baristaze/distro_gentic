@@ -26,7 +26,7 @@ from acme.services.api.types.agent_sessions import (
     DecisionRequest,
     MessageRequest,
     QuestionView,
-    SessionUsageView,
+    SessionModelUsageView,
     StartSessionRequest,
     StepPageView,
     StepView,
@@ -193,7 +193,9 @@ async def get_tool_calls(
     return await sessions.get_tool_calls(ctx, session_id, after_seq, limit)
 
 
-@router.get("/{session_id}/usage", response_model=SessionUsageView)
-async def get_usage(ctx: Ctx, sessions: AgentSessionsService, session_id: UUID) -> SessionUsageView:
+@router.get("/{session_id}/usage", response_model=SessionModelUsageView)
+async def get_usage(
+    ctx: Ctx, sessions: AgentSessionsService, session_id: UUID
+) -> SessionModelUsageView:
     """The tokens the session's model calls used, per model and in total."""
     return await sessions.get_usage(ctx, session_id)
