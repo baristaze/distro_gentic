@@ -39,6 +39,20 @@ uv run acme logout
   it. `ACME_API_URL` or `--api` names the API. `ACME_HTTP_TIMEOUT_SECONDS`,
   `ACME_HTTP_RETRIES`, and `ACME_HTTP_RETRY_BACKOFF_SECONDS` tune the client.
 
+## A product's commands
+
+A product adds command groups of its own without editing `main.py`. It
+declares them in `product_commands.py`, one `CommandGroup` each: a name
+and the function that builds its commands from the CLI's `run`, which
+signs the client in and turns a refusal into an exit code. `main` mounts
+them after its own. A name the CLI already holds, a group's or a
+command's, is refused when the CLI starts, and so is a name declared
+twice. The platform's own declares none.
+
+```python
+PRODUCT_COMMANDS = (CommandGroup("reports", reports.commands),)
+```
+
 ## Test
 
 ```bash
