@@ -405,7 +405,7 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         run keeps the id of the work it started, and is at work until the
         kind's check says that work ended."""
         try:
-            params = kind.params.model_validate(automation.action.params)
+            params = kind.params.model_validate(automation.action.plain_params())
         except ShapeError as exc:
             # Saved under an earlier shape of its kind: refused, never acted on.
             raise ValidationFailed(f"the params of {kind.name} are malformed: {exc}") from exc
@@ -523,7 +523,7 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         if kind is None:
             raise ValidationFailed(f"no product declares the action kind {action.kind}")
         try:
-            kind.params.model_validate(action.params)
+            kind.params.model_validate(action.plain_params())
         except ShapeError as exc:
             raise ValidationFailed(f"the params of {action.kind} are malformed: {exc}") from exc
 

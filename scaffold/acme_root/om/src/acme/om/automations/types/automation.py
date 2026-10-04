@@ -8,11 +8,11 @@ from enum import StrEnum
 from typing import ClassVar, Self
 from uuid import UUID
 
-from pydantic import Field, JsonValue, model_validator
+from pydantic import Field, model_validator
 
 from acme.om.agents.types.request import MAX_TITLE
 from acme.om.attribution.types.principal import MAX_KIND
-from acme.om.base import Created, Identifiable, Platform, Trackable
+from acme.om.base import Created, FrozenMapping, Identifiable, Platform, Trackable
 from acme.om.context import Role
 from acme.om.steps.types.content import MAX_NAME, Stored
 
@@ -82,7 +82,7 @@ class Action(Platform):
     title: Stored | None = Field(default=None, min_length=1, max_length=MAX_TITLE)
     project_id: UUID | None = None
     session_id: UUID | None = None
-    params: dict[str, JsonValue] = Field(default_factory=lambda: {})
+    params: FrozenMapping = Field(default_factory=dict, validate_default=True)
 
     @model_validator(mode="after")
     def _names_what_it_acts_on(self) -> Self:
@@ -101,11 +101,15 @@ class Action(Platform):
             raise ValueError("a message names no project: its session keeps its own")
         return self
 
+    def plain_params(self) -> dict[str, object]:
+        """The params as plain JSON, as a product's kind reads them."""
+        return self.model_dump(mode="json", include={"params"})["params"]
+
     def _a_products_action(self) -> Self:
         names = (self.brief, self.agent_kind, self.title, self.project_id, self.session_id)
         if any(name is not None for name in names):
             raise ValueError("a product's action carries its params, and no brief or session")
-        if len(json.dumps(self.params)) > MAX_PARAMS:
+        if len(json.dumps(self.plain_params())) > MAX_PARAMS:
             raise ValueError(f"a product's action's params take at most {MAX_PARAMS} characters")
         return self
 
