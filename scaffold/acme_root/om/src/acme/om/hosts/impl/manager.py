@@ -11,6 +11,7 @@ from acme.om.context import AppContext, Permission, RequestContext, TenantContex
 from acme.om.exceptions import (
     CredentialExpired,
     InvalidCredential,
+    NotAuthorized,
     NotFound,
     ValidationFailed,
 )
@@ -324,7 +325,7 @@ class HostsManagerImpl(HostsManagerInterface):
     async def enroll(
         self, rctx: RequestContext, token: str, enrollment: Enrollment
     ) -> IssuedCredential:
-        org_id, enrollment_token = await self._redeem(token)
+        org_id, enrollment_token = await self._redeem(rctx, token)
         if enrollment_token.kind != HOST:
             raise InvalidCredential(f"this enrollment token enrolls a {enrollment_token.kind}")
         self._at_or_above_floor(enrollment.exec_version)
@@ -348,7 +349,7 @@ class HostsManagerImpl(HostsManagerInterface):
     async def enroll_claimant(
         self, rctx: RequestContext, token: str, enrollment: ClaimantEnrollment
     ) -> IssuedCredential:
-        org_id, enrollment_token = await self._redeem(token)
+        org_id, enrollment_token = await self._redeem(rctx, token)
         if enrollment_token.kind == HOST:
             raise InvalidCredential("a host enrolls with what it probed")
         now = self._clock()
@@ -461,8 +462,11 @@ class HostsManagerImpl(HostsManagerInterface):
             raise NotFound(f"pool {pool_id} not found")
         return pool
 
-    async def _redeem(self, token: str) -> tuple[UUID, EnrollmentToken]:
-        """The live enrollment token behind `token`, and its tenant."""
+    async def _redeem(self, rctx: RequestContext, token: str) -> tuple[UUID, EnrollmentToken]:
+        """The live enrollment token behind `token`, and its tenant. A token
+        enrolls only while the person who issued it may still issue one: one
+        who left the tenant, or no longer manages its members, lets nothing
+        in with a token issued before."""
         if not token.startswith(ENROLLMENT_PREFIX):
             raise InvalidCredential("a claimant enrolls with an enrollment token")
         found = await self._storage.read_enrollment_token_by_digest(hash_token(token))
@@ -471,6 +475,12 @@ class HostsManagerImpl(HostsManagerInterface):
         org_id, enrollment_token = found
         if enrollment_token.revoked_at is not None or enrollment_token.expires_at <= self._clock():
             raise CredentialExpired("enrollment token expired or revoked")
+        try:
+            issuer = await self._tenancy.member_context(rctx, org_id, enrollment_token.created_by)
+        except NotAuthorized:
+            raise CredentialExpired("enrollment token's issuer left the tenant") from None
+        if not issuer.has(Permission.MANAGE_MEMBERS):
+            raise CredentialExpired("enrollment token's issuer no longer manages the members")
         return org_id, enrollment_token
 
     async def _admit(
