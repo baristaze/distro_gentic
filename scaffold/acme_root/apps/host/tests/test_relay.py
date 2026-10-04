@@ -88,12 +88,14 @@ async def relay_to(
     serves: UUID | None = None,
     wire: httpx.AsyncBaseTransport | None = None,
     now: Callable[[], datetime] | None = None,
+    flush_seconds: float = 0.0,
 ) -> Relayed:
     """A host of the tenant's pool that holds a session's workspace, a
     directory it runs commands in through the engine's local transport, and
     the runner's relay to it. With `serves`, the host's ceilings serve that
     project alone, and the session belongs to `project_id`. With `wire`, the
-    host reaches the platform through it, and with `now` it reads its time."""
+    host reaches the platform through it, and with `now` it reads its time.
+    It sends what a command prints at once, or `flush_seconds` apart."""
     pool = await api.pool()
     where = tmp_path / "workspace"
     where.mkdir()
@@ -105,7 +107,7 @@ async def relay_to(
                 tmp_path / "records", SecretsLocalImpl(None), BrokerNullImpl()
             )
         },
-        flush_seconds=0.0,
+        flush_seconds=flush_seconds,
         renew_seconds=0.2,
     )
     host = HostAgent(
@@ -427,6 +429,20 @@ async def test_a_renewal_or_a_result_the_platform_fails_to_take_is_sent_again(
     wire = FailsOnceAt(api.transport, suffix, failure)
     relayed = await relay_to(api, tmp_path, wire=wire)
     spec = command(relayed.epoch, "sh", "-c", "sleep 0.5; echo done", seconds=5)
+    waiting = asyncio.ensure_future(relayed.runner.run(relayed.workspace, spec, seal=NO_SEAL))
+    handed = await asyncio.wait_for(claims(relayed.host, waiting), 10)
+    ran = await waiting
+    assert wire.failed
+    assert (ran.exit_code, ran.stdout, len(handed)) == (0, "done\n", 1)
+
+
+async def test_a_last_part_the_wire_drops_keeps_the_commands_result(
+    api: Stack, tmp_path: Path
+) -> None:
+    # Nothing is sent while the command runs, so its one part is its last.
+    wire = FailsOnceAt(api.transport, "/parts", None)
+    relayed = await relay_to(api, tmp_path, wire=wire, flush_seconds=60.0)
+    spec = command(relayed.epoch, "sh", "-c", "echo done", seconds=5)
     waiting = asyncio.ensure_future(relayed.runner.run(relayed.workspace, spec, seal=NO_SEAL))
     handed = await asyncio.wait_for(claims(relayed.host, waiting), 10)
     ran = await waiting
