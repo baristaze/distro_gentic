@@ -146,7 +146,8 @@ from acme.om.tools.native.read_attachment import ReadAttachmentToolImpl
 from acme.om.tools.native.write_plan import WritePlanToolImpl
 from acme.om.tools.seal import RecordSealInterface
 from acme.om.tools.tool import ToolInterface
-from acme.om.tools.types.policy import PolicyLayer
+from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule
+from acme.om.tools.types.tool import ToolClass
 from acme.om.trust.owners import SecretOwnerInterface
 from acme.om.watch.kinds import StreamKind
 from acme.om.windows import WindowsManagerInterface
@@ -231,7 +232,8 @@ def no_tools(managers: Callable[[], Managers]) -> tuple[ToolInterface, ...]:
 class ProductKinds:
     """What a product adds to the platform's kinds: its agent kinds, every
     version it still runs; its tools, and the authorization classes they
-    declare beside the platform's; its work kinds, each with its payload,
+    declare beside the platform's, with the ceiling any of those classes
+    holds whatever a tenant's layer says; its work kinds, each with its payload,
     its permission, its lane, and the claimant kind that takes it through
     the gateway; its claimant kinds; its secret owner kinds (`TrustLayer`);
     its stream kinds, each with its bounds (`watch.root.build_stream`) and the
@@ -241,12 +243,16 @@ class ProductKinds:
     platform's, where a registry refuses two of one name. Every other kind
     registers beside the platform's own, which go through the same registries,
     and a name the platform holds is refused, so a product adds kinds and
-    never changes one of the platform's. A product's work kind names its
-    claimant kind, since no worker of the platform's runs it."""
+    never changes one of the platform's. A product's ceiling names a class
+    of its own, and the platform holds none for it, so it never loosens or
+    doubles one of the platform's (`product_ceilings`). A product's work
+    kind names its claimant kind, since no worker of the platform's runs
+    it."""
 
     agents: tuple[AgentKind, ...] = ()
     tools: ProductTools = no_tools
     classes: tuple[str, ...] = ()
+    ceilings: Mapping[str, Decision] = field(default_factory=lambda: {})
     work: tuple[WorkKindSpec, ...] = ()
     claimants: tuple[ClaimantKindSpec, ...] = ()
     secret_owners: tuple[SecretOwnerInterface, ...] = ()
@@ -314,6 +320,25 @@ def refuse_quiet_nulls(environment: str, *capabilities: object) -> None:
                 f"{type(capability).__name__} holds nothing, and is refused "
                 f"when the environment is {environment}"
             )
+
+
+def product_ceilings(platform: PolicyLayer, product: ProductKinds) -> PolicyLayer:
+    """The platform's ceilings with the product's beside them, one rule per
+    class the product declares a ceiling for. A ceiling of a class the
+    platform's engine knows, of a class the product does not declare, or of
+    a class a platform ceiling already names is refused at boot, so a
+    product caps its own classes and never touches the platform's."""
+    platform_classes = {rule.authorization_class for rule in platform.rules}
+    rules: list[PolicyRule] = []
+    for name, decision in product.ceilings.items():
+        if name in {known.value for known in ToolClass}:
+            raise ValueError(f"{name} is a platform class, and its ceiling is the platform's")
+        if name not in product.classes:
+            raise ValueError(f"a ceiling names {name}, which is no class of the product's")
+        if name in platform_classes:
+            raise ValueError(f"the platform already holds a ceiling for {name}")
+        rules.append(PolicyRule(authorization_class=name, decision=decision))
+    return PolicyLayer(rules=(*platform.rules, *rules))
 
 
 def intake_absent() -> IntakeManagerInterface:
@@ -539,15 +564,17 @@ def build_managers(
     delivered; one it does not hold, or one of no bound repository, is
     refused, so no success counts on a guess. Whatever
     `tools_options` names, the tools take the platform's ceiling on a
-    protected path beside its ceilings.
+    protected path beside its ceilings, and the product's on its own
+    classes.
 
     `tools_layer` wraps the tools manager before the loop and the root take
     it: a layer above the engine holds its own rules around every call, and
     sees each call the engine runs. None takes the tools manager as it is.
 
     `product_kinds` is what a product adds to the platform's kinds
-    (`PlatformPorts.kinds`): its agent kinds, tools, and classes, which
-    join `agent_kinds`, `tool_catalog`, and `domain_classes`, each tool
+    (`PlatformPorts.kinds`): its agent kinds, tools, classes, and their
+    ceilings, which join `agent_kinds`, `tool_catalog`, `domain_classes`,
+    and the tools' ceilings, each tool
     reading the managers built here at call time; its work kinds and
     claimant kinds, which the work queue and placement read beside the
     platform's; and its executors, which run a check that names their
@@ -912,10 +939,14 @@ def build_managers(
     # which answers whose authority each call runs under and the rule of
     # two. What a call keeps of its session's content goes under the
     # session's key: its input's hash, and its command's record.
+    # The ceilings: the options' own, the platform's on a protected path,
+    # and the product's on its own classes.
     tool_options = tools_options or ToolsOptions()
-    if PROTECTED_CEILING not in tool_options.ceilings.rules:
-        ceilings = PolicyLayer(rules=(*tool_options.ceilings.rules, PROTECTED_CEILING))
-        tool_options = tool_options.model_copy(update={"ceilings": ceilings})
+    ceilings = tool_options.ceilings
+    if PROTECTED_CEILING not in ceilings.rules:
+        ceilings = PolicyLayer(rules=(*ceilings.rules, PROTECTED_CEILING))
+    ceilings = product_ceilings(ceilings, product)
+    tool_options = tool_options.model_copy(update={"ceilings": ceilings})
     engine_tools_manager = ToolsManagerImpl(
         storage.get_tool_storage(),
         steps,
