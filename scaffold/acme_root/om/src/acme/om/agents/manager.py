@@ -7,17 +7,22 @@ A child starts from a self-contained objective, never its parent's
 history. It holds no more than its parent: its tools are cut to its
 parent's, its calls run under its parent's principal, it pays as its
 parent pays, it carries its parent's mark, and it draws on its tree's
-budget and deadline. Cancelling a parent cancels its children."""
+budget and deadline, under a share of its own that never adds to the
+tree's. Cancelling a parent cancels its children. A child's report
+reaches its parent's inbox, as data, when its loop ends or when it needs
+a person, so its parent never polls."""
 
 from abc import ABC, abstractmethod
 from datetime import datetime
 from uuid import UUID
 
 from acme.om.agent_sessions.types.agent_session import AgentSession
+from acme.om.agents.types.report import Report
 from acme.om.agents.types.request import Handoff, Spawn, Start
 from acme.om.agents.types.result import Result, Verdict
 from acme.om.agents.types.tree import AgentTree
 from acme.om.context import TenantContext
+from acme.om.steps.types.step import Step
 
 
 class AgentsManagerInterface(ABC):
@@ -36,17 +41,20 @@ class AgentsManagerInterface(ABC):
         """The history's check of an instruction, a principal's message or a
         parent's to its child: `NotAuthorized` when `ctx` lacks a permission
         a call the session's registry offers needs
-        (`tools.rules.instruct_refusal`). A session that is not there offers
-        nothing to check."""
+        (`tools.rules.instruct_refusal`), or when the registry names a tool
+        the catalog cannot class. A session that is not there offers nothing
+        to check."""
         ...
 
     @abstractmethod
     async def spawn(self, ctx: TenantContext, parent_id: UUID, spawn: Spawn) -> AgentSession:
-        """A child of `parent_id`, one level down its tree, and its objective
-        as its first input: a waking message from its parent. A tree past
-        its height or its count is `TreeBoundReached`, a kind whose result
-        tool its parent lacks is `ValidationFailed`, and a context that lacks
-        a permission a call of the child's registry needs is
+        """A child of `parent_id`, one level down its tree, under a budget on
+        its own session of its kind's share, and its objective as its first
+        input: a waking message from its parent, through the inbox, so the
+        projection that turns the child pending asks for its run. A tree past its height or
+        its count is `TreeBoundReached`, a kind whose result tool its parent
+        lacks or that names no share is `ValidationFailed`, and a context
+        that lacks a permission a call of the child's registry needs is
         `NotAuthorized`: nothing is made.
         A spawn asked again under the same id answers the child it made."""
         ...
@@ -73,8 +81,27 @@ class AgentsManagerInterface(ABC):
     async def cancel_children(self, ctx: TenantContext, session_id: UUID) -> tuple[UUID, ...]:
         """The cascade of a cancel: a `cancel` control to every session below
         `session_id` that is not idle, children and theirs, a session that
-        waits to begin its next loop among them. Answers the sessions it
-        reached."""
+        waits to begin its next loop among them. Each goes through the inbox,
+        so a parked child the cancel clears is asked to run and end its
+        loop. Answers the sessions it reached."""
+        ...
+
+    @abstractmethod
+    async def report_to_parent(
+        self, ctx: TenantContext, session_id: UUID, report: Report
+    ) -> Step | None:
+        """A child's report, written into its parent's inbox as an agent's
+        message: data that names the child and says how its loop stands and
+        what it said last, carrying the child's mark and whether it holds
+        private data, and above the size bound a tool result has, its head,
+        its tail, and the handle of the artifact that keeps it whole. It
+        wakes the parent through the inbox, so the projection that turns the
+        parent pending asks for its run, except the note of a cancel that
+        came down from the parent (`rules.report_wakes`).
+        The report of a loop's end has an id derived from the loop, so a
+        run that ends the loop again writes it once. None, with nothing
+        written, for a session with no parent, a parent that is gone, and
+        a park the parent is not told of (`rules.notes_parent`)."""
         ...
 
     @abstractmethod

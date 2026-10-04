@@ -30,9 +30,14 @@ from acme.om.attribution.impl.manager import (
     members_context,
 )
 from acme.om.base import utcnow
-from acme.om.budgets import BudgetGateInterface, BudgetsManagerInterface
+from acme.om.budgets import (
+    BudgetGateInterface,
+    BudgetsManagerInterface,
+    BudgetsOperatorManagerInterface,
+)
 from acme.om.budgets.impl.gate import BudgetGateImpl, BudgetGateOptions
 from acme.om.budgets.impl.manager import BudgetsManagerImpl, BudgetsOptions
+from acme.om.budgets.impl.operator import BudgetsOperatorManagerImpl, BudgetsOperatorOptions
 from acme.om.budgets.impl.pricing import PricingTableImpl
 from acme.om.budgets.pricing import PricingInterface
 from acme.om.events import EventsManagerInterface
@@ -110,6 +115,7 @@ class Managers:
     agent_sessions: AgentSessionsManagerInterface
     privacy: PrivacyManagerInterface
     budgets: BudgetsManagerInterface
+    budgets_operator: BudgetsOperatorManagerInterface
     budget_gate: BudgetGateInterface
     pricing: PricingInterface
     models: ModelsManagerInterface
@@ -410,18 +416,6 @@ def build_managers(
     kinds = AgentKindCatalog(kinds=agent_kinds)
     catalog = engine_tools(steps, attachment_reader or AttachmentReaderNullImpl()) + tool_catalog
     ToolRegistry(catalog, domain_classes)  # refuses two tools of one name at boot
-    agents = AgentsManagerImpl(
-        storage.get_agent_storage(),
-        agent_sessions,
-        steps,
-        attribution,
-        result_gate or ResultGateNullImpl(),
-        kinds,
-        tenancy,
-        outbox,
-        agents_options or AgentsOptions(),
-        tool_classes={tool.spec.name: tool.spec.authorization_class for tool in catalog},
-    )
     # What a model request reads: rendered from the history, compacted by
     # the summarizer through the model providers, behind the gate, paid for
     # by the spender attribution names.
@@ -429,7 +423,7 @@ def build_managers(
         absent_model_providers() if integrations is None else integrations.get_model_providers()
     )
     # The one gate every model call passes, priced from the one source.
-    calls = call_gate or CallGateBudgetImpl(gate, pricing, agent_sessions)
+    calls = call_gate or CallGateBudgetImpl(gate, pricing, agent_sessions, budgets)
     windows = WindowsManagerImpl(
         storage.get_window_storage(),
         steps,
@@ -443,6 +437,22 @@ def build_managers(
         artifact_seal or ArtifactSealKeysImpl(session_keys, storage.get_privacy_storage()),
         compaction_policy or CompactionPolicy(),
         WindowsOptions(),
+    )
+    # A child's report reaches its parent through windows, which bounds it.
+    agents = AgentsManagerImpl(
+        storage.get_agent_storage(),
+        agent_sessions,
+        steps,
+        attribution,
+        result_gate or ResultGateNullImpl(),
+        kinds,
+        tenancy,
+        outbox,
+        agents_options or AgentsOptions(),
+        budgets=budgets,
+        windows=windows,
+        tool_classes={tool.spec.name: tool.spec.authorization_class for tool in catalog},
+        secret_tools=frozenset(tool.spec.name for tool in catalog if tool.spec.secrets),
     )
     # Where the engine touches the world: the session's history for a
     # person's decisions, the events for the audit of each secret a call
@@ -491,6 +501,9 @@ def build_managers(
         agent_sessions=agent_sessions,
         privacy=privacy,
         budgets=budgets,
+        budgets_operator=BudgetsOperatorManagerImpl(
+            storage.get_ledger_storage(), storage.get_tenancy_storage(), BudgetsOperatorOptions()
+        ),
         budget_gate=gate,
         # The one source of prices: the list table.
         pricing=pricing,

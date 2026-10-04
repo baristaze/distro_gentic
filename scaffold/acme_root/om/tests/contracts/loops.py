@@ -18,6 +18,7 @@ from acme.integrations.model_providers.calls import ModelReply
 from acme.integrations.model_providers.registry import ModelProvidersOverImpl
 from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl, ScriptedFailure
 from acme.integrations.model_providers.types import ErrorKind, ProviderName, StopReason, Usage
+from acme.om.agent_sessions.impl.manager import AgentSessionsOptions
 from acme.om.agents.impl.loop import LoopManagerImpl, LoopOptions
 from acme.om.agents.impl.sink import StreamSinkMemoryImpl
 from acme.om.agents.types.kind import AgentKind, AgentKindCatalog, DoneRule, TreeLimits
@@ -27,6 +28,7 @@ from acme.om.agents.types.run import RunEnd
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import Platform, new_id, utcnow
+from acme.om.budgets.types.amount import Amount
 from acme.om.context import CredentialKind, RequestContext, Role, TenantContext, build_context
 from acme.om.root import Managers, build_managers, engine_tools
 from acme.om.steps.types.content import TextBlock, ToolUseBlock
@@ -37,6 +39,7 @@ from acme.om.storage.root import StorageInterface
 from acme.om.tenancy.rules import permissions_of
 from acme.om.tools.attachments import AttachmentReaderInterface
 from acme.om.tools.impl.attachments import AttachmentReaderNullImpl
+from acme.om.tools.impl.manager import ToolsOptions
 from acme.om.tools.tool import JobToolInterface, ToolInterface, ToolRuntime
 from acme.om.tools.types.call import JobHandle, JobStarted
 from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule, Target
@@ -188,6 +191,7 @@ ASSISTANT = AgentKind(
     done_rule=DoneRule.ANSWER,
     authority=AuthorityMode.DELEGATED,
     tree=TreeLimits(height=2, count=4),
+    share=Amount(tokens=1_000_000),
     prompts=("You answer questions about the records.",),
     policy=ALLOWED,
 )
@@ -227,6 +231,33 @@ HELPER = AgentKind(
     policy=ALLOWED,
 )
 """A kind that names the engine's own tools."""
+
+LEAD = AgentKind(
+    name="lead",
+    version=1,
+    tools=("lookup", "ask_person", "submit"),
+    done_rule=DoneRule.ANSWER,
+    authority=AuthorityMode.DELEGATED,
+    tree=TreeLimits(height=2, count=4),
+    prompts=("You split the work among sub-agents and answer from their reports.",),
+    policy=ALLOWED,
+)
+"""A root that spawns `worker`s: it holds every tool a worker may hold."""
+
+WORKER = AgentKind(
+    name="worker",
+    version=1,
+    tools=("lookup", "ask_person", "submit"),
+    done_rule=DoneRule.RESULT_TOOL,
+    result_tool="submit",
+    max_nudges=3,
+    authority=AuthorityMode.DELEGATED,
+    tree=TreeLimits(height=2, count=4),
+    share=Amount(tokens=1_000_000),
+    prompts=("You do the part you are given, and submit it with its evidence.",),
+    policy=ALLOWED,
+)
+"""A sub-agent kind: it asks its person, and submits a result."""
 
 
 class Clock:
@@ -321,13 +352,16 @@ def loop_over(
     jitter: Callable[[], float] = random.random,
     reader: AttachmentReaderInterface | None = None,
     extra: tuple[ToolInterface, ...] = (),
+    ceilings: PolicyLayer | None = None,
+    sessions: AgentSessionsOptions | None = None,
 ) -> Loop:
     """`storage` None is the memory storage, and `owner` None a fresh
     tenant's owner; a suite over Postgres hands in both. `jitter` is what
     the loop draws its retry waits from. The loop's catalog holds the
     engine's tools before the suite's, over `reader`, None the null, and
     `extra` after them: a product's own tool, which a kind of `kinds`
-    names."""
+    names. `ceilings` None keeps the platform's, and `sessions` None is the
+    sessions' own options."""
     infra = InfraLocalImpl(tmp_path)
     anthropic = ModelProviderScriptedImpl(ProviderName.ANTHROPIC)
     openai = ModelProviderScriptedImpl(ProviderName.OPENAI)
@@ -348,10 +382,12 @@ def loop_over(
         principal_context=live,
         tool_catalog=every,
         attachment_reader=reader,
+        tools_options=None if ceilings is None else ToolsOptions(ceilings=ceilings),
+        agent_sessions_options=sessions,
     )
     clock = Clock()
     calls = CallGateBudgetImpl(
-        managers.budget_gate, managers.pricing, managers.agent_sessions, clock
+        managers.budget_gate, managers.pricing, managers.agent_sessions, managers.budgets, clock
     )
 
     async def sleep(seconds: float) -> None:

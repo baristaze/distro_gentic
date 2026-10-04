@@ -11,6 +11,8 @@ from acme.integrations.model_providers.failures import ModelCallFailed
 from acme.integrations.model_providers.types import StopReason
 from acme.om.attribution import AttributionManagerInterface
 from acme.om.base import Platform, derived_id, new_id, utcnow
+from acme.om.budgets.rules import elapsed_ms
+from acme.om.budgets.types.usage import CallSite
 from acme.om.context import Permission, TenantContext
 from acme.om.exceptions import (
     CompactionFailed,
@@ -23,10 +25,12 @@ from acme.om.exceptions import (
 from acme.om.models.manager import ModelsManagerInterface
 from acme.om.models.types.fill import MAIN, SUMMARIZER, Fill, FillSet, ModelRole
 from acme.om.steps import StepsManagerInterface
-from acme.om.steps.types.content import Children, Content, ToolResultBlock
+from acme.om.steps.types.content import Block, Children, Content, TextBlock, ToolResultBlock
 from acme.om.steps.types.header import (
     ArtifactRef,
+    InputHeader,
     ModelResponseHeader,
+    StepHeader,
     SummaryHeader,
     ToolResponseHeader,
 )
@@ -99,11 +103,12 @@ class WindowsManagerImpl(WindowsManagerInterface):
         role: ModelRole = MAIN,
         *,
         plan: str | None = None,
+        history: Sequence[Step] | None = None,
     ) -> RenderedRequest:
         ctx.require(Permission.WRITE)
         fill_set = await self._models.get_fill_set(ctx, session_id)
         fill = _fill(fill_set, role)
-        steps = await self._history(ctx, session_id)
+        steps = await self._history(ctx, session_id) if history is None else history
         if role != MAIN:
             draft = _drafted(
                 lambda: rules.render_side(steps, kind, role, fill, fill_set.version, self._policy)
@@ -143,6 +148,7 @@ class WindowsManagerImpl(WindowsManagerInterface):
         refused: RenderedRequest,
         *,
         plan: str | None = None,
+        history: Sequence[Step] | None = None,
     ) -> RenderedRequest:
         ctx.require(Permission.WRITE)
         if refused.overflow_retry:
@@ -151,7 +157,7 @@ class WindowsManagerImpl(WindowsManagerInterface):
             raise ContextOverflow(f"a {refused.window.role} request reads a suffix; none compacts")
         fill_set = await self._models.get_fill_set(ctx, session_id)
         fill = _fill(fill_set, MAIN)
-        steps = await self._history(ctx, session_id)
+        steps = await self._history(ctx, session_id) if history is None else history
         self._main(steps, kind, fill, fill_set.version, plan)
         compacted = await self._compact(ctx, session_id, epoch, loop_id, steps, fill_set)
         if compacted is None:
@@ -172,12 +178,39 @@ class WindowsManagerImpl(WindowsManagerInterface):
         if kept is None:
             return step
         whole, parts = kept
-        # Derived from the step, so a run that keeps the same response twice
-        # writes the same artifact once.
+        handle = await self._keep(ctx, session_id, step, whole)
+        bounded = ToolResultBlock(
+            tool_use_id=result.tool_use_id, parts=parts, is_error=result.is_error
+        )
+        return _bounded(step, header.model_copy(update={"artifact": handle}), (bounded,))
+
+    async def bound_report(self, ctx: TenantContext, session_id: UUID, step: Step) -> Step:
+        ctx.require(Permission.WRITE)
+        header = step.header
+        reported = isinstance(header, InputHeader) and step.actor is Actor.AGENT
+        if not reported or step.session_id != session_id:
+            raise ValidationFailed(f"a {step.type.value} step is no agent's input of {session_id}")
+        assert isinstance(header, InputHeader)
+        if header.artifact is not None:
+            return step
+        whole = step.as_text()
+        kept = rules.clip(whole, self._policy)
+        if kept is None:
+            return step
+        handle = await self._keep(ctx, session_id, step, whole)
+        others = tuple(block for block in step.content.blocks if not isinstance(block, TextBlock))
+        return _bounded(step, header.model_copy(update={"artifact": handle}), (*kept, *others))
+
+    async def _keep(
+        self, ctx: TenantContext, session_id: UUID, step: Step, whole: str
+    ) -> ArtifactRef:
+        """A step's whole text kept as an artifact of its session, and its
+        handle. Its id is derived from the step, so a run that keeps the
+        same step twice writes the same artifact once. It is sealed like the
+        step it came from. A session that keeps no content at rest keeps its
+        artifact in this runtime's memory alone, as it keeps its steps'
+        content, and its step is bounded all the same."""
         artifact_id = derived_id(step.id, step.created_at, "artifact")
-        # Sealed like the step it came from. A session that keeps no content
-        # at rest keeps its artifact in this runtime's memory alone, as it
-        # keeps its steps' content, and its step is bounded all the same.
         sealed = await self._seal.seal(ctx, session_id, artifact_id, whole.encode("utf-8"))
         if not sealed.at_rest:
             self._held[(ctx.org_id, session_id, artifact_id)] = sealed.blob
@@ -199,18 +232,7 @@ class WindowsManagerImpl(WindowsManagerInterface):
                 characters=len(whole),
             )
             await self._storage.write_artifact(ctx.org_id, artifact)
-        handle = ArtifactRef(id=artifact_id, characters=len(whole))
-        bounded = ToolResultBlock(
-            tool_use_id=result.tool_use_id, parts=parts, is_error=result.is_error
-        )
-        fields = {name: getattr(step, name) for name in Step.model_fields}
-        return Step.model_validate(
-            {
-                **fields,
-                "header": header.model_copy(update={"artifact": handle}),
-                "content": Content(blocks=(bounded,)),
-            }
-        )
+        return ArtifactRef(id=artifact_id, characters=len(whole))
 
     async def get_artifact(
         self, ctx: TenantContext, session_id: UUID, artifact_id: UUID, offset: int, limit: int
@@ -366,22 +388,35 @@ class WindowsManagerImpl(WindowsManagerInterface):
         try:
             (request,) = await self._steps.append_steps(ctx, session_id, epoch, [request])
         except BaseException:
-            await self._gate.settle(ctx, hold, None, billed=False)
+            await self._gate.settle(ctx, hold, None, billed=False, site=None)
             raise
+        started = self._clock()
         try:
             reply = await reply_of(self._providers.get(summarizer.provider).stream(call))
         except ModelCallFailed as failed:
             # Nothing streamed back: the call was never sent, or the provider
             # refused it before processing it, so the hold is released. A
-            # stream that broke after it began is billed.
-            await self._gate.settle(ctx, hold, None, billed=failed.partial is not None)
-            if failed.partial is not None:
-                await self._steps.append_steps(
-                    ctx, session_id, epoch, [_response(request, failed.partial, self._clock())]
-                )
+            # stream that broke after it began is billed, whole.
+            if failed.partial is None:
+                await self._gate.settle(ctx, hold, None, billed=False, site=None)
+                raise
+            broken = _response(request, failed.partial, self._clock())
+            site = CallSite(
+                loop_id=loop_id,
+                step_id=broken.id,
+                latency_ms=elapsed_ms(started, broken.created_at),
+            )
+            await self._gate.settle(
+                ctx, hold, None, billed=True, site=site, partial=failed.partial.usage
+            )
+            await self._steps.append_steps(ctx, session_id, epoch, [broken])
             raise
-        await self._gate.settle(ctx, hold, reply.usage, billed=True)
-        response = _response(request, reply, self._clock())
+        answered = self._clock()
+        response = _response(request, reply, answered)
+        site = CallSite(
+            loop_id=loop_id, step_id=response.id, latency_ms=elapsed_ms(started, answered)
+        )
+        await self._gate.settle(ctx, hold, reply.usage, billed=True, site=site)
         whole = (
             not reply.truncated
             and reply.stop_reason is StopReason.END_TURN
@@ -405,6 +440,12 @@ class WindowsManagerImpl(WindowsManagerInterface):
         )
         stored = await self._steps.append_steps(ctx, session_id, epoch, [response, summary])
         return [*steps, request, *stored]
+
+
+def _bounded(step: Step, header: StepHeader, blocks: tuple[Block, ...]) -> Step:
+    """`step` holding `header` and `blocks` in place of its own."""
+    fields = {name: getattr(step, name) for name in Step.model_fields}
+    return Step.model_validate({**fields, "header": header, "content": Content(blocks=blocks)})
 
 
 def _fill(fill_set: FillSet, role: ModelRole) -> Fill:
