@@ -3,6 +3,7 @@ the integrations (the identity provider), and managers.
 The loop holds the container directly."""
 
 import logging
+from collections.abc import Callable
 from datetime import timedelta
 
 from acme.infra.impl.configured import InfraConfiguredImpl
@@ -25,8 +26,10 @@ from acme.om.budgets.impl.manager import BudgetsOptions
 from acme.om.events.impl.manager import EventsOptions
 from acme.om.hosts.impl.manager import HostsOptions
 from acme.om.idempotency.impl.manager import IdempotencyOptions
+from acme.om.intake import IntakeManagerInterface
 from acme.om.intake.impl.manager import IntakeOptions
 from acme.om.intake.root import build_intake
+from acme.om.intake.tools import CommentImpl
 from acme.om.knowledge.impl.manager import KnowledgeOptions
 from acme.om.knowledge.root import build_knowledge
 from acme.om.media.impl.manager import MediaOptions
@@ -35,14 +38,23 @@ from acme.om.notifications.impl.manager import NotificationsOptions
 from acme.om.notifications.root import build_notifications
 from acme.om.orchestrations.impl.manager import OrchestrationsOptions
 from acme.om.placement.impl.manager import PlacementOptions
+from acme.om.platform_agents.catalog import PlatformAgents
 from acme.om.platform_agents.impl.manager import PlatformAgentsOptions
+from acme.om.platform_agents.settings import shipped_agents
 from acme.om.playbooks.impl.manager import PlaybooksOptions
 from acme.om.playbooks.root import PlaybooksLayer
 from acme.om.product_kinds import PRODUCT_KINDS
 from acme.om.projects.impl.manager import ProjectsOptions
 from acme.om.relay.impl.manager import RelayOptions
 from acme.om.retention.impl.manager import RetentionOptions
-from acme.om.root import LOCAL, Managers, PlatformPorts, ProductKinds, build_managers
+from acme.om.root import (
+    LOCAL,
+    Managers,
+    PlatformPorts,
+    ProductKinds,
+    build_managers,
+    intake_absent,
+)
 from acme.om.steps.impl.manager import StepsOptions
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
@@ -99,6 +111,9 @@ def worker_managers(
     integrations: IntegrationsInterface,
     settings: MaintenanceSettings,
     ports: PlatformPorts | None = None,
+    *,
+    platform_agents: PlatformAgents | None = None,
+    intake: Callable[[], IntakeManagerInterface] = intake_absent,
 ) -> Managers:
     """The managers, each one the sweep purges through with its retention and
     its batch from the settings. The worker is the one process that purges,
@@ -107,7 +122,14 @@ def worker_managers(
     ports the product sets, None each for the platform's own, and their
     `kinds` the product's, which `build` reads from `PRODUCT_KINDS`. Outside
     `local`, a quiet null for any of them, or a budget gate that is not the
-    money gate, is refused at boot."""
+    money gate, is refused at boot.
+
+    The catalog classes every tool a session can name, as the API's and the
+    session runner's do, since an intake event, an automation's start, and
+    a message are checked against a session's tools here: `platform_agents`
+    ships the platform's agents, which a deployed worker reads from its
+    corpus root and refuses to boot with none, and the runner's `comment`
+    answers `intake`, the one the container builds over these managers."""
     batch = settings.worker_purge_batch
     ports = ports or PlatformPorts()
     managers = build_managers(
@@ -121,6 +143,8 @@ def worker_managers(
         ),
         integrations=integrations,
         environment=settings.environment,
+        tool_catalog=(CommentImpl(intake, integrations.get_integration),),
+        platform_agents=platform_agents,
         media_options=MediaOptions(
             retention=timedelta(days=settings.media_retention_days),
             pending_expiry=timedelta(hours=settings.media_pending_expiry_hours),
@@ -262,16 +286,19 @@ class WorkerContainer:
         integrations = IntegrationsConfiguredImpl(
             settings, settings.environment, settings.is_cloud_environment
         )
-        return cls(
-            settings,
+        held: list[WorkerContainer] = []
+        managers = worker_managers(
             storage,
             infra,
-            worker_managers(
-                storage, infra, integrations, settings, PlatformPorts(kinds=PRODUCT_KINDS)
-            ),
             integrations,
-            PRODUCT_KINDS,
+            settings,
+            PlatformPorts(kinds=PRODUCT_KINDS),
+            platform_agents=shipped_agents(settings, settings.environment),
+            intake=lambda: held[0].intake,
         )
+        container = cls(settings, storage, infra, managers, integrations, PRODUCT_KINDS)
+        held.append(container)
+        return container
 
     @classmethod
     def for_tests(
@@ -282,6 +309,7 @@ class WorkerContainer:
         integrations: IntegrationsInterface | None = None,
         *,
         ports: PlatformPorts | None = None,
+        platform_agents: PlatformAgents | None = None,
     ) -> WorkerContainer:
         settings = settings or MaintenanceSettings.model_validate(
             {"_env_file": None, "environment": "test", "worker_id": "maintenance-test"}
@@ -289,14 +317,20 @@ class WorkerContainer:
         integrations = integrations or IntegrationsOverImpl(
             IdentityProviderTwinImpl(), absent_model_providers()
         )
-        return cls(
-            settings,
+        held: list[WorkerContainer] = []
+        managers = worker_managers(
             storage,
             infra,
-            worker_managers(storage, infra, integrations, settings, ports),
             integrations,
-            None if ports is None else ports.kinds,
+            settings,
+            ports,
+            platform_agents=platform_agents,
+            intake=lambda: held[0].intake,
         )
+        kinds = None if ports is None else ports.kinds
+        container = cls(settings, storage, infra, managers, integrations, kinds)
+        held.append(container)
+        return container
 
     async def start(self) -> None:
         await self.infra.start()

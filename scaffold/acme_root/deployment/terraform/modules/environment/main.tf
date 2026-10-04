@@ -504,6 +504,10 @@ module "maintenance" {
     ACME_SERVICE_NAME      = "maintenance"
     ACME_IDENTITY_PROVIDER = "workos"
     ACME_WORKOS_CLIENT_ID  = var.workos_client_id
+    # The image carries the knowledge map and the documents it lists here.
+    # The worker classes the platform's agents' tools for the sessions it
+    # starts and wakes, and refuses to boot with no corpus.
+    ACME_CORPUS_ROOT = "/app"
   })
 
   # The serving process answers /healthz on its metrics port from its

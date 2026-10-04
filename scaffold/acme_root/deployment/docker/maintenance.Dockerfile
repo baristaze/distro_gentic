@@ -20,6 +20,11 @@ COPY infra infra
 COPY integrations integrations
 COPY workers/maintenance workers/maintenance
 RUN uv sync --frozen --no-dev --package acme-maintenance
+# The knowledge map and the documents it lists for tenant users, outside the
+# packages above: the worker classes the platform's agents' tools over them,
+# as the API does (ACME_CORPUS_ROOT).
+COPY llms.txt ./
+COPY apps/cli/README.md apps/cli/
 
 FROM python:3.14-slim
 RUN useradd --create-home --uid 10001 acme
