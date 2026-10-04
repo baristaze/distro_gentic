@@ -2,10 +2,12 @@
 revision of every role downgrades and upgrades again, the logins are safe to
 make twice, a migration behind a held lock gives up within its bound, a
 data migration passes the fence it runs under and fails when it misses rows,
-a workspace's notices move to the one notice and back, every tenant's, and
-the one notice leaves the table with every notice kept in the list, and a
-platform automation this release writes reads as the previous release's
-after a downgrade, which drops the automations of a product's kind."""
+a workspace's notices move to the one notice and back, every tenant's, the
+one notice leaves the table with every notice kept in the list, the
+validation sessions' station columns leave the table with every session this
+release wrote kept, and a platform automation this release writes reads as the
+previous release's after a downgrade, which drops the automations of a
+product's kind."""
 
 import asyncio
 import time
@@ -14,7 +16,9 @@ from uuid import UUID
 import pytest
 from contracts.automation_storage import make_automation
 from contracts.event_storage import make_event
+from contracts.platform_agents_storage import finished, make_validation
 from contracts.workspace_storage import make_workspace
+from pydantic import ValidationError
 from sqlalchemy import Connection, text
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -22,6 +26,8 @@ from acme.om.automations.storage.impl.postgres import AutomationStoragePostgresI
 from acme.om.automations.types.automation import Action
 from acme.om.base import new_id
 from acme.om.events.storage.impl.postgres import EventStoragePostgresImpl
+from acme.om.platform_agents.storage.impl.postgres import PlatformAgentsStoragePostgresImpl
+from acme.om.platform_agents.types.validation import ValidationSession
 from acme.om.storage.impl.pg_base import LoginSessions
 from acme.om.storage.migrate import (
     RUN_AGAIN,
@@ -299,6 +305,130 @@ async def test_the_one_notice_comes_back_as_the_lists_last_entry(
 
     await upgrade(DatabaseRole.CORE, core)
     assert await check(DatabaseRole.CORE, core) == []
+
+
+async def in_tenant(url: str, org: UUID, sql: str) -> list[tuple[object, ...]]:
+    """One statement on the core role, as the migration login, inside a
+    tenant's fence."""
+    engine = create_async_engine(url)
+    try:
+        async with engine.begin() as connection:
+            await connection.exec_driver_sql(f"SET LOCAL app.org_id = '{org}'")
+            result = await connection.exec_driver_sql(sql)
+            return [tuple(row) for row in result] if result.returns_rows else []
+    finally:
+        await engine.dispose()
+
+
+async def session_shape(url: str) -> list[tuple[object, ...]]:
+    """The validation session's station and commit columns, each with
+    whether it takes a null."""
+    return await on_core(
+        url,
+        "SELECT column_name, is_nullable FROM information_schema.columns"
+        " WHERE table_schema = 'core' AND table_name = 'validation_sessions'"
+        " AND column_name IN"
+        " ('base', 'check_version', 'head', 'lab_id', 'parameters', 'project_id')"
+        " ORDER BY column_name",
+    )
+
+
+V0_2_0_SESSION_SHAPE = [
+    ("base", "YES"),
+    ("check_version", "YES"),
+    ("head", "YES"),
+    ("lab_id", "YES"),
+    ("parameters", "YES"),
+    ("project_id", "YES"),
+]
+"""The columns at the release before the station's columns left: all
+nullable, so both releases' rows fit."""
+
+SESSION_SHAPE = [("base", "NO"), ("head", "NO"), ("project_id", "NO")]
+
+
+async def written_on_a_station(url: str, org: UUID) -> UUID:
+    """A session as the release before the executor wrote it: a lab, a check
+    version, and parameters, and no project or commit."""
+    session_id = new_id()
+    actor = new_id()
+    await in_tenant(
+        url,
+        org,
+        "INSERT INTO core.validation_sessions (id, org_id, created_at, updated_at,"
+        " created_by, updated_by, lab_id, check_name, check_version, parameters,"
+        " status, version) VALUES"
+        f" ('{session_id}', '{org}', now(), now(), '{actor}', '{actor}', '{new_id()}',"
+        " 'report.totals', '1', '{}'::jsonb, 'queued', 1)",
+    )
+    return session_id
+
+
+async def seed_sessions(pg_sessions: LoginSessions) -> dict[UUID, ValidationSession]:
+    """Two tenants, each with a session this release wrote: one queued, one
+    finished with its run."""
+    storage = PlatformAgentsStoragePostgresImpl(pg_sessions)
+    held: dict[UUID, ValidationSession] = {}
+    for session in (make_validation(), finished(make_validation())):
+        org = new_id()
+        assert await storage.create_validation(org, session, ())
+        held[org] = session
+    return held
+
+
+async def test_the_station_columns_leave_and_every_session_this_release_wrote_stays(
+    pg_sessions: LoginSessions, migrated: dict[DatabaseRole, str]
+) -> None:
+    """At the release before, each tenant holds a session that release wrote
+    and one written on a station, which it cannot read. Forward, the
+    station's columns are gone, the commit columns take no null, the station
+    session is gone, and every value of the other is kept."""
+    core = migrated[DatabaseRole.CORE]
+    storage = PlatformAgentsStoragePostgresImpl(pg_sessions)
+    await downgrade(DatabaseRole.CORE, core, V0_2_0_HEAD)
+    held = await seed_sessions(pg_sessions)
+    stale = {org: await written_on_a_station(core, org) for org in held}
+    assert await session_shape(core) == V0_2_0_SESSION_SHAPE
+    for org, session_id in stale.items():
+        with pytest.raises(ValidationError):
+            await storage.read_validation(org, session_id)
+
+    await upgrade(DatabaseRole.CORE, core)
+
+    assert await session_shape(core) == SESSION_SHAPE
+    for org, session in held.items():
+        assert await storage.read_validation(org, session.id) == session
+        kept = await in_tenant(core, org, "SELECT count(*) FROM core.validation_sessions")
+        assert kept == [(1,)]
+    assert await check(DatabaseRole.CORE, core) == []
+
+
+async def test_the_station_columns_come_back_null_and_the_sessions_stay(
+    pg_sessions: LoginSessions, migrated: dict[DatabaseRole, str]
+) -> None:
+    """Down, the station's columns are back, nullable and null, the commit
+    columns take a null again, and every session is kept and read; up again,
+    the schema agrees with the mapping."""
+    held = await seed_sessions(pg_sessions)
+    core = migrated[DatabaseRole.CORE]
+    storage = PlatformAgentsStoragePostgresImpl(pg_sessions)
+
+    await downgrade(DatabaseRole.CORE, core, V0_2_0_HEAD)
+
+    assert await session_shape(core) == V0_2_0_SESSION_SHAPE
+    for org, session in held.items():
+        assert await storage.read_validation(org, session.id) == session
+        assert await in_tenant(
+            core,
+            org,
+            "SELECT lab_id, check_version, parameters FROM core.validation_sessions"
+            f" WHERE id = '{session.id}'",
+        ) == [(None, None, None)]
+
+    await upgrade(DatabaseRole.CORE, core)
+    assert await check(DatabaseRole.CORE, core) == []
+    for org, session in held.items():
+        assert await storage.read_validation(org, session.id) == session
 
 
 PREVIOUS_ACTION = {"kind", "brief", "agent_kind", "title", "project_id", "session_id"}
