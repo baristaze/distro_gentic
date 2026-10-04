@@ -84,16 +84,21 @@ workspace it works in, and which of its calls run without asking.
   is recorded as the session's act, and the branch bound to it, before
   the push, and the pull request once it opens: a comment, a check, or a
   person's push on either finds the session ([intake](../intake/README.md)).
-- **Start a validation session.** Its `VALIDATION` work goes on the
-  platform's own lane of the [work queue](../work/README.md) in the same
-  write, and the platform's worker claims it.
+- **Start a validation session.** A member who may write asks for a
+  check at a delivered commit, with its checks from a base, as a CI job
+  asks through the API. A check its project's policy does not declare is
+  refused before anything is written, and so is a project whose policy
+  is another tenant's. Its `VALIDATION` work goes on the platform's own
+  lane of the [work queue](../work/README.md) in the same write, and the
+  platform's worker claims it.
 - **Run it.** The worker runs the check through the
   [evidence](../evidence/README.md) on a fresh executor: an instance
   nobody used, holding the delivered commit with the protected paths
   from its base, destroyed after the run. The run is recorded as an
   execution record, the record every run is, and finishing the session
   names it. A session runs its check once: asked again after its run
-  was kept, it finishes with that run and runs nothing.
+  was kept, it finishes with that run and runs nothing. Its verdict is
+  that run's: it passed when the run passed and one of its cases did.
 - **Purge.** A tenant deleted past its retention loses its validation
   sessions.
 
