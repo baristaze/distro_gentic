@@ -3,7 +3,8 @@ revision of every role downgrades and upgrades again, the logins are safe to
 make twice, a migration behind a held lock gives up within its bound, a
 data migration passes the fence it runs under and fails when it misses rows,
 a workspace's notices move to the one notice and back, every tenant's, and
-a platform automation this release writes reads as the previous release's
+the one notice leaves the table with every notice kept in the list, and a
+platform automation this release writes reads as the previous release's
 after a downgrade, which drops the automations of a product's kind."""
 
 import asyncio
@@ -180,15 +181,15 @@ async def on_core(url: str, sql: str) -> list[tuple[object, ...]]:
         await engine.dispose()
 
 
-async def notices_of(url: str, org: UUID, session_id: UUID) -> object:
-    """A workspace's notices as the migration login reads them, inside its
-    tenant's fence."""
+async def notices_of(url: str, org: UUID, session_id: UUID, column: str = "notices") -> object:
+    """A workspace's notices, or another of its columns, as the migration
+    login reads them, inside its tenant's fence."""
     engine = create_async_engine(url)
     try:
         async with engine.begin() as connection:
             await connection.exec_driver_sql(f"SET LOCAL app.org_id = '{org}'")
             read = await connection.exec_driver_sql(
-                f"SELECT notices FROM core.session_workspaces WHERE id = '{session_id}'"
+                f"SELECT {column} FROM core.session_workspaces WHERE id = '{session_id}'"
             )
             return read.scalar_one()
     finally:
@@ -213,6 +214,90 @@ async def test_a_workspaces_notices_move_to_the_one_notice_and_back_for_every_te
 
     for org, session_id in held.items():
         assert await notices_of(core, org, session_id) == ["newer"]
+    assert await check(DatabaseRole.CORE, core) == []
+
+
+V0_2_0_HEAD = "202610036100"
+"""The core head of the release before the one notice left the table."""
+
+
+async def notice_shape(url: str) -> list[tuple[object, ...]]:
+    """The notice columns of a workspace row and the default of each."""
+    return await on_core(
+        url,
+        "SELECT column_name, column_default FROM information_schema.columns"
+        " WHERE table_schema = 'core' AND table_name = 'session_workspaces'"
+        " AND column_name IN ('notice', 'notices') ORDER BY column_name",
+    )
+
+
+async def told_before(url: str, org: UUID, session_id: UUID) -> None:
+    """The one notice a release before the list wrote and a loop was told,
+    as the column still holds it, inside its tenant's fence."""
+    engine = create_async_engine(url)
+    try:
+        async with engine.begin() as connection:
+            await connection.exec_driver_sql(f"SET LOCAL app.org_id = '{org}'")
+            await connection.exec_driver_sql(
+                f"UPDATE core.session_workspaces SET notice = 'told' WHERE id = '{session_id}'"
+            )
+    finally:
+        await engine.dispose()
+
+
+async def seed_notices(
+    pg_sessions: LoginSessions, *notices: tuple[str, ...]
+) -> dict[UUID, tuple[UUID, tuple[str, ...]]]:
+    """One workspace a tenant, each holding its notices."""
+    storage = WorkspaceStoragePostgresImpl(pg_sessions)
+    held: dict[UUID, tuple[UUID, tuple[str, ...]]] = {}
+    for listed in notices:
+        org = new_id()
+        workspace = make_workspace().model_copy(update={"notices": listed})
+        assert await storage.create_workspace(org, workspace)
+        held[org] = (workspace.id, listed)
+    return held
+
+
+async def test_the_one_notice_leaves_the_table_and_every_notice_stays_in_the_list(
+    pg_sessions: LoginSessions, migrated: dict[DatabaseRole, str]
+) -> None:
+    """Rows written at the release before, the one notice beside each list,
+    migrate forward with the column and the list's default gone and every
+    entry of every tenant's list kept."""
+    core = migrated[DatabaseRole.CORE]
+    await downgrade(DatabaseRole.CORE, core, V0_2_0_HEAD)
+    held = await seed_notices(pg_sessions, ("older", "newer"), ("only",), ())
+    for org, (session_id, _) in held.items():
+        await told_before(core, org, session_id)
+    assert await notice_shape(core) == [("notice", None), ("notices", "'[]'::jsonb")]
+
+    await upgrade(DatabaseRole.CORE, core)
+
+    assert await notice_shape(core) == [("notices", None)]
+    for org, (session_id, listed) in held.items():
+        assert await notices_of(core, org, session_id) == list(listed)
+    assert await check(DatabaseRole.CORE, core) == []
+
+
+async def test_the_one_notice_comes_back_as_the_lists_last_entry(
+    pg_sessions: LoginSessions, migrated: dict[DatabaseRole, str]
+) -> None:
+    """Down, each tenant's row holds its last notice in the column, an empty
+    list leaves it null, and the list keeps every entry and its default; up
+    again, the schema agrees with the mapping."""
+    held = await seed_notices(pg_sessions, ("older", "newer"), ("only",), ())
+    core = migrated[DatabaseRole.CORE]
+
+    await downgrade(DatabaseRole.CORE, core, V0_2_0_HEAD)
+
+    assert await notice_shape(core) == [("notice", None), ("notices", "'[]'::jsonb")]
+    for org, (session_id, listed) in held.items():
+        last = listed[-1] if listed else None
+        assert await notices_of(core, org, session_id, "notice") == last
+        assert await notices_of(core, org, session_id) == list(listed)
+
+    await upgrade(DatabaseRole.CORE, core)
     assert await check(DatabaseRole.CORE, core) == []
 
 
@@ -261,7 +346,7 @@ async def test_a_platform_automation_reads_as_the_previous_releases_after_a_down
     finally:
         await engine.dispose()
 
-    await downgrade(DatabaseRole.CORE, core, "202610036100")
+    await downgrade(DatabaseRole.CORE, core, "202610036200")
     previous = await actions_of(core, org)
     await upgrade(DatabaseRole.CORE, core)
 
