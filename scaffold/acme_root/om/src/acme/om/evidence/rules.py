@@ -1,7 +1,7 @@
 """Pure rules of evidence: the key a project's policy is kept under, which
 paths a policy protects, the target a tool's call reports for them, the checks a change asks for, what a
-validation is asked to run, and the result gate's judgment. Values in,
-values out; no clock, no storage."""
+validation is asked to run, the result gate's judgment, and a validation
+session's verdict. Values in, values out; no clock, no storage."""
 
 import posixpath
 import re
@@ -15,7 +15,7 @@ from acme.om.agents.types.result import Claim, Verdict
 from acme.om.evidence.rates import corrected, rate_claim, stops_at
 from acme.om.evidence.types.acceptance import Leak, Surface
 from acme.om.evidence.types.contract import CheckDeclaration, Offer
-from acme.om.evidence.types.policy import Requirement, ValidationPolicy
+from acme.om.evidence.types.policy import Grade, Requirement, ValidationPolicy
 from acme.om.evidence.types.rate import AbortRule, Bound, RateRule
 from acme.om.evidence.types.record import ExecutionRecord, RunOutcome, RunPurpose
 from acme.om.evidence.types.validation import Delivery, ExecutionRequest, Validation
@@ -401,6 +401,31 @@ def batch_refusal(
     if claim.upper > rule.max_rate:
         return [f"{name}: {claim.render()}, above the {rule.max_rate:.2%} declared"]
     return []
+
+
+# A validation session's verdict.
+
+
+def check_grade(policy: ValidationPolicy, check: str) -> Grade:
+    """The grade a run of `check` passes at: the strictest grade among the
+    policy's requirements that name it, and a twin when none does."""
+    grades = [requirement.grade for requirement in policy.requirements if requirement.check == check]
+    return max(grades, key=lambda grade: grade.floor.strength, default=Grade.TWIN)
+
+
+def run_refusal(record: ExecutionRecord, grade: Grade) -> str | None:
+    """Why one run does not pass at `grade`, the way the result gate reads a
+    plain requirement: it did not pass, or what served it is below the
+    grade. A double's run, or one whose dependency was not there, passes at
+    no grade."""
+    if not record.passing:
+        return f"{record.check} did not pass"
+    if record.provenance.strength < grade.floor.strength:
+        return (
+            f"{record.check} has no passing run at the {grade.value} grade: "
+            f"its run's provenance is {record.provenance.value}"
+        )
+    return None
 
 
 # Acceptance: the hidden suite.

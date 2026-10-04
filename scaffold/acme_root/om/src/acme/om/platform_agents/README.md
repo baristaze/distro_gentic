@@ -98,7 +98,10 @@ workspace it works in, and which of its calls run without asking.
   execution record, the record every run is, and finishing the session
   names it. A session runs its check once: asked again after its run
   was kept, it finishes with that run and runs nothing. Its verdict is
-  that run's: it passed when the run passed and one of its cases did.
+  that run's, read at the check's grade: it passed when the run passed,
+  one of its cases did, and what served it meets the strictest grade the
+  policy's requirements ask of the check, a twin when none names it. A
+  run on a double, or with a dependency that was not there, never passes.
 - **Purge.** A tenant deleted past its retention loses its validation
   sessions.
 

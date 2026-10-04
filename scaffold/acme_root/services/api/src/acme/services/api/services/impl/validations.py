@@ -2,6 +2,7 @@ from uuid import UUID
 
 from acme.om.context import TenantContext
 from acme.om.evidence import EvidenceManagerInterface
+from acme.om.evidence.rules import check_grade, policy_key, run_refusal
 from acme.om.platform_agents import PlatformAgentsManagerInterface
 from acme.om.platform_agents.types.validation import ValidationSession, ValidationStart
 from acme.services.api.services.impl.evidence import execution_view
@@ -34,11 +35,17 @@ class ValidationsServiceImpl(ValidationsServiceInterface):
 
     async def _view(self, ctx: TenantContext, session: ValidationSession) -> ValidationSessionView:
         record = None
+        reason = None
         if session.run_id is not None:
             # The session was read in its tenant first: the evidence reads its
             # runs by the session's id alone.
             page = await self._evidence.get_runs(ctx, session.id, None, LIMIT_MAX)
             record = next((each for each in page.items if each.id == session.run_id), None)
+        if record is not None:
+            # The run passes at the grade its project's policy asks of the
+            # check, never on a double or a dependency that was not there.
+            policy = await self._evidence.get_policy(ctx, policy_key(session.project_id))
+            reason = run_refusal(record, check_grade(policy, session.check_name))
         return ValidationSessionView(
             id=session.id,
             created_at=session.created_at,
@@ -49,6 +56,7 @@ class ValidationsServiceImpl(ValidationsServiceInterface):
             base=session.base,
             status=session.status,
             finished_at=session.finished_at,
-            passed=None if record is None else record.passing,
+            passed=None if record is None else reason is None,
+            reason=reason,
             run=None if record is None else execution_view(record),
         )

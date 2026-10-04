@@ -26,8 +26,12 @@ class StartValidationRequest(RequestBody):
 class ValidationSessionView(View):
     """A validation session: what it runs, at which commit and from which,
     and where it stands. Once its run is recorded, `passed` is the verdict
-    (the run passed, and at least one of its cases did) and `run` is that
-    run; both are null while it waits."""
+    and `run` is that run; both are null while it waits. The run passes
+    when it passed, at least one of its cases did, and what served it meets
+    the strictest grade the project's policy asks of the check, a twin when
+    no requirement names it: a run on a double, or with a dependency that
+    was not there, never passes. `reason` says why it did not pass, and is
+    null otherwise."""
 
     id: UUID
     created_at: datetime
@@ -39,4 +43,5 @@ class ValidationSessionView(View):
     status: ValidationStatus
     finished_at: datetime | None
     passed: bool | None
+    reason: str | None
     run: ExecutionView | None

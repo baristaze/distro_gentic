@@ -4,7 +4,8 @@ delivered head with its checks from a base, under an Idempotency-Key, and
 reads its verdict once the platform's worker has run it. A viewer starts
 none; another tenant starts nothing on the project and reads nothing of the
 session; a check the policy does not declare is refused before anything is
-queued."""
+queued. A run passes only at the grade the policy asks of its check: on a
+double, or with a dependency that was not there, it never does."""
 
 from dataclasses import dataclass
 from datetime import timedelta
@@ -21,6 +22,8 @@ from tenant_support import Headers, person, refused
 from acme.om.base import new_id
 from acme.om.context import AppContext, AppType, RequestContext, Role
 from acme.om.evidence.rules import policy_key
+from acme.om.evidence.types.policy import Grade, Requirement
+from acme.om.evidence.types.provenance import Provenance
 from acme.om.root import PlatformPorts
 from acme.om.work.types.work_item import WorkKind
 from acme.services.api.container import AppContainer
@@ -50,9 +53,12 @@ class Tenant:
     project_id: UUID
 
 
-async def tenant(client: httpx.AsyncClient, container: AppContainer, slug: str) -> Tenant:
+async def tenant(
+    client: httpx.AsyncClient, container: AppContainer, slug: str, grade: Grade = Grade.TWIN
+) -> Tenant:
     """A tenant with its owner signed in, and a project whose policy, which
-    its owner declares, holds the check `unit`."""
+    its owner declares, holds the check `unit`, required at a twin for one
+    kind of change and at `grade` for another."""
     email = f"owner@{slug}.test"
     ctx, org = await container.managers.tenancy.bootstrap(
         seed_request(), slug.title(), slug, email, slug.title()
@@ -61,7 +67,10 @@ async def tenant(client: httpx.AsyncClient, container: AppContainer, slug: str) 
     made = await client.post("/v1/projects", headers=owner, json=PROJECT)
     assert made.status_code == 201, made.text
     project_id = UUID(made.json()["id"])
-    await container.managers.evidence.write_policy(ctx, make_policy(policy_key(project_id)))
+    policy = make_policy(policy_key(project_id))
+    graded = Requirement(check="unit", grade=grade, paths=("docs/**",))
+    policy = policy.model_copy(update={"requirements": (*policy.requirements, graded)})
+    await container.managers.evidence.write_policy(ctx, policy)
     return Tenant(org.id, owner, project_id)
 
 
@@ -122,7 +131,7 @@ async def test_a_member_starts_a_validation_under_its_key_and_reads_its_verdict(
 
     assert read.status_code == 200, read.text
     verdict = read.json()
-    assert (verdict["status"], verdict["passed"]) == ("finished", True)
+    assert (verdict["status"], verdict["passed"], verdict["reason"]) == ("finished", True, None)
     run = verdict["run"]
     assert (run["purpose"], run["check"], run["version"], run["outcome"]) == (
         "validation",
@@ -140,11 +149,50 @@ async def test_a_member_starts_a_validation_under_its_key_and_reads_its_verdict(
     assert failing.status_code == 201, failing.text
     assert await worker_runs(container) == 1
     failed = (await client.get(f"{URL}/{failing.json()['id']}", headers=member)).json()
-    assert (failed["status"], failed["passed"], failed["run"]["outcome"]) == (
+    assert (failed["status"], failed["passed"], failed["reason"], failed["run"]["outcome"]) == (
         "finished",
         False,
+        "unit did not pass",
         "failed",
     )
+
+
+# The verdict holds the grade: a run that passed counts only when what served
+# it meets the strictest grade the policy's requirements ask of its check.
+
+
+@pytest.mark.parametrize(
+    ("served", "grade", "reason"),
+    [
+        (Provenance.DOUBLE, Grade.TWIN, "the twin grade: its run's provenance is double"),
+        (Provenance.UNAVAILABLE, Grade.TWIN, "the twin grade: its run's provenance is unavailable"),
+        (Provenance.TWIN, Grade.REAL, "the real grade: its run's provenance is twin"),
+        (Provenance.TWIN, Grade.TWIN, None),
+        (Provenance.REAL, Grade.REAL, None),
+    ],
+)
+async def test_a_passing_run_passes_only_at_the_grade_its_check_asks(
+    client: httpx.AsyncClient,
+    container: AppContainer,
+    executor: ScriptedExecutor,
+    served: Provenance,
+    grade: Grade,
+    reason: str | None,
+) -> None:
+    ajax = await tenant(client, container, "ajax", grade)
+    executor.provenance = served
+    started = await client.post(URL, headers=ajax.owner, json=start_of(ajax.project_id))
+    assert started.status_code == 201, started.text
+    assert await worker_runs(container) == 1
+
+    read = await client.get(f"{URL}/{started.json()['id']}", headers=ajax.owner)
+
+    assert read.status_code == 200, read.text
+    verdict = read.json()
+    assert (verdict["run"]["outcome"], verdict["run"]["provenance"]) == ("passed", served.value)
+    assert verdict["passed"] is (reason is None)
+    expected = None if reason is None else f"unit has no passing run at {reason}"
+    assert verdict["reason"] == expected
 
 
 # Check 2: a member without the write permission starts nothing, and a
