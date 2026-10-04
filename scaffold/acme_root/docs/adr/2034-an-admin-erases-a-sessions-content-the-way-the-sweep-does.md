@@ -10,13 +10,13 @@ tenant can revoke. A retention policy is declared per tenant.
 
 The engine erases a session's content by revoking its key, and keeps
 its shape ([ADR 1004](1004-a-sessions-content-is-erased-by-revoking-its-key.md)).
-Its revocation asks only the write permission, which every member holds.
+Its revocation asks only the write permission, which a member holds too.
 The retention sweep revokes a key when the session's content expires.
 It also has the tenant's key service destroy the key, and audits the
 destruction as that service reported it
 ([ADR 2014](2014-retention-is-a-snapshot-and-a-destruction-is-the-key-services-report.md)).
-Until now only the sweep revoked a key, and only the seed declared a
-policy, so a tenant could do neither.
+With no route to either, only the sweep revokes a key and only the seed
+declares a policy, so a tenant can do neither.
 
 ## Decision
 
