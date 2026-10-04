@@ -3,8 +3,9 @@ as the automation runs, and the run it started stays at work until the
 kind's check says that work ended, whatever time passes, then closes as
 the check says. An action that names a kind no product declares is refused
 when it is written, and so is a writer the kind's check of its writer
-refuses, while a disabled one is never asked about; a product's kind named
-as one of the platform's actions is refused at boot."""
+refuses, or one set to run as the principal its firings would refuse,
+while a disabled one is never asked about; a product's kind named as one
+of the platform's actions is refused at boot."""
 
 from collections.abc import Callable
 from pathlib import Path
@@ -25,6 +26,7 @@ from acme.om.automations.types.automation import (
     Limits,
     Refusal,
     RunOutcome,
+    RunsAs,
     RunStatus,
     Trigger,
     TriggerKind,
@@ -53,12 +55,15 @@ class JobAction(AutomationActionInterface):
         self.acted_as: list[UUID] = []
         self.texts: list[str] = []
         self.broken = False
-        # None admits every writer; a set admits only the people it holds.
+        # None admits every writer; a set admits only the people it holds,
+        # and the job runs as one of them, never as the tenant's principal.
         self.approvers: set[UUID] | None = None
         self.writers: list[tuple[UUID, int]] = []
 
     async def act(self, ctx: TenantContext, run: AutomationRun, params: Platform) -> UUID:
         assert isinstance(params, Job)
+        if self.approvers is not None and ctx.user_id not in self.approvers:
+            raise NotAuthorized("only an approver runs the job")
         job_id = derived_id(run.id, run.created_at, "job")
         self.jobs.setdefault(job_id, None)
         self.acted_as.append(ctx.user_id)
@@ -71,11 +76,15 @@ class JobAction(AutomationActionInterface):
         assert run.work_id is not None
         return self.jobs[run.work_id]
 
-    async def check_writer(self, ctx: TenantContext, params: Platform) -> None:
+    async def check_writer(self, ctx: TenantContext, params: Platform, runs_as: RunsAs) -> None:
         assert isinstance(params, Job)
         self.writers.append((ctx.user_id, params.steps))
-        if self.approvers is not None and ctx.user_id not in self.approvers:
+        if self.approvers is None:
+            return
+        if ctx.user_id not in self.approvers:
             raise NotAuthorized("only an approver sets up the job")
+        if runs_as is RunsAs.AUTOMATION_PRINCIPAL:
+            raise NotAuthorized("the job runs as an approver, never as the tenant's principal")
 
 
 def declaring(
@@ -226,6 +235,36 @@ async def test_a_writer_the_kinds_check_refuses_is_refused_when_the_automation_i
     assert on.enabled
     # Asked once for each enabled write, and never for a disabled one.
     assert len(job.writers) == asked + 2
+
+
+async def test_a_kind_refuses_an_automation_run_as_the_principal_its_firings_would_refuse(
+    platform: Wired, job: JobAction
+) -> None:
+    approver = platform.person(Role.ADMIN)
+    job.approvers = {approver.user_id}
+    await platform.automations.grant_principal(platform.owner, Role.MEMBER)
+    as_principal = job_automation(runs_as=RunsAs.AUTOMATION_PRINCIPAL)
+    # Its firings would refuse it: one stored past the check acts as the
+    # principal, whom the job refuses, and starts nothing.
+    stored = as_principal.model_copy(update={"created_by": approver.user_id})
+    await platform.storage.get_automation_storage().create_automation(
+        platform.owner.org_id, stored, ()
+    )
+    run = await fired(platform)
+    assert (run.status, run.refusal, run.work_id) == (RunStatus.REFUSED, Refusal.ACTION, None)
+    assert job.acted_as == []
+    # So its approver is refused the create, and an edit that sets it so,
+    # with the kind's reason, and the one stored is left as it was.
+    with pytest.raises(NotAuthorized, match="never as the tenant's principal"):
+        await platform.automations.create_automation(approver, as_principal)
+    mine = await platform.automations.create_automation(approver, job_automation(enabled=False))
+    with pytest.raises(NotAuthorized, match="never as the tenant's principal"):
+        await platform.automations.update_automation(approver, mine.id, as_principal)
+    held = await platform.automations.get_automation(approver, mine.id)
+    assert (held.runs_as, held.enabled) == (RunsAs.CREATOR, False)
+    # Run as its approver, the same job is saved enabled.
+    on = await platform.automations.update_automation(approver, mine.id, job_automation())
+    assert (on.runs_as, on.enabled) == (RunsAs.CREATOR, True)
 
 
 async def test_an_automation_whose_kind_left_the_product_is_refused_at_each_firing(

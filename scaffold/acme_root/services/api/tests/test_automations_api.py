@@ -17,7 +17,7 @@ from httpx import ASGITransport
 from tenant_support import Headers, person, refused, tenant
 
 from acme.om.automations.actions import AutomationActionInterface
-from acme.om.automations.types.automation import AutomationRun, RunOutcome
+from acme.om.automations.types.automation import AutomationRun, RunOutcome, RunsAs
 from acme.om.base import Platform, new_id
 from acme.om.context import Role, TenantContext
 from acme.om.exceptions import NotAuthorized
@@ -186,7 +186,7 @@ class SweepAction(AutomationActionInterface):
     async def ended(self, ctx: TenantContext, run: AutomationRun) -> RunOutcome | None:
         return None
 
-    async def check_writer(self, ctx: TenantContext, params: Platform) -> None:
+    async def check_writer(self, ctx: TenantContext, params: Platform, runs_as: RunsAs) -> None:
         return None
 
 
@@ -227,7 +227,7 @@ class ApprovedSweep(SweepAction):
     def __init__(self) -> None:
         self.approvers = {Role.OWNER}
 
-    async def check_writer(self, ctx: TenantContext, params: Platform) -> None:
+    async def check_writer(self, ctx: TenantContext, params: Platform, runs_as: RunsAs) -> None:
         if ctx.role not in self.approvers:
             raise NotAuthorized(f"the role {ctx.role.value} is no approver of the sweep")
 

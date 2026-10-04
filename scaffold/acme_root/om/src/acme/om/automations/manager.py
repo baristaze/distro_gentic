@@ -32,8 +32,8 @@ class AutomationsManagerInterface(ABC):
         `ValidationFailed`, and one stored with none is refused at each
         firing, starting nothing. A product's action names a kind a product
         declares, with params of its shape, or is `ValidationFailed`; an
-        enabled one is refused as its kind's check of the caller says
-        (`AutomationActionInterface.check_writer`). An id written already
+        enabled one is refused as its kind's check of the caller, and of
+        whom it runs as, says (`AutomationActionInterface.check_writer`). An id written already
         answers the automation as stored."""
         ...
 

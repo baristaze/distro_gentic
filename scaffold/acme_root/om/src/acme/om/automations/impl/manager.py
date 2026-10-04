@@ -516,8 +516,9 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         """A product's action names a kind a product declares, and its params
         hold to that kind's shape: otherwise it is `ValidationFailed`, so no
         automation is written that could never act. An enabled one is then
-        its kind's to check against its writer, whose refusal answers as is,
-        so a writer its firings would refuse is told now. A disabled one is
+        its kind's to check against its writer and whom it runs as, whose
+        refusal answers as is, so a writer its firings would refuse is told
+        now. A disabled one is
         not asked: nothing deletes an automation, so turning it off always
         goes through, and turning it on again is an edit the kind checks."""
         action = automation.action
@@ -531,7 +532,7 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         except ShapeError as exc:
             raise ValidationFailed(f"the params of {action.kind} are malformed: {exc}") from exc
         if automation.enabled:
-            await kind.check_writer(ctx, params)
+            await kind.check_writer(ctx, params, automation.runs_as)
 
     def _unknown_kind(self, automation: Automation) -> bool:
         kind = automation.action.kind

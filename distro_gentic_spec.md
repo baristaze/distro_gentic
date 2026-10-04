@@ -483,9 +483,9 @@ filters or a schedule, leads to an action: start a session, or message a
 standing session (a CI triage session, say). A product adds actions of
 its own, each with a check that says when the work it started ended, so
 its run stays at work until then. A product's action may also refuse the
-person who writes the automation, so one its firings would refuse is
-never saved, and that person hears why when they can fix it. An
-automation runs as its
+person who writes the automation, or the principal it is set to run as,
+so one its firings would refuse is never saved, and that person hears
+why when they can fix it. An automation runs as its
 creator or as the tenant's automation principal, and has limits of its
 own: a cost cap, a rate, a concurrency, and whether to queue when
 limited. An automation ignores the events its own sessions caused,

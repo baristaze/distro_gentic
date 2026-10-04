@@ -19,6 +19,7 @@ from acme.om.automations.types.automation import (
     PLATFORM_ACTIONS,
     AutomationRun,
     RunOutcome,
+    RunsAs,
 )
 from acme.om.base import Platform
 from acme.om.context import TenantContext
@@ -51,17 +52,19 @@ class AutomationActionInterface(ABC):
         ...
 
     @abstractmethod
-    async def check_writer(self, ctx: TenantContext, params: Platform) -> None:
+    async def check_writer(self, ctx: TenantContext, params: Platform, runs_as: RunsAs) -> None:
         """Refuses the person writing an enabled automation of this kind,
         under `ctx`, their own context in person, with `params` already held
-        to the kind's shape. A writer it refuses is told when the automation
-        is written, not by a refused run at each firing: it raises
-        `NotAuthorized` with the reason, which the create or the edit answers
-        as is, and any other `PlatformException` answers as itself. A kind
-        with no rule of its own returns, and admits every writer the platform
-        admits. A disabled automation is never asked about, so its writer can
-        always turn it off. The firing still runs `act` under the run's live
-        context, which refuses what changed since."""
+        to the kind's shape and `runs_as` naming whose context its firings
+        act under. A writer it refuses is told when the automation is
+        written, not by a refused run at each firing, and so is one set to
+        run as the tenant's principal where `act` refuses the principal: it
+        raises `NotAuthorized` with the reason, which the create or the edit
+        answers as is, and any other `PlatformException` answers as itself.
+        A kind with no rule of its own returns, and admits every writer the
+        platform admits. A disabled automation is never asked about, so its
+        writer can always turn it off. The firing still runs `act` under the
+        run's live context, which refuses what changed since."""
         ...
 
 

@@ -92,8 +92,8 @@ is made of](../../../../README.md).
   automation whose kind left the product is refused at each firing.
 - **A product's action checks its writer when it is written.** Its kind
   may refuse the person who makes or edits an enabled automation of it,
-  so one its firings would refuse is never saved, and the person hears
-  why then. A disabled one is never asked about, so its writer can always
+  or the principal it is set to run as, so one its firings would refuse
+  is never saved, and the person hears why then. A disabled one is never asked about, so its writer can always
   turn it off, and turning it on is an edit the kind checks. Its firings
   still act under the run's live context, which refuses what changed
   since.
