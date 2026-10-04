@@ -5,40 +5,59 @@ included, stay on its GitHub release. Releases are tagged
 `vMAJOR.MINOR.PATCH`; see `CONTRIBUTING.md` for what bumps which
 number.
 
-## 0.2.0 (2026-10-04)
+## 0.3.0 (2026-10-04)
 
-The platform's routes and screens, a product's own kinds of work, a
-deployment ready to ship, and the engine at v0.3.0. Minor: rules are
-added, and no released rule is reversed.
+A product declares its own ceilings and automation actions, a member
+sets budgets through the API, and the platform builds on the engine at
+v0.4.0. Minor: rules are added, and one rule of the guideline is
+reversed.
+
+### Fixed
+
+- A host's control stream holds no read slot of admission, so a fleet
+  of connected hosts no longer takes every read on its replica (#66).
+- The audit opens on the org's newest events: `GET /v1/events/recent`
+  pages back from the head, and the portal loads older pages down to
+  the floor (#69).
+- The repository's `CLAUDE.md` lives under `.claude/`, so the plugin
+  validates with `--strict`, and CI pins the Claude Code that checks it
+  (#65).
 
 ### Added
 
-- Routes for a session's reads and its evidence (#50); for projects and
-  repositories, knowledge and playbooks, automations, and tool policies
-  (#52); and for the model matrix, a tenant's provider keys, and the
-  operators' reads of benchmarks and ledgers (#51).
-- The portal shows a tenant its sessions: the list, a new session in a
-  project, and the session page, with the design kit's views (#57). It
-  keeps a tenant's records and settings: projects, models and keys,
-  automations, playbooks, knowledge, approvals, audit, and usage, a
-  credential or key never shown back (#61).
-- A product adds its own kinds: work kinds, claimant kinds, lanes, secret
-  owners, stream kinds, and validation executors are registries the
-  platform's own kinds go through (#55). A product's parts reach every
-  process from one declaration, and a hidden suite runs from its own
-  repository, protected (#59). A product's claimant enrolls and claims
-  through the gateway, as a host does (#60), and streams the item it
-  holds, each entry verified by its hash, read by a member through a
-  handle (#62).
-- The engineer edits a file by one place and searches its code, and
-  agents search, read, and suggest knowledge (#56).
-- A real forge and chat behind their twins: a GitHub App and a Slack
-  app, each write and connect held to its tenant (#54).
-- The deployment is complete: the session runner runs in the cloud, and
-  a host installs as a hardened service (#53).
+- A product declares the ceilings of its own tool classes beside its
+  kinds, and the boot refuses a ceiling of a platform class, of a class
+  the product does not declare, or of a class a platform ceiling
+  already names (#67).
+- A product adds its own kind of automation action beside starting and
+  messaging a session: its check says when the work ended, and the run
+  stays open until then and closes `succeeded` or `failed`. A kind no
+  product declares, or params off its shape, is refused when the
+  automation is written (#71).
+- A member who governs members sets a budget over a person, a project,
+  or the tenant, in any window, in reference cost or native tokens,
+  through `POST /v1/budgets`, and anyone who reads lists them; a scope
+  no model call is charged to is refused (#72).
 
 ### Changed
 
-- The scaffold base moves to the engine at v0.2.0 (#58) and then v0.3.0
-  (#63): a tool's long job parks its loop, the platform's gates hold and
-  settle its spend, and `read_attachment` reads past a long line.
+- The scaffold base moves to the engine at v0.4.0, and through it the
+  guideline at v0.50.0: a deleted tenant's purge takes each session's
+  workspace and transport records through the platform's tools wrapper
+  before it marks the tenant purged, a recovered job call runs once, a
+  migration waits for a lock only briefly, an outbound breadcrumb keeps
+  no URL path, and the portal's error reports keep no query. The spec
+  and the lenses cite the guideline at v0.50.0 and the engine's lenses
+  at v0.4.0 (#73).
+- Reversed: the guideline's NET-26 no longer asks a statement deadline
+  of a migration's connection; a migration carries a bounded lock wait
+  instead (#73).
+
+### Removed
+
+- The workspace row's old single `notice` column, and the default on
+  its `notices` list (#68).
+- The validation sessions' old station columns (`lab_id`,
+  `check_version`, `parameters`); a session's project and commit turn
+  not null, and a row with neither, which no release could read, is
+  deleted (#70).
