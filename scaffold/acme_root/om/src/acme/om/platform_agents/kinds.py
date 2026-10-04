@@ -141,9 +141,7 @@ ENGINEER_V2 = AgentKind(
 """The engineer before it named a share: kept while a session may still run
 it."""
 
-ENGINEER_V3 = ENGINEER_V2.model_copy(
-    update={"version": 3, "share": Amount(cost_micros=50_000_000)}
-)
+ENGINEER_V3 = ENGINEER_V2.model_copy(update={"version": 3, "share": Amount(cost_micros=50_000_000)})
 """The engineer before its step guard was sized for a change: kept while a
 session may still run it."""
 
