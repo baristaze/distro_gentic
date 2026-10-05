@@ -1,8 +1,9 @@
 """The platform's agents over Postgres: the assistant answers from its
 corpus with a citation, a call it makes to a shell is refused, and its
-draft leaves the live policy as it was; a validation session is the
-platform's own work, run on the executor and finished with its execution
-record, with no model call."""
+draft leaves the live policy as it was; the engineer starts two sub-agents,
+wakes on each report, and ends, its tree within its root's budget; a
+validation session is the platform's own work, run on the executor and
+finished with its execution record, with no model call."""
 
 import json
 from collections.abc import AsyncIterator
@@ -13,7 +14,12 @@ import pytest
 from contracts.evidence import ScriptedExecutor
 from contracts.evidence_storage import make_policy
 from contracts.loops import reply, said
-from contracts.platform_agents import calls, platform_over
+from contracts.platform_agents import (
+    an_engineer_starts_two_sub_agents_and_wakes_on_each_report,
+    calls,
+    platform_over,
+    sub_agents_over,
+)
 
 from acme.om.base import new_id
 from acme.om.context import AppContext, AppType, RequestContext
@@ -80,6 +86,17 @@ async def test_the_assistant_over_postgres_cites_its_corpus_and_reaches_no_shell
     failure, text = await platform.answer(session_id, "use_draft")
     assert failure is None and json.loads(text)["valid"] is True
     assert (await platform.managers.tools.get_policy(platform.owner)).rules == ()
+
+
+async def test_the_engineer_starts_two_sub_agents_and_wakes_on_each_report_over_postgres(
+    storage: StoragePostgresImpl, tmp_path: Path
+) -> None:
+    platform, executor, work = sub_agents_over(tmp_path, storage=storage)
+    slug = f"ajax-{new_id().hex[-8:]}"
+    platform.owner, _ = await platform.managers.tenancy.bootstrap(
+        RequestContext(request_id=new_id(), app=APP), "Ajax", slug, f"ann-{slug}@x.test", "Ann"
+    )
+    await an_engineer_starts_two_sub_agents_and_wakes_on_each_report(platform, executor, work)
 
 
 async def test_a_validation_session_over_postgres_is_platform_work_with_no_model_call(

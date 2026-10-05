@@ -11,6 +11,11 @@ engine runs every one of them the same way.
   knowledge base, and suggests an entry for a person to review.
 - Analysis reads what a run produced in a workspace, searches it and the
   knowledge base, changes nothing, and answers with findings.
+- The engineer and analysis split independent work, such as hypotheses
+  or checks, into sub-agents, each in a clean context of its own, and wait
+  for their reports. Every kind takes the engine's tree, three levels deep
+  and ten sub-agents besides its root, and each kind a sub-agent may run
+  as names its share (ADR 2043).
 - The planner turns findings into tasks: it reads where sessions stand,
   hands new engineering work to an engineer, and answers with its plan.
 - The platform assistant answers the people who run their part of the
@@ -26,9 +31,11 @@ a person chooses by choosing the session they type in."""
 
 from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
 from acme.om.agent_sessions.limits import Limits
-from acme.om.agents.types.kind import NO_WORKSPACE, AgentKind, DoneRule, TreeLimits
+from acme.om.agents.types.kind import NO_WORKSPACE, AgentKind, DoneRule
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.budgets.types.amount import Amount
+from acme.om.tools.native.spawn_sub_agent import SPAWN_SUB_AGENT
+from acme.om.tools.native.wait_for_sub_agents import WAIT_FOR_SUB_AGENTS
 from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule
 from acme.om.tools.types.tool import ToolClass
 
@@ -89,7 +96,6 @@ ENGINEER_V1 = AgentKind(
     done_rule=DoneRule.RESULT_TOOL,
     result_tool=SUBMIT_RESULT,
     authority=AuthorityMode.STEADY,
-    tree=TreeLimits(height=1, count=0),
     prompts=(
         "You are an engineer. You take one objective to a validated, reviewable change "
         "in your workspace. Take a baseline with validate before you change anything. "
@@ -127,7 +133,6 @@ ENGINEER_V2 = AgentKind(
     done_rule=DoneRule.RESULT_TOOL,
     result_tool=SUBMIT_RESULT,
     authority=AuthorityMode.STEADY,
-    tree=TreeLimits(height=1, count=0),
     prompts=(
         "You are an engineer. You take one objective to a validated, reviewable change "
         "in your workspace. Take a baseline with validate before you change anything. "
@@ -164,7 +169,7 @@ parks, and still a guard."""
 
 CACHED_CALL_MICROS = 100_000
 """What one call of the main role over a cached window costs at list price,
-as the engineer's share counts it: a choice."""
+as each share counts it: a choice."""
 
 ENGINEER_LOOPS = 3
 """The loops at the step guard one engineer's share pays for: its first,
@@ -177,15 +182,60 @@ of the main role's worst-case calls at a full window, so its first call is
 never refused. Its tree's budget still bounds it, and a share never raises
 that budget."""
 
-ENGINEER_KIND = ENGINEER_V3.model_copy(
+ENGINEER_V4 = ENGINEER_V3.model_copy(
     update={
         "version": 4,
         "share": ENGINEER_SHARE,
         "limits": Limits(step_guard=ENGINEER_STEP_GUARD),
     }
 )
-"""The engineer. It delivers through its result tool, so a product's kind
-may spawn it, and a spawn refuses a kind that names no share."""
+"""The engineer before it started sub-agents: kept while a session may
+still run it."""
+
+SUB_AGENTS = (
+    "When the work splits into questions that do not depend on each other, such as "
+    "hypotheses to test or checks to run, start a sub-agent for each with "
+    "spawn_sub_agent: a short title, and an objective that stands on its own, since a "
+    "sub-agent sees none of your history. Keep working, or wait for their reports with "
+    "wait_for_sub_agents; each report wakes you. Start one only for work worth a session "
+    "of its own: every sub-agent spends from the budget your whole tree shares."
+)
+"""The prompt layer of a kind that starts sub-agents."""
+
+ENGINEER_KIND = ENGINEER_V4.model_copy(
+    update={
+        "version": 5,
+        "tools": (
+            LIST_FILES,
+            READ_FILE,
+            SEARCH_CODE,
+            EDIT_FILE,
+            WRITE_FILE,
+            RUN_COMMAND,
+            SEARCH_KNOWLEDGE,
+            READ_KNOWLEDGE,
+            SUGGEST_KNOWLEDGE,
+            SPAWN_SUB_AGENT,
+            WAIT_FOR_SUB_AGENTS,
+            VALIDATE,
+            OPEN_PULL_REQUEST,
+            SUBMIT_RESULT,
+        ),
+        "prompts": (*ENGINEER_V4.prompts, SUB_AGENTS),
+        # A sub-agent's calls are still decided under its own kind's
+        # policy and under this one, and the strictest holds.
+        "policy": allowing(
+            ToolClass.READ,
+            ToolClass.WRITE,
+            ToolClass.EXECUTE,
+            ToolClass.INTEGRATION,
+            ToolClass.SPAWN,
+        ),
+    }
+)
+"""The engineer. It starts sub-agents and waits on them, and since it
+delivers through its result tool, a product's kind may spawn it too, under
+its share."""
 
 ANALYSIS_V1 = AgentKind(
     name=ANALYSIS,
@@ -193,7 +243,6 @@ ANALYSIS_V1 = AgentKind(
     tools=(LIST_FILES, READ_FILE, RUN_COMMAND),
     done_rule=DoneRule.ANSWER,
     authority=AuthorityMode.STEADY,
-    tree=TreeLimits(height=1, count=0),
     prompts=(
         "You read what a run produced (its logs, its telemetry, its recordings) in your "
         "workspace, and turn it into findings. Change nothing. Answer with the findings, "
@@ -205,13 +254,12 @@ ANALYSIS_V1 = AgentKind(
 """Analysis before it searched its workspace and the knowledge base: kept
 while a session may still run it."""
 
-ANALYSIS_KIND = AgentKind(
+ANALYSIS_V2 = AgentKind(
     name=ANALYSIS,
     version=2,
     tools=(LIST_FILES, READ_FILE, SEARCH_CODE, RUN_COMMAND, SEARCH_KNOWLEDGE, READ_KNOWLEDGE),
     done_rule=DoneRule.ANSWER,
     authority=AuthorityMode.STEADY,
-    tree=TreeLimits(height=1, count=0),
     prompts=(
         "You read what a run produced (its logs, its telemetry, its recordings) in your "
         "workspace, and turn it into findings. Search it with search_code, and look up "
@@ -221,6 +269,31 @@ ANALYSIS_KIND = AgentKind(
     policy=allowing(ToolClass.READ, ToolClass.EXECUTE),
     isolation=WORKSPACE,
 )
+"""Analysis before it started sub-agents and named a share: kept while a
+session may still run it."""
+
+ANALYSIS_LOOPS = 2
+"""The loops at its step guard, the engine's, one analysis's share pays
+for: its first, and one more a follow-up asks for."""
+
+ANALYSIS_SHARE = Amount(cost_micros=ANALYSIS_LOOPS * Limits().step_guard * CACHED_CALL_MICROS)
+"""What one analysis a spawn starts may spend over its life, in reference
+cost: its loops at the engine's step guard over a cached window, which is
+also more than three of the main role's worst-case calls at a full
+window, so its first call is never refused. Its tree's budget still
+bounds it, and a share never raises that budget."""
+
+ANALYSIS_KIND = ANALYSIS_V2.model_copy(
+    update={
+        "version": 3,
+        "tools": (*ANALYSIS_V2.tools, SPAWN_SUB_AGENT, WAIT_FOR_SUB_AGENTS),
+        "prompts": (*ANALYSIS_V2.prompts, SUB_AGENTS),
+        "policy": allowing(ToolClass.READ, ToolClass.EXECUTE, ToolClass.SPAWN),
+        "share": ANALYSIS_SHARE,
+    }
+)
+"""Analysis. It starts sub-agents of its own, and a spawn may start it, the
+way an engineer splits a question, so it names a share."""
 
 PLANNER_KIND = AgentKind(
     name=PLANNER,
@@ -228,7 +301,6 @@ PLANNER_KIND = AgentKind(
     tools=(READ_SESSION, HAND_OFF),
     done_rule=DoneRule.ANSWER,
     authority=AuthorityMode.STEADY,
-    tree=TreeLimits(height=1, count=0),
     prompts=(
         "You turn findings into tasks. For each task, decide whether an existing session "
         "should continue it or a new one should start: read where a session stands with "
@@ -245,7 +317,6 @@ PLATFORM_ASSISTANT_V1 = AgentKind(
     tools=(SEARCH_CORPUS, READ_SESSION, DRAFT_TOOL_POLICY, HAND_OFF),
     done_rule=DoneRule.ANSWER,
     authority=AuthorityMode.DELEGATED,
-    tree=TreeLimits(height=1, count=0),
     prompts=(
         "You help the people who set up and run their part of the platform. Explain the "
         "product only from what search_corpus finds, and cite the document of every "
@@ -287,7 +358,6 @@ PLATFORM_ASSISTANT_KIND = AgentKind(
     ),
     done_rule=DoneRule.ANSWER,
     authority=AuthorityMode.DELEGATED,
-    tree=TreeLimits(height=1, count=0),
     prompts=(
         "You help the people who set up and run their part of the platform. Explain the "
         "product only from what search_corpus and search_knowledge find, and cite the "
@@ -314,8 +384,10 @@ SHIPPED: tuple[AgentKind, ...] = (
     ENGINEER_V1,
     ENGINEER_V2,
     ENGINEER_V3,
+    ENGINEER_V4,
     ENGINEER_KIND,
     ANALYSIS_V1,
+    ANALYSIS_V2,
     ANALYSIS_KIND,
     PLANNER_KIND,
     PLATFORM_ASSISTANT_V1,
