@@ -53,9 +53,7 @@ class HostsManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def get_host(
-        self, ctx: TenantContext, pool_id: UUID, host_id: UUID
-    ) -> HostStatus | None:
+    async def get_host(self, ctx: TenantContext, pool_id: UUID, host_id: UUID) -> HostStatus | None:
         """The host, with whether it is online now, when it is one of the
         pool's, revoked or not: read by its id, so a pool of any size
         answers. None when the tenant holds no such host in that pool."""
