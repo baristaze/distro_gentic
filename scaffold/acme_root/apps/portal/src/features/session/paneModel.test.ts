@@ -97,8 +97,8 @@ describe("a tab that opens itself", () => {
 
   it("never shows a pane a person hid: it waits in it", () => {
     const hidden = togglePane(openTab(NEW_PANE, "evidence"), "workspace");
-    const after = openThemselves(hidden, ["station"]);
-    expect([after.tabs, shownTab(after), after.active]).toEqual([["evidence", "station"], null, "station"]);
+    const after = openThemselves(hidden, ["preview"]);
+    expect([after.tabs, shownTab(after), after.active]).toEqual([["evidence", "preview"], null, "preview"]);
   });
 });
 
@@ -106,18 +106,18 @@ describe("+", () => {
   const record = { id: "s1", status: "running" } as AgentSessionView;
   const session: SlotSession = { session: record, calls: [], running: true, open: () => undefined };
   // A product's tab, offered only while the session runs.
-  const station: SessionTab = { id: "station", label: "Station", icon: null, tip: "Its run", offered: (s) => s.running, render: () => null };
+  const preview: SessionTab = { id: "preview", label: "Preview", icon: null, tip: "What it built", offered: (s) => s.running, render: () => null };
 
   it("offers each tab the session has something for that is not open, a slot's tab among them", () => {
     const offers = (s: SlotSession) => [
       { id: "workspace", offered: true, opensItself: false },
       { id: "plan", offered: false, opensItself: false },
-      { id: station.id, offered: station.offered(s), opensItself: false },
+      { id: preview.id, offered: preview.offered(s), opensItself: false },
     ];
     const pane = openTab(NEW_PANE, "workspace");
-    expect(addable(pane, offers(session))).toEqual(["station"]);
+    expect(addable(pane, offers(session))).toEqual(["preview"]);
     expect(addable(pane, offers({ ...session, running: false }))).toEqual([]);
-    expect(addable(NEW_PANE, offers(session))).toEqual(["workspace", "station"]);
+    expect(addable(NEW_PANE, offers(session))).toEqual(["workspace", "preview"]);
   });
 });
 
