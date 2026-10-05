@@ -103,11 +103,13 @@ again: where the cause is still there, it parks again.
 | `give_back` | `handover` | a person took the session's environment to work in it by hand | that person gives it back, with what they did | the person who took it over | `read_session` |
 | `resume` | `pause` | a person paused the session | a resume | any person who may write | `read_session` |
 | a job's key | `job` | a long-running job a tool started is working; the retry time is its deadline | the job completes, or its deadline passes and it is cancelled and answered as timed out | nobody; a person who may write can cancel the session | `read_session` |
+| `report` | `children` | the agent called `wait_for_sub_agents`: a parent waits on its sub-agents | a child's report, which wakes it; or the tree's deadline, after which it parks on `deadline` | nobody | `read_session` |
 | a provider's name, such as `anthropic` | `provider` | the provider is failing: an outage, or the retries a call may make are spent | the session tries again at its retry time, by itself | nobody | `read_session` gives the retry time |
 | `<provider>:key` | `provider` | the tenant pays its provider itself and holds no live key for it | a key is saved, then an unlock; saving a key does not wake it | an admin or the owner saves the key; any person who may write unlocks | `read_session` |
 | `<provider>:billing`, `<provider>:credential`, `<provider>:permission` | `provider` | the provider refused the call: its billing, the key itself, or a permission, region, or model the key cannot reach | the account or the key is fixed at the provider, or a new key is saved, then an unlock | for the tenant's own key, an admin or the owner; for the platform's key, the operator; any person who may write unlocks | `read_session` |
 
-The engine writes no park on `children` today.
+A parent that calls `wait_for_sub_agents` parks on `children` until a
+child's report wakes it, or until the tree's deadline passes.
 
 ## The work queue and the hosts
 
