@@ -650,7 +650,8 @@ select.acme-field {
 @media (prefers-reduced-motion: reduce) {
   .acme-dot[data-tone="pending"],
   .acme-menu,
-  .acme-toasts .acme-banner {
+  .acme-toasts .acme-banner,
+  .acme-needs-toasts .acme-toast {
     animation: none;
   }
 }
@@ -767,6 +768,50 @@ select.acme-field {
 
 /* A short word that a change was made: the tooltip's colours, so it reads
    as neither a warning nor a card. */
+/* The toasts a session raises when it starts to need its person: at the
+ * bottom right, over any page. */
+.acme-needs-toasts {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 40;
+  display: grid;
+  gap: 8px;
+  width: min(380px, calc(100vw - 32px));
+}
+
+.acme-needs-toasts .acme-toast {
+  box-shadow: var(--acme-shadow-lg);
+  animation: acme-fade-in 200ms ease-out both;
+}
+
+.acme-needs-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.acme-needs-toast > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--acme-pending);
+}
+
+.acme-needs-toast-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.acme-needs-toast-text > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.acme-needs-toast-text > strong {
+  white-space: nowrap;
+}
+
 .acme-toast {
   display: flex;
   align-items: center;
@@ -1950,6 +1995,23 @@ select.acme-field {
   font-variant-numeric: tabular-nums;
 }
 
+.acme-child-group {
+  display: grid;
+  gap: 4px;
+}
+
+.acme-child-group-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--acme-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .acme-subagent-open {
   flex-shrink: 0;
   font-size: 12px;
@@ -2532,6 +2594,49 @@ select.acme-field {
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   line-height: 20px;
+}
+
+/* A parent's row and the chevron that folds its sub-agents. */
+.acme-side-row-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+
+.acme-side-row-line > .acme-side-row {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.acme-row-fold {
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-top: 6px;
+  padding: 3px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--acme-muted);
+  cursor: pointer;
+}
+
+.acme-row-fold:hover {
+  background: var(--acme-surface-subtle);
+  color: var(--acme-text);
+}
+
+.acme-row-tree {
+  overflow: hidden;
+  color: var(--acme-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acme-row-tree[data-needs-you] {
+  color: var(--acme-warning-text);
+  font-weight: 500;
 }
 
 .acme-sidebar-foot {

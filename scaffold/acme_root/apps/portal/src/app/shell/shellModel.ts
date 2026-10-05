@@ -25,6 +25,9 @@ export interface ShellRow {
   /** When it started, as the server gave it. */
   at: string;
   children: ShellRow[];
+  /** Its sub-agents, at every depth, and how many of them need a person:
+   * what its row says once it folds them. */
+  tree: { count: number; needsYou: number };
 }
 
 export interface ShellGroups {
@@ -120,6 +123,7 @@ export function shellGroups(
       dot: dotOf(session),
       at: session.created_at,
       children: [],
+      tree: { count: 0, needsYou: 0 },
     });
   }
   const roots: ShellRow[] = [];
@@ -136,16 +140,104 @@ export function shellGroups(
     row.children.sort(oldestFirst);
     row.children.forEach(sortChildren);
   };
+  // What each row holds beneath it.
+  const count = (row: ShellRow): ShellRow["tree"] => {
+    for (const child of row.children) {
+      const below = count(child);
+      row.tree.count += 1 + below.count;
+      row.tree.needsYou += (child.dot === "needs" ? 1 : 0) + below.needsYou;
+    }
+    return row.tree;
+  };
   roots.sort(newestFirst);
   const groups: ShellGroups = { needsYou: [], running: [], recent: [] };
   for (const root of roots) {
     sortChildren(root);
+    count(root);
     const rank = urgency(root);
     if (rank === 0) groups.needsYou.push(root);
     else if (rank === 1) groups.running.push(root);
     else if (groups.recent.length < RECENT_MAX) groups.recent.push(root);
   }
   return groups;
+}
+
+/** A session that started to need its person, as its toast says it: its
+ * title and what it needs ("Approve run_command", its question). */
+export interface NeedsYouNotice {
+  id: string;
+  title: string;
+  need: string;
+  /** Whether it waits for an answer to the agent's question, which a read
+   * of its history words. */
+  asks: boolean;
+}
+
+/** What a session that needs its person needs, in a few words. `held`
+ * names the tool of the call it holds for a decision, when that is known. */
+export function needWords(session: Pick<AgentSessionView, "status" | "park" | "archived_at">, held?: string): string {
+  const park = session.park;
+  if (park?.unlock === "approval") return held ? `Approve ${held}` : "Decide on a held call";
+  if (park?.unlock === "answer") return "Answer its question";
+  return statusWords(session, held);
+}
+
+/** The sessions of the person's that need them now, by id: one they
+ * started, or a sub-agent anywhere in a tree they started. */
+export function needingYou(
+  sessions: readonly AgentSessionView[],
+  me: string | null,
+  held?: ReadonlyMap<string, string>,
+): Map<string, NeedsYouNotice> {
+  const byId = new Map(sessions.map((session) => [session.id, session]));
+  const mine = (session: AgentSessionView) => session.created_by === me || byId.get(session.root_id)?.created_by === me;
+  const needing = new Map<string, NeedsYouNotice>();
+  if (me === null) return needing;
+  for (const session of byId.values()) {
+    if (!needsYou(session) || !mine(session)) continue;
+    needing.set(session.id, { id: session.id, title: session.title.trim() || "Untitled", need: needWords(session, held?.get(session.id)), asks: session.park?.unlock === "answer" });
+  }
+  return needing;
+}
+
+/** The toasts on show, and the sessions that needed the person when the
+ * list was last read: null before the first read. */
+export interface ToastState {
+  seen: ReadonlySet<string> | null;
+  toasts: readonly NeedsYouNotice[];
+}
+
+export const NO_TOASTS: ToastState = { seen: null, toasts: [] };
+/** The most toasts on show: the newest. */
+export const TOASTS_SHOWN = 3;
+
+const sameNotice = (a: NeedsYouNotice, b: NeedsYouNotice | undefined) => b !== undefined && a.id === b.id && a.title === b.title && a.need === b.need;
+
+/** The toasts once the list is read again: a session that starts to need
+ * the person raises one, unless its page is the one open; one that no
+ * longer needs them, or whose page opened, drops its own. What needed them
+ * at the first read is in the left bar already and raises none. The same
+ * state comes back when nothing changed. */
+export function nextToasts(state: ToastState, needing: ReadonlyMap<string, NeedsYouNotice>, open: string | null): ToastState {
+  const ids = new Set(needing.keys());
+  if (state.seen === null) return { seen: ids, toasts: [] };
+  const fresh = [...needing.values()].filter((notice) => !state.seen!.has(notice.id) && notice.id !== open);
+  const kept = state.toasts.flatMap((toast) => (toast.id !== open && needing.has(toast.id) ? [needing.get(toast.id)!] : []));
+  const toasts = [...kept, ...fresh].slice(-TOASTS_SHOWN);
+  const unchanged =
+    toasts.length === state.toasts.length &&
+    toasts.every((toast, index) => sameNotice(toast, state.toasts[index])) &&
+    ids.size === state.seen.size &&
+    [...ids].every((id) => state.seen!.has(id));
+  return unchanged ? state : { seen: ids, toasts };
+}
+
+/** What a row that folds its sub-agents says of them: "2 sub-agents · 1
+ * needs you". */
+export function treeWords(tree: ShellRow["tree"]): string {
+  const many = tree.count === 1 ? "1 sub-agent" : `${tree.count} sub-agents`;
+  if (tree.needsYou === 0) return many;
+  return `${many} · ${tree.needsYou} ${tree.needsYou === 1 ? "needs" : "need"} you`;
 }
 
 /** A time as the row shows it: "now", "5m", "3h", "2d", or the day. */

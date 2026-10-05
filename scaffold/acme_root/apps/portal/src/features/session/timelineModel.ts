@@ -191,7 +191,7 @@ export function childPhase(child: Pick<ChildState, "status" | "park" | "archived
 const PHASE_WORDS: Record<ChildPhase, string> = { needs_you: "needs you", working: "working", waiting: "waiting", done: "done" };
 
 /** A child's status in words, by its phase: "Needs you: an answer". */
-function childWords(child: ChildState): string {
+export function childWords(child: ChildState): string {
   const phase = childPhase(child);
   if (phase === "working") return "Working";
   return statusWords(child);
@@ -882,6 +882,17 @@ export function outline(entries: readonly Entry[]): OutlineMark[] {
     else if (entry.kind === "ask" && entry.open) mark(entry, "needs_you", entry.unlock === null ? `The agent asks: ${oneLine(entry.question, 60)}` : oneLine(entry.question, 60));
   }
   return marks;
+}
+
+/** The question the agent asked last in these steps, when it asked one. */
+export function askedIn(steps: readonly StepView[]): string | null {
+  for (const step of [...steps].reverse()) {
+    if (step.type !== "model_response") continue;
+    const use = [...step.tool_uses].reverse().find((one) => ASK_TOOLS.has(one.name));
+    const question = use ? field(use.input, "question", "text", "prompt") : null;
+    if (question) return question;
+  }
+  return null;
 }
 
 /** Whether an entry is the agent's question still waiting for an answer: the

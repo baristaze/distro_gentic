@@ -274,6 +274,9 @@ export function useSessionVm(id: string) {
     may,
     chat,
     marks,
+    /** Its sub-agents, each with what it does now. */
+    children,
+    childrenPending: childList.isPending,
     stepsError: steps.error,
     slotSession,
     tools,

@@ -199,6 +199,26 @@ function useRead<T>(id: string, part: string, route: string, enabled: boolean) {
   });
 }
 
+/** How many steps before a park its question is looked for in. */
+const ASKED_WINDOW = 8;
+
+/** The steps that led to a session's park on its person's answer, where
+ * the agent asked its question: a short read once the park is known, never
+ * the whole history. Empty when it waits on no answer. */
+export function useStepsBeforeAnswer(id: string, enabled: boolean) {
+  return useQuery({
+    queryKey: keys.agentSessions.read(id, "asked"),
+    queryFn: async ({ signal }) => {
+      const parks = await api.get<QuestionView[]>(`${path(id)}/questions`, { signal });
+      const park = parks.find((one) => one.unlock === "answer");
+      if (!park) return [];
+      const after = Math.max(0, park.seq - ASKED_WINDOW);
+      return (await api.get<StepPageView>(`${path(id)}/steps?after_seq=${after}&limit=${ASKED_WINDOW}`, { signal })).items;
+    },
+    enabled,
+  });
+}
+
 export const useQuestions = (id: string, enabled = true) => useRead<QuestionView[]>(id, "questions", "questions", enabled);
 export const useApprovals = (id: string, enabled = true) => useRead<ApprovalView[]>(id, "approvals", "approvals", enabled);
 export const useBounds = (id: string, enabled = true) => useRead<BoundsView>(id, "bounds", "bounds", enabled);

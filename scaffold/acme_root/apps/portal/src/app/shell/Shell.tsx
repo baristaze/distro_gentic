@@ -3,7 +3,8 @@
 // (Cmd-K), and the shell's keys (Cmd-B folds the bar, Cmd-, opens
 // Settings). A page offers its own commands to the search through
 // `usePageCommands`, and a control opens the search or the shortcuts
-// through `useShellActions`.
+// through `useShellActions`. A session that starts to need its person
+// raises a toast on any page.
 import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { CommandPalette, SidebarIcon, Tooltip, type PaletteCommand } from "../../design/kit";
@@ -11,6 +12,7 @@ import { usePreferencesStore } from "../../store/preferences";
 import { useSlot } from "../slot";
 import { THEME_CHOICES } from "../themeModel";
 import { LeftBar } from "./LeftBar";
+import { NeedsYouToasts } from "./NeedsYouToasts";
 import { ShellContext, type ShellActions } from "./shellContext";
 import { SEARCH_PLACEHOLDER, shellCommands, shellKey, startCommands } from "./paletteModel";
 import { SettingsBar } from "./SettingsBar";
@@ -103,6 +105,7 @@ export function Shell({ children }: { children: ReactNode }) {
         />
       ) : null}
       {shortcuts ? <ShortcutsDialog onClose={() => setShortcuts(false)} /> : null}
+      <NeedsYouToasts needing={vm.needing} ready={vm.read} />
     </ShellContext.Provider>
   );
 }
