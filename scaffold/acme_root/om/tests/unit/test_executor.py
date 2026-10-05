@@ -6,7 +6,9 @@ session inside its tenant's wall runs on an instance a host of its pool
 makes, never on the cloud's, and a process that reaches no pool refuses it
 before anything is made."""
 
+import io
 import json
+import tarfile
 from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
@@ -45,7 +47,18 @@ from acme.om.workspaces.placed import PlacedInstancesInterface
 
 HEAD = "c" * 40
 BASE = "b" * 40
-TAR = b"the tree, as a tar"
+
+
+def a_tree() -> bytes:
+    """The tree the executor writes into each instance, as a tar: the
+    checks' runner, at a path the request protects."""
+    out = io.BytesIO()
+    with tarfile.open(fileobj=out, mode="w") as archive:
+        archive.addfile(tarfile.TarInfo("checks/run.py"), io.BytesIO(b""))
+    return out.getvalue()
+
+
+TAR = a_tree()
 PINNED = IsolationSpec(mode=IsolationMode.HOST, egress=EgressPolicy(mode=EgressMode.OPEN))
 """A directory on a host of the session's pool, as its session is pinned."""
 ROOT = "/instance"
