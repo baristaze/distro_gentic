@@ -16,9 +16,9 @@ export function OrgChip() {
         <span className="acme-org-avatar" aria-hidden>
           {vm.orgName.trim().charAt(0).toUpperCase()}
         </span>
-        {vm.orgName}
+        <span className="acme-org-name">{vm.orgName}</span>
         {vm.personal ? (
-          <span style={{ color: tokens.color.muted, fontWeight: 400, fontSize: tokens.font.size.sm }}>personal</span>
+          <span style={{ flexShrink: 0, color: tokens.color.muted, fontWeight: 400, fontSize: tokens.font.size.sm }}>personal</span>
         ) : null}
       </Link>
       <Menu

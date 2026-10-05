@@ -410,13 +410,16 @@ select.acme-field {
 .acme-org-chip {
   display: inline-flex;
   align-items: center;
-  flex-shrink: 0;
+  min-width: 0;
   gap: 2px;
 }
 
+/* A long name ends in an ellipsis, so the caret and the bar's own buttons
+   stay in reach. */
 .acme-org-home {
   display: inline-flex;
   align-items: center;
+  min-width: 0;
   gap: 8px;
   font-weight: 600;
   color: var(--acme-text);
@@ -447,7 +450,19 @@ select.acme-field {
     color 120ms ease;
 }
 
+.acme-org-chip > :not(.acme-org-home) {
+  flex-shrink: 0;
+}
+
+.acme-org-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .acme-org-caret {
+  flex-shrink: 0;
   justify-content: center;
   width: 24px;
   height: 32px;
@@ -475,6 +490,7 @@ select.acme-field {
 
 .acme-org-avatar {
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: center;
   width: 24px;
@@ -1344,6 +1360,10 @@ select.acme-field {
   justify-content: space-between;
   gap: 4px;
   padding: 10px 10px 6px;
+}
+
+.acme-sidebar-head > .acme-tip-anchor {
+  flex-shrink: 0;
 }
 
 .acme-sidebar-top {
