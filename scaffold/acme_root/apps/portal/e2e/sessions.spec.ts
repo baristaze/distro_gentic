@@ -72,7 +72,7 @@ test("a member starts a session on Home, sees it run and finish in the left bar,
   console.log(`another org's left bar: ${(await strangerBar.locator(".acme-sidebar-scroll").innerText()).trim()}`);
   await stranger.goto("/sessions");
   await expect(stranger.getByRole("heading", { level: 1, name: "All sessions" })).toBeVisible();
-  await expect(stranger.getByText("No sessions yet.")).toBeVisible();
+  await expect(stranger.getByRole("main").getByText("No sessions yet.")).toBeVisible();
   await stranger.goto(`/sessions/${sessionId}?tab=timeline`);
   await expect(stranger.getByRole("heading", { level: 1 })).toHaveText("No session here");
   await expect(stranger.getByText(title)).toHaveCount(0);
