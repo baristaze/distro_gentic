@@ -18,8 +18,18 @@ from contracts.evidence import ScriptedExecutor
 from contracts.evidence_storage import make_policy
 from contracts.factories import make_org
 from contracts.loops import reply, said
-from contracts.platform_agents import CORPUS, Later, Platform, calls, platform_over
-from contracts.project_storage import in_project, make_binding
+from contracts.platform_agents import (
+    CORPUS,
+    Platform,
+    an_engineer,
+    an_engineer_starts_two_sub_agents_and_wakes_on_each_report,
+    calls,
+    citing,
+    on_the_twin,
+    platform_over,
+    sub_agents_over,
+)
+from contracts.project_storage import in_project
 from contracts.tools import (
     HOST_SPEC,
     Tools,
@@ -35,14 +45,10 @@ from acme.infra.secrets.local import SecretsLocalImpl
 from acme.infra.transports.broker import BrokerTwinImpl
 from acme.infra.transports.local import TransportLocalImpl
 from acme.infra.workspaces import (
-    EgressMode,
-    EgressPolicy,
     IsolationMode,
-    IsolationSpec,
     Workspace,
 )
 from acme.infra.workspaces.host import WorkspaceHostImpl
-from acme.integrations.model_providers.calls import ModelCall, ModelReply
 from acme.om import base
 from acme.om.agent_sessions.limits import Limits
 from acme.om.agent_sessions.types.agent_session import SessionStatus
@@ -71,7 +77,6 @@ from acme.om.context import (
 from acme.om.evidence.impl.ports import WorkProductMemoryImpl
 from acme.om.evidence.rules import policy_key
 from acme.om.evidence.types.record import RunPurpose
-from acme.om.evidence.types.validation import Delivery
 from acme.om.exceptions import (
     NotAuthorized,
     NotFound,
@@ -88,6 +93,7 @@ from acme.om.platform_agents.catalog import (
 )
 from acme.om.platform_agents.kinds import (
     ANALYSIS_KIND,
+    ANALYSIS_SHARE,
     ENGINEER_KIND,
     ENGINEER_SHARE,
     PLATFORM_ASSISTANT_KIND,
@@ -100,12 +106,13 @@ from acme.om.platform_agents.tools import (
     SearchCodeImpl,
 )
 from acme.om.platform_agents.types.validation import ValidationStart, ValidationStatus
-from acme.om.root import build_managers
-from acme.om.steps.types.content import TextBlock, ToolResultBlock
+from acme.om.root import build_managers, engine_tools
 from acme.om.steps.types.header import LoopOutcome, ToolFailure
 from acme.om.steps.types.step import Step
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import permissions_of
+from acme.om.tools.native.spawn_sub_agent import SPAWN_SUB_AGENT
+from acme.om.tools.native.wait_for_sub_agents import WAIT_FOR_SUB_AGENTS
 from acme.om.tools.tool import ToolInterface, ToolRuntime
 from acme.om.tools.types.policy import Decision, PolicyRule, ToolPolicy
 from acme.om.tools.types.tool import ToolClass, ToolInput
@@ -124,7 +131,14 @@ def unbound() -> object:
 
 
 def shipped_catalog() -> tuple[ToolInterface, ...]:
-    return with_shipped(
+    """The engine's tools and the platform's, as the root offers them."""
+    engine = engine_tools(
+        unbound,  # pyright: ignore[reportArgumentType]
+        unbound,  # pyright: ignore[reportArgumentType]
+        unbound,  # pyright: ignore[reportArgumentType]
+        unbound,  # pyright: ignore[reportArgumentType]
+    )
+    return *engine, *with_shipped(
         PlatformAgents(corpus=CORPUS),
         (),
         (),
@@ -191,8 +205,10 @@ def test_every_shipped_agent_is_a_profile_that_sets_its_powers() -> None:
         ("engineer", 2),
         ("engineer", 3),
         ("engineer", 4),
+        ("engineer", 5),
         ("analysis", 1),
         ("analysis", 2),
+        ("analysis", 3),
         ("planner", 1),
         ("platform_assistant", 1),
         ("platform_assistant", 2),
@@ -217,7 +233,56 @@ def test_every_shipped_agent_is_a_profile_that_sets_its_powers() -> None:
     assert {kinds.SEARCH_CODE, kinds.SEARCH_KNOWLEDGE, kinds.READ_KNOWLEDGE} <= set(
         ANALYSIS_KIND.tools
     )
-    assert {classes[tool] for tool in ANALYSIS_KIND.tools} == {"read", "execute"}
+    assert {classes[tool] for tool in ANALYSIS_KIND.tools} == {"read", "execute", "spawn"}
+
+
+def test_every_kind_roots_the_engines_tree_and_the_engineer_and_analysis_start_sub_agents() -> None:
+    """Every shipped kind, at every version, roots a tree three levels deep
+    that holds ten sub-agents besides its root, never a tree of one. The
+    engineer and analysis name the engine's two tools, and their policy runs
+    a spawn unattended; the planner and the assistant hand work on and start
+    no sub-agent."""
+    for kind in SHIPPED:
+        assert (kind.tree.height, kind.tree.count) == (3, 10), (kind.name, kind.version)
+    classes = classes_of(shipped_catalog())
+    assert (classes[SPAWN_SUB_AGENT], classes[WAIT_FOR_SUB_AGENTS]) == ("spawn", "read")
+    for kind in (ENGINEER_KIND, ANALYSIS_KIND):
+        assert {SPAWN_SUB_AGENT, WAIT_FOR_SUB_AGENTS} <= set(kind.tools), kind.name
+        decided = {rule.authorization_class: rule.decision for rule in kind.policy.rules}
+        assert decided[ToolClass.SPAWN] is Decision.ALLOW, kind.name
+    for kind in SHIPPED:
+        if kind.name in (kinds.PLANNER, kinds.PLATFORM_ASSISTANT):
+            assert SPAWN_SUB_AGENT not in kind.tools, kind.name
+
+
+def test_the_sub_agent_layer_says_a_sub_agent_starts_from_the_default_branch() -> None:
+    """A sub-agent's workspace is a fresh checkout of the default branch, so
+    every kind that starts one is told its sub-agents lack its changes, and
+    asks about the default branch or hands over what they need."""
+    for kind in (ENGINEER_KIND, ANALYSIS_KIND):
+        assert kinds.SUB_AGENTS in kind.prompts, kind.name
+    assert "a fresh checkout of the default branch, without your changes" in kinds.SUB_AGENTS
+    assert "hand it what it needs in its objective" in kinds.SUB_AGENTS
+
+
+def test_the_engineers_layers_name_analysis_for_a_question_and_the_engineer_for_a_change() -> None:
+    """An engineer starts a question that only reads or checks as analysis,
+    under analysis's share, and another engineer only for work that changes
+    code: its prompt layers name both kinds, since the spawn tool's input
+    names none."""
+    layers = " ".join(ENGINEER_KIND.prompts)
+    assert f'kind "{kinds.ANALYSIS}" for a question that only reads or checks' in layers
+    assert f'your own kind, "{kinds.ENGINEER}" (or leave kind out)' in layers
+    assert "only for work that changes code" in layers
+    assert ANALYSIS_KIND.share == ANALYSIS_SHARE
+
+
+def test_analysis_waits_for_every_report_before_it_answers() -> None:
+    """Analysis ends its session with a turn that calls no tool, so its
+    prompt has it wait for every sub-agent's report before that turn."""
+    assert ANALYSIS_KIND.done_rule is DoneRule.ANSWER
+    layers = " ".join(ANALYSIS_KIND.prompts)
+    assert "wait for every sub-agent's report with wait_for_sub_agents before you answer" in layers
 
 
 def test_the_engineers_step_guard_is_sized_for_a_change_and_its_share_follows_it() -> None:
@@ -232,7 +297,17 @@ def test_the_engineers_step_guard_is_sized_for_a_change_and_its_share_follows_it
     )
 
 
-# A spawn starts every shipped kind that delivers, under its share.
+def test_analysis_keeps_the_engines_step_guard_and_its_share_follows_it() -> None:
+    """Analysis reads and answers, so it parks at the engine's guard, and its
+    share pays for its loops at that guard."""
+    assert ANALYSIS_KIND.limits == Limits()
+    assert ANALYSIS_KIND.share == ANALYSIS_SHARE
+    assert ANALYSIS_SHARE.cost_micros == (
+        kinds.ANALYSIS_LOOPS * ANALYSIS_KIND.limits.step_guard * kinds.CACHED_CALL_MICROS
+    )
+
+
+# A spawn starts every shipped kind a sub-agent runs as, under its share.
 
 LEAD = AgentKind(
     name="lead",
@@ -249,13 +324,15 @@ tool, and its tree has room for one child."""
 
 
 def test_every_shipped_kind_a_spawn_can_start_names_a_share() -> None:
-    """A spawn refuses a kind that names no share. A kind that delivers
-    through its result tool is one a product's kind may spawn, so its latest
-    version names one; a kind a person starts directly names none."""
+    """A spawn refuses a kind that names no share. The engineer and analysis
+    split their work into sub-agents of either kind, and a product's kind
+    may spawn the engineer, so each one's latest version names a share; the
+    planner and the assistant are started by a person and name none."""
     catalog = AgentKindCatalog(kinds=SHIPPED)
     latest = [catalog.latest(name) for name in dict.fromkeys(kind.name for kind in SHIPPED)]
-    spawned = [kind for kind in latest if kind.done_rule is DoneRule.RESULT_TOOL]
-    assert [kind.name for kind in spawned] == [kinds.ENGINEER]
+    spawned = [kind for kind in latest if SPAWN_SUB_AGENT in kind.tools]
+    assert [kind.name for kind in spawned] == [kinds.ENGINEER, kinds.ANALYSIS]
+    assert [kind.share for kind in spawned] == [ENGINEER_SHARE, ANALYSIS_SHARE]
     for kind in spawned:
         assert kind.share is not None and (kind.share.cost_micros or 0) > 0, kind.name
     assert all(kind.share is None for kind in latest if kind not in spawned)
@@ -279,36 +356,9 @@ async def test_a_products_kind_spawns_the_engineer_under_its_share(tmp_path: Pat
 # Each shipped kind reaches an accepted end; the engineer's success only on
 # a passing validation at its head.
 
-TWIN = IsolationSpec(mode=IsolationMode.TWIN, egress=EgressPolicy(mode=EgressMode.NONE))
-"""The workspace this suite prepares, in place of a container."""
-
-
-def on_the_twin(kind: AgentKind) -> AgentKind:
-    """The shipped profile, whole, in the workspace this suite can prepare."""
-    return kind.model_copy(update={"version": kind.version + 1, "isolation": TWIN})
-
 
 def all_fail(check: str, trial: int) -> str:
     return "failed"
-
-
-def citing(claim: Claim) -> Later:
-    """The engineer's turn that submits `claim`, citing the runs the last
-    validation it read answered."""
-
-    def turn(call: ModelCall) -> ModelReply:
-        runs: list[str] = []
-        for message in call.messages:
-            for block in message.blocks:
-                if isinstance(block, ToolResultBlock):
-                    for part in block.parts:
-                        if isinstance(part, TextBlock) and '"runs"' in part.text:
-                            runs = json.loads(part.text)["runs"]
-        return reply(
-            calls(kinds.SUBMIT_RESULT, f"use_{claim.value}", claim=claim.value, evidence=runs)
-        )
-
-    return turn
 
 
 @pytest.fixture
@@ -322,18 +372,6 @@ def evidenced(tmp_path: Path) -> tuple[Platform, ScriptedExecutor, WorkProductMe
         work_product=work,
     )
     return platform, executor, work
-
-
-async def an_engineer(platform: Platform, work: WorkProductMemoryImpl, project_id: UUID) -> UUID:
-    """An engineer session of the project, whose work product changed `src/`
-    and is committed, and whose policy requires its unit check there."""
-    session_id = await platform.start(kinds.ENGINEER)
-    binding = make_binding(session_id, project_id)
-    await platform.storage.get_project_storage().bind_session(platform.owner.org_id, binding)
-    delivery = Delivery(project="reports", base="b1", head="c2", changed=("src/report.py",))
-    work.deliver(platform.owner.org_id, session_id, delivery)
-    await platform.say(session_id, "The weekly report misses its total. Fix it.")
-    return session_id
 
 
 async def test_the_engineers_success_needs_a_passing_validation_at_its_head(
@@ -389,6 +427,12 @@ async def test_analysis_the_planner_and_the_assistant_end_by_their_answer(
         assert run.outcome is LoopOutcome.SUCCEEDED, kind
         steps = await platform.history(session_id)
         assert answer in [step.as_text() for step in steps], kind
+
+
+async def test_the_engineer_starts_two_sub_agents_and_wakes_on_each_report(
+    tmp_path: Path,
+) -> None:
+    await an_engineer_starts_two_sub_agents_and_wakes_on_each_report(*sub_agents_over(tmp_path))
 
 
 # Check 1: the assistant holds no workspace, repository, shell, or domain
