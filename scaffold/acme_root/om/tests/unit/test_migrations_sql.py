@@ -6,11 +6,12 @@ from acme.om.media.types.file import FileStatus
 from acme.om.storage.migrate import (
     MIGRATIONS_DIR,
     check_role_of_sql,
+    dropped_tables,
     head,
     role_metadata,
     split_statements,
 )
-from acme.om.storage.roles import DatabaseRole
+from acme.om.storage.roles import DatabaseRole, role_for
 
 
 def test_every_sql_file_names_only_its_own_role() -> None:
@@ -29,6 +30,21 @@ def test_a_file_naming_another_role_is_refused() -> None:
     check_role_of_sql(DatabaseRole.QUEUE, "ALTER INDEX queue.ix_work_items_a RENAME TO ix_b")
     with pytest.raises(RuntimeError):
         check_role_of_sql(DatabaseRole.CORE, "DROP INDEX queue.ix_work_items_org_id")
+
+
+def test_a_table_the_chain_dropped_is_known_to_its_own_chain_alone() -> None:
+    """The role map holds no table the chain dropped, so the role check
+    knows one from the chain's own drop, and only in the role that dropped it."""
+    dropped = {role: dropped_tables(role) for role in DatabaseRole}
+    for role, tables in dropped.items():
+        for table in tables:
+            with pytest.raises(LookupError):
+                role_for(table)
+            check_role_of_sql(role, f"CREATE TABLE {role.value}.{table} (id uuid)")
+            for other in DatabaseRole:
+                if table not in dropped[other]:
+                    with pytest.raises(LookupError):
+                        check_role_of_sql(other, f"CREATE TABLE {other.value}.{table} (id uuid)")
 
 
 def test_split_statements_drops_comments_and_blanks() -> None:
