@@ -14,4 +14,4 @@ its rules.
 platform's `scripts/check_version.py` holds equal to its plugin manifest.
 """
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
