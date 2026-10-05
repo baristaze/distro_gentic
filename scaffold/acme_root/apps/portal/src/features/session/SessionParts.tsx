@@ -221,7 +221,7 @@ export function LivePart({ vm }: { vm: SessionVm }) {
                 vm.runCommand(line, () => setLine(""));
               }}
             >
-              <TextField label="Command" value={line} onChange={setLine} placeholder="make test" />
+              <TextField label="Command" value={line} onChange={setLine} placeholder="e.g. pytest tests/test_dates.py -q" />
               <Button type="submit" disabled={!line.trim()}>
                 Run
               </Button>
@@ -246,7 +246,12 @@ export function LivePart({ vm }: { vm: SessionVm }) {
                 vm.giveBack(summary);
               }}
             >
-              <TextArea label="What you did, for the agent to read" value={summary} onChange={setSummary} />
+              <TextArea
+                label="What you did, for the agent to read"
+                placeholder='e.g. "I fixed the import in conftest.py"'
+                value={summary}
+                onChange={setSummary}
+              />
               <div>
                 <Button type="submit" disabled={!summary.trim()}>
                   Give it back

@@ -1,4 +1,4 @@
-// Pure: rows, formatting, and gating predicates for the settings screen.
+// Pure: rows, formatting, and gating predicates for the Settings sections.
 import type { ApiKeyView, InvitationView, MembershipView, MeView, Role, UserView } from "@acme/client";
 
 export interface MemberRow {
@@ -117,4 +117,35 @@ export function invitationRows(invitations: InvitationView[], now: Date): Invita
 /** The invite form asks for an address; the server checks the rest. */
 export function checkInvite(email: string): string | null {
   return email.trim().includes("@") ? null : "Enter the email address to invite.";
+}
+
+/** The longest name the server keeps. */
+export const NAME_MAX = 200;
+
+/** Why a name cannot be saved, or null when it can. */
+export function checkDisplayName(name: string): string | null {
+  const trimmed = name.trim();
+  if (!trimmed) return "Write the name others see.";
+  if (trimmed.length > NAME_MAX) return `A name is at most ${NAME_MAX} characters.`;
+  return null;
+}
+
+export interface OrgLines {
+  name: string;
+  slug: string;
+  kind: string;
+  role: Role;
+  /** "3 members"; null while the list is on the way. */
+  members: string | null;
+}
+
+/** What Organization › General says of the org the tab is in. */
+export function orgLines(me: MeView, memberCount: number | null): OrgLines {
+  return {
+    name: me.org.name,
+    slug: me.org.slug,
+    kind: me.org.kind === "team" ? "A team's" : "Your personal org",
+    role: me.role,
+    members: memberCount === null ? null : `${memberCount} ${memberCount === 1 ? "member" : "members"}`,
+  };
 }

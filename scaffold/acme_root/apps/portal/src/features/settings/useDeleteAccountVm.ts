@@ -54,7 +54,7 @@ export function useDeleteAccountVm(me: MeView | undefined) {
     deleting: remove.isPending,
     confirm,
     refusal,
-    /** The refusal names the org this tab is in: its ways out are on this page. */
+    /** The refusal names the org this tab is in: its ways out are in its Settings. */
     strandedHere: strandedHere(stranded, me?.org.id),
   };
 }

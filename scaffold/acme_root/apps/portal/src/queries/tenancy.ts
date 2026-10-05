@@ -128,6 +128,19 @@ export function useUpdateMemberRole() {
   });
 }
 
+/** The person's own name, as every org they are in shows it. */
+export function useUpdateMe() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { display_name: string }) => api.patch<UserView>("/v1/me", body),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: keys.me }),
+        queryClient.invalidateQueries({ queryKey: keys.users.all }),
+      ]),
+  });
+}
+
 /** Only a member who may manage keys asks for them: `GET /v1/api-keys`
  * refuses anyone else, and a refusal nobody can act on is not an error to
  * show. Disabled, the query stays pending and never fetches, so a caller

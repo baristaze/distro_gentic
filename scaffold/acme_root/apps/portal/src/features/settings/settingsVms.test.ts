@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-// The view model over a fake transport: the revoke is held open, so a second
-// revoke can start while the first is still in flight. A refusal is said.
+// The API keys' and the members' view models over a fake transport: a write
+// is held open, so a second can start while the first is still in flight. A
+// refusal is said.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, createElement, useEffect } from "react";
 import { createRoot } from "react-dom/client";
@@ -14,7 +15,8 @@ import {
   type UserPageView,
 } from "@acme/client";
 import { useNoticesStore } from "../../store/notices";
-import { useSettingsVm, type SettingsVm } from "./useSettingsVm";
+import { useApiKeysVm, type ApiKeysVm } from "./useApiKeysVm";
+import { useMembersVm, type MembersVm } from "./useMembersVm";
 
 interface Held {
   path: string;
@@ -62,11 +64,10 @@ const keyOf = (id: string, name: string): ApiKeyView => ({
 
 // The view model as the screen sees it, taken after each commit rather than
 // during render, so the probe stays a pure component.
-const held: { vm?: SettingsVm } = {};
-const vm = () => held.vm!;
+const held: { vm?: { loading: boolean } } = {};
 
-function Probe() {
-  const current = useSettingsVm();
+function Probe({ use }: { use: () => { loading: boolean } }) {
+  const current = use();
   useEffect(() => {
     held.vm = current;
   });
@@ -75,13 +76,15 @@ function Probe() {
 
 const tick = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
 
-async function mount() {
+async function mount<T extends { loading: boolean }>(use: () => T): Promise<() => T> {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   await act(async () => {
-    root.render(createElement(QueryClientProvider, { client: queryClient }, createElement(Probe)));
+    root.render(createElement(QueryClientProvider, { client: queryClient }, createElement(Probe, { use })));
   });
+  const vm = () => held.vm as T;
   for (let turn = 0; turn < 50 && vm().loading; turn += 1) await tick();
   expect(vm().loading).toBe(false);
+  return vm;
 }
 
 beforeEach(() => {
@@ -113,7 +116,7 @@ afterEach(async () => {
 });
 
 it("says the first revoke was refused even after a second revoke started", async () => {
-  await mount();
+  const vm = await mount<ApiKeysVm>(useApiKeysVm);
   await act(async () => void vm().revokeApiKey("k1"));
   await act(async () => void vm().revokeApiKey("k2"));
   expect(net.writes.map((w) => w.path)).toEqual(["/v1/api-keys/k1", "/v1/api-keys/k2"]);
@@ -125,7 +128,7 @@ it("says the first revoke was refused even after a second revoke started", async
 });
 
 it("says a created key whose secret was lost, instead of showing nothing", async () => {
-  await mount();
+  const vm = await mount<ApiKeysVm>(useApiKeysVm);
   await act(async () => vm().setNewKeyName("ci"));
   await act(async () => void vm().createApiKey());
   expect(net.writes.map((w) => w.path)).toEqual(["/v1/api-keys"]);
@@ -140,7 +143,7 @@ it("says a created key whose secret was lost, instead of showing nothing", async
 
 it("shows each member's role, lets an owner give Bob another, and says a refusal", async () => {
   net.reads.set("/v1/me", { ...me, permissions: [...me.permissions, "manage_members"] });
-  await mount();
+  const vm = await mount<MembersVm>(useMembersVm);
   for (let turn = 0; turn < 20 && vm().members.some((m) => m.role === null); turn += 1) await tick();
   expect(vm().members.map((m) => [m.name, m.role, m.roles.length > 0])).toEqual([
     ["Owner", "owner", false],

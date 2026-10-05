@@ -59,7 +59,7 @@ export function useProjectVm(id: string) {
   };
   const confirmRemove = () =>
     remove.mutate(undefined, {
-      onSuccess: () => navigate("/projects"),
+      onSuccess: () => navigate("/settings/projects"),
       onError: (caught) => {
         setConfirming(false);
         setRemoveProblem(errorMessage(caught, "The project was not removed."));

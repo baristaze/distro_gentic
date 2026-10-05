@@ -11,9 +11,12 @@ import type { LucideIcon, LucideProps } from "lucide-react";
 import {
   Archive,
   ArrowDown,
+  ArrowLeft,
   ArrowUp,
   BookOpen,
   Bot,
+  Building2,
+  ChartColumn,
   Check,
   ChevronDown,
   ChevronRight,
@@ -23,11 +26,13 @@ import {
   ExternalLink,
   Eye,
   FileText,
+  Fingerprint,
   Flag,
   FolderGit2,
   GitPullRequest,
   Info,
   Keyboard,
+  KeyRound,
   LayoutList,
   ListChecks,
   ListFilter,
@@ -42,6 +47,7 @@ import {
   Pause,
   Play,
   Plus,
+  ScrollText,
   Search,
   Shield,
   ShieldAlert,
@@ -169,3 +175,21 @@ export const ResultIcon = kitIcon(Flag);
 export const SubAgentIcon = kitIcon(Network);
 /** A speech bubble with a question mark: the agent asks. */
 export const AskIcon = kitIcon(MessageCircleQuestionMark);
+
+/** An arrow to the left: back to where the person came from. */
+export const BackIcon = kitIcon(ArrowLeft);
+
+/** A building: the organization. */
+export const OrgIcon = kitIcon(Building2);
+
+/** A key: an API key. */
+export const KeyIcon = kitIcon(KeyRound);
+
+/** A fingerprint: signing in. */
+export const SignOnIcon = kitIcon(Fingerprint);
+
+/** Columns: what was spent. */
+export const UsageIcon = kitIcon(ChartColumn);
+
+/** A scroll: the record of what happened. */
+export const AuditIcon = kitIcon(ScrollText);

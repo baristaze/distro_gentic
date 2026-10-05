@@ -11,8 +11,21 @@ A signed-in page sits beside the left bar. From the top: the org chip,
 Search (⌘K), New session, Automations, Knowledge with its count of
 suggestions to review, the product's entries, and the sessions grouped by
 what they ask: Needs you, Running, and Recent, each sub-agent under its
-parent. The user chip at the foot holds Settings, the theme, the keyboard
-shortcuts, and Sign out. ⌘B folds the bar; its edge drags to resize.
+parent. The user chip at the foot holds Settings, Profile, the theme, the
+keyboard shortcuts, and Sign out. ⌘B folds the bar; its edge drags to resize.
+
+What is set up once lives in Settings (`/settings`, ⌘,), out of the bar a
+person scans every day. There, Settings' own bar takes the left bar's
+place: back to the app, a search (`/`), and the sections by group.
+Personal holds the profile; Organization its general facts, members,
+usage, and audit; Agents the projects, models and keys, and playbooks;
+Security the API keys and single sign-on; and a product adds its own. An
+old address (`/projects`, `/models`, `/playbooks`, `/audit`, `/usage`)
+lands on its section, and `/approvals` on the sessions that need you.
+
+Every text field shows a realistic example of what goes in, and an ⓘ says
+what a field means where its name does not. `watermarks.test.ts` holds
+every platform screen to it.
 
 A product adds its pages, left bar entries, session tabs, tool cards,
 settings, agents, and examples in `src/product.tsx`, and edits no platform
@@ -28,7 +41,8 @@ product never shadows a platform screen
   The portal calls `fetch` nowhere and never reads the generated schema.
 - `src/app/`: routes, the slot (`product.ts`, `platform.tsx`), the query
   cache, the session, and the one client instance the app shares.
-  `src/app/shell/` is the frame: the left bar, the search, and their keys.
+  `src/app/shell/` is the frame: the left bar, Settings' own bar, the
+  search, and their keys.
 - `src/features/<name>/`: one folder per screen, a pure model, a
   view-model hook, and a page. `home/` is the composer that starts a
   session on an agent and a project. `sessions/` is All sessions, with its
@@ -37,10 +51,12 @@ product never shadows a platform screen
   children, live while it runs. The org's records and settings each have
   their own: `projects/`, `models/` (the org's own provider keys and its
   model for each role), `automations/`, `playbooks/`, `knowledge/`,
-  `approvals/`, `audit/`, and `usage/`. `providers/` is the banner a page
-  shows while the org's sessions wait on a model provider. A secret field
-  is write-only: the form sends it once, and the page shows only who set
-  it and when.
+  `audit/`, `usage/`, and `settings/` (the overview, the profile, the
+  org's general facts, members, API keys, and single sign-on).
+  `providers/` is the banner a page shows while the org's sessions wait
+  on a model provider. A secret field is write-only: the form sends it
+  once, and the page shows only who set it and when. A new API key's
+  secret shows once, until Done.
 - `src/queries/`: query keys and hooks, one file per API namespace.
 - `src/realtime/`: the socket; a push invalidates the queries of its entity.
 - `src/store/`, `src/design/`: client state and the design kit. The kit's
@@ -78,12 +94,13 @@ again. The pace keeps the run open long enough to see it under Running.
 The check signs in as the seeded owner, starts a session on Home, sees it
 under Running and then Recent in the left bar, and reads its chat and, in
 the panel, its evidence. It then signs in a person of another org, who
-finds no row of it and nothing at its address. The records check needs only the API, on the
-scripted providers, and this dev server: the owner makes a project with a
-read credential, saves a provider key, and makes an automation through the
-screens, reads each back from the API, and finds neither secret in any
-reply or on any screen. Their screenshots land in `e2e/screenshots/`,
-which git ignores.
+finds no row of it and nothing at its address. The records check needs
+only the API, on the scripted providers, and this dev server: in Settings
+the owner makes a project with a read credential, saves a provider key,
+and creates an API key, and then makes an automation; each is read back
+from the API. The credential's password and the provider key come back in
+no reply and on no screen, and the API key shows once, then on no screen.
+Their screenshots land in `e2e/screenshots/`, which git ignores.
 
 The timeline check plays the engineer's scene: it thinks, plans, runs a
 failing test, edits, runs it again, opens a pull request, asks its person,

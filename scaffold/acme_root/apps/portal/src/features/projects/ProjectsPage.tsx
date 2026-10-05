@@ -9,7 +9,7 @@ import type { ProjectRow } from "./projectsModel";
 import { useProjectsVm } from "./useProjectsVm";
 
 const COLUMNS: Column<ProjectRow>[] = [
-  { key: "name", header: "Name", cell: (row) => <Link to={`/projects/${row.id}`}>{row.name}</Link>, sortValue: (row) => row.name },
+  { key: "name", header: "Name", cell: (row) => <Link to={`/settings/projects/${row.id}`}>{row.name}</Link>, sortValue: (row) => row.name },
   { key: "repository", header: "Repository", cell: (row) => <code>{row.repository}</code>, sortValue: (row) => row.repository },
   { key: "created", header: "Made", cell: (row) => shortTime(row.createdAt), sortValue: (row) => row.createdAt },
 ];
@@ -26,11 +26,11 @@ export function ProjectsPage() {
       {vm.mayManage ? (
         <Card title="New project" id="new">
           <form onSubmit={onSubmit} style={{ display: "grid", gap: tokens.space.md }} aria-label="New project">
-            <TextField label="Name" value={vm.draft.name} onChange={(name) => vm.setDraft({ ...vm.draft, name })} />
+            <TextField label="Name" placeholder="e.g. Storefront" value={vm.draft.name} onChange={(name) => vm.setDraft({ ...vm.draft, name })} />
             <TextField
               label="Repository"
               value={vm.draft.repository}
-              placeholder="host/owner/name"
+              placeholder="github.com/your-org/storefront"
               onChange={(repository) => vm.setDraft({ ...vm.draft, repository })}
             />
             <Muted style={{ fontSize: tokens.font.size.sm }}>A project is bound to its repository, which never moves.</Muted>
