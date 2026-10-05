@@ -30,6 +30,13 @@ async function shoot(page: Page, name: string): Promise<void> {
   await page.emulateMedia({ colorScheme: "light" });
 }
 
+type Box = { x: number; y: number; width: number; height: number };
+
+/** Whether two boxes on the page share no point. */
+function apart(a: Box, b: Box): boolean {
+  return a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y;
+}
+
 /** The tree, or its next beat once its root is named; the last line printed. */
 function tree(...root: string[]): string {
   const printed = execFileSync("uv", ["run", "--package", "acme-api", "python", "services/api/tests/portal_check.py", "tree", SLUG, ...root], {
@@ -102,6 +109,15 @@ test("a session's sub-agents: a card that follows each, a report that leads to i
   await expect(waits).toContainText(`${CALLERS}: needs you`);
   await expect(chat.getByRole("status")).toContainText(`Needs you in a sub-agent: ${CALLERS}`);
   await expect(bar.getByRole("link", { name: new RegExp(ASKED) })).toContainText("2 sub-agents · 1 needs you");
+  // The toast leaves the composer and its Send clear: the person steers on.
+  const composer = owner.getByRole("form", { name: "Send a message" });
+  const send = composer.getByRole("button", { name: "Send" });
+  await expect(send).toBeVisible();
+  const boxes = await Promise.all([toasts.boundingBox(), composer.boundingBox(), send.boundingBox()]);
+  const [toast, under, button] = boxes.map((box) => box!);
+  expect(apart(toast, under), "the toast clears the composer").toBe(true);
+  expect(apart(toast, button), "the toast clears Send").toBe(true);
+  console.log(`toast box: ${JSON.stringify(toast)} · send box: ${JSON.stringify(button)}`);
   console.log(`toast: ${(await toasts.innerText()).split("\n").join(" | ")}`);
   console.log(`status: ${await chat.getByRole("status").innerText()}`);
   await shoot(owner, "needs-you");

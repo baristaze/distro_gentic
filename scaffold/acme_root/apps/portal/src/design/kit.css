@@ -766,14 +766,13 @@ select.acme-field {
   height: 64px;
 }
 
-/* A short word that a change was made: the tooltip's colours, so it reads
-   as neither a warning nor a card. */
 /* The toasts a session raises when it starts to need its person: at the
- * bottom right, over any page. */
+ * top right, under a page's header and clear of the outline's rail, so none
+ * covers a composer or its Send. */
 .acme-needs-toasts {
   position: fixed;
-  right: 16px;
-  bottom: 16px;
+  top: 64px;
+  right: 40px;
   z-index: 40;
   display: grid;
   gap: 8px;
@@ -812,6 +811,8 @@ select.acme-field {
   white-space: nowrap;
 }
 
+/* A short word that a change was made: the tooltip's colours, so it reads
+   as neither a warning nor a card. */
 .acme-toast {
   display: flex;
   align-items: center;
