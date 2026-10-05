@@ -113,10 +113,9 @@ test("a session's sub-agents: a card that follows each, a report that leads to i
   const composer = owner.getByRole("form", { name: "Send a message" });
   const send = composer.getByRole("button", { name: "Send" });
   await expect(send).toBeVisible();
-  const boxes = await Promise.all([toasts.boundingBox(), composer.boundingBox(), send.boundingBox()]);
-  const [toast, under, button] = boxes.map((box) => box!);
-  expect(apart(toast, under), "the toast clears the composer").toBe(true);
-  expect(apart(toast, button), "the toast clears Send").toBe(true);
+  const [toast, under, button] = await Promise.all([toasts.boundingBox(), composer.boundingBox(), send.boundingBox()]);
+  expect(apart(toast!, under!), "the toast clears the composer").toBe(true);
+  expect(apart(toast!, button!), "the toast clears Send").toBe(true);
   console.log(`toast box: ${JSON.stringify(toast)} · send box: ${JSON.stringify(button)}`);
   console.log(`toast: ${(await toasts.innerText()).split("\n").join(" | ")}`);
   console.log(`status: ${await chat.getByRole("status").innerText()}`);
