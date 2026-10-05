@@ -22,6 +22,7 @@ function step(fields: Partial<StepView> & Pick<StepView, "type">, second = seq):
     thinking: "",
     tool_uses: [],
     tool_use_id: null,
+    agent: null,
     created_at: at(second),
     command: null,
     failure: null,

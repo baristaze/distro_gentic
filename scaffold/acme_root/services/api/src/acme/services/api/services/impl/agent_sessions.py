@@ -23,6 +23,7 @@ from acme.om.steps.types.content import TextBlock
 from acme.om.steps.types.header import (
     ControlCommand,
     ControlHeader,
+    InputHeader,
     LoopEndedHeader,
     ModelResponseHeader,
     Park,
@@ -44,6 +45,7 @@ from acme.services.api.services.impl.session_reads import (
 from acme.services.api.services.impl.tenancy import decode_cursor, encode_cursor
 from acme.services.api.types.agent_sessions import (
     MAX_SHOWN,
+    AgentRefView,
     AgentSessionPageView,
     AgentSessionView,
     ApprovalPageView,
@@ -161,6 +163,18 @@ def tool_use_id_of(step: Step) -> str | None:
     return None
 
 
+def agent_of(step: Step) -> AgentRefView | None:
+    """The agent that wrote a message, from its header: a child's report
+    names the child, a child's objective its parent. Any other step names
+    none, and neither does a message a person or a program wrote."""
+    header = step.header
+    if step.type is not StepType.MESSAGE or not isinstance(header, InputHeader):
+        return None
+    if header.agent is None:
+        return None
+    return AgentRefView(kind=header.agent.kind, session_id=header.agent.session_id)
+
+
 def usage_view(usage: Usage | None) -> StepUsageView | None:
     return None if usage is None else StepUsageView.model_validate(usage.model_dump())
 
@@ -182,6 +196,7 @@ def step_view(step: Step) -> StepView:
         thinking=thinking_of(step),
         tool_uses=tool_uses_of(step),
         tool_use_id=tool_use_id_of(step),
+        agent=agent_of(step),
         tools=[use.name for use in step.as_tool_uses()] if responded is not None else [],
         stop_reason=None if responded is None else responded.stop_reason,
         usage=usage_view(responded.usage) if responded is not None else None,
