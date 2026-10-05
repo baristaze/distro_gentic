@@ -12,10 +12,11 @@ Markdown and calls nothing, so a session runs its loop offline and the
 same way every time. With `--scene engineer` it is the engineer's scene
 instead: it thinks, plans, runs a failing test, reads, edits, runs the
 test again, opens a pull request on the forge's twin, asks its person,
-validates, and submits its result; a message after that, such as a
-person's giving back, gets one last reply. Each command and the
-validation wait for a decision, since its plan's answer, a tool's
-output, marks it.
+validates, and submits its result. A message after that, such as a
+person's giving back, gets a reply that validates the head again and
+submits the result again, since an engineer's loop ends only on its
+result. Each command and each validation wait for a decision, since its
+plan's answer, a tool's output, marks it.
 `evidence` records on one session of the org what an executor writes: two
 runs of a check and a validation of one of them. The local stack runs no
 executor, so the check writes the records its evidence screen reads
@@ -100,7 +101,7 @@ OPENING = (
     "The fix should be one line: the parts of the date in the order it is written. "
     "Here is the plan."
 )
-AFTER = "I read what you did. The test passes on the branch, so nothing else changes."
+AFTER = "I read what you did. The test passes on the branch, so nothing else changes. I'll validate the head again."
 PLAN = (
     "1. Run `tests/test_dates.py` and see it fail.\n"
     "2. Read `src/dates.py` and take the day first.\n"
@@ -157,7 +158,8 @@ def engineer_scene() -> list[Any]:
         turn(use("ask_person", question="Shall I also add a test for a leap day, 29/02/2028?")),
         turn(ThinkingBlock(text="Not now, then. I'll validate the head."), use("validate")),
         turn(use("submit_result", claim="succeeded", evidence="$last_result.runs")),
-        turn(TextBlock(text=AFTER)),
+        turn(TextBlock(text=AFTER), use("validate")),
+        turn(use("submit_result", claim="succeeded", evidence="$last_result.runs")),
     ]
 
 

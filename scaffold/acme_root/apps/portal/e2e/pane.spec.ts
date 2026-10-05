@@ -4,7 +4,8 @@
 // while it runs, and Changes once it delivers. A line of a work block opens
 // its step; "+" opens the rest. Then the owner takes control, runs
 // `pytest -q` on the host that holds its workspace (`portal_check.py host`
-// stands in for it), and gives it back, and the agent reads what they did.
+// stands in for it), and gives it back: the agent reads what they did and
+// validates the head again.
 // The pane hides and shows again on Option-Cmd-B. Each view is shot light
 // and dark under e2e/screenshots/.
 import { execFileSync, spawn } from "node:child_process";
@@ -152,6 +153,8 @@ test("a session's pane: tabs that open themselves once, a step from its row, and
   await pane.getByRole("button", { name: "Give it back", exact: true }).click();
   await expect(pane.getByRole("form", { name: "Run a command" })).toHaveCount(0);
   await expect(chat.locator("[data-kind='prose']").last()).toContainText("The test passes on the branch", { timeout: 90_000 });
+  // It validates the head again, and submits its result again.
+  await approve(chat);
   await expect(chat.getByRole("status")).toHaveText("Done", { timeout: 60_000 });
   console.log(`after giving back: ${await chat.getByRole("status").innerText()}`);
   await shoot(owner, "tab-workspace");
