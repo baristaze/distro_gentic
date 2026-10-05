@@ -2,11 +2,12 @@ from collections.abc import Callable
 from datetime import datetime
 from uuid import UUID
 
+from acme.om.attribution.rules import principal_of
 from acme.om.base import Platform, utcnow
 from acme.om.context import Permission, TenantContext
 from acme.om.evidence import EvidenceManagerInterface
 from acme.om.evidence.rules import policy_key
-from acme.om.exceptions import NotFound, PreconditionFailed, ValidationFailed
+from acme.om.exceptions import NotAuthorized, NotFound, PreconditionFailed, ValidationFailed
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import OutboxRow, outbox_row, versioned_row
 from acme.om.platform_agents.manager import PlatformAgentsManagerInterface
@@ -67,6 +68,7 @@ class PlatformAgentsManagerImpl(PlatformAgentsManagerInterface):
             check_name=start.check_name,
             head=start.head,
             base=start.base,
+            key_id=principal_of(ctx).key_id,
         )
         # Its work lands with the session, on the platform's own lane: the
         # platform's worker runs it on a fresh executor. No loop is asked
@@ -99,9 +101,15 @@ class PlatformAgentsManagerImpl(PlatformAgentsManagerInterface):
             return stored
         # The evidence keeps the run with the session's id, and answers it
         # again when asked again: a retry after the run was kept runs
-        # nothing more.
+        # nothing more. It runs on its starter's authority, as an agent's
+        # validation runs on its principal's.
         validation = await self._evidence.run_check(
-            ctx, stored.id, stored.project_id, stored.check_name, stored.head, stored.base
+            await self._starter(ctx, stored),
+            stored.id,
+            stored.project_id,
+            stored.check_name,
+            stored.head,
+            stored.base,
         )
         if not validation.records:
             raise ValidationFailed(f"validation session {session_id} kept no run of its check")
@@ -141,6 +149,24 @@ class PlatformAgentsManagerImpl(PlatformAgentsManagerInterface):
         if not await self._tenancy.tenant_expired(ctx):
             return 0
         return await self._storage.purge_tenant(ctx.org_id, self._options.purge_batch)
+
+    async def _starter(self, ctx: TenantContext, session: ValidationSession) -> TenantContext:
+        """The live context of the session's starter, read now, at a role no
+        higher than the API key they started it on: a key never runs a check
+        at its creator's role. `PreconditionFailed` when the starter holds no
+        place in the tenant, the key no longer holds, or the role left them
+        no write: such a run never would (ADR 2039)."""
+        try:
+            starter = await self._tenancy.member_context(
+                ctx, ctx.org_id, session.created_by, session.key_id
+            )
+            starter.require(Permission.WRITE)
+        except NotAuthorized as refused:
+            raise PreconditionFailed(
+                f"validation session {session.id} runs on its starter's authority: "
+                f"{refused.message}"
+            ) from None
+        return starter
 
     async def _relay_all(self, ctx: TenantContext, rows: tuple[OutboxRow, ...]) -> None:
         """The write has committed; a relay that fails is left to the sweep."""

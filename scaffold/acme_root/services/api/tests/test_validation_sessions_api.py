@@ -7,7 +7,9 @@ session; a check the policy does not declare is refused before anything is
 queued. A run passes only at the grade the policy asks of its check: on a
 double, or with a dependency that was not there, it never does. A check
 the policy rates runs its declared trials and passes only on the batch:
-one trial never passes it."""
+one trial never passes it. A session started on an API key runs at the
+key's role, never at the role its starter's membership holds, and only
+while the key holds."""
 
 from dataclasses import dataclass
 from datetime import timedelta
@@ -22,12 +24,20 @@ from contracts.evidence_storage import make_policy
 from tenant_support import Headers, person, refused
 
 from acme.om.base import new_id
-from acme.om.context import AppContext, AppType, RequestContext, Role, TenantContext
+from acme.om.context import (
+    AppContext,
+    AppType,
+    CredentialKind,
+    RequestContext,
+    Role,
+    TenantContext,
+)
 from acme.om.evidence.rules import policy_key
 from acme.om.evidence.types.policy import Grade, Requirement
 from acme.om.evidence.types.provenance import Provenance
 from acme.om.evidence.types.rate import RateRule
 from acme.om.evidence.types.validation import ExecutionRequest, ExecutorReport
+from acme.om.exceptions import PreconditionFailed
 from acme.om.root import PlatformPorts
 from acme.om.work.types.work_item import WorkKind
 from acme.services.api.container import AppContainer
@@ -163,6 +173,62 @@ async def test_a_member_starts_a_validation_under_its_key_and_reads_its_verdict(
         "unit did not pass",
         "failed",
     )
+
+
+# A start on an API key runs at the key's role: the run never acts at the
+# role its starter's membership holds above the key, nor after the key is
+# revoked.
+
+
+async def test_a_session_started_on_a_key_runs_at_the_keys_role_while_it_holds(
+    client: httpx.AsyncClient, container: AppContainer, executor: ScriptedExecutor
+) -> None:
+    ajax = await tenant(client, container, "ajax")
+    admin = await person(client, container, ajax.org_id, Role.ADMIN)
+    minted = await client.post(
+        "/v1/api-keys",
+        headers={**admin, "Idempotency-Key": "mint-ci-key"},
+        json={"name": "ci", "role": "member"},
+    )
+    assert minted.status_code == 201, minted.text
+    key = {"Authorization": f"Bearer {minted.json()['key']}"}
+    starter = (await client.get("/v1/me", headers=admin)).json()["user"]["id"]
+
+    on_key = await client.post(
+        URL, headers={**key, "Idempotency-Key": "on-key"}, json=start_of(ajax.project_id)
+    )
+    in_person = await client.post(
+        URL,
+        headers={**admin, "Idempotency-Key": "in-person"},
+        json=start_of(ajax.project_id, head="d" * 40),
+    )
+    assert on_key.status_code == 201, on_key.text
+    assert in_person.status_code == 201, in_person.text
+    assert await worker_runs(container) == 2
+
+    ran = {
+        request.version: (str(ctx.user_id), ctx.role, ctx.credential_kind)
+        for request, ctx in zip(executor.requests, executor.contexts, strict=True)
+    }
+    assert ran == {
+        HEAD: (starter, Role.MEMBER, CredentialKind.API_KEY),
+        "d" * 40: (starter, Role.ADMIN, CredentialKind.INTERNAL),
+    }
+    finished = await client.get(f"{URL}/{on_key.json()['id']}", headers=admin)
+    assert (finished.json()["status"], finished.json()["passed"]) == ("finished", True)
+
+    # Revoked before its run, the key runs nothing: the run fails for good.
+    queued = await client.post(
+        URL,
+        headers={**key, "Idempotency-Key": "on-key-revoked"},
+        json=start_of(ajax.project_id, head="e" * 40),
+    )
+    assert queued.status_code == 201, queued.text
+    revoked = await client.delete(f"/v1/api-keys/{minted.json()['api_key']['id']}", headers=admin)
+    assert revoked.status_code == 200, revoked.text
+    with pytest.raises(PreconditionFailed, match="runs on its starter's authority"):
+        await worker_runs(container)
+    assert len(executor.requests) == 2, "the revoked key's check never ran"
 
 
 # The verdict holds the grade: a run that passed counts only when what served

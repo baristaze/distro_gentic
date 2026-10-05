@@ -5,8 +5,9 @@ wrote (`PlatformAgentsManagerInterface.run_validation`).
 
 It is idempotent: a finished session runs nothing, and a run the evidence
 kept is never run again. A check its project cannot run, such as one its
-policy no longer declares, fails for good; anything else, such as an
-instance that could not be made, is tried again."""
+policy no longer declares, or one its starter may no longer run, fails for
+good; anything else, such as an instance that could not be made, is tried
+again."""
 
 import logging
 from typing import ClassVar
