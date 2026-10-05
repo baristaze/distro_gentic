@@ -26,9 +26,11 @@ workspace it works in, and which of its calls run without asking.
   recordings) in a workspace of its own, searches it and the knowledge
   its session reaches, changes nothing, and answers with its findings.
 - **Sub-agents**: the engineer and analysis split independent work,
-  such as hypotheses to test or checks to run, into sub-agents of either
-  kind, each in a clean context of its own, and wait for their reports
+  such as hypotheses to test or checks to run, into sub-agents, each in
+  a clean context of its own, and wait for their reports
   ([ADR 1019](../../../../../docs/adr/1019-a-kind-starts-sub-agents-through-a-tool-and-a-report-clears-its-parents-wait.md)).
+  A question that only reads or checks runs as analysis, and only work
+  that changes code runs as an engineer.
   Every kind roots the engine's tree: three levels deep, ten sub-agents
   besides its root, one budget and one deadline for all of them. Each
   kind a sub-agent may run as names its share, what one of them may

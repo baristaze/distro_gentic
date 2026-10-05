@@ -204,6 +204,16 @@ SUB_AGENTS = (
 )
 """The prompt layer of a kind that starts sub-agents."""
 
+ENGINEER_SPLITS = (
+    f'Start a sub-agent of kind "{ANALYSIS}" for a question that only reads or checks, '
+    "such as a hypothesis to test or a check to run: it changes nothing and spends less. "
+    f'Start one of your own kind, "{ENGINEER}" (or leave kind out), only for work that '
+    "changes code: it opens a pull request of its own."
+)
+"""The engineer's layer on which kind a sub-agent runs as, so a question it
+splits off runs as analysis, under analysis's share, and not as another
+engineer."""
+
 ENGINEER_KIND = ENGINEER_V4.model_copy(
     update={
         "version": 5,
@@ -223,7 +233,7 @@ ENGINEER_KIND = ENGINEER_V4.model_copy(
             OPEN_PULL_REQUEST,
             SUBMIT_RESULT,
         ),
-        "prompts": (*ENGINEER_V4.prompts, SUB_AGENTS),
+        "prompts": (*ENGINEER_V4.prompts, SUB_AGENTS, ENGINEER_SPLITS),
         # A sub-agent's calls are still decided under its own kind's
         # policy and under this one, and the strictest holds.
         "policy": allowing(

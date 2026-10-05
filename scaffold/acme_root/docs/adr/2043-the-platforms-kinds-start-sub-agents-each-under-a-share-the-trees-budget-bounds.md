@@ -39,8 +39,10 @@ its objective carries what it needs. Each change is a new version, and
 the version before it stays shipped while a session may run it.
 
 **A sub-agent runs as the engineer or as analysis, each under its
-share.** A spawn names one of the two, or takes its caller's. Both
-shares are reference cost at list price: the loops a share pays for, at
+share.** A spawn names one of the two, or takes its caller's. The
+engineer's prompt names analysis for a question that only reads or
+checks, and the engineer for work that changes code, since the spawn
+tool's input names no kind. Both shares are reference cost at list price: the loops a share pays for, at
 the kind's step guard, over a cached window at 0.10 a call.
 
 | Kind | Share | Why |

@@ -265,6 +265,18 @@ def test_the_sub_agent_layer_says_a_sub_agent_starts_from_the_default_branch() -
     assert "hand it what it needs in its objective" in kinds.SUB_AGENTS
 
 
+def test_the_engineers_layers_name_analysis_for_a_question_and_the_engineer_for_a_change() -> None:
+    """An engineer starts a question that only reads or checks as analysis,
+    under analysis's share, and another engineer only for work that changes
+    code: its prompt layers name both kinds, since the spawn tool's input
+    names none."""
+    layers = " ".join(ENGINEER_KIND.prompts)
+    assert f'kind "{kinds.ANALYSIS}" for a question that only reads or checks' in layers
+    assert f'your own kind, "{kinds.ENGINEER}" (or leave kind out)' in layers
+    assert "only for work that changes code" in layers
+    assert ANALYSIS_KIND.share == ANALYSIS_SHARE
+
+
 def test_the_engineers_step_guard_is_sized_for_a_change_and_its_share_follows_it() -> None:
     """An engineer a spawn or an automation starts parks for a person past the
     calls a change takes, never at the engine's default guard, and its share
