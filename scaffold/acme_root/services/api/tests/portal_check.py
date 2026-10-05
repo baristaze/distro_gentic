@@ -437,13 +437,15 @@ async def write_tree(slug: str) -> None:
 
         # Its sub-agents, each in a slot of the tree, at work from the start.
         children: list[tuple[Any, Any]] = []
-        for child_id, (title, objective) in zip(ids, CHILDREN, strict=True):
+        for n, (child_id, (title, objective)) in enumerate(zip(ids, CHILDREN, strict=True)):
             if await trees.take_slot(owner.org_id, root.root_id) is None:
                 raise SystemExit("the tree holds no more sub-agents")
+            # A second apart, so they list in the order the answer started them.
+            made = began + timedelta(seconds=n)
             child = AgentSession(
                 id=child_id,
-                created_at=began,
-                updated_at=began,
+                created_at=made,
+                updated_at=made,
                 created_by=owner.user_id,
                 updated_by=owner.user_id,
                 title=title,
