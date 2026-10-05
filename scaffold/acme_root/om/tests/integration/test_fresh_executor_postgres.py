@@ -95,6 +95,7 @@ TOTAL = 4
 """A cart whose code removes the base's fixture from its folder, which
 stays writable, while the check runs, and writes its own total there."""
 
+
 class ReadBack(TransportContainerImpl):
     """The container transport, keeping every file it read back."""
 
@@ -319,6 +320,7 @@ async def test_a_new_file_in_a_protected_folder_passes_and_a_replaced_one_has_no
     (record,) = (await evidence.get_runs(owner, session_id, None, 10)).items
     assert (record.version, record.outcome, record.isolation) == (head, outcome, "container")
     assert gone(UUID(record.executor.removeprefix("executor:")))
+
 
 # Check 2: a validation session is platform work, run on the same fresh
 # container, and its checks are the base's whatever the head holds there.
