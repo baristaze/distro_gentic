@@ -332,9 +332,11 @@ REQUEST_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
         ("HostsManagerInterface", "held_as"),
         ("HostsManagerInterface", "extend_as"),
         ("HostsManagerInterface", "report_as"),
-        # And its append to its kind's stream for the item it holds, which
-        # the watch holds to that item through the same calls.
+        # And its append to its kind's stream for the item it holds, and its
+        # read of the streams its kind reads, which the watch holds to that
+        # item through the same calls.
         ("WatchManagerInterface", "append_as"),
+        ("WatchManagerInterface", "read_as"),
         # A system's delivery names no tenant until its installation is
         # found: the ingress reads the tenant that connected it from the
         # request stage, and queues the event under that tenant.

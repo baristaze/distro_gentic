@@ -7,7 +7,9 @@ and the person's commands run as `exec` work on the host that holds the
 workspace, each recorded as a run attributed to them. Giving it back
 turns their summary into a message the agent reads on resume. A product's
 claimant appends to its kind's stream for the item it holds, and a viewer
-reads it by a handle to that item's streams, as a session's are read."""
+reads it by a handle to that item's streams, as a session's are read. A
+claimant reads, for the item it holds, the streams of a kind its own kind
+reads."""
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
@@ -71,6 +73,25 @@ class WatchManagerInterface(ABC):
         `ValidationFailed`, and an entry whose bytes do not match the
         `stream_part` crossing it declared is `CrossingRefused`; either
         lands nothing."""
+        ...
+
+    @abstractmethod
+    async def read_as(
+        self,
+        rctx: RequestContext,
+        claimant: ClaimantIdentity,
+        item_id: UUID,
+        kind: str,
+        claim_token: UUID,
+        seen: Sequence[ItemSeen],
+    ) -> ItemPage:
+        """Platform-internal: the claimant reads the item's open streams of
+        `kind`, each from the entry after the last `seen` names for it, for
+        the item it holds under `claim_token` with a live lease. A kind its
+        own kind does not read, the step's, and one nobody registered are
+        `NotFound`, as is an item it does not hold (`hosts.held_as`), one
+        held under another token, and its own item under a lapsed lease:
+        a claimant reads nothing of an item it no longer holds."""
         ...
 
     @abstractmethod

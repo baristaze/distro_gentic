@@ -5,8 +5,9 @@ renews, and reports its kind's items through the gateway, with that
 credential alone. It is handed nothing of another pool or another tenant,
 its credential opens no other kind's path, and a revoked one is refused.
 While it holds an item it appends to its kind's stream for it, which a
-member of the item's tenant reads by a handle, and nobody else reads.
-The example is a `render` job on a `batch` pool, and its log."""
+member of the item's tenant reads by a handle, and nobody else reads, and
+it reads the streams the product writes for it of a kind its kind reads.
+The example is a `render` job on a `batch` pool, its log, and its cues."""
 
 import base64
 from datetime import timedelta
@@ -26,6 +27,7 @@ from acme.om.placement.types.claimant import Claimant
 from acme.om.retention.crossing import Crossing, CrossingKind, declared
 from acme.om.root import PlatformPorts, ProductKinds
 from acme.om.watch.kinds import MAX_APPEND_BYTES, MAX_APPEND_ENTRIES, StreamKind
+from acme.om.watch.root import build_kind_streams
 from acme.om.watch.types.live import MAX_ENTRY
 from acme.om.work.kinds import WorkKindSpec
 from acme.om.work.types.work_item import WorkItem, WorkStatus
@@ -35,6 +37,7 @@ RENDER = "RENDER"
 BATCH = "batch"
 PROBE = "probe"
 LOG = "render_log"
+CUES = "render_cues"
 KEY = "k" * 32
 CLAIMANT_APP = {"X-App": "api", "X-App-Version": "node@test"}
 PROBED = {"os": "Linux 6.8", "shell": "/bin/bash", "capabilities": [], "isolation_modes": []}
@@ -68,6 +71,10 @@ PRODUCT = ProductKinds(
         StreamKind(LOG, entries=4, bytes=64 * 1024, streams=2, claimant=BATCH),
         StreamKind("probe_log", entries=4, bytes=4096, streams=2, claimant=PROBE),
         StreamKind("render_index", entries=4, bytes=4096, streams=2),
+        # A render's cues, which the product's own code writes and its batch
+        # node reads.
+        StreamKind(CUES, entries=4, bytes=4096, streams=2, reader=BATCH),
+        StreamKind("probe_cues", entries=4, bytes=4096, streams=2, reader=PROBE),
     ),
 )
 
@@ -571,3 +578,153 @@ async def test_an_append_spends_the_claimants_budget_of_writes(tmp_path: Path) -
         assert "Retry-After" in refused.headers
         held = await read(client, owner, render.id)
     assert [n for n, _ in held[str(stream)]] == list(range(SMALL_BUDGET - 1))
+
+
+async def read_as(
+    client: httpx.AsyncClient,
+    node: dict[str, Any],
+    item_id: UUID,
+    claim_token: str,
+    kind: str = CUES,
+    after: tuple[str, ...] = (),
+) -> httpx.Response:
+    """The node's read of the item's streams of the kind, under its claim
+    token."""
+    return await client.get(
+        f"/v1/claimants/me/items/{item_id}/streams/{kind}",
+        headers={**bearer(node["token"]), "Claim-Token": claim_token},
+        params={"after": list(after)},
+    )
+
+
+def refusal(page: httpx.Response, item_id: UUID) -> tuple[int, str, str]:
+    """A refusal's status, code, and message, the item's id taken out."""
+    error = page.json()["error"]
+    return page.status_code, error["code"], error["message"].replace(str(item_id), "<item>")
+
+
+def entries_of(page: httpx.Response) -> dict[str, list[tuple[int, str]]]:
+    """Each open stream's entries of a page, decoded."""
+    return {
+        found["stream"]: [
+            (entry["n"], base64.b64decode(entry["data"]).decode()) for entry in found["entries"]
+        ]
+        for found in page.json()["streams"]
+    }
+
+
+async def test_a_claimant_reads_the_streams_its_kind_reads_for_the_item_it_holds_alone(
+    client: httpx.AsyncClient, owner: dict[str, str], container: AppContainer
+) -> None:
+    pool_id = await a_pool(client, owner)
+    token = await a_token(client, owner, pool_id)
+    ours, theirs = await a_node(client, token, "node-1"), await a_node(client, token, "node-2")
+    mine, mine_token = await held_render(client, container, owner, ours)
+    other, other_token = await held_render(client, container, owner, theirs)
+    beta, _ = await container.managers.tenancy.bootstrap(
+        seed_request(), "Beta", "beta", "bea@beta.test", "Bea"
+    )
+    elsewhere = await a_render(container, beta, pool_id)
+    # The product's own code writes each item's cues, and another claimant
+    # kind's, beside the log its node writes.
+    product = build_kind_streams(container.infra, PRODUCT)
+    stream = uuid4()
+    await product.append(CUES, mine.id, stream, [(0, b"go"), (1, b"hold")])
+    for item_id in (other.id, elsewhere.id):
+        await product.append(CUES, item_id, uuid4(), [(0, b"theirs")])
+    await product.append("probe_cues", mine.id, uuid4(), [(0, b"probe")])
+    logged = await append(client, ours, mine.id, mine_token, uuid4(), entries("log"))
+    assert logged.status_code == 204, logged.text
+
+    page = await read_as(client, ours, mine.id, mine_token)
+    assert page.status_code == 200, page.text
+    assert (page.json()["item_id"], page.json()["kind"]) == (str(mine.id), CUES)
+    assert entries_of(page) == {str(stream): [(0, "go"), (1, "hold")]}
+    resumed = await read_as(client, ours, mine.id, mine_token, after=(f"{stream}:0",))
+    assert entries_of(resumed) == {str(stream): [(1, "hold")]}
+
+    # Another claimant's item, under its token or its own, another tenant's,
+    # and its own under a token its claim was not handed are the same 404.
+    refusals: set[tuple[int, str, str]] = set()
+    for item_id, claim_token in (
+        (other.id, other_token),
+        (other.id, mine_token),
+        (elsewhere.id, mine_token),
+        (mine.id, str(uuid4())),
+    ):
+        refused = await read_as(client, ours, item_id, claim_token)
+        assert refused.status_code == 404, refused.text
+        refusals.add(refusal(refused, item_id))
+    # Another claimant kind's cues, the log its own kind writes but does not
+    # read, one no claimant reads, the step's, and one nobody registered are
+    # not found; a name no kind could carry is refused at the door.
+    for kind, status in (
+        ("probe_cues", 404),
+        (LOG, 404),
+        ("render_index", 404),
+        ("step", 404),
+        ("nothing", 404),
+        ("Render-Cues", 422),
+    ):
+        refused = await read_as(client, ours, mine.id, mine_token, kind)
+        assert refused.status_code == status, f"{kind}: {refused.text}"
+
+    # Its lease lapsed, it reads nothing until it renews it, though no sweep
+    # requeued the item: the same 404 as an item it never held.
+    ctx = await tenant_of(container, owner)
+    claimed = await container.managers.work.get_item(ctx, mine.id)
+    await container.managers.work.extend_lease(ctx, claimed, timedelta(seconds=-1))
+    lapsed = await read_as(client, ours, mine.id, mine_token)
+    refusals.add(refusal(lapsed, mine.id))
+    renewed = await client.post(
+        f"/v1/claimants/me/items/{mine.id}/lease",
+        headers=bearer(ours["token"]),
+        json={"claim_token": mine_token},
+    )
+    assert renewed.status_code == 200, renewed.text
+    again = await read_as(client, ours, mine.id, mine_token)
+    assert entries_of(again) == {str(stream): [(0, "go"), (1, "hold")]}
+
+    # Handed back, it is not found.
+    reported = await client.post(
+        f"/v1/claimants/me/items/{mine.id}/report",
+        headers=bearer(ours["token"]),
+        json={"claim_token": mine_token, "outcome": "done"},
+    )
+    assert reported.status_code == 200, reported.text
+    released = await read_as(client, ours, mine.id, mine_token)
+    refusals.add(refusal(released, mine.id))
+    assert len(refusals) == 1 and next(iter(refusals))[0] == 404, refusals
+
+    # Under a revoked credential, the item it held is read no more.
+    revoked = await client.delete(f"/v1/claimants/{theirs['claimant_id']}", headers=owner)
+    assert revoked.status_code == 200, revoked.text
+    gone = await read_as(client, theirs, other.id, other_token)
+    assert gone.status_code == 401, gone.text
+
+
+async def test_a_claimants_read_spends_its_budget_of_reads(tmp_path: Path) -> None:
+    container = build_container(
+        tmp_path,
+        ports=PlatformPorts(kinds=PRODUCT),
+        live_read_key=KEY,
+        credential_rate_limit_reads=SMALL_BUDGET,
+    )
+    async with client_over(container) as client:
+        owner = await sign_in(client, container)
+        pool_id = await a_pool(client, owner)
+        node = await a_node(client, await a_token(client, owner, pool_id))
+        render, claim_token = await held_render(client, container, owner, node)
+        # A read the claimant is refused spends the budget as one it is
+        # answered does.
+        missing = await read_as(client, node, render.id, claim_token, "nothing")
+        assert missing.status_code == 404, missing.text
+        for _ in range(SMALL_BUDGET - 1):
+            page = await read_as(client, node, render.id, claim_token)
+            assert page.status_code == 200, page.text
+        refused = await read_as(client, node, render.id, claim_token)
+        assert refused.status_code == 429, refused.text
+        assert "Retry-After" in refused.headers
+        # Its writes are a budget of their own.
+        landed = await append(client, node, render.id, claim_token, uuid4(), entries("e"))
+        assert landed.status_code == 204, landed.text

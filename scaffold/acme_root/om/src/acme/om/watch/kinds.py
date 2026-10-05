@@ -6,7 +6,8 @@ alone, never a kind's own. The platform's own kind, the parts of a step,
 registers here as a product's kind does at its roots
 (`root.PlatformPorts.kinds`), so no stream is written without a bound. A
 product's kind may name the claimant kind that writes it through the
-gateway, for the item one of its claimants holds."""
+gateway, and the one that reads it there, for the item one of its claimants
+holds."""
 
 import re
 from abc import ABC, abstractmethod
@@ -38,13 +39,16 @@ class StreamKind:
     open streams of one group the one that heard nothing longest goes.
     `claimant` is the product's claimant kind that writes its streams
     through the gateway, one group per item a claimant of that kind holds;
-    None for a kind only the product's own code writes."""
+    None for a kind only the product's own code writes. `reader` is the
+    product's claimant kind that reads them through the gateway, for the
+    item it holds; None for a kind no claimant reads."""
 
     name: str
     entries: int
     bytes: int
     streams: int
     claimant: str | None = None
+    reader: str | None = None
 
     def __post_init__(self) -> None:
         if not STREAM_KIND.match(self.name):
@@ -89,6 +93,12 @@ class StreamKinds:
         kind = self._kinds.get(name)
         return None if kind is None else kind.claimant
 
+    def reader(self, name: str) -> str | None:
+        """The claimant kind that reads the kind's streams through the
+        gateway; None for a kind none reads, or one nobody registered."""
+        kind = self._kinds.get(name)
+        return None if kind is None else kind.reader
+
 
 class KindStreamsInterface(ABC):
     """The live streams of a product's kinds: numbered entries in a group,
@@ -122,5 +132,12 @@ class KindStreamsInterface(ABC):
     def writer(self, kind: str) -> str | None:
         """The claimant kind that writes a product's kind through the
         gateway; None for the step's, a kind none writes, and one nobody
+        registered."""
+        ...
+
+    @abstractmethod
+    def reader(self, kind: str) -> str | None:
+        """The claimant kind that reads a product's kind through the
+        gateway; None for the step's, a kind none reads, and one nobody
         registered."""
         ...
