@@ -15,6 +15,7 @@ import {
 } from "react";
 import { tokens } from "../tokens";
 import { keepTabInside, useReturnFocus } from "./focus";
+import { InfoTip } from "./Tooltip";
 
 export * from "./icons";
 export * from "./DataTable";
@@ -97,13 +98,30 @@ export function Page({
   );
 }
 
-/** `id` is where a link on the page lands. */
-export function Card({ title, id, children }: { title?: string; id?: string; children: ReactNode }) {
+/** `id` is where a link on the page lands; `info` is an ⓘ beside the title,
+ * saying what the card's subject means. */
+export function Card({ title, id, info, children }: { title?: string; id?: string; info?: ReactNode; children: ReactNode }) {
   return (
     <section className="acme-card" id={id}>
-      {title ? <h2 className="acme-card-title">{title}</h2> : null}
+      {title ? (
+        <h2 className="acme-card-title">
+          {title}
+          {info ? <InfoTip label={`About ${title.toLowerCase()}`}>{info}</InfoTip> : null}
+        </h2>
+      ) : null}
       {children}
     </section>
+  );
+}
+
+/** A field's name, and an ⓘ beside it when the field says what it means. The
+ * field is named by the words alone, so the ⓘ's own name never joins it. */
+function FieldName({ id, label, info, hidden = false }: { id: string; label: string; info?: ReactNode; hidden?: boolean }) {
+  return (
+    <span className={hidden ? "acme-sr-only" : info ? "acme-label-row" : undefined}>
+      <span id={id}>{label}</span>
+      {info ? <InfoTip label={`About ${label.toLowerCase()}`}>{info}</InfoTip> : null}
+    </span>
   );
 }
 
@@ -143,18 +161,24 @@ export function TextField({
   type = "text",
   autoComplete,
   placeholder,
+  info,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   type?: "text" | "email" | "password" | "date";
   autoComplete?: string;
+  /** A realistic example of what goes in, shown while it is empty. */
   placeholder?: string;
+  /** What the field means, behind an ⓘ beside its name. */
+  info?: ReactNode;
 }) {
+  const id = useId();
   return (
     <label className="acme-label">
-      <span>{label}</span>
+      <FieldName id={id} label={label} info={info} />
       <input
+        aria-labelledby={id}
         type={type}
         value={value}
         autoComplete={autoComplete}
@@ -284,6 +308,7 @@ export function TextArea({
   disabled,
   autoFocus,
   onKeyDown,
+  info,
 }: {
   label: string;
   value: string;
@@ -296,11 +321,15 @@ export function TextArea({
   disabled?: boolean;
   autoFocus?: boolean;
   onKeyDown?: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
+  /** What the field means, behind an ⓘ beside its name. */
+  info?: ReactNode;
 }) {
+  const id = useId();
   return (
     <label className="acme-label">
-      <span className={hideLabel ? "acme-sr-only" : undefined}>{label}</span>
+      <FieldName id={id} label={label} info={info} hidden={hideLabel} />
       <textarea
+        aria-labelledby={id}
         value={value}
         rows={rows}
         placeholder={placeholder}
@@ -319,16 +348,20 @@ export function Select({
   value,
   options,
   onChange,
+  info,
 }: {
   label: string;
   value: string;
   options: { value: string; label: string }[];
   onChange: (value: string) => void;
+  /** What the choice means, behind an ⓘ beside its name. */
+  info?: ReactNode;
 }) {
+  const id = useId();
   return (
     <label className="acme-label">
-      <span>{label}</span>
-      <select value={value} onChange={(event) => onChange(event.target.value)} className="acme-field">
+      <FieldName id={id} label={label} info={info} />
+      <select aria-labelledby={id} value={value} onChange={(event) => onChange(event.target.value)} className="acme-field">
         {options.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}

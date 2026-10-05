@@ -17,7 +17,7 @@ export function NewOrgPage() {
           <Muted style={{ fontSize: tokens.font.size.sm }}>
             An organization for a team. You own it, and you move into it once it is made.
           </Muted>
-          <TextField label="Name" value={vm.name} onChange={vm.setName} autoComplete="organization" />
+          <TextField label="Name" placeholder="e.g. Northwind Software" value={vm.name} onChange={vm.setName} autoComplete="organization" />
           <TextField
             label="Short name (optional; in links and the command line)"
             value={vm.slug}

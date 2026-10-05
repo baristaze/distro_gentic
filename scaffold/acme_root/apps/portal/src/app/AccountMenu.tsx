@@ -1,7 +1,7 @@
 // The user chip at the foot of the left bar: the avatar with the live
 // channel's dot on its corner, the person's name, and the org. Its menu
-// holds Settings, the theme, the keyboard shortcuts, the documentation, and
-// Sign out. It opens on a click, never on hover.
+// holds Settings, Profile and preferences, the theme, the keyboard
+// shortcuts, the documentation, and Sign out. It opens on a click, never on hover.
 import type { ReactNode } from "react";
 import {
   ChevronIcon,
@@ -17,6 +17,7 @@ import {
   MoonIcon,
   SettingsIcon,
   SunIcon,
+  UserIcon,
 } from "../design/kit";
 import { ConnectionDot } from "./ConnectionDot";
 import type { ThemePreference } from "./themeModel";
@@ -57,6 +58,9 @@ export function AccountMenu() {
         <MenuSeparator />
         <MenuItem onSelect={vm.openSettings} icon={<SettingsIcon />} shortcut="⌘,">
           Settings
+        </MenuItem>
+        <MenuItem onSelect={vm.openProfile} icon={<UserIcon />}>
+          Profile and preferences
         </MenuItem>
         <MenuSeparator />
         <div role="group" aria-label="Theme">

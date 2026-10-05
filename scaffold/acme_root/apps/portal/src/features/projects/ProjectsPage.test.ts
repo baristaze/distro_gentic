@@ -41,8 +41,8 @@ function answer(call: Call): unknown {
 }
 
 const routes = [
-  { path: "/projects", Component: ProjectsPage },
-  { path: "/projects/:projectId", Component: ProjectPage },
+  { path: "/settings/projects", Component: ProjectsPage },
+  { path: "/settings/projects/:projectId", Component: ProjectPage },
 ];
 
 beforeEach(() => Object.assign(net, newNet(), { answer }));
@@ -50,23 +50,24 @@ afterEach(unmount);
 
 describe("the projects list", () => {
   it("shows the org's own projects and none of another's", async () => {
-    await mount(routes, "/projects");
+    await mount(routes, "/settings/projects");
     expect(container.querySelector("table[aria-label='Projects']")!.textContent).toContain("Ajax docs");
     expect(container.textContent).toContain("forge.example.com/a/docs");
     expect(container.textContent).not.toContain("Beta docs");
   });
 
   it("makes a project bound to the repository typed", async () => {
-    await mount(routes, "/projects");
+    const router = await mount(routes, "/settings/projects");
     await enter("Name", "Docs");
     await enter("Repository", "https://forge.example.com/a/docs.git");
     await press("Make the project");
     expect(writes(net)).toEqual([{ method: "POST", path: "/v1/projects", body: { name: "Docs", repository: { host: "forge.example.com", path: "a/docs" } } }]);
+    expect(router.state.location.pathname).toBe("/settings/projects/pnew");
   });
 
   it("offers no form to a member who does not manage the org", async () => {
     net.role = "member";
-    await mount(routes, "/projects");
+    await mount(routes, "/settings/projects");
     expect(container.querySelector("form[aria-label='New project']")).toBeNull();
     expect(container.textContent).toContain("Ajax docs");
   });
@@ -74,14 +75,14 @@ describe("the projects list", () => {
 
 describe("a project's page", () => {
   it("shows nothing of a project another org holds", async () => {
-    await mount(routes, "/projects/pb");
+    await mount(routes, "/settings/projects/pb");
     expect(container.querySelector("h1")!.textContent).toBe("No project here");
     expect(container.textContent).not.toContain("Beta docs");
     expect(writes(net)).toEqual([]);
   });
 
   it("sends the credential once and never shows it back", async () => {
-    await mount(routes, "/projects/pa");
+    await mount(routes, "/settings/projects/pa");
     expect(container.querySelector("h1")!.textContent).toBe("Ajax docs");
     await enter("User", "reader");
     await enter("Password or token", SECRET);
@@ -95,14 +96,14 @@ describe("a project's page", () => {
 
   it("offers a member who does not manage the org no credential, rename, or removal", async () => {
     net.role = "viewer";
-    await mount(routes, "/projects/pa");
+    await mount(routes, "/settings/projects/pa");
     expect(container.textContent).toContain("forge.example.com/a/docs");
     expect(container.querySelectorAll("form")).toHaveLength(0);
     expect(buttons()).not.toContain("Remove the project");
   });
 
   it("asks before it removes", async () => {
-    await mount(routes, "/projects/pa");
+    await mount(routes, "/settings/projects/pa");
     await press("Remove the project");
     expect(container.querySelector("[role='alertdialog']")!.textContent).toContain("Remove Ajax docs?");
     expect(writes(net)).toEqual([]);

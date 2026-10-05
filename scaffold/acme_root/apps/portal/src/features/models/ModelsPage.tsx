@@ -5,7 +5,7 @@ import { tokens } from "../../design/tokens";
 import { ProviderNotice } from "../providers/ProviderNotice";
 import { providerName } from "../providers/outageModel";
 import { shortTime } from "../sessions/sessionsModel";
-import { fillLine, roleLabel, type KeyRow, type RoleRow } from "./modelsModel";
+import { fillLine, keyPlaceholder, roleLabel, type KeyRow, type RoleRow } from "./modelsModel";
 import { useModelsVm } from "./useModelsVm";
 
 const STATES: Record<KeyRow["status"], { label: string; tone: "accent" | "plain" | "danger" }> = {
@@ -57,7 +57,7 @@ export function ModelsPage() {
     });
   }
   return (
-    <Page title="Models" notice={<ProviderNotice />}>
+    <Page title="Models and keys" notice={<ProviderNotice />}>
       {vm.error ? <Banner>{errorMessage(vm.error, "The models could not be read.")}</Banner> : null}
       <Card title="The org's own keys" id="keys">
         <div style={form}>
@@ -81,6 +81,7 @@ export function ModelsPage() {
                     label={`New key to ${providerName(each.provider)}`}
                     type="password"
                     autoComplete="off"
+                    placeholder={keyPlaceholder(each.provider)}
                     value={each.draft}
                     onChange={(value) => vm.setDraft(each.provider, value)}
                   />

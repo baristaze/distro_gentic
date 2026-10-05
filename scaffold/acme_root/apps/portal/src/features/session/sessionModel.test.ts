@@ -5,6 +5,7 @@ import {
   asks,
   bodyKind,
   deliveryLines,
+  messagePlaceholder,
   parkLine,
   runRow,
   sessionTab,
@@ -266,5 +267,17 @@ describe("what a person may do", () => {
 describe("the page's parts", () => {
   it("opens the part the address bar names, and the thread otherwise", () => {
     expect([sessionTab("evidence"), sessionTab("nope"), sessionTab(null)]).toEqual(["evidence", "thread", "thread"]);
+  });
+});
+
+describe("messagePlaceholder", () => {
+  const decision = { seq: 4, kind: "decision" as const, what: "Run run_command (execute)", at: "" };
+  const reply = 'Reply or steer, e.g. "Also add a test"';
+
+  it("asks for the answer while the agent waits on a person's reply, and a reply or a steer otherwise", () => {
+    expect(messagePlaceholder("person", [], reply)).toBe("Answer the agent's question");
+    expect(messagePlaceholder("person", [decision], reply)).toBe(reply);
+    expect(messagePlaceholder("budget", [], reply)).toBe(reply);
+    expect(messagePlaceholder(null, [], reply)).toBe(reply);
   });
 });

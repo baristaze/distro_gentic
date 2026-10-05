@@ -46,7 +46,7 @@ export function useNewOrgVm() {
   return {
     name,
     slug,
-    slugPlaceholder: suggestSlug(name) || "made from the name",
+    slugPlaceholder: suggestSlug(name) || "e.g. northwind-software",
     error,
     busy: create.isPending || exchange.isPending,
     setName,

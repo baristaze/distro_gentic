@@ -1,9 +1,10 @@
+import { Link } from "react-router-dom";
 import { Button, Card, ErrorText, Muted, TextField } from "../../design/kit";
 import { tokens } from "../../design/tokens";
 import { GONE_LINE } from "./deleteAccountModel";
 import type { DeleteAccountVm } from "./useDeleteAccountVm";
 
-/** The last card of Settings: the person deletes their own account. */
+/** The last card of Profile: the person deletes their own account. */
 export function DeleteAccountCard({ vm }: { vm: DeleteAccountVm }) {
   return (
     <Card title="Delete my account">
@@ -24,18 +25,19 @@ export function DeleteAccountCard({ vm }: { vm: DeleteAccountVm }) {
               label={`Type your email, ${vm.email ?? ""}, to confirm`}
               type="email"
               autoComplete="off"
+              placeholder={vm.email ?? ""}
               value={vm.typed}
               onChange={vm.setTyped}
             />
             {vm.refusal ? <ErrorText>{vm.refusal}</ErrorText> : null}
             {vm.strandedHere ? (
               <div style={{ display: "flex", flexWrap: "wrap", gap: tokens.space.md }} data-ways-out>
-                <a href="#members" className="acme-link">
+                <Link to="/settings/members" className="acme-link">
                   Make someone else an owner
-                </a>
-                <a href="#delete-organization" className="acme-link">
+                </Link>
+                <Link to="/settings/general#delete-organization" className="acme-link">
                   Delete this organization
-                </a>
+                </Link>
               </div>
             ) : null}
             <div style={{ display: "flex", flexWrap: "wrap", gap: tokens.space.sm }}>

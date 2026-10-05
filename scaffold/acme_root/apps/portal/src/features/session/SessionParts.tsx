@@ -23,7 +23,8 @@ import {
 } from "../../design/kit";
 import { tokens } from "../../design/tokens";
 import { shortTime, type SessionRow } from "../sessions/sessionsModel";
-import type { RunRow, TimelineEntry, ToolCallRow } from "./sessionModel";
+import { useSlot } from "../../app/slot";
+import { DENY_NOTE_PLACEHOLDER, messagePlaceholder, type RunRow, type TimelineEntry, type ToolCallRow } from "./sessionModel";
 import type { SessionVm } from "./useSessionVm";
 
 const row = { display: "flex", flexWrap: "wrap", alignItems: "center", gap: tokens.space.sm } as const;
@@ -97,7 +98,12 @@ export function SessionHeader({ vm }: { vm: SessionVm }) {
                 </span>
                 {vm.may?.send && ask.kind === "decision" ? (
                   <div style={row}>
-                    <TextField label="Note (optional)" value={notes[ask.seq] ?? ""} onChange={(note) => setNotes({ ...notes, [ask.seq]: note })} />
+                    <TextField
+                      label="Note (optional)"
+                      placeholder={DENY_NOTE_PLACEHOLDER}
+                      value={notes[ask.seq] ?? ""}
+                      onChange={(note) => setNotes({ ...notes, [ask.seq]: note })}
+                    />
                     <Button onClick={() => vm.decide(ask.seq, true, notes[ask.seq] ?? "")}>Approve</Button>
                     <Button tone="danger" onClick={() => vm.decide(ask.seq, false, notes[ask.seq] ?? "")}>
                       Deny
@@ -140,6 +146,7 @@ export function SessionHeader({ vm }: { vm: SessionVm }) {
 
 export function ThreadPart({ vm }: { vm: SessionVm }) {
   const [draft, setDraft] = useState("");
+  const reply = useSlot().examples.reply ?? "Reply or steer the session";
   const onSubmit = (event: FormEvent) => {
     event.preventDefault();
     if (draft.trim()) vm.send(draft.trim(), () => setDraft(""));
@@ -161,7 +168,12 @@ export function ThreadPart({ vm }: { vm: SessionVm }) {
         </ol>
         {vm.may?.send ? (
           <form onSubmit={onSubmit} style={stack} aria-label="Send a message">
-            <TextArea label="Message" value={draft} onChange={setDraft} />
+            <TextArea
+              label="Message"
+              placeholder={messagePlaceholder(vm.session?.raw.park?.reason, vm.asks, reply)}
+              value={draft}
+              onChange={setDraft}
+            />
             <div>
               <Button type="submit" disabled={vm.sending || !draft.trim()}>
                 {vm.sending ? "Sending" : "Send"}
@@ -425,7 +437,7 @@ export function LivePart({ vm }: { vm: SessionVm }) {
                 vm.runCommand(line, () => setLine(""));
               }}
             >
-              <TextField label="Command" value={line} onChange={setLine} placeholder="make test" />
+              <TextField label="Command" value={line} onChange={setLine} placeholder="e.g. pytest tests/test_dates.py -q" />
               <Button type="submit" disabled={!line.trim()}>
                 Run
               </Button>
@@ -450,7 +462,12 @@ export function LivePart({ vm }: { vm: SessionVm }) {
                 vm.giveBack(summary);
               }}
             >
-              <TextArea label="What you did, for the agent to read" value={summary} onChange={setSummary} />
+              <TextArea
+                label="What you did, for the agent to read"
+                placeholder='e.g. "I fixed the import in conftest.py"'
+                value={summary}
+                onChange={setSummary}
+              />
               <div>
                 <Button type="submit" disabled={!summary.trim()}>
                   Give it back

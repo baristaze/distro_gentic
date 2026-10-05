@@ -52,6 +52,7 @@ export function useAccountMenuVm() {
     themes: THEME_CHOICES,
     setTheme,
     openSettings: () => navigate("/settings"),
+    openProfile: () => navigate("/settings/profile"),
     openShortcuts: shell.openShortcuts,
     docsUrl: DOCS_URL,
     signOut: leave,

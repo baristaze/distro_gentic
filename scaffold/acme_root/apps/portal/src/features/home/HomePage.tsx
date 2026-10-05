@@ -122,7 +122,7 @@ function Composer({ initialPrompt }: { initialPrompt: string }) {
         {vm.problem ? (
           <ErrorText>
             {vm.problem}{" "}
-            {vm.required && vm.projects.length === 0 ? <Link to="/projects">Add a project</Link> : null}
+            {vm.required && vm.projects.length === 0 ? <Link to="/settings/projects">Add a project</Link> : null}
           </ErrorText>
         ) : null}
         {vm.ready && !vm.mayWrite ? <Muted>You can read this org&apos;s sessions. Starting one needs the write permission.</Muted> : null}

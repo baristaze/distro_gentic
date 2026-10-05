@@ -8,6 +8,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider, type RouteObject } from "react-router-dom";
 import { ApiError, type AgentSessionView, type MeView, type Permission, type Role } from "@acme/client";
+import { EMPTY_PRODUCT, type PortalProduct } from "../app/product";
+import { SlotProvider } from "../app/slot";
 
 export type Org = "a" | "b";
 
@@ -97,11 +99,13 @@ export async function settle(): Promise<void> {
   for (let turn = 0; turn < 6; turn += 1) await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
 }
 
-export async function mount(routes: RouteObject[], address: string) {
+/** A page under its routes, with the slot the shell would hand it. */
+export async function mount(routes: RouteObject[], address: string, slot: PortalProduct = EMPTY_PRODUCT) {
   const router = createMemoryRouter(routes, { initialEntries: [address] });
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   root = createRoot(container);
-  await act(async () => root!.render(createElement(QueryClientProvider, { client: queryClient }, createElement(RouterProvider, { router }))));
+  const page = createElement(RouterProvider, { router });
+  await act(async () => root!.render(createElement(QueryClientProvider, { client: queryClient }, createElement(SlotProvider, { slot, children: page }))));
   await settle();
   return router;
 }
@@ -111,10 +115,18 @@ export async function unmount(): Promise<void> {
   root = null;
 }
 
+/** A field's name: the element it is labelled by, or its label's words. */
+function nameOf(control: Element): string | null {
+  const by = control.getAttribute("aria-labelledby");
+  if (by) return document.getElementById(by)?.textContent ?? null;
+  return control.closest("label")?.querySelector("span")?.textContent ?? null;
+}
+
 /** The field whose label says `label`. */
 export function field(label: string): HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | undefined {
-  const found = [...container.querySelectorAll("label")].find((each) => each.querySelector("span")?.textContent === label);
-  return found?.querySelector("input, select, textarea") ?? undefined;
+  return [...container.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>("input, select, textarea")].find(
+    (control) => nameOf(control) === label,
+  );
 }
 
 /** Types into a field as a person does, so React hears the change. */
