@@ -205,9 +205,9 @@ objective to a validated, reviewable change in a workspace of its own.
 **planner** turns findings into tasks, and hands new work to an
 engineer. The **platform assistant** answers the people who set up and
 run their part of the platform: it explains the product from its
-documentation and cites it, reads where a session stands, drafts the
-tool policy for a person to apply, and hands engineering work to an
-engineer. It acts on a person's own permissions, and it has no
+documentation and cites it, reads the tenant's sessions and what they
+wait on, its projects, and its automations, drafts the tool policy for a
+person to apply, and hands engineering work to an engineer. It acts on a person's own permissions, and it has no
 workspace, no repository, and no shell.
 
 Nothing chooses an agent for a message: a person chooses by choosing
