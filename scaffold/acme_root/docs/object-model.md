@@ -62,10 +62,10 @@ has.
 
 | Reason | It waits on | What clears it | Who may clear it | Reader |
 | --- | --- | --- | --- | --- |
-| `person` | a call held for approval, a question, or a call far above the session's norm | a decision on the call, or an answer as a message | a held call: the roles the tool policy lets decide its class, the owner and admins unless the policy names others; a question: the person who asked for the work, or an admin when they have left; a call above its norm: an admin or the owner | `read_session` names each held call and who decides it |
-| `provider` | a model provider's outage, rate limit, or billing or credential error | the provider answers again; the session retries at its own time | nobody: it retries by itself; a tenant's own key that fails needs an admin to fix it | `read_session` gives the retry time |
-| `budget` | the budget gate refused the next call | the budget is raised or resets, or the account is topped up | an admin or the owner, who set budgets | `read_session` names the budget in what clears it |
-| `resource` | a workspace no host can give yet, or a scarce resource in line | the host comes back, or the resource frees; the session asks again at its retry time | when the one host that holds its workspace is offline: whoever runs that machine brings it back; an admin or the owner can revoke it, and another host of the pool prepares a new workspace without the old one's files; a person who may write can move the session to the cloud or another pool. Otherwise nobody: it takes its turn | `read_session` gives the retry time; `read_wait` names the host that holds the workspace, whether it is online, and since when |
+| `person` | a person: a held call, a question, a call far above the session's norm, a principal who left, nobody to pay, a step guard, a deadline, or a lost workspace | what its unlock says: see the next section | what its unlock says: see the next section | `read_session` names the unlock, and each held call with who decides it |
+| `provider` | a model provider's outage, rate limit, or billing or credential error | with a retry time, the provider answers again and the session retries by itself; without one, a key or the provider's account is fixed, then the park is unlocked | with a retry time, nobody; without one, see the next section | `read_session` gives the retry time and the unlock |
+| `budget` | the budget gate refused the next call | the budget's window resets or its held calls settle, the budget is raised, the account is topped up, or the call is priced | an admin or the owner raises a budget; whoever pays tops up the account; only the platform's operator prices a call | `read_session` names the budget in the unlock |
+| `resource` | a workspace no host can give yet, or a scarce resource in line | the host comes back, or the resource frees; the session asks again at its retry time | nobody: it takes its turn; for an offline host that holds its workspace, see the next section | `read_session` gives the retry time; `read_wait` names the host that holds the workspace, whether it is online, and since when |
 | `job` | a long-running job a tool started | the job reports, or its deadline passes | nobody | `read_session` |
 | `children` | sub-agents that have not reported | each child reports | nobody; a person who may write can cancel a child | `read_session` lists the children |
 | `handover` | a person working in the session's environment by hand | that person gives it back | the person who took it over | `read_session` |
@@ -73,8 +73,41 @@ has.
 
 A session waits without a park too. A `pending` session waits on the
 work queue, and a session pinned to the org's own hosts waits for one of
-them to be online, or for the one that holds its workspace: see the next
-section.
+them to be online, or for the one that holds its workspace: see "The
+work queue and the hosts".
+
+## What each park waits on
+
+A park names its **unlock** beside its reason: exactly what it waits
+on. `read_session` gives it. This table holds every unlock the engine
+writes. Any person who may write can **unlock** a park, or cancel the
+session, from the session's page. An unlock makes the session check
+again: where the cause is still there, it parks again.
+
+| Unlock | Reason | Its cause | What clears it | Who may clear it | Reader |
+| --- | --- | --- | --- | --- | --- |
+| `approval` | `person` | the tool policy holds a call for a person's decision | an approval or a denial of each held call, on the session's page | the roles the policy lets decide the call's class, in person: the owner and admins unless the policy names others | `read_session` names each held call and who decides it |
+| `answer` | `person` | the agent asked its person a question, or stood down and said what it needs | a message from a person, which is the answer | any person who may write; the notice goes to the person who asked for the work, or to the admins and the owner when they have left | `read_session` |
+| `principal` | `person` | the person a session runs as left the org or lost their place in it | a person takes the session over: it runs as them from then on, and its sub-agents follow | any person who may write | `read_session` |
+| `spender` | `person` | nobody can be named to pay for the next call: no person's message in the session and no payer passed down to it, or the payer's account cannot be read | a person's message gives it a payer, then an unlock; a message alone does not wake it | any person who may write | `read_session` |
+| `step_guard` | `person` | the loop made as many model calls as its step guard allows between two looks of a person | an unlock, once a person has looked: the count starts again | any person who may write | `read_session` |
+| `deadline` | `person` | the deadline of the session's tree passed | a later deadline, or none, for the whole tree; an unlock alone trips it again | any person who may write | `read_session` |
+| `workspace` | `person` | the workspace was lost: the branch it is rebuilt from is gone from its repository, or moved on both sides | the branch is put back in the repository, then an unlock prepares the workspace again; otherwise a cancel | any person who may write | `read_session` |
+| `anomaly` | `person` | the next call's expected cost is far above the session's norm, over ten times its median; the operator is told too | an approval of calls up to an amount, which wakes it; an unlock alone parks it again | an admin or the owner | `read_session` |
+| `workspace` | `resource` | no host can give the workspace yet: the one host that holds it is offline, no host has prepared it yet, or none can meet the isolation its kind asks | the session asks again each minute, by itself, and runs once a host can give it | for the offline host that holds it: whoever runs that machine brings it back; an admin or the owner can revoke it, and another host of the pool prepares a new workspace without the old one's files; a person who may write can move the session to the cloud or another pool. Otherwise nobody | `read_wait` names the host that holds the workspace, whether it is online, and since when |
+| `price` | `budget` | nothing prices the call's cost: the model, or the call, has no price the platform knows | the operator prices it, then an unlock lets the call through | only the platform's operator; no member of the tenant can, and nobody in it is told | `read_session` |
+| `own_amount` | `budget` | the call passes the amount its own request set | an unlock, or a cancel | any person who may write | `read_session` |
+| a budget's id | `budget` | the budget line that binds longest refused the next call | with a retry time, its held calls settle or its window resets, and the session tries again by itself; else a raise of the budget, which wakes it | an admin or the owner, who set budgets | `read_session` names the budget |
+| `held` | `budget` | other calls still running hold the room this call needs | the session tries again within thirty seconds, by itself | nobody | `read_session` |
+| `funds` | `budget` | no units left on the account cover the call | with a retry time, the next billing period starts and the session tries again by itself; else a top-up of the account | whoever pays for the account; the notice goes to the admins and the owner | `read_session` |
+| `give_back` | `handover` | a person took the session's environment to work in it by hand | that person gives it back, with what they did | the person who took it over | `read_session` |
+| `resume` | `pause` | a person paused the session | a resume | any person who may write | `read_session` |
+| a job's key | `job` | a long-running job a tool started is working; the retry time is its deadline | the job completes, or its deadline passes and it is cancelled and answered as timed out | nobody; a person who may write can cancel the session | `read_session` |
+| a provider's name, such as `anthropic` | `provider` | the provider is failing: an outage, or the retries a call may make are spent | the session tries again at its retry time, by itself | nobody | `read_session` gives the retry time |
+| `<provider>:key` | `provider` | the tenant pays its provider itself and holds no live key for it | a key is saved, then an unlock; saving a key does not wake it | an admin or the owner saves the key; any person who may write unlocks | `read_session` |
+| `<provider>:billing`, `<provider>:credential`, `<provider>:permission` | `provider` | the provider refused the call: its billing, the key itself, or a permission, region, or model the key cannot reach | the account or the key is fixed at the provider, or a new key is saved, then an unlock | for the tenant's own key, an admin or the owner; for the platform's key, the operator; any person who may write unlocks | `read_session` |
+
+The engine writes no park on `children` today.
 
 ## The work queue and the hosts
 

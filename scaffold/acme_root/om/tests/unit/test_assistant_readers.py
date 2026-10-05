@@ -2,9 +2,12 @@
 and the tools a product's slot names, and a slot that names a tool it may
 not call is refused at start; a reader refuses an input it does not
 declare before it reads anything; a list of sessions filters by park
-reason and project and says where to read on; and the object model names
-every park reason the engine has, with the reader that shows each."""
+reason and project and says where to read on; read_wait names the offline
+host that holds a session's workspace; and the object model names every
+park reason the engine has and every unlock it writes, each with its
+cause, who may clear it, and the reader that shows it."""
 
+import ast
 import json
 import re
 from collections.abc import Callable
@@ -46,6 +49,7 @@ from acme.om.tools.types.tool import Effect, ToolClass, ToolInput, ToolMode, Too
 
 ROOT = Path(__file__).resolve().parents[3]
 OBJECT_MODEL = ROOT / "docs" / "object-model.md"
+ENGINE = ROOT / "om/src/acme/om"
 
 
 class Nothing(ToolInput):
@@ -324,17 +328,67 @@ async def test_a_wait_on_the_offline_host_that_holds_the_workspace_names_that_ho
     assert wait["waits_for_a_host"] is True
 
 
-# Check: docs/object-model.md names every park reason the engine has.
+# Check: docs/object-model.md names every park reason and every unlock the
+# engine writes, each with its cause and who may clear it.
+
+COMPUTED = {
+    "agents/impl/loop.py: fill.provider.value": "a provider's name",
+    "agents/impl/loop.py: refused.unlock": "`<provider>:key`",
+    "agents/impl/loop.py: unlock": "`<provider>:billing`",
+    "agents/impl/loop.py: str(started.key)": "a job's key",
+    "budgets/rules.py: unlock": "a budget's id",
+}
+"""Each unlock the engine computes rather than names, by the module and the
+expression that compute it, with the start of its row in the object model."""
+
+
+def section(document: str, heading: str) -> str:
+    return document.split(f"\n## {heading}\n", 1)[1].split("\n## ", 1)[0]
+
+
+def named_in(table: str) -> set[str]:
+    """What the first column of a table names in code font."""
+    return {
+        match.group(1)
+        for line in table.splitlines()
+        if (match := re.match(r"^\| `([a-z_]+)` \|", line)) is not None
+    }
 
 
 def park_reasons_in(document: str) -> set[str]:
-    """The reasons the first column of the park table names."""
-    section = document.split("## Why a session is parked", 1)[1].split("\n## ", 1)[0]
-    return {
-        match.group(1)
-        for line in section.splitlines()
-        if (match := re.match(r"^\| `([a-z_]+)` \|", line)) is not None
-    }
+    return named_in(section(document, "Why a session is parked"))
+
+
+def unlocks_in_code() -> tuple[set[str], set[str]]:
+    """What the engine parks on: each unlock it names, as a module's
+    `*_UNLOCK` constant or a literal a `Park` is given, and each one it
+    computes, as the module and the expression that compute it."""
+    named: set[str] = set()
+    computed: set[str] = set()
+    for path in sorted(ENGINE.rglob("*.py")):
+        module = path.relative_to(ENGINE).as_posix()
+        for node in ast.walk(ast.parse(path.read_text())):
+            if (
+                isinstance(node, ast.Assign)
+                and len(node.targets) == 1
+                and isinstance(target := node.targets[0], ast.Name)
+                and target.id.endswith("_UNLOCK")
+                and isinstance(node.value, ast.Constant)
+            ):
+                named.add(str(node.value.value))
+            elif (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "Park"
+            ):
+                for keyword in node.keywords:
+                    if keyword.arg != "unlock":
+                        continue
+                    if isinstance(keyword.value, ast.Constant):
+                        named.add(str(keyword.value.value))
+                    elif not ast.unparse(keyword.value).endswith("_UNLOCK"):
+                        computed.add(f"{module}: {ast.unparse(keyword.value)}")
+    return named, computed
 
 
 def test_the_object_model_names_every_park_reason_the_engine_has() -> None:
@@ -352,3 +406,28 @@ def test_a_park_table_that_drops_a_reason_fails_the_check() -> None:
     document = OBJECT_MODEL.read_text()
     dropped = document.replace("| `handover` |", "| handover |")
     assert ParkReason.HANDOVER.value not in park_reasons_in(dropped)
+
+
+def test_the_object_model_names_every_unlock_the_engine_writes() -> None:
+    named, computed = unlocks_in_code()
+    table = section(OBJECT_MODEL.read_text(), "What each park waits on")
+    assert named_in(table) == named
+    assert computed == set(COMPUTED)
+    for start in COMPUTED.values():
+        assert f"\n| {start}" in table, start
+    # Each row says its reason, its cause, what clears it, who may clear
+    # it, and the reader that shows it.
+    rows = [line for line in table.splitlines() if line.startswith("| ")][2:]
+    reasons = {f"`{reason.value}`" for reason in ParkReason}
+    for row in rows:
+        cells = [cell.strip() for cell in row.strip().strip("|").split("|")]
+        assert len(cells) == 6 and all(cells), row
+        assert cells[1] in reasons, row
+        assert "`read_" in cells[5], row
+
+
+def test_an_unlock_table_that_drops_an_unlock_fails_the_check() -> None:
+    table = section(OBJECT_MODEL.read_text(), "What each park waits on")
+    named, _ = unlocks_in_code()
+    assert "principal" in named
+    assert named_in(table.replace("| `principal` |", "| principal |")) != named
