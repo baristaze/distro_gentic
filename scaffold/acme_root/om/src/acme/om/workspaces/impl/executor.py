@@ -15,9 +15,11 @@ is not as the executor left it ran to no verdict: its inode, its mode, its
 size, and the time its inode last changed, which no process of the
 instance sets back, are read before the first trial and after each. A
 folder stays writable: a check, or the head's code, may add a new file in
-a protected folder, and no file the tree held there changes unseen. So
-the head's code neither rewrites what scores it while it runs nor puts it
-back unseen. Each check's
+a protected folder, and no file the tree held there changes unseen. The
+digest holds against code that leaves the instance's `stat` and
+`sha256sum` as they are; code that puts its own first on the path fakes
+it, and only a check run as a user apart from the tree's owner stops
+that. Each check's
 command template runs with `{version}` and `{out}` filled, in the tree,
 under the environment of the instance's image and its transport, never one
 an agent set. Each trial's results stream is read back within the bound,
