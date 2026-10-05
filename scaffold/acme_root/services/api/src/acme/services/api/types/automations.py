@@ -45,7 +45,8 @@ class TriggerView(View):
 class ActionBody(RequestBody):
     """`start_session`: start a session of `agent_kind` titled `title` in the
     tenant's project `project_id`. `message_session`: send the brief to the
-    standing session `session_id`. The brief is the creator's word. Any
+    standing session `session_id`; an enabled one is refused, since nothing
+    would hold its run to `run_cap_micros`. The brief is the creator's word. Any
     other kind is one the product declares, which takes its `params` and no
     brief; a kind no product declares is refused."""
 

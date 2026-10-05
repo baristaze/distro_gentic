@@ -304,6 +304,41 @@ async def test_an_action_the_engine_refuses_is_a_refused_run_that_holds_nothing(
     )
 
 
+async def test_a_message_to_a_standing_session_is_refused_when_saved_and_never_acts(
+    platform: Wired, creator: TenantContext
+) -> None:
+    """No budget on a standing session ends with a run, so nothing would
+    hold the woken session's spend to the run's cap: an enabled message is
+    refused when it is saved, a disabled one saves, and one stored enabled
+    fires a refused run that reserves nothing and sends nothing."""
+    standing = await platform.managers.agents.start_session(
+        creator, Start(id=new_id(), kind="steady", title="ci triage")
+    )
+    message = Action(
+        kind=ActionKind.MESSAGE_SESSION, brief="Triage the failed check.", session_id=standing.id
+    )
+    with pytest.raises(ValidationFailed, match="no budget on a session ends with a run"):
+        await made(platform, creator, action=message)
+    assert not (await made(platform, creator, action=message, enabled=False)).enabled
+    at = platform.clock.now
+    stored = automation(action=message).model_copy(
+        update={"created_by": creator.user_id, "created_at": at, "updated_at": at}
+    )
+    automations = platform.storage.get_automation_storage()
+    assert await automations.create_automation(creator.org_id, stored, ())
+
+    (run,) = await fired(platform, comment())
+
+    assert (run.status, run.refusal, run.session_id, run.reserved_micros) == (
+        RunStatus.REFUSED,
+        Refusal.ACTION,
+        None,
+        0,
+    )
+    assert [s for s in await platform.history(standing.id) if s.type.is_input()] == []
+    assert platform.anthropic.calls == []
+
+
 # A session an automation starts is in the project its action names.
 
 

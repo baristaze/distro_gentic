@@ -70,7 +70,9 @@ PLATFORM_ACTIONS = frozenset(kind.value for kind in ActionKind)
 class Action(Platform):
     """What a firing does: start a session of `agent_kind` with the brief, in
     the tenant's project `project_id`; send the brief to a standing
-    session, which keeps the project it has; or a product's own action,
+    session, which keeps the project it has, and which is refused while
+    it is enabled, since no budget on a session ends with a run (ADR
+    2036); or a product's own action,
     which its kind runs with `params`. The brief is the creator's word; the
     event that fired it reaches the session beside it, as data. A product's
     action reaches no session, so it carries no brief, and `params` are
