@@ -35,6 +35,7 @@ from acme.om.billing.types.ledger import (
 )
 from acme.om.billing.types.plan import PlanCatalog, UnitScale
 from acme.om.budgets import BudgetsManagerInterface
+from acme.om.budgets.rules import window_bounds
 from acme.om.budgets.types.amount import Amount
 from acme.om.budgets.types.hold import HoldLine, Tally
 from acme.om.context import OperatorContext, OperatorPermission, Permission, TenantContext
@@ -237,8 +238,15 @@ class BillingManagerImpl(BillingManagerInterface):
     async def get_spend(self, ctx: TenantContext, budget_id: UUID) -> Tally:
         ctx.require(Permission.READ)
         budget = await self._budgets.get_budget(ctx, budget_id)
-        account = await self._read(ctx.org_id)
-        start, resets_at = window_of(budget.window, account, self._clock())
+        account = await self._accounts.read_account(ctx.org_id)
+        if account is None:
+            # No call is held before an account is opened: its windows are
+            # the engine's, in UTC, and they hold nothing.
+            start, resets_at = window_bounds(budget.window, self._clock())
+        elif account.id != ctx.org_id:
+            raise TenantMismatch(f"account {account.id} is not {ctx.org_id}'s")
+        else:
+            start, resets_at = window_of(budget.window, account, self._clock())
         line = HoldLine(
             budget_id=budget.id,
             scope=budget.scope,

@@ -5,7 +5,9 @@ reads its verdict once the platform's worker has run it. A viewer starts
 none; another tenant starts nothing on the project and reads nothing of the
 session; a check the policy does not declare is refused before anything is
 queued. A run passes only at the grade the policy asks of its check: on a
-double, or with a dependency that was not there, it never does."""
+double, or with a dependency that was not there, it never does. A check
+the policy rates runs its declared trials and passes only on the batch:
+one trial never passes it."""
 
 from dataclasses import dataclass
 from datetime import timedelta
@@ -20,10 +22,12 @@ from contracts.evidence_storage import make_policy
 from tenant_support import Headers, person, refused
 
 from acme.om.base import new_id
-from acme.om.context import AppContext, AppType, RequestContext, Role
+from acme.om.context import AppContext, AppType, RequestContext, Role, TenantContext
 from acme.om.evidence.rules import policy_key
 from acme.om.evidence.types.policy import Grade, Requirement
 from acme.om.evidence.types.provenance import Provenance
+from acme.om.evidence.types.rate import RateRule
+from acme.om.evidence.types.validation import ExecutionRequest, ExecutorReport
 from acme.om.root import PlatformPorts
 from acme.om.work.types.work_item import WorkKind
 from acme.services.api.container import AppContainer
@@ -54,11 +58,15 @@ class Tenant:
 
 
 async def tenant(
-    client: httpx.AsyncClient, container: AppContainer, slug: str, grade: Grade = Grade.TWIN
+    client: httpx.AsyncClient,
+    container: AppContainer,
+    slug: str,
+    grade: Grade = Grade.TWIN,
+    rate: RateRule | None = None,
 ) -> Tenant:
     """A tenant with its owner signed in, and a project whose policy, which
     its owner declares, holds the check `unit`, required at a twin for one
-    kind of change and at `grade` for another."""
+    kind of change and at `grade` (under `rate`, when set) for another."""
     email = f"owner@{slug}.test"
     ctx, org = await container.managers.tenancy.bootstrap(
         seed_request(), slug.title(), slug, email, slug.title()
@@ -68,7 +76,7 @@ async def tenant(
     assert made.status_code == 201, made.text
     project_id = UUID(made.json()["id"])
     policy = make_policy(policy_key(project_id))
-    graded = Requirement(check="unit", grade=grade, paths=("docs/**",))
+    graded = Requirement(check="unit", grade=grade, paths=("docs/**",), rate=rate)
     policy = policy.model_copy(update={"requirements": (*policy.requirements, graded)})
     await container.managers.evidence.write_policy(ctx, policy)
     return Tenant(org.id, owner, project_id)
@@ -193,6 +201,59 @@ async def test_a_passing_run_passes_only_at_the_grade_its_check_asks(
     assert verdict["passed"] is (reason is None)
     expected = None if reason is None else f"unit has no passing run at {reason}"
     assert verdict["reason"] == expected
+
+
+# A rated check runs its declared trials, and its verdict reads them as one
+# batch: a first trial that passed never passes it alone.
+
+RATE = RateRule(max_rate=0.5, confidence=0.9, trials=5)
+"""Five trials with no failure bound the rate under half; one failure does
+not."""
+
+
+@pytest.mark.parametrize(
+    ("fails", "one_trial", "reason"),
+    [
+        (None, False, None),
+        (2, False, "unit: "),
+        (None, True, "unit ran 1 of the 5 trials declared"),
+    ],
+)
+async def test_a_rated_check_runs_its_trials_and_never_passes_on_one(
+    client: httpx.AsyncClient,
+    container: AppContainer,
+    executor: ScriptedExecutor,
+    monkeypatch: pytest.MonkeyPatch,
+    fails: int | None,
+    one_trial: bool,
+    reason: str | None,
+) -> None:
+    ajax = await tenant(client, container, "ajax", rate=RATE)
+    executor.outcome = lambda check, trial: "failed" if trial == fails else "passed"
+    asked: list[tuple[int, ...]] = []
+    scripted = executor.run
+
+    async def run(ctx: TenantContext, request: ExecutionRequest) -> ExecutorReport:
+        # What the platform asked for, and, for `one_trial`, an executor
+        # that runs one trial whatever it is asked.
+        asked.append(request.trials)
+        ran = request.model_copy(update={"trials": (1,)}) if one_trial else request
+        return await scripted(ctx, ran)
+
+    monkeypatch.setattr(executor, "run", run)
+    started = await client.post(URL, headers=ajax.owner, json=start_of(ajax.project_id))
+    assert started.status_code == 201, started.text
+    assert await worker_runs(container) == 1
+
+    read = await client.get(f"{URL}/{started.json()['id']}", headers=ajax.owner)
+
+    assert read.status_code == 200, read.text
+    verdict = read.json()
+    assert asked == [(5,)], "the declared trials were asked for"
+    assert verdict["run"]["outcome"] == "passed", "the last trial passed"
+    assert verdict["passed"] is (reason is None)
+    if reason is not None:
+        assert reason in verdict["reason"]
 
 
 # Check 2: a member without the write permission starts nothing, and a

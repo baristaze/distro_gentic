@@ -2,7 +2,8 @@ from uuid import UUID
 
 from acme.om.context import TenantContext
 from acme.om.evidence import EvidenceManagerInterface
-from acme.om.evidence.rules import check_grade, policy_key, run_refusal
+from acme.om.evidence.rules import policy_key, session_refusal
+from acme.om.evidence.types.record import ExecutionRecord
 from acme.om.platform_agents import PlatformAgentsManagerInterface
 from acme.om.platform_agents.types.validation import ValidationSession, ValidationStart
 from acme.services.api.services.impl.evidence import execution_view
@@ -34,18 +35,23 @@ class ValidationsServiceImpl(ValidationsServiceInterface):
         return await self._view(ctx, await self._platform_agents.get_validation(ctx, session_id))
 
     async def _view(self, ctx: TenantContext, session: ValidationSession) -> ValidationSessionView:
+        runs: list[ExecutionRecord] = []
         record = None
         reason = None
         if session.run_id is not None:
             # The session was read in its tenant first: the evidence reads its
             # runs by the session's id alone.
-            page = await self._evidence.get_runs(ctx, session.id, None, LIMIT_MAX)
-            record = next((each for each in page.items if each.id == session.run_id), None)
+            runs = await self._runs(ctx, session.id)
+            record = next((each for each in runs if each.id == session.run_id), None)
         if record is not None:
             # The run passes at the grade its project's policy asks of the
-            # check, never on a double or a dependency that was not there.
+            # check, never on a double or a dependency that was not there; a
+            # rated check passes only as its requirements judge its trials.
             policy = await self._evidence.get_policy(ctx, policy_key(session.project_id))
-            reason = run_refusal(record, check_grade(policy, session.check_name))
+            kept = await self._evidence.get_validations(ctx, session.id, 1)
+            order = {run: at for at, run in enumerate(kept[0].records)} if kept else {}
+            batch = [each for each in runs if each.validation_id == record.validation_id]
+            reason = session_refusal(policy, record, batch, session.head, order)
         return ValidationSessionView(
             id=session.id,
             created_at=session.created_at,
@@ -60,3 +66,15 @@ class ValidationsServiceImpl(ValidationsServiceInterface):
             reason=reason,
             run=None if record is None else execution_view(record),
         )
+
+    async def _runs(self, ctx: TenantContext, session_id: UUID) -> list[ExecutionRecord]:
+        """Every run of the session, oldest first: a rated check's trials
+        may fill more than one page."""
+        runs: list[ExecutionRecord] = []
+        after = None
+        while True:
+            page = await self._evidence.get_runs(ctx, session_id, after, LIMIT_MAX)
+            runs.extend(page.items)
+            if not page.has_more or not page.items:
+                return runs
+            after = page.items[-1].id

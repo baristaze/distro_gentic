@@ -2944,7 +2944,8 @@ export interface components {
          * ActionBody
          * @description `start_session`: start a session of `agent_kind` titled `title` in the
          *     tenant's project `project_id`. `message_session`: send the brief to the
-         *     standing session `session_id`. The brief is the creator's word. Any
+         *     standing session `session_id`; an enabled one is refused, since nothing
+         *     would hold its run to `run_cap_micros`. The brief is the creator's word. Any
          *     other kind is one the product declares, which takes its `params` and no
          *     brief; a kind no product declares is refused.
          */
@@ -7310,8 +7311,10 @@ export interface components {
          *     when it passed, at least one of its cases did, and what served it meets
          *     the strictest grade the project's policy asks of the check, a twin when
          *     no requirement names it: a run on a double, or with a dependency that
-         *     was not there, never passes. `reason` says why it did not pass, and is
-         *     null otherwise.
+         *     was not there, never passes. A check a requirement rates runs its
+         *     declared trials and passes only as that requirement judges them
+         *     together, so one lucky trial never passes it; `run` is its last trial.
+         *     `reason` says why it did not pass, and is null otherwise.
          */
         ValidationSessionView: {
             /** Base */

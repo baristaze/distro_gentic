@@ -96,6 +96,7 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             "orchestrations": managers.orchestrations.purge_tenant,
             "agent_trees": managers.agents.purge_tenant,
             "session_authorities": managers.attribution.purge_tenant,
+            # Its matrix pins and choices of fill, then its fill sets.
             "models": managers.models.purge_tenant,
             "tools": managers.tools.purge_tenant,
             # Its validation policies, then its runs, validations, and

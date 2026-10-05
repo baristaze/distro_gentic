@@ -31,7 +31,10 @@ session's last step holds it already, as a loop's end leaves it. One a
 person holds, its loop parked on a hand-over, is theirs and stays. One
 whose release was asked since its session's last loop is not asked
 again, answered or failed: a failed one is logged, and is asked anew
-only after the session's next loop. One whose host is offline, revoked, or out of the
+only after the session's next loop. A snapshot push the forge refuses,
+here or through a host, is final for the session's head: it is logged,
+the instance stays, and its push is tried again only once the session's
+next loop has moved its head. One whose host is offline, revoked, or out of the
 session's pool waits for a pass that reaches it. A deleted tenant's is
 left to the tenant's purge: nothing is sent into its wall."""
 
@@ -46,7 +49,7 @@ from acme.infra.workspaces import HeldInstance, Workspace, WorkspaceProviderInte
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.base import EMPTY_UUID, Platform, utcnow
 from acme.om.context import RequestContext, TenantContext
-from acme.om.exceptions import NotFound
+from acme.om.exceptions import NotAuthorized, NotFound, ValidationFailed
 from acme.om.placement.types.work import WorkspaceOperation, WorkspacePayload
 from acme.om.relay.manager import RelayManagerInterface
 from acme.om.relay.types.exec import WorkspaceBinding
@@ -60,6 +63,10 @@ from acme.om.workspaces.manager import WorkspacesManagerInterface
 from acme.om.workspaces.rules import snapshot_at
 
 log = logging.getLogger(__name__)
+
+REFUSED = (ValidationFailed, NotAuthorized)
+"""A push the forge refuses for good, as a repository no installation of
+the tenant's holds: pushing the same work again would be refused again."""
 
 
 class HeldOptions(Platform):
@@ -105,6 +112,8 @@ class HeldWorkspacesSweep:
         self._logged: set[UUID] = set()
         # Each session whose release was logged as failed, and that release.
         self._failed: dict[UUID, UUID] = {}
+        # Each session whose snapshot push was refused, and its head then.
+        self._refused: dict[UUID, int] = {}
 
     async def __call__(self, rctx: RequestContext) -> int:
         """One pass over what this host holds, then over what the tenants'
@@ -116,6 +125,7 @@ class HeldWorkspacesSweep:
         self._unaccounted = {id_: at for id_, at in self._unaccounted.items() if id_ in ids}
         self._logged &= ids
         self._failed = {id_: item for id_, item in self._failed.items() if id_ in ids}
+        self._refused = {id_: head for id_, head in self._refused.items() if id_ in ids}
         let_go = 0
         for instance in held:
             try:
@@ -176,10 +186,12 @@ class HeldWorkspacesSweep:
                 instance.id,
                 instance.org_id,
             )
-        elif (await self._steps.get_cursor(ctx, instance.id)).epoch == 0:
+        elif (cursor := await self._steps.get_cursor(ctx, instance.id)).epoch == 0:
             # A run took an epoch before it prepared this instance, so a
             # session with none here is one this database has no history of.
             self._unknown(instance, "its session")
+            return False
+        elif self._refused.get(instance.id) == cursor.head:
             return False
         else:
             pinned = await self._workspaces.get_workspace(ctx, instance.id)
@@ -189,7 +201,11 @@ class HeldWorkspacesSweep:
                 spec=pinned.spec(),
                 location=instance.location,
             )
-            await self._tools.release_workspace(ctx, workspace)
+            try:
+                await self._tools.release_workspace(ctx, workspace)
+            except REFUSED as refused:
+                self._refuse(ctx, instance.id, cursor.head, refused)
+                return False
             log.info(
                 "session %s of org %s: its instance no run held is released",
                 instance.id,
@@ -234,6 +250,8 @@ class HeldWorkspacesSweep:
                 "its session",
             )
             return False
+        if self._refused.get(session_id) == cursor.head:
+            return False
         holder = await self._relay.holder(ctx, session_id)
         if holder is None:
             # Nothing reaches its host now, the snapshot included: a later
@@ -246,7 +264,11 @@ class HeldWorkspacesSweep:
         if not await self._kept(ctx, session_id, cursor.head, pinned.snapshot_ref):
             # Kept first, through the relay: a push that does not land
             # raises, and the instance and its work stay.
-            await self._workspaces.detach(ctx, workspace, cursor.epoch)
+            try:
+                await self._workspaces.detach(ctx, workspace, cursor.epoch)
+            except REFUSED as refused:
+                self._refuse(ctx, session_id, cursor.head, refused)
+                return False
         await self._relay.ask_release(ctx, session_id, workspace.spec)
         log.info(
             "session %s of org %s: host %s is asked to let go of its instance no run held",
@@ -309,6 +331,19 @@ class HeldWorkspacesSweep:
             return True
         page = await self._steps.get_steps(ctx, session_id, head - 1, 1)
         return all(step.created_at <= taken for step in page.items)
+
+    def _refuse(self, ctx: TenantContext, session_id: UUID, head: int, refused: Exception) -> None:
+        """Records a snapshot push the forge refused at the session's head,
+        and logs it: the instance and its work stay, and no pass pushes
+        again until the session's next loop moves its head."""
+        self._refused[session_id] = head
+        log.warning(
+            "session %s of org %s: its snapshot push was refused (%s); its instance "
+            "stays, and it is pushed again after the session's next loop",
+            session_id,
+            ctx.org_id,
+            refused,
+        )
 
     def _unknown(self, instance: HeldInstance, what: str) -> None:
         """Logs, once a process, an instance this database cannot account

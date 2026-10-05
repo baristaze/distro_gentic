@@ -105,7 +105,10 @@ The limits are asked inside the write that records a run
 (`AutomationStorageInterface.admit`, which holds the automation's row in
 Postgres), from `rules.admitted`. A started session's tree gets a
 `LIFE` budget of `run_cap_micros` before its brief wakes it, and starts
-through the projects' `start_session`. `build_automations` takes
+through the projects' `start_session`. A `message_session` action is
+refused while enabled, when it is written and at each firing
+(`impl/manager.py` `UNHELD`): no budget on a session ends with a run, so
+nothing would hold its run to its cap (ADR 2036). `build_automations` takes
 `project_required`, which a root sets outside `local`, and `actions`,
 the product's kinds (`ProductKinds.actions`, `actions.py`), which every
 process that writes or fires an automation hands it. The

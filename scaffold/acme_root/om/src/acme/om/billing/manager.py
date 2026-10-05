@@ -104,7 +104,8 @@ class BillingManagerInterface(ABC):
     async def get_spend(self, ctx: TenantContext, budget_id: UUID) -> Tally:
         """What the budget's current window, as the tenant counts it, spent
         and holds: the one aggregation every view reads, the cap's
-        included."""
+        included. A tenant with no account has held nothing, in windows
+        counted in UTC."""
         ...
 
     @abstractmethod

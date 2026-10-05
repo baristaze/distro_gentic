@@ -256,7 +256,7 @@ def build_services(
         fleet=FleetServiceImpl(managers.placement_operator, trust_operator),
         relay=RelayServiceImpl(managers.relay, infra.get_topics()),
         intake=IntakeServiceImpl(intake),
-        budgets=BudgetsServiceImpl(managers.budgets),
+        budgets=BudgetsServiceImpl(managers.budgets, billing),
         automations=AutomationsServiceImpl(automations),
         notifications=NotificationsServiceImpl(notifications),
         watch=WatchServiceImpl(watch),

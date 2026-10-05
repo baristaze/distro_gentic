@@ -33,8 +33,12 @@ class AutomationsManagerInterface(ABC):
         firing, starting nothing. A product's action names a kind a product
         declares, with params of its shape, or is `ValidationFailed`; an
         enabled one is refused as its kind's check of the caller, and of
-        whom it runs as, says (`AutomationActionInterface.check_writer`). An id written already
-        answers the automation as stored."""
+        whom it runs as, says (`AutomationActionInterface.check_writer`). An
+        enabled message to a standing session is `ValidationFailed`, and one
+        stored enabled is refused at each firing, sending nothing: no budget
+        on a session ends with a run, so nothing would hold the run to its
+        cap (ADR 2036). An id written already answers the automation as
+        stored."""
         ...
 
     @abstractmethod

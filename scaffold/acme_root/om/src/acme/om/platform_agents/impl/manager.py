@@ -103,12 +103,11 @@ class PlatformAgentsManagerImpl(PlatformAgentsManagerInterface):
         validation = await self._evidence.run_check(
             ctx, stored.id, stored.project_id, stored.check_name, stored.head, stored.base
         )
-        if len(validation.records) != 1:
-            raise ValidationFailed(
-                f"validation session {session_id} kept {len(validation.records)} runs of its "
-                "one check"
-            )
-        return await self.finish_validation(ctx, session_id, validation.records[0])
+        if not validation.records:
+            raise ValidationFailed(f"validation session {session_id} kept no run of its check")
+        # A rated check's trials are one batch; the session names the last,
+        # and its verdict reads the whole batch by that run's validation.
+        return await self.finish_validation(ctx, session_id, validation.records[-1])
 
     async def finish_validation(
         self, ctx: TenantContext, session_id: UUID, run_id: UUID

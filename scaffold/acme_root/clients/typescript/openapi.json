@@ -29,7 +29,7 @@
       },
       "ActionBody": {
         "additionalProperties": false,
-        "description": "`start_session`: start a session of `agent_kind` titled `title` in the\ntenant's project `project_id`. `message_session`: send the brief to the\nstanding session `session_id`. The brief is the creator's word. Any\nother kind is one the product declares, which takes its `params` and no\nbrief; a kind no product declares is refused.",
+        "description": "`start_session`: start a session of `agent_kind` titled `title` in the\ntenant's project `project_id`. `message_session`: send the brief to the\nstanding session `session_id`; an enabled one is refused, since nothing\nwould hold its run to `run_cap_micros`. The brief is the creator's word. Any\nother kind is one the product declares, which takes its `params` and no\nbrief; a kind no product declares is refused.",
         "properties": {
           "agent_kind": {
             "anyOf": [
@@ -9378,7 +9378,7 @@
         "type": "object"
       },
       "ValidationSessionView": {
-        "description": "A validation session: what it runs, at which commit and from which,\nand where it stands. Once its run is recorded, `passed` is the verdict\nand `run` is that run; both are null while it waits. The run passes\nwhen it passed, at least one of its cases did, and what served it meets\nthe strictest grade the project's policy asks of the check, a twin when\nno requirement names it: a run on a double, or with a dependency that\nwas not there, never passes. `reason` says why it did not pass, and is\nnull otherwise.",
+        "description": "A validation session: what it runs, at which commit and from which,\nand where it stands. Once its run is recorded, `passed` is the verdict\nand `run` is that run; both are null while it waits. The run passes\nwhen it passed, at least one of its cases did, and what served it meets\nthe strictest grade the project's policy asks of the check, a twin when\nno requirement names it: a run on a double, or with a dependency that\nwas not there, never passes. A check a requirement rates runs its\ndeclared trials and passes only as that requirement judges them\ntogether, so one lucky trial never passes it; `run` is its last trial.\n`reason` says why it did not pass, and is null otherwise.",
         "properties": {
           "base": {
             "title": "Base",

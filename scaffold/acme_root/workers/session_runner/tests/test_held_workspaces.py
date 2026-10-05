@@ -3,7 +3,9 @@ leaves its instance prepared, its work uncommitted in it, and nothing to
 release it. Once no loop item accounts for it, a pass past the grace
 releases it the way a run does: its work pushed to a snapshot ref first.
 An instance a live loop holds, and a directory no prepare marked, are left
-alone; a push that does not land keeps the instance for the next pass. An
+alone; a push that does not land keeps the instance for the next pass,
+and one the forge refuses is not tried again until the session's next
+loop. An
 instance whose tenant is deleted is purged, and one whose tenant or
 session this database holds no record of is left alone."""
 
@@ -17,6 +19,7 @@ from uuid import UUID
 
 import pytest
 from contracts.agent_session_storage import make_session
+from contracts.step_storage import make_message
 from contracts.workspaces import GitTwin, ProjectsTwin, PullRequestsTwin, ReaderTwin
 
 from acme.infra.impl.local import InfraLocalImpl
@@ -36,6 +39,7 @@ from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, OperatorRole, RequestContext, TenantContext
+from acme.om.exceptions import ValidationFailed
 from acme.om.root import Managers, build_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.work.types.work_item import WorkItem, WorkKind
@@ -268,6 +272,52 @@ async def test_a_push_that_does_not_land_keeps_the_instance_for_the_next_pass(
     assert await host.passes(GRACE) == 0, "the push failed: nothing is let go"
     assert await host.held() == {session_id}
     source.refuses_push = False
+    assert await host.passes() == 1, "the next pass pushes it, and lets it go"
+    assert await host.held() == set() and len(source.pushed) == 1
+
+
+async def test_a_push_the_forge_refuses_waits_for_the_sessions_next_loop(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    infra = InfraLocalImpl(tmp_path)
+    source = GitTwin()
+    managers = build_managers(
+        StorageMemoryImpl(),
+        infra,
+        agent_kinds=(worker(TWIN),),
+        workspace_projects=ProjectsTwin(),
+        pull_requests=PullRequestsTwin(),
+        workspace_git=source,
+        workspace_reader=ReaderTwin(),
+    )
+    provider = infra.get_workspaces()
+    assert isinstance(provider, WorkspaceTwinImpl)
+    host = Host(managers, provider)
+    await host.start()
+    session_id, item, _ = await host.run_left(TWIN)
+    await managers.work.complete(host.owner, item)
+    source.dirty = True  # the work the run left, uncommitted
+    pushes: list[str] = []
+    snapshot = source.snapshot
+
+    async def refused(*args: object, **kwargs: object) -> object:
+        # The forge refuses the push for good, as it does a repository no
+        # installation of the tenant's holds.
+        pushes.append("push")
+        raise ValidationFailed("the forge refused the push")
+
+    monkeypatch.setattr(source, "snapshot", refused)
+
+    assert await host.passes() == 0
+    assert await host.passes(GRACE) == 0, "the push was refused: nothing is let go"
+    for _ in range(3):
+        assert await host.passes(timedelta(seconds=30)) == 0
+    assert pushes == ["push"], "the refused head is pushed once"
+    assert await host.held() == {session_id}, "its instance and its work stay"
+
+    # The session's next loop moves its head: its work is pushed again.
+    await managers.steps.append_inputs(host.owner, session_id, [make_message(session_id)])
+    monkeypatch.setattr(source, "snapshot", snapshot)
     assert await host.passes() == 1, "the next pass pushes it, and lets it go"
     assert await host.held() == set() and len(source.pushed) == 1
 

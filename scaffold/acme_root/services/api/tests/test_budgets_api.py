@@ -19,7 +19,7 @@ from acme.om.billing.root import build_billing
 from acme.om.billing.types.account import AccountRequest, FundingMode
 from acme.om.budgets.types.amount import AmountUnit, Spend
 from acme.om.budgets.types.breach import Refusal
-from acme.om.budgets.types.hold import Hold, HoldRequest
+from acme.om.budgets.types.hold import Billed, Hold, HoldRequest
 from acme.om.context import Role, TenantContext
 from acme.om.windows.impl.gate import scopes_of
 from acme.services.api.container import AppContainer
@@ -129,6 +129,38 @@ async def test_a_budget_the_gate_would_not_hold_a_call_to_is_refused_whole(
         await client.post("/v1/budgets", headers=ajax.owner, json=body), 422, "validation_failed"
     )
     assert (await client.get("/v1/budgets", headers=ajax.owner)).json() == []
+
+
+async def test_the_usage_page_reads_what_the_money_gate_holds_and_settles(
+    client: httpx.AsyncClient, container: AppContainer
+) -> None:
+    """A session's call, held and settled by billing's money gate, shows on
+    the usage page as held and then as spent, in the budget's window as the
+    tenant counts it. A tenant with no account has held nothing."""
+    ajax = await tenant(client, container, "ajax")
+    bare = await client.post(
+        "/v1/budgets",
+        headers=ajax.owner,
+        json={"scope_kind": "tenant", "window_kind": "day", "tokens": 9_000},
+    )
+    assert bare.status_code == 201, bare.text
+    before = await client.get("/v1/usage", headers=ajax.owner)
+    assert before.status_code == 200, before.text
+    assert [i["spent_tokens"] for i in before.json()["items"]] == [0], "no account, no spend"
+    ctx = await funded(container, ajax.owner)
+
+    hold = await asked(container, ctx, 2_000, None)
+    assert isinstance(hold, Hold), hold
+    held = (await client.get("/v1/usage", headers=ajax.owner)).json()["items"]
+    assert [(i["held_tokens"], i["spent_tokens"]) for i in held] == [(2_000, 0)]
+    await container.managers.budget_gate.settle(
+        ctx, hold.id, Billed(usage=Spend(cost_micros=700, tokens=1_500))
+    )
+    spent = (await client.get("/v1/usage", headers=ajax.owner)).json()["items"]
+
+    assert [(i["held_tokens"], i["spent_tokens"]) for i in spent] == [(0, 1_500)]
+    assert [i["spent_cost_micros"] for i in spent] == [700]
+    assert spent[0]["window_start"] == held[0]["window_start"]
 
 
 @pytest.mark.parametrize("role", [Role.MEMBER, Role.VIEWER])

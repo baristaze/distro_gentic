@@ -51,6 +51,11 @@ log = logging.getLogger(__name__)
 CREATED = "automations.automation.created"
 UPDATED = "automations.automation.updated"
 GRANTED = "automations.principal.granted"
+UNHELD = (
+    "a message to a standing session is refused: no budget on a session ends "
+    "with a run, so nothing would hold the run to its run_cap_micros"
+)
+"""Why a `message_session` action never acts (ADR 2036)."""
 
 
 class AutomationsOptions(Platform):
@@ -295,6 +300,11 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
             # Its product's kind left this process's registry since it was
             # saved: nothing would act on it.
             return await self._refuse(ctx, run, Refusal.ACTION)
+        if automation.action.kind == ActionKind.MESSAGE_SESSION:
+            # One stored enabled never acts: its woken session's spend would
+            # be held to no cap.
+            log.info("run %s of org %s is refused: %s", run.id, ctx.org_id, UNHELD)
+            return await self._refuse(ctx, run, Refusal.ACTION)
         creator = await self._runs_as(ctx, automation)
         if creator is None:
             return await self._refuse(ctx, run, Refusal.PRINCIPAL)
@@ -330,43 +340,40 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         """The action of a started run, as its creator. A started session is
         held to the run's reservation by a budget on its tree before anything
         wakes it; the event reaches it as data, and the brief as the
-        creator's message. A product's action is its kind's to run."""
+        creator's message. A product's action is its kind's to run. A
+        message to a standing session is refused before it gets here."""
         action = automation.action
         kind = self._actions.get(action.kind)
         if kind is not None:
             return await self._act_product(ctx, creator, kind, automation, run)
-        assert action.brief is not None  # a session's action carries one
-        opened = action.kind == ActionKind.START_SESSION
-        if opened:
-            assert action.agent_kind is not None and action.title is not None
-            start = Start(
-                id=derived_id(run.id, run.created_at, "session"),
-                kind=action.agent_kind,
-                title=action.title,
-            )
-            # In its project from its first moment, so the project's budget
-            # and policies hold every call it makes.
-            session = (
-                await self._agents.start_session(creator, start)
-                if action.project_id is None
-                else await self._projects.start_session(creator, action.project_id, start)
-            )
-            budget = Budget(
-                id=derived_id(run.id, run.created_at, "budget"),
-                created_at=run.created_at,
-                updated_at=run.created_at,
-                created_by=ctx.user_id,
-                updated_by=ctx.user_id,
-                scope_kind=BudgetScopeKind.TREE,
-                scope_key=str(session.root_id),
-                window_kind=WindowKind.LIFE,
-                cost_micros=run.reserved_micros,
-            )
-            await self._budgets.create_budget(ctx, budget)
-            session_id, budget_id = session.id, budget.id
-        else:
-            assert action.session_id is not None
-            session_id, budget_id = action.session_id, None
+        assert action.kind == ActionKind.START_SESSION  # `_admit` refuses a message
+        assert action.brief is not None and action.agent_kind is not None
+        assert action.title is not None
+        start = Start(
+            id=derived_id(run.id, run.created_at, "session"),
+            kind=action.agent_kind,
+            title=action.title,
+        )
+        # In its project from its first moment, so the project's budget
+        # and policies hold every call it makes.
+        session = (
+            await self._agents.start_session(creator, start)
+            if action.project_id is None
+            else await self._projects.start_session(creator, action.project_id, start)
+        )
+        budget = Budget(
+            id=derived_id(run.id, run.created_at, "budget"),
+            created_at=run.created_at,
+            updated_at=run.created_at,
+            created_by=ctx.user_id,
+            updated_by=ctx.user_id,
+            scope_kind=BudgetScopeKind.TREE,
+            scope_key=str(session.root_id),
+            window_kind=WindowKind.LIFE,
+            cost_micros=run.reserved_micros,
+        )
+        await self._budgets.create_budget(ctx, budget)
+        session_id, budget_id = session.id, budget.id
         inputs: list[Step] = []
         if run.event_text:
             inputs.append(self._event_step(ctx, run, session_id))
@@ -385,7 +392,7 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         acted = run.model_copy(
             update={
                 "session_id": session_id,
-                "opened": opened,
+                "opened": True,
                 "budget_id": budget_id,
                 "event_text": "",
             }
@@ -520,8 +527,12 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         refusal answers as is, so a writer its firings would refuse is told
         now. A disabled one is
         not asked: nothing deletes an automation, so turning it off always
-        goes through, and turning it on again is an edit the kind checks."""
+        goes through, and turning it on again is an edit the kind checks.
+        An enabled message to a standing session is `ValidationFailed`
+        (`UNHELD`): nothing would hold its run to its cap."""
         action = automation.action
+        if action.kind == ActionKind.MESSAGE_SESSION and automation.enabled:
+            raise ValidationFailed(UNHELD)
         if action.kind in PLATFORM_ACTIONS:
             return
         kind = self._actions.get(action.kind)

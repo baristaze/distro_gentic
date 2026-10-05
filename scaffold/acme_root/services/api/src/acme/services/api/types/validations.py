@@ -30,8 +30,10 @@ class ValidationSessionView(View):
     when it passed, at least one of its cases did, and what served it meets
     the strictest grade the project's policy asks of the check, a twin when
     no requirement names it: a run on a double, or with a dependency that
-    was not there, never passes. `reason` says why it did not pass, and is
-    null otherwise."""
+    was not there, never passes. A check a requirement rates runs its
+    declared trials and passes only as that requirement judges them
+    together, so one lucky trial never passes it; `run` is its last trial.
+    `reason` says why it did not pass, and is null otherwise."""
 
     id: UUID
     created_at: datetime

@@ -20,7 +20,6 @@ from api_support import PROJECT_ID, add_member, build_container, seed_request, s
 from contracts.agent_session_storage import make_session
 from contracts.evidence_storage import make_record, make_validation
 from contracts.intake_storage import make_binding
-from contracts.ledger_storage import a_hold
 from contracts.step_storage import (
     make_request,
     make_response,
@@ -29,13 +28,16 @@ from contracts.step_storage import (
 )
 
 from acme.integrations.model_providers.types import Usage
+from acme.integrations.payments.twin import PaymentProviderTwinImpl
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
 from acme.om.attribution.types.authority import AuthorityMode
+from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import new_id, utcnow
-from acme.om.budgets.rules import window_bounds
-from acme.om.budgets.types.amount import Amount
+from acme.om.billing.root import build_billing
+from acme.om.billing.types.account import AccountRequest, FundingMode
+from acme.om.budgets.types.amount import Spend
 from acme.om.budgets.types.budget import Budget, BudgetScopeKind, WindowKind
-from acme.om.budgets.types.hold import HoldLine
+from acme.om.budgets.types.hold import Hold, HoldRequest
 from acme.om.context import Role, TenantContext
 from acme.om.intake.types.link import HandleKind
 from acme.om.steps.types.header import (
@@ -51,6 +53,7 @@ from acme.om.steps.types.header import (
     ToolResponseHeader,
 )
 from acme.om.steps.types.step import Actor, Origin, Step, StepType
+from acme.om.windows.impl.gate import scopes_of
 from acme.services.api.container import AppContainer
 from acme.services.api.services.impl.session_reads import tool_calls_of
 
@@ -475,6 +478,14 @@ async def test_the_tenants_usage_is_each_budget_with_what_its_window_spent(
 ) -> None:
     ctx = await context_of(container, owner)
     now = utcnow()
+    scopes = scopes_of(
+        ctx.org_id,
+        new_id(),
+        new_id(),
+        Principal(kind=PrincipalKind.PERSON, id=ctx.user_id),
+        project_id=None,
+    )
+    keys = {BudgetScopeKind.TENANT: str(ctx.org_id), BudgetScopeKind.PERSON: str(new_id())}
     budgets = [
         await container.managers.budgets.create_budget(
             ctx,
@@ -484,25 +495,27 @@ async def test_the_tenants_usage_is_each_budget_with_what_its_window_spent(
                 updated_at=now,
                 created_by=ctx.user_id,
                 updated_by=ctx.user_id,
-                scope_kind=BudgetScopeKind.TENANT,
-                scope_key=f"{ctx.org_id}-{index}",
+                scope_kind=kind,
+                scope_key=key,
                 window_kind=WindowKind.LIFE,
                 cost_micros=1_000_000,
             ),
         )
-        for index in range(2)
+        for kind, key in keys.items()
     ]
-    charged = budgets[0]
-    start_at, resets_at = window_bounds(charged.window, now)
-    line = HoldLine(
-        budget_id=charged.id,
-        scope=charged.scope,
-        window_start=start_at,
-        resets_at=resets_at,
-        amount=Amount(cost_micros=1_000_000),
+    billing = build_billing(container.storage, container.managers, PaymentProviderTwinImpl())
+    await billing.open_account(
+        ctx,
+        AccountRequest(funding=FundingMode.PLATFORM, key_ref=None, plan_id="starter", zone="UTC"),
     )
-    ledger = container.storage.get_ledger_storage()
-    assert await ledger.open_hold(ctx.org_id, a_hold(line, cost_micros=600, tokens=100)) is None
+    request = HoldRequest(
+        spender_id=ctx.user_id,
+        scopes=scopes,
+        exposure=Spend(cost_micros=600, tokens=100),
+        own=None,
+        purpose="main",
+    )
+    assert isinstance(await container.managers.budget_gate.authorize(ctx, request), Hold)
 
     first = await client.get("/v1/usage", headers=owner, params={"limit": 1})
     rest = await client.get(

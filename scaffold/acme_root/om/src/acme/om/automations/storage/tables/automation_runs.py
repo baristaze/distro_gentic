@@ -22,6 +22,15 @@ class AutomationRuns(IdentifiableMixin, CreatedMixin, Base):
             "created_at",
         ),
         Index("ix_automation_runs_org_id_session_id", "org_id", "session_id"),
+        # Its queued runs, oldest first, on every tick, and their count at
+        # every admission: runs are never trimmed, so the status leads.
+        Index(
+            "ix_automation_runs_org_id_automation_id_status_created_at",
+            "org_id",
+            "automation_id",
+            "status",
+            "created_at",
+        ),
     )
     automation_id: Mapped[UUID]
     event_id: Mapped[UUID | None]

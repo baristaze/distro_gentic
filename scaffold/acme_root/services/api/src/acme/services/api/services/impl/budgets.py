@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from acme.om.base import utcnow
+from acme.om.billing import BillingManagerInterface
 from acme.om.budgets import BudgetsManagerInterface
 from acme.om.budgets.types.amount import Amount
 from acme.om.budgets.types.budget import Budget, BudgetScopeKind
@@ -23,8 +24,11 @@ USAGE = "usage"
 
 
 class BudgetsServiceImpl(BudgetsServiceInterface):
-    def __init__(self, budgets: BudgetsManagerInterface) -> None:
+    def __init__(self, budgets: BudgetsManagerInterface, billing: BillingManagerInterface) -> None:
+        """`billing` reads each budget's spend from the one ledger the money
+        gate holds and settles in, in the tenant's own windows."""
         self._budgets = budgets
+        self._billing = billing
 
     async def create_budget(
         self, ctx: TenantContext, body: CreateBudgetRequest, budget_id: UUID
@@ -78,7 +82,7 @@ class BudgetsServiceImpl(BudgetsServiceInterface):
         page = await self._budgets.get_budgets(ctx, after, clamp_limit(limit))
         items: list[BudgetUsageView] = []
         for budget in page.items:
-            tally = await self._budgets.get_spend(ctx, budget.id)
+            tally = await self._billing.get_spend(ctx, budget.id)
             items.append(
                 BudgetUsageView(
                     budget=BudgetView.model_validate(budget),

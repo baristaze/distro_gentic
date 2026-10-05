@@ -111,11 +111,13 @@ class EvidenceManagerInterface(ABC):
         source: str,
     ) -> Validation:
         """Platform-internal: one check the project's policy declares, run
-        once on a fresh executor at `version`, with the checks, fixtures, and
+        on a fresh executor at `version`, with the checks, fixtures, and
         runner from `source`, for `session_id`, a session with no agent (a
-        validation session). What it wrote is kept as `validate` keeps it. A
-        session runs its check once: asked again, it answers the validation
-        it kept and runs nothing. Refused before anything runs
+        validation session). It runs once, or, when a requirement rates it,
+        its declared trials, stopping where the rate's rule stops them. What
+        it wrote is kept as `validate` keeps it. A session runs its check
+        once: asked again, it answers the validation it kept and runs
+        nothing. Refused before anything runs
         (`PreconditionFailed`) when the project declares no policy, the
         policy declares no such check, or the executor cannot run it; its
         results are refused as `validate` refuses them."""

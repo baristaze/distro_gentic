@@ -8,7 +8,8 @@ only then asks the host to let it go, which it does through its own
 provider. A live loop's instance is kept, a push that does not land lets
 nothing go, and an instance whose tenant or session the platform holds no
 record of is left alone. One a person holds is theirs; the work a loop's
-end kept is not pushed again; and a release its host fails is asked once."""
+end kept is not pushed again; a release its host fails is asked once; and
+a snapshot push the forge refuses waits for the session's next loop."""
 
 import asyncio
 import logging
@@ -44,6 +45,7 @@ from acme.om.agents.loop_rules import changed_step
 from acme.om.agents.types.request import Start
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
+from acme.om.exceptions import NotAuthorized
 from acme.om.intake.types.link import Installation
 from acme.om.placement.types.work import WorkspaceOperation, WorkspacePayload
 from acme.om.root import Managers, PlatformPorts, ProductKinds
@@ -452,3 +454,39 @@ async def test_a_release_its_host_fails_is_asked_once(
     assert len(run.refs()) == 1 and await run.notices() == 1
     failed = [r for r in caplog.records if "did not let its instance go" in r.getMessage()]
     assert len(failed) == 1, "a failed release is logged once"
+
+
+@pytest.mark.skipif(GIT is None, reason="git is not on this host")
+async def test_a_snapshot_push_the_forge_refuses_waits_for_the_sessions_next_loop(
+    api: Stack, tmp_path: Path, remote: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run = await placed(api, tmp_path, remote)
+    managers, owner = run.managers, run.owner
+    detach = managers.workspaces.detach
+    pushes: list[int] = []
+
+    async def refused(ctx: TenantContext, workspace: Workspace, epoch: int) -> None:
+        # The forge refuses the push for good, as it does a repository no
+        # installation of the tenant's holds.
+        pushes.append(epoch)
+        raise NotAuthorized("no installation of the forge this tenant connected holds it")
+
+    monkeypatch.setattr(managers.workspaces, "detach", refused)
+    await managers.work.fail_for_good(owner, run.item, "its runner died")
+    assert await run.passes() == 0
+    assert await run.passes(GRACE) == 0, "the push was refused: nothing is let go"
+    for _ in range(3):
+        assert await run.passes(timedelta(seconds=30)) == 0
+    assert len(pushes) == 1, "the refused head is pushed once"
+    assert await run.release() is None and await run.held() == {run.session_id}
+
+    # The session's next loop moves its head: its work is pushed again.
+    item = await claimed_loop(managers, owner, run.session_id)
+    epoch = await managers.steps.begin_run(owner, run.session_id)
+    step = changed_step(new_id(), utcnow(), run.session_id, new_id())
+    await managers.steps.append_steps(owner, run.session_id, epoch, [step])
+    await managers.work.fail_for_good(owner, item, "its runner died")
+    monkeypatch.setattr(managers.workspaces, "detach", detach)
+    assert await run.passes() == 1, "the next pass pushes it, and asks for the release"
+    await run.answers()
+    assert len(run.refs()) == 1 and await run.release() is not None

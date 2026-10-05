@@ -1,0 +1,1 @@
+DROP INDEX core.ix_automation_runs_org_id_automation_id_status_created_at;

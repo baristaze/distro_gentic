@@ -16,6 +16,8 @@ from acme.om.evidence.rules import (
     execution_request,
     policy_key,
     protection_target,
+    stopping_rules,
+    trials_of,
 )
 from acme.om.evidence.storage import EvidenceStorageInterface
 from acme.om.evidence.types.inference import Inference, InferenceKind, InferencePage
@@ -229,6 +231,11 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
         declared = next((each for each in policy.checks if each.name == check), None)
         if declared is None:
             raise PreconditionFailed(f"the project {project_id} declares no check {check}")
+        # A check a requirement rates runs its declared trials, stopping
+        # where its rule stops them, so its verdict reads a batch and never
+        # one lucky run.
+        naming = [each for each in policy.requirements if each.check == check]
+        rule = stopping_rules(naming).get(check)
         request = ExecutionRequest(
             session_id=session_id,
             project=policy.project,
@@ -236,7 +243,8 @@ class EvidenceManagerImpl(EvidenceManagerInterface):
             version=version,
             source=source,
             checks=(declared,),
-            trials=(1,),
+            trials=(trials_of(naming).get(check, 1),),
+            rates=() if rule is None else (rule,),
             protected=policy.protected,
         )
         ((executor, part),) = await self._planned(ctx, request)
