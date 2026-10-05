@@ -11,9 +11,9 @@ every run is.
 
 The executor port has a loud null and nothing else, so no delivery's
 checks run and the result gate confirms no success. A validation session
-is a record of its own that calls no model, but its work goes to a lab's
-lane for a daemon to run
-([ADR 2013](2013-a-validation-session-is-station-work-with-a-record-of-its-own.md)),
+is a record of its own that calls no model, but its work goes to a
+claimant outside the platform, on its group's lane
+([ADR 2013](2013-a-validation-session-is-a-claimants-work-with-a-record-of-its-own.md)),
 so the platform's evidence waits on a domain it does not hold.
 
 ## Decision
@@ -71,13 +71,13 @@ again.
 
 - No path of a validation session asks for a loop, so no runner claims
   it and no model is called.
-- No lab, station, or daemon is in its path. Placement has no lab's lane
-  and the work queue no station kind; a claimant through the gateway is
-  a host.
-- A session's lab, its check's own version, and its parameters leave the
-  mapping now and the table a release later
+- No domain's lane, kind, or claimant is in its path: its item is the
+  platform's own, on the platform's own lane, and the maintenance worker
+  claims it.
+- A session's group, its check's own version, and its parameters leave
+  the mapping now and the table a release later
   ([ADR 0038](0038-a-dead-column-leaves-the-mapping-before-the-table.md)).
-  A row the previous release wrote keeps its lab until then.
+  A row the previous release wrote keeps its group until then.
 - A check its project's policy does not declare fails its work for good.
   An instance that could not be made, or a repository that could not be
   read, is tried again.

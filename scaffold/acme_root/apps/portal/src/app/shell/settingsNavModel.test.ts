@@ -16,7 +16,7 @@ const ENTRIES = [
   entry("Agents", "projects", "Projects", "Repositories and their credentials"),
   entry("Organization", "audit", "Audit", "What happened"),
   entry("Security", "api-keys", "API keys", "Keys a program calls with"),
-  entry("Lab", "places", "Places", "Where work runs"),
+  entry("Extras", "extras", "Extras", "What a product adds"),
 ];
 const shape = (groups: ReturnType<typeof settingsGroups>) => groups.map((group) => [group.name, group.entries.map((each) => each.id)]);
 
@@ -26,7 +26,7 @@ it("groups the sections where each group first appears, keeping their order", ()
     ["Organization", ["members", "audit"]],
     ["Agents", ["projects"]],
     ["Security", ["api-keys"]],
-    ["Lab", ["places"]],
+    ["Extras", ["extras"]],
   ]);
 });
 
