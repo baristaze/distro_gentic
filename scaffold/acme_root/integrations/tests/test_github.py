@@ -360,9 +360,10 @@ SECONDARY = "You have exceeded a secondary rate limit. Please wait a few minutes
     [
         (429, {"retry-after": "60"}),
         (403, {"retry-after": "60", "x-ratelimit-remaining": "4990"}),
+        (403, {"x-ratelimit-remaining": "4990"}),
         (403, {"x-ratelimit-remaining": "0", "x-ratelimit-reset": "1791000000"}),
     ],
-    ids=["429", "secondary-403", "primary-403"],
+    ids=["429", "secondary-403", "secondary-403-by-its-message", "primary-403"],
 )
 async def test_a_limit_is_a_wait_and_the_call_after_it_lands(
     key: rsa.RSAPrivateKey, status: int, headers: dict[str, str]
