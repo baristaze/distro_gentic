@@ -85,6 +85,7 @@ served to it. Exposure is by listing, never by folder.
 
 - [What Acme is made of](om/README.md): the nouns and how they relate, for a reader with no code
 - [The object model](docs/object-model.md): each thing, what owns it, its states and what moves it, why a session is parked, what clears it, and who may clear it
+- [The portal's pages](docs/portal-routes.md): every page of the portal by its address, what it shows, and how a reply links to it
 - [Tenancy](om/src/acme/om/tenancy/README.md): orgs, people, roles, invitations, single sign-on, credentials, deleting a team org you own, and deleting your account
 - [Files](om/src/acme/om/media/README.md): the files an org keeps, their bounds, and the storage used
 - [Events](om/src/acme/om/events/README.md): the org's diary

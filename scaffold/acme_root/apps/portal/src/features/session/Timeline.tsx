@@ -3,6 +3,9 @@
 // Nothing here reads or decides: a row folds or opens, a call's line opens
 // it in the pane, and a card's button calls the view-model. What a model or
 // a sub-agent wrote is drawn as text or as the kit's Markdown, never as HTML.
+// Compact, as the support dock draws it, a work block reads as its calls'
+// one-line rows, no line opens a pane, and the outline is left out; the
+// dock's own `link` decides what a link in the agent's words becomes.
 import { useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -19,6 +22,7 @@ import {
   JumpIcon,
   LogView,
   Markdown,
+  type LinkView,
   Muted,
   OutlineIcon,
   ParentIcon,
@@ -33,9 +37,13 @@ import {
   parseJsonText,
   type KitIcon,
 } from "../../design/kit";
+import { splitPage } from "../../app/shell/supportLinks";
 import { shortTime } from "../sessions/sessionsModel";
 import { CUT_NOTE, duration, type BodyKind, type Call, type CallLine, type CallState, type CardKind, type ChildPhase, type Entry, type OutlineMark, type ThoughtEntry } from "./timelineModel";
 import type { SessionVm } from "./useSessionVm";
+
+/** What the timeline draws from: a session's page, or the support dock. */
+export type TimelineVm = Pick<SessionVm, "chat" | "marks" | "stepsError" | "copy" | "openCall" | "tools" | "slotSession" | "may" | "decide" | "deciding" | "control">;
 
 /** A line's words, a `quoted` run drawn as code. */
 function Gist({ text }: { text: string }) {
@@ -83,8 +91,8 @@ export function StateMark({ state }: { state: CallState }) {
   );
 }
 
-/** Opens a call in the session's pane. */
-type OnOpen = (call: Call) => void;
+/** Opens a call in the session's pane; null where there is no pane. */
+type OnOpen = ((call: Call) => void) | null;
 
 /** One call: its state and its line, which opens it in the pane, and the
  * chevron that shows its answer inline. A running call shows what it
@@ -93,15 +101,24 @@ function CallRow({ line, onOpen }: { line: CallLine; onOpen: OnOpen }) {
   const [open, setOpen] = useState<boolean | null>(null);
   const has = line.bodyKind !== "none";
   const shown = has && (open ?? (line.call.output === null && line.call.liveOutput !== null));
+  const words = (
+    <>
+      <StateMark state={line.call.state} />
+      <span className="acme-call-gist">
+        <Gist text={line.gist} />
+      </span>
+    </>
+  );
   return (
     <div className="acme-call" data-tool={line.call.tool} data-state={line.call.state}>
       <div className="acme-call-head">
-        <button type="button" className="acme-call-line" title="Open this step in the panel" onClick={() => onOpen(line.call)}>
-          <StateMark state={line.call.state} />
-          <span className="acme-call-gist">
-            <Gist text={line.gist} />
-          </span>
-        </button>
+        {onOpen ? (
+          <button type="button" className="acme-call-line" title="Open this step in the panel" onClick={() => onOpen(line.call)}>
+            {words}
+          </button>
+        ) : (
+          <span className="acme-call-line">{words}</span>
+        )}
         {has ? (
           <button
             type="button"
@@ -145,8 +162,16 @@ function ThoughtRow({ entry }: { entry: ThoughtEntry }) {
   );
 }
 
-function WorkBlock({ entry, onOpen }: { entry: Extract<Entry, { kind: "work" }>; onOpen: OnOpen }) {
+function WorkBlock({ entry, onOpen, compact }: { entry: Extract<Entry, { kind: "work" }>; onOpen: OnOpen; compact: boolean }) {
   const [open, setOpen] = useState<boolean | null>(null);
+  if (compact) {
+    // Its calls alone, a line each; a thought between them stays folded.
+    return (
+      <div className="acme-work-items" data-compact="">
+        {entry.items.map((item) => (item.kind === "call" ? <CallRow key={item.key} line={item} onOpen={null} /> : <ThoughtRow key={item.key} entry={item} />))}
+      </div>
+    );
+  }
   const shown = open ?? entry.running;
   const label = `${entry.running ? "Working for" : "Worked for"} ${duration(entry.seconds)} · ${entry.steps} ${entry.steps === 1 ? "step" : "steps"}`;
   return (
@@ -165,7 +190,7 @@ function WorkBlock({ entry, onOpen }: { entry: Extract<Entry, { kind: "work" }>;
   );
 }
 
-function ActionCard({ entry, vm }: { entry: Extract<Entry, { kind: "action" }>; vm: SessionVm }) {
+function ActionCard({ entry, vm, onOpen }: { entry: Extract<Entry, { kind: "action" }>; vm: TimelineVm; onOpen: OnOpen }) {
   const [denying, setDenying] = useState(false);
   const [note, setNote] = useState("");
   const seq = entry.line.call.requestSeq;
@@ -179,7 +204,7 @@ function ActionCard({ entry, vm }: { entry: Extract<Entry, { kind: "action" }>; 
           {entry.authorizationClass ? ` · ${entry.authorizationClass.replace(/_/g, " ")}` : ""}
         </Muted>
       </header>
-      <CallRow line={entry.line} onOpen={vm.openCall} />
+      <CallRow line={entry.line} onOpen={onOpen} />
       {vm.may?.send && seq !== null ? (
         <div className="acme-tcard-actions">
           {denying ? (
@@ -210,7 +235,7 @@ function ActionCard({ entry, vm }: { entry: Extract<Entry, { kind: "action" }>; 
   );
 }
 
-function AskCard({ entry, vm }: { entry: Extract<Entry, { kind: "ask" }>; vm: SessionVm }) {
+function AskCard({ entry, vm }: { entry: Extract<Entry, { kind: "ask" }>; vm: TimelineVm }) {
   return (
     <section className="acme-tcard" data-card="ask" data-open={entry.open || undefined} aria-label="The agent asks">
       <header className="acme-tcard-head">
@@ -384,21 +409,36 @@ function FoldRow({ entry }: { entry: Extract<Entry, { kind: "fold" }> }) {
   );
 }
 
-function EntryRow({ entry, vm }: { entry: Entry; vm: SessionVm }): ReactNode {
+/** How the timeline is drawn: in full on a session's page, or compact in the dock. */
+interface Drawn {
+  compact: boolean;
+  link?: LinkView;
+}
+
+/** A person's message: their words, and the page they sent it from, when
+ * the support dock sent it. */
+function PersonRow({ text, at }: { text: string; at: string }) {
+  const { text: words, page } = splitPage(text);
+  return (
+    <div className="acme-bubble" title={shortTime(at)}>
+      <Markdown text={words} />
+      {page ? <span className="acme-bubble-page">Sent from {page.path}</span> : null}
+    </div>
+  );
+}
+
+function EntryRow({ entry, vm, drawn }: { entry: Entry; vm: TimelineVm; drawn: Drawn }): ReactNode {
+  const onOpen: OnOpen = drawn.compact ? null : vm.openCall;
   switch (entry.kind) {
     case "person":
-      return (
-        <div className="acme-bubble" title={shortTime(entry.at)}>
-          <Markdown text={entry.text} />
-        </div>
-      );
+      return <PersonRow text={entry.text} at={entry.at} />;
     case "note":
       return (
         <section className="acme-tcard" data-card="note" aria-label={entry.label}>
           <Muted>
             {entry.label} · {shortTime(entry.at)}
           </Muted>
-          <Markdown text={entry.text} />
+          <Markdown text={entry.text} link={drawn.link} />
         </section>
       );
     case "thought":
@@ -406,7 +446,7 @@ function EntryRow({ entry, vm }: { entry: Entry; vm: SessionVm }): ReactNode {
     case "prose":
       return (
         <div className="acme-prose" data-live={entry.live || undefined}>
-          <Markdown text={entry.text} />
+          <Markdown text={entry.text} link={drawn.link} />
           {entry.live ? <span className="acme-caret" aria-hidden="true" /> : null}
           {entry.live ? null : (
             <div className="acme-prose-tools">
@@ -419,9 +459,9 @@ function EntryRow({ entry, vm }: { entry: Entry; vm: SessionVm }): ReactNode {
         </div>
       );
     case "work":
-      return <WorkBlock entry={entry} onOpen={vm.openCall} />;
+      return <WorkBlock entry={entry} onOpen={onOpen} compact={drawn.compact} />;
     case "action":
-      return <ActionCard entry={entry} vm={vm} />;
+      return <ActionCard entry={entry} vm={vm} onOpen={onOpen} />;
     case "ask":
       return <AskCard entry={entry} vm={vm} />;
     case "card":
@@ -434,7 +474,7 @@ function EntryRow({ entry, vm }: { entry: Entry; vm: SessionVm }): ReactNode {
       return <FromCard entry={entry} />;
     case "product": {
       const card = vm.tools[entry.line.call.tool]?.card;
-      return card && vm.slotSession ? card(vm.slotSession, entry.line.call) : <CallRow line={entry.line} onOpen={vm.openCall} />;
+      return card && vm.slotSession ? card(vm.slotSession, entry.line.call) : <CallRow line={entry.line} onOpen={onOpen} />;
     }
     case "line":
       return (
@@ -520,7 +560,8 @@ function Outline({ marks, scroller, onEnd }: { marks: readonly OutlineMark[]; sc
 
 /** The chat, scrolled to its end while the reader is there; a reader who
  * scrolled up keeps their place, and a button takes them to the latest. */
-export function Timeline({ vm }: { vm: SessionVm }) {
+export function Timeline({ vm, compact = false, link, empty = "Nothing yet. A message wakes the session." }: { vm: TimelineVm; compact?: boolean; link?: LinkView; empty?: string }) {
+  const drawn: Drawn = { compact, link };
   const chat = vm.chat;
   const scroller = useRef<HTMLDivElement>(null);
   const [atEnd, setAtEnd] = useState(true);
@@ -537,7 +578,7 @@ export function Timeline({ vm }: { vm: SessionVm }) {
   };
   const status = chat?.status;
   return (
-    <div className="acme-chat-frame">
+    <div className="acme-chat-frame" data-compact={compact || undefined}>
       <div className="acme-chat-scroll" ref={scroller} onScroll={onScroll}>
         <ol className="acme-chat" aria-label="Timeline">
           {chat === null ? (
@@ -547,12 +588,12 @@ export function Timeline({ vm }: { vm: SessionVm }) {
           ) : null}
           {chat?.entries.length === 0 ? (
             <li>
-              <Muted>Nothing yet. A message wakes the session.</Muted>
+              <Muted>{empty}</Muted>
             </li>
           ) : null}
           {chat?.entries.map((entry) => (
             <li key={entry.key} className="acme-chat-row" data-kind={entry.kind} data-key={entry.key}>
-              <EntryRow entry={entry} vm={vm} />
+              <EntryRow entry={entry} vm={vm} drawn={drawn} />
             </li>
           ))}
           {status ? (
@@ -576,7 +617,7 @@ export function Timeline({ vm }: { vm: SessionVm }) {
           </button>
         )}
       </div>
-      <Outline marks={vm.marks} scroller={scroller} onEnd={toEnd} />
+      {compact ? null : <Outline marks={vm.marks} scroller={scroller} onEnd={toEnd} />}
     </div>
   );
 }

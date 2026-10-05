@@ -70,6 +70,20 @@ describe("sessions model", () => {
     expect(ids({ status: "needs_you" })).toEqual(["Asks"]);
   });
 
+  it("leaves support conversations out, and shows them under the platform assistant's filter", () => {
+    const one = (id: string, over: Partial<AgentSessionView>): AgentSessionView => ({ ...session, id, ...over });
+    const sessions = [
+      one("work", { title: "Fix the flaky test", kind: "engineer" }),
+      one("support", { title: "Support", kind: "platform_assistant", created_by: "u1" }),
+      one("theirs", { title: "Support", kind: "platform_assistant", created_by: "u2" }),
+      one("composed", { title: "Draft the webhook settings", kind: "platform_assistant" }),
+    ];
+    const ids = (kind: string) =>
+      listed(sessions, { status: "any", owner: "everyone", kind, archived: false, query: "" }, "u1").map((each) => each.id);
+    expect(ids("")).toEqual(["work", "composed"]);
+    expect(ids("platform_assistant")).toEqual(["support", "theirs", "composed"]);
+  });
+
   it("starts a session only with a title and a kind, trimmed", () => {
     const local = { required: false, count: 0 };
     expect(startRequest({ title: " Tidy ", kind: " assistant ", projectId: "" }, local)).toEqual({ request: { title: "Tidy", kind: "assistant" } });

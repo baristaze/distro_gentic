@@ -45,14 +45,16 @@ export function shellCommands(input: {
   ];
 }
 
-export type ShellKey = "palette" | "sidebar" | "settings";
+export type ShellKey = "palette" | "sidebar" | "settings" | "support";
 
-/** The shell's own shortcuts: Cmd-K searches, Cmd-B folds the left bar, and
- * Cmd-, opens Settings (Ctrl on a keyboard without Cmd). */
+/** The shell's own shortcuts: Cmd-K searches, Cmd-B folds the left bar,
+ * Cmd-, opens Settings, and Cmd-/ opens or closes support (Ctrl on a
+ * keyboard without Cmd). */
 export function shellKey(event: { key: string; metaKey: boolean; ctrlKey: boolean; altKey: boolean; shiftKey: boolean }): ShellKey | null {
   if (opensPalette(event)) return "palette";
   if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return null;
   if (event.key.toLowerCase() === "b") return "sidebar";
   if (event.key === ",") return "settings";
+  if (event.key === "/") return "support";
   return null;
 }

@@ -6,8 +6,9 @@ export const SHORTCUTS: readonly { keys: string; does: string }[] = [
   { keys: "⌘K", does: "Search sessions, settings, and actions" },
   { keys: "⌘B", does: "Collapse or open the sidebar" },
   { keys: "⌘,", does: "Open Settings" },
+  { keys: "⌘/", does: "Ask support, or close it" },
   { keys: "⌘↵", does: "Send what you wrote" },
-  { keys: "Esc", does: "Close a menu, a search, or a dialog" },
+  { keys: "Esc", does: "Close a menu, a search, a dialog, or support" },
 ];
 
 export function ShortcutsDialog({ onClose }: { onClose: () => void }) {

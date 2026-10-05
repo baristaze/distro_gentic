@@ -710,6 +710,8 @@ def test_the_copys_corpus_is_its_maps_tenant_section_and_no_internal_document() 
     listed = rules.listed((ROOT / "llms.txt").read_text(), rules.TENANT_USERS)
     paths = [document.path for document in corpus.documents]
     assert paths == [entry.path for entry in listed] and "om/README.md" in paths
+    # The portal's pages are there, so a reply can link one.
+    assert "docs/portal-routes.md" in paths
     for internal in ("ops/README.md", "docs/runbooks/support.md", "specs/architecture.md"):
         assert internal not in paths, f"{internal} is listed for the platform's own people"
 

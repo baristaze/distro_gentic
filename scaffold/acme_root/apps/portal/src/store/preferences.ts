@@ -1,11 +1,12 @@
 // Preferences only the UI knows about, kept across visits: the theme the
 // person picked, or the system's; the left bar's width, whether it is
 // folded away, what its sessions list shows, and which rows fold their
-// sub-agents. Local storage is the right
+// sub-agents; and the support dock's width. Local storage is the right
 // place for a preference; the session token is the one thing that never
 // goes there.
 import { parseTheme, type ThemePreference } from "../app/themeModel";
 import { DEFAULT_FILTER, parseFilter, type SessionFilter } from "../app/shell/sessionFilter";
+import { DOCK } from "../app/shell/dockModel";
 import { clampWidth, type PaneBounds } from "../design/kit/splitterModel";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
@@ -30,6 +31,8 @@ interface PreferencesState {
   /** The sessions whose row folds its sub-agents away. */
   foldedTrees: string[];
   toggleTree: (id: string) => void;
+  dockWidth: number;
+  setDockWidth: (width: number) => void;
 }
 
 export const usePreferencesStore = create<PreferencesState>()(
@@ -48,6 +51,8 @@ export const usePreferencesStore = create<PreferencesState>()(
         set((state) => ({
           foldedTrees: state.foldedTrees.includes(id) ? state.foldedTrees.filter((one) => one !== id) : [...state.foldedTrees, id].slice(-FOLDS_KEPT),
         })),
+      dockWidth: DOCK.initial,
+      setDockWidth: (width) => set({ dockWidth: clampWidth(width, DOCK) }),
     }),
     {
       name: PREFERENCES_STORAGE_KEY,
@@ -58,6 +63,7 @@ export const usePreferencesStore = create<PreferencesState>()(
         sidebarFolded: state.sidebarFolded,
         sessionFilter: state.sessionFilter,
         foldedTrees: state.foldedTrees,
+        dockWidth: state.dockWidth,
       }),
       // A value the stored state does not name, or names wrongly, is the
       // default's; a field the store does not know is dropped.
@@ -70,6 +76,7 @@ export const usePreferencesStore = create<PreferencesState>()(
           sidebarFolded: kept.sidebarFolded === true,
           sessionFilter: parseFilter(kept.sessionFilter),
           foldedTrees: Array.isArray(kept.foldedTrees) ? kept.foldedTrees.filter((id): id is string => typeof id === "string").slice(-FOLDS_KEPT) : [],
+          dockWidth: clampWidth(typeof kept.dockWidth === "number" ? kept.dockWidth : DOCK.initial, DOCK),
         };
       },
     },
