@@ -4,21 +4,34 @@ itself and by no gate:
     python services/api/tests/portal_check.py script <path> [--scene engineer]
     python services/api/tests/portal_check.py evidence <slug> <session_id>
     python services/api/tests/portal_check.py scene <root> <slug>
+    python services/api/tests/portal_check.py tree <slug> <session_id>
+    python services/api/tests/portal_check.py host <root> <slug> <session_id> <api>
 
 `script` writes the scripted provider's script: one turn that answers in
 Markdown and calls nothing, so a session runs its loop offline and the
 same way every time. With `--scene engineer` it is the engineer's scene
 instead: it thinks, plans, runs a failing test, reads, edits, runs the
 test again, opens a pull request on the forge's twin, asks its person,
-validates, and submits its result. Each command and the validation wait
-for a decision, since its plan's answer, a tool's output, marks it.
+validates, and submits its result. A message after that, such as a
+person's giving back, gets a reply that validates the head again and
+submits the result again, since an engineer's loop ends only on its
+result. Each command and each validation wait for a decision, since its
+plan's answer, a tool's output, marks it.
 `evidence` records on one session of the org what an executor writes: two
 runs of a check and a validation of one of them. The local stack runs no
 executor, so the check writes the records its evidence screen reads
 through the om, under the org's owner. `scene` makes what the engineer's
 scene runs on: the org's first repository as a bare one under `<root>`
 (`portal_stack.py` clones from there), holding a parser whose test fails,
-and the validation policy of the org's first project."""
+and the validation policy of the org's first project. `tree` writes two
+sub-agents of a session straight through storage, since no shipped kind
+may spawn one. `host` stands in for the host that holds the session's
+workspace, which the local stack runs none of: it enrolls a host in a
+pool of the org's, places the session there and binds its workspace to
+a clone of the scene's repository at the branch the engineer pushed,
+prints `ready`, then claims the first command a person sends over the
+API's host routes at `<api>`, runs it there, settles it, and takes the
+session back off the pool."""
 
 import asyncio
 import subprocess
@@ -39,6 +52,12 @@ ANSWER = (
 
 SONNET = "claude-sonnet-5-5"
 
+# The sub-agents `tree` writes: their titles and agents.
+CHILDREN = (
+    ("Read how the other parsers take a date", "analysis"),
+    ("Check every caller of parse", "analysis"),
+)
+
 PARSER = (
     "from datetime import date\n"
     "\n"
@@ -54,8 +73,14 @@ TEST = (
     'sys.path.insert(0, "src")\n'
     "from dates import parse  # noqa: E402\n"
     "\n"
-    'assert parse("05/10/2026").month == 10, "the month is the second part"\n'
-    'print("1 passed")\n'
+    "\n"
+    "def test_day_first():\n"
+    '    assert parse("05/10/2026").month == 10, "the month is the second part"\n'
+    "\n"
+    "\n"
+    'if __name__ == "__main__":\n'
+    "    test_day_first()\n"
+    '    print("1 passed")\n'
 )
 WRONG = '    month, day, year = text.split("/")\n'
 RIGHT = '    day, month, year = text.split("/")\n'
@@ -76,6 +101,7 @@ OPENING = (
     "The fix should be one line: the parts of the date in the order it is written. "
     "Here is the plan."
 )
+AFTER = "I read what you did. The test passes on the branch, so nothing else changes. I'll validate the head again."
 PLAN = (
     "1. Run `tests/test_dates.py` and see it fail.\n"
     "2. Read `src/dates.py` and take the day first.\n"
@@ -131,6 +157,8 @@ def engineer_scene() -> list[Any]:
         ),
         turn(use("ask_person", question="Shall I also add a test for a leap day, 29/02/2028?")),
         turn(ThinkingBlock(text="Not now, then. I'll validate the head."), use("validate")),
+        turn(use("submit_result", claim="succeeded", evidence="$last_result.runs")),
+        turn(TextBlock(text=AFTER), use("validate")),
         turn(use("submit_result", claim="succeeded", evidence="$last_result.runs")),
     ]
 
@@ -258,6 +286,186 @@ async def record_evidence(slug: str, session_id: UUID) -> None:
         await container.close()
 
 
+async def write_tree(slug: str, session_id: UUID) -> None:
+    from acme.om.agent_sessions.types.agent_session import AgentSession
+    from acme.om.base import new_id, utcnow
+    from acme.services.api.container import AppContainer, boot
+    from acme.services.api.main import command_request
+    from acme.services.api.settings import ApiSettings
+
+    settings = ApiSettings()
+    boot(settings)
+    settings.refuse_remote()
+    container = AppContainer.build(settings)
+    await container.start()
+    try:
+        org = await container.storage.get_tenancy_storage().read_org_by_slug(slug)
+        if org is None:
+            raise SystemExit(f"no org {slug}")
+        owner = await container.managers.tenancy.member_context(
+            command_request(settings), org.id, org.created_by
+        )
+        root = await container.managers.agent_sessions.get_session(owner, session_id)
+        sessions = container.storage.get_agent_session_storage()
+        for title, kind in CHILDREN:
+            now = utcnow()
+            child_id = new_id()
+            child = AgentSession(
+                id=child_id,
+                created_at=now,
+                updated_at=now,
+                created_by=owner.user_id,
+                updated_by=owner.user_id,
+                title=title,
+                participants=(owner.user_id,),
+                kind=kind,
+                kind_version=1,
+                parent_id=root.id,
+                root_id=root.root_id,
+                depth=root.depth + 1,
+            )
+            await sessions.create_session(owner.org_id, child, ())
+    finally:
+        await container.close()
+
+
+def checkout(root: Path, slug: str, at: Path) -> Path:
+    """A clone of the org's repository at the branch pushed last, else its
+    default branch: what the session's workspace holds once it delivered."""
+    from acme.services.api.seed import first_repository
+
+    repository = first_repository(slug)
+    bare = root / repository.host / f"{repository.path}.git"
+    heads = subprocess.run(
+        ["git", "for-each-ref", "--sort=-committerdate", "--format=%(refname:short)", "refs/heads"],
+        cwd=bare,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.split()
+    branch = next((head for head in heads if head != "main"), "main")
+    subprocess.run(
+        ["git", "clone", "-q", "--branch", branch, str(bare), str(at)],
+        check=True,
+        capture_output=True,
+    )
+    return at
+
+
+async def stand_in_host(root: Path, slug: str, session_id: UUID, api: str) -> None:
+    sys.path.insert(0, str(REPO / "om" / "tests"))
+    import httpx
+    from contracts.hosts_storage import make_pool
+
+    from acme.services.api.container import AppContainer, boot
+    from acme.services.api.main import command_request
+    from acme.services.api.settings import ApiSettings
+
+    settings = ApiSettings()
+    boot(settings)
+    settings.refuse_remote()
+    container = AppContainer.build(settings)
+    await container.start()
+    try:
+        org = await container.storage.get_tenancy_storage().read_org_by_slug(slug)
+        if org is None:
+            raise SystemExit(f"no org {slug}")
+        owner = await container.managers.tenancy.member_context(
+            command_request(settings), org.id, org.created_by
+        )
+        hosts = container.managers.hosts
+        pool = await hosts.create_pool(owner, make_pool("this machine"))
+        issued = await hosts.issue_enrollment_token(owner, pool.id)
+        async with httpx.AsyncClient(base_url=api, timeout=30) as client:
+            enrolled = await client.post(
+                "/v1/hosts/enrollments",
+                headers=host_headers(issued.token),
+                json={"name": "this-machine", "advertisement": ADVERTISED, "exec_version": 1},
+            )
+            enrolled.raise_for_status()
+            host = enrolled.json()
+            await hosts.place_session(owner, session_id, pool.id)
+            work = checkout(root, slug, root / "hands" / str(session_id))
+            await container.managers.relay.bind_workspace(
+                owner, session_id, UUID(host["host_id"]), str(work)
+            )
+            print("ready", flush=True)
+            try:
+                await run_one(client, host_headers(host["token"]), work)
+            finally:
+                await hosts.place_session(owner, session_id, None)
+    finally:
+        await container.close()
+
+
+ADVERTISED = {
+    "os": "this machine",
+    "shell": "/bin/sh",
+    "capabilities": ["git"],
+    "isolation_modes": ["directory"],
+}
+
+
+def host_headers(token: str) -> dict[str, str]:
+    return {
+        "Authorization": f"Bearer {token}",
+        "X-App": "api",
+        "X-App-Version": "host@portal-check",
+    }
+
+
+async def run_one(client: Any, headers: dict[str, str], work: Path) -> None:
+    """Claims the first command sent within two minutes, runs it in `work`,
+    and settles it with what it printed."""
+    import base64
+    import hashlib
+
+    from acme.om.relay.types.exec import ExecOutcome, ExecOutput, ExecResult
+
+    for _ in range(240):
+        claimed = await client.post(
+            "/v1/hosts/me/claims", headers=headers, json={"exec_version": 1}
+        )
+        claimed.raise_for_status()
+        item = claimed.json().get("item")
+        if item is not None:
+            break
+        await asyncio.sleep(0.5)
+    else:
+        raise SystemExit("no command came")
+    item_id = item["payload"]["item_id"]
+    held = await client.get(f"/v1/hosts/me/exec/{item_id}", headers=headers)
+    held.raise_for_status()
+    request = held.json()["request"]
+    ran = await asyncio.to_thread(
+        subprocess.run,
+        request["argv"],
+        cwd=work / request.get("cwd", "."),
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    print(f"ran {' '.join(request['argv'])}: exit {ran.returncode}", flush=True)
+    settled = ExecResult(
+        outcome=ExecOutcome(exit_code=ran.returncode),
+        output=ExecOutput(stdout=ran.stdout, stderr=ran.stderr),
+    )
+    data = settled.model_dump_json().encode()
+    pushed = await client.post(
+        f"/v1/hosts/me/exec/{item_id}/result",
+        headers=headers,
+        json={
+            "data": base64.b64encode(data).decode(),
+            "crossing": {
+                "kind": "result",
+                "sha256": hashlib.sha256(data).hexdigest(),
+                "size": len(data),
+            },
+        },
+    )
+    pushed.raise_for_status()
+
+
 def main(argv: list[str]) -> int:
     if len(argv) == 2 and argv[0] == "script":
         write_script(Path(argv[1]))
@@ -267,6 +475,12 @@ def main(argv: list[str]) -> int:
         return 0
     if len(argv) == 3 and argv[0] == "scene":
         asyncio.run(prepare_scene(Path(argv[1]), argv[2]))
+        return 0
+    if len(argv) == 3 and argv[0] == "tree":
+        asyncio.run(write_tree(argv[1], UUID(argv[2])))
+        return 0
+    if len(argv) == 5 and argv[0] == "host":
+        asyncio.run(stand_in_host(Path(argv[1]), argv[2], UUID(argv[3]), argv[4]))
         return 0
     if len(argv) == 3 and argv[0] == "evidence":
         asyncio.run(record_evidence(argv[1], UUID(argv[2])))

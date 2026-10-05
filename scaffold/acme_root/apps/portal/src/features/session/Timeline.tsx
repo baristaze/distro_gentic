@@ -1,6 +1,7 @@
 // A session's history as a chat: each entry the timeline model makes, drawn
 // as its row, and the status line under the last. Nothing here reads or
-// decides: a row folds or opens, and a card's button calls the view-model.
+// decides: a row folds or opens, a call's line opens it in the pane, and a
+// card's button calls the view-model.
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -29,7 +30,7 @@ import {
   type KitIcon,
 } from "../../design/kit";
 import { shortTime } from "../sessions/sessionsModel";
-import { CUT_NOTE, duration, type BodyKind, type CallLine, type CallState, type CardKind, type Entry, type ThoughtEntry } from "./timelineModel";
+import { CUT_NOTE, duration, type BodyKind, type Call, type CallLine, type CallState, type CardKind, type Entry, type ThoughtEntry } from "./timelineModel";
 import type { SessionVm } from "./useSessionVm";
 
 /** A line's words, a `quoted` run drawn as code. */
@@ -44,7 +45,7 @@ function Gist({ text }: { text: string }) {
   );
 }
 
-function Body({ kind, text, label }: { kind: BodyKind; text: string; label: string }): ReactNode {
+export function Body({ kind, text, label }: { kind: BodyKind; text: string; label: string }): ReactNode {
   switch (kind) {
     case "markdown":
       return <Markdown text={text} />;
@@ -69,7 +70,7 @@ const STATE_WORDS: Record<CallState, string> = {
   stopped: "Stopped",
 };
 
-function StateMark({ state }: { state: CallState }) {
+export function StateMark({ state }: { state: CallState }) {
   const Icon = state === "done" ? CheckIcon : state === "held" ? HeldIcon : state === "failed" || state === "denied" ? FailedIcon : state === "stopped" ? FailedIcon : SpinnerIcon;
   return (
     <span className="acme-call-state" data-state={state} role="img" aria-label={STATE_WORDS[state]} title={STATE_WORDS[state]}>
@@ -78,21 +79,38 @@ function StateMark({ state }: { state: CallState }) {
   );
 }
 
-/** One call: its state, its line, and the chevron that shows its answer
- * inline. A running call shows what it streams without a click. */
-function CallRow({ line }: { line: CallLine }) {
+/** Opens a call in the session's pane. */
+type OnOpen = (call: Call) => void;
+
+/** One call: its state and its line, which opens it in the pane, and the
+ * chevron that shows its answer inline. A running call shows what it
+ * streams without a click. */
+function CallRow({ line, onOpen }: { line: CallLine; onOpen: OnOpen }) {
   const [open, setOpen] = useState<boolean | null>(null);
   const has = line.bodyKind !== "none";
   const shown = has && (open ?? (line.call.output === null && line.call.liveOutput !== null));
   return (
     <div className="acme-call" data-tool={line.call.tool} data-state={line.call.state}>
-      <button type="button" className="acme-call-line" aria-expanded={has ? shown : undefined} disabled={!has} onClick={() => setOpen(!shown)}>
-        <StateMark state={line.call.state} />
-        <span className="acme-call-gist">
-          <Gist text={line.gist} />
-        </span>
-        {has ? <ChevronRightIcon size={14} className="acme-fold-mark" /> : null}
-      </button>
+      <div className="acme-call-head">
+        <button type="button" className="acme-call-line" title="Open this step in the panel" onClick={() => onOpen(line.call)}>
+          <StateMark state={line.call.state} />
+          <span className="acme-call-gist">
+            <Gist text={line.gist} />
+          </span>
+        </button>
+        {has ? (
+          <button
+            type="button"
+            className="acme-call-fold"
+            aria-expanded={shown}
+            aria-label={shown ? "Hide its answer" : "Show its answer"}
+            title={shown ? "Hide its answer" : "Show its answer"}
+            onClick={() => setOpen(!shown)}
+          >
+            <ChevronRightIcon size={14} className="acme-fold-mark" />
+          </button>
+        ) : null}
+      </div>
       {shown ? (
         <div className="acme-call-body">
           <Body kind={line.bodyKind} text={line.body} label={line.gist} />
@@ -123,7 +141,7 @@ function ThoughtRow({ entry }: { entry: ThoughtEntry }) {
   );
 }
 
-function WorkBlock({ entry }: { entry: Extract<Entry, { kind: "work" }> }) {
+function WorkBlock({ entry, onOpen }: { entry: Extract<Entry, { kind: "work" }>; onOpen: OnOpen }) {
   const [open, setOpen] = useState<boolean | null>(null);
   const shown = open ?? entry.running;
   const label = `${entry.running ? "Working for" : "Worked for"} ${duration(entry.seconds)} · ${entry.steps} ${entry.steps === 1 ? "step" : "steps"}`;
@@ -136,7 +154,7 @@ function WorkBlock({ entry }: { entry: Extract<Entry, { kind: "work" }> }) {
       </button>
       {shown ? (
         <div className="acme-work-items">
-          {entry.items.map((item) => (item.kind === "call" ? <CallRow key={item.key} line={item} /> : <ThoughtRow key={item.key} entry={item} />))}
+          {entry.items.map((item) => (item.kind === "call" ? <CallRow key={item.key} line={item} onOpen={onOpen} /> : <ThoughtRow key={item.key} entry={item} />))}
         </div>
       ) : null}
     </div>
@@ -157,7 +175,7 @@ function ActionCard({ entry, vm }: { entry: Extract<Entry, { kind: "action" }>; 
           {entry.authorizationClass ? ` · ${entry.authorizationClass.replace(/_/g, " ")}` : ""}
         </Muted>
       </header>
-      <CallRow line={entry.line} />
+      <CallRow line={entry.line} onOpen={vm.openCall} />
       {vm.may?.send && seq !== null ? (
         <div className="acme-tcard-actions">
           {denying ? (
@@ -325,7 +343,7 @@ function EntryRow({ entry, vm }: { entry: Entry; vm: SessionVm }): ReactNode {
         </div>
       );
     case "work":
-      return <WorkBlock entry={entry} />;
+      return <WorkBlock entry={entry} onOpen={vm.openCall} />;
     case "action":
       return <ActionCard entry={entry} vm={vm} />;
     case "ask":
@@ -336,7 +354,7 @@ function EntryRow({ entry, vm }: { entry: Entry; vm: SessionVm }): ReactNode {
       return <SubAgentCard entry={entry} />;
     case "product": {
       const card = vm.tools[entry.line.call.tool]?.card;
-      return card && vm.slotSession ? card(vm.slotSession, entry.line.call) : <CallRow line={entry.line} />;
+      return card && vm.slotSession ? card(vm.slotSession, entry.line.call) : <CallRow line={entry.line} onOpen={vm.openCall} />;
     }
     case "line":
       return (

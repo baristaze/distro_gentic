@@ -56,8 +56,12 @@ test("a member starts a session on Home, sees it run and finish in the left bar,
   console.log(`chat: ${(await chat.locator("li[data-kind]").evaluateAll((rows) => rows.map((row) => row.getAttribute("data-kind")))).join(" | ")}`);
   await owner.screenshot({ path: `${SHOTS}session-chat.png`, fullPage: true });
 
-  await owner.getByRole("button", { name: "Show the panel" }).click();
-  await owner.getByRole("radio", { name: "Evidence", exact: true }).click();
+  // The pane opened itself at Workspace while it ran; "+" opens Evidence.
+  const pane = owner.getByRole("complementary", { name: "Session pane" });
+  await expect(pane.getByRole("tab", { name: "Workspace" })).toBeVisible();
+  await pane.getByRole("button", { name: "Open a view" }).click();
+  await owner.getByRole("menuitem", { name: "Evidence" }).click();
+  await expect(pane.getByRole("tab", { name: "Evidence" })).toHaveAttribute("aria-selected", "true");
   const runs = owner.getByRole("table", { name: "Runs" });
   await expect(runs.locator("tbody tr")).toHaveCount(3);
   await expect(runs).toContainText("twin, never reported as real");
@@ -73,7 +77,7 @@ test("a member starts a session on Home, sees it run and finish in the left bar,
   await stranger.goto("/sessions");
   await expect(stranger.getByRole("heading", { level: 1, name: "All sessions" })).toBeVisible();
   await expect(stranger.getByRole("main").getByText("No sessions yet.")).toBeVisible();
-  await stranger.goto(`/sessions/${sessionId}?tab=evidence`);
+  await stranger.goto(`/sessions/${sessionId}?pane=evidence`);
   await expect(stranger.getByRole("heading", { level: 1 })).toHaveText("No session here");
   await expect(stranger.getByText(title)).toHaveCount(0);
   console.log(`another org at /sessions/${sessionId}: ${await stranger.getByRole("heading", { level: 1 }).textContent()}`);

@@ -1,6 +1,6 @@
 // One session: its header, its history as a chat with the composer pinned
-// under it, and a panel of its other parts beside them. A session the
-// member's org does not hold shows nothing of it.
+// under it, and its right pane of tabs beside them. A session the member's
+// org does not hold shows nothing of it.
 import { useEffect, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { errorMessage } from "../../app/errorMessage";
@@ -9,9 +9,7 @@ import {
   ArchiveIcon,
   Banner,
   Card,
-  CloseIcon,
   CopyIcon,
-  IconButton,
   InfoTip,
   Menu,
   MenuItem,
@@ -22,14 +20,13 @@ import {
   PauseIcon,
   PlayIcon,
   PullRequestIcon,
-  SegmentedControl,
   SendIcon,
   TextArea,
   Tooltip,
 } from "../../design/kit";
 import { shortTime } from "../sessions/sessionsModel";
-import { SESSION_TABS } from "./sessionModel";
-import { ChangesPart, ChildrenPart, EvidencePart, LivePart, ToolCallsPart } from "./SessionParts";
+import { Pane } from "./Pane";
+import { SessionVmContext } from "./sessionContext";
 import { Timeline } from "./Timeline";
 import { useSessionVm, type SessionVm } from "./useSessionVm";
 
@@ -40,18 +37,17 @@ export function SessionPage() {
   const vm = useSessionVm(sessionId);
   // What the page can do now, offered first in the shell's search (Cmd-K).
   usePageCommands(vm.commands);
-  const { panel, setPanel } = vm;
-  const running = vm.session?.raw.status === "running";
-  // Option-Cmd-B shows or hides the panel.
+  const { togglePane } = vm;
+  // Option-Cmd-B shows or hides the pane.
   useEffect(() => {
     const onKey = (event: globalThis.KeyboardEvent) => {
       if (event.code !== "KeyB" || !event.altKey || !(event.metaKey || event.ctrlKey)) return;
       event.preventDefault();
-      setPanel(panel === null ? (running ? "live" : "changes") : null);
+      togglePane();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [panel, setPanel, running]);
+  }, [togglePane]);
   if (vm.missing) {
     return (
       <Page title="No session here" back={back}>
@@ -69,16 +65,18 @@ export function SessionPage() {
     );
   }
   return (
-    <div className="acme-app">
-      <div className="acme-session" data-panel={vm.panel ? "open" : undefined}>
-        <section className="acme-session-middle" aria-label="Session">
-          <SessionHeader vm={vm} />
-          <Timeline key={vm.id} vm={vm} />
-          <Composer key={`composer-${vm.id}`} vm={vm} />
-        </section>
-        {vm.panel ? <SessionPanel vm={vm} /> : null}
+    <SessionVmContext.Provider value={vm}>
+      <div className="acme-app">
+        <div className="acme-session" data-pane={vm.pane.shown ? "open" : undefined}>
+          <section className="acme-session-middle" aria-label="Session">
+            <SessionHeader vm={vm} />
+            <Timeline key={vm.id} vm={vm} />
+            <Composer key={`composer-${vm.id}`} vm={vm} />
+          </section>
+          <Pane vm={vm} />
+        </div>
       </div>
-    </div>
+    </SessionVmContext.Provider>
   );
 }
 
@@ -93,7 +91,6 @@ function SessionHeader({ vm }: { vm: SessionVm }) {
   const why = park
     ? `${park.reason} It is cleared by ${park.unlock}.${park.retryAt ? ` It tries again by itself at ${shortTime(park.retryAt)}.` : ""}`
     : `It is ${session.status.label}.`;
-  const opens = raw.status === "running" ? "live" : "changes";
   return (
     <header className="acme-session-head">
       <Tooltip tip={why}>
@@ -120,7 +117,7 @@ function SessionHeader({ vm }: { vm: SessionVm }) {
       ) : null}
       <span className="acme-composer-gap" />
       {park?.action === "give_back" && may?.giveBack ? (
-        <button type="button" className="acme-chip" onClick={() => vm.setPanel("live")}>
+        <button type="button" className="acme-chip" onClick={() => vm.openTab("workspace")}>
           <span>Give it back</span>
         </button>
       ) : null}
@@ -154,29 +151,27 @@ function SessionHeader({ vm }: { vm: SessionVm }) {
           Copy link
         </MenuItem>
       </Menu>
-      <Tooltip tip={vm.panel ? "Hide the panel" : "Show the panel"} shortcut="⌥⌘B">
-        <button
-          type="button"
-          className="acme-icon-button"
-          aria-label={vm.panel ? "Hide the panel" : "Show the panel"}
-          aria-pressed={vm.panel !== null}
-          onClick={() => vm.setPanel(vm.panel ? null : opens)}
-        >
-          <PanelIcon />
-        </button>
-      </Tooltip>
+      {vm.pane.shown === null ? (
+        <Tooltip tip="Show the panel" shortcut="⌥⌘B">
+          <button type="button" className="acme-icon-button" aria-label="Show the panel" onClick={vm.togglePane}>
+            <PanelIcon />
+          </button>
+        </Tooltip>
+      ) : null}
     </header>
   );
 }
 
 /** Pinned under the chat: a reply or a steer, or the answer while the agent
- * asks; Send on Cmd-Enter; Pause while it runs. */
+ * asks. Send works at any time, running or not, on Cmd-Enter too: a message
+ * sent while the agent works is queued, and its next step reads it. While
+ * the session runs, Pause sits beside Send and never replaces it. */
 function Composer({ vm }: { vm: SessionVm }) {
   const [draft, setDraft] = useState("");
   if (!vm.may?.send) {
     return (
       <div className="acme-session-composer">
-        <Muted>A member who may write sends messages here.</Muted>
+        <Muted>{vm.may?.giveBack ? "A person has control: the agent reads what they did once they give it back." : "A member who may write sends messages here."}</Muted>
       </div>
     );
   }
@@ -214,27 +209,5 @@ function Composer({ vm }: { vm: SessionVm }) {
         </div>
       </form>
     </div>
-  );
-}
-
-/** The session's other parts, one at a time, beside the chat. */
-function SessionPanel({ vm }: { vm: SessionVm }) {
-  if (vm.panel === null) return null;
-  return (
-    <aside className="acme-session-panel" aria-label="Session panel">
-      <div className="acme-session-panel-head">
-        <SegmentedControl label="Part of the session" value={vm.panel} options={SESSION_TABS} onChange={vm.setPanel} />
-        <IconButton label="Hide the panel" onClick={() => vm.setPanel(null)}>
-          <CloseIcon />
-        </IconButton>
-      </div>
-      <div className="acme-session-panel-body">
-        {vm.panel === "tools" ? <ToolCallsPart vm={vm} /> : null}
-        {vm.panel === "evidence" ? <EvidencePart vm={vm} /> : null}
-        {vm.panel === "changes" ? <ChangesPart vm={vm} /> : null}
-        {vm.panel === "children" ? <ChildrenPart vm={vm} /> : null}
-        {vm.panel === "live" ? <LivePart vm={vm} /> : null}
-      </div>
-    </aside>
   );
 }

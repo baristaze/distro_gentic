@@ -180,12 +180,16 @@ export function oneLine(text: string, max = 96): string {
   return cut.length > max ? `${cut.slice(0, max - 1)}…` : cut;
 }
 
+/** How many lines a text holds; a last newline ends a line, and starts none. */
+export function lineCount(text: string): number {
+  return text === "" ? 0 : text.replace(/\n$/, "").split("\n").length;
+}
+
 /** The lines a change adds and removes: "+3 −1"; nothing when the view
  * cut either side, whose lines it cannot count. */
 export function counts(removed: string, added: string): string {
   if (isCut(removed) || isCut(added)) return "";
-  const lines = (text: string) => (text === "" ? 0 : text.replace(/\n$/, "").split("\n").length);
-  return `+${lines(added)} −${lines(removed)}`;
+  return `+${lineCount(added)} −${lineCount(removed)}`;
 }
 
 /** An edit's text as a unified diff of one hunk, so it reads as a diff. */

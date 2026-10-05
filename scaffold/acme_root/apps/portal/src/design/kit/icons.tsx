@@ -21,10 +21,13 @@ import {
   ChevronDown,
   ChevronRight,
   CircleX,
+  ClipboardCheck,
   Copy,
+  Crosshair,
   Crown,
   ExternalLink,
   Eye,
+  FileDiff,
   FileText,
   Fingerprint,
   Flag,
@@ -53,10 +56,12 @@ import {
   ShieldAlert,
   ShieldCheck,
   SquarePen,
+  SquareTerminal,
   Sun,
   User,
   UserPlus,
   Users,
+  X,
   Zap,
 } from "lucide-react";
 
@@ -175,6 +180,16 @@ export const ResultIcon = kitIcon(Flag);
 export const SubAgentIcon = kitIcon(Network);
 /** A speech bubble with a question mark: the agent asks. */
 export const AskIcon = kitIcon(MessageCircleQuestionMark);
+/** A terminal: a session's workspace. */
+export const WorkspaceIcon = kitIcon(SquareTerminal);
+/** Crosshairs: one step. */
+export const StepIcon = kitIcon(Crosshair);
+/** A file with a diff: what a session changed. */
+export const ChangesIcon = kitIcon(FileDiff);
+/** A clipboard with a check: evidence. */
+export const EvidenceIcon = kitIcon(ClipboardCheck);
+/** A cross: close a tab. */
+export const CloseTabIcon = kitIcon(X);
 
 /** An arrow to the left: back to where the person came from. */
 export const BackIcon = kitIcon(ArrowLeft);

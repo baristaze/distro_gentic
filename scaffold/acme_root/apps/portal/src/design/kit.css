@@ -1184,15 +1184,16 @@ select.acme-field {
 }
 
 /* A session's page: the header, the chat that scrolls, and the composer
-   pinned under it; the panel beside them when it is open. */
+   pinned under it; the pane beside them while it shows, as wide as a
+   person left it. */
 .acme-session {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   height: 100vh;
 }
 
-.acme-session[data-panel] {
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 40%);
+.acme-session[data-pane] {
+  grid-template-columns: minmax(360px, 1fr) auto;
 }
 
 .acme-session-middle {
@@ -1263,34 +1264,246 @@ select.acme-field {
   min-height: 48px;
 }
 
-.acme-session-panel {
+/* The right pane: its tabs, "+", and the hide button on one row; the
+   active tab's view under them; its left edge is the splitter. */
+.acme-pane {
+  position: relative;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
+  max-width: 60vw;
   min-width: 0;
   min-height: 0;
   border-left: 1px solid var(--acme-border);
   background: var(--acme-bg);
 }
 
-.acme-session-panel-head {
+.acme-pane-splitter {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  z-index: 4;
+  width: 6px;
+  cursor: col-resize;
+}
+
+.acme-pane-splitter:hover,
+.acme-pane-splitter:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--acme-accent) 35%, transparent);
+}
+
+.acme-pane-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  overflow-x: auto;
-  padding: 10px 12px;
+  gap: 4px;
+  min-width: 0;
+  padding: 6px 8px;
   border-bottom: 1px solid var(--acme-border);
 }
 
-.acme-session-panel-head > :last-child {
-  margin-left: auto;
+.acme-pane-tabs {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 
-.acme-session-panel-body {
+/* A tab gives up its label before the strip scrolls: an inactive one
+ * narrows to its icon, its ✕ shown on hover; the active one keeps its
+ * width. */
+.acme-pane-tab {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  min-width: 34px;
+  border-radius: 8px;
+  color: var(--acme-muted);
+}
+
+.acme-pane-tab .acme-tip-anchor {
+  overflow: hidden;
+}
+
+.acme-pane-tab:hover {
+  background: var(--acme-surface-subtle);
+}
+
+.acme-pane-tab[data-active] {
+  flex-shrink: 0;
+  background: var(--acme-surface-subtle);
+  color: var(--acme-text);
+}
+
+.acme-pane-tab-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 5px 4px 5px 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.acme-pane-tab-name > svg {
+  flex-shrink: 0;
+}
+
+.acme-pane-tab-name > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acme-pane-tab[data-active] .acme-pane-tab-name {
+  font-weight: 600;
+}
+
+.acme-pane-tab-close {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 4px;
+  padding: 2px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--acme-muted);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.acme-pane-tab:hover .acme-pane-tab-close,
+.acme-pane-tab[data-active] .acme-pane-tab-close,
+.acme-pane-tab-close:focus-visible {
+  opacity: 1;
+}
+
+.acme-pane-tab:not([data-active], :hover, :focus-within) .acme-pane-tab-close {
+  display: none;
+}
+
+.acme-pane-tab-close:hover {
+  background: var(--acme-border);
+  color: var(--acme-text);
+}
+
+/* A view fits the pane's width: a card no wider than the pane, a table
+ * wider than its card scrolling inside it. */
+.acme-pane-view {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   align-content: start;
   gap: 16px;
+  min-width: 0;
   overflow: auto;
   padding: 16px;
+}
+
+.acme-pane-view .acme-card {
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.acme-pane-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.acme-pane-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.acme-pane-row > .acme-field {
+  flex: 1 1 200px;
+}
+
+.acme-pane-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 16px;
+  overflow-wrap: anywhere;
+}
+
+.acme-pane-plan {
+  display: grid;
+  gap: 8px;
+}
+
+/* The Step tab: one call, its facts, and what it was asked and answered. */
+.acme-step {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.acme-step-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.acme-step-heading {
+  margin: 4px 0 0;
+  color: var(--acme-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* The Changes tab: a file a row, its lines added and removed at the end. */
+.acme-files {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.acme-file {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--acme-text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.acme-file:hover {
+  background: var(--acme-surface-subtle);
+}
+
+.acme-file-counts {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.acme-file-counts [data-tone="added"] {
+  color: var(--acme-live);
+}
+
+.acme-file-counts [data-tone="removed"] {
+  color: var(--acme-danger-text);
 }
 
 /* The chat: one entry a row, a person's words on the right. */
@@ -1424,7 +1637,32 @@ select.acme-field {
   border-left: 2px solid var(--acme-border);
 }
 
-/* One call: its state, its line, and its answer under it. */
+/* One call: its state and its line, which opens it in the pane; the
+   chevron that folds its answer under it. */
+.acme-call-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.acme-call-fold {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  padding: 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--acme-muted);
+  cursor: pointer;
+}
+
+.acme-call-fold:hover {
+  background: var(--acme-surface-subtle);
+  color: var(--acme-text);
+}
+
 .acme-call-line {
   display: flex;
   align-items: center;

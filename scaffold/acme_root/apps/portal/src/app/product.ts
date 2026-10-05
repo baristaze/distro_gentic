@@ -16,7 +16,7 @@ export interface SlotSession {
   /** Its steps paired into tool calls, each with what it was asked and
    * what it answered. */
   calls: readonly Call[];
-  /** Whether a run holds its loop now. */
+  /** Whether a run holds its loop now, or is about to take it. */
   running: boolean;
   /** Shows one of the session's tabs. */
   open: (tabId: string) => void;
@@ -43,7 +43,8 @@ export interface SessionTab {
   tip: string;
   /** Whether this session has anything for the tab. */
   offered: (s: SlotSession) => boolean;
-  /** Whether the tab opens by itself, once, when it first has something. */
+  /** Whether the tab opens by itself now. It does so once a session, the
+   * first time this holds, and a person who closes it keeps it closed. */
   opensItself?: (s: SlotSession) => boolean;
   render: (s: SlotSession) => ReactNode;
 }
