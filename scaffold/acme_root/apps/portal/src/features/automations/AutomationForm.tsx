@@ -1,7 +1,8 @@
 import type { FormEvent } from "react";
+import { useSlot } from "../../app/slot";
 import { Button, ErrorText, SegmentedControl, Select, TextArea, TextField } from "../../design/kit";
 import { tokens } from "../../design/tokens";
-import { AS_SAVED, asSavedLine, periodOptions, type AutomationDraft } from "./automationsModel";
+import { agentOptions, AS_SAVED, asSavedLine, periodOptions, type AutomationDraft } from "./automationsModel";
 
 const grid = { display: "grid", gap: tokens.space.md } as const;
 const row = { display: "grid", gap: tokens.space.md, gridTemplateColumns: "repeat(auto-fit, minmax(10rem, 1fr))" } as const;
@@ -28,6 +29,8 @@ export function AutomationForm({
   submitLabel: string;
   onSubmit: () => void;
 }) {
+  const agents = useSlot().agents;
+  const agent = agents.find((each) => each.kind === draft.agentKind);
   const set = <K extends keyof AutomationDraft>(key: K) => (value: AutomationDraft[K]) => setDraft({ ...draft, [key]: value });
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -35,7 +38,7 @@ export function AutomationForm({
   };
   return (
     <form onSubmit={submit} style={grid} aria-label={label}>
-      <TextField label="Name" value={draft.name} onChange={set("name")} />
+      <TextField label="Name" placeholder="e.g. Nightly dependency update" value={draft.name} onChange={set("name")} />
       <SegmentedControl
         label="Trigger"
         value={draft.triggerKind}
@@ -47,7 +50,7 @@ export function AutomationForm({
       />
       {draft.triggerKind === "schedule" ? (
         <div style={row}>
-          {draft.everyUnit === AS_SAVED ? null : <TextField label="Every" value={draft.every} onChange={set("every")} />}
+          {draft.everyUnit === AS_SAVED ? null : <TextField label="Every" placeholder="1" value={draft.every} onChange={set("every")} />}
           <Select
             label="Unit"
             value={draft.everyUnit}
@@ -62,9 +65,9 @@ export function AutomationForm({
         </div>
       ) : (
         <div style={row}>
-          <TextField label="From integrations" placeholder="any; or names, by commas" value={draft.integrations} onChange={set("integrations")} />
-          <TextField label="Arriving as" placeholder="any; or kinds, by commas" value={draft.arrivals} onChange={set("arrivals")} />
-          <TextField label="Routed to" placeholder="any; or effects, by commas" value={draft.effects} onChange={set("effects")} />
+          <TextField label="From integrations" placeholder="Any, or e.g. github" value={draft.integrations} onChange={set("integrations")} />
+          <TextField label="Arriving as" placeholder="Any, or e.g. ticket, comment" value={draft.arrivals} onChange={set("arrivals")} />
+          <TextField label="Routed to" placeholder="Any, or e.g. wake" value={draft.effects} onChange={set("effects")} />
         </div>
       )}
       <SegmentedControl
@@ -78,20 +81,31 @@ export function AutomationForm({
       />
       {draft.actionKind === "start_session" ? (
         <div style={row}>
-          <TextField label="Session kind" value={draft.agentKind} onChange={set("agentKind")} />
-          <TextField label="Session title" value={draft.title} onChange={set("title")} />
+          <Select
+            label="Agent"
+            value={draft.agentKind}
+            options={agentOptions(agents, draft.agentKind)}
+            onChange={set("agentKind")}
+            info={agent?.about ?? "The agent its sessions run"}
+          />
+          <TextField label="Session title" placeholder="e.g. Update dependencies" value={draft.title} onChange={set("title")} />
           {projectOptions.length > 0 ? <Select label="Project" value={draft.projectId} options={projectOptions} onChange={set("projectId")} /> : null}
         </div>
       ) : (
-        <TextField label="Standing session id" value={draft.sessionId} onChange={set("sessionId")} />
+        <TextField label="Standing session id" placeholder="Paste a session's id from its address" value={draft.sessionId} onChange={set("sessionId")} />
       )}
-      <TextArea label="Brief" value={draft.brief} onChange={set("brief")} />
+      <TextArea
+        label="Brief"
+        placeholder='e.g. "Update minor versions, run the tests, and open a pull request if they pass"'
+        value={draft.brief}
+        onChange={set("brief")}
+      />
       <div style={row}>
         <TextField label="Cost cap a period" placeholder="e.g. 5.00" value={draft.costCap} onChange={set("costCap")} />
-        <TextField label="Cost cap a run" placeholder="e.g. 1.00" value={draft.runCap} onChange={set("runCap")} />
+        <TextField label="Cost cap a run" placeholder="e.g. 1.00" info="The most one run may spend" value={draft.runCap} onChange={set("runCap")} />
         <Select label="Period" value={draft.period} options={periodOptions(draft.savedPeriod)} onChange={set("period")} />
-        <TextField label="Firings a period" value={draft.rate} onChange={set("rate")} />
-        <TextField label="Runs at once" value={draft.concurrency} onChange={set("concurrency")} />
+        <TextField label="Firings a period" placeholder="e.g. 10" value={draft.rate} onChange={set("rate")} />
+        <TextField label="Runs at once" placeholder="e.g. 1" value={draft.concurrency} onChange={set("concurrency")} />
         <Select
           label="When limited"
           value={draft.queue}
@@ -105,6 +119,7 @@ export function AutomationForm({
       <div style={row}>
         <Select
           label="Runs as"
+          info="Whose permissions its sessions use"
           value={draft.runsAs}
           options={[
             { value: "creator", label: "its maker" },

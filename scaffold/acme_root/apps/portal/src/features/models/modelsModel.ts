@@ -80,3 +80,11 @@ export function roleRows(options: readonly FillOptionsView[], choices: readonly 
 export function roleLabel(role: string): string {
   return role.replace(/_/g, " ");
 }
+
+/** What a provider's key field shows while empty: what to paste, and how
+ * its key starts. */
+export function keyPlaceholder(provider: string): string {
+  if (provider === "anthropic") return "Paste your Anthropic key (starts sk-ant-)";
+  if (provider === "openai") return "Paste your OpenAI key (starts sk-)";
+  return `Paste your ${providerName(provider)} key`;
+}

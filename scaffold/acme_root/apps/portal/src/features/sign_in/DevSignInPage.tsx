@@ -29,8 +29,8 @@ function DevSignInForm() {
               The local stack signs anyone in by address alone, with no email sent. A deployed environment has no such
               door.
             </Muted>
-            <TextField label="Email" type="email" value={vm.email} onChange={vm.setEmail} autoComplete="username" />
-            <TextField label="Name (for a new person)" value={vm.name} onChange={vm.setName} />
+            <TextField label="Email" type="email" placeholder="e.g. ada@example.com" value={vm.email} onChange={vm.setEmail} autoComplete="username" />
+            <TextField label="Name (for a new person)" placeholder="e.g. Ada Lovelace" value={vm.name} onChange={vm.setName} />
             {vm.error ? <ErrorText>{vm.error}</ErrorText> : null}
             <Button type="submit" wide disabled={vm.busy}>
               {vm.busy ? "Signing in…" : "Sign in"}

@@ -112,6 +112,16 @@ export function asks(approvals: readonly ApprovalView[], questions: readonly Que
   ].sort((a, b) => a.seq - b.seq);
 }
 
+/** What the message box shows while empty: while the agent waits on a
+ * person's answer (parked on a person with no call to decide), the answer;
+ * otherwise a reply or a steer, as the slot's example says it. */
+export function messagePlaceholder(parkReason: string | null | undefined, held: readonly Ask[], reply: string): string {
+  return parkReason === "person" && !held.some((ask) => ask.kind === "decision") ? "Answer the agent's question" : reply;
+}
+
+/** What a deny's note shows while empty. */
+export const DENY_NOTE_PLACEHOLDER = 'Tell the agent why, e.g. "Leave the migrations alone"';
+
 /** Who said a thing in a session's thread. */
 export type Speaker = "person" | "program" | "engine" | "agent" | "parent" | "outside";
 

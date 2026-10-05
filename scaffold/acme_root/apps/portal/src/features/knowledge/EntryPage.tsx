@@ -5,6 +5,7 @@ import { Banner, Button, Card, ErrorText, Markdown, Muted, Page, Pill, TextArea,
 import { tokens } from "../../design/tokens";
 import { ProviderNotice } from "../providers/ProviderNotice";
 import { shortTime } from "../sessions/sessionsModel";
+import { ENTRY_EXAMPLES } from "./knowledgeModel";
 import { useEntryVm } from "./useEntryVm";
 
 const back = <Link to="/knowledge">← Knowledge</Link>;
@@ -72,9 +73,20 @@ export function EntryPage() {
         <Card title="Edit" id="edit">
           {vm.draft ? (
             <form onSubmit={onSubmit} style={grid} aria-label="Edit entry">
-              <TextField label="Title" value={vm.draft.title} onChange={(title) => vm.setDraft({ ...vm.draft!, title })} />
-              <TextField label="Recalled by" value={vm.draft.trigger} onChange={(trigger) => vm.setDraft({ ...vm.draft!, trigger })} />
-              <TextArea label="What a session should know (Markdown)" value={vm.draft.text} onChange={(text) => vm.setDraft({ ...vm.draft!, text })} />
+              <TextField label="Title" placeholder={ENTRY_EXAMPLES.title} value={vm.draft.title} onChange={(title) => vm.setDraft({ ...vm.draft!, title })} />
+              <TextField
+                label="Recalled by"
+                placeholder={ENTRY_EXAMPLES.trigger}
+                info={ENTRY_EXAMPLES.triggerInfo}
+                value={vm.draft.trigger}
+                onChange={(trigger) => vm.setDraft({ ...vm.draft!, trigger })}
+              />
+              <TextArea
+                label="What a session should know (Markdown)"
+                placeholder={ENTRY_EXAMPLES.text}
+                value={vm.draft.text}
+                onChange={(text) => vm.setDraft({ ...vm.draft!, text })}
+              />
               {vm.problem ? <ErrorText>{vm.problem}</ErrorText> : null}
               <div style={{ display: "flex", gap: tokens.space.sm }}>
                 <Button type="submit" disabled={vm.saving}>

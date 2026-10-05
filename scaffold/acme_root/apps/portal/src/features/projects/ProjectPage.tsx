@@ -61,7 +61,7 @@ export function ProjectPage() {
           </dd>
         </dl>
       </Card>
-      <Card title="Read credential" id="credential">
+      <Card title="Read credential" id="credential" info="Used only to fetch the repository">
         <div style={form}>
           <p data-credential style={{ margin: 0 }}>
             <Muted>{credentialLine(vm.saved ? { updated_at: vm.saved.at } : null, vm.saved?.by ?? "", shortTime)}</Muted>
@@ -72,12 +72,14 @@ export function ProjectPage() {
                 label="User"
                 value={vm.draft.username}
                 autoComplete="off"
+                placeholder="x-access-token"
                 onChange={(username) => vm.setDraft({ ...vm.draft, username })}
               />
               <TextField
                 label="Password or token"
                 type="password"
                 autoComplete="new-password"
+                placeholder="A token that can read this repository"
                 value={vm.draft.password}
                 onChange={(password) => vm.setDraft({ ...vm.draft, password })}
               />
@@ -94,7 +96,7 @@ export function ProjectPage() {
       {vm.mayManage ? (
         <Card title="Name" id="name">
           <form onSubmit={onRename} style={form} aria-label="Rename">
-            <TextField label="Name" value={vm.name} onChange={vm.setName} />
+            <TextField label="Name" placeholder="e.g. Storefront" value={vm.name} onChange={vm.setName} />
             {vm.renameProblem ? <ErrorText>{vm.renameProblem}</ErrorText> : null}
             <div>
               <Button type="submit" disabled={vm.renaming}>

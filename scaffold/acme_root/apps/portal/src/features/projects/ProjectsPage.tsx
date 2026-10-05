@@ -26,11 +26,11 @@ export function ProjectsPage() {
       {vm.mayManage ? (
         <Card title="New project" id="new">
           <form onSubmit={onSubmit} style={{ display: "grid", gap: tokens.space.md }} aria-label="New project">
-            <TextField label="Name" value={vm.draft.name} onChange={(name) => vm.setDraft({ ...vm.draft, name })} />
+            <TextField label="Name" placeholder="e.g. Storefront" value={vm.draft.name} onChange={(name) => vm.setDraft({ ...vm.draft, name })} />
             <TextField
               label="Repository"
               value={vm.draft.repository}
-              placeholder="host/owner/name"
+              placeholder="github.com/your-org/storefront"
               onChange={(repository) => vm.setDraft({ ...vm.draft, repository })}
             />
             <Muted style={{ fontSize: tokens.font.size.sm }}>A project is bound to its repository, which never moves.</Muted>

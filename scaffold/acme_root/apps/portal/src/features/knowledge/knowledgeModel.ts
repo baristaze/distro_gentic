@@ -57,3 +57,12 @@ export function entryRequest(draft: EntryDraft): { request: KnowledgeRequest } |
   if (text.length > TEXT_MAX) return { problem: `An entry is at most ${TEXT_MAX} characters.` };
   return { request: { title, trigger, text } };
 }
+
+/** What an entry's fields show while empty: a realistic entry, and what
+ * "Recalled by" means. */
+export const ENTRY_EXAMPLES = {
+  title: "e.g. How we name migrations",
+  trigger: "e.g. migration, schema",
+  triggerInfo: "Words that make an agent read this entry",
+  text: 'e.g. "Never edit a migration that has shipped."',
+} as const;

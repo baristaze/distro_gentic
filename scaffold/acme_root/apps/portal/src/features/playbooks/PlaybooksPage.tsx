@@ -65,9 +65,25 @@ export function PlaybooksPage() {
         <Card title="Publish" id="publish">
           <form onSubmit={onPublish} style={grid} aria-label="Publish a playbook">
             <TextField label="Name" value={vm.draft.name} placeholder="release-notes" onChange={(name) => vm.setDraft({ ...vm.draft, name })} />
-            <TextField label="Description" value={vm.draft.description} onChange={(description) => vm.setDraft({ ...vm.draft, description })} />
-            <TextArea label="Steps (Markdown)" value={vm.draft.body} onChange={(body) => vm.setDraft({ ...vm.draft, body })} />
-            <TextArea label="Gates, one a line" value={vm.draft.gates} onChange={(gates) => vm.setDraft({ ...vm.draft, gates })} />
+            <TextField
+              label="Description"
+              placeholder="e.g. Drafts release notes from merged pull requests"
+              value={vm.draft.description}
+              onChange={(description) => vm.setDraft({ ...vm.draft, description })}
+            />
+            <TextArea
+              label="Steps (Markdown)"
+              placeholder="e.g. 1. List the pull requests merged since the last tag."
+              value={vm.draft.body}
+              onChange={(body) => vm.setDraft({ ...vm.draft, body })}
+            />
+            <TextArea
+              label="Gates, one a line"
+              placeholder="e.g. approve tool git_push"
+              info="Calls that wait for a person's approval, or are denied, while a session follows this playbook"
+              value={vm.draft.gates}
+              onChange={(gates) => vm.setDraft({ ...vm.draft, gates })}
+            />
             <Muted style={{ fontSize: tokens.font.size.sm }}>
               A gate reads &quot;approve tool git_push&quot; or &quot;deny class network&quot;. It only narrows the session&apos;s policy.
             </Muted>

@@ -8,6 +8,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider, type RouteObject } from "react-router-dom";
 import { ApiError, type AgentSessionView, type MeView, type Permission, type Role } from "@acme/client";
+import { EMPTY_PRODUCT, type PortalProduct } from "../app/product";
+import { SlotProvider } from "../app/slot";
 
 export type Org = "a" | "b";
 
@@ -97,11 +99,13 @@ export async function settle(): Promise<void> {
   for (let turn = 0; turn < 6; turn += 1) await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
 }
 
-export async function mount(routes: RouteObject[], address: string) {
+/** A page under its routes, with the slot the shell would hand it. */
+export async function mount(routes: RouteObject[], address: string, slot: PortalProduct = EMPTY_PRODUCT) {
   const router = createMemoryRouter(routes, { initialEntries: [address] });
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   root = createRoot(container);
-  await act(async () => root!.render(createElement(QueryClientProvider, { client: queryClient }, createElement(RouterProvider, { router }))));
+  const page = createElement(RouterProvider, { router });
+  await act(async () => root!.render(createElement(QueryClientProvider, { client: queryClient }, createElement(SlotProvider, { slot, children: page }))));
   await settle();
   return router;
 }
