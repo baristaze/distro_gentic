@@ -416,7 +416,8 @@ async def write_tree(slug: str) -> None:
         managers = container.managers
         trees = container.storage.get_agent_storage()
         person = Principal(kind=PrincipalKind.PERSON, id=owner.user_id)
-        began = utcnow() - timedelta(minutes=2)
+        # The tree began a minute ago: its sessions and their steps alike.
+        began = utcnow() - timedelta(minutes=1)
 
         # The root: an engineer, whose kind lets its tree hold two sub-agents.
         root = await managers.agents.start_session(
@@ -439,11 +440,10 @@ async def write_tree(slug: str) -> None:
         for child_id, (title, objective) in zip(ids, CHILDREN, strict=True):
             if await trees.take_slot(owner.org_id, root.root_id) is None:
                 raise SystemExit("the tree holds no more sub-agents")
-            now = utcnow()
             child = AgentSession(
                 id=child_id,
-                created_at=now,
-                updated_at=now,
+                created_at=began,
+                updated_at=began,
                 created_by=owner.user_id,
                 updated_by=owner.user_id,
                 title=title,
