@@ -1518,7 +1518,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Read Streams
+         * @description The item's open streams of a kind the claimant's own kind reads, for
+         *     the item it holds under the claim token its claim was handed (the
+         *     `Claim-Token` header) with a live lease, each after the last entry read
+         *     (`after=<stream>:<last>`, once a stream). Any other item, any other
+         *     kind, and a lapsed lease are not found; each call spends the
+         *     credential's budget of reads.
+         */
+        get: operations["read_streams_v1_claimants_me_items__item_id__streams__kind__get"];
         put?: never;
         /**
          * Append
@@ -10528,6 +10537,45 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ClaimantWorkView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_streams_v1_claimants_me_items__item_id__streams__kind__get: {
+        parameters: {
+            query?: {
+                after?: string[] | null;
+            };
+            header: {
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                authorization?: string | null;
+                "claim-token": string;
+            };
+            path: {
+                item_id: string;
+                kind: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemPageView"];
                 };
             };
             /** @description Validation Error */

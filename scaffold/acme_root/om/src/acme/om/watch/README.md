@@ -19,7 +19,7 @@ does; a chat message counts as a person's only as
   parts are the platform's kind; a product registers its own, which it
   writes and reads in groups of their own. A product's kind may name its
   claimant kind, which writes it for the item it holds, in a group per
-  item.
+  item, and the claimant kind that reads it there.
 - **The stream service's buffers**: the parts of each open stream, a
   bounded buffer per stream on the shared cache. A stream is the parts of
   one step. Nothing else: the step each adds up to is the record. The
@@ -40,6 +40,10 @@ the record that it is theirs is an entry in the tenant's event stream.
   with the hash it crossed the wall with. Any other item or kind is not
   found, an entry that does not match its hash is refused, and nothing
   lands.
+- **A claimant reads.** A product's claimant reads the streams of a
+  kind its own kind reads, for the item it holds under a live lease and
+  its claim token, from the entry after the last it read. Any other item
+  or kind, and a lapsed lease, are not found, and nothing is read.
 - **Open an item's read.** A viewer who may read the item's tenant gets
   a handle to the item's streams of one kind, as a session's.
 - **Read live.** The handle reads the session's open streams, each from
@@ -121,7 +125,11 @@ item's handle is `rules.signed`/`rules.verified_item` over an
 writer (`StreamKind.claimant`), the bounds `MAX_APPEND_ENTRIES` and
 `MAX_APPEND_BYTES`, each entry's `stream_part` crossing
 (`crossing.verified`), then `hosts.held_as` and the lease, and appends
-through `KindStreamsInterface` in the item's group. ADR 2030.
+through `KindStreamsInterface` in the item's group. ADR 2030. `read_as`
+checks the kind's reader (`StreamKind.reader`), then `hosts.held_as` and
+the lease, each refusal the same `NotFound` (a `LeaseLost` from
+`held_as` among them), and reads the item's group as `read_item_live`
+does. ADR 2038.
 -->
 
 ## How another namespace composes it

@@ -792,6 +792,10 @@ async def test_a_check_that_cannot_run_refuses_its_session_with_the_reason(
 ) -> None:
     executor = ScriptedExecutor(capabilities=frozenset())
     platform = platform_over(tmp_path, executor=executor)
+    # The run reads its starter's live context: the starter is a member.
+    platform.owner, _ = await platform.managers.tenancy.bootstrap(
+        RequestContext(request_id=new_id(), app=APP), "Ajax", "ajax", "ann@ajax.test", "Ann"
+    )
     project_id = new_id()
     evidence = platform.managers.evidence
     await evidence.write_policy(platform.owner, make_policy(policy_key(project_id)))

@@ -279,12 +279,13 @@ async def test_a_decision_counts_only_in_a_role_the_policy_lets_decide(setting: 
     assert await outcome() is GateOutcome.ASK, "the owner no longer decides this class"
 
 
-async def test_a_decision_sent_on_an_api_key_is_a_programs_and_approves_nothing(
+async def test_a_decision_sent_on_an_api_key_is_refused_and_the_call_stays_held(
     setting: Setting,
 ) -> None:
-    """An owner's API key may send a decision, and the history records it as
-    the program's: no verdict counts it, so the call still waits for a
-    person."""
+    """An owner's API key decides no call: an approval is a person's. The
+    decision is refused before anything is written, so the call still waits
+    for a person; and a program's decision, however it reached the history,
+    is none."""
     tools, org, registry = setting.tools, setting.org, setting.registry
     agent, owner = context(Role.SERVICE, org), context(Role.OWNER, org)
     program = build_context(
@@ -300,13 +301,13 @@ async def test_a_decision_sent_on_an_api_key_is_a_programs_and_approves_nothing(
         tools.manager, tools.steps, agent, "push_branch", {"branch": "feature"}, "integration"
     )
 
-    decision = await tools.manager.decide_call(
-        program, found.session_id, found.request.seq, approve=True
-    )
+    with pytest.raises(NotAuthorized):
+        await tools.manager.decide_call(program, found.session_id, found.request.seq, approve=True)
+    written = await tools.steps.get_steps(owner, found.session_id, found.request.seq, 10)
     gate = await tools.manager.gate(
         agent, registry, KIND_DEFAULTS, found.request, found.call_input, workspace
     )
 
-    assert decision.actor is Actor.PROGRAM
-    assert not decides(decision, found.request, OWNERS)
+    assert written.items == ()
     assert gate.outcome is GateOutcome.ASK
+    assert not decides(decision_on(found.request, actor=Actor.PROGRAM), found.request, OWNERS)

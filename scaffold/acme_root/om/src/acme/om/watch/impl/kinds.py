@@ -36,6 +36,9 @@ class KindStreamsImpl(KindStreamsInterface):
     def writer(self, kind: str) -> str | None:
         return None if kind == STEP else self._kinds.writer(kind)
 
+    def reader(self, kind: str) -> str | None:
+        return None if kind == STEP else self._kinds.reader(kind)
+
     def _bounds(self, kind: str) -> StreamBounds:
         """The bounds of a product's registered kind; the step is the stream
         service's, and a kind nobody registered has none, so it is refused."""

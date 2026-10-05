@@ -71,7 +71,8 @@ class TenancyOrgManagerInterface(ABC):
         credential they hold, each live one announced as revoked, and the
         sign-in delay of their address. What they made in a team org stays
         the org's, under an id that no longer names anyone. The same commit
-        asks for the rest: in their personal org, the provider's side goes
+        asks for the rest: in each team org, what it keeps of them elsewhere
+        (`MEMBER_LEFT`); in their personal org, the provider's side goes
         and then the org itself (`DELETE_ACCOUNT`). The answer says where the browser goes to
         end the provider's session, as `TenancySignInManagerInterface.logout`
         does with `return_to`."""

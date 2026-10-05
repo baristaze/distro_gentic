@@ -158,19 +158,22 @@ class RetentionStorageContract:
         self, storage: RetentionStorageInterface
     ) -> None:
         org, other = new_id(), new_id()
+        now = utcnow()
         policy = make_policy(version=1)
         assert await storage.create_policy(org, policy, ())
         level = make_snapshot(policy_version=1)
         behind = make_snapshot(policy_version=0)
+        waiting = moved(make_snapshot(policy_version=0), next_attempt_at=now + timedelta(minutes=5))
+        retried = moved(make_snapshot(policy_version=0), next_attempt_at=now - timedelta(minutes=5))
         no_policy = make_snapshot(policy_version=0)
-        for snapshot in (level, behind):
+        for snapshot in (level, behind, waiting, retried):
             await storage.create_snapshot(org, snapshot)
         await storage.create_snapshot(other, no_policy)
-        found = await storage.read_behind(100)
-        assert [(o, s.id, p.id) for o, s, p in found if o in (org, other)] == [
-            (org, behind.id, policy.id)
-        ]
-        assert len(await storage.read_behind(1)) == 1
+        found = await storage.read_behind(now, 100)
+        assert sorted((o, s.id, p.id) for o, s, p in found if o in (org, other)) == sorted(
+            [(org, behind.id, policy.id), (org, retried.id, policy.id)]
+        )
+        assert len(await storage.read_behind(now, 1)) == 1
 
     async def test_the_sweep_reads_what_has_expired_and_is_not_taken_up(
         self, storage: RetentionStorageInterface
