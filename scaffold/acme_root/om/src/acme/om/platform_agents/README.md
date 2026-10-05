@@ -33,13 +33,29 @@ workspace it works in, and which of its calls run without asking.
   plan: each task and the session it goes to.
 - **The platform assistant** helps the people who set up and run their
   part of the platform, on their own permissions. It explains the
-  product from its corpus and cites it, diagnoses where a session stands
-  by reading it, drafts the tenant's tool policy and shows the difference
-  from what is live, and hands engineering work to an engineer. It has no
-  workspace, repository, or shell.
+  product from its corpus and the knowledge base, and cites them. It
+  diagnoses by reading the tenant's live records: its sessions, what a
+  session's park and its loop wait on, its projects, and its automations
+  with their recent runs. It drafts the tenant's tool policy and shows
+  the difference from what is live, and hands engineering work to an
+  engineer. It has no workspace, repository, or shell. A session keeps
+  the version of the assistant it started on, so the one before its
+  readers is still shipped.
+- **The assistant's readers**, each a tool that reads through the asking
+  person's own context: `list_sessions`, by status, park reason, and
+  project, newest first; `read_session`, where one stands, each call it
+  holds for approval with the roles that may decide it, and the
+  sub-agents it waits for; `read_wait`, its loop's item on the work queue
+  and the hosts it may run on; `list_projects` and `read_project`; and
+  `list_automations` and `read_automation`, with its recent runs. Each
+  answers a record's shape, never a session's content, and bounds its
+  list. A product adds readers of its own through its slot.
 - **The corpus**: what the [knowledge map](../../../../../llms.txt) lists
   for the tenant's users, read once when the process starts. A document
-  listed only for the platform's own people is not in it.
+  listed only for the platform's own people is not in it. Among it is
+  [the object model](../../../../../docs/object-model.md): each entity,
+  its states and what moves it, and every park reason with what clears
+  it, who may, and the reader that shows it.
 - **A validation session**: one check of a project's policy, run on a
   fresh executor with no agent. It holds the project, the check, the
   delivered commit it runs at, and the base its checks, fixtures, and
@@ -49,7 +65,8 @@ workspace it works in, and which of its calls run without asking.
 
 - **Ask the assistant.** A person types in an assistant's session. It
   searches the corpus, reads live state, drafts, or hands work on, and
-  answers.
+  answers. Asked why something waits, it reads first, then says what it
+  waits on, what clears it, who may clear it, and where.
 - **Hand work on.** The assistant or the planner starts an engineer
   session with an objective that stands on its own. The new session
   names where it came from, holds only the objective, and starts when its
@@ -117,7 +134,14 @@ workspace it works in, and which of its calls run without asking.
 - **The assistant only reads and hands on.** Its authority is
   delegated, it has no workspace, and each of its tools reads or starts a
   session. A profile of it that names any other tool, or a catalog with
-  two tools of one name, is refused when the process starts.
+  two tools of one name, is refused when the process starts, and so is a
+  product's slot that names a tool the catalog does not hold, one past
+  reading and handing on, or one the assistant holds already.
+- **A reader reads what its person may.** Each runs under the context of
+  the person who spoke last, read again for the call, so another
+  tenant's record, or one marked deleted, is not found, as one that never
+  existed is not. A reader's input from the model is checked before it
+  runs, and a malformed one is refused.
 - **A draft changes nothing.** The assistant cannot apply
   configuration; a person does.
 - **The corpus is the map's list for the tenant's users,** by listing,
@@ -138,10 +162,14 @@ workspace it works in, and which of its calls run without asking.
 ## How another namespace composes it
 
 A process ships these agents by handing its root the corpus
-(`PlatformAgents`); their kinds and tools join the adopter's. The tools
-that read a manager take it late, once the root has built it; the
-engineer's pull request also takes the intake the process builds over
-those managers, and with none it opens nothing. The maintenance
+(`PlatformAgents`); their kinds and tools join the adopter's, and the
+tools a product's slot names (`ProductKinds.assistant_tools`) join the
+assistant's current version. The tools that read a manager take it late,
+once the root has built it; the engineer's pull request also takes the
+intake the process builds over those managers, and with none it opens
+nothing. The automations the assistant reads are built over the managers
+too, by the session runner, and a process with none refuses those
+readers. The maintenance
 worker's `VALIDATION` handler runs a validation session
 (`run_validation`); the evidence the root builds over the platform's
 executor runs its check and keeps its execution record.

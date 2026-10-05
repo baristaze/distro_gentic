@@ -1,7 +1,7 @@
 """The runner boots the way every process does: settings, storage, infra,
 the integrations (the model providers), and the managers, with the
-product's agent kinds and tools. The claim loop holds the container
-directly.
+product's agent kinds and tools, and the automations the platform
+assistant reads. The claim loop holds the container directly.
 
 The runner holds no purge login: it runs what a model asks for, and the
 one login that deletes a history is the maintenance worker's alone."""
