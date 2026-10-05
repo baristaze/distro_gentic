@@ -52,6 +52,5 @@ refuses the run for good.
 - A session stored before the key column, or written by the previous
   release during a roll, names no key and runs at its starter's own
   role.
-- An executor that reads the starter's role from their membership, not
-  from the context it is given, still reads the uncapped role. It moves
-  to the context's role when its product takes this release.
+- An executor reads who may run from the context it is given. One that
+  reads the starter's membership itself reads the uncapped role.
