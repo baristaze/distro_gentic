@@ -15,10 +15,12 @@ from contracts.evidence_storage import make_policy
 from contracts.intake import ACTING, WORKER, Wired, wired
 from contracts.loops import ASSISTANT, reply, said, use
 from contracts.project_storage import in_project, make_project
+from contracts.sub_agents import spawn
 from pydantic import ValidationError
 
 from acme.integrations.events.twin import twin_installation
 from acme.integrations.model_providers.calls import ModelCall
+from acme.om.agent_sessions.types.agent_session import SessionStatus
 from acme.om.agents.types.request import Start
 from acme.om.agents.types.run import RunEnd
 from acme.om.attribution.types.principal import Principal, PrincipalKind
@@ -113,6 +115,10 @@ async def made(platform: Wired, creator: TenantContext, **changes: object) -> Au
 
 async def fired(platform: Wired, firing: Firing) -> list[AutomationRun]:
     return list(await platform.automations.fire(platform.service, firing))
+
+
+async def runs_of(platform: Wired, mine: Automation) -> list[AutomationRun]:
+    return list(await platform.automations.get_runs(platform.owner, mine.id, 10))
 
 
 @pytest.fixture
@@ -243,6 +249,47 @@ async def test_the_concurrency_stops_a_firing_while_its_runs_are_at_work(
     assert (await platform.loops.run(platform.owner, first.session_id)).end is RunEnd.ENDED
     (third,) = await fired(platform, comment())
     assert third.status is RunStatus.STARTED
+
+
+async def test_a_run_holds_its_place_while_a_sub_agent_of_its_tree_works(
+    platform: Wired, creator: TenantContext
+) -> None:
+    delegating = automation().action.model_copy(update={"agent_kind": "delegating"})
+    mine = await made(platform, creator, limits=limits(concurrency=1), action=delegating)
+    (first,) = await fired(platform, comment())
+    assert first.session_id is not None
+    root = first.session_id
+    platform.anthropic.add(reply(spawn("the slow checkout")), reply(said("A sub-agent looks.")))
+    assert (await platform.loops.run(platform.owner, root)).end is RunEnd.ENDED
+    sessions = platform.managers.agent_sessions
+    (child,) = (await sessions.get_children(platform.owner, root, None, 10)).items
+    idle = (await sessions.get_session(platform.owner, root)).status
+    assert (idle, child.status) == (SessionStatus.IDLE, SessionStatus.PENDING)
+
+    # The root waits idle while its sub-agent works: the run stays open,
+    # and the next firing starts no second tree.
+    (second,) = await fired(platform, comment())
+    assert (second.status, second.refusal, second.session_id) == (
+        RunStatus.REFUSED,
+        Refusal.CONCURRENCY,
+        None,
+    )
+    (held,) = [r for r in await runs_of(platform, mine) if r.id == first.id]
+    assert held.closed_at is None
+    platform.anthropic.add(reply(said("The query has no index.")))
+    assert (await platform.loops.run(platform.owner, child.id)).end is RunEnd.ENDED
+
+    # The sub-agent's report wakes the root under the run still open.
+    (third,) = await fired(platform, comment())
+    assert (third.status, third.refusal) == (RunStatus.REFUSED, Refusal.CONCURRENCY)
+    platform.anthropic.add(reply(said("The checkout query has no index.")))
+    assert (await platform.loops.run(platform.owner, root)).end is RunEnd.ENDED
+
+    # The whole tree is idle: the run closes, and a firing starts again.
+    (fourth,) = await fired(platform, comment())
+    assert fourth.status is RunStatus.STARTED
+    (closed,) = [r for r in await runs_of(platform, mine) if r.id == first.id]
+    assert closed.closed_at is not None
 
 
 async def test_a_run_starts_its_session_as_the_creator_with_the_event_as_data(

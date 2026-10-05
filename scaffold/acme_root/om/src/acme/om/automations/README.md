@@ -58,7 +58,9 @@ is made of](../../../../README.md).
   period and the runs still at work never reserve past the cap.
 - **The rate and the concurrency hold,** and a firing they stop is
   queued or refused, as the automation says. A run counts in the period
-  it starts in, however long it was queued.
+  it starts in, however long it was queued. A run that started a
+  session is at work while any session of its tree is: a root that
+  waits idle on a sub-agent still holds its place.
 - **A queue holds at most its depth.** A firing that finds it full is
   refused, and says so; a run already queued keeps its place. The depth
   is read in the write that admits the run, so two firings at once never

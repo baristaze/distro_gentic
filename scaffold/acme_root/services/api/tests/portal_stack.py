@@ -5,14 +5,18 @@ the browser check and by no gate:
     python services/api/tests/portal_stack.py api --port <port>
     python services/api/tests/portal_stack.py runner
 
-Both register the scene's engineer beside the product's kinds: the
-platform's engineer in a directory on this host in place of its container,
-which also writes a plan and asks its person, and roots a tree of two
-sub-agents (`portal_check.py tree` writes one). The runner's executor writes
-the results stream a fresh executor would, and each bound repository is
-cloned from a folder of bare repositories on this host
-(`PORTAL_REPOSITORIES`, as `portal_check.py repository` writes one) instead
-of over HTTPS. The forge is its twin, which the seed connects."""
+Both register the scene's engineer and analysis beside the product's
+kinds: the platform's own, each in a directory on this host in place of
+its container, the engineer also writing a plan and asking its person.
+The engineer's scene starts two analysis sub-agents, within the tree the
+platform's kinds root. The runner runs one loop at a time, since the
+scripted model answers every session from one script: so each turn goes
+to the session the scene wrote it for, in the order the loops are
+claimed. The runner's executor writes the results stream a fresh executor
+would, and each bound repository is cloned from a folder of bare
+repositories on this host (`PORTAL_REPOSITORIES`, as `portal_check.py
+repository` writes one) instead of over HTTPS. The forge is its twin,
+which the seed connects."""
 
 import argparse
 import os
@@ -30,10 +34,11 @@ REPO = Path(__file__).resolve().parents[3]
 
 
 def scene_kinds() -> ProductKinds:
-    """The product's kinds, and the scene's engineer as its latest version."""
+    """The product's kinds, and the scene's engineer and analysis, each as
+    its latest version: the shipped kind whole, its tree and its share
+    included, on this host."""
     from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
-    from acme.om.agents.types.kind import TreeLimits
-    from acme.om.platform_agents.kinds import ENGINEER_KIND
+    from acme.om.platform_agents.kinds import ANALYSIS_KIND, ENGINEER_KIND
     from acme.om.product_kinds import PRODUCT_KINDS
     from acme.om.root import ProductKinds
     from acme.om.tools.native.ask_person import ASK_PERSON
@@ -45,10 +50,12 @@ def scene_kinds() -> ProductKinds:
             "version": ENGINEER_KIND.version + 1,
             "isolation": host,
             "tools": (*ENGINEER_KIND.tools, WRITE_PLAN, ASK_PERSON),
-            "tree": TreeLimits(height=2, count=2),
         }
     )
-    return ProductKinds(agents=(*PRODUCT_KINDS.agents, engineer))
+    analysis = ANALYSIS_KIND.model_copy(
+        update={"version": ANALYSIS_KIND.version + 1, "isolation": host}
+    )
+    return ProductKinds(agents=(*PRODUCT_KINDS.agents, engineer, analysis))
 
 
 def scene_container(settings: ApiSettings) -> AppContainer:
@@ -124,6 +131,8 @@ def runner() -> int:
             local = bound.repository.replace("https://", f"file://{self._root}/", 1)
             return bound.model_copy(update={"repository": local})
 
+    # One loop at a time: the script is one queue for every session.
+    os.environ["ACME_RUNNER_CAPACITY"] = "1"
     settings = SessionRunnerSettings()
     rows = StoragePostgresImpl(
         settings.role_urls(), settings.role_pools(), system_urls=settings.system_role_urls()

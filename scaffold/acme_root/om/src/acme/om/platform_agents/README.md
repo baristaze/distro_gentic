@@ -25,9 +25,21 @@ workspace it works in, and which of its calls run without asking.
 - **Analysis** reads what a run produced (its logs, telemetry, and
   recordings) in a workspace of its own, searches it and the knowledge
   its session reaches, changes nothing, and answers with its findings.
+- **Sub-agents**: the engineer and analysis split independent work,
+  such as hypotheses to test or checks to run, into sub-agents, each in
+  a clean context of its own, and wait for their reports
+  ([ADR 1019](../../../../../docs/adr/1019-a-kind-starts-sub-agents-through-a-tool-and-a-report-clears-its-parents-wait.md)).
+  A question that only reads or checks runs as analysis, and only work
+  that changes code runs as an engineer.
+  Every kind roots the engine's tree: three levels deep, ten sub-agents
+  besides its root, one budget and one deadline for all of them. Each
+  kind a sub-agent may run as names its share, what one of them may
+  spend over its life; the tree's budget still bounds them all
+  ([ADR 2043](../../../../../docs/adr/2043-the-platforms-kinds-start-sub-agents-each-under-a-share-the-trees-budget-bounds.md)).
 - **A kind's versions**: a session keeps the version of its kind it
   started on, so the engineer and analysis before they searched and
-  edited by one place are still shipped beside them.
+  edited by one place, and before they started sub-agents, are still
+  shipped beside them.
 - **The planner** turns findings into tasks. It reads where sessions
   stand, hands new engineering work to an engineer, and answers with its
   plan: each task and the session it goes to.

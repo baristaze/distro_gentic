@@ -451,8 +451,8 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         return moved
 
     async def _close_finished(self, ctx: TenantContext, automation: Automation) -> None:
-        """Closes the runs whose sessions are no longer at work, and those
-        whose product's work ended as its kind's check says, with the
+        """Closes the runs whose session's tree is no longer at work, and
+        those whose product's work ended as its kind's check says, with the
         outcome it said, so the concurrency counts the ones that are."""
         now = self._clock()
         for run in await self._storage.read_open_runs(
@@ -465,16 +465,50 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
             elif run.session_id is None:
                 done = now - run.created_at >= self._options.lost_after
             else:
-                try:
-                    session = await self._sessions.get_session(ctx, run.session_id)
-                    done = session.status is SessionStatus.IDLE
-                except NotFound:
-                    done = True
+                done = await self._tree_idle(ctx, run.session_id)
             if done:
                 closed = run.model_copy(
                     update={"closed_at": now, "event_text": "", "outcome": outcome}
                 )
                 await self._storage.write_run(ctx.org_id, closed)
+
+    async def _tree_idle(self, ctx: TenantContext, root_id: UUID) -> bool:
+        """Whether no session of the tree a run started is pending,
+        running, or parked: a root that waits idle on a sub-agent still
+        holds its run's place. The tree is read twice, and is idle only when
+        both reads find every session idle at one version, since a report
+        or a spawn that lands while it is read moves one. A root that is
+        gone holds nothing."""
+        try:
+            first = await self._idle_versions(ctx, root_id)
+            return first is not None and first == await self._idle_versions(ctx, root_id)
+        except NotFound:
+            return True
+
+    async def _idle_versions(
+        self, ctx: TenantContext, root_id: UUID
+    ) -> list[tuple[UUID, int]] | None:
+        """Each session of the tree with its version, from the root down,
+        when every one is idle; None at the first one that is not. The
+        tree's own bounds keep the walk short."""
+        root = await self._sessions.get_session(ctx, root_id)
+        if root.status is not SessionStatus.IDLE:
+            return None
+        seen = [(root.id, root.version)]
+        parents = [root.id]
+        while parents:
+            parent_id, after = parents.pop(), None
+            while True:
+                page = await self._sessions.get_children(ctx, parent_id, after, self._options.page)
+                for child in page.items:
+                    if child.status is not SessionStatus.IDLE:
+                        return None
+                    seen.append((child.id, child.version))
+                    parents.append(child.id)
+                if not page.has_more or not page.items:
+                    break
+                after = page.items[-1].id
+        return seen
 
     async def _ended(
         self, ctx: TenantContext, automation: Automation, run: AutomationRun

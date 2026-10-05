@@ -61,6 +61,7 @@ from acme.om.tenancy.types.user import User
 from acme.om.tools.impl.attachments import AttachmentReaderNullImpl
 from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.tools.native.ask_person import ASK_PERSON
+from acme.om.tools.native.spawn_sub_agent import SPAWN_SUB_AGENT
 from acme.om.tools.tool import ToolInterface
 from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule
 from acme.om.tools.types.tool import ToolClass
@@ -92,7 +93,21 @@ account."""
 
 ASKING = STEADY.model_copy(update={"name": "asking", "tools": (*STEADY.tools, ASK_PERSON)})
 """A steady kind that also asks its person what it cannot find."""
-KINDS = (STEADY, ACTING, ASKING)
+
+DELEGATING = STEADY.model_copy(
+    update={
+        "name": "delegating",
+        "tools": (*STEADY.tools, SPAWN_SUB_AGENT),
+        "policy": PolicyLayer(
+            rules=(
+                *ALLOWED.rules,
+                PolicyRule(authorization_class=ToolClass.SPAWN, decision=Decision.ALLOW),
+            )
+        ),
+    }
+)
+"""A steady kind that also starts sub-agents of its own kind."""
+KINDS = (STEADY, ACTING, ASKING, DELEGATING)
 
 
 @dataclass

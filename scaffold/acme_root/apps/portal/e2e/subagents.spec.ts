@@ -1,13 +1,17 @@
 // A session's sub-agents across the panes, on the stack the timeline check
-// runs (`portal_stack.py`). No shipped kind spawns one yet, so
-// `portal_check.py tree` starts the scene's engineer and writes its tree
-// through storage: one answer that starts two sub-agents within its tree's
-// bounds, a park on them, the first one's report, and the second still at
-// work. Its next beats park the second on its person, then end it. The
-// owner reads the card that follows each child, opens a report's child and
-// comes back from its first card, folds the parent's row in the left bar,
-// and gets a toast on the page open when a sub-agent starts to need them.
-// Each view is shot light and dark under e2e/screenshots/.
+// runs (`portal_stack.py`). The scene never has a sub-agent ask its
+// person, so `portal_check.py tree` first starts the scene's engineer and
+// writes a tree through storage: one answer that starts two sub-agents, a
+// park on them, the first one's report, and the second still at work. Its
+// next beats park the second on its person, then end it. The owner reads
+// the card that follows each child, opens a report's child and comes back
+// from its first card, folds the parent's row in the left bar, and gets a
+// toast on the page open when a sub-agent starts to need them. Then the
+// engineer's scene runs for real: its answer starts two analysis
+// sub-agents and parks on them, each runs and reports, and the engineer
+// wakes. The owner watches the card follow each child live, reads each
+// report, and finds its tree in the Sub-agents tab. Each view is shot light
+// and dark under e2e/screenshots/.
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
@@ -15,7 +19,10 @@ import { ORG, OWNER, signedIn, SLUG } from "./signIn";
 
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const SHOTS = fileURLToPath(new URL("./screenshots/", import.meta.url));
-// What `portal_check.py tree` writes.
+// The folder the runner clones the org's repository from (`portal_stack.py runner`).
+const REPOSITORIES = process.env.PORTAL_REPOSITORIES;
+const PROMPT = "Fix the failing test in tests/test_dates.py and open a pull request";
+// What `portal_check.py tree` writes; the scene's sub-agents carry the same titles.
 const ASKED = "Read every date in the app day first";
 const READS = "Read how the other parsers take a date";
 const CALLERS = "Check every caller of parse";
@@ -139,4 +146,64 @@ test("a session's sub-agents: a card that follows each, a report that leads to i
   await expect(row(CALLERS)).toHaveAttribute("data-phase", "done", { timeout: 30_000 });
   await expect(waits).toContainText(`${READS}: done · ${CALLERS}: done`);
   await shoot(owner, "card-settled");
+});
+
+test("the engineer's scene starts two sub-agents: a card that follows each live, a report from each, and its tree in the Sub-agents tab", async ({ browser }) => {
+  test.skip(!REPOSITORIES, "PORTAL_REPOSITORIES names the folder the scene's runner clones from");
+  execFileSync("uv", ["run", "--package", "acme-api", "python", "services/api/tests/portal_check.py", "scene", REPOSITORIES!, SLUG], {
+    cwd: ROOT,
+    stdio: "inherit",
+  });
+  const owner = await signedIn(browser, OWNER, ORG);
+  await owner.getByRole("button", { name: /^Agent:/ }).click();
+  await owner.getByRole("menuitemradio", { name: /^Engineer/ }).click();
+  await owner.keyboard.press("Escape");
+  await owner.getByRole("button", { name: /^Project:/ }).click();
+  await owner.getByRole("menuitemradio", { name: "First project" }).click();
+  await owner.keyboard.press("Escape");
+  await owner.getByRole("textbox", { name: "Prompt" }).fill(PROMPT);
+  await owner.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(owner.getByRole("heading", { level: 1, name: PROMPT })).toBeVisible();
+  const sessionId = new URL(owner.url()).pathname.split("/").pop()!;
+  const chat = owner.getByRole("list", { name: "Timeline" });
+
+  // Its answer starts both: one card, a row each that follows its child as
+  // it runs. The runner takes one loop at a time, so the second is still at
+  // work while the first reads.
+  const card = chat.getByRole("region", { name: "Started 2 sub-agents" });
+  await expect(card).toBeVisible({ timeout: 90_000 });
+  const row = (title: string) => card.getByRole("listitem").filter({ hasText: title });
+  await expect(row(CALLERS)).toHaveAttribute("data-phase", "working");
+  console.log(`card at work: ${(await card.innerText()).split("\n").join(" | ")}`);
+  await card.scrollIntoViewIfNeeded();
+  await shoot(owner, "scene-card-running");
+  // Each ends and reports, and its row settles with no reload.
+  await expect(row(READS)).toHaveAttribute("data-phase", "done", { timeout: 60_000 });
+  await expect(row(CALLERS)).toHaveAttribute("data-phase", "done", { timeout: 60_000 });
+  console.log(`card settled: ${(await card.innerText()).split("\n").join(" | ")}`);
+
+  // A report card from each, read as data; woken by the second, the
+  // engineer goes on.
+  for (const [title, says] of [
+    [READS, "takes the month first"],
+    [CALLERS, "written day first"],
+  ] as const) {
+    const report = chat.getByRole("region", { name: `Report from ${title}` });
+    await expect(report).toContainText("Ended succeeded");
+    await report.getByRole("button", { name: "The report" }).click();
+    await expect(report).toContainText(says);
+    console.log(`report: ${(await report.innerText()).split("\n").join(" | ")}`);
+  }
+  await expect(chat).toContainText("Both reported", { timeout: 60_000 });
+  await card.scrollIntoViewIfNeeded();
+  await shoot(owner, "scene-card-settled");
+
+  // The Sub-agents tab: both done, and the tree the engineer's kind roots.
+  await owner.goto(`/sessions/${sessionId}?pane=subagents`);
+  const tab = owner.getByRole("complementary", { name: "Session pane" }).getByRole("tabpanel");
+  await expect(tab.getByRole("region", { name: "Done" })).toContainText(READS);
+  await expect(tab.getByRole("region", { name: "Done" })).toContainText(CALLERS);
+  await expect(tab).toContainText("Its tree has spawned 2 of the 10 sub-agents it may, at most 3 deep.");
+  console.log(`tab: ${(await tab.innerText()).split("\n").join(" | ")}`);
+  await shoot(owner, "scene-tab-subagents");
 });
