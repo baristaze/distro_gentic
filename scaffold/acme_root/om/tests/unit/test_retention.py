@@ -438,6 +438,41 @@ async def test_a_snapshot_that_cannot_fold_holds_back_no_other_tenant(
     assert failed[0].exc_info is not None and failed[0].exc_info[0] is OverflowError
 
 
+async def test_a_batch_of_snapshots_that_cannot_fold_waits_and_still_expires_on_time(
+    tmp_path: Path,
+) -> None:
+    """A batch of two, both a tenant's snapshots that cannot fold its stored
+    policy. A pass leaves the failures out of its count and puts them out of
+    the read, so the next pass folds another tenant's tightening and its
+    content goes. At the expiry the stuck snapshots hold, their content goes
+    all the same, under the policy they hold."""
+    roots = Roots(tmp_path, options=RetentionOptions(sweep_batch=2))
+    broken = await roots.tenant()
+    await roots.declare(broken, a_policy(MONTH))
+    stuck = [await roots.session_saying(broken) for _ in range(2)]
+    held = await roots.managers.retention.get_policy(broken)
+    retention = roots.storage.get_retention_storage()
+    unfoldable = a_policy(MONTH, timedelta(days=3_000_000))
+    await retention.write_policy(
+        broken.org_id, held.model_copy(update={"policy": unfoldable, "version": 2}), 1, ()
+    )
+    other = await roots.tenant()
+    await roots.declare(other, a_policy(MONTH))
+    waiting = await roots.session_saying(other)
+    await roots.declare(other, a_policy(WEEK))
+
+    assert await roots.sweep(WEEK + DAY) == 0, "two failed folds are no batch"
+    assert await roots.said(other, waiting.id) == [SAID]
+    assert await roots.sweep(WEEK + DAY) == 1
+    assert await roots.said(other, waiting.id) == []
+
+    assert await roots.sweep(MONTH + DAY) == 2
+    for session in stuck:
+        assert await roots.said(broken, session.id) == []
+        snapshot = await roots.managers.retention.get_snapshot(broken, session.id)
+        assert snapshot.policy_version == 1 and snapshot.content_expired_at is not None
+
+
 # The snapshot: tightening reaches it at the next sweep, loosening never.
 
 

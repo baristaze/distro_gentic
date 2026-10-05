@@ -125,11 +125,21 @@ class RetentionStoragePostgresImpl(PgStorageBase, RetentionStorageInterface):
             await session.commit()
             return landed
 
-    async def read_behind(self, limit: int) -> list[tuple[UUID, SessionRetention, TenantRetention]]:
+    async def read_behind(
+        self, now: datetime, limit: int
+    ) -> list[tuple[UUID, SessionRetention, TenantRetention]]:
+        # A snapshot whose fold failed waits out its next attempt, so the
+        # ones that cannot fold never fill every pass's batch.
         stmt = (
             select(SessionRetentionRows, RetentionPolicies)
             .join(RetentionPolicies, RetentionPolicies.org_id == SessionRetentionRows.org_id)
-            .where(SessionRetentionRows.policy_version < RetentionPolicies.version)
+            .where(
+                SessionRetentionRows.policy_version < RetentionPolicies.version,
+                or_(
+                    SessionRetentionRows.next_attempt_at.is_(None),
+                    SessionRetentionRows.next_attempt_at <= now,
+                ),
+            )
             .limit(limit)
         )
         # Every tenant's snapshots behind their policy, so the system scope,

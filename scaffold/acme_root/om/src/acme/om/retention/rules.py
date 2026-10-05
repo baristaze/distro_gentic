@@ -126,3 +126,11 @@ def shape_due(snapshot: SessionRetention, now: datetime) -> bool:
     """Its shape has expired and the session is not yet marked."""
     expires = snapshot.shape_expires_at
     return expires is not None and expires <= now and snapshot.shape_expired_at is None
+
+
+def next_expiry(snapshot: SessionRetention) -> datetime | None:
+    """The earliest expiry the snapshot holds that the sweep has not yet
+    taken up; None is never."""
+    content = snapshot.content_expires_at if snapshot.content_expired_at is None else None
+    shape = snapshot.shape_expires_at if snapshot.shape_expired_at is None else None
+    return earliest(content, shape)

@@ -51,8 +51,9 @@ is made of](../../../../README.md).
     never come.
   - What a pass cannot finish waits for its next attempt, out of every
     pass's read meanwhile, so no session holds back another. A snapshot
-    that fails to take its tenant's policy stays behind it, and the pass
-    goes on to every other tenant's.
+    that fails to take its tenant's policy stays behind it and waits the
+    same way, and the pass goes on to every other tenant's. Its wait ends
+    by the next expiry it already holds, so that expiry is not held back.
 - **Erase a session's content.** The tenant's owners and admins erase
   one session's content before its life ends, the way the sweep does at
   its end: its key revoked and destroyed, the destruction audited, the
