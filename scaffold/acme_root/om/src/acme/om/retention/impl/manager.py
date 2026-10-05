@@ -418,13 +418,16 @@ class RetentionManagerImpl(RetentionManagerInterface):
         """A `cancel` control on each parked loop of the session and of the
         sessions below it, through the inbox, which clears the park and asks
         for the run that ends the loop. A loop a run holds, or one an input
-        is about to wake, ends by itself."""
+        is about to wake, ends by itself. A cancel below comes down as a
+        parent's does, so the note of it wakes no session above, which
+        would open a loop the mark waits on."""
         session = await self._sessions.get_session(ctx, snapshot.session_id)
         parked = [session] if session.status is SessionStatus.PARKED else []
         parked += await self._parked_below(ctx, snapshot.session_id)
         expires = snapshot.shape_expires_at or snapshot.created_at
         for each in parked:
             step_id = derived_id(each.id, expires, SHAPE_CANCEL)
+            below = each.id != snapshot.session_id
             cancel = Step(
                 id=step_id,
                 created_at=self._clock(),
@@ -432,7 +435,7 @@ class RetentionManagerImpl(RetentionManagerInterface):
                 loop_id=step_id,
                 type=StepType.CONTROL,
                 actor=Actor.ENGINE,
-                origin=Origin.ENGINE,
+                origin=Origin.PARENT if below else Origin.ENGINE,
                 header=ControlHeader(command=ControlCommand.CANCEL),
             )
             await self._sessions.receive(ctx, each.id, [cancel])

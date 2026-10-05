@@ -71,7 +71,7 @@ KIND = AgentKind(
     tools=("read_log", "run_tests"),
     done_rule=DoneRule.ANSWER,
     authority=AuthorityMode.STEADY,
-    tree=TreeLimits(height=2, count=4),
+    tree=TreeLimits(height=3, count=4),
     share=Amount(cost_micros=1_000),
 )
 """The kind `make_session` names, which a run takes its loop up as, and
@@ -652,23 +652,20 @@ async def test_a_session_parked_on_a_person_past_its_shapes_life_is_cancelled_th
     assert (await roots.managers.retention.get_snapshot(owner, session.id)).shape_expired_at
 
 
-async def a_tree(
-    roots: Roots, owner: TenantContext
-) -> tuple[AgentSession, AgentSession, Step, int]:
-    """An idle root and a sub-agent a run holds below it: the model request
-    that carries its objective, and the run's epoch. The sub-agent's shape outlives
-    its root's by a month, as one spawned a month later does, so no pass of
-    its own reaches it before its root's shape expires."""
+async def at_work_below(
+    roots: Roots, owner: TenantContext, parent: AgentSession
+) -> tuple[AgentSession, Step, int]:
+    """A sub-agent spawned below `parent` that a run holds: the model request
+    that carries its objective, and the run's epoch. Its shape outlives its
+    parent's by a month, as one spawned a month later does, so no pass of
+    its own reaches it before its parent's shape expires."""
     sessions, steps = roots.managers.agent_sessions, roots.managers.steps
-    start = Start(id=new_id(), kind=KIND.name, title="the weekly report")
-    root = await roots.managers.agents.start_session(owner, start)
     spawn = Spawn(id=new_id(), kind=KIND.name, title="the pump log", objective="read it")
-    child = await roots.managers.agents.spawn(owner, root.id, spawn)
+    child = await roots.managers.agents.spawn(owner, parent.id, spawn)
     (objective,) = (await steps.get_steps(owner, child.id, 0, 1)).items
     epoch = await steps.begin_run(owner, child.id)
     request = make_request(child.id, objective.id, (objective.id,))
     await steps.append_steps(owner, child.id, epoch, [request])
-    assert (await sessions.project_status(owner, root.id)).status is SessionStatus.IDLE
     assert (await sessions.project_status(owner, child.id)).status is SessionStatus.RUNNING
     store = roots.storage.get_retention_storage()
     taken = await store.read_snapshot(owner.org_id, child.id)
@@ -681,7 +678,38 @@ async def a_tree(
         }
     )
     assert await store.write_snapshot(owner.org_id, later, taken.version)
+    return child, request, epoch
+
+
+async def a_tree(
+    roots: Roots, owner: TenantContext
+) -> tuple[AgentSession, AgentSession, Step, int]:
+    """An idle root and a sub-agent a run holds below it (`at_work_below`)."""
+    start = Start(id=new_id(), kind=KIND.name, title="the weekly report")
+    root = await roots.managers.agents.start_session(owner, start)
+    child, request, epoch = await at_work_below(roots, owner, root)
+    status = await roots.managers.agent_sessions.project_status(owner, root.id)
+    assert status.status is SessionStatus.IDLE
     return root, child, request, epoch
+
+
+async def end_loop(
+    roots: Roots, owner: TenantContext, session_id: UUID, request: Step, epoch: int
+) -> None:
+    """The run's answer to `request` and the end of its loop, as the run
+    writes them."""
+    ended = Step(
+        id=new_id(),
+        created_at=utcnow(),
+        session_id=session_id,
+        loop_id=request.loop_id,
+        type=StepType.LOOP_ENDED,
+        actor=Actor.ENGINE,
+        origin=Origin.ENGINE,
+        header=LoopEndedHeader(outcome=LoopOutcome.SUCCEEDED),
+    )
+    done = [make_response(session_id, request.loop_id, request.id), ended]
+    await roots.managers.steps.append_steps(owner, session_id, epoch, done)
 
 
 def cancels_of(history: tuple[Step, ...]) -> list[tuple[ControlCommand, Actor]]:
@@ -742,18 +770,7 @@ async def test_a_sub_agent_at_work_below_a_session_past_its_shapes_life_ends_by_
     assert cancels_of((await steps.get_steps(owner, child.id, 0, 50)).items) == []
     assert (await sessions.project_status(owner, child.id)).status is SessionStatus.RUNNING
 
-    ended = Step(
-        id=new_id(),
-        created_at=utcnow(),
-        session_id=child.id,
-        loop_id=request.loop_id,
-        type=StepType.LOOP_ENDED,
-        actor=Actor.ENGINE,
-        origin=Origin.ENGINE,
-        header=LoopEndedHeader(outcome=LoopOutcome.SUCCEEDED),
-    )
-    done = [make_response(child.id, request.loop_id, request.id), ended]
-    await steps.append_steps(owner, child.id, epoch, done)
+    await end_loop(roots, owner, child.id, request, epoch)
     assert (await sessions.project_status(owner, child.id)).status is SessionStatus.IDLE
     await roots.sweep(MONTH + DAY + 2 * roots.options.retry_after)
 
@@ -786,6 +803,35 @@ async def test_a_cancelled_sub_agents_report_over_the_bound_is_dropped_and_its_l
 
     assert (await sessions.get_session(owner, child.id)).status is SessionStatus.IDLE
     assert (await steps.get_cursor(owner, root.id)).head == held, "no report reached it"
+    await roots.sweep(MONTH + DAY + roots.options.retry_after)
+    with pytest.raises(NotFound):
+        await sessions.get_session(owner, root.id)
+
+
+async def test_the_cancel_of_a_sub_agent_parked_two_levels_down_wakes_no_session_above(
+    roots: Roots,
+) -> None:
+    """A sub-agent parked on a person below an idle middle whose content
+    still lives. The sweep's cancel of it comes down as a parent's does:
+    its note reaches the middle and wakes neither the middle nor the root,
+    so no loop opens above, and the next pass marks the root."""
+    owner = await roots.tenant()
+    await roots.declare(owner, a_policy(WEEK, MONTH))
+    sessions, steps = roots.managers.agent_sessions, roots.managers.steps
+    root, middle, request, epoch = await a_tree(roots, owner)
+    await end_loop(roots, owner, middle.id, request, epoch)
+    below, request, epoch = await at_work_below(roots, owner, middle)
+    person = Park(reason=ParkReason.PERSON, unlock="approval")
+    await sessions.park(owner, below.id, epoch, request.loop_id, person)
+
+    await roots.sweep(MONTH + DAY)
+    held = (await steps.get_cursor(owner, middle.id)).head
+    await roots.managers.loop.run(owner, below.id)
+
+    assert (await sessions.get_session(owner, below.id)).status is SessionStatus.IDLE
+    assert (await steps.get_cursor(owner, middle.id)).head == held + 1, "its note reached it"
+    for each in (middle, root):
+        assert (await sessions.project_status(owner, each.id)).status is SessionStatus.IDLE
     await roots.sweep(MONTH + DAY + roots.options.retry_after)
     with pytest.raises(NotFound):
         await sessions.get_session(owner, root.id)
