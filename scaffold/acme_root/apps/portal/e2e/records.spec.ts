@@ -100,12 +100,12 @@ test("an owner keeps a project, a key, an API key, and an automation through the
   const form = owner.getByRole("form", { name: "New automation" });
   const automationName = `Nightly tidy ${STAMP}`;
   await form.getByLabel("Name").fill(automationName);
-  await form.getByLabel("Agent").selectOption("platform_assistant");
+  await form.getByLabel("Agent", { exact: true }).selectOption("platform_assistant");
   await form.getByLabel("Session title").fill("Tidy the docs");
   await form.getByLabel("Project").selectOption({ label: projectName });
   await form.getByLabel("Brief").fill("Tidy the **docs**.");
   await form.getByLabel("Cost cap a period").fill("2");
-  await form.getByLabel("Cost cap a run").fill("0.5");
+  await form.getByLabel("Cost cap a run", { exact: true }).fill("0.5");
   await form.getByLabel("State").selectOption("no");
   await form.getByRole("button", { name: "Make the automation" }).click();
   await expect(owner.getByRole("heading", { level: 1, name: automationName })).toBeVisible();
