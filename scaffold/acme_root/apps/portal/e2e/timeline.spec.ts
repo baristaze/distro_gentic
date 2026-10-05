@@ -109,7 +109,7 @@ test("the engineer's session reads as a live chat: thoughts, work blocks, a diff
   await expect(chat.getByRole("status")).toHaveText("Needs you: answer the agent's question");
   await shoot(owner, "ask");
 
-  // Every block folded once its calls are done; a line opens its answer inline.
+  // Every block folded once its calls are done; a call's fold opens its answer inline.
   const lines = await blocks.locator(".acme-fold-line").allInnerTexts();
   console.log(`blocks: ${lines.join(" | ")}`);
   expect(lines.every((line) => /^Worked for \S+( \S+)? · \d+ steps?$/.test(line))).toBe(true);
@@ -118,7 +118,7 @@ test("the engineer's session reads as a live chat: thoughts, work blocks, a diff
   const failed = chat.locator(".acme-call", { hasText: "Ran python3 tests/test_dates.py · exit 1" });
   await expect(failed).toBeVisible();
   const edit = chat.locator(".acme-call", { hasText: "Edited src/dates.py +1 −1" });
-  await edit.locator(".acme-call-line").click();
+  await edit.locator(".acme-call-fold").click();
   await expect(edit.locator(".acme-call-body")).toContainText("day, month, year");
   await edit.scrollIntoViewIfNeeded();
   await shoot(owner, "block-open");
