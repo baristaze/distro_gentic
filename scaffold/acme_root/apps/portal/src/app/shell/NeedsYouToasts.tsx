@@ -36,7 +36,7 @@ export function NeedsYouToasts({ needing, ready }: { needing: ReadonlyMap<string
   const drop = (id: string) => setState((now) => ({ ...now, toasts: now.toasts.filter((toast) => toast.id !== id) }));
   if (next.toasts.length === 0) return null;
   return (
-    <div className="acme-needs-toasts" aria-label="Needs you">
+    <div className="acme-needs-toasts" role="region" aria-label="Sessions that need you">
       {next.toasts.map((notice) => (
         <NeedsYouToast
           key={notice.id}

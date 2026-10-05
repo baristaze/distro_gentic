@@ -4,7 +4,7 @@ itself and by no gate:
     python services/api/tests/portal_check.py script <path> [--scene engineer]
     python services/api/tests/portal_check.py evidence <slug> <session_id>
     python services/api/tests/portal_check.py scene <root> <slug>
-    python services/api/tests/portal_check.py tree <slug> <session_id>
+    python services/api/tests/portal_check.py tree <slug> [<root_id>]
     python services/api/tests/portal_check.py host <root> <slug> <session_id> <api>
 
 `script` writes the scripted provider's script: one turn that answers in
@@ -23,9 +23,15 @@ executor, so the check writes the records its evidence screen reads
 through the om, under the org's owner. `scene` makes what the engineer's
 scene runs on: the org's first repository as a bare one under `<root>`
 (`portal_stack.py` clones from there), holding a parser whose test fails,
-and the validation policy of the org's first project. `tree` writes two
-sub-agents of a session straight through storage, since no shipped kind
-may spawn one. `host` stands in for the host that holds the session's
+and the validation policy of the org's first project. `tree` starts the
+scene's engineer for the org's owner and writes its tree straight through
+storage, since no shipped kind spawns a sub-agent: one answer that starts
+two, each in a slot its tree's bounds hold, and a park on them; the first
+reads, ends, and reports; the second still searches. It prints the ids
+of the root and its sub-agents. Given the root, it plays the next beat:
+the sub-agent at work asks its person and parks on their answer; called
+again, it takes the answer and ends. Each beat reports to the root, as the
+engine does, and no step it writes asks for a run. `host` stands in for the host that holds the session's
 workspace, which the local stack runs none of: it enrolls a host in a
 pool of the org's, places the session there and binds its workspace to
 a clone of the scene's repository at the branch the engineer pushed,
@@ -34,8 +40,10 @@ API's host routes at `<api>`, runs it there, settles it, and takes the
 session back off the pool."""
 
 import asyncio
+import json
 import subprocess
 import sys
+from datetime import datetime, timedelta
 from itertools import count
 from pathlib import Path
 from typing import Any
@@ -52,10 +60,44 @@ ANSWER = (
 
 SONNET = "claude-sonnet-5-5"
 
-# The sub-agents `tree` writes: their titles and agents.
+# The tree `tree` writes: what its person asks the engineer, the engineer's
+# answer that starts two sub-agents, and each sub-agent's title and
+# objective.
+TREE_ASK = "Read every date in the app day first"
+SPLIT = (
+    "Two things decide this, so I'll ask two sub-agents at once: one reads how the "
+    "other parsers take a date, the other finds every caller of `parse`. I change "
+    "the parser once both report."
+)
 CHILDREN = (
-    ("Read how the other parsers take a date", "analysis"),
-    ("Check every caller of parse", "analysis"),
+    (
+        "Read how the other parsers take a date",
+        "Read each parser under src/ and say in which order it reads a date.",
+    ),
+    (
+        "Check every caller of parse",
+        "Find every caller of parse and say which of them pass a date month first.",
+    ),
+)
+PARSERS = (
+    "src/dates.py:4:def parse(text):\n"
+    "src/times.py:9:def parse_time(text):\n"
+    "src/money.py:12:def parse_amount(text):"
+)
+READ = "Only `parse` in src/dates.py reads a date, and it takes the month first."
+CALLERS = (
+    'src/report.py:21:    when = parse(row["date"])\n'
+    "scripts/import_us.py:8:    day = parse(line)\n"
+    'tests/test_dates.py:5:    assert parse("03/04/2026")'
+)
+ASKED = (
+    "scripts/import_us.py reads files from a US bank, written month first. "
+    "Should it keep reading them that way?"
+)
+ANSWERED = "Yes, leave that script month first."
+FOUND = (
+    "Two callers pass a date for `parse` to read: src/report.py and tests/test_dates.py. "
+    "scripts/import_us.py stays month first, as you said."
 )
 
 PARSER = (
@@ -286,30 +328,118 @@ async def record_evidence(slug: str, session_id: UUID) -> None:
         await container.close()
 
 
-async def write_tree(slug: str, session_id: UUID) -> None:
-    from acme.om.agent_sessions.types.agent_session import AgentSession
-    from acme.om.base import new_id, utcnow
-    from acme.services.api.container import AppContainer, boot
+def story(session: Any, person: Any, at: datetime) -> Any:
+    """A history of `session` as its runs write it, a few seconds apart: the
+    test suites' `History`, each step a real `Step` that storage numbers."""
+    from contracts.histories import History
+
+    from acme.om.attribution.types.principal import AgentRef
+    from acme.om.steps.types.step import Step
+
+    class Story(History):
+        def __init__(self) -> None:
+            super().__init__(session.id)
+            self.person = person
+            self.at = at
+
+        @property
+        def agent(self) -> AgentRef:
+            return AgentRef(kind=session.kind, version=session.kind_version, session_id=session.id)
+
+        def then(self) -> datetime:
+            self.at += timedelta(seconds=3)
+            return self.at
+
+        def add(self, **fields: Any) -> Step:
+            step = super().add(**fields).model_copy(update={"created_at": self.then(), "seq": 0})
+            self.steps[-1] = step
+            return step
+
+        def asks(self, use_id: str, tool: str, given: dict[str, Any], text: str = "") -> Step:
+            """A model call on what came last, answering `text` and calling
+            `tool` once: its call."""
+            request = self.request(self.steps[-1:])
+            return self.call(self.response(request, text, [(use_id, tool, given)]), use_id, tool)
+
+    return Story()
+
+
+async def scene_owner(slug: str) -> tuple[Any, Any]:
+    """The scene's container, started, and its org's owner."""
+    from portal_stack import scene_container
+
+    from acme.services.api.container import boot
     from acme.services.api.main import command_request
     from acme.services.api.settings import ApiSettings
 
     settings = ApiSettings()
     boot(settings)
     settings.refuse_remote()
-    container = AppContainer.build(settings)
+    container = scene_container(settings)
     await container.start()
+    org = await container.storage.get_tenancy_storage().read_org_by_slug(slug)
+    if org is None:
+        await container.close()
+        raise SystemExit(f"no org {slug}")
+    owner = await container.managers.tenancy.member_context(
+        command_request(settings), org.id, org.created_by
+    )
+    return container, owner
+
+
+async def written(container: Any, owner: Any, session_id: UUID, steps: list[Any]) -> None:
+    """Steps appended as one run writes them, then the session's status
+    brought up to them once: a park or a run's end asks for no run."""
+    managers = container.managers
+    epoch = await managers.steps.begin_run(owner, session_id)
+    await managers.steps.append_steps(owner, session_id, epoch, steps)
+    await managers.agent_sessions.project_status(owner, session_id)
+
+
+async def write_tree(slug: str) -> None:
+    sys.path.insert(0, str(REPO / "om" / "tests"))
+    from acme.om.agent_sessions.rules import parked_step
+    from acme.om.agent_sessions.types.agent_session import AgentSession, SessionStatus
+    from acme.om.agents.loop_rules import ended_step
+    from acme.om.agents.types.report import Report
+    from acme.om.agents.types.request import Start
+    from acme.om.attribution.types.authority import AuthorityMode
+    from acme.om.attribution.types.principal import AgentRef, Principal, PrincipalKind
+    from acme.om.base import new_id, utcnow
+    from acme.om.platform_agents.kinds import ANALYSIS, ENGINEER
+    from acme.om.steps.types.content import Content, TextBlock
+    from acme.om.steps.types.header import InputHeader, LoopOutcome, Park, ParkReason
+    from acme.om.steps.types.step import Actor, Origin, Step, StepType
+
+    container, owner = await scene_owner(slug)
     try:
-        org = await container.storage.get_tenancy_storage().read_org_by_slug(slug)
-        if org is None:
-            raise SystemExit(f"no org {slug}")
-        owner = await container.managers.tenancy.member_context(
-            command_request(settings), org.id, org.created_by
+        managers = container.managers
+        trees = container.storage.get_agent_storage()
+        person = Principal(kind=PrincipalKind.PERSON, id=owner.user_id)
+        began = utcnow() - timedelta(minutes=2)
+
+        # The root: an engineer, whose kind lets its tree hold two sub-agents.
+        root = await managers.agents.start_session(
+            owner, Start(id=new_id(), kind=ENGINEER, title=TREE_ASK)
         )
-        root = await container.managers.agent_sessions.get_session(owner, session_id)
-        sessions = container.storage.get_agent_session_storage()
-        for title, kind in CHILDREN:
+        told = story(root, person, began)
+        ids = [new_id() for _ in CHILDREN]
+        uses = [
+            (f"toolu_spawn_{n}", "spawn_sub_agent", {"title": t, "objective": o, "kind": ANALYSIS})
+            for n, (t, o) in enumerate(CHILDREN, 1)
+        ]
+        response = told.response(told.request([told.message(TREE_ASK)]), SPLIT, uses)
+        for (use_id, tool, _), child_id in zip(uses, ids, strict=True):
+            told.result(told.call(response, use_id, tool), f'{{"session_id": "{child_id}"}}')
+        waits = Park(reason=ParkReason.CHILDREN, unlock="children")
+        told.steps.append(parked_step(new_id(), root.id, told.loop_id, waits, told.then()))
+
+        # Its sub-agents, each in a slot of the tree, at work from the start.
+        children: list[tuple[Any, Any]] = []
+        for child_id, (title, objective) in zip(ids, CHILDREN, strict=True):
+            if await trees.take_slot(owner.org_id, root.root_id) is None:
+                raise SystemExit("the tree holds no more sub-agents")
             now = utcnow()
-            child_id = new_id()
             child = AgentSession(
                 id=child_id,
                 created_at=now,
@@ -318,13 +448,98 @@ async def write_tree(slug: str, session_id: UUID) -> None:
                 updated_by=owner.user_id,
                 title=title,
                 participants=(owner.user_id,),
-                kind=kind,
+                kind=ANALYSIS,
                 kind_version=1,
                 parent_id=root.id,
                 root_id=root.root_id,
                 depth=root.depth + 1,
+                status=SessionStatus.RUNNING,
             )
+            sessions = container.storage.get_agent_session_storage()
             await sessions.create_session(owner.org_id, child, ())
+            await managers.attribution.open_authority(owner, child_id, AuthorityMode.STEADY)
+            work = story(child, person, began)
+            parent = AgentRef(kind=root.kind, version=root.kind_version, session_id=root.id)
+            aim = Step(
+                id=new_id(),
+                created_at=work.then(),
+                session_id=child_id,
+                loop_id=child_id,
+                type=StepType.MESSAGE,
+                actor=Actor.AGENT,
+                origin=Origin.PARENT,
+                header=InputHeader(waking=True, principal=person, agent=parent),
+                content=Content(blocks=(TextBlock(text=objective),)),
+            )
+            work.steps.append(aim)
+            work.loop_id = aim.id
+            children.append((child, work))
+        await written(container, owner, root.id, told.steps)
+
+        # The first reads the parsers, ends, and reports to the root.
+        first, read = children[0]
+        call = read.asks("toolu_parsers", "search_code", {"pattern": "def parse", "path": "src"})
+        read.result(call, PARSERS)
+        read.response(read.request(read.steps[-1:]), READ)
+        read.steps.append(
+            ended_step(new_id(), read.then(), first.id, read.loop_id, LoopOutcome.SUCCEEDED)
+        )
+        await written(container, owner, first.id, read.steps)
+        report = Report(loop_id=read.loop_id, outcome=LoopOutcome.SUCCEEDED, answer=READ)
+        await managers.agents.report_to_parent(owner, first.id, report)
+
+        # The second is still searching.
+        second, search = children[1]
+        search.asks("toolu_callers", "search_code", {"pattern": "parse(", "path": "."})
+        await written(container, owner, second.id, search.steps)
+        print(json.dumps({"root": str(root.id), "children": [str(one) for one in ids]}))
+    finally:
+        await container.close()
+
+
+async def next_beat(slug: str, root_id: UUID) -> None:
+    sys.path.insert(0, str(REPO / "om" / "tests"))
+    from acme.om.agent_sessions.rules import QUESTION, parked_step
+    from acme.om.agent_sessions.types.agent_session import SessionStatus
+    from acme.om.agents.loop_rules import ended_step
+    from acme.om.agents.types.report import Report
+    from acme.om.attribution.types.principal import Principal, PrincipalKind
+    from acme.om.base import new_id, utcnow
+    from acme.om.steps.types.header import LoopOutcome
+    from acme.om.steps.types.step import StepType
+
+    container, owner = await scene_owner(slug)
+    try:
+        managers = container.managers
+        page = await managers.agent_sessions.get_children(owner, root_id, None, 10)
+        working = [one for one in page.items if one.status is SessionStatus.RUNNING]
+        asking = [one for one in page.items if one.park == QUESTION]
+        child = (working or asking or [None])[0]
+        if child is None:
+            raise SystemExit(f"no sub-agent of {root_id} is at work or asks")
+        held = (await managers.steps.get_steps(owner, child.id, 0, 100)).items
+        person = Principal(kind=PrincipalKind.PERSON, id=owner.user_id)
+        work = story(child, person, max(utcnow(), held[-1].created_at))
+        work.loop_id = held[-1].loop_id
+        if working:
+            # Its search answers, and it asks its person.
+            call = next(step for step in reversed(held) if step.type is StepType.TOOL_REQUEST)
+            work.result(call, CALLERS)
+            asked = work.asks("toolu_ask", "ask_person", {"question": ASKED})
+            work.result(asked, json.dumps({"question": ASKED}))
+            work.steps.append(parked_step(new_id(), child.id, work.loop_id, QUESTION, work.then()))
+            report = Report(loop_id=work.loop_id, park=QUESTION)
+        else:
+            # Its person answers, and it ends.
+            work.response(work.request([work.message(ANSWERED)]), FOUND)
+            work.steps.append(
+                ended_step(new_id(), work.then(), child.id, work.loop_id, LoopOutcome.SUCCEEDED)
+            )
+            report = Report(loop_id=work.loop_id, outcome=LoopOutcome.SUCCEEDED, answer=FOUND)
+        await written(container, owner, child.id, work.steps)
+        # What it does now reaches its parent, as the engine reports it.
+        await managers.agents.report_to_parent(owner, child.id, report)
+        print(child.id)
     finally:
         await container.close()
 
@@ -476,8 +691,11 @@ def main(argv: list[str]) -> int:
     if len(argv) == 3 and argv[0] == "scene":
         asyncio.run(prepare_scene(Path(argv[1]), argv[2]))
         return 0
+    if len(argv) == 2 and argv[0] == "tree":
+        asyncio.run(write_tree(argv[1]))
+        return 0
     if len(argv) == 3 and argv[0] == "tree":
-        asyncio.run(write_tree(argv[1], UUID(argv[2])))
+        asyncio.run(next_beat(argv[1], UUID(argv[2])))
         return 0
     if len(argv) == 5 and argv[0] == "host":
         asyncio.run(stand_in_host(Path(argv[1]), argv[2], UUID(argv[3]), argv[4]))
