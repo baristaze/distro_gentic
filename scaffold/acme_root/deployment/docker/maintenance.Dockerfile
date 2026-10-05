@@ -25,6 +25,7 @@ RUN uv sync --frozen --no-dev --package acme-maintenance
 # as the API does (ACME_CORPUS_ROOT).
 COPY llms.txt ./
 COPY apps/cli/README.md apps/cli/
+COPY docs/object-model.md docs/
 
 FROM python:3.14-slim
 RUN useradd --create-home --uid 10001 acme

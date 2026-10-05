@@ -14,9 +14,11 @@ engine runs every one of them the same way.
 - The planner turns findings into tasks: it reads where sessions stand,
   hands new engineering work to an engineer, and answers with its plan.
 - The platform assistant answers the people who run their part of the
-  platform, on their own permissions: it reads the corpus and live state,
-  drafts configuration a person applies, and hands engineering work to an
-  engineer. It has no workspace, repository, or shell.
+  platform, on their own permissions: it reads the corpus, the knowledge
+  base, and the tenant's live records (its sessions and what they wait
+  on, its projects, its automations), drafts configuration a person
+  applies, and hands engineering work to an engineer. It has no
+  workspace, repository, or shell.
 
 A validation session is not here: it runs a check with no agent at all
 (`types/validation.py`). Nothing routes a message to one kind or another:
@@ -52,6 +54,12 @@ HAND_OFF = "hand_off_to_engineer"
 SEARCH_KNOWLEDGE = "search_knowledge"
 READ_KNOWLEDGE = "read_knowledge"
 SUGGEST_KNOWLEDGE = "suggest_knowledge"
+LIST_SESSIONS = "list_sessions"
+READ_WAIT = "read_wait"
+LIST_PROJECTS = "list_projects"
+READ_PROJECT = "read_project"
+LIST_AUTOMATIONS = "list_automations"
+READ_AUTOMATION = "read_automation"
 
 WORKSPACE = IsolationSpec(mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode=EgressMode.NONE))
 """A container of its own, from which nothing leaves: the workspace of the
@@ -231,7 +239,7 @@ PLANNER_KIND = AgentKind(
     policy=allowing(ToolClass.READ, ToolClass.SPAWN),
 )
 
-PLATFORM_ASSISTANT_KIND = AgentKind(
+PLATFORM_ASSISTANT_V1 = AgentKind(
     name=PLATFORM_ASSISTANT,
     version=1,
     tools=(SEARCH_CORPUS, READ_SESSION, DRAFT_TOOL_POLICY, HAND_OFF),
@@ -250,6 +258,57 @@ PLATFORM_ASSISTANT_KIND = AgentKind(
     policy=allowing(ToolClass.READ, ToolClass.SPAWN),
     isolation=NO_WORKSPACE,
 )
+"""The platform assistant before it read the tenant's sessions, projects,
+and automations, and its knowledge: kept while a session may still run
+it."""
+
+ASSISTANT_READERS = (
+    READ_SESSION,
+    LIST_SESSIONS,
+    READ_WAIT,
+    LIST_PROJECTS,
+    READ_PROJECT,
+    LIST_AUTOMATIONS,
+    READ_AUTOMATION,
+)
+"""The assistant's readers of the tenant's live records, each through the
+asking person's own permissions."""
+
+PLATFORM_ASSISTANT_KIND = AgentKind(
+    name=PLATFORM_ASSISTANT,
+    version=2,
+    tools=(
+        SEARCH_CORPUS,
+        SEARCH_KNOWLEDGE,
+        READ_KNOWLEDGE,
+        *ASSISTANT_READERS,
+        DRAFT_TOOL_POLICY,
+        HAND_OFF,
+    ),
+    done_rule=DoneRule.ANSWER,
+    authority=AuthorityMode.DELEGATED,
+    tree=TreeLimits(height=1, count=0),
+    prompts=(
+        "You help the people who set up and run their part of the platform. Explain the "
+        "product only from what search_corpus and search_knowledge find, and cite the "
+        "document of every passage you use: docs/object-model.md says what each thing is, "
+        "what owns it, and what moves it between its states. Diagnose by reading first, "
+        "never by guessing. Find sessions with list_sessions and read one with "
+        "read_session; read what a waiting session waits on, its place in the work queue "
+        "and the hosts that run it, with read_wait; read projects and automations, and an "
+        "automation's recent runs, the same way, and any other reader you hold. When "
+        "something waits or is slow, say what it waits on as you read it, what clears it, "
+        "who may clear it, and where they do. Draft a change to the tool policy with "
+        "draft_tool_policy and show the difference from what is live: a person applies "
+        "it, never you. When the work is engineering, hand it to an engineer with "
+        "hand_off_to_engineer and an objective that stands on its own, then step back.",
+    ),
+    policy=allowing(ToolClass.READ, ToolClass.SPAWN),
+    isolation=NO_WORKSPACE,
+)
+"""The platform assistant. A product adds its own readers to it through its
+slot (`ProductKinds.assistant_tools`), which the root joins to this version
+alone."""
 
 SHIPPED: tuple[AgentKind, ...] = (
     ENGINEER_V1,
@@ -259,6 +318,7 @@ SHIPPED: tuple[AgentKind, ...] = (
     ANALYSIS_V1,
     ANALYSIS_KIND,
     PLANNER_KIND,
+    PLATFORM_ASSISTANT_V1,
     PLATFORM_ASSISTANT_KIND,
 )
 """Every kind the platform ships, at every version it still runs."""
