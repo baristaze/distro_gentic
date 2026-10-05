@@ -2,6 +2,7 @@
 // offers and keeps in the address bar, and what a new session needs before
 // it may start. No React, no fetch.
 import type { AgentSessionView, ProjectView, SessionStatus, StartSessionRequest } from "@acme/client";
+import { listedFor } from "../../app/shell/supportModel";
 import { statusLine, type Tone } from "../session/sessionModel";
 
 /** A status, or the parked sessions that wait on a person: "Needs you". */
@@ -67,7 +68,8 @@ export function narrowed(filter: ListFilter): boolean {
 
 /** The sessions the list shows: the server read them in the status; here
  * they narrow to whose they are, the agent, the archived, and the words of
- * the title, case aside. */
+ * the title, case aside. A support conversation shows only under the
+ * platform assistant's filter. */
 export function listed(sessions: readonly AgentSessionView[], filter: ListFilter, me: string | null): AgentSessionView[] {
   const words = filter.query.trim().toLowerCase();
   return sessions.filter(
@@ -75,7 +77,7 @@ export function listed(sessions: readonly AgentSessionView[], filter: ListFilter
       (filter.status !== "needs_you" || session.park?.reason === "person") &&
       (filter.archived || session.archived_at === null) &&
       (filter.owner === "everyone" || session.created_by === me) &&
-      (!filter.kind || session.kind === filter.kind) &&
+      listedFor(session, filter.kind) &&
       (!words || session.title.toLowerCase().includes(words)),
   );
 }

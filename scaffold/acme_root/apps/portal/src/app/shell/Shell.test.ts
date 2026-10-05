@@ -541,13 +541,15 @@ describe("the support dock", () => {
   });
 
   it("continues the person's own conversation, and New conversation starts the next message afresh", async () => {
-    net.sessions = [session("mine", { kind: "platform_assistant" })];
+    net.sessions = [session("work"), session("mine", { kind: "platform_assistant", title: "Support" })];
     useSupportStore.setState({ conversations: { "o1/u1": "mine" } });
     await mount("/sessions");
     await act(async () => ask().click());
     await settle();
     expect(net.gets.some((path) => path.startsWith("/v1/agent-sessions/mine/steps"))).toBe(true);
     expect(q("aside[aria-label='Support'] a[href='/sessions/mine']")!.textContent).toBe("As a session");
+    // The left bar lists the work; the conversation is the dock's.
+    expect(group("Recent")).toEqual(["work"]);
     await act(async () => q<HTMLButtonElement>("button[aria-label='New conversation']")!.click());
     expect(useSupportStore.getState().conversations["o1/u1"]).toBeUndefined();
     await typeIn("A new question");
