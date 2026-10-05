@@ -22,7 +22,6 @@ vi.mock("./useDeleteAccountVm", () => ({ useDeleteAccountVm: () => ({}) }));
 vi.mock("./DeleteAccountCard", () => ({ DeleteAccountCard: () => null }));
 vi.mock("./useDeleteOrgVm", () => ({ useDeleteOrgVm: () => ({ shown: false }) }));
 vi.mock("./StorageCard", () => ({ StorageCard: () => null }));
-vi.mock("../../app/AppNav", () => ({ AppNav: () => null }));
 vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 
 const container = document.createElement("div");

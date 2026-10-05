@@ -207,6 +207,20 @@ export function useStartSession() {
   });
 }
 
+/** A message to a session the caller names at the call: Home sends the
+ * prompt to the session it has just started. */
+export function useSendMessage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, text }: { id: string; text: string }) => api.post<StepView>(`${path(id)}/messages`, { text }),
+    onSettled: (_step, _error, { id }) =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: keys.agentSessions.one(id) }),
+        queryClient.invalidateQueries({ queryKey: keys.agentSessions.lists }),
+      ]),
+  });
+}
+
 /** What a person sends a session: each answers with what was stored, and the
  * session's reads are read again. */
 export function useSessionActions(id: string) {

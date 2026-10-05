@@ -1,6 +1,7 @@
 // The things a page can do, found by typing: Cmd-K or Ctrl-K opens it, the
 // letters narrow it, the arrows choose, Enter does the chosen one and closes
-// it, and Escape closes it. A page passes only what it can do now.
+// it, and Escape closes it. A page passes only what it can do now; `lead`
+// adds what the typed words themselves offer, first.
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { keepTabInside, useReturnFocus } from "./focus";
 import { opensPalette, paletteStep, rankCommands } from "./overlayModel";
@@ -10,6 +11,8 @@ export interface PaletteCommand {
   label: string;
   /** Other words a person may type for it. */
   keywords?: readonly string[];
+  /** What kind of thing it is, drawn muted at the end: "Session", "Settings". */
+  hint?: string;
   run: () => void;
 }
 
@@ -26,7 +29,18 @@ export function usePaletteKey(onOpen: () => void): void {
   }, [onOpen]);
 }
 
-export function CommandPalette({ commands, onClose }: { commands: readonly PaletteCommand[]; onClose: () => void }) {
+export function CommandPalette({
+  commands,
+  onClose,
+  placeholder = "Find a command",
+  lead,
+}: {
+  commands: readonly PaletteCommand[];
+  onClose: () => void;
+  placeholder?: string;
+  /** Commands made from what is typed, shown before the matches. */
+  lead?: (query: string) => readonly PaletteCommand[];
+}) {
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const box = useRef<HTMLDivElement>(null);
@@ -34,7 +48,7 @@ export function CommandPalette({ commands, onClose }: { commands: readonly Palet
   const listId = useId();
   useReturnFocus();
   useEffect(() => field.current?.focus(), []);
-  const shown = rankCommands(commands, query);
+  const shown = [...(lead?.(query) ?? []), ...rankCommands(commands, query)];
   const chosen = shown[Math.min(active, shown.length - 1)];
   const run = (command: PaletteCommand | undefined) => {
     if (!command) return;
@@ -79,8 +93,8 @@ export function CommandPalette({ commands, onClose }: { commands: readonly Palet
           aria-expanded="true"
           aria-controls={listId}
           aria-activedescendant={chosen ? optionId(chosen) : undefined}
-          aria-label="Find a command"
-          placeholder="Find a command"
+          aria-label={placeholder}
+          placeholder={placeholder}
           value={query}
           onChange={(event) => {
             setQuery(event.target.value);
@@ -99,7 +113,8 @@ export function CommandPalette({ commands, onClose }: { commands: readonly Palet
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => run(command)}
             >
-              {command.label}
+              <span className="acme-palette-label">{command.label}</span>
+              {command.hint ? <span className="acme-palette-hint">{command.hint}</span> : null}
             </li>
           ))}
         </ul>

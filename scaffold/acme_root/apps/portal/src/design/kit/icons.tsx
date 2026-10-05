@@ -1,43 +1,57 @@
 // The kit's icons. An icon is drawn in the text's color and hidden from
-// assistive technology; the words beside it are what a screen reader says.
+// assistive technology; the words beside it, or the label of the button it
+// sits in, are what a screen reader says.
 //
-// Every drawing but the gear is Lucide's (https://lucide.dev, lucide-static
-// 1.48.0), copied as paths under its ISC license:
-//   Copyright (c) 2026 Lucide Icons and Contributors. Permission to use,
-//   copy, modify, and/or distribute this software for any purpose with or
-//   without fee is hereby granted, provided that the above copyright notice
-//   and this permission notice appear in all copies. THE SOFTWARE IS
-//   PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES.
-// Monitor, moon, log-out, and plus come to Lucide from Feather, under MIT:
-//   Copyright (c) 2013-present Cole Bemis. Permission is hereby granted,
-//   free of charge, to deal in the Software without restriction, provided
-//   the copyright notice and this permission notice are included in all
-//   copies. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
-import type { ReactNode } from "react";
+// Every drawing but the gear is Lucide's, from `lucide-react` (ISC; its
+// license ships with the package). `kitIcon` draws any Lucide icon the
+// kit's way, so a product takes one the platform does not name from
+// `lucide-react` and passes it through here.
+import type { JSX } from "react";
+import type { LucideIcon, LucideProps } from "lucide-react";
+import {
+  Archive,
+  ArrowUp,
+  BookOpen,
+  Bot,
+  ChevronDown,
+  Crown,
+  ExternalLink,
+  Eye,
+  FileText,
+  FolderGit2,
+  Info,
+  Keyboard,
+  LayoutList,
+  ListFilter,
+  LogOut,
+  Monitor,
+  Moon,
+  PanelLeft,
+  Plus,
+  Search,
+  Shield,
+  SquarePen,
+  Sun,
+  User,
+  UserPlus,
+  Users,
+  Zap,
+} from "lucide-react";
 
-/** Lucide's 24-unit grid drawn at 16 pixels, so its 2-unit stroke is the
- * 1.3-pixel line of the kit's own marks. */
-function LucideIcon({ children }: { children: ReactNode }) {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      focusable="false"
-      style={{ flexShrink: 0 }}
-    >
-      {children}
-    </svg>
-  );
+export type { LucideIcon };
+
+/** An icon of the kit: drawn at 16 pixels, hidden from assistive technology. */
+export type KitIcon = (props: Omit<LucideProps, "ref">) => JSX.Element;
+
+/** One Lucide icon at the kit's size: its 24-unit grid drawn at 16 pixels,
+ * so its 2-unit stroke is the 1.3-pixel line of the kit's own marks. */
+export function kitIcon(Icon: LucideIcon): KitIcon {
+  return function Drawn(props) {
+    return <Icon size={16} aria-hidden="true" focusable="false" style={{ flexShrink: 0 }} {...props} />;
+  };
 }
 
-/** A gear: Settings. The product's own drawing, the one in the bar. */
+/** A gear: Settings. The product's own drawing. */
 export function SettingsIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false" style={{ flexShrink: 0 }}>
@@ -54,124 +68,56 @@ export function SettingsIcon() {
 }
 
 /** A screen: follow the system. */
-export function MonitorIcon() {
-  return (
-    <LucideIcon>
-      <rect width="20" height="14" x="2" y="3" rx="2" />
-      <line x1="8" x2="16" y1="21" y2="21" />
-      <line x1="12" x2="12" y1="17" y2="21" />
-    </LucideIcon>
-  );
-}
-
-/** The sun: light. */
-export function SunIcon() {
-  return (
-    <LucideIcon>
-      <circle cx="12" cy="12" r="4" />
-      <path d="M12 2v2" />
-      <path d="M12 20v2" />
-      <path d="m4.93 4.93 1.41 1.41" />
-      <path d="m17.66 17.66 1.41 1.41" />
-      <path d="M2 12h2" />
-      <path d="M20 12h2" />
-      <path d="m6.34 17.66-1.41 1.41" />
-      <path d="m19.07 4.93-1.41 1.41" />
-    </LucideIcon>
-  );
-}
-
-/** The moon: dark. */
-export function MoonIcon() {
-  return (
-    <LucideIcon>
-      <path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401" />
-    </LucideIcon>
-  );
-}
-
-/** A door and an arrow out: sign out. */
-export function LogOutIcon() {
-  return (
-    <LucideIcon>
-      <path d="m16 17 5-5-5-5" />
-      <path d="M21 12H9" />
-      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-    </LucideIcon>
-  );
-}
-
-/** One person: a personal org, a member. */
-export function UserIcon() {
-  return (
-    <LucideIcon>
-      <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
-      <circle cx="12" cy="7" r="4" />
-    </LucideIcon>
-  );
-}
-
-/** Two people: a team org. */
-export function UsersIcon() {
-  return (
-    <LucideIcon>
-      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-      <path d="M16 3.128a4 4 0 0 1 0 7.744" />
-      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-      <circle cx="9" cy="7" r="4" />
-    </LucideIcon>
-  );
-}
-
+export const MonitorIcon = kitIcon(Monitor);
+/** The sun: the light theme. */
+export const SunIcon = kitIcon(Sun);
+/** The moon: the dark theme. */
+export const MoonIcon = kitIcon(Moon);
+/** A door with an arrow out: Sign out. */
+export const LogOutIcon = kitIcon(LogOut);
+/** One person: a personal org, a profile. */
+export const UserIcon = kitIcon(User);
+/** Two people: a team org, the members. */
+export const UsersIcon = kitIcon(Users);
+/** A person with a plus: invite someone. */
+export const UserPlusIcon = kitIcon(UserPlus);
 /** A plus: make a new one. */
-export function PlusIcon() {
-  return (
-    <LucideIcon>
-      <path d="M5 12h14" />
-      <path d="M12 5v14" />
-    </LucideIcon>
-  );
-}
-
+export const PlusIcon = kitIcon(Plus);
 /** A crown: the owner. */
-export function CrownIcon() {
-  return (
-    <LucideIcon>
-      <path d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.734H5.81a1 1 0 0 1-.957-.734L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z" />
-      <path d="M5 21h14" />
-    </LucideIcon>
-  );
-}
-
+export const CrownIcon = kitIcon(Crown);
 /** A shield: an admin. */
-export function ShieldIcon() {
-  return (
-    <LucideIcon>
-      <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
-    </LucideIcon>
-  );
-}
-
-/** An eye: a viewer. */
-export function EyeIcon() {
-  return (
-    <LucideIcon>
-      <path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" />
-      <circle cx="12" cy="12" r="3" />
-    </LucideIcon>
-  );
-}
-
-/** A bot: a service account. */
-export function BotIcon() {
-  return (
-    <LucideIcon>
-      <path d="M12 8V4H8" />
-      <rect width="16" height="12" x="4" y="8" rx="2" />
-      <path d="M2 14h2" />
-      <path d="M20 14h2" />
-      <path d="M15 13v2" />
-      <path d="M9 13v2" />
-    </LucideIcon>
-  );
-}
+export const ShieldIcon = kitIcon(Shield);
+/** An eye: one who reads. */
+export const EyeIcon = kitIcon(Eye);
+/** A face with an antenna: an agent. */
+export const BotIcon = kitIcon(Bot);
+/** A magnifier: search. */
+export const SearchIcon = kitIcon(Search);
+/** A pen on a square: a new session. */
+export const NewSessionIcon = kitIcon(SquarePen);
+/** A bolt: an automation. */
+export const AutomationIcon = kitIcon(Zap);
+/** An open book: the knowledge base. */
+export const KnowledgeIcon = kitIcon(BookOpen);
+/** A list of rows: every session. */
+export const ListIcon = kitIcon(LayoutList);
+/** Lines that narrow: a filter. */
+export const FilterIcon = kitIcon(ListFilter);
+/** A window with its side pane: the sidebar. */
+export const SidebarIcon = kitIcon(PanelLeft);
+/** A keyboard: the shortcuts. */
+export const KeyboardIcon = kitIcon(Keyboard);
+/** A box with an arrow out: a page outside the app. */
+export const ExternalIcon = kitIcon(ExternalLink);
+/** A page: the documentation. */
+export const DocumentIcon = kitIcon(FileText);
+/** A folder with a branch: a project. */
+export const ProjectIcon = kitIcon(FolderGit2);
+/** An arrow up: send. */
+export const SendIcon = kitIcon(ArrowUp);
+/** An i in a circle: what a field means. */
+export const InfoIcon = kitIcon(Info);
+/** A chevron down: a chip that opens a menu. */
+export const ChevronIcon = kitIcon(ChevronDown);
+/** A box: archived. */
+export const ArchiveIcon = kitIcon(Archive);

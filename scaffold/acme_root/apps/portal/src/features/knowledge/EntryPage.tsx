@@ -1,6 +1,5 @@
 import type { FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
-import { AppNav } from "../../app/AppNav";
 import { errorMessage } from "../../app/errorMessage";
 import { Banner, Button, Card, ErrorText, Markdown, Muted, Page, Pill, TextArea, TextField } from "../../design/kit";
 import { tokens } from "../../design/tokens";
@@ -16,7 +15,7 @@ export function EntryPage() {
   const vm = useEntryVm(entryId);
   if (vm.missing) {
     return (
-      <Page title="No entry here" back={back} nav={<AppNav />}>
+      <Page title="No entry here" back={back}>
         <Card>
           <Muted>This org holds no entry with this address. It may belong to another org.</Muted>
         </Card>
@@ -25,7 +24,7 @@ export function EntryPage() {
   }
   if (!vm.entry) {
     return (
-      <Page title="Entry" back={back} nav={<AppNav />}>
+      <Page title="Entry" back={back}>
         {vm.error ? <Banner>{errorMessage(vm.error, "The entry could not be read.")}</Banner> : <Muted>Loading</Muted>}
       </Page>
     );
@@ -36,7 +35,7 @@ export function EntryPage() {
     vm.submit();
   };
   return (
-    <Page title={entry.title} back={back} nav={<AppNav />} notice={<ProviderNotice />}>
+    <Page title={entry.title} back={back} notice={<ProviderNotice />}>
       <Card id="entry">
         <div style={grid} data-entry>
           <div style={{ display: "flex", gap: tokens.space.sm, flexWrap: "wrap", alignItems: "center" }}>

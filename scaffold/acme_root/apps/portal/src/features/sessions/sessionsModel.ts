@@ -1,12 +1,15 @@
-// Pure: the tenant's sessions as the list shows them, the filters it offers,
-// and what a new session needs before it may start. No React, no fetch.
+// Pure: the tenant's sessions as All sessions shows them, the filters it
+// offers and keeps in the address bar, and what a new session needs before
+// it may start. No React, no fetch.
 import type { AgentSessionView, ProjectView, SessionStatus, StartSessionRequest } from "@acme/client";
 import { statusLine, type Tone } from "../session/sessionModel";
 
-export type StatusFilter = SessionStatus | "any";
+/** A status, or the parked sessions that wait on a person: "Needs you". */
+export type StatusFilter = SessionStatus | "any" | "needs_you";
 
 export const STATUS_FILTERS: readonly { value: StatusFilter; label: string }[] = [
   { value: "any", label: "All" },
+  { value: "needs_you", label: "Needs you" },
   { value: "running", label: "Running" },
   { value: "parked", label: "Parked" },
   { value: "pending", label: "Pending" },
@@ -16,6 +19,65 @@ export const STATUS_FILTERS: readonly { value: StatusFilter; label: string }[] =
 /** A filter from the address bar; anything else is every status. */
 export function statusFilter(value: string | null): StatusFilter {
   return STATUS_FILTERS.some((filter) => filter.value === value) ? (value as StatusFilter) : "any";
+}
+
+/** The status the server is asked for: "Needs you" reads the parked ones. */
+export function serverStatus(filter: StatusFilter): SessionStatus | null {
+  if (filter === "any") return null;
+  return filter === "needs_you" ? "parked" : filter;
+}
+
+/** What All sessions shows, as the address bar holds it. */
+export interface ListFilter {
+  status: StatusFilter;
+  owner: "everyone" | "mine";
+  /** An agent kind; empty for any. */
+  kind: string;
+  archived: boolean;
+  /** Words the title holds. */
+  query: string;
+}
+
+/** The filter the address bar names; `needs=you` reads as "Needs you" too. */
+export function readListFilter(params: URLSearchParams): ListFilter {
+  return {
+    status: params.get("needs") === "you" ? "needs_you" : statusFilter(params.get("status")),
+    owner: params.get("owner") === "mine" ? "mine" : "everyone",
+    kind: params.get("agent") ?? "",
+    archived: params.get("archived") === "1",
+    query: params.get("q") ?? "",
+  };
+}
+
+/** The address bar's part of a filter: only what differs from showing every session. */
+export function listFilterParams(filter: ListFilter): Record<string, string> {
+  const params: Record<string, string> = {};
+  if (filter.status !== "any") params.status = filter.status;
+  if (filter.owner === "mine") params.owner = "mine";
+  if (filter.kind) params.agent = filter.kind;
+  if (filter.archived) params.archived = "1";
+  if (filter.query) params.q = filter.query;
+  return params;
+}
+
+/** Whether the filter narrows the list past its status. */
+export function narrowed(filter: ListFilter): boolean {
+  return filter.owner === "mine" || filter.kind !== "" || filter.archived || filter.query.trim() !== "";
+}
+
+/** The sessions the list shows: the server read them in the status; here
+ * they narrow to whose they are, the agent, the archived, and the words of
+ * the title, case aside. */
+export function listed(sessions: readonly AgentSessionView[], filter: ListFilter, me: string | null): AgentSessionView[] {
+  const words = filter.query.trim().toLowerCase();
+  return sessions.filter(
+    (session) =>
+      (filter.status !== "needs_you" || session.park?.reason === "person") &&
+      (filter.archived || session.archived_at === null) &&
+      (filter.owner === "everyone" || session.created_by === me) &&
+      (!filter.kind || session.kind === filter.kind) &&
+      (!words || session.title.toLowerCase().includes(words)),
+  );
 }
 
 export interface SessionRow {

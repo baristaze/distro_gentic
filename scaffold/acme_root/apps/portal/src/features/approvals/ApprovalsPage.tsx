@@ -1,5 +1,4 @@
 import { Link } from "react-router-dom";
-import { AppNav } from "../../app/AppNav";
 import { errorMessage } from "../../app/errorMessage";
 import { Banner, Card, DataTable, Muted, Page, type Column } from "../../design/kit";
 import { tokens } from "../../design/tokens";
@@ -21,7 +20,7 @@ const COLUMNS: Column<Row>[] = [
 export function ApprovalsPage() {
   const vm = useApprovalsVm();
   return (
-    <Page title="Approvals" nav={<AppNav />} notice={<ProviderNotice />}>
+    <Page title="Approvals" notice={<ProviderNotice />}>
       {vm.error ? <Banner>{errorMessage(vm.error, "The approvals could not be read.")}</Banner> : null}
       <Card title="Calls waiting on a person" id="approvals">
         <div style={{ display: "grid", gap: tokens.space.md }}>

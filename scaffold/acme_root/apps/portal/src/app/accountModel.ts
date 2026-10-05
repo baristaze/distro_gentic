@@ -1,8 +1,6 @@
-// Pure: what the account menu's button shows.
+// Pure: what the user chip shows.
 
-/** The part of an address before the @, for a window with no room for the
- * whole of it; an address with no @ is shown whole. */
-export function shortEmail(email: string): string {
-  const at = email.indexOf("@");
-  return at > 0 ? email.slice(0, at) : email;
+/** The letter an avatar shows: a name's first, upper-cased; "?" for none. */
+export function initialOf(name: string): string {
+  return name.trim().charAt(0).toUpperCase() || "?";
 }

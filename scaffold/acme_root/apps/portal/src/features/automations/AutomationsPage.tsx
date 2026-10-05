@@ -1,7 +1,6 @@
 import type { FormEvent } from "react";
 import { Link } from "react-router-dom";
 import type { Role } from "@acme/client";
-import { AppNav } from "../../app/AppNav";
 import { errorMessage } from "../../app/errorMessage";
 import { Banner, Button, Card, DataTable, ErrorText, Muted, Page, Pill, Select, type Column } from "../../design/kit";
 import { tokens } from "../../design/tokens";
@@ -31,7 +30,7 @@ export function AutomationsPage() {
     vm.submitGrant();
   };
   return (
-    <Page title="Automations" nav={<AppNav />} notice={<ProviderNotice />}>
+    <Page title="Automations" notice={<ProviderNotice />}>
       {vm.error ? <Banner>{errorMessage(vm.error, "The automations could not be read.")}</Banner> : null}
       <Card title="The org's automations" id="automations">
         {vm.rows === null ? (

@@ -1,11 +1,12 @@
-import type { FormEvent } from "react";
+// All sessions: the org's sessions with filter chips (the status, whose,
+// the agent, the archived), a filter by title, and "Load more". A session
+// starts on Home.
 import { Link } from "react-router-dom";
-import { AppNav } from "../../app/AppNav";
 import { errorMessage } from "../../app/errorMessage";
-import { Banner, Button, Card, DataTable, Page, ErrorText, Muted, Pill, SegmentedControl, Select, TextField, type Column } from "../../design/kit";
+import { Banner, Button, Card, DataTable, Muted, Page, Pill, SegmentedControl, Select, TextField, type Column } from "../../design/kit";
 import { tokens } from "../../design/tokens";
 import { ProviderNotice } from "../providers/ProviderNotice";
-import { shortTime, STATUS_FILTERS, type SessionRow } from "./sessionsModel";
+import { shortTime, STATUS_FILTERS, type ListFilter, type SessionRow } from "./sessionsModel";
 import { useSessionsVm } from "./useSessionsVm";
 
 const COLUMNS: Column<SessionRow>[] = [
@@ -21,7 +22,7 @@ const COLUMNS: Column<SessionRow>[] = [
     cell: (row) => <Pill tone={row.tone}>{row.status}</Pill>,
     sortValue: (row) => row.status,
   },
-  { key: "kind", header: "Kind", cell: (row) => row.kind, sortValue: (row) => row.kind },
+  { key: "kind", header: "Agent", cell: (row) => row.kind, sortValue: (row) => row.kind },
   {
     key: "started",
     header: "Started",
@@ -35,54 +36,43 @@ const COLUMNS: Column<SessionRow>[] = [
   },
 ];
 
+const OWNERS: readonly { value: ListFilter["owner"]; label: string }[] = [
+  { value: "everyone", label: "Everyone" },
+  { value: "mine", label: "Mine" },
+];
+
 export function SessionsPage() {
   const vm = useSessionsVm();
-  const onSubmit = (event: FormEvent) => {
-    event.preventDefault();
-    vm.submit();
-  };
   return (
-    <Page title="Sessions" nav={<AppNav />} notice={<ProviderNotice />}>
+    <Page title="All sessions" notice={<ProviderNotice />}>
       {vm.error ? <Banner>{errorMessage(vm.error, "The sessions could not be read.")}</Banner> : null}
-      {vm.mayWrite ? (
-        <Card title="New session" id="new">
-          <form onSubmit={onSubmit} style={{ display: "grid", gap: tokens.space.md }} aria-label="New session">
-            <TextField label="Title" value={vm.draft.title} onChange={(title) => vm.setDraft({ ...vm.draft, title })} />
-            <TextField
-              label="Kind"
-              value={vm.draft.kind}
-              placeholder="The kind of work the product runs"
-              onChange={(kind) => vm.setDraft({ ...vm.draft, kind })}
-            />
-            {vm.projectOptions.length > 0 ? (
-              <Select
-                label="Project"
-                value={vm.draft.projectId}
-                options={vm.projectOptions}
-                onChange={(projectId) => vm.setDraft({ ...vm.draft, projectId })}
-              />
-            ) : null}
-            {vm.problem ? <ErrorText>{vm.problem}</ErrorText> : null}
-            <div>
-              <Button type="submit" disabled={vm.starting}>
-                {vm.starting ? "Starting" : "Start"}
-              </Button>
-            </div>
-          </form>
-        </Card>
-      ) : null}
-      <Card title="The org's sessions" id="sessions">
+      <Card>
         <div style={{ display: "grid", gap: tokens.space.md }}>
-          <SegmentedControl label="Status" value={vm.filter} options={STATUS_FILTERS} onChange={vm.setFilter} />
+          <div style={{ overflowX: "auto" }}>
+            <SegmentedControl label="Status" value={vm.filter.status} options={STATUS_FILTERS} onChange={(status) => vm.setFilter({ status })} />
+          </div>
+          <div className="acme-filter-row">
+            <SegmentedControl label="Whose sessions" value={vm.filter.owner} options={OWNERS} onChange={(owner) => vm.setFilter({ owner })} />
+            <Select label="Agent" value={vm.filter.kind} options={vm.kinds} onChange={(kind) => vm.setFilter({ kind })} />
+            <TextField label="Filter by title" placeholder="e.g. flaky test" value={vm.filter.query} onChange={(query) => vm.setFilter({ query })} />
+            <label className="acme-check">
+              <input type="checkbox" checked={vm.filter.archived} onChange={(event) => vm.setFilter({ archived: event.target.checked })} />
+              Show archived
+            </label>
+          </div>
           {vm.rows === null ? (
             <Muted>Loading</Muted>
+          ) : vm.rows.length === 0 && !vm.narrowed && !vm.hasMore ? (
+            <Muted>
+              No sessions yet. <Link to="/">Describe a task on Home.</Link>
+            </Muted>
           ) : (
             <DataTable
               label="Sessions"
               columns={COLUMNS}
               rows={vm.rows}
               rowKey={(row) => row.id}
-              empty={vm.filter === "any" ? "No sessions yet." : "No session in this status."}
+              empty={vm.hasMore ? "None on the pages read yet. Load more to look further." : "No session matches."}
             />
           )}
           {vm.hasMore ? (

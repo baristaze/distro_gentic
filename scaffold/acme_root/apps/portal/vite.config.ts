@@ -2,6 +2,7 @@
 import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+import environments from "../../deployment/cloud/environments.json";
 import pkg from "./package.json";
 
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
@@ -21,6 +22,9 @@ export default defineConfig({
   plugins: [react()],
   define: {
     __APP_VERSION__: JSON.stringify(`portal@${pkg.version}`),
+    // The user chip's Documentation: the README of the public repository,
+    // named once in deployment/cloud/environments.json.
+    __DOCS_URL__: JSON.stringify(`https://github.com/${environments.github_repository}#readme`),
   },
   server: {
     port: 5173,

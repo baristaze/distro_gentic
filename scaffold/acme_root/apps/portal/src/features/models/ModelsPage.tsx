@@ -1,5 +1,4 @@
 import type { FormEvent } from "react";
-import { AppNav } from "../../app/AppNav";
 import { errorMessage } from "../../app/errorMessage";
 import { Banner, Button, Card, DataTable, ErrorText, Muted, Page, Pill, Select, TextField, type Column } from "../../design/kit";
 import { tokens } from "../../design/tokens";
@@ -58,7 +57,7 @@ export function ModelsPage() {
     });
   }
   return (
-    <Page title="Models" nav={<AppNav />} notice={<ProviderNotice />}>
+    <Page title="Models" notice={<ProviderNotice />}>
       {vm.error ? <Banner>{errorMessage(vm.error, "The models could not be read.")}</Banner> : null}
       <Card title="The org's own keys" id="keys">
         <div style={form}>

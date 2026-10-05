@@ -13,7 +13,6 @@ import { ProjectsPage } from "./ProjectsPage";
 
 const net = vi.hoisted(() => ({}) as ReturnType<typeof newNet>);
 vi.mock("../../app/api", async () => (await import("../screenTesting")).fakeApi(net));
-vi.mock("../../app/AppNav", () => ({ AppNav: () => null }));
 vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 
 const SECRET = "ghp_never-on-a-screen-1234";

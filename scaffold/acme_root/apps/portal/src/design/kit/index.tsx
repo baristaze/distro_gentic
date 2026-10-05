@@ -24,6 +24,11 @@ export * from "./Lightbox";
 export * from "./LogView";
 export * from "./Markdown";
 export * from "./CommandPalette";
+export * from "./Popover";
+export * from "./Tooltip";
+export { useSplitter, type SplitterProps } from "./splitter";
+export type { PaneBounds } from "./splitterModel";
+export type { TipSide } from "./tooltipModel";
 export { looksLikeDiff, parseUnifiedDiff } from "./diffModel";
 export { parseJsonText } from "./jsonModel";
 export type { LogChunk } from "./logModel";
@@ -57,7 +62,6 @@ export function Page({
   title,
   heading,
   back,
-  nav,
   notice,
   narrow = false,
   children,
@@ -67,7 +71,6 @@ export function Page({
   heading?: ReactNode;
   /** The way back, above the title. */
   back?: ReactNode;
-  nav?: ReactNode;
   /** What the page says above its title before anything else: a banner the
    * whole app shows. */
   notice?: ReactNode;
@@ -76,11 +79,6 @@ export function Page({
 }) {
   return (
     <div className="acme-app">
-      {nav ? (
-        <header className="acme-topbar">
-          <div className="acme-topbar-inner">{nav}</div>
-        </header>
-      ) : null}
       <main className="acme-page" data-narrow={narrow || undefined}>
         <div className="acme-column">
           {narrow ? (
@@ -280,15 +278,38 @@ export function TextArea({
   label,
   value,
   onChange,
+  placeholder,
+  rows = 3,
+  hideLabel = false,
+  disabled,
+  autoFocus,
+  onKeyDown,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  /** A realistic example of what goes in, shown while it is empty. */
+  placeholder?: string;
+  rows?: number;
+  /** The label is said to a screen reader and not drawn, where the field's place says it. */
+  hideLabel?: boolean;
+  disabled?: boolean;
+  autoFocus?: boolean;
+  onKeyDown?: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
 }) {
   return (
     <label className="acme-label">
-      <span>{label}</span>
-      <textarea value={value} rows={3} onChange={(event) => onChange(event.target.value)} className="acme-field" />
+      <span className={hideLabel ? "acme-sr-only" : undefined}>{label}</span>
+      <textarea
+        value={value}
+        rows={rows}
+        placeholder={placeholder}
+        disabled={disabled}
+        autoFocus={autoFocus}
+        onKeyDown={onKeyDown}
+        onChange={(event) => onChange(event.target.value)}
+        className="acme-field"
+      />
     </label>
   );
 }
@@ -361,6 +382,7 @@ export function Menu({
   triggerTitle,
   triggerClassName = "acme-menu-trigger",
   align = "start",
+  placement = "below",
   minWidth = 220,
   disabled = false,
   children,
@@ -375,6 +397,8 @@ export function Menu({
   triggerClassName?: string;
   /** Which edge of the button the menu lines up with. */
   align?: "start" | "end";
+  /** Whether the menu opens under the button or over it. */
+  placement?: "below" | "above";
   minWidth?: number;
   disabled?: boolean;
   children: ReactNode;
@@ -451,7 +475,13 @@ export function Menu({
           aria-label={label}
           onKeyDown={onMenuKey}
           className="acme-menu"
-          style={{ position: "absolute", top: "calc(100% + 6px)", [align === "end" ? "right" : "left"]: 0, zIndex: 30, minWidth }}
+          style={{
+            position: "absolute",
+            [placement === "below" ? "top" : "bottom"]: "calc(100% + 6px)",
+            [align === "end" ? "right" : "left"]: 0,
+            zIndex: 30,
+            minWidth,
+          }}
         >
           <MenuContext.Provider value={{ close }}>{children}</MenuContext.Provider>
         </div>
@@ -466,6 +496,7 @@ export function MenuItem({
   disabled,
   tone = "plain",
   icon,
+  shortcut,
   children,
 }: {
   onSelect: () => void;
@@ -474,6 +505,8 @@ export function MenuItem({
   tone?: "plain" | "danger";
   /** A 16-pixel mark before the words, from the kit's icons. */
   icon?: ReactNode;
+  /** The keys that do the same, at the far end: "⌘,". Not part of the name. */
+  shortcut?: string;
   children: ReactNode;
 }) {
   const { close } = useContext(MenuContext);
@@ -492,6 +525,11 @@ export function MenuItem({
     >
       <MenuIcon icon={icon} />
       <span className="acme-menu-label">{children}</span>
+      {shortcut ? (
+        <kbd className="acme-keys" aria-hidden="true">
+          {shortcut}
+        </kbd>
+      ) : null}
     </button>
   );
 }

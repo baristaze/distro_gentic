@@ -67,7 +67,6 @@ export function useSessionVm(id: string) {
   const actions = useSessionActions(id);
   const [commandKey, setCommandKey] = useState<string | null>(null);
   const command = useCommandProgress(id, commandKey);
-  const [paletteOpen, setPaletteOpen] = useState(false);
   const [shown, setShown] = useState<number | null>(null);
   const [commandProblem, setCommandProblem] = useState<string | null>(null);
 
@@ -168,8 +167,6 @@ export function useSessionVm(id: string) {
     giveBack,
     sending: actions.message.isPending,
     commands,
-    paletteOpen,
-    setPaletteOpen,
     shown,
     setShown,
   };

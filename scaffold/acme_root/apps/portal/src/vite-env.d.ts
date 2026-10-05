@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 declare const __APP_VERSION__: string;
+declare const __DOCS_URL__: string;
 
 // Build variables; in the cloud /config.json replaces them (src/app/config.ts).
 interface ImportMetaEnv {

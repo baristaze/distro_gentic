@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 // A switch lands in the new org on fresh screens: the signed-in shell is
-// mounted once per org, so the page on show, its queries, and its state start
-// over under the new session. The real routes, shell, home page, and org chip
-// run over a fake transport that answers by the token the tab holds; the
-// socket is left out, since its reopening is the channel's own test.
+// mounted once per org, so the page on show, the left bar, their queries,
+// and their state start over under the new session. The real routes, shell,
+// home page, and org chip run over a fake transport that answers by the
+// token the tab holds; the socket is left out, since its reopening is the
+// channel's own test.
 import { act, createElement, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -40,6 +41,7 @@ vi.mock("./api", () => ({
     patch: () => Promise.resolve({}),
   },
 }));
+vi.mock("./config", () => ({ runtimeConfig: () => ({ environment: "local" }) }));
 vi.mock("../realtime/RealtimeProvider", () => ({ RealtimeProvider: ({ children }: { children: ReactNode }) => children }));
 vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 
@@ -67,6 +69,9 @@ function answer(path: string): unknown {
     return { items, next_cursor: null };
   }
   if (path.startsWith("/v1/users")) return { items: [user], next_cursor: null };
+  if (path.startsWith("/v1/agent-sessions")) return { items: [], next_cursor: null };
+  if (path.startsWith("/v1/knowledge")) return [];
+  if (path.startsWith("/v1/projects")) return { items: [], next_cursor: null };
   if (path === "/v1/me/identity") return { id: "i1", email: user.email, operator_role: null, created_at: at, time_zone: null };
   throw new Error(`no read for ${path}`);
 }
@@ -106,8 +111,8 @@ const readsAfterSwitch = () => {
   expect(exchanged).toBeGreaterThanOrEqual(0);
   return net.calls.slice(exchanged + 1).filter((call) => call.method === "get");
 };
-/** The org the home card names. */
-const shownOrg = () => container.querySelector("#org h2")?.textContent ?? null;
+/** The org the chip at the top of the left bar names, past its avatar's letter. */
+const shownOrg = () => container.querySelector(".acme-org-home")?.textContent?.slice(1) ?? null;
 const button = (text: string) =>
   [...container.querySelectorAll("button")].find((node) => node.textContent?.includes(text)) as HTMLButtonElement;
 
@@ -133,10 +138,10 @@ afterEach(async () => {
   useSessionStore.getState().clear();
 });
 
-it("shows the new org's home after a switch from the chip, read once under the new session", async () => {
+it("shows the new org's home and sessions after a switch from the chip, read once under the new session", async () => {
   await open("/");
   expect(shownOrg()).toBe("Ajax");
-  expect(container.querySelector("[data-home]")!.textContent).toContain("1 member");
+  expect(container.querySelector("h1")!.textContent).toBe("Home");
 
   await act(async () => switcher().click());
   await act(async () => button("Beta").click());
@@ -147,7 +152,7 @@ it("shows the new org's home after a switch from the chip, read once under the n
   const after = readsAfterSwitch();
   expect(after.every((read) => read.token === tokenOf("beta"))).toBe(true);
   expect(after.filter((read) => read.path === "/v1/me")).toHaveLength(1);
-  expect(after.filter((read) => read.path.startsWith("/v1/users"))).toHaveLength(1);
+  expect(after.filter((read) => read.path.startsWith("/v1/agent-sessions?limit="))).toHaveLength(1);
 });
 
 it("lands on the new org's home after creating one at /orgs/new", async () => {
