@@ -46,9 +46,11 @@ is made of](../../../../README.md).
     that sweep.
   - Past its shape's life, the session is marked deleted, and the
     engine's purge removes it. That mark is never undone. A session with
-    a loop still open is marked at a later pass; a loop that waits parked
-    is cancelled first, since what it waits on, such as a person, may
-    never come.
+    a loop still open, its own or a sub-agent's below it, is marked at a
+    later pass, once each has ended. A loop that waits parked, the
+    session's or a sub-agent's, is cancelled first, since what it waits
+    on, such as a person, may never come. A sub-agent at work ends by
+    itself.
   - What a pass cannot finish waits for its next attempt, out of every
     pass's read meanwhile, so no session holds back another. A snapshot
     that fails to take its tenant's policy stays behind it and waits the

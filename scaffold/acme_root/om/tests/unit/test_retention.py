@@ -5,7 +5,8 @@ sweep folds a tightening into the snapshot and never a loosening; when the
 content expires, the tenant's key service destroys the session's key, the
 engine revokes it, and the audit holds the destruction as the service
 reported it; when the shape expires, the session is marked deleted, and a loop parked
-past it, on a person, is cancelled first. A
+past it, on a person, its own or a sub-agent's below it, is cancelled
+first. A
 tenant that revokes its own key makes its own content unreadable and no
 other tenant's. And a crossing whose bytes do not match the hash they
 crossed with is refused."""
@@ -18,7 +19,7 @@ from uuid import UUID
 import pytest
 from contracts.agent_session_storage import make_session
 from contracts.doubles import APP, context
-from contracts.step_storage import make_message, make_request
+from contracts.step_storage import make_message, make_request, make_response
 from contracts.tools import stand_ins
 
 from acme.infra.exceptions import KeyRefused
@@ -27,9 +28,10 @@ from acme.infra.keys import KeyServiceInterface, WrappedKey
 from acme.infra.keys.memory import KeyServiceMemoryImpl
 from acme.om.agent_sessions.types.agent_session import AgentSession, SessionStatus
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
-from acme.om.agents.types.request import Start
+from acme.om.agents.types.request import Spawn, Start
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.base import new_id, utcnow
+from acme.om.budgets.types.amount import Amount
 from acme.om.context import RequestContext, Role, TenantContext
 from acme.om.exceptions import NotAuthorized, NotFound, PreconditionFailed, ValidationFailed
 from acme.om.privacy.types.session_privacy import StorageMode
@@ -47,10 +49,18 @@ from acme.om.retention.types.policy import (
     TenantRetention,
 )
 from acme.om.root import Managers, build_managers
-from acme.om.steps.types.content import ContentState
-from acme.om.steps.types.header import ControlCommand, ControlHeader, Park, ParkReason
-from acme.om.steps.types.step import Actor
+from acme.om.steps.types.content import Content, ContentState, TextBlock
+from acme.om.steps.types.header import (
+    ControlCommand,
+    ControlHeader,
+    LoopEndedHeader,
+    LoopOutcome,
+    Park,
+    ParkReason,
+)
+from acme.om.steps.types.step import Actor, Origin, Step, StepType
 from acme.om.storage.impl.memory import StorageMemoryImpl
+from acme.om.windows.types.policy import CompactionPolicy
 
 # What `make_session` names, so the agents manager classes every tool it
 # offers.
@@ -61,9 +71,11 @@ KIND = AgentKind(
     tools=("read_log", "run_tests"),
     done_rule=DoneRule.ANSWER,
     authority=AuthorityMode.STEADY,
-    tree=TreeLimits(height=2, count=4),
+    tree=TreeLimits(height=3, count=4),
+    share=Amount(cost_micros=1_000),
 )
-"""The kind `make_session` names, which a run takes its loop up as."""
+"""The kind `make_session` names, which a run takes its loop up as, and
+which a session spawns under its share."""
 
 DAY = timedelta(days=1)
 WEEK = timedelta(days=7)
@@ -638,6 +650,191 @@ async def test_a_session_parked_on_a_person_past_its_shapes_life_is_cancelled_th
     with pytest.raises(NotFound):
         await sessions.get_session(owner, session.id)
     assert (await roots.managers.retention.get_snapshot(owner, session.id)).shape_expired_at
+
+
+async def at_work_below(
+    roots: Roots, owner: TenantContext, parent: AgentSession
+) -> tuple[AgentSession, Step, int]:
+    """A sub-agent spawned below `parent` that a run holds: the model request
+    that carries its objective, and the run's epoch. Its shape outlives its
+    parent's by a month, as one spawned a month later does, so no pass of
+    its own reaches it before its parent's shape expires."""
+    sessions, steps = roots.managers.agent_sessions, roots.managers.steps
+    spawn = Spawn(id=new_id(), kind=KIND.name, title="the pump log", objective="read it")
+    child = await roots.managers.agents.spawn(owner, parent.id, spawn)
+    (objective,) = (await steps.get_steps(owner, child.id, 0, 1)).items
+    epoch = await steps.begin_run(owner, child.id)
+    request = make_request(child.id, objective.id, (objective.id,))
+    await steps.append_steps(owner, child.id, epoch, [request])
+    assert (await sessions.project_status(owner, child.id)).status is SessionStatus.RUNNING
+    store = roots.storage.get_retention_storage()
+    taken = await store.read_snapshot(owner.org_id, child.id)
+    assert taken is not None and taken.shape_expires_at and taken.content_expires_at
+    later = taken.model_copy(
+        update={
+            "shape_expires_at": taken.shape_expires_at + MONTH,
+            "content_expires_at": taken.content_expires_at + MONTH,
+            "version": taken.version + 1,
+        }
+    )
+    assert await store.write_snapshot(owner.org_id, later, taken.version)
+    return child, request, epoch
+
+
+async def a_tree(
+    roots: Roots, owner: TenantContext
+) -> tuple[AgentSession, AgentSession, Step, int]:
+    """An idle root and a sub-agent a run holds below it (`at_work_below`)."""
+    start = Start(id=new_id(), kind=KIND.name, title="the weekly report")
+    root = await roots.managers.agents.start_session(owner, start)
+    child, request, epoch = await at_work_below(roots, owner, root)
+    status = await roots.managers.agent_sessions.project_status(owner, root.id)
+    assert status.status is SessionStatus.IDLE
+    return root, child, request, epoch
+
+
+async def end_loop(
+    roots: Roots, owner: TenantContext, session_id: UUID, request: Step, epoch: int
+) -> None:
+    """The run's answer to `request` and the end of its loop, as the run
+    writes them."""
+    ended = Step(
+        id=new_id(),
+        created_at=utcnow(),
+        session_id=session_id,
+        loop_id=request.loop_id,
+        type=StepType.LOOP_ENDED,
+        actor=Actor.ENGINE,
+        origin=Origin.ENGINE,
+        header=LoopEndedHeader(outcome=LoopOutcome.SUCCEEDED),
+    )
+    done = [make_response(session_id, request.loop_id, request.id), ended]
+    await roots.managers.steps.append_steps(owner, session_id, epoch, done)
+
+
+def cancels_of(history: tuple[Step, ...]) -> list[tuple[ControlCommand, Actor]]:
+    return [(s.header.command, s.actor) for s in history if isinstance(s.header, ControlHeader)]
+
+
+async def test_a_sub_agent_parked_below_a_session_past_its_shapes_life_is_cancelled(
+    roots: Roots,
+) -> None:
+    """A sub-agent parked on a person holds the session above it, and its
+    own shape may outlive that session's by far. Past the session's shape
+    life, the sweep cancels the sub-agent's loop; the run that ends it
+    leaves the sub-agent idle, and the next pass marks the session, long
+    before the sub-agent's own pass."""
+    owner = await roots.tenant()
+    await roots.declare(owner, a_policy(WEEK, MONTH))
+    sessions, steps = roots.managers.agent_sessions, roots.managers.steps
+    root, child, request, epoch = await a_tree(roots, owner)
+    person = Park(reason=ParkReason.PERSON, unlock="approval")
+    parked = await sessions.park(owner, child.id, epoch, request.loop_id, person)
+    assert parked.status is SessionStatus.PARKED
+
+    await roots.sweep(MONTH + DAY)
+
+    waiting = await roots.managers.retention.get_snapshot(owner, root.id)
+    assert waiting.shape_expired_at is None and waiting.next_attempt_at is not None
+    history = (await steps.get_steps(owner, child.id, 0, 50)).items
+    assert cancels_of(history) == [(ControlCommand.CANCEL, Actor.ENGINE)]
+    assert (await sessions.get_session(owner, child.id)).status is SessionStatus.PENDING
+
+    await roots.managers.loop.run(owner, child.id)
+    assert (await sessions.get_session(owner, child.id)).status is SessionStatus.IDLE
+    await roots.sweep(MONTH + DAY + roots.options.retry_after)
+
+    with pytest.raises(NotFound):
+        await sessions.get_session(owner, root.id)
+    assert (await roots.managers.retention.get_snapshot(owner, root.id)).shape_expired_at
+    below = await roots.managers.retention.get_snapshot(owner, child.id)
+    assert below.shape_expired_at is None, "the sub-agent's own shape lives on"
+
+
+async def test_a_sub_agent_at_work_below_a_session_past_its_shapes_life_ends_by_itself(
+    roots: Roots,
+) -> None:
+    """A sub-agent a run holds is never cancelled: the session above it is
+    marked at the first pass after the sub-agent's loop ends."""
+    owner = await roots.tenant()
+    await roots.declare(owner, a_policy(WEEK, MONTH))
+    sessions, steps = roots.managers.agent_sessions, roots.managers.steps
+    root, child, request, epoch = await a_tree(roots, owner)
+
+    await roots.sweep(MONTH + DAY)
+    await roots.sweep(MONTH + DAY + roots.options.retry_after)
+
+    waiting = await roots.managers.retention.get_snapshot(owner, root.id)
+    assert waiting.shape_expired_at is None and waiting.next_attempt_at is not None
+    assert await sessions.get_session(owner, root.id), "not marked yet"
+    assert cancels_of((await steps.get_steps(owner, child.id, 0, 50)).items) == []
+    assert (await sessions.project_status(owner, child.id)).status is SessionStatus.RUNNING
+
+    await end_loop(roots, owner, child.id, request, epoch)
+    assert (await sessions.project_status(owner, child.id)).status is SessionStatus.IDLE
+    await roots.sweep(MONTH + DAY + 2 * roots.options.retry_after)
+
+    with pytest.raises(NotFound):
+        await sessions.get_session(owner, root.id)
+    assert (await roots.managers.retention.get_snapshot(owner, root.id)).shape_expired_at
+
+
+async def test_a_cancelled_sub_agents_report_over_the_bound_is_dropped_and_its_loop_ends(
+    roots: Roots,
+) -> None:
+    """A report over the bound seals its whole under its parent's key, which
+    is revoked once the parent's content is past its life. The report is
+    dropped as a shorter one is, the sub-agent's loop ends, and the next
+    pass marks the session above."""
+    owner = await roots.tenant()
+    await roots.declare(owner, a_policy(WEEK, MONTH))
+    sessions, steps = roots.managers.agent_sessions, roots.managers.steps
+    root, child, request, epoch = await a_tree(roots, owner)
+    said = make_response(child.id, request.loop_id, request.id)
+    long = TextBlock(text="x" * (CompactionPolicy().result_bound + 1))
+    said = said.model_copy(update={"content": Content(blocks=(long, *said.content.blocks[1:]))})
+    await steps.append_steps(owner, child.id, epoch, [said])
+    person = Park(reason=ParkReason.PERSON, unlock="approval")
+    await sessions.park(owner, child.id, epoch, request.loop_id, person)
+
+    await roots.sweep(MONTH + DAY)
+    held = (await steps.get_cursor(owner, root.id)).head
+    await roots.managers.loop.run(owner, child.id)
+
+    assert (await sessions.get_session(owner, child.id)).status is SessionStatus.IDLE
+    assert (await steps.get_cursor(owner, root.id)).head == held, "no report reached it"
+    await roots.sweep(MONTH + DAY + roots.options.retry_after)
+    with pytest.raises(NotFound):
+        await sessions.get_session(owner, root.id)
+
+
+async def test_the_cancel_of_a_sub_agent_parked_two_levels_down_wakes_no_session_above(
+    roots: Roots,
+) -> None:
+    """A sub-agent parked on a person below an idle middle whose content
+    still lives. The sweep's cancel of it comes down as a parent's does:
+    its note reaches the middle and wakes neither the middle nor the root,
+    so no loop opens above, and the next pass marks the root."""
+    owner = await roots.tenant()
+    await roots.declare(owner, a_policy(WEEK, MONTH))
+    sessions, steps = roots.managers.agent_sessions, roots.managers.steps
+    root, middle, request, epoch = await a_tree(roots, owner)
+    await end_loop(roots, owner, middle.id, request, epoch)
+    below, request, epoch = await at_work_below(roots, owner, middle)
+    person = Park(reason=ParkReason.PERSON, unlock="approval")
+    await sessions.park(owner, below.id, epoch, request.loop_id, person)
+
+    await roots.sweep(MONTH + DAY)
+    held = (await steps.get_cursor(owner, middle.id)).head
+    await roots.managers.loop.run(owner, below.id)
+
+    assert (await sessions.get_session(owner, below.id)).status is SessionStatus.IDLE
+    assert (await steps.get_cursor(owner, middle.id)).head == held + 1, "its note reached it"
+    for each in (middle, root):
+        assert (await sessions.project_status(owner, each.id)).status is SessionStatus.IDLE
+    await roots.sweep(MONTH + DAY + roots.options.retry_after)
+    with pytest.raises(NotFound):
+        await sessions.get_session(owner, root.id)
 
 
 # The tenant's key, revoked.

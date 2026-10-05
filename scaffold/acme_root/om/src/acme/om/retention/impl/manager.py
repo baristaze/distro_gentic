@@ -51,6 +51,8 @@ the sweep, or before it, by the tenant's admin, whom the entry names."""
 SHAPE_CANCEL = "retention.shape.cancel"
 """What a parked loop's cancel derives its id from, once per shape's life:
 every pass that finds the loop still parked asks for the same cancel."""
+CHILDREN_PAGE = 100
+"""The sub-agents one read of a session's children takes up at most."""
 ERASE_WRITES = 3
 """The writes an erasure makes of its snapshot at most, each after a sweep
 that wrote the snapshot meanwhile."""
@@ -397,11 +399,12 @@ class RetentionManagerImpl(RetentionManagerInterface):
 
     async def _mark(self, ctx: TenantContext, snapshot: SessionRetention) -> bool:
         """The session marked deleted, its shape past its life; the engine's
-        purge removes it. False when a loop is still open: the next pass
-        tries again. A loop that waits parked, on a person or on anything
-        else that may never come, is cancelled under the service context,
-        so the run that ends it leaves the session for the next pass to
-        mark."""
+        purge removes it. False when a loop is still open, the session's own
+        or a sub-agent's below it: the next pass tries again. A loop that
+        waits parked, on a person or on anything else that may never come,
+        is cancelled under the service context, the session's own and every
+        sub-agent's below it, so the runs that end them leave the session for
+        the next pass to mark. A sub-agent at work ends by itself."""
         try:
             await self._sessions.delete_session(ctx, snapshot.session_id)
         except NotFound:
@@ -412,30 +415,58 @@ class RetentionManagerImpl(RetentionManagerInterface):
         return True
 
     async def _cancel_parked(self, ctx: TenantContext, snapshot: SessionRetention) -> None:
-        """A `cancel` control on a parked session's loop, through the inbox,
-        which clears the park and asks for the run that ends the loop. A
-        loop a run holds, or one an input is about to wake, ends by itself."""
+        """A `cancel` control on each parked loop of the session and of the
+        sessions below it, through the inbox, which clears the park and asks
+        for the run that ends the loop. A loop a run holds, or one an input
+        is about to wake, ends by itself. A cancel below comes down as a
+        parent's does, so the note of it wakes no session above, which
+        would open a loop the mark waits on."""
         session = await self._sessions.get_session(ctx, snapshot.session_id)
-        if session.status is not SessionStatus.PARKED:
-            return
+        parked = [session] if session.status is SessionStatus.PARKED else []
+        parked += await self._parked_below(ctx, snapshot.session_id)
         expires = snapshot.shape_expires_at or snapshot.created_at
-        step_id = derived_id(snapshot.session_id, expires, SHAPE_CANCEL)
-        cancel = Step(
-            id=step_id,
-            created_at=self._clock(),
-            session_id=snapshot.session_id,
-            loop_id=step_id,
-            type=StepType.CONTROL,
-            actor=Actor.ENGINE,
-            origin=Origin.ENGINE,
-            header=ControlHeader(command=ControlCommand.CANCEL),
-        )
-        await self._sessions.receive(ctx, snapshot.session_id, [cancel])
-        log.info(
-            "session %s of org %s parked past its shape's life: its loop is cancelled",
-            snapshot.session_id,
-            ctx.org_id,
-        )
+        for each in parked:
+            step_id = derived_id(each.id, expires, SHAPE_CANCEL)
+            below = each.id != snapshot.session_id
+            cancel = Step(
+                id=step_id,
+                created_at=self._clock(),
+                session_id=each.id,
+                loop_id=step_id,
+                type=StepType.CONTROL,
+                actor=Actor.ENGINE,
+                origin=Origin.PARENT if below else Origin.ENGINE,
+                header=ControlHeader(command=ControlCommand.CANCEL),
+            )
+            await self._sessions.receive(ctx, each.id, [cancel])
+            log.info(
+                "session %s of org %s parked past the shape's life of session %s: "
+                "its loop is cancelled",
+                each.id,
+                ctx.org_id,
+                snapshot.session_id,
+            )
+
+    async def _parked_below(self, ctx: TenantContext, session_id: UUID) -> list[AgentSession]:
+        """Every parked session below `session_id`, children and theirs, a
+        level at a time; the tree's count bounds the walk. A deleted session
+        is walked through and left out: the engine's delete never waits on
+        it, and what waits below it still holds the session above."""
+        parked: list[AgentSession] = []
+        parents = [session_id]
+        while parents:
+            parent_id = parents.pop(0)
+            after: UUID | None = None
+            while True:
+                page = await self._sessions.get_children(ctx, parent_id, after, CHILDREN_PAGE)
+                for child in page.items:
+                    parents.append(child.id)
+                    if child.deleted_at is None and child.status is SessionStatus.PARKED:
+                        parked.append(child)
+                if not page.has_more or not page.items:
+                    break
+                after = page.items[-1].id
+        return parked
 
     async def purge_tenant(self, ctx: TenantContext) -> int:
         ctx.require(Permission.WRITE)
