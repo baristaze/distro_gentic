@@ -1,9 +1,11 @@
-// The portal over a running local stack. The seeded owner starts a session
-// and sends it a message, and the session runner plays the scripted
-// provider's answer. The check then records the session's evidence as an
-// executor would, since the local stack runs none, and reads the thread, the
-// timeline, and the evidence on the session's page. A person of another org
-// then finds the session in no list and nothing of it at its address.
+// The portal over a running local stack. The seeded owner describes a task
+// on Home and sends it; the session opens, and the left bar shows it under
+// Running while the session runner plays the scripted provider's answer
+// (paced, so the run stays open to be seen), then under Recent. The check
+// records the session's evidence as an executor would, since the local stack
+// runs none, and reads the thread, the timeline, and the evidence on the
+// session's page. A person of another org then finds no row of it in the
+// left bar or in All sessions, and nothing of it at its address.
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
@@ -11,7 +13,8 @@ import { ORG, OWNER, signedIn, SLUG } from "./signIn";
 
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const SHOTS = fileURLToPath(new URL("./screenshots/", import.meta.url));
-const KIND = process.env.ACME_E2E_KIND ?? "platform_assistant";
+// The agent the composer's chip offers for the kind the stack registers.
+const AGENT = process.env.ACME_E2E_AGENT ?? "Platform assistant";
 
 function recordEvidence(sessionId: string): void {
   execFileSync("uv", ["run", "--package", "acme-api", "python", "services/api/tests/portal_check.py", "evidence", SLUG, sessionId], {
@@ -20,21 +23,29 @@ function recordEvidence(sessionId: string): void {
   });
 }
 
-test("a member starts a session and reads its thread, timeline, and evidence; another org sees none of it", async ({ browser }) => {
+test("a member starts a session on Home, sees it run and finish in the left bar, and reads it; another org sees no row of it", async ({ browser }) => {
   const owner = await signedIn(browser, OWNER, ORG);
-  await owner.getByRole("link", { name: "The org's agent sessions" }).click();
   const title = `Tidy the docs ${Date.now()}`;
-  await owner.getByLabel("Title").fill(title);
-  await owner.getByLabel("Kind").fill(KIND);
-  await owner.getByRole("button", { name: "Start", exact: true }).click();
+  await owner.getByRole("button", { name: /^Agent:/ }).click();
+  await owner.getByRole("menuitemradio", { name: new RegExp(`^${AGENT}`) }).click();
+  await owner.keyboard.press("Escape");
+  await expect(owner.getByRole("button", { name: `Agent: ${AGENT}` })).toBeVisible();
+  await owner.getByRole("textbox", { name: "Prompt" }).fill(`${title}\nKeep the voice plain.`);
+  await owner.getByRole("button", { name: "Send", exact: true }).click();
   await expect(owner.getByRole("heading", { level: 1, name: title })).toBeVisible();
   const sessionId = new URL(owner.url()).pathname.split("/").pop()!;
 
-  await owner.getByRole("textbox", { name: "Message", exact: true }).fill("Tidy the docs, please.");
-  await owner.getByRole("button", { name: "Send", exact: true }).click();
+  const bar = owner.getByRole("complementary", { name: "Sidebar" });
+  await expect(bar.getByRole("list", { name: "Running" })).toContainText(title);
+  console.log(`running: ${await bar.getByRole("list", { name: "Running" }).innerText()}`);
+  await owner.screenshot({ path: `${SHOTS}shell-running.png` });
+
   const answer = owner.getByRole("list", { name: "Messages" }).locator("[data-who='agent']");
   await expect(answer).toContainText("one voice", { timeout: 90_000 });
   await expect(answer.locator("strong")).toHaveText("one voice");
+  await expect(bar.getByRole("list", { name: "Recent" })).toContainText(title);
+  await expect(bar.getByRole("list", { name: "Running" })).toHaveCount(0);
+  console.log(`recent: ${(await bar.getByRole("list", { name: "Recent" }).innerText()).split("\n").slice(0, 3).join(" | ")}`);
 
   recordEvidence(sessionId);
 
@@ -55,8 +66,13 @@ test("a member starts a session and reads its thread, timeline, and evidence; an
   await owner.screenshot({ path: `${SHOTS}session-evidence.png`, fullPage: true });
 
   const stranger = await signedIn(browser, `stranger-${Date.now()}@example.test`);
+  const strangerBar = stranger.getByRole("complementary", { name: "Sidebar" });
+  await expect(strangerBar).toContainText("No sessions yet. Describe a task on Home.");
+  await expect(strangerBar.getByText(title)).toHaveCount(0);
+  console.log(`another org's left bar: ${(await strangerBar.locator(".acme-sidebar-scroll").innerText()).trim()}`);
   await stranger.goto("/sessions");
-  await expect(stranger.getByRole("table", { name: "Sessions" })).toContainText("No sessions yet.");
+  await expect(stranger.getByRole("heading", { level: 1, name: "All sessions" })).toBeVisible();
+  await expect(stranger.getByText("No sessions yet.")).toBeVisible();
   await stranger.goto(`/sessions/${sessionId}?tab=timeline`);
   await expect(stranger.getByRole("heading", { level: 1 })).toHaveText("No session here");
   await expect(stranger.getByText(title)).toHaveCount(0);

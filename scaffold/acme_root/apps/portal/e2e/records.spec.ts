@@ -44,7 +44,7 @@ test("an owner keeps a project, a key, and an automation through the screens; th
   };
 
   // A project bound to its repository, and the repository's read credential.
-  await owner.getByRole("link", { name: "Projects", exact: true }).click();
+  await owner.goto("/projects");
   const projectName = `Docs ${STAMP}`;
   const repository = `forge.example.com/acme/docs-${STAMP}`;
   await owner.getByLabel("Name").fill(projectName);
