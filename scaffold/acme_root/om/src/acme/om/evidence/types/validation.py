@@ -45,8 +45,10 @@ class ExecutionRequest(Platform):
     `source_project` binds when the request names it: a hidden suite's
     source of its own. `untouched` holds the patterns of the paths no
     change may touch: every path one matches, and no `protected` one does,
-    comes from the commit `base` of the repository `project` binds, so the
-    head's own copy of what scores a run never scores it. Nothing of the
+    comes from the commit `base` of the repository `project` binds. Every
+    path either matches is read-only to the checks while they run, and a
+    trial that changes one has no verdict, so no copy the head makes of
+    what scores a run scores it, in the tree or while it runs. Nothing of the
     agent's workspace or environment is in it. Each check runs at most its
     count of trials; one with a rate stops where `rates.stops_at` says its
     rule stops, at the confidence given here, and nowhere else."""

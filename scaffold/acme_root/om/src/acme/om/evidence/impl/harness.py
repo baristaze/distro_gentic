@@ -129,8 +129,10 @@ class AcceptanceHarnessImpl(AcceptanceHarnessInterface):
         source, which no workspace holds: the executor fetches it for this
         run alone, from the repository its project binds, and every path
         its patterns match comes from there, whatever the head holds there.
-        Every other path the scenario forbids comes from its base, so a head
-        that rewrites what scores a run is judged by the base's copy. Its
+        Every other path the scenario forbids comes from its base, and the
+        executor holds all of them read-only while the suite runs, so no
+        copy the head makes of what scores a run, in its delivery or while
+        it runs, scores it. Its
         runs belong to the verdict: none is stored where the session's
         evidence is."""
         if delivery is None:

@@ -4,15 +4,18 @@ reads the tree at the head with every path of the suite taken from that
 repository, and the suite's own files run there, whatever the head holds
 at those paths. Both repositories are on this disk, read by their URLs;
 the instance is the twins', and each check's command runs for real in
-the tree the executor wrote into it."""
+the tree the executor wrote into it. Every path the run protects is
+read-only to the head's code while it runs, and one it changes anyway
+leaves the trial without a verdict."""
 
 import asyncio
+import hashlib
 import io
 import os
 import subprocess
 import sys
 import tarfile
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from uuid import UUID
 
@@ -33,10 +36,17 @@ from acme.om.context import Role, TenantContext
 from acme.om.evidence.impl.harness import AcceptanceHarnessImpl
 from acme.om.evidence.types.acceptance import AcceptanceVerdict, HiddenSuite, Link, Scenario
 from acme.om.evidence.types.contract import CheckDeclaration
+from acme.om.evidence.types.record import RunOutcome
 from acme.om.evidence.types.validation import Delivery
 from acme.om.root import build_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
-from acme.om.workspaces.impl.executor import ARCHIVE, ExecutorOptions, ExecutorWorkspacesImpl
+from acme.om.workspaces.impl.executor import (
+    ARCHIVE,
+    LOCK,
+    SEEN,
+    ExecutorOptions,
+    ExecutorWorkspacesImpl,
+)
 from acme.om.workspaces.impl.reader import RepositoryReaderGitImpl
 from acme.om.workspaces.projects import WorkspaceProjectsInterface
 from acme.om.workspaces.types.source import RepositoryBinding
@@ -93,6 +103,40 @@ PLANTED = SUITE_RUNNER.replace('totals["total"]([2, 3]) == 5', "True")
 the code does."""
 DEFECT = "def total(items):\n    return sum(items[1:])\n"
 FIX = "def total(items):\n    return sum(items)\n"
+WRITES_OVER = (
+    DEFECT
+    + f"""
+try:
+    with open("checks/score.py", "w") as scorer:
+        scorer.write({GAMED!r})
+except OSError:
+    pass
+"""
+)
+"""A head that leaves the defect, and whose code writes over what scores
+the suite while it runs, going on when it may not."""
+PUTS_BACK = (
+    DEFECT
+    + f"""
+import atexit, os
+
+os.chmod("checks/score.py", 0o644)
+with open("checks/score.py", "w") as scorer:
+    scorer.write({GAMED!r})
+
+
+def put_back():
+    with open("checks/score.py", "w") as scorer:
+        scorer.write({SCORE!r})
+    os.chmod("checks/score.py", 0o444)
+
+
+atexit.register(put_back)
+"""
+)
+"""A head that leaves the defect, and whose code makes what scores the
+suite writable, writes over it, and puts it back as it was when the run
+ends."""
 COMPLETE = CheckDeclaration(
     name="totals-complete",
     version="1",
@@ -155,9 +199,11 @@ class Instances(WorkspaceTwinImpl):
 
 class Ran:
     """An instance's commands run for real: the tree the executor wrote is
-    unpacked in a directory of its own, and each check runs there, its
-    results stream handed back to the transport where the executor reads
-    it. `trees` keeps each tree's files, as the executor wrote them."""
+    unpacked in a directory of its own, the paths the executor protects
+    made read-only there and their digest taken as `SEEN` takes it, and
+    each check runs there, its results stream handed back to the transport
+    where the executor reads it. `trees` keeps each tree's files, as the
+    executor wrote them."""
 
     def __init__(self, root: Path, provider: Instances, transport: TransportTwinImpl) -> None:
         self._root = root
@@ -170,6 +216,13 @@ class Ran:
         workspace = self._provider.made
         assert workspace is not None
         instance = self._root / str(workspace.id)
+        if command.argv[:3] == ("sh", "-c", LOCK):
+            for name in command.argv[4:]:
+                path = instance / "tree" / name
+                path.chmod(path.stat().st_mode & ~0o222)
+            return TwinReply()
+        if command.argv[:3] == ("sh", "-c", SEEN):
+            return seen(instance / "tree", command.argv[4:])
         if command.argv[0] == "sh":
             tar = await self._transport.read_file(workspace, ARCHIVE, 1 << 24)
             with tarfile.open(fileobj=io.BytesIO(tar)) as archive:
@@ -194,6 +247,22 @@ class Ran:
                 workspace, f"out/{written.name}", written.read_bytes(), 1
             )
         return TwinReply(done.returncode or 0, stdout.decode(), stderr.decode())
+
+
+def seen(tree: Path, names: Sequence[str]) -> TwinReply:
+    """What `SEEN` answers in `tree`: one digest of each path's inode, mode,
+    size, and the time its inode last changed, or a failure for a path
+    gone."""
+    lines: list[str] = []
+    for name in names:
+        try:
+            status = (tree / name).lstat()
+        except FileNotFoundError:
+            return TwinReply(1, "", f"stat: cannot stat {name!r}")
+        mode = status.st_mode & 0o7777
+        lines.append(f"{name} {status.st_ino} {mode:o} {status.st_size} {status.st_ctime_ns}")
+    digest = hashlib.sha256(("\n".join(lines) + "\n").encode()).hexdigest()
+    return TwinReply(stdout=f"{digest}  -\n")
 
 
 class Repositories:
@@ -356,3 +425,37 @@ async def test_a_head_that_rewrites_what_scores_the_suite_is_judged_by_the_bases
     fixed = await repositories.judge({"src/totals.py": FIX})
     assert [(run.check, run.passing) for run in fixed.hidden] == [(COMPLETE.name, True)]
     assert Link.HIDDEN not in fixed.broken()
+
+
+# Check 1, while the head runs: a head whose code writes over a forbidden
+# path when it runs has its hidden case scored by the base's copy, and
+# one whose code changes it anyway has a trial without a verdict.
+
+
+async def test_a_head_whose_code_rewrites_what_scores_the_suite_while_it_runs_fails(
+    tmp_path: Path,
+) -> None:
+    repositories = Repositories(
+        tmp_path,
+        base={"src/totals.py": DEFECT, "checks/score.py": SCORE},
+        runner=SCORED_RUNNER,
+        forbidden=("hidden/**", "checks/**"),
+    )
+
+    # Its code finds the scorer read-only and goes on: the base's copy
+    # scores the suite, and the hidden case fails. Its delivery touched no
+    # forbidden path, so the hidden link alone is what breaks.
+    refused = await repositories.judge({"src/totals.py": WRITES_OVER})
+    assert [(run.check, run.version, run.outcome) for run in refused.hidden] == [
+        (COMPLETE.name, refused.head, RunOutcome.FAILED)
+    ], "the base's copy scored the suite"
+    assert Link.HIDDEN in refused.broken() and Link.UNTOUCHED not in refused.broken()
+
+    # Its code makes the scorer writable, writes over it, and puts it back
+    # as it was when the run ends: the suite read the head's copy and
+    # passed, and the trial is errored, never a pass.
+    put_back = await repositories.judge({"src/totals.py": PUTS_BACK})
+    assert [(run.check, run.outcome) for run in put_back.hidden] == [
+        (COMPLETE.name, RunOutcome.ERRORED)
+    ], "a changed scorer leaves the trial without a verdict"
+    assert Link.HIDDEN in put_back.broken()

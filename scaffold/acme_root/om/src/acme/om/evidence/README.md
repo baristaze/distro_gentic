@@ -86,9 +86,11 @@ of](../../../../README.md).
   repository the workspace checks out, and the executor fetches it only
   to run it. The paths it names are protected in that run: they come from
   its source, whatever the head holds there. Every other path the
-  scenario forbids comes from its base, so the head's copy of what scores
-  the suite never scores it. A scan of every surface the agent reads finds
-  any mention of it.
+  scenario forbids comes from its base. All of them are read-only to the
+  head's code while the suite runs, and a trial that changes one anyway is
+  errored. So no copy the head makes of what scores the suite scores it,
+  in its delivery or while it runs. A scan of every surface the agent
+  reads finds any mention of it.
 - **Acceptance judges the chain, never the files.** A failing baseline at
   the base before the change, every hypothesis resolved, a validation the
   gate accepts, a result that cites it, and the hidden suite passing at
