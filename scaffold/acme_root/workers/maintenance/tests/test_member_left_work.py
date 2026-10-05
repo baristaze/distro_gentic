@@ -7,9 +7,11 @@ from datetime import timedelta
 from pathlib import Path
 from uuid import UUID
 
+import pytest
 from worker_support import build_container, request, sign_in, signing
 
 from acme.om.context import Role, TenantContext
+from acme.om.exceptions import NotFound
 from acme.om.tenancy.types.user import User
 from acme.om.work.types.work_item import WorkKind
 from acme.workers.maintenance.container import WorkerContainer
@@ -67,6 +69,9 @@ async def test_a_removed_member_leaves_no_link_and_links_again_once_back(
     assert [link.external_id for link in await intake.get_links(ann, ann.user_id)] == ["U-ANN"]
     # A rerun finds nothing left.
     assert await intake.forget_member(ann, bob.id) == 0
+    # No account links to the user who left, so none of theirs comes back.
+    with pytest.raises(NotFound):
+        await intake.link_account(ann, "chat", "U-BOB", bob.id)
 
     # Added back, Bob is a new user of the org, and his account links to him.
     again = await add_bob(container)
