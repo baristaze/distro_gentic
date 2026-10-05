@@ -189,7 +189,9 @@ export function allowed(session: AgentSessionView, mayWrite: boolean): Allowed {
   if (!mayWrite) return none;
   return {
     send: !handedOver,
-    pause: session.status === "running",
+    // A session reads pending until its first run parks or ends, so a run
+    // may hold it while it is pending: a pause parks it at its next step.
+    pause: session.status === "running" || session.status === "pending",
     resume: paused,
     cancel: open && !handedOver,
     compact: session.status === "idle",

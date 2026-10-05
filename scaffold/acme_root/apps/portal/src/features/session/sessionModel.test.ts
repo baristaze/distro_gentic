@@ -129,6 +129,7 @@ describe("what a person may do", () => {
 
   it("offers pause while it runs, resume while paused, and give back while a person has control", () => {
     expect(allowed({ ...session, status: "running" }, true)).toMatchObject({ pause: true, resume: false, cancel: true, archive: false });
+    expect(allowed({ ...session, status: "pending" }, true)).toMatchObject({ pause: true, resume: false, cancel: true, archive: false });
     expect(allowed({ ...session, status: "parked", park: { reason: "pause", unlock: "resume", retry_at: null } }, true)).toMatchObject({ resume: true, pause: false });
     expect(allowed({ ...session, status: "parked", park: { reason: "handover", unlock: "give_back", retry_at: null } }, true)).toMatchObject({
       giveBack: true,

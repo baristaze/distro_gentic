@@ -77,8 +77,11 @@ export function useSessionVm(id: string) {
   const bounds = useBounds(id, found && (panel === "evidence" || panel === "children"));
   const delivery = useDelivery(id, found);
   const children = useChildren(id, found && panel === "children");
-  const live = useLiveStreams(id, found && status === "running");
-  const now = useNow(status === "running" || status === "pending");
+  // A session reads as pending until a step after its input is projected,
+  // which can be its run's park: its first run streams while it is pending.
+  const runs = status === "running" || status === "pending";
+  const live = useLiveStreams(id, found && runs);
+  const now = useNow(runs);
   const actions = useSessionActions(id);
   const [commandKey, setCommandKey] = useState<string | null>(null);
   const command = useCommandProgress(id, commandKey);
