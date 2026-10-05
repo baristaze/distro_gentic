@@ -684,9 +684,7 @@ async def a_tree(
 
 
 def cancels_of(history: tuple[Step, ...]) -> list[tuple[ControlCommand, Actor]]:
-    return [
-        (s.header.command, s.actor) for s in history if isinstance(s.header, ControlHeader)
-    ]
+    return [(s.header.command, s.actor) for s in history if isinstance(s.header, ControlHeader)]
 
 
 async def test_a_sub_agent_parked_below_a_session_past_its_shapes_life_is_cancelled(
