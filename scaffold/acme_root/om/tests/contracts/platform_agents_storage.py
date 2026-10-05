@@ -44,6 +44,16 @@ def finished(session: ValidationSession) -> ValidationSession:
     )
 
 
+def refused(session: ValidationSession, reason: str) -> ValidationSession:
+    return session.model_copy(
+        update={
+            "status": ValidationStatus.REFUSED,
+            "refusal": reason,
+            "version": session.version + 1,
+        }
+    )
+
+
 class PlatformAgentsStorageContract:
     @pytest.fixture
     def storage(self) -> PlatformAgentsStorageInterface:
@@ -95,6 +105,16 @@ class PlatformAgentsStorageContract:
         with pytest.raises(PreconditionFailed):
             await storage.write_validation(org, finished(done), 1, ())
         assert await storage.read_validation(org, session.id) == done
+
+    async def test_a_refused_session_keeps_its_reason(
+        self, storage: PlatformAgentsStorageInterface
+    ) -> None:
+        org = new_id()
+        session = make_validation()
+        assert await storage.create_validation(org, session, ())
+        gone = refused(session, "the project declares no check report.totals")
+        await storage.write_validation(org, gone, 1, ())
+        assert await storage.read_validation(org, session.id) == gone
 
     async def test_write_validation_of_another_tenant_changes_nothing(
         self, storage: PlatformAgentsStorageInterface

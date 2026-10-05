@@ -2,7 +2,7 @@
 the platform's own lane and handled by the worker's own handler, which
 runs the check on the executor once and finishes the session with the
 record it wrote. A check its project's policy no longer declares fails for
-good."""
+good, and its session reads refused with the reason."""
 
 from datetime import timedelta
 from pathlib import Path
@@ -100,6 +100,12 @@ async def test_a_check_its_policy_no_longer_declares_fails_for_good(tmp_path: Pa
     ctx, item = await claimed(container)
     with pytest.raises(WorkRefused, match="declares no check unit"):
         await handler.handle(ctx, item)
+    with pytest.raises(WorkRefused, match="declares no check unit"):
+        await handler.handle(ctx, item)
+
+    refused = await container.managers.platform_agents.get_validation(owner, session_id)
+    assert refused.status is ValidationStatus.REFUSED
+    assert refused.refusal == f"the project {session.project_id} declares no check unit"
     assert executor.requests == []
 
 

@@ -44,7 +44,11 @@ class PlatformAgentsManagerInterface(ABC):
         or its declared trials when a requirement rates it), and the session
         finished with the execution record its last run wrote. A
         finished session runs nothing. Asked again after the run was kept,
-        it runs nothing more and finishes with that run."""
+        it runs nothing more and finishes with that run. A check that cannot
+        run here, for good (its project's policy no longer declares it, or
+        no executor offers what it needs), refuses the session with that
+        reason (`refuse_validation`) and raises `PreconditionFailed`; a
+        refused session runs nothing and raises it again."""
         ...
 
     @abstractmethod
@@ -54,7 +58,19 @@ class PlatformAgentsManagerInterface(ABC):
         """Platform-internal: the session's run is recorded as `run_id`, the
         execution record every run is, and the session is finished. Asked
         again with the same run, it answers the session as stored; with
-        another, `PreconditionFailed`, since a session runs its check once."""
+        another, or once the session is refused, `PreconditionFailed`, since
+        a session runs its check once."""
+        ...
+
+    @abstractmethod
+    async def refuse_validation(
+        self, ctx: TenantContext, session_id: UUID, reason: str
+    ) -> ValidationSession:
+        """Platform-internal: the session's check cannot run here, for good,
+        and the session is refused with `reason`, its first characters
+        kept, so its read ends rather than waiting for ever. A session
+        refused already answers as stored; a finished one,
+        `PreconditionFailed`, since its run is recorded."""
         ...
 
     @abstractmethod

@@ -2863,7 +2863,8 @@ export interface paths {
         /**
          * Get Validation
          * @description The session: `queued` while its check waits or runs, `finished` with
-         *     its verdict and its run once the run is recorded.
+         *     its verdict and its run once the run is recorded, and `refused` with its
+         *     reason when its check cannot run here, for good.
          */
         get: operations["get_validation_v1_validation_sessions__session_id__get"];
         put?: never;
@@ -7323,7 +7324,9 @@ export interface components {
          *     was not there, never passes. A check a requirement rates runs its
          *     declared trials and passes only as that requirement judges them
          *     together, so one lucky trial never passes it; `run` is its last trial.
-         *     `reason` says why it did not pass, and is null otherwise.
+         *     `reason` says why it did not pass, and is null otherwise. A session
+         *     whose check cannot run here, for good, is `refused`: it never passes,
+         *     `reason` says why it could not run, and `run` is null.
          */
         ValidationSessionView: {
             /** Base */
@@ -7365,7 +7368,7 @@ export interface components {
          * ValidationStatus
          * @enum {string}
          */
-        ValidationStatus: "queued" | "finished";
+        ValidationStatus: "queued" | "finished" | "refused";
         /**
          * ValidationView
          * @description One pass of the policy's checks on a fresh executor: the version it

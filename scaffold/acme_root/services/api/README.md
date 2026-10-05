@@ -113,9 +113,11 @@ app, and `main.py` is the `acme-api` command: `serve`, `migrate`,
   platform's worker runs it once on a fresh executor, or, for a check a
   requirement rates, its declared trials, which pass only together. Any
   member reads it, and once its run is recorded, its verdict and the run
-  (the last trial's, for a rated check). A project
-  with no policy in the tenant is `404`, as another tenant's is, and a
-  check the policy does not declare is `422`. (`/v1/validation-sessions`,
+  (the last trial's, for a rated check). A check that cannot run there for
+  good, one the policy no longer declares or no executor can run, reads
+  `refused`, with its reason and no run, so a CI job stops waiting. A
+  project with no policy in the tenant is `404`, as another tenant's is,
+  and a check the policy does not declare is `422`. (`/v1/validation-sessions`,
   `/v1/validation-sessions/{session_id}`)
 - **Knowledge and playbooks.** The entries in a state, the suggestions
   waiting on a review among them, and one entry; a person writes one in

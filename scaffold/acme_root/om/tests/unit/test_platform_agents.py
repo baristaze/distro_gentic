@@ -779,6 +779,51 @@ async def test_a_validation_session_whose_run_was_kept_finishes_without_running_
         )
 
 
+@pytest.mark.parametrize(
+    ("change", "reason"),
+    [
+        ({"name": "lint"}, "declares no check unit"),
+        ({"capabilities": ("gpu",)}, "needs gpu, which the executor lacks"),
+    ],
+    ids=["dropped", "unoffered"],
+)
+async def test_a_check_that_cannot_run_refuses_its_session_with_the_reason(
+    tmp_path: Path, change: dict[str, object], reason: str
+) -> None:
+    executor = ScriptedExecutor(capabilities=frozenset())
+    platform = platform_over(tmp_path, executor=executor)
+    project_id = new_id()
+    evidence = platform.managers.evidence
+    await evidence.write_policy(platform.owner, make_policy(policy_key(project_id)))
+    validations = platform.managers.platform_agents
+    start = ValidationStart(
+        id=new_id(), project_id=project_id, check_name="unit", head=HEAD, base=BASE
+    )
+    session = await validations.start_validation(platform.owner, start)
+    # After the start, the policy drops the check, or asks of it what no
+    # executor here offers.
+    policy = await evidence.get_policy(platform.owner, policy_key(project_id))
+    checks = tuple(each.model_copy(update=change) for each in policy.checks)
+    await evidence.write_policy(
+        platform.owner, policy.model_copy(update={"checks": checks, "requirements": ()})
+    )
+
+    with pytest.raises(PreconditionFailed, match=reason):
+        await validations.run_validation(platform.owner, session.id)
+
+    gone = await validations.get_validation(platform.owner, session.id)
+    assert gone.status is ValidationStatus.REFUSED
+    assert gone.refusal is not None and reason in gone.refusal
+    assert (gone.run_id, gone.version, executor.requests) == (None, 2, [])
+    # Asked again, it runs nothing and says the same; it never finishes.
+    with pytest.raises(PreconditionFailed, match=reason):
+        await validations.run_validation(platform.owner, session.id)
+    with pytest.raises(PreconditionFailed, match="is refused"):
+        await validations.finish_validation(platform.owner, session.id, new_id())
+    assert await validations.get_validation(platform.owner, session.id) == gone
+    assert executor.requests == []
+
+
 async def test_a_validation_session_is_its_tenants_and_a_reader_starts_none(
     tmp_path: Path,
 ) -> None:
