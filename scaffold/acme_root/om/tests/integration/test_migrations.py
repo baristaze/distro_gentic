@@ -478,7 +478,10 @@ async def test_a_refused_session_goes_back_to_queued_and_is_kept(
 
     for org, session in held.items():
         statuses = await in_tenant(core, org, "SELECT id, status FROM core.validation_sessions")
-        assert dict(statuses) == {gone[org].id: "queued", session.id: session.status}
+        assert {row[0]: row[1] for row in statuses} == {
+            gone[org].id: "queued",
+            session.id: session.status,
+        }
     await upgrade(DatabaseRole.CORE, core)
     assert await check(DatabaseRole.CORE, core) == []
     for org, session in held.items():
