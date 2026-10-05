@@ -463,9 +463,12 @@ def _json(response: httpx.Response, doing: str) -> Any:
 
 
 def _refusal(response: httpx.Response, doing: str) -> NoReturn:
+    # A limit is a wait, never a refusal: a 429, or a 403 that says it is
+    # one, by a spent primary limit or by the `retry-after` of a secondary.
     status = response.status_code
+    headers = response.headers
     limited = status == 429 or (
-        status == 403 and response.headers.get("x-ratelimit-remaining") == "0"
+        status == 403 and (headers.get("x-ratelimit-remaining") == "0" or "retry-after" in headers)
     )
     if status == 401 or limited or status >= 500:
         raise ProviderUnavailable(f"the forge answered {status} to {doing}")

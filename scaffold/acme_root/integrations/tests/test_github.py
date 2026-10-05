@@ -352,6 +352,50 @@ async def test_a_refused_key_is_unavailable_and_never_named(
     assert token not in str(failed.value) and token not in caplog.text
 
 
+SECONDARY = "You have exceeded a secondary rate limit. Please wait a few minutes."
+
+
+@pytest.mark.parametrize(
+    ("status", "headers"),
+    [
+        (429, {"retry-after": "60"}),
+        (403, {"retry-after": "60", "x-ratelimit-remaining": "4990"}),
+        (403, {"x-ratelimit-remaining": "0", "x-ratelimit-reset": "1791000000"}),
+    ],
+    ids=["429", "secondary-403", "primary-403"],
+)
+async def test_a_limit_is_a_wait_and_the_call_after_it_lands(
+    key: rsa.RSAPrivateKey, status: int, headers: dict[str, str]
+) -> None:
+    comments: list[httpx.Request] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/comments"):
+            comments.append(request)
+            if len(comments) == 1:
+                return httpx.Response(status, headers=headers, json={"message": SECONDARY})
+        return minting([])(request)
+
+    client = forge(key, handle)
+    # Unavailable, as a 429 is, so its caller waits and asks again; never
+    # refused, which would fail the work for good.
+    with pytest.raises(ProviderUnavailable, match=f"answered {status}"):
+        await client.post("octo-org/widgets#12", "Fixed it.", MARK, installation=HOLDER)
+    posted = await client.post("octo-org/widgets#12", "Fixed it.", MARK, installation=HOLDER)
+    assert (posted.id, len(comments)) == ("1003", 2)
+
+
+async def test_a_403_that_names_no_limit_is_refused(key: rsa.RSAPrivateKey) -> None:
+    def handle(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/comments"):
+            denied = {"message": "Resource not accessible by integration"}
+            return httpx.Response(403, headers={"x-ratelimit-remaining": "4990"}, json=denied)
+        return minting([])(request)
+
+    with pytest.raises(ProviderRefused, match="not accessible"):
+        await forge(key, handle).post("octo-org/widgets#12", "Fixed it.", installation=HOLDER)
+
+
 async def test_a_comment_carries_its_mark_and_answers_as_real(key: rsa.RSAPrivateKey) -> None:
     calls: list[httpx.Request] = []
     posted = await forge(key, minting(calls)).post(
