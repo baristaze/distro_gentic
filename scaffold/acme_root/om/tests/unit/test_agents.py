@@ -417,6 +417,32 @@ async def test_a_moved_deadline_unlocks_every_session_of_the_tree_it_parked(
     assert await statuses() == [SessionStatus.PENDING] * 2
 
 
+async def test_a_moved_deadline_unlocks_the_tree_past_a_deleted_session(
+    managers: Managers,
+) -> None:
+    """A child that ended and was deleted waits on nothing: the unlock
+    passes over it to the child after it."""
+    ctx = context(Role.MEMBER)
+    agents, steps, sessions = managers.agents, managers.steps, managers.agent_sessions
+    root = await start(managers, ctx)
+    children = [await agents.spawn(ctx, root.id, spawn()) for _ in range(2)]
+    gone, child = sorted(children, key=lambda session: session.id)
+    (objective,) = (await steps.get_steps(ctx, gone.id, 0, 1)).items
+    request = make_request(gone.id, objective.id, (objective.id,))
+    response = make_response(gone.id, objective.id, request.id)
+    epoch = await steps.begin_run(ctx, gone.id)
+    await steps.append_steps(ctx, gone.id, epoch, [request, response, ended(gone.id, objective.id)])
+    assert (await sessions.project_status(ctx, gone.id)).status is SessionStatus.IDLE
+    await sessions.delete_session(ctx, gone.id)
+    (opening,) = (await steps.get_steps(ctx, child.id, 0, 1)).items
+    epoch = await steps.begin_run(ctx, child.id)
+    await sessions.park(ctx, child.id, epoch, opening.loop_id, deadline_park())
+
+    await agents.set_deadline(ctx, root.id, utcnow() + timedelta(hours=1))
+
+    assert (await sessions.get_session(ctx, child.id)).status is SessionStatus.PENDING
+
+
 async def test_a_tree_stops_at_its_height_and_its_count(managers: Managers) -> None:
     ctx = context(Role.MEMBER)
     agents = managers.agents
@@ -646,13 +672,8 @@ async def test_a_purged_session_leaves_no_authority_or_tree_behind(tmp_path: Pat
     root = await start(managers, ctx)
     child = await managers.agents.spawn(ctx, root.id, spawn())
     sibling = await start(managers, ctx)
-    await sessions.delete_session(ctx, root.id)
-    await sessions.purge_across_tenants()
-    with pytest.raises(NotFound):
-        await authority(ctx, root.id)
-    assert await trees.read_tree(ctx.org_id, root.id) is not None, "its child is left"
-    # Its objective woke it: its loop reads it and ends, and the idle child
-    # may be deleted.
+    # Its objective woke the child: its loop reads it and ends, so nothing
+    # below the root is at work, and the root may be deleted.
     (objective,) = (await managers.steps.get_steps(ctx, child.id, 0, 1)).items
     request = make_request(child.id, objective.id, (objective.id,))
     response = make_response(child.id, objective.id, request.id)
@@ -660,6 +681,11 @@ async def test_a_purged_session_leaves_no_authority_or_tree_behind(tmp_path: Pat
     done = [request, response, ended(child.id, objective.id)]
     await managers.steps.append_steps(ctx, child.id, epoch, done)
     assert (await sessions.project_status(ctx, child.id)).status is SessionStatus.IDLE
+    await sessions.delete_session(ctx, root.id)
+    await sessions.purge_across_tenants()
+    with pytest.raises(NotFound):
+        await authority(ctx, root.id)
+    assert await trees.read_tree(ctx.org_id, root.id) is not None, "its child is left"
     await sessions.delete_session(ctx, child.id)
     await sessions.purge_across_tenants()
     with pytest.raises(NotFound):
