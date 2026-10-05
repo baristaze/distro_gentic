@@ -25,6 +25,7 @@ export function DeleteOrgCard({ vm }: { vm: DeleteOrgVm }) {
             <TextField
               label={`Type the organization's name, ${vm.name ?? ""}, to confirm`}
               autoComplete="off"
+              placeholder={vm.name ?? ""}
               value={vm.typed}
               onChange={vm.setTyped}
             />

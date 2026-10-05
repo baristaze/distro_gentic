@@ -84,7 +84,10 @@ const SLOT: PortalProduct = {
     { id: "automations", label: "Automations", icon: null, to: "/automations", tip: "Automations" },
     { id: "knowledge", label: "Knowledge", icon: null, to: "/knowledge", tip: "Knowledge", count: () => 2 },
   ],
-  settings: [{ group: "Agents", id: "projects", label: "Projects", icon: null, about: "Repositories", routes: [{ path: "/projects" }] }],
+  settings: [
+    { group: "Agents", id: "projects", label: "Projects", icon: null, about: "Repositories", routes: [{ path: "/settings/projects" }] },
+    { group: "Security", id: "api-keys", label: "API keys", icon: null, about: "Keys a program calls with", routes: [{ path: "/settings/api-keys" }] },
+  ],
   agents: [{ kind: "engineer", label: "Engineer", about: "Changes code." }],
 };
 
@@ -107,7 +110,7 @@ const key = (target: Element, name: string, mods: KeyboardEventInit = {}) =>
   act(async () => { target.dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true, ...mods })); });
 const group = (name: string) => [...(q(`ul[aria-label='${name}']`)?.children ?? [])].map((li) => li.querySelector(".acme-row-title")?.textContent);
 
-async function mount(path = "/settings") {
+async function mount(path = "/") {
   router = createMemoryRouter(
     [
       {
@@ -117,7 +120,7 @@ async function mount(path = "/settings") {
           { path: "/settings", Component: page("settings") },
           { path: "/sessions", Component: page("sessions") },
           { path: "/sessions/:id", Component: page("one session") },
-          { path: "/projects", Component: page("projects") },
+          { path: "/settings/*", Component: page("a section") },
           { path: "/automations", Component: page("automations") },
           { path: "/knowledge", Component: page("knowledge") },
         ],
@@ -207,8 +210,7 @@ it("goes home from the org's name, and to Settings and the members from the chip
   expect(q("[role='menu'][aria-label='Organizations']")).not.toBeNull();
   expect(item("New organization…")).toBeDefined();
   await act(async () => item("Invite members").click());
-  expect(router.state.location.pathname).toBe("/settings");
-  expect(router.state.location.hash).toBe("#members");
+  expect(router.state.location.pathname).toBe("/settings/members");
 });
 
 it("offers Invite members only to a member who may manage them", async () => {
@@ -226,7 +228,7 @@ it("opens the user chip's menu on a click, not on hover, with Settings, the them
   expect(trigger().getAttribute("aria-expanded")).toBe("true");
   expect(menu()!.textContent).toContain("owner@example.test");
   const items = [...menu()!.querySelectorAll("[role^='menuitem']")].map(label);
-  expect(items).toEqual(["Settings", "System", "Light", "Dark", "Keyboard shortcuts", "Documentation ↗", "Sign out"]);
+  expect(items).toEqual(["Settings", "Profile and preferences", "System", "Light", "Dark", "Keyboard shortcuts", "Documentation ↗", "Sign out"]);
   expect(item("Settings").querySelector("kbd")!.textContent).toBe("⌘,");
   expect(document.activeElement).toBe(item("Settings"));
   const drawings = [...menu()!.querySelectorAll<HTMLElement>("[role^='menuitem']")].map(
@@ -240,6 +242,8 @@ it("moves by the arrows, closes on Escape, and gives the keyboard back to its bu
   trigger().focus();
   await key(trigger(), "ArrowDown");
   expect(document.activeElement).toBe(item("Settings"));
+  await key(document.activeElement!, "ArrowDown");
+  expect(document.activeElement).toBe(item("Profile and preferences"));
   await key(document.activeElement!, "ArrowDown");
   expect(document.activeElement).toBe(item("System"));
   await key(document.activeElement!, "End");
@@ -310,6 +314,40 @@ it("opens Settings on Cmd-comma", async () => {
   await mount("/");
   await key(window as unknown as Element, ",", { metaKey: true });
   expect(router.state.location.pathname).toBe("/settings");
+});
+
+it("puts Settings' own bar in the left bar's place inside Settings: back to the app, the search, and the sections by group", async () => {
+  await mount("/settings/projects");
+  expect(q("aside[aria-label='Sidebar']")).toBeNull();
+  const bar = q("aside[aria-label='Settings sidebar']")!;
+  const sections = () => [...bar.querySelectorAll("nav[aria-label='Settings'] a")].map((a) => [a.textContent, a.getAttribute("href")]);
+  expect(sections()).toEqual([
+    ["Overview", "/settings"],
+    ["Projects", "/settings/projects"],
+    ["API keys", "/settings/api-keys"],
+  ]);
+  expect([...bar.querySelectorAll("h2")].map((h) => h.textContent)).toEqual(["Agents", "Security"]);
+  expect(bar.querySelector("a[aria-current='page']")!.textContent).toBe("Projects");
+
+  const search = bar.querySelector<HTMLInputElement>("input[type='search']")!;
+  expect(search.placeholder).toBe("e.g. API keys");
+  await key(window as unknown as Element, "/");
+  expect(document.activeElement).toBe(search);
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(search, "keys");
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  expect(sections()).toEqual([
+    ["Overview", "/settings"],
+    ["API keys", "/settings/api-keys"],
+  ]);
+  await key(search, "Enter");
+  expect(router.state.location.pathname).toBe("/settings/api-keys");
+
+  await act(async () => [...bar.querySelectorAll("a")].find((a) => a.textContent === "Back to app")!.click());
+  expect(router.state.location.pathname).toBe("/");
+  expect(q("aside[aria-label='Settings sidebar']")).toBeNull();
+  expect(q("aside[aria-label='Sidebar']")).not.toBeNull();
 });
 
 it("signs out: the server session first, then the token here", async () => {

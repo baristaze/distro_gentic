@@ -5,6 +5,7 @@
 // form; one who does not manage the org is offered no grant.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AutomationView } from "@acme/client";
+import { EMPTY_PRODUCT, type PortalProduct } from "../../app/product";
 import { buttons, container, enter, field, mount, newNet, notFound, PEOPLE, press, unmount, writes, type Call } from "../screenTesting";
 import { AutomationPage } from "./AutomationPage";
 import { AutomationsPage } from "./AutomationsPage";
@@ -43,6 +44,14 @@ function answer(call: Call): unknown {
   return notFound(call.path);
 }
 
+const SLOT: PortalProduct = {
+  ...EMPTY_PRODUCT,
+  agents: [
+    { kind: "engineer", label: "Engineer", about: "Changes code." },
+    { kind: "assistant", label: "Assistant", about: "Answers questions." },
+  ],
+};
+
 const routes = [
   { path: "/automations", Component: AutomationsPage },
   { path: "/automations/:automationId", Component: AutomationPage },
@@ -63,10 +72,12 @@ describe("the automations list", () => {
     expect(container.querySelector("[data-principal]")!.textContent).toBe("No role is granted to the principal yet.");
   });
 
-  it("makes an automation from the form", async () => {
-    await mount(routes, "/automations");
+  it("makes an automation from the form, on the agent picked from the slot's", async () => {
+    await mount(routes, "/automations", SLOT);
+    expect(field("Agent")!.value).toBe("engineer");
+    expect([...(field("Agent") as HTMLSelectElement).options].map((option) => option.textContent)).toEqual(["Engineer", "Assistant"]);
     await enter("Name", "Nightly tidy");
-    await enter("Session kind", "assistant");
+    await enter("Agent", "assistant");
     await enter("Session title", "Tidy the docs");
     await enter("Brief", "Tidy the docs.");
     await enter("Cost cap a period", "2");

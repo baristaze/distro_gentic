@@ -5,7 +5,7 @@ import { Banner, Button, Card, DataTable, ErrorText, Muted, Page, SegmentedContr
 import { tokens } from "../../design/tokens";
 import { ProviderNotice } from "../providers/ProviderNotice";
 import { shortTime } from "../sessions/sessionsModel";
-import { STATUS_FILTERS, type EntryRow } from "./knowledgeModel";
+import { ENTRY_EXAMPLES, STATUS_FILTERS, type EntryRow } from "./knowledgeModel";
 import { useKnowledgeVm } from "./useKnowledgeVm";
 
 const COLUMNS: Column<EntryRow>[] = [
@@ -46,9 +46,20 @@ export function KnowledgePage() {
       {vm.mayWrite ? (
         <Card title="New entry" id="new">
           <form onSubmit={onSubmit} style={{ display: "grid", gap: tokens.space.md }} aria-label="New entry">
-            <TextField label="Title" value={vm.draft.title} onChange={(title) => vm.setDraft({ ...vm.draft, title })} />
-            <TextField label="Recalled by" placeholder="words, by commas" value={vm.draft.trigger} onChange={(trigger) => vm.setDraft({ ...vm.draft, trigger })} />
-            <TextArea label="What a session should know (Markdown)" value={vm.draft.text} onChange={(text) => vm.setDraft({ ...vm.draft, text })} />
+            <TextField label="Title" placeholder={ENTRY_EXAMPLES.title} value={vm.draft.title} onChange={(title) => vm.setDraft({ ...vm.draft, title })} />
+            <TextField
+              label="Recalled by"
+              placeholder={ENTRY_EXAMPLES.trigger}
+              info={ENTRY_EXAMPLES.triggerInfo}
+              value={vm.draft.trigger}
+              onChange={(trigger) => vm.setDraft({ ...vm.draft, trigger })}
+            />
+            <TextArea
+              label="What a session should know (Markdown)"
+              placeholder={ENTRY_EXAMPLES.text}
+              value={vm.draft.text}
+              onChange={(text) => vm.setDraft({ ...vm.draft, text })}
+            />
             {vm.problem ? <ErrorText>{vm.problem}</ErrorText> : null}
             <div>
               <Button type="submit" disabled={vm.writing}>

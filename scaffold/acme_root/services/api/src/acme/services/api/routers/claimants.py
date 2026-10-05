@@ -1,14 +1,14 @@
 """Routes of a product's claimant, the way a host's are. A tenant's: list a
 pool's, and revoke one. A claimant's own: enroll once with an enrollment token of its kind,
 then rotate its credential, claim, and read, renew, and report the item
-it holds, and append to its kind's stream for it, with that credential
-alone. Each function is one call into the hosts service, or the watch
-service for a stream."""
+it holds, and append to its kind's stream for it and read the streams its
+kind reads, with that credential alone. Each function is one call into the
+hosts service, or the watch service for a stream."""
 
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Path
+from fastapi import APIRouter, Path, Query
 
 from acme.om.watch.kinds import STREAM_KIND
 from acme.services.api.gateway.auth import Ctx, Rctx
@@ -25,6 +25,7 @@ from acme.services.api.types.claimants import (
     ExtendLeaseRequest,
     IssuedClaimantCredentialView,
 )
+from acme.services.api.types.watch import ItemPageView
 
 router = APIRouter(tags=["claimants"])
 
@@ -124,3 +125,22 @@ async def append(
     any other kind, is not found; each call spends the credential's
     budget of writes."""
     await watch.append_as(rctx, claimant, item_id, kind, body)
+
+
+@router.get("/claimants/me/items/{item_id}/streams/{kind}", response_model=ItemPageView)
+async def read_streams(
+    rctx: Rctx,
+    watch: WatchService,
+    claimant: Claimant,
+    item_id: UUID,
+    kind: Annotated[str, Path(pattern=STREAM_KIND.pattern)],
+    claim_token: ClaimToken,
+    after: Annotated[list[str] | None, Query()] = None,
+) -> ItemPageView:
+    """The item's open streams of a kind the claimant's own kind reads, for
+    the item it holds under the claim token its claim was handed (the
+    `Claim-Token` header) with a live lease, each after the last entry read
+    (`after=<stream>:<last>`, once a stream). Any other item, any other
+    kind, and a lapsed lease are not found; each call spends the
+    credential's budget of reads."""
+    return await watch.read_as(rctx, claimant, item_id, kind, claim_token, after or [])

@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 // A switch lands in the new org on fresh screens: the signed-in shell is
 // mounted once per org, so the page on show, the left bar, their queries,
-// and their state start over under the new session. The real routes, shell,
-// home page, and org chip run over a fake transport that answers by the
-// token the tab holds; the socket is left out, since its reopening is the
+// and their state start over under the new session. And an address the
+// portal moved still opens the screen it became. The real routes, shell,
+// pages, and org chip run over a fake transport that answers by the token
+// the tab holds; the socket is left out, since its reopening is the
 // channel's own test.
 import { act, createElement, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
@@ -170,4 +171,20 @@ it("lands on the new org's home after creating one at /orgs/new", async () => {
   const after = readsAfterSwitch();
   expect(after.every((read) => read.token === tokenOf("gamma"))).toBe(true);
   expect(after.filter((read) => read.path === "/v1/me")).toHaveLength(1);
+});
+
+it.each([
+  ["/projects", "/settings/projects", "Projects"],
+  ["/projects/p1?from=mail#credential", "/settings/projects/p1?from=mail#credential", null],
+  ["/models", "/settings/models", "Models and keys"],
+  ["/playbooks?name=release-notes", "/settings/playbooks?name=release-notes", "Playbooks"],
+  ["/audit", "/settings/audit", "Audit"],
+  ["/usage", "/settings/usage", "Usage"],
+  ["/approvals", "/sessions?needs=you", "All sessions"],
+])("sends a bookmark to %s on to %s, in its place in the history", async (from, to, title) => {
+  await open(from);
+  const { pathname, search, hash } = router.state.location;
+  expect(`${pathname}${search}${hash}`).toBe(to);
+  expect(router.state.historyAction).toBe("REPLACE");
+  if (title !== null) expect(container.querySelector("h1")!.textContent).toBe(title);
 });

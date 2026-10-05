@@ -35,7 +35,7 @@ import { changedFiles, delivered, latestPlan, stepOf } from "./paneModel";
 import { runRow, usageLine, type RunRow } from "./sessionModel";
 import { useSessionPage } from "./sessionContext";
 import { Body, StateMark } from "./Timeline";
-import { callLine, duration, editDiff, editOf, outputText, bodyKindOf } from "./timelineModel";
+import { CUT_NOTE, callLine, duration, editDiff, editOf, outputText, bodyKindOf } from "./timelineModel";
 
 const count = (n: number) => n.toLocaleString("en-US");
 
@@ -182,6 +182,7 @@ function StepTab() {
         <>
           <h3 className="acme-step-heading">Change</h3>
           <Body kind="diff" text={editDiff(edit.path, edit.removed, edit.added)} label="The change" />
+          {edit.cut ? <p className="acme-cut-note">{CUT_NOTE}</p> : null}
         </>
       ) : null}
       <h3 className="acme-step-heading">Answer</h3>
@@ -204,9 +205,11 @@ function ChangesTab() {
             <li key={file.path}>
               <button type="button" className="acme-file" onClick={() => vm.openStep(file.lastCall)}>
                 <code>{file.path}</code>
-                <span className="acme-file-counts">
-                  <span data-tone="added">+{file.added}</span> <span data-tone="removed">−{file.removed}</span>
-                </span>
+                {file.cut ? null : (
+                  <span className="acme-file-counts">
+                    <span data-tone="added">+{file.added}</span> <span data-tone="removed">−{file.removed}</span>
+                  </span>
+                )}
               </button>
             </li>
           ))}

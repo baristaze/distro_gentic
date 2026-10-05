@@ -2,7 +2,6 @@
 // (`product.ts`): its pages, its entries in the left bar, its settings, the
 // agents it ships, and the examples its fields show. The shell joins it with
 // the product's and refuses an entry the two share.
-import { ApprovalsPage } from "../features/approvals/ApprovalsPage";
 import { AuditPage } from "../features/audit/AuditPage";
 import { AutomationPage } from "../features/automations/AutomationPage";
 import { AutomationsPage } from "../features/automations/AutomationsPage";
@@ -18,16 +17,48 @@ import { PLATFORM_TABS } from "../features/session/PaneTabs";
 import { SessionPage } from "../features/session/SessionPage";
 import { PLATFORM_GISTS } from "../features/session/toolGists";
 import { SessionsPage } from "../features/sessions/SessionsPage";
+import { ApiKeysPage } from "../features/settings/ApiKeysPage";
+import { GeneralPage } from "../features/settings/GeneralPage";
+import { MembersPage } from "../features/settings/MembersPage";
+import { ProfilePage } from "../features/settings/ProfilePage";
 import { SettingsPage } from "../features/settings/SettingsPage";
+import { SignOnPage } from "../features/settings/SignOnPage";
 import { UsagePage } from "../features/usage/UsagePage";
-import { AutomationIcon, BotIcon, DocumentIcon, KnowledgeIcon, ListIcon, ProjectIcon, ShieldIcon } from "../design/kit";
+import {
+  AuditIcon,
+  AutomationIcon,
+  BotIcon,
+  DocumentIcon,
+  KeyIcon,
+  KnowledgeIcon,
+  OrgIcon,
+  ProjectIcon,
+  SignOnIcon,
+  UsageIcon,
+  UserIcon,
+  UsersIcon,
+} from "../design/kit";
 import { useKnowledge } from "../queries/knowledge";
+import { Moved } from "./Moved";
 import type { PortalProduct } from "./product";
 
 /** How many suggested entries wait on a review; null until read. */
 function useSuggestedCount(): number | null {
   return useKnowledge("suggested").data?.length ?? null;
 }
+
+/** The addresses the portal moved, and where each lands now: what is set up
+ * once went under Settings, and the calls waiting on a person are the
+ * sessions that need one. A `:name` in the new address takes the old one's. */
+export const MOVED: readonly { from: string; to: string }[] = [
+  { from: "/projects", to: "/settings/projects" },
+  { from: "/projects/:projectId", to: "/settings/projects/:projectId" },
+  { from: "/models", to: "/settings/models" },
+  { from: "/playbooks", to: "/settings/playbooks" },
+  { from: "/audit", to: "/settings/audit" },
+  { from: "/usage", to: "/settings/usage" },
+  { from: "/approvals", to: "/sessions?needs=you" },
+];
 
 export const PLATFORM: PortalProduct = {
   routes: [
@@ -38,9 +69,9 @@ export const PLATFORM: PortalProduct = {
     { path: "/automations/:automationId", element: <AutomationPage /> },
     { path: "/knowledge", element: <KnowledgePage /> },
     { path: "/knowledge/:entryId", element: <EntryPage /> },
-    { path: "/approvals", element: <ApprovalsPage /> },
     { path: "/settings", element: <SettingsPage /> },
     { path: "/orgs/new", element: <NewOrgPage /> },
+    ...MOVED.map(({ from, to }) => ({ path: from, element: <Moved to={to} /> })),
   ],
   nav: [
     {
@@ -65,14 +96,54 @@ export const PLATFORM: PortalProduct = {
   tools: Object.fromEntries(Object.entries(PLATFORM_GISTS).map(([name, gist]) => [name, { gist }])),
   settings: [
     {
+      group: "Personal",
+      id: "profile",
+      label: "Profile",
+      icon: <UserIcon />,
+      about: "Your name, the theme, and your account",
+      routes: [{ path: "/settings/profile", element: <ProfilePage /> }],
+    },
+    {
+      group: "Organization",
+      id: "general",
+      label: "General",
+      icon: <OrgIcon />,
+      about: "The org's name, its storage, and its deletion",
+      routes: [{ path: "/settings/general", element: <GeneralPage /> }],
+    },
+    {
+      group: "Organization",
+      id: "members",
+      label: "Members",
+      icon: <UsersIcon />,
+      about: "Who is in the org, their roles, and invitations",
+      routes: [{ path: "/settings/members", element: <MembersPage /> }],
+    },
+    {
+      group: "Organization",
+      id: "usage",
+      label: "Usage",
+      icon: <UsageIcon />,
+      about: "Each budget and what its window spent",
+      routes: [{ path: "/settings/usage", element: <UsagePage /> }],
+    },
+    {
+      group: "Organization",
+      id: "audit",
+      label: "Audit",
+      icon: <AuditIcon />,
+      about: "What happened in the org, and who did it",
+      routes: [{ path: "/settings/audit", element: <AuditPage /> }],
+    },
+    {
       group: "Agents",
       id: "projects",
       label: "Projects",
       icon: <ProjectIcon />,
       about: "Each bound to its repository, and the credential it is read with",
       routes: [
-        { path: "/projects", element: <ProjectsPage /> },
-        { path: "/projects/:projectId", element: <ProjectPage /> },
+        { path: "/settings/projects", element: <ProjectsPage /> },
+        { path: "/settings/projects/:projectId", element: <ProjectPage /> },
       ],
     },
     {
@@ -81,7 +152,7 @@ export const PLATFORM: PortalProduct = {
       label: "Models and keys",
       icon: <BotIcon />,
       about: "The org's own provider keys, and its model for each role",
-      routes: [{ path: "/models", element: <ModelsPage /> }],
+      routes: [{ path: "/settings/models", element: <ModelsPage /> }],
     },
     {
       group: "Agents",
@@ -89,23 +160,23 @@ export const PLATFORM: PortalProduct = {
       label: "Playbooks",
       icon: <DocumentIcon />,
       about: "The team's procedures, as versioned briefs",
-      routes: [{ path: "/playbooks", element: <PlaybooksPage /> }],
+      routes: [{ path: "/settings/playbooks", element: <PlaybooksPage /> }],
     },
     {
-      group: "Organization",
-      id: "usage",
-      label: "Usage",
-      icon: <ListIcon />,
-      about: "Each budget and what its window spent",
-      routes: [{ path: "/usage", element: <UsagePage /> }],
+      group: "Security",
+      id: "api-keys",
+      label: "API keys",
+      icon: <KeyIcon />,
+      about: "Keys a program calls the API with, as the org",
+      routes: [{ path: "/settings/api-keys", element: <ApiKeysPage /> }],
     },
     {
-      group: "Organization",
-      id: "audit",
-      label: "Audit",
-      icon: <ShieldIcon />,
-      about: "What happened in the org, and who did it",
-      routes: [{ path: "/audit", element: <AuditPage /> }],
+      group: "Security",
+      id: "sign-on",
+      label: "Single sign-on",
+      icon: <SignOnIcon />,
+      about: "Sign-in through the org's own identity provider",
+      routes: [{ path: "/settings/sign-on", element: <SignOnPage /> }],
     },
   ],
   agents: [

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Role } from "@acme/client";
 import { runtimeConfig } from "../../app/config";
+import { useSlot } from "../../app/slot";
 import { errorMessage } from "../../app/errorMessage";
 import { personName } from "../../app/recordModel";
 import { useAutomationPrincipal, useAutomations, useCreateAutomation, useGrantPrincipal } from "../../queries/automations";
@@ -24,7 +25,9 @@ export function useAutomationsVm() {
   const grant = useGrantPrincipal();
   const navigate = useNavigate();
   const required = projectRequired(runtimeConfig().environment);
-  const [draft, setDraft] = useState<AutomationDraft>(EMPTY_DRAFT);
+  const firstAgent = useSlot().agents[0]?.kind ?? "";
+  // A new automation starts the composer's default agent unless another is chosen.
+  const [draft, setDraft] = useState<AutomationDraft>(() => ({ ...EMPTY_DRAFT, agentKind: firstAgent }));
   const [problem, setProblem] = useState<string | null>(null);
   const [role, setRole] = useState<Role | "">("");
   const [grantProblem, setGrantProblem] = useState<string | null>(null);

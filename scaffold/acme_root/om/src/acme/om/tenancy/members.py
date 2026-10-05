@@ -106,8 +106,9 @@ class TenancyMembersManagerInterface(ABC):
         """Soft-deletes the member's user in this org, ends their membership,
         and revokes every live session and api key of theirs, in one
         transaction; no list shows them, no role change reaches them, and
-        each revocation is announced, so their sockets close. The person of a
-        personal org is never removed from it (PersonalOrgFixed)."""
+        each revocation is announced, so their sockets close. The same commit
+        asks for what the tenant keeps of them elsewhere (`MEMBER_LEFT`). The
+        person of a personal org is never removed from it (PersonalOrgFixed)."""
         ...
 
     @abstractmethod

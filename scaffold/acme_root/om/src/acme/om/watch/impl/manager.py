@@ -141,6 +141,28 @@ class WatchManagerImpl(WatchManagerInterface):
         entries = [(entry.n, entry.data) for entry in appended.entries]
         await streams.append(kind, item.id, appended.stream, entries)
 
+    async def read_as(
+        self,
+        rctx: RequestContext,
+        claimant: ClaimantIdentity,
+        item_id: UUID,
+        kind: str,
+        claim_token: UUID,
+        seen: Sequence[ItemSeen],
+    ) -> ItemPage:
+        streams = self._read_by(kind, claimant.kind)
+        # Every item it does not hold is the same NotFound, placement's own:
+        # another token, or a lapsed lease no sweep requeued yet, tells it
+        # no more than another tenant's item does.
+        missing = NotFound(f"{claimant.kind}:{claimant.id} holds no work item {item_id}")
+        try:
+            item = await self._hosts.held_as(rctx, claimant, item_id, claim_token)
+        except LeaseLost:
+            raise missing from None
+        if item.lease_expires_at is None or item.lease_expires_at <= self._clock():
+            raise missing
+        return await _page(streams, kind, item.id, seen)
+
     async def open_item_live(self, ctx: TenantContext, item_id: UUID, kind: str) -> ItemRead:
         ctx.require(Permission.READ)
         self._written(kind)
@@ -158,21 +180,7 @@ class WatchManagerImpl(WatchManagerInterface):
             raise LiveReadRefused("the handle is not one the platform signed for an item")
         if self._clock() >= grant.expires_at:
             raise LiveReadRefused("the handle has expired; ask for a new one")
-        after = {mark.stream: mark.n for mark in seen[:MAX_SEEN]}
-        slices = await self._written(grant.kind).read(grant.kind, grant.item_id, after)
-        return ItemPage(
-            item_id=grant.item_id,
-            kind=grant.kind,
-            streams=tuple(
-                ItemStream(
-                    stream=held.stream,
-                    first=held.first,
-                    entries=tuple(Entry(n=n, data=data) for n, data in held.entries),
-                    dropped=after.get(held.stream, -1) + 1 < held.first,
-                )
-                for held in slices
-            ),
-        )
+        return await _page(self._written(grant.kind), grant.kind, grant.item_id, seen)
 
     # Take control, give back.
 
@@ -285,6 +293,12 @@ class WatchManagerImpl(WatchManagerInterface):
             raise NotFound(f"no stream kind {kind} is written by {claimant}")
         return self._kind_streams
 
+    def _read_by(self, kind: str, claimant: str) -> KindStreamsInterface:
+        """The product's streams, for a kind the claimant's own kind reads."""
+        if self._kind_streams is None or self._kind_streams.reader(kind) != claimant:
+            raise NotFound(f"no stream kind {kind} is read by {claimant}")
+        return self._kind_streams
+
     def _key(self) -> bytes:
         key = self._options.live_read_key
         if key is None:
@@ -305,3 +319,25 @@ class WatchManagerImpl(WatchManagerInterface):
         self, ctx: TenantContext, event_id: UUID, kind: str, target: UUID, facts: dict[str, object]
     ) -> None:
         await self._events.append_event(ctx, audit_event(ctx, event_id, kind, target, facts))
+
+
+async def _page(
+    streams: KindStreamsInterface, kind: str, item_id: UUID, seen: Sequence[ItemSeen]
+) -> ItemPage:
+    """The item's open streams of the kind, each from the entry after the
+    last `seen` names for it, and whether entries it never read went."""
+    after = {mark.stream: mark.n for mark in seen[:MAX_SEEN]}
+    slices = await streams.read(kind, item_id, after)
+    return ItemPage(
+        item_id=item_id,
+        kind=kind,
+        streams=tuple(
+            ItemStream(
+                stream=held.stream,
+                first=held.first,
+                entries=tuple(Entry(n=n, data=data) for n, data in held.entries),
+                dropped=after.get(held.stream, -1) + 1 < held.first,
+            )
+            for held in slices
+        ),
+    )

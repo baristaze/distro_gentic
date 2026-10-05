@@ -26,7 +26,7 @@ import {
   togglePane,
   type PaneState,
 } from "./paneModel";
-import type { Call } from "./timelineModel";
+import { MAX_SHOWN, type Call } from "./timelineModel";
 
 const at = "2026-10-05T10:00:00Z";
 const call = (id: string, fields: Partial<Call>): Call => ({
@@ -215,9 +215,15 @@ describe("what the platform's tabs read from the calls", () => {
 
   it("lists each changed file with its lines, the last call that changed it opening it", () => {
     expect(changedFiles(calls)).toEqual([
-      { path: "src/dates.py", added: 3, removed: 2, edits: 2, lastCall: "u4" },
-      { path: "NOTES.md", added: 1, removed: 0, edits: 1, lastCall: "u3" },
+      { path: "src/dates.py", added: 3, removed: 2, edits: 2, lastCall: "u4", cut: false },
+      { path: "NOTES.md", added: 1, removed: 0, edits: 1, lastCall: "u3", cut: false },
     ]);
+  });
+
+  it("marks a file one of whose edits the view cut, whose lines it cannot count", () => {
+    const long = call("u6", { tool: "write_file", input: { path: "NOTES.md", text: "x".repeat(MAX_SHOWN + 1) } });
+    expect(changedFiles([...calls, long]).find((file) => file.path === "NOTES.md")?.cut).toBe(true);
+    expect(changedFiles(calls).some((file) => file.cut)).toBe(false);
   });
 
   it("finds the last plan, the step a click names, and whether it delivered", () => {

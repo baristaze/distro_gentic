@@ -4,6 +4,7 @@ reaches the agent quoted and labelled with the origin the platform set;
 and a chat approval counts only from a mapped user whose role may decide
 the call, decided and audited as that user."""
 
+import asyncio
 from datetime import timedelta
 from pathlib import Path
 from uuid import UUID
@@ -16,9 +17,10 @@ from acme.om.agent_sessions.types.agent_session import AgentSession, SessionStat
 from acme.om.agents.types.run import RunEnd
 from acme.om.base import new_id, utcnow
 from acme.om.context import Role, TenantContext
+from acme.om.events.types.event import Event
 from acme.om.evidence.types.provenance import Provenance
 from acme.om.exceptions import Conflict, NotAuthorized, NotFound
-from acme.om.intake.impl.manager import APPROVED, REFUSED, ROUTED
+from acme.om.intake.impl.manager import APPROVED, REFUSED, ROUTED, UNLINKED
 from acme.om.intake.rules import described
 from acme.om.intake.types.event import (
     Arrival,
@@ -368,6 +370,32 @@ async def test_an_account_is_unlinked_in_person_and_then_speaks_as_nobody(
     other = await mapped(platform, Role.MEMBER, external_id="U-BOB")
     await platform.intake.unlink_account(platform.owner, "chat", "U-BOB")
     assert await platform.intake.get_links(platform.owner, other.user_id) == ()
+
+
+async def test_an_unlink_stopped_after_its_audit_writes_it_once_when_run_again(
+    platform: Wired, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The audit goes before the delete: a stop between the two leaves the
+    link, and the unlink run again deletes it and writes no second entry."""
+    person = await mapped(platform, Role.MEMBER)
+    (link,) = await platform.intake.get_links(platform.owner, person.user_id)
+    events = platform.managers.events
+    append = events.append_event
+
+    async def appended_then_stopped(ctx: TenantContext, entry: Event) -> Event:
+        await append(ctx, entry)
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(events, "append_event", appended_then_stopped)
+    with pytest.raises(asyncio.CancelledError):
+        await platform.intake.unlink_account(person, "chat", "U-ANN")
+    monkeypatch.undo()
+    assert await platform.intake.get_links(platform.owner, person.user_id) == (link,)
+
+    await platform.intake.unlink_account(person, "chat", "U-ANN")
+    assert await platform.intake.get_links(platform.owner, person.user_id) == ()
+    entries = await events.get_events(platform.owner, 0, 100)
+    assert [e.target_id for e in entries if e.kind == UNLINKED] == [link.id]
 
 
 # Text from outside, as the agent reads it.

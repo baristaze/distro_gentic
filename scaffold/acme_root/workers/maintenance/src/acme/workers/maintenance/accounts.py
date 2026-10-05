@@ -1,5 +1,5 @@
-"""The handlers of a deleted account, and of a deleted team org: what one
-commit could not do.
+"""The handlers of a deleted account, of a deleted team org, and of a
+member who left one: what one commit could not do.
 
 The account's own rows go in the request that deleted it, so the person is
 gone the moment it answers and nothing below can bring them back. What is
@@ -20,13 +20,18 @@ first, it could no longer run the work that names it.
 members and their credentials went in the request, so nobody is in it. It
 deletes the org's organization at the identity provider, then the org: the
 sweep purges it after the retention. Every step, and every wait and
-failure, is the account's (ADR 0042)."""
+failure, is the account's (ADR 0042).
+
+`MEMBER_LEFT` runs in a team org a person's place in has ended, by their
+removal or their account's deletion, and the org stays. It unlinks every
+outside account linked to them there. A rerun finds none left."""
 
 import logging
 from typing import ClassVar
 
 from acme.integrations.identity import IdentityProviderInterface
 from acme.om.context import Permission, TenantContext
+from acme.om.intake import IntakeManagerInterface
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.work.types.handler import WorkHandlerInterface
 from acme.om.work.types.work_item import DeleteAccountPayload, DeleteOrgPayload, WorkItem
@@ -71,3 +76,15 @@ class DeleteOrgHandlerImpl(WorkHandlerInterface):
                 await self._identity.delete_organization(org_id)
         await self._tenancy.org.delete_closed_org(ctx)
         log.info("the closed team org %s is deleted", ctx.org_id)
+
+
+class MemberLeftHandlerImpl(WorkHandlerInterface):
+    REQUIRES: ClassVar[tuple[Permission, ...]] = (Permission.MANAGE_MEMBERS,)
+    """Unlinking another person's account manages members."""
+
+    def __init__(self, intake: IntakeManagerInterface) -> None:
+        self._intake = intake
+
+    async def handle(self, ctx: TenantContext, item: WorkItem) -> None:
+        gone = await self._intake.forget_member(ctx, item.target_id)
+        log.info("org %s: %d account links of a departed member are gone", ctx.org_id, gone)

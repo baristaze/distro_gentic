@@ -11,9 +11,12 @@ import type { LucideIcon, LucideProps } from "lucide-react";
 import {
   Archive,
   ArrowDown,
+  ArrowLeft,
   ArrowUp,
   BookOpen,
   Bot,
+  Building2,
+  ChartColumn,
   Check,
   ChevronDown,
   ChevronRight,
@@ -26,12 +29,13 @@ import {
   Eye,
   FileDiff,
   FileText,
+  Fingerprint,
   Flag,
   FolderGit2,
-  Gauge,
   GitPullRequest,
   Info,
   Keyboard,
+  KeyRound,
   LayoutList,
   ListChecks,
   ListFilter,
@@ -46,6 +50,7 @@ import {
   Pause,
   Play,
   Plus,
+  ScrollText,
   Search,
   Shield,
   ShieldAlert,
@@ -183,7 +188,23 @@ export const StepIcon = kitIcon(Crosshair);
 export const ChangesIcon = kitIcon(FileDiff);
 /** A clipboard with a check: evidence. */
 export const EvidenceIcon = kitIcon(ClipboardCheck);
-/** A gauge: use and its limits. */
-export const UsageIcon = kitIcon(Gauge);
 /** A cross: close a tab. */
 export const CloseTabIcon = kitIcon(X);
+
+/** An arrow to the left: back to where the person came from. */
+export const BackIcon = kitIcon(ArrowLeft);
+
+/** A building: the organization. */
+export const OrgIcon = kitIcon(Building2);
+
+/** A key: an API key. */
+export const KeyIcon = kitIcon(KeyRound);
+
+/** A fingerprint: signing in. */
+export const SignOnIcon = kitIcon(Fingerprint);
+
+/** Columns: what was spent. */
+export const UsageIcon = kitIcon(ChartColumn);
+
+/** A scroll: the record of what happened. */
+export const AuditIcon = kitIcon(ScrollText);

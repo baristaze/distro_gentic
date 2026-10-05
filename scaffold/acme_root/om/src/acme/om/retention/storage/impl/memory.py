@@ -73,12 +73,18 @@ class RetentionStorageMemoryImpl(MemoryStorageBase, RetentionStorageInterface):
             self._put(self._snapshots, org_id, snapshot)
             return True
 
-    async def read_behind(self, limit: int) -> list[tuple[UUID, SessionRetention, TenantRetention]]:
+    async def read_behind(
+        self, now: datetime, limit: int
+    ) -> list[tuple[UUID, SessionRetention, TenantRetention]]:
         policies = {org_id: policy for org_id, policy in self._policies.values()}
         behind: list[tuple[UUID, SessionRetention, TenantRetention]] = []
         for org_id, snapshot in self._rows_across_tenants(self._snapshots):
             policy = policies.get(org_id)
-            if policy is not None and snapshot.policy_version < policy.version:
+            if (
+                policy is not None
+                and snapshot.policy_version < policy.version
+                and (snapshot.next_attempt_at is None or snapshot.next_attempt_at <= now)
+            ):
                 behind.append((org_id, snapshot, policy))
         return behind[:limit]
 

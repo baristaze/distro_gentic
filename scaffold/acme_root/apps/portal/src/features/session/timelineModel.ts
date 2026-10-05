@@ -55,6 +55,8 @@ export interface CallLine {
   /** What the chevron shows inline: a diff of an edit, else its answer. */
   body: string;
   bodyKind: BodyKind;
+  /** Whether its body shows what it asked cut short by the view. */
+  cut: boolean;
 }
 
 export interface ThoughtEntry {
@@ -82,7 +84,7 @@ export type Entry =
   | { kind: "work"; key: string; at: string; seconds: number; steps: number; running: boolean; items: WorkItem[] }
   | { kind: "action"; key: string; at: string; line: CallLine; authorizationClass: string }
   | { kind: "ask"; key: string; at: string; question: string; line: CallLine | null; open: boolean; unlock: string | null }
-  | { kind: "card"; key: string; at: string; card: CardKind; title: string; facts: string[]; body: string; line: CallLine }
+  | { kind: "card"; key: string; at: string; card: CardKind; title: string; facts: string[]; body: string; cut: boolean; line: CallLine }
   | { kind: "subagent"; key: string; at: string; title: string; agent: string; childId: string | null; line: CallLine }
   | { kind: "product"; key: string; at: string; line: CallLine }
   | { kind: "line"; key: string; seq: number; at: string; text: string; tone: "plain" | "accent" | "danger" }
@@ -105,7 +107,8 @@ export interface TimelineInput {
   steps: readonly StepView[];
   live: readonly LiveStream[];
   session: Pick<AgentSessionView, "status" | "park" | "archived_at">;
-  /** The calls the session holds for a person's decision. */
+  /** The calls the session holds for a person's decision. They count only
+   * while it is parked on one: a list read before then is stale. */
   held: readonly Pick<ApprovalView, "seq" | "tool" | "authorization_class">[];
   /** How each tool's call reads: the platform's and the product's. */
   gists: Readonly<Record<string, Gist>>;
@@ -131,6 +134,19 @@ const seconds = (from: string, to: string | Date) => {
   const span = ((typeof to === "string" ? Date.parse(to) : to.getTime()) - Date.parse(from)) / 1000;
   return Number.isFinite(span) ? Math.max(0, span) : 0;
 };
+
+/** The most characters one string of a tool use's input carries in a
+ * step's view: the API cuts a longer one there and ends it in an ellipsis. */
+export const MAX_SHOWN = 4096;
+
+/** What a body or a card says under what the view cut short. */
+export const CUT_NOTE = "Cut at 4,096 characters: the rest is not shown.";
+
+/** Whether the view cut a string of a tool use's input: it holds more
+ * characters than the view carries, counted as the API counts them. */
+export function isCut(text: string): boolean {
+  return text.length > MAX_SHOWN && Array.from(text).length > MAX_SHOWN;
+}
 
 /** "4s", "1m 12s", "2h 5m". */
 export function duration(total: number): string {
@@ -169,8 +185,10 @@ export function lineCount(text: string): number {
   return text === "" ? 0 : text.replace(/\n$/, "").split("\n").length;
 }
 
-/** The lines a change adds and removes: "+3 −1". */
+/** The lines a change adds and removes: "+3 −1"; nothing when the view
+ * cut either side, whose lines it cannot count. */
 export function counts(removed: string, added: string): string {
+  if (isCut(removed) || isCut(added)) return "";
   return `+${lineCount(added)} −${lineCount(removed)}`;
 }
 
@@ -200,20 +218,22 @@ export function callLine(call: Call, gists: Readonly<Record<string, Gist>>): Cal
   }
   const edit = editOf(call);
   const body = edit ? editDiff(edit.path, edit.removed, edit.added) : outputText(call.output ?? call.liveOutput ?? "");
-  return { kind: "call", key: `call-${call.id}`, call, gist: line || words(call.tool), body, bodyKind: edit ? "diff" : bodyKindOf(body) };
+  return { kind: "call", key: `call-${call.id}`, call, gist: line || words(call.tool), body, bodyKind: edit ? "diff" : bodyKindOf(body), cut: edit?.cut ?? false };
 }
 
-/** What an edit or a write changed, from what it was asked. */
-export function editOf(call: Pick<Call, "tool" | "input">): { path: string; removed: string; added: string } | null {
+/** What an edit or a write changed, from what it was asked, and whether the
+ * view cut it short. */
+export function editOf(call: Pick<Call, "tool" | "input">): { path: string; removed: string; added: string; cut: boolean } | null {
   const path = field(call.input, "path");
   if (path === null) return null;
+  const edit = (removed: string, added: string) => ({ path, removed, added, cut: isCut(removed) || isCut(added) });
   if (call.tool === "edit_file") {
     const added = field(call.input, "new_text");
-    return added === null ? null : { path, removed: field(call.input, "old_text") ?? "", added };
+    return added === null ? null : edit(field(call.input, "old_text") ?? "", added);
   }
   if (call.tool === "write_file") {
     const added = field(call.input, "text");
-    return added === null ? null : { path, removed: "", added };
+    return added === null ? null : edit("", added);
   }
   return null;
 }
@@ -352,9 +372,17 @@ function pairCalls(input: TimelineInput, loopEnded: ReadonlySet<string>): Map<st
   return calls;
 }
 
+/** Whether a session waits for a person's decision on a call it holds. */
+function onApproval(session: TimelineInput["session"]): boolean {
+  return session.status === "parked" && session.park?.reason === "person" && session.park.unlock === "approval";
+}
+
 /** The session's history as entries, with the streams of the steps not
- * stored yet at the end, and the status line under them. */
-export function timeline(input: TimelineInput): Timeline {
+ * stored yet at the end, and the status line under them. The calls it
+ * holds count only while it is parked on them: once a decision made
+ * elsewhere moves it on, a list read before asks for nothing. */
+export function timeline(given: TimelineInput): Timeline {
+  const input = onApproval(given.session) ? given : { ...given, held: [] };
   const { steps, gists, now, session } = input;
   const running = session.status === "running" || session.status === "pending";
   // A call whose loop ended before it answered is over, though no step says so.
@@ -576,18 +604,26 @@ export function timeline(input: TimelineInput): Timeline {
   return { entries, status: statusRow(input, entries) };
 }
 
-function cardOf(card: CardKind, call: Call): { title: string; facts: string[]; body: string } {
+function cardOf(card: CardKind, call: Call): { title: string; facts: string[]; body: string; cut: boolean } {
   const answer = parseJsonText(call.output ?? "");
   const said = answer && typeof answer === "object" && !Array.isArray(answer) ? (answer as Record<string, unknown>) : {};
   const facts = (...found: (string | null | false)[]) => found.filter((fact): fact is string => !!fact);
+  // What it was asked, which the view may cut short.
+  const asked = (name: string) => {
+    const body = field(call.input, name) ?? "";
+    return { body, cut: isCut(body) };
+  };
   switch (card) {
-    case "plan":
-      return { title: "Plan", facts: [], body: field(call.input, "plan") ?? str(said["plan"]) ?? "" };
+    case "plan": {
+      // Its answer keeps the plan whole.
+      const kept = str(said["plan"]);
+      return { title: "Plan", facts: [], ...(kept !== null ? { body: kept, cut: false } : asked("plan")) };
+    }
     case "pull_request":
       return {
         title: field(call.input, "title") ?? "Pull request",
         facts: facts(str(said["branch"]), str(said["url"])),
-        body: field(call.input, "body") ?? "",
+        ...asked("body"),
       };
     case "validation": {
       const runs = Array.isArray(said["runs"]) ? said["runs"].length : null;
@@ -596,6 +632,7 @@ function cardOf(card: CardKind, call: Call): { title: string; facts: string[]; b
         title: "Validation",
         facts: facts(runs !== null && `${runs} ${runs === 1 ? "run" : "runs"}`, version && `at ${version.slice(0, 12)}`),
         body: call.output && runs === null ? call.output : "",
+        cut: false,
       };
     }
     case "result": {
@@ -605,6 +642,7 @@ function cardOf(card: CardKind, call: Call): { title: string; facts: string[]; b
         title: "Result",
         facts: facts(field(call.input, "claim") && `claims ${field(call.input, "claim")}`, cited !== null && `${cited} ${cited === 1 ? "record" : "records"} cited`),
         body: call.output ?? "",
+        cut: false,
       };
     }
   }

@@ -56,6 +56,13 @@ class IntakeStorageInterface(ABC):
         ...
 
     @abstractmethod
+    async def delete_user_links(self, org_id: UUID, user_id: UUID, ids: Sequence[UUID]) -> int:
+        """The links among `ids` of the user in the tenant gone, in one
+        statement, and no other: a link its caller has not read stays.
+        Returns how many went."""
+        ...
+
+    @abstractmethod
     async def create_binding(self, org_id: UUID, binding: WorkBinding) -> WorkBinding:
         """The binding, or the one the tenant holds for the handle already,
         which answers instead: one session a handle."""

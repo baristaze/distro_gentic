@@ -24,6 +24,7 @@ class WorkKind(StrEnum):
     WAKE_PARKED = "WAKE_PARKED"  # the reason an org's records parked for is gone
     DELETE_ACCOUNT = "DELETE_ACCOUNT"  # a deleted account's providers, then its personal org
     DELETE_ORG = "DELETE_ORG"  # a closed team org: its providers, then the org
+    MEMBER_LEFT = "MEMBER_LEFT"  # what the tenant keeps of a person who left it
     WAKE_SESSION = "WAKE_SESSION"  # a parked session's retry time has come
     WAKE_SESSIONS = "WAKE_SESSIONS"  # the reason an org's sessions parked for is gone
     LOOP = "LOOP"  # a session's loop, for the session runner to run
@@ -97,6 +98,12 @@ class WorkItem(Identifiable, Trackable):
 
 class NoopPayload(Platform):
     """The NOOP kind carries nothing."""
+
+
+class MemberLeftPayload(Platform):
+    """The MEMBER_LEFT kind carries nothing: its target is the user whose
+    place in the tenant ended, by a member's removal or an account's
+    deletion, and that id is all the work needs."""
 
 
 class ValidationPayload(Platform):

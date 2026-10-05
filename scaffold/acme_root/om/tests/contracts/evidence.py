@@ -61,7 +61,8 @@ class ScriptedExecutor(ExecutorInterface):
     checks it is asked, each trial's outcome as `outcome` says, every
     dependency served as `provenance` says, and each run's cases as
     `cases` says when it is set. A check with a rate stops where its rule
-    stops it, as an executor does. `requests` keeps what it was asked."""
+    stops it, as an executor does. `requests` keeps what it was asked, and
+    `contexts` whom each run was for."""
 
     name: str = "executor-1"
     outcome: Outcome = all_pass
@@ -72,12 +73,14 @@ class ScriptedExecutor(ExecutorInterface):
     # What it made each run's instance as: what its runner's start line says.
     prepared: Prepared = PREPARED
     requests: list[ExecutionRequest] = field(default_factory=list)
+    contexts: list[TenantContext] = field(default_factory=list)
 
     async def offer(self, ctx: TenantContext) -> Offer:
         return Offer(capabilities=self.capabilities, schemas=frozenset({1}))
 
     async def run(self, ctx: TenantContext, request: ExecutionRequest) -> ExecutorReport:
         self.requests.append(request)
+        self.contexts.append(ctx)
         lines: list[dict[str, Any]] = []
         start = utcnow()
         rates = request.rates or (None,) * len(request.checks)

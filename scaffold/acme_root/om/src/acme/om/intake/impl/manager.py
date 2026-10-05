@@ -112,6 +112,10 @@ class IntakeManagerImpl(IntakeManagerInterface):
         ctx.require(Permission.MANAGE_MEMBERS)
         if not in_person(ctx):
             raise NotAuthorized("an account is linked by a person, never by an agent's call")
+        # Never to a user who left: the link would keep an erased person's
+        # id, and hold the account from the next one it is linked to.
+        if not await self._holds_place(ctx, user_id):
+            raise NotFound(f"user {user_id} holds no place in the tenant")
         link = AccountLink(
             id=new_id(),
             created_at=self._clock(),
@@ -134,9 +138,23 @@ class IntakeManagerImpl(IntakeManagerInterface):
             raise NotFound(f"{integration} account {external_id} is linked to no user")
         if link.user_id != ctx.user_id:
             ctx.require(Permission.MANAGE_MEMBERS)
-        if await self._storage.delete_link(ctx.org_id, integration, external_id):
-            facts: dict[str, object] = {"integration": integration, "user_id": str(link.user_id)}
-            await self._audit(ctx, UNLINKED, link.id, facts)
+        await self._unlinked(ctx, link)
+        await self._storage.delete_link(ctx.org_id, integration, external_id)
+
+    async def forget_member(self, ctx: TenantContext, user_id: UUID) -> int:
+        ctx.require(Permission.MANAGE_MEMBERS)
+        if await self._holds_place(ctx, user_id):
+            return 0
+        batch, forgotten = self._options.links, 0
+        while True:
+            links = await self._storage.read_user_links(ctx.org_id, user_id, batch)
+            for link in links:
+                await self._unlinked(ctx, link)
+            if links:
+                ids = [link.id for link in links]
+                forgotten += await self._storage.delete_user_links(ctx.org_id, user_id, ids)
+            if len(links) < batch:
+                return forgotten
 
     async def get_links(self, ctx: TenantContext, user_id: UUID) -> tuple[AccountLink, ...]:
         ctx.require(Permission.READ)
@@ -331,6 +349,14 @@ class IntakeManagerImpl(IntakeManagerInterface):
         except NotAuthorized:
             return None
 
+    async def _holds_place(self, ctx: TenantContext, user_id: UUID) -> bool:
+        """Whether the user is a live member of the tenant, read now."""
+        try:
+            await self._live(ctx, ctx.org_id, Principal(kind=PrincipalKind.PERSON, id=user_id))
+        except NotAuthorized, NotFound:
+            return False
+        return True
+
     async def _may_instruct(self, member: TenantContext, session_id: UUID) -> bool:
         try:
             await self._agents.require_instructor(member, session_id)
@@ -342,3 +368,12 @@ class IntakeManagerImpl(IntakeManagerInterface):
         self, ctx: TenantContext, kind: str, target: UUID, facts: dict[str, object]
     ) -> None:
         await self._events.append_event(ctx, audit_event(ctx, new_id(), kind, target, facts))
+
+    async def _unlinked(self, ctx: TenantContext, link: AccountLink) -> None:
+        """A link's end, audited before its delete under an id the link
+        derives: a stop between the two leaves the link, and the rerun
+        appends the same entry, which answers as the one held, then deletes.
+        An erasure is never without its record, nor recorded twice."""
+        facts: dict[str, object] = {"integration": link.integration, "user_id": str(link.user_id)}
+        entry_id = derived_id(link.id, link.created_at, UNLINKED)
+        await self._events.append_event(ctx, audit_event(ctx, entry_id, UNLINKED, link.id, facts))

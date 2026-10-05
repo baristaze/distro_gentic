@@ -134,13 +134,15 @@ export function rememberPane(panes: Readonly<Record<string, PaneState>>, id: str
 }
 
 /** One file a session changed: the lines its edits added and removed, and
- * the last call that changed it, which a click opens. */
+ * the last call that changed it, which a click opens. `cut` when the view
+ * cut one of its edits, whose lines it cannot count. */
 export interface ChangedFile {
   path: string;
   added: number;
   removed: number;
   edits: number;
   lastCall: string;
+  cut: boolean;
 }
 
 /** Each file the session's answered edits and writes changed, in the order
@@ -150,13 +152,14 @@ export function changedFiles(calls: readonly Call[]): ChangedFile[] {
   for (const call of calls) {
     const edit = call.state === "done" ? editOf(call) : null;
     if (!edit) continue;
-    const before = files.get(edit.path) ?? { path: edit.path, added: 0, removed: 0, edits: 0, lastCall: call.id };
+    const before = files.get(edit.path) ?? { path: edit.path, added: 0, removed: 0, edits: 0, lastCall: call.id, cut: false };
     files.set(edit.path, {
       ...before,
       added: before.added + lineCount(edit.added),
       removed: before.removed + lineCount(edit.removed),
       edits: before.edits + 1,
       lastCall: call.id,
+      cut: before.cut || edit.cut,
     });
   }
   return [...files.values()];

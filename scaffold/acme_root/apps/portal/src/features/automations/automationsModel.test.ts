@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AutomationView } from "@acme/client";
-import { actionLine, automationRequest, automationRow, draftOf, EMPTY_DRAFT, everyLine, limitsLine, principalRoles, secondsOf, spanLine, type AutomationDraft } from "./automationsModel";
+import { actionLine, agentOptions, automationRequest, automationRow, draftOf, EMPTY_DRAFT, everyLine, limitsLine, principalRoles, secondsOf, spanLine, type AutomationDraft } from "./automationsModel";
 
 const SESSION = "0b8e5d2a-1c3f-4e6a-9b7d-2f4c6e8a0b1c";
 const draft = (fields: Partial<AutomationDraft>): AutomationDraft => ({
@@ -73,7 +73,7 @@ describe("automationRequest", () => {
     expect(problem({ every: "0" })).toBe("Say how often the schedule fires, as a whole number.");
     expect(problem({ every: "1.5" })).toBe("Say how often the schedule fires, as a whole number.");
     expect(problem({ brief: "" })).toBe("Write the brief the session is given.");
-    expect(problem({ agentKind: "" })).toBe("Name the kind of session it starts.");
+    expect(problem({ agentKind: "" })).toBe("Choose the agent it starts.");
     expect(problem({ title: "" })).toBe("Give the sessions it starts a title.");
     expect(problem({}, true)).toBe("Choose the project its sessions work in.");
     expect(problem({ actionKind: "message_session", sessionId: "not-an-id" })).toBe("Name the standing session by its id.");
@@ -120,4 +120,20 @@ it("offers the principal no role above the granter's own", () => {
   expect(principalRoles("owner")).toEqual(["admin", "member", "viewer"]);
   expect(principalRoles("member")).toEqual(["member", "viewer"]);
   expect(principalRoles(undefined)).toEqual([]);
+});
+
+describe("agentOptions", () => {
+  const agents = [
+    { kind: "engineer", label: "Engineer" },
+    { kind: "analysis", label: "Analysis" },
+  ];
+
+  it("offers the slot's agents, and keeps a saved kind that is none of them", () => {
+    expect(agentOptions(agents, "engineer")).toEqual([
+      { value: "engineer", label: "Engineer" },
+      { value: "analysis", label: "Analysis" },
+    ]);
+    expect(agentOptions(agents, "nightly_kind").at(-1)).toEqual({ value: "nightly_kind", label: "nightly_kind (as saved)" });
+    expect(agentOptions(agents, "")).toHaveLength(2);
+  });
 });

@@ -6,21 +6,18 @@ import {
   useInviteMember,
   useResendInvitation,
   useRevokeInvitation,
-  useSsoLink,
 } from "../../queries/tenancy";
 import { useNoticesStore } from "../../store/notices";
-import { canManageMembers, checkInvite, invitableRoles, invitationRows, ssoAvailable } from "./settingsModel";
+import { canManageMembers, checkInvite, invitableRoles, invitationRows } from "./settingsModel";
 
-/** Inviting people and the org's single sign-on, for a member who manages
- * members. The identity provider sends the invitation's email and hosts the
- * page where an admin connects their own identity provider. */
+/** Inviting people, for a member who manages members. The identity provider
+ * sends the invitation's email. */
 export function useInvitationsVm(me: MeView | undefined) {
   const mayManage = canManageMembers(me);
   const invitations = useInvitations(mayManage);
   const invite = useInviteMember();
   const resend = useResendInvitation();
   const revoke = useRevokeInvitation();
-  const ssoLink = useSsoLink();
   const notify = useNoticesStore((s) => s.notify);
   const roles = invitableRoles(me);
   const [email, setEmail] = useState("");
@@ -60,19 +57,8 @@ export function useInvitationsVm(me: MeView | undefined) {
     }
   };
 
-  // The link is short-lived, so it is asked for on the click and followed at once.
-  const openSso = async (intent: "sso" | "domain_verification") => {
-    try {
-      const link = await ssoLink.mutateAsync({ intent, return_url: `${window.location.origin}/settings` });
-      window.location.assign(link.url);
-    } catch (caught) {
-      notify(errorMessage(caught, "Single sign-on could not be opened."));
-    }
-  };
-
   return {
     mayManage,
-    sso: ssoAvailable(me),
     roles,
     email,
     role,
@@ -88,7 +74,5 @@ export function useInvitationsVm(me: MeView | undefined) {
     send,
     resend: resendOne,
     revoke: revokeOne,
-    openSso,
-    openingSso: ssoLink.isPending,
   };
 }

@@ -201,6 +201,10 @@ class TenancyOrgManagerImpl(TenancyOrgManagerInterface):
             rows.append(
                 outbox_row(where, "tenancy.user.deleted", place.user.id, user_payload(place.user))
             )
+            # What a team org keeps of them beyond their place, such as an
+            # outside account linked to them, goes by the queue; a personal
+            # org goes whole, by the sweep.
+            rows.append(outbox_row(where, work_row_kind(WorkKind.MEMBER_LEFT), place.user.id, {}))
 
         users = {place.org.id: place.user.id for place in places}
 

@@ -23,7 +23,7 @@ export function useProjectsVm() {
     }
     setProblem(null);
     create.mutate(made.request, {
-      onSuccess: (project) => navigate(`/projects/${project.id}`),
+      onSuccess: (project) => navigate(`/settings/projects/${project.id}`),
       onError: (caught) => setProblem(errorMessage(caught, "The project was not made.")),
     });
   };

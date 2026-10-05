@@ -45,7 +45,7 @@ from acme.om.steps.types.header import (
     ToolFailure,
     ToolRequestHeader,
 )
-from acme.om.steps.types.step import Step, StepType
+from acme.om.steps.types.step import Actor, Step, StepType
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tools.manager import KeyedHash, ToolsManagerInterface
 from acme.om.tools.registry import ToolRegistry
@@ -460,6 +460,11 @@ class ToolsManagerImpl(ToolsManagerInterface):
         note: str = "",
     ) -> Step:
         ctx.require(Permission.WRITE)
+        # An approval exists so a person sees the call before it runs. A
+        # decision sent on an API key is a program's: it is refused before
+        # anything is read or written, and the call stays held (ADR 2039).
+        if actor_of(ctx.credential_kind) is not Actor.PERSON:
+            raise NotAuthorized("a person decides a call; a program on an API key decides none")
         page = await self._steps.get_steps(ctx, session_id, request_seq - 1, 1)
         request = next((step for step in page.items if step.seq == request_seq), None)
         if request is None or request.type is not StepType.TOOL_REQUEST:
@@ -477,8 +482,8 @@ class ToolsManagerImpl(ToolsManagerInterface):
             session_id=session_id,
             loop_id=request.loop_id,
             type=StepType.CONTROL,
-            # A decision sent on an API key is a program's: it is recorded as
-            # one, and `decides` never counts it as a person's approval.
+            # A person's, as refused above otherwise: `decides` counts no
+            # other actor's.
             actor=actor_of(ctx.credential_kind),
             origin=origin_of(ctx.app.type),
             refs=(request.id,),

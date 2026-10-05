@@ -291,7 +291,7 @@ export function automationRequest(
   if (draft.actionKind === "start_session") {
     const agentKind = draft.agentKind.trim();
     const title = draft.title.trim();
-    if (!agentKind) return { problem: "Name the kind of session it starts." };
+    if (!agentKind) return { problem: "Choose the agent it starts." };
     if (agentKind.length > KIND_MAX) return { problem: `A kind is at most ${KIND_MAX} characters.` };
     if (!title) return { problem: "Give the sessions it starts a title." };
     if (title.length > TITLE_MAX) return { problem: `A title is at most ${TITLE_MAX} characters.` };
@@ -340,4 +340,11 @@ const RANK: Readonly<Record<string, number>> = { viewer: 0, member: 1, admin: 2,
 export function principalRoles(mine: Role | undefined): Role[] {
   const rank = mine ? (RANK[mine] ?? -1) : -1;
   return (["admin", "member", "viewer"] as const).filter((role) => RANK[role]! <= rank);
+}
+
+/** The agents an automation may start: the slot's, and the kind it names
+ * when that is none of them, kept as saved so an edit never changes it. */
+export function agentOptions(agents: readonly { kind: string; label: string }[], current: string): { value: string; label: string }[] {
+  const options = agents.map((agent) => ({ value: agent.kind, label: agent.label }));
+  return current && !agents.some((agent) => agent.kind === current) ? [...options, { value: current, label: `${current} (as saved)` }] : options;
 }

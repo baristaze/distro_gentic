@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { StepView } from "@acme/client";
 import type { LiveStream } from "../../queries/live";
 import { commandLine, PLATFORM_GISTS } from "./toolGists";
-import { answers, bodyKindOf, callsOf, duration, editDiff, timeline, type Entry, type TimelineInput } from "./timelineModel";
+import { answers, bodyKindOf, callsOf, duration, editDiff, isCut, MAX_SHOWN, timeline, type Entry, type TimelineInput } from "./timelineModel";
 
 const T0 = Date.parse("2026-10-05T10:00:00Z");
 const at = (s: number) => new Date(T0 + s * 1000).toISOString();
@@ -157,6 +157,17 @@ describe("timeline", () => {
     expect(kinds(entries)).toEqual(["thought", "prose", "action"]);
     expect(only(entries, "action")).toMatchObject({ authorizationClass: "execute", line: { gist: "Run `pytest -q`", call: { requestSeq: ran.seq, state: "held" } } });
     expect(status).toEqual({ text: "Needs you: approve run_command", needsYou: true, working: false });
+  });
+
+  it("reads a session no longer parked on a decision by its own status, whatever a stale list of held calls says", () => {
+    const steps = turn().slice(0, 3);
+    const stale = [{ seq: steps[2]!.seq, tool: "run_command", authorization_class: "execute" }];
+    const decided = read(steps, { session: { status: "running", park: null, archived_at: null }, held: stale });
+    expect(kinds(decided.entries)).toEqual(["thought", "prose", "work"]);
+    expect(decided.status).toEqual({ text: "Working…", needsYou: false, working: true });
+    const paused = read(steps, { session: { status: "parked", park: { reason: "pause", unlock: "resume", retry_at: null }, archived_at: null }, held: stale });
+    expect(kinds(paused.entries)).not.toContain("action");
+    expect(paused.status.text).not.toMatch(/approve/);
   });
 
   it("draws ask_person as the agent's question, open until it is answered", () => {
@@ -329,6 +340,50 @@ describe("a call's body", () => {
     expect(bodyKindOf("Changed:\n@@ -1 +1 @@\n-old\n+new")).toBe("log");
     expect(bodyKindOf("--- a/a\n+++ b/a\n@@ -1 +1 @@\n-old\n+new")).toBe("diff");
     expect(bodyKindOf('{"ok": true}')).toBe("json");
+  });
+});
+
+describe("what the view cut short", () => {
+  /** A 400-line file, as the API shows it: its first MAX_SHOWN characters and an ellipsis. */
+  const whole = Array.from({ length: 400 }, (_, index) => `value_${index} = ${index}`).join("\n") + "\n";
+  const shown = `${whole.slice(0, MAX_SHOWN)}…`;
+
+  it("knows a string the view cut by its characters, as the API counts them", () => {
+    expect(isCut("x".repeat(MAX_SHOWN))).toBe(false);
+    expect(isCut(shown)).toBe(true);
+    expect(isCut("😀".repeat(MAX_SHOWN))).toBe(false);
+  });
+
+  it("counts no lines of an edit or a write it cut, and marks its diff cut", () => {
+    expect(PLATFORM_GISTS["write_file"]!({ path: "big.py", text: shown }, "")).toBe("Wrote big.py");
+    expect(PLATFORM_GISTS["edit_file"]!({ path: "big.py", old_text: "a\n", new_text: shown }, "")).toBe("Edited big.py");
+    const asked = request(0);
+    const writes = response(asked, 1, { tool_uses: [toolUse("w1", "write_file", { path: "big.py", text: shown }), toolUse("w2", "write_file", { path: "small.py", text: "a\n" })] });
+    const wrote = call(writes, "w1", "write_file", 2);
+    const small = call(writes, "w2", "write_file", 3);
+    const steps = [asked, writes, wrote, answer(wrote, "{}", 3), small, answer(small, "{}", 4)];
+    const work = only(read(steps).entries, "work");
+    expect(work.items.map((item) => item.kind === "call" && [item.gist, item.bodyKind, item.cut])).toEqual([
+      ["Wrote big.py", "diff", true],
+      ["Wrote small.py +1 −0", "diff", false],
+    ]);
+  });
+
+  it("reads a plan from its answer, which keeps it whole, and marks a pull request's body cut", () => {
+    const asked = request(0);
+    const asks = response(asked, 1, {
+      tool_uses: [toolUse("p1", "write_plan", { plan: shown }), toolUse("p2", "open_pull_request", { title: "Add values", body: shown })],
+    });
+    const planned = call(asks, "p1", "write_plan", 2);
+    const opened = call(asks, "p2", "open_pull_request", 3);
+    const steps = [asked, asks, planned, answer(planned, JSON.stringify({ plan: whole }), 3), opened, answer(opened, JSON.stringify({ id: "pr-1", url: "twin://ajax/first/pull/1", branch: "session/abc", head: "f00d" }), 4)];
+    const cards = read(steps).entries.flatMap((entry) => (entry.kind === "card" ? [[entry.card, entry.body === whole, entry.cut]] : []));
+    expect(cards).toEqual([
+      ["plan", true, false],
+      ["pull_request", false, true],
+    ]);
+    const unanswered = read([asked, asks, planned]).entries.find((entry) => entry.kind === "card");
+    expect(unanswered).toMatchObject({ card: "plan", body: shown, cut: true });
   });
 });
 

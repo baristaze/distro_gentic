@@ -28,7 +28,8 @@ is made of](../../../../README.md).
 
 - **Declare a policy.** The tenant's owners and admins write it, with
   each project's narrowing, by a compare-and-set on its version. A
-  project that names another region than its tenant's is refused.
+  project that names another region than its tenant's is refused, and so
+  is a lifetime past a century, in the policy or in a narrowing.
 - **Snapshot a session.** Taken before the session is written, so no
   session is ever without one. A session spawned or handed over belongs
   to the project of the session it came from. A policy that keeps
@@ -49,7 +50,10 @@ is made of](../../../../README.md).
     is cancelled first, since what it waits on, such as a person, may
     never come.
   - What a pass cannot finish waits for its next attempt, out of every
-    pass's read meanwhile, so no session holds back another.
+    pass's read meanwhile, so no session holds back another. A snapshot
+    that fails to take its tenant's policy stays behind it and waits the
+    same way, and the pass goes on to every other tenant's. Its wait ends
+    by the next expiry it already holds, so that expiry is not held back.
 - **Erase a session's content.** The tenant's owners and admins erase
   one session's content before its life ends, the way the sweep does at
   its end: its key revoked and destroyed, the destruction audited, the

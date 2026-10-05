@@ -77,7 +77,6 @@ export const keys = {
   // The calls held for a person across the org's sessions.
   approvals: {
     all: ["approval"] as const,
-    list: (limit: number) => ["approval", "list", limit] as const,
   },
   // The org's events, newest first, as the audit reads them.
   audit: {

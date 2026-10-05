@@ -111,6 +111,17 @@ class IntakeStoragePostgresImpl(PgStorageBase, IntakeStorageInterface):
             await session.commit()
             return gone > 0
 
+    async def delete_user_links(self, org_id: UUID, user_id: UUID, ids: Sequence[UUID]) -> int:
+        stmt = delete(AccountLinks).where(
+            AccountLinks.org_id == org_id,
+            AccountLinks.user_id == user_id,
+            AccountLinks.id.in_(ids),
+        )
+        async with self._session_for(stmt, org_id=org_id) as session:
+            gone = deleted(await session.execute(stmt))
+            await session.commit()
+            return gone
+
     async def create_binding(self, org_id: UUID, binding: WorkBinding) -> WorkBinding:
         stmt = (
             insert(WorkBindings)

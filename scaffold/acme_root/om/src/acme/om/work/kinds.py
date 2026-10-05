@@ -18,6 +18,7 @@ from acme.om.work.types.work_item import (
     DeleteAccountPayload,
     DeleteOrgPayload,
     LoopPayload,
+    MemberLeftPayload,
     NoopPayload,
     OrchestrationPayload,
     ValidationPayload,
@@ -96,6 +97,7 @@ WORK_PAYLOADS: dict[str, type[Platform]] = {
     WorkKind.WAKE_PARKED: WakeParkedPayload,
     WorkKind.DELETE_ACCOUNT: DeleteAccountPayload,
     WorkKind.DELETE_ORG: DeleteOrgPayload,
+    WorkKind.MEMBER_LEFT: MemberLeftPayload,
     WorkKind.WAKE_SESSION: WakeSessionPayload,
     WorkKind.WAKE_SESSIONS: WakeSessionsPayload,
     WorkKind.LOOP: LoopPayload,
@@ -120,6 +122,10 @@ WORK_KINDS: tuple[WorkKindSpec, ...] = (
     # Only the deletion of a team org, an owner's or an operator's, asks for
     # this one, relayed from its own commit; no route enqueues it.
     _own(WorkKind.DELETE_ORG, Permission.MANAGE_MEMBERS),
+    # A member's removal and an account's deletion ask for this one, each
+    # relayed from its own commit; no route enqueues it. Unlinking another
+    # person's account manages members.
+    _own(WorkKind.MEMBER_LEFT, Permission.MANAGE_MEMBERS),
     # A park asks for the first and a raised budget for the second, each
     # relayed from its own commit; the handlers append a control and project
     # the status, which WRITE covers.

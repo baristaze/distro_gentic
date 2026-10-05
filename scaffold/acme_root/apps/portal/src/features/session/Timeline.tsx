@@ -30,7 +30,7 @@ import {
   type KitIcon,
 } from "../../design/kit";
 import { shortTime } from "../sessions/sessionsModel";
-import { duration, type BodyKind, type Call, type CallLine, type CallState, type CardKind, type Entry, type ThoughtEntry } from "./timelineModel";
+import { CUT_NOTE, duration, type BodyKind, type Call, type CallLine, type CallState, type CardKind, type Entry, type ThoughtEntry } from "./timelineModel";
 import type { SessionVm } from "./useSessionVm";
 
 /** A line's words, a `quoted` run drawn as code. */
@@ -114,6 +114,7 @@ function CallRow({ line, onOpen }: { line: CallLine; onOpen: OnOpen }) {
       {shown ? (
         <div className="acme-call-body">
           <Body kind={line.bodyKind} text={line.body} label={line.gist} />
+          {line.cut ? <p className="acme-cut-note">{CUT_NOTE}</p> : null}
         </div>
       ) : null}
     </div>
@@ -256,6 +257,7 @@ function DeliveryCard({ entry }: { entry: Extract<Entry, { kind: "card" }> }) {
       {entry.body && inline ? (
         <div className="acme-tcard-body">
           <Markdown text={entry.body} />
+          {entry.cut ? <p className="acme-cut-note">{CUT_NOTE}</p> : null}
         </div>
       ) : null}
       {entry.body && !inline ? (

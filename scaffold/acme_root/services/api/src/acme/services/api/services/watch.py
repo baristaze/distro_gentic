@@ -2,7 +2,8 @@
 handle, and take control, a command by hand, and give back, in views. The
 read answers to the handle alone; every other call is the person's. A
 product's claimant appends to its kind's stream for the item it holds, and
-a viewer reads it by a handle to that item's streams."""
+a viewer reads it by a handle to that item's streams. A claimant reads the
+streams of a kind its own kind reads, for the item it holds."""
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
@@ -46,6 +47,21 @@ class WatchServiceInterface(ABC):
         kind: str,
         body: ClaimantAppendRequest,
     ) -> None: ...
+
+    @abstractmethod
+    async def read_as(
+        self,
+        rctx: RequestContext,
+        claimant: ClaimantIdentity,
+        item_id: UUID,
+        kind: str,
+        claim_token: UUID,
+        after: Sequence[str],
+    ) -> ItemPageView:
+        """The open streams of the kind for the item the claimant holds.
+        Each of `after` is `<stream>:<last>`, the number of the last entry
+        read of one stream; one that is not is refused."""
+        ...
 
     @abstractmethod
     async def open_item_live(
