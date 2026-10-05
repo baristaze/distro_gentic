@@ -171,7 +171,7 @@ function Composer({ vm }: { vm: SessionVm }) {
   if (!vm.may?.send) {
     return (
       <div className="acme-session-composer">
-        <Muted>A member who may write sends messages here.</Muted>
+        <Muted>{vm.may?.giveBack ? "A person has control: the agent reads what they did once they give it back." : "A member who may write sends messages here."}</Muted>
       </div>
     );
   }

@@ -315,6 +315,13 @@ describe("the org's own session", () => {
     expect([...composer.querySelectorAll("button")].map((button) => button.textContent || button.getAttribute("aria-label"))).toEqual(["Pause", "Send"]);
   });
 
+  it("says a person has control in place of Send while they hold it", async () => {
+    net.over = { status: "parked", park: { reason: "handover", unlock: "give_back", retry_at: null } };
+    await open("a", "/sessions/sa");
+    expect(container.querySelector("form[aria-label='Send a message']")).toBeNull();
+    expect(container.querySelector(".acme-session-composer")!.textContent).toBe("A person has control: the agent reads what they did once they give it back.");
+  });
+
   it("opens Workspace by itself once while it runs; closed, it stays closed", async () => {
     net.over = { status: "running" };
     await open("a", "/sessions/sa");
