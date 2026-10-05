@@ -23,6 +23,7 @@ CROSS_TENANT_CASES: frozenset[str] = frozenset(
         "read_link",
         "read_user_links",
         "delete_link",
+        "delete_user_links",
         "create_binding",
         "read_binding",
         "read_session_bindings",
@@ -182,6 +183,27 @@ class IntakeStorageContract:
         assert await storage.delete_link(org, "chat", "U-ANN")
         assert not await storage.delete_link(org, "chat", "U-ANN")
         assert await storage.read_user_links(org, user, 10) == [forge]
+
+    async def test_a_users_links_go_together_in_its_tenant_alone(
+        self, storage: IntakeStorageInterface
+    ) -> None:
+        org, other = new_id(), new_id()
+        ann, bob = new_id(), new_id()
+        chat = await storage.create_link(org, make_link("U-ANN", ann))
+        forge = await storage.create_link(
+            org, make_link("ann", ann).model_copy(update={"integration": "forge"})
+        )
+        kept = await storage.create_link(org, make_link("U-BOB", bob))
+        elsewhere = await storage.create_link(other, make_link("U-ANN", ann))
+        assert await storage.delete_user_links(new_id(), ann, 10) == []
+        first = await storage.delete_user_links(org, ann, 1)
+        assert len(first) == 1, "a call takes its limit at most"
+        gone = [*first, *await storage.delete_user_links(org, ann, 10)]
+        assert sorted(link.id for link in gone) == sorted((chat.id, forge.id))
+        assert await storage.read_user_links(org, ann, 10) == []
+        assert await storage.read_link(org, "chat", "U-BOB") == kept
+        assert await storage.read_link(other, "chat", "U-ANN") == elsewhere
+        assert await storage.delete_user_links(org, ann, 10) == []
 
     async def test_create_binding_in_another_tenant_is_its_own(
         self, storage: IntakeStorageInterface

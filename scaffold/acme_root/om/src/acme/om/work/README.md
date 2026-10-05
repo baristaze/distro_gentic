@@ -18,8 +18,9 @@ kinds of thing [Acme is made of](../../../../README.md).
   agent sessions a park's time or a raised budget frees, and `LOOP` for
   a session's loop, which the session runner runs. The platform adds
   `VALIDATION`, a validation session's check, which its own worker runs
-  on a fresh executor, and two that a host claims through the gateway:
-  `EXEC` and `WORKSPACE`. A product registers its own at its root. A
+  on a fresh executor; `MEMBER_LEFT`, which lets go of what the tenant
+  keeps of a person who left it; and two that a host claims through the
+  gateway: `EXEC` and `WORKSPACE`. A product registers its own at its root. A
   kind whose payload names a time waits until then.
 - **Lane**: a routing name, which
   [placement](../placement/README.md) answers at every enqueue. A

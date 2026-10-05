@@ -22,7 +22,11 @@ from acme.infra.trust import install_trust_store
 from acme.om.context import RequestContext
 from acme.om.orchestrations.types.orchestration import OrchestrationKind
 from acme.om.work.types.work_item import WorkKind
-from acme.workers.maintenance.accounts import DeleteAccountHandlerImpl, DeleteOrgHandlerImpl
+from acme.workers.maintenance.accounts import (
+    DeleteAccountHandlerImpl,
+    DeleteOrgHandlerImpl,
+    MemberLeftHandlerImpl,
+)
 from acme.workers.maintenance.container import (
     AGENT_SESSION_PURGE_BATCH,
     HOLD_SWEEP_BATCH,
@@ -193,6 +197,7 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             WorkKind.DELETE_ORG: DeleteOrgHandlerImpl(
                 managers.tenancy, container.identity_provider
             ),
+            WorkKind.MEMBER_LEFT: MemberLeftHandlerImpl(container.intake),
             WorkKind.WAKE_SESSION: WakeSessionHandlerImpl(managers.agent_sessions),
             WorkKind.WAKE_SESSIONS: WakeSessionsHandlerImpl(managers.agent_sessions),
             WorkKind.VALIDATION: ValidationHandlerImpl(managers.platform_agents),

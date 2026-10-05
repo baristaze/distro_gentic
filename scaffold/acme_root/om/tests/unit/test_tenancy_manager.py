@@ -3,7 +3,7 @@ from collections import Counter
 from collections.abc import Callable, Sequence
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from urllib.parse import quote
 from uuid import UUID
 
@@ -79,6 +79,8 @@ from acme.om.tenancy.types.membership import Membership
 from acme.om.tenancy.types.org import Org, OrgKind
 from acme.om.tenancy.types.socket_ticket import SocketPrincipal
 from acme.om.tenancy.types.user import PERSONAL_FIELDS, User
+from acme.om.work.manager import WorkManagerInterface
+from acme.om.work.types.work_item import WorkKind, work_row_kind
 
 APP = AppContext(type=AppType.PORTAL, version="portal@test")
 
@@ -693,10 +695,29 @@ async def test_removing_a_member_soft_deletes_the_user_and_ends_access(
     assert ended is None
 
 
+class Queue:
+    """Stands for the work manager the relay enqueues into: each row it was
+    handed."""
+
+    def __init__(self) -> None:
+        self.rows: list[OutboxRow] = []
+
+    async def enqueue_relayed(self, org_id: UUID, row: OutboxRow) -> None:
+        self.rows.append(row)
+
+
 async def test_removing_a_member_revokes_their_credentials_and_announces_each(
     storage: TenancyStorageMemoryImpl, infra: InfraLocalImpl, outbox: OutboxStorageMemoryImpl
 ) -> None:
-    relay = SpyRelay(OutboxRelayImpl(outbox, EventStorageMemoryImpl(), infra.get_topics()))
+    queue = Queue()
+    relay = SpyRelay(
+        OutboxRelayImpl(
+            outbox,
+            EventStorageMemoryImpl(),
+            infra.get_topics(),
+            work=lambda: cast(WorkManagerInterface, queue),
+        )
+    )
     manager = build_tenancy(
         storage,
         relay,
@@ -729,12 +750,17 @@ async def test_removing_a_member_revokes_their_credentials_and_announces_each(
     assert kinds[0] == ("tenancy.user.deleted", bob.id)
     assert sorted(kinds[1:]) == sorted(
         [
+            # What the tenant keeps of them beyond their place, by the queue.
+            (work_row_kind(WorkKind.MEMBER_LEFT), bob.id),
             ("tenancy.session.revoked", bobs.security.credential_id),
             ("tenancy.session.revoked", other.security.credential_id),
             ("tenancy.api_key.deleted", key.api_key.id),
         ]
     )
     assert await claim_all(outbox) == []
+    assert [(r.kind, r.target_id) for r in queue.rows] == [
+        (work_row_kind(WorkKind.MEMBER_LEFT), bob.id)
+    ]
 
 
 async def test_no_event_about_a_user_carries_who_they_are(

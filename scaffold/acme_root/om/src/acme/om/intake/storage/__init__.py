@@ -56,6 +56,13 @@ class IntakeStorageInterface(ABC):
         ...
 
     @abstractmethod
+    async def delete_user_links(self, org_id: UUID, user_id: UUID, limit: int) -> list[AccountLink]:
+        """At most `limit` of the accounts linked to the user in the tenant
+        gone, in one statement; the links it deleted answer, none when it
+        held none."""
+        ...
+
+    @abstractmethod
     async def create_binding(self, org_id: UUID, binding: WorkBinding) -> WorkBinding:
         """The binding, or the one the tenant holds for the handle already,
         which answers instead: one session a handle."""

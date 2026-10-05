@@ -49,8 +49,9 @@ class IntakeManagerInterface(ABC):
     ) -> AccountLink:
         """Maps an outside account to a user of the tenant, as a person who
         manages its members may, in person: a context an agent's call runs
-        under is `NotAuthorized`. One link an account: linked already, the
-        link held answers, and one held for another user is `Conflict`."""
+        under is `NotAuthorized`. A user who holds no place in the tenant is
+        `NotFound`. One link an account: linked already, the link held
+        answers, and one held for another user is `Conflict`."""
         ...
 
     @abstractmethod
@@ -60,6 +61,15 @@ class IntakeManagerInterface(ABC):
         runs under, or anyone else, is `NotAuthorized`. The account then
         speaks to no session as a principal and approves no call. An account
         with no link is `NotFound`."""
+        ...
+
+    @abstractmethod
+    async def forget_member(self, ctx: TenantContext, user_id: UUID) -> int:
+        """Platform-internal: `MEMBER_LEFT`'s. Every account linked to a user
+        who holds no place in the tenant any more gone, each audited as
+        unlinked, so an erased person's outside ids stay linked nowhere and
+        the account is free to link again. A user who holds a place keeps
+        theirs. Returns how many links went."""
         ...
 
     @abstractmethod

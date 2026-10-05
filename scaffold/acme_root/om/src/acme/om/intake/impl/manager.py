@@ -112,6 +112,10 @@ class IntakeManagerImpl(IntakeManagerInterface):
         ctx.require(Permission.MANAGE_MEMBERS)
         if not in_person(ctx):
             raise NotAuthorized("an account is linked by a person, never by an agent's call")
+        # Never to a user who left: the link would keep an erased person's
+        # id, and hold the account from the next one it is linked to.
+        if not await self._holds_place(ctx, user_id):
+            raise NotFound(f"user {user_id} holds no place in the tenant")
         link = AccountLink(
             id=new_id(),
             created_at=self._clock(),
@@ -137,6 +141,23 @@ class IntakeManagerImpl(IntakeManagerInterface):
         if await self._storage.delete_link(ctx.org_id, integration, external_id):
             facts: dict[str, object] = {"integration": integration, "user_id": str(link.user_id)}
             await self._audit(ctx, UNLINKED, link.id, facts)
+
+    async def forget_member(self, ctx: TenantContext, user_id: UUID) -> int:
+        ctx.require(Permission.MANAGE_MEMBERS)
+        if await self._holds_place(ctx, user_id):
+            return 0
+        batch, forgotten = self._options.links, 0
+        while True:
+            gone = await self._storage.delete_user_links(ctx.org_id, user_id, batch)
+            for link in gone:
+                facts: dict[str, object] = {
+                    "integration": link.integration,
+                    "user_id": str(user_id),
+                }
+                await self._audit(ctx, UNLINKED, link.id, facts)
+            forgotten += len(gone)
+            if len(gone) < batch:
+                return forgotten
 
     async def get_links(self, ctx: TenantContext, user_id: UUID) -> tuple[AccountLink, ...]:
         ctx.require(Permission.READ)
@@ -330,6 +351,14 @@ class IntakeManagerImpl(IntakeManagerInterface):
             )
         except NotAuthorized:
             return None
+
+    async def _holds_place(self, ctx: TenantContext, user_id: UUID) -> bool:
+        """Whether the user is a live member of the tenant, read now."""
+        try:
+            await self._live(ctx, ctx.org_id, Principal(kind=PrincipalKind.PERSON, id=user_id))
+        except NotAuthorized, NotFound:
+            return False
+        return True
 
     async def _may_instruct(self, member: TenantContext, session_id: UUID) -> bool:
         try:
