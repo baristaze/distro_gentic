@@ -635,7 +635,11 @@ function statusRow(input: TimelineInput, entries: readonly Entry[]): StatusRow {
   if (session.status === "parked" && session.park?.reason === "person") {
     return { text: asking ? "Needs you: answer the agent's question" : statusWords(session), needsYou: true, working: false };
   }
-  if (session.status === "running") return { text: "Working…", needsYou: false, working: true };
+  // A session reads pending until its first run parks or ends: once that
+  // run streams or writes past its input, it works.
+  const last = input.steps[input.steps.length - 1];
+  const underway = input.live.length > 0 || (last !== undefined && last.type !== "message");
+  if (session.status === "running" || (session.status === "pending" && underway)) return { text: "Working…", needsYou: false, working: true };
   if (session.status === "pending") return { text: "Starting…", needsYou: false, working: true };
   if (session.status === "parked") return { text: session.park ? parkedLine(session.park) : "Waiting", needsYou: false, working: false };
   const ended = [...entries].reverse().find((entry) => entry.kind === "line" && entry.text.startsWith("Run ended"));

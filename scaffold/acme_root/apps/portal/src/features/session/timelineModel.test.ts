@@ -141,6 +141,12 @@ describe("timeline", () => {
     expect(status).toEqual({ text: "Working…", needsYou: false, working: true });
   });
 
+  it("reads a pending session as working once its run writes past its input", () => {
+    const pending = { status: "pending" as const, park: null, archived_at: null };
+    expect(read([], { session: pending }).status.text).toBe("Starting…");
+    expect(read(turn().slice(0, 3), { session: pending }).status.text).toBe("Working…");
+  });
+
   it("draws a call held for a decision as an action card, and the status line asks for it", () => {
     const steps = turn().slice(0, 3);
     const ran = steps[2]!;
@@ -149,7 +155,7 @@ describe("timeline", () => {
       held: [{ seq: ran.seq, tool: "run_command", authorization_class: "execute" }],
     });
     expect(kinds(entries)).toEqual(["thought", "prose", "action"]);
-    expect(only(entries, "action")).toMatchObject({ authorizationClass: "execute", line: { gist: "Ran `pytest -q`", call: { requestSeq: ran.seq, state: "held" } } });
+    expect(only(entries, "action")).toMatchObject({ authorizationClass: "execute", line: { gist: "Run `pytest -q`", call: { requestSeq: ran.seq, state: "held" } } });
     expect(status).toEqual({ text: "Needs you: approve run_command", needsYou: true, working: false });
   });
 
@@ -299,10 +305,16 @@ describe("the platform's lines", () => {
   });
 
   it("reads each platform tool in words", () => {
-    expect(PLATFORM_GISTS["read_file"]!({ path: "src/dates.py" }, null)).toBe("Read src/dates.py");
-    expect(PLATFORM_GISTS["search_code"]!({ pattern: "parse(", path: "src" }, null)).toBe("Searched for “parse(” in src");
-    expect(PLATFORM_GISTS["write_file"]!({ path: "a.txt", text: "x\ny\n" }, null)).toBe("Wrote a.txt +2 −0");
-    expect(PLATFORM_GISTS["open_pull_request"]!({ title: "Parse dates in UTC" }, null)).toBe("Opened a pull request “Parse dates in UTC”");
+    expect(PLATFORM_GISTS["read_file"]!({ path: "src/dates.py" }, "")).toBe("Read src/dates.py");
+    expect(PLATFORM_GISTS["search_code"]!({ pattern: "parse(", path: "src" }, "")).toBe("Searched for “parse(” in src");
+    expect(PLATFORM_GISTS["write_file"]!({ path: "a.txt", text: "x\ny\n" }, "")).toBe("Wrote a.txt +2 −0");
+    expect(PLATFORM_GISTS["open_pull_request"]!({ title: "Parse dates in UTC" }, "")).toBe("Opened a pull request “Parse dates in UTC”");
+  });
+
+  it("reads a call that has not answered by what it asks: a held command has not run", () => {
+    expect(PLATFORM_GISTS["run_command"]!({ argv: ["pytest", "-q"] }, null)).toBe("Run `pytest -q`");
+    expect(PLATFORM_GISTS["run_command"]!({ argv: ["pytest", "-q"] }, '{"exit_code": 1}')).toBe("Ran `pytest -q` · exit 1");
+    expect(PLATFORM_GISTS["validate"]!({}, null)).toBe("Validate the head");
   });
 
   it("says a duration the short way", () => {

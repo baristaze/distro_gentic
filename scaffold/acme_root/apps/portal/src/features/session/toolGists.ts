@@ -27,28 +27,32 @@ function exitCode(output: unknown): number | null {
 
 const quoted = (text: string | null) => (text ? `“${oneLine(text, 60)}”` : "");
 
+/** The verb of a call that answered, or, while no answer has come (it waits
+ * for a decision, or runs), of what it asks: a held command has not run. */
+const verb = (output: unknown, done: string, asks: string) => (output === null || output === undefined ? asks : done);
+
 export const PLATFORM_GISTS: Readonly<Record<string, Gist>> = {
-  list_files: (input) => `Listed ${asked(input, "path") ?? "."}`,
+  list_files: (input, output) => `${verb(output, "Listed", "List")} ${asked(input, "path") ?? "."}`,
   read_file: (input) => `Read ${asked(input, "path") ?? "a file"}`,
-  search_code: (input) => {
+  search_code: (input, output) => {
     const path = asked(input, "path");
-    return `Searched for ${quoted(asked(input, "pattern"))}${path && path !== "." ? ` in ${path}` : ""}`;
+    return `${verb(output, "Searched", "Search")} for ${quoted(asked(input, "pattern"))}${path && path !== "." ? ` in ${path}` : ""}`;
   },
-  write_file: (input) => `Wrote ${asked(input, "path") ?? "a file"} ${counts("", asked(input, "text") ?? "")}`,
-  edit_file: (input) => `Edited ${asked(input, "path") ?? "a file"} ${counts(asked(input, "old_text") ?? "", asked(input, "new_text") ?? "")}`,
+  write_file: (input, output) => `${verb(output, "Wrote", "Write")} ${asked(input, "path") ?? "a file"} ${counts("", asked(input, "text") ?? "")}`,
+  edit_file: (input, output) => `${verb(output, "Edited", "Edit")} ${asked(input, "path") ?? "a file"} ${counts(asked(input, "old_text") ?? "", asked(input, "new_text") ?? "")}`,
   run_command: (input, output) => {
     const code = exitCode(output);
     const line = commandLine((input as Record<string, unknown> | null)?.["argv"]);
     const exit = code !== null && code !== 0 ? ` · exit ${code}` : "";
-    return line ? `Ran \`${oneLine(line, 80)}\`${exit}` : `Ran a command${exit}`;
+    return `${verb(output, "Ran", "Run")} ${line ? `\`${oneLine(line, 80)}\`` : "a command"}${exit}`;
   },
-  search_knowledge: (input) => `Searched knowledge for ${quoted(asked(input, "query"))}`.trim(),
+  search_knowledge: (input, output) => `${verb(output, "Searched", "Search")} knowledge for ${quoted(asked(input, "query"))}`.trim(),
   read_knowledge: () => "Read a knowledge entry",
-  suggest_knowledge: (input) => `Suggested a knowledge entry ${quoted(asked(input, "title"))}`.trim(),
-  validate: () => "Validated the head",
-  open_pull_request: (input) => `Opened a pull request ${quoted(asked(input, "title"))}`.trim(),
-  submit_result: (input) => `Submitted its result: ${asked(input, "claim") ?? "a claim"}`,
-  write_plan: () => "Wrote a plan",
-  ask_person: (input) => `Asked ${quoted(asked(input, "question"))}`.trim(),
-  hand_off_to_engineer: (input) => `Handed off ${quoted(asked(input, "title"))}`.trim(),
+  suggest_knowledge: (input, output) => `${verb(output, "Suggested", "Suggest")} a knowledge entry ${quoted(asked(input, "title"))}`.trim(),
+  validate: (_input, output) => `${verb(output, "Validated", "Validate")} the head`,
+  open_pull_request: (input, output) => `${verb(output, "Opened", "Open")} a pull request ${quoted(asked(input, "title"))}`.trim(),
+  submit_result: (input, output) => `${verb(output, "Submitted", "Submit")} its result: ${asked(input, "claim") ?? "a claim"}`,
+  write_plan: (_input, output) => `${verb(output, "Wrote", "Write")} a plan`,
+  ask_person: (input, output) => `${verb(output, "Asked", "Ask")} ${quoted(asked(input, "question"))}`.trim(),
+  hand_off_to_engineer: (input, output) => `${verb(output, "Handed", "Hand")} off ${quoted(asked(input, "title"))}`.trim(),
 };
