@@ -105,7 +105,8 @@ export interface TimelineInput {
   steps: readonly StepView[];
   live: readonly LiveStream[];
   session: Pick<AgentSessionView, "status" | "park" | "archived_at">;
-  /** The calls the session holds for a person's decision. */
+  /** The calls the session holds for a person's decision. They count only
+   * while it is parked on one: a list read before then is stale. */
   held: readonly Pick<ApprovalView, "seq" | "tool" | "authorization_class">[];
   /** How each tool's call reads: the platform's and the product's. */
   gists: Readonly<Record<string, Gist>>;
@@ -348,9 +349,17 @@ function pairCalls(input: TimelineInput, loopEnded: ReadonlySet<string>): Map<st
   return calls;
 }
 
+/** Whether a session waits for a person's decision on a call it holds. */
+function onApproval(session: TimelineInput["session"]): boolean {
+  return session.status === "parked" && session.park?.reason === "person" && session.park.unlock === "approval";
+}
+
 /** The session's history as entries, with the streams of the steps not
- * stored yet at the end, and the status line under them. */
-export function timeline(input: TimelineInput): Timeline {
+ * stored yet at the end, and the status line under them. The calls it
+ * holds count only while it is parked on them: once a decision made
+ * elsewhere moves it on, a list read before asks for nothing. */
+export function timeline(given: TimelineInput): Timeline {
+  const input = onApproval(given.session) ? given : { ...given, held: [] };
   const { steps, gists, now, session } = input;
   const running = session.status === "running" || session.status === "pending";
   // A call whose loop ended before it answered is over, though no step says so.

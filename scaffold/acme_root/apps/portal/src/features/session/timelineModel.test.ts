@@ -159,6 +159,17 @@ describe("timeline", () => {
     expect(status).toEqual({ text: "Needs you: approve run_command", needsYou: true, working: false });
   });
 
+  it("reads a session no longer parked on a decision by its own status, whatever a stale list of held calls says", () => {
+    const steps = turn().slice(0, 3);
+    const stale = [{ seq: steps[2]!.seq, tool: "run_command", authorization_class: "execute" }];
+    const decided = read(steps, { session: { status: "running", park: null, archived_at: null }, held: stale });
+    expect(kinds(decided.entries)).toEqual(["thought", "prose", "work"]);
+    expect(decided.status).toEqual({ text: "Working…", needsYou: false, working: true });
+    const paused = read(steps, { session: { status: "parked", park: { reason: "pause", unlock: "resume", retry_at: null }, archived_at: null }, held: stale });
+    expect(kinds(paused.entries)).not.toContain("action");
+    expect(paused.status.text).not.toMatch(/approve/);
+  });
+
   it("draws ask_person as the agent's question, open until it is answered", () => {
     const asked = request(0);
     const asks = response(asked, 1, { tool_uses: [toolUse("q1", "ask_person", { question: "Shall I add a leap-year test too?" })] });
