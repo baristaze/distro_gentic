@@ -78,14 +78,22 @@ OUT = "out"
 """Where each trial's results stream goes, beside the tree, never in it."""
 UNPACK = 'mkdir -p "$1" "$2" && tar -xf "$3" -C "$1" && rm -f "$3" && pwd'
 """Unpacks the tree and answers the instance's root, as its commands see it."""
-LOCK = 'chmod a-w -- "$@"'
+LOCK = 'chmod -- a-w "$@"'
 """Makes each file and folder of the tree a run protects read-only: no
 process of the check writes it, or adds to it, without changing its mode."""
-SEEN = 'seen=$(stat -c "%n %i %a %s %z" -- "$@") && printf "%s\\n" "$seen" | sha256sum'
+SEEN = (
+    "seen=$(if stat -c %i . >/dev/null 2>&1;"
+    ' then stat -c "%n %i %a %s %z" -- "$@";'
+    ' else stat -f "%N %i %Lp %z %Fc" -- "$@"; fi)'
+    " && if command -v sha256sum >/dev/null;"
+    ' then printf "%s\\n" "$seen" | sha256sum;'
+    ' else printf "%s\\n" "$seen" | shasum -a 256; fi'
+)
 """One digest of what the instance holds at each path a run protects: its
-inode, mode, size, and the time its inode last changed, to the nanosecond.
-A write, a change of mode, or a replacement moves that time, and no process
-of the instance sets it back. A path gone fails it."""
+inode, mode, size, and the time its inode last changed, to the nanosecond,
+by GNU's `stat` and `sha256sum`, or by BSD's `stat` and `shasum` on a host
+that has those. A write, a change of mode, or a replacement moves that
+time, and no process of the instance sets it back. A path gone fails it."""
 EPOCH = 1
 """The one epoch of an instance's commands: no other run ever reaches it."""
 Tree = Callable[
