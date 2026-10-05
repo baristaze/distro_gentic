@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from uuid import UUID
 
 from acme.om.privacy.types.session_privacy import StorageMode
-from acme.om.retention.types.policy import RetentionPolicy, TenantRetention
+from acme.om.retention.types.policy import MAX_LIFETIME, RetentionPolicy, TenantRetention
 from acme.om.retention.types.snapshot import SessionRetention
 
 
@@ -55,6 +55,15 @@ def region_conflicts(tenant: RetentionPolicy, narrowing: RetentionPolicy) -> boo
         tenant.region is not None
         and narrowing.region is not None
         and narrowing.region != tenant.region
+    )
+
+
+def past_bound(policy: RetentionPolicy) -> bool:
+    """A lifetime past the longest a policy is written with. The write
+    refuses it, so no expiry runs past a date's last year."""
+    return any(
+        lifetime is not None and lifetime > MAX_LIFETIME
+        for lifetime in (policy.content_lifetime, policy.shape_lifetime)
     )
 
 
@@ -117,3 +126,11 @@ def shape_due(snapshot: SessionRetention, now: datetime) -> bool:
     """Its shape has expired and the session is not yet marked."""
     expires = snapshot.shape_expires_at
     return expires is not None and expires <= now and snapshot.shape_expired_at is None
+
+
+def next_expiry(snapshot: SessionRetention) -> datetime | None:
+    """The earliest expiry the snapshot holds that the sweep has not yet
+    taken up; None is never."""
+    content = snapshot.content_expires_at if snapshot.content_expired_at is None else None
+    shape = snapshot.shape_expires_at if snapshot.shape_expired_at is None else None
+    return earliest(content, shape)

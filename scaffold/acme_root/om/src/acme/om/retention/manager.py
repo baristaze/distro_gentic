@@ -78,8 +78,8 @@ class RetentionManagerInterface(ABC):
         the key service says its key is gone. What cannot finish yet, a
         loop still open or a step that failed, takes the session out of
         every pass's read until its next attempt, so no session holds back
-        another. Returns the larger of the two counts, so a whole batch says
-        there may be more."""
+        another. Returns the larger of the two counts, a fold that failed
+        left out, so a whole batch says there may be more."""
         ...
 
     @abstractmethod

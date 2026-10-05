@@ -8,13 +8,8 @@ from uuid import UUID
 from pydantic import Field
 
 from acme.om.privacy.types.session_privacy import StorageMode
-from acme.om.retention.types.policy import MAX_PROJECTS, REGION
+from acme.om.retention.types.policy import MAX_LIFETIME, MAX_PROJECTS, REGION
 from acme.services.api.types.common import RequestBody, View
-
-# The longest lifetime a tenant writes: a century. A lifetime is added to a
-# session's creation date, and a date has a last year; a policy that
-# overflows it would stop the sweep that holds every tenant to its own.
-MAX_LIFETIME = timedelta(days=36500)
 
 
 class RetentionPolicyBody(RequestBody):
