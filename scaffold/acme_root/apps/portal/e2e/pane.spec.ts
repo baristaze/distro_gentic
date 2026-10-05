@@ -84,9 +84,10 @@ test("a session's pane: tabs that open themselves once, a step from its row, and
   await shoot(owner, "three-panes");
   await shoot(owner, "tab-changes");
 
-  // A line of a work block opens its step.
+  // A line of a work block opens its step. Every block is folded once done,
+  // and the first holds the scene's spawns, so each opens.
   const blocks = chat.locator(".acme-work");
-  await blocks.first().locator(".acme-fold-line").first().click();
+  for (const block of await blocks.all()) await block.locator(".acme-fold-line").first().click();
   const failed = chat.locator(".acme-call", { hasText: "Ran python3 tests/test_dates.py · exit 1" });
   await failed.locator(".acme-call-line").click();
   await expect(pane.getByRole("tab", { name: "Step" })).toHaveAttribute("aria-selected", "true");
