@@ -6834,10 +6834,15 @@ export interface components {
         /**
          * StepView
          * @description One step of a session's history, in its order. `text` is what it
-         *     says: a message's words, a model's answer, a tool's result. The rest is
-         *     its header's, by type: the tools a model response called, why it
-         *     stopped, and what it used; a tool call's tool and the class of its
-         *     failure; a control's command; a park; a loop's outcome.
+         *     says: a message's words, a model's answer, a tool's result. A model
+         *     response also says what it thought (`thinking`) and the calls it made
+         *     (`tool_uses`); a tool response names the call it answers
+         *     (`tool_use_id`). Each of these is the step's content: where it is gone,
+         *     its session's key revoked or its content never kept here, each is empty
+         *     as `text` is. The rest is its header's, by type: the tools a model
+         *     response called, why it stopped, and what it used; a tool call's tool,
+         *     the id of the call it runs, and the class of its failure; a control's
+         *     command; a park; a loop's outcome.
          */
         StepView: {
             actor: components["schemas"]["Actor"];
@@ -6870,8 +6875,14 @@ export interface components {
             stop_reason: components["schemas"]["StopReason"] | null;
             /** Text */
             text: string;
+            /** Thinking */
+            thinking: string;
             /** Tool */
             tool: string | null;
+            /** Tool Use Id */
+            tool_use_id: string | null;
+            /** Tool Uses */
+            tool_uses: components["schemas"]["ToolUseView"][];
             /** Tools */
             tools: string[];
             type: components["schemas"]["StepType"];
@@ -7012,6 +7023,22 @@ export interface components {
             updated_by: string;
             /** Version */
             version: number;
+        };
+        /**
+         * ToolUseView
+         * @description One call a model response made: its id, which the call's request and
+         *     response name, the tool, and what the tool was asked, each string cut
+         *     at `MAX_SHOWN`.
+         */
+        ToolUseView: {
+            /** Id */
+            id: string;
+            /** Input */
+            input: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Name */
+            name: string;
         };
         /**
          * TotpConfirmedView

@@ -1836,6 +1836,17 @@ class ToolFailure(StrEnum):
     permanent = 'permanent'
 
 
+class ToolUseView(BaseModel):
+    """
+    One call a model response made: its id, which the call's request and
+    response name, the tool, and what the tool was asked, each string cut
+    at `MAX_SHOWN`.
+    """
+    id: Annotated[str, Field(title='Id')]
+    input: Annotated[dict[str, JsonValue], Field(title='Input')]
+    name: Annotated[str, Field(title='Name')]
+
+
 class TotpConfirmedView(BaseModel):
     """
     The second factor is enrolled: from now on the operator plane admits
@@ -3020,10 +3031,15 @@ class StepShapeView(BaseModel):
 class StepView(BaseModel):
     """
     One step of a session's history, in its order. `text` is what it
-    says: a message's words, a model's answer, a tool's result. The rest is
-    its header's, by type: the tools a model response called, why it
-    stopped, and what it used; a tool call's tool and the class of its
-    failure; a control's command; a park; a loop's outcome.
+    says: a message's words, a model's answer, a tool's result. A model
+    response also says what it thought (`thinking`) and the calls it made
+    (`tool_uses`); a tool response names the call it answers
+    (`tool_use_id`). Each of these is the step's content: where it is gone,
+    its session's key revoked or its content never kept here, each is empty
+    as `text` is. The rest is its header's, by type: the tools a model
+    response called, why it stopped, and what it used; a tool call's tool,
+    the id of the call it runs, and the class of its failure; a control's
+    command; a park; a loop's outcome.
     """
     actor: Actor
     command: ControlCommand | None
@@ -3039,7 +3055,10 @@ class StepView(BaseModel):
     seq: Annotated[int, Field(title='Seq')]
     stop_reason: StopReason | None
     text: Annotated[str, Field(title='Text')]
+    thinking: Annotated[str, Field(title='Thinking')]
     tool: Annotated[str | None, Field(title='Tool')]
+    tool_use_id: Annotated[str | None, Field(title='Tool Use Id')]
+    tool_uses: Annotated[list[ToolUseView], Field(title='Tool Uses')]
     tools: Annotated[list[str], Field(title='Tools')]
     type: StepType
     usage: StepUsageView | None
