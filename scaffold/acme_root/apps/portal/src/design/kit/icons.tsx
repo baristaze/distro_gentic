@@ -13,6 +13,7 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowUp,
+  BellRing,
   BookOpen,
   Bot,
   Building2,
@@ -20,6 +21,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  CornerLeftUp,
   CircleX,
   ClipboardCheck,
   Copy,
@@ -39,9 +41,11 @@ import {
   LayoutList,
   ListChecks,
   ListFilter,
+  ListTree,
   LoaderCircle,
   LogOut,
   MessageCircleQuestionMark,
+  MessageSquareText,
   Monitor,
   Moon,
   Network,
@@ -180,6 +184,14 @@ export const ResultIcon = kitIcon(Flag);
 export const SubAgentIcon = kitIcon(Network);
 /** A speech bubble with a question mark: the agent asks. */
 export const AskIcon = kitIcon(MessageCircleQuestionMark);
+/** A speech bubble with lines: a sub-agent's report. */
+export const ReportIcon = kitIcon(MessageSquareText);
+/** An arrow up and back: what the parent asked. */
+export const ParentIcon = kitIcon(CornerLeftUp);
+/** A tree of lines: the timeline's outline. */
+export const OutlineIcon = kitIcon(ListTree);
+/** A ringing bell: a session needs the person. */
+export const NeedsYouIcon = kitIcon(BellRing);
 /** A terminal: a session's workspace. */
 export const WorkspaceIcon = kitIcon(SquareTerminal);
 /** Crosshairs: one step. */

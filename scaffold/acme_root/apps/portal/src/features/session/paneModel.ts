@@ -3,7 +3,7 @@
 // has something. Each session keeps its own pane: its width, its open tabs,
 // the active one, and whether a person hid it. No React, no storage.
 import { clampWidth, type PaneBounds } from "../../design/kit/splitterModel";
-import { editOf, lineCount, type Call } from "./timelineModel";
+import { childPhase, editOf, lineCount, type Call, type ChildState } from "./timelineModel";
 
 /** The pane: 440 pixels at first, between 320 and 760. */
 export const PANE: PaneBounds = { min: 320, max: 760, initial: 440 };
@@ -186,4 +186,28 @@ export function delivered(calls: readonly Call[]): boolean {
 /** The call the Step tab shows: the one named, else the last. */
 export function stepOf(calls: readonly Call[], id: string | null): Call | null {
   return (id !== null ? calls.find((call) => call.id === id) : undefined) ?? calls[calls.length - 1] ?? null;
+}
+
+/** A group of the Sub-agents tab: the children that need a person, those
+ * that work or wait on something that clears by itself, and those done. */
+export interface ChildGroup {
+  phase: "needs_you" | "working" | "done";
+  label: string;
+  children: ChildState[];
+}
+
+const CHILD_GROUPS: readonly Omit<ChildGroup, "children">[] = [
+  { phase: "needs_you", label: "Needs you" },
+  { phase: "working", label: "Working" },
+  { phase: "done", label: "Done" },
+];
+
+/** A session's children grouped by where they stand, in their order, each
+ * group that holds one. */
+export function childGroups(children: readonly ChildState[]): ChildGroup[] {
+  const groupOf = (child: ChildState): ChildGroup["phase"] => {
+    const phase = childPhase(child);
+    return phase === "waiting" ? "working" : phase;
+  };
+  return CHILD_GROUPS.map((group) => ({ ...group, children: children.filter((child) => groupOf(child) === group.phase) })).filter((group) => group.children.length > 0);
 }

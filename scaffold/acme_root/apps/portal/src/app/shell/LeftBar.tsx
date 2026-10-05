@@ -1,10 +1,12 @@
 // The left bar: what exists and what needs the person. The org chip, the
 // search, New session, the platform's and the product's entries, the
 // sessions grouped by what they ask (Needs you, Running, Recent) with each
-// sub-agent under its parent, and the user chip. Its edge drags to resize.
+// sub-agent under its parent, a tree whose parent row folds it, and the user
+// chip. Its edge drags to resize.
 import { useId, type ReactNode } from "react";
 import { Link, NavLink } from "react-router-dom";
 import {
+  ChevronRightIcon,
   FilterIcon,
   NewSessionIcon,
   Popover,
@@ -18,7 +20,7 @@ import {
 import { AccountMenu } from "../AccountMenu";
 import { OrgChip } from "../OrgChip";
 import type { NavEntry } from "../product";
-import { ago, type ShellRow, type SessionFilter } from "./shellModel";
+import { ago, treeWords, type ShellRow, type SessionFilter } from "./shellModel";
 import type { ShellVm } from "./useShellVm";
 
 const STATUS_OPTIONS: { value: SessionFilter["status"]; label: string }[] = [
@@ -51,23 +53,50 @@ function SideLink({ to, icon, label, tip, end, count }: { to: string; icon: Reac
   );
 }
 
-function Row({ row, now }: { row: ShellRow; now: Date }) {
+/** Which rows fold their sub-agents, and the switch. */
+interface Folds {
+  folded: ReadonlySet<string>;
+  toggle: (id: string) => void;
+}
+
+function Row({ row, now, folds }: { row: ShellRow; now: Date; folds: Folds }) {
+  const parent = row.children.length > 0;
+  const folded = parent && folds.folded.has(row.id);
   return (
-    <li>
-      <NavLink to={`/sessions/${row.id}`} className="acme-side-row" data-dot={row.dot}>
-        <span className="acme-row-dot" data-dot={row.dot} aria-hidden="true" />
-        <span className="acme-row-main">
-          <span className="acme-row-title">{row.title}</span>
-          <span className="acme-row-words">{row.words}</span>
-        </span>
-        <time className="acme-row-ago" dateTime={row.at}>
-          {ago(row.at, now)}
-        </time>
-      </NavLink>
-      {row.children.length > 0 ? (
+    <li data-tree={parent ? (folded ? "folded" : "open") : undefined}>
+      <div className="acme-side-row-line">
+        <NavLink to={`/sessions/${row.id}`} className="acme-side-row" data-dot={row.dot}>
+          <span className="acme-row-dot" data-dot={row.dot} aria-hidden="true" />
+          <span className="acme-row-main">
+            <span className="acme-row-title">{row.title}</span>
+            <span className="acme-row-words">{row.words}</span>
+            {folded ? (
+              <span className="acme-row-tree" data-needs-you={row.tree.needsYou > 0 || undefined}>
+                {treeWords(row.tree)}
+              </span>
+            ) : null}
+          </span>
+          <time className="acme-row-ago" dateTime={row.at}>
+            {ago(row.at, now)}
+          </time>
+        </NavLink>
+        {parent ? (
+          <button
+            type="button"
+            className="acme-row-fold"
+            aria-expanded={!folded}
+            aria-label={folded ? `Show the sub-agents of ${row.title}` : `Fold the sub-agents of ${row.title}`}
+            title={folded ? "Show its sub-agents" : "Fold its sub-agents"}
+            onClick={() => folds.toggle(row.id)}
+          >
+            <ChevronRightIcon size={14} className="acme-fold-mark" />
+          </button>
+        ) : null}
+      </div>
+      {parent && !folded ? (
         <ul className="acme-row-children" aria-label={`Sub-agents of ${row.title}`}>
           {row.children.map((child) => (
-            <Row key={child.id} row={child} now={now} />
+            <Row key={child.id} row={child} now={now} folds={folds} />
           ))}
         </ul>
       ) : null}
@@ -75,7 +104,7 @@ function Row({ row, now }: { row: ShellRow; now: Date }) {
   );
 }
 
-function Group({ label, rows, now }: { label: string; rows: readonly ShellRow[]; now: Date }) {
+function Group({ label, rows, now, folds }: { label: string; rows: readonly ShellRow[]; now: Date; folds: Folds }) {
   const id = useId();
   if (rows.length === 0) return null;
   return (
@@ -86,7 +115,7 @@ function Group({ label, rows, now }: { label: string; rows: readonly ShellRow[];
       </h2>
       <ul aria-label={label} className="acme-side-rows">
         {rows.map((row) => (
-          <Row key={row.id} row={row} now={now} />
+          <Row key={row.id} row={row} now={now} folds={folds} />
         ))}
       </ul>
     </section>
@@ -180,9 +209,9 @@ export function LeftBar({ vm, nav, onSearch }: { vm: ShellVm; nav: readonly NavE
           </div>
         ) : (
           <>
-            <Group label="Needs you" rows={vm.groups.needsYou} now={vm.now} />
-            <Group label="Running" rows={vm.groups.running} now={vm.now} />
-            <Group label="Recent" rows={vm.groups.recent} now={vm.now} />
+            <Group label="Needs you" rows={vm.groups.needsYou} now={vm.now} folds={vm.folds} />
+            <Group label="Running" rows={vm.groups.running} now={vm.now} folds={vm.folds} />
+            <Group label="Recent" rows={vm.groups.recent} now={vm.now} folds={vm.folds} />
           </>
         )}
       </div>

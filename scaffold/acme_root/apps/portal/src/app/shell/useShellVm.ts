@@ -6,7 +6,7 @@ import { useMe } from "../../queries/tenancy";
 import { SIDEBAR, usePreferencesStore } from "../../store/preferences";
 import { errorMessage } from "../errorMessage";
 import { useSlot } from "../slot";
-import { DEFAULT_FILTER, filtering, needsYou, shellGroups, type SessionFilter } from "./shellModel";
+import { DEFAULT_FILTER, filtering, needingYou, needsYou, shellGroups, type SessionFilter } from "./shellModel";
 
 /** The clock the rows' times are read against, a minute at a time. */
 function useMinute(): Date {
@@ -34,6 +34,9 @@ export function useShellVm() {
   const setWidth = usePreferencesStore((s) => s.setSidebarWidth);
   const folded = usePreferencesStore((s) => s.sidebarFolded);
   const toggle = usePreferencesStore((s) => s.toggleSidebar);
+  const foldedTrees = usePreferencesStore((s) => s.foldedTrees);
+  const toggleTree = usePreferencesStore((s) => s.toggleTree);
+  const folds = useMemo(() => ({ folded: new Set(foldedTrees), toggle: toggleTree }), [foldedTrees, toggleTree]);
   const now = useMinute();
 
   const sessions = useMemo(() => [...(parked.data ?? []), ...(newest.data ?? [])], [parked.data, newest.data]);
@@ -44,6 +47,8 @@ export function useShellVm() {
     () => shellGroups(sessions, { filter, me: meId, held: held.data }),
     [sessions, filter, meId, held.data],
   );
+  // The sessions of the person's that need them now, for the toasts.
+  const needing = useMemo(() => needingYou(sessions, meId, held.data), [sessions, meId, held.data]);
   const kinds = useMemo(() => {
     const named = slot.agents.map((agent) => ({ value: agent.kind, label: agent.label }));
     const seen = [...new Set(sessions.map((session) => session.kind))]
@@ -55,9 +60,14 @@ export function useShellVm() {
 
   return {
     nav: slot.nav,
+    /** Every session the bar holds, as read: what a page reads a tree from. */
+    sessions,
     groups,
     now,
     loading: newest.isPending || parked.isPending,
+    needing,
+    /** Whether the lists are read whole, so a toast compares like with like. */
+    read: !newest.isPending && !parked.isPending && meId !== null,
     error: error ? errorMessage(error, "The sessions could not be read.") : null,
     empty: groups.needsYou.length + groups.running.length + groups.recent.length === 0,
     filter,
@@ -70,6 +80,7 @@ export function useShellVm() {
     bounds: SIDEBAR,
     folded,
     toggle,
+    folds,
     goHome: () => navigate("/"),
   };
 }

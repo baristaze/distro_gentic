@@ -650,7 +650,8 @@ select.acme-field {
 @media (prefers-reduced-motion: reduce) {
   .acme-dot[data-tone="pending"],
   .acme-menu,
-  .acme-toasts .acme-banner {
+  .acme-toasts .acme-banner,
+  .acme-needs-toasts .acme-toast {
     animation: none;
   }
 }
@@ -763,6 +764,68 @@ select.acme-field {
 /* Room under the page for the bar, so it never covers the last row. */
 .acme-action-bar-room {
   height: 64px;
+}
+
+/* The toasts a session raises when it starts to need its person: at the
+ * top right, under a page's header and clear of the outline's rail, so none
+ * covers a composer or its Send. */
+.acme-needs-toasts {
+  position: fixed;
+  top: 64px;
+  right: 40px;
+  z-index: 40;
+  display: grid;
+  gap: 8px;
+  width: min(380px, calc(100vw - 32px));
+}
+
+/* Its colours follow the theme (theme.css): in dark, a raised surface with
+ * a ring, as a popover is, never a light box on the dark page. The ring is a
+ * shadow, so it takes no room. */
+.acme-needs-toasts .acme-toast {
+  background: var(--acme-needs-toast-bg);
+  color: var(--acme-needs-toast-text);
+  box-shadow:
+    0 0 0 1px var(--acme-needs-toast-ring),
+    var(--acme-shadow-lg);
+  animation: acme-fade-in 200ms ease-out both;
+}
+
+.acme-needs-toasts .acme-toast-action:hover,
+.acme-needs-toasts .acme-toast-close:hover {
+  background: color-mix(in srgb, var(--acme-needs-toast-text) 14%, transparent);
+}
+
+.acme-needs-toasts .acme-toast-action:focus-visible,
+.acme-needs-toasts .acme-toast-close:focus-visible {
+  outline-color: var(--acme-needs-toast-text);
+}
+
+.acme-needs-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.acme-needs-toast > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--acme-pending);
+}
+
+.acme-needs-toast-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.acme-needs-toast-text > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.acme-needs-toast-text > strong {
+  white-space: nowrap;
 }
 
 /* A short word that a change was made: the tooltip's colours, so it reads
@@ -1221,7 +1284,14 @@ select.acme-field {
 .acme-status-pill {
   font: inherit;
   font-size: 12px;
+  white-space: nowrap;
   cursor: default;
+}
+
+/* The pill and the ⓘ keep their width, so the header's gap stays between
+ * the pill and the title however narrow it gets: the title gives way. */
+.acme-session-head > .acme-tip-anchor {
+  flex-shrink: 0;
 }
 
 .acme-session-title {
@@ -1312,8 +1382,8 @@ select.acme-field {
 }
 
 /* A tab gives up its label before the strip scrolls: an inactive one
- * narrows to its icon, its ✕ shown on hover; the active one keeps its
- * width. */
+ * narrows to its icon alone, its ✕ shown on hover, its label in its
+ * tooltip and its name; the active one keeps its width. */
 .acme-pane-tab {
   display: inline-flex;
   flex: 0 1 auto;
@@ -1337,28 +1407,38 @@ select.acme-field {
   color: var(--acme-text);
 }
 
+/* One line high, with no padding above or below it: a label with no room
+ * for all of it wraps under the icon, wholly out of sight, so a narrowed
+ * tab never shows a cut letter. */
 .acme-pane-tab-name {
   display: inline-flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
   align-items: center;
-  gap: 6px;
+  gap: 0 6px;
+  box-sizing: border-box;
+  height: 30px;
   min-width: 0;
-  padding: 5px 4px 5px 8px;
+  overflow: hidden;
+  padding: 0 4px 0 8px;
   border: 0;
   background: transparent;
   color: inherit;
   font: inherit;
   font-size: 13px;
+  line-height: 30px;
   cursor: pointer;
 }
 
+/* The icon's box is the line's whole height, its drawing centred in it,
+ * so the line it keeps alone is as high as the tab. */
 .acme-pane-tab-name > svg {
   flex-shrink: 0;
+  height: 30px;
 }
 
 .acme-pane-tab-name > span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  flex-shrink: 0;
   white-space: nowrap;
 }
 
@@ -1507,6 +1587,14 @@ select.acme-field {
 }
 
 /* The chat: one entry a row, a person's words on the right. */
+/* The chat and the outline on its edge. */
+.acme-chat-frame {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
+}
+
 .acme-chat-scroll {
   position: relative;
   overflow-y: auto;
@@ -1851,6 +1939,245 @@ select.acme-field {
 .acme-chat-status[data-needs-you] {
   color: var(--acme-pending);
   font-weight: 500;
+}
+
+.acme-chat-status-open {
+  margin-left: 4px;
+  font-weight: 500;
+}
+
+/* The sub-agents one response started: a row each, live. */
+.acme-subagents {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.acme-subagent {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 6px 4px;
+  border-top: 1px solid var(--acme-border);
+  font-size: 13px;
+}
+
+.acme-subagent:first-child {
+  border-top: 0;
+}
+
+.acme-subagent-main {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 2px;
+  min-width: 0;
+}
+
+.acme-subagent-title {
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acme-subagent-doing {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--acme-muted);
+  font-size: 12px;
+}
+
+.acme-subagent-agent {
+  flex-shrink: 0;
+  padding: 0 6px;
+  border: 1px solid var(--acme-border);
+  border-radius: 999px;
+  font-size: 11px;
+}
+
+.acme-subagent-words {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acme-subagent[data-phase="needs_you"] .acme-subagent-words {
+  color: var(--acme-pending);
+  font-weight: 500;
+}
+
+.acme-subagent-time {
+  flex-shrink: 0;
+  color: var(--acme-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.acme-child-group {
+  display: grid;
+  gap: 4px;
+}
+
+.acme-child-group-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--acme-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.acme-subagent-open {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.acme-tcard-who {
+  color: var(--acme-text);
+}
+
+.acme-report-outcome {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.acme-report-outcome[data-tone="accent"] {
+  color: var(--acme-live);
+}
+
+.acme-report-outcome[data-tone="danger"] {
+  color: var(--acme-danger-text);
+}
+
+/* The outline: a tick on the edge for each person's message, pull
+ * request, and card that needs a person; hovering lists them. */
+.acme-outline {
+  position: absolute;
+  top: 8px;
+  right: 6px;
+  bottom: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  width: 22px;
+}
+
+.acme-outline-toggle {
+  display: inline-flex;
+  padding: 3px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--acme-muted);
+  cursor: pointer;
+}
+
+.acme-outline-toggle:hover,
+.acme-outline[data-open] .acme-outline-toggle {
+  background: var(--acme-surface-subtle);
+  color: var(--acme-text);
+}
+
+.acme-outline-rail {
+  position: relative;
+  flex: 1 1 auto;
+  width: 10px;
+  margin: 6px 6px 0 0;
+}
+
+.acme-outline-tick {
+  position: absolute;
+  right: 0;
+  width: 10px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--acme-border-strong);
+}
+
+.acme-outline-tick[data-kind="pull_request"] {
+  background: var(--acme-live);
+}
+
+.acme-outline-tick[data-kind="needs_you"] {
+  background: var(--acme-pending);
+}
+
+.acme-outline-list {
+  position: absolute;
+  top: 0;
+  right: 26px;
+  z-index: 5;
+  display: grid;
+  gap: 2px;
+  width: min(320px, 70vw);
+  max-height: 100%;
+  margin: 0;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--acme-border);
+  border-radius: 10px;
+  background: var(--acme-surface);
+  box-shadow: var(--acme-shadow-md);
+  list-style: none;
+}
+
+.acme-outline-list button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--acme-text);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.acme-outline-list button:hover,
+.acme-outline-list button:focus-visible {
+  background: var(--acme-surface-subtle);
+}
+
+.acme-outline-dot {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--acme-border-strong);
+}
+
+.acme-outline-dot[data-kind="pull_request"] {
+  background: var(--acme-live);
+}
+
+.acme-outline-dot[data-kind="needs_you"] {
+  background: var(--acme-pending);
+}
+
+.acme-outline-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acme-outline-list .acme-outline-end {
+  border-top: 1px solid var(--acme-border);
+  border-radius: 0 0 6px 6px;
+  color: var(--acme-muted);
 }
 
 .acme-jump {
@@ -2289,6 +2616,49 @@ select.acme-field {
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   line-height: 20px;
+}
+
+/* A parent's row and the chevron that folds its sub-agents. */
+.acme-side-row-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+
+.acme-side-row-line > .acme-side-row {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.acme-row-fold {
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-top: 6px;
+  padding: 3px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--acme-muted);
+  cursor: pointer;
+}
+
+.acme-row-fold:hover {
+  background: var(--acme-surface-subtle);
+  color: var(--acme-text);
+}
+
+.acme-row-tree {
+  overflow: hidden;
+  color: var(--acme-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acme-row-tree[data-needs-you] {
+  color: var(--acme-warning-text);
+  font-weight: 500;
 }
 
 .acme-sidebar-foot {

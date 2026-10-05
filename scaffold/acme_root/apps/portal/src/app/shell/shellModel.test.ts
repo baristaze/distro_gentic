@@ -1,9 +1,10 @@
 // The left bar's sessions: grouped by what they ask of a person, sub-agents
-// nested under their parent, and nothing that needs a person hidden in a
-// quieter group.
+// nested under their parent, a folded parent saying what it holds, and
+// nothing that needs a person hidden in a quieter group; and the toast a
+// session raises when it starts to need its person.
 import type { AgentSessionView, ParkView } from "@acme/client";
 import { expect, it } from "vitest";
-import { ago, DEFAULT_FILTER, groupOf, parseFilter, RECENT_MAX, shellGroups, statusWords, type ShellRow } from "./shellModel";
+import { ago, DEFAULT_FILTER, groupOf, needingYou, nextToasts, NO_TOASTS, parseFilter, RECENT_MAX, shellGroups, statusWords, treeWords, waitingBeneath, type ShellRow } from "./shellModel";
 
 let clock = 0;
 function session(id: string, over: Partial<AgentSessionView> = {}): AgentSessionView {
@@ -123,4 +124,70 @@ it("says how long ago, in the row's short words", () => {
   expect(ago("2026-10-05T09:00:00Z", now)).toBe("3h");
   expect(ago("2026-10-03T12:00:00Z", now)).toBe("2d");
   expect(ago("not a time", now)).toBe("");
+});
+
+it("counts a parent's sub-agents at every depth and how many need a person, which its folded row says", () => {
+  const groups = shellGroups(
+    [
+      session("root", { status: "parked", park: park("children", "children") }),
+      session("reads", { parent_id: "root", root_id: "root", status: "running" }),
+      session("asks", { parent_id: "root", root_id: "root", status: "parked", park: park("person", "answer") }),
+      session("deep", { parent_id: "reads", root_id: "root", status: "parked", park: park("person", "approval") }),
+    ],
+    options,
+  );
+  const [root] = groups.needsYou;
+  expect(root!.tree).toEqual({ count: 3, needsYou: 2 });
+  expect(root!.children.find((row) => row.id === "reads")!.tree).toEqual({ count: 1, needsYou: 1 });
+  expect(treeWords(root!.tree)).toBe("3 sub-agents · 2 need you");
+  expect(treeWords({ count: 2, needsYou: 1 })).toBe("2 sub-agents · 1 needs you");
+  expect(treeWords({ count: 1, needsYou: 0 })).toBe("1 sub-agent");
+});
+
+it("raises a toast when a session of the person's, or a sub-agent in a tree of theirs, starts to need them", () => {
+  const quiet = [
+    session("mine", { status: "running" }),
+    session("child", { parent_id: "theirs-root", root_id: "mine", status: "running", created_by: "u9" }),
+    session("theirs", { status: "running", created_by: "u2" }),
+  ];
+  // The first read takes what already waits as seen: the left bar shows it.
+  const first = nextToasts(NO_TOASTS, needingYou([...quiet, session("waiting", { status: "parked", park: park("person", "answer") })], "u1"), null);
+  expect(first.toasts).toEqual([]);
+  const asking = quiet.map((one) => (one.id === "child" ? { ...one, status: "parked" as const, park: park("person", "answer") } : one));
+  const holding = asking.map((one) => (one.id === "theirs" || one.id === "mine" ? { ...one, status: "parked" as const, park: park("person", "approval") } : one));
+  const raised = nextToasts(first, needingYou(holding, "u1", new Map([["mine", "run_command"]])), null);
+  expect(raised.toasts.map((toast) => [toast.id, toast.need, toast.asks])).toEqual([
+    ["mine", "Approve run_command", false],
+    ["child", "Answer its question", true],
+  ]);
+  // Nothing new: the same state, so the page draws nothing again.
+  expect(nextToasts(raised, needingYou(holding, "u1", new Map([["mine", "run_command"]])), null)).toBe(raised);
+  // Its page opening, or the need clearing, drops its toast; none comes back.
+  const opened = nextToasts(raised, needingYou(holding, "u1", new Map([["mine", "run_command"]])), "child");
+  expect(opened.toasts.map((toast) => toast.id)).toEqual(["mine"]);
+  expect(nextToasts(opened, needingYou(quiet, "u1"), null).toasts).toEqual([]);
+});
+
+it("finds, for each child, a session beneath it at any depth that waits on a person", () => {
+  const onChildren = { status: "parked" as const, park: park("children", "children") };
+  const asks = { status: "parked" as const, park: park("person", "answer") };
+  const sessions = [
+    session("root", onChildren),
+    session("lead", { ...onChildren, parent_id: "root" }),
+    session("helper", { ...asks, parent_id: "lead", title: "Check the fixture" }),
+    session("helper", { ...asks, parent_id: "lead", title: "Check the fixture" }),
+    session("deep", { ...onChildren, parent_id: "root" }),
+    session("middle", { ...onChildren, parent_id: "deep" }),
+    session("bottom", { ...asks, parent_id: "middle", title: "  " }),
+    session("quiet", { status: "running", parent_id: "root" }),
+    session("gone", { ...asks, parent_id: "quiet", archived_at: "2026-10-05T11:00:00Z" }),
+    session("self", { ...asks, parent_id: "root" }),
+  ];
+  const found = waitingBeneath(sessions, [{ id: "lead" }, { id: "deep" }, { id: "quiet" }, { id: "self" }]);
+  expect([...found]).toEqual([
+    ["lead", { id: "helper", title: "Check the fixture" }],
+    ["deep", { id: "bottom", title: "Untitled" }],
+  ]);
+  // A loop in the links ends the walk.
+  expect(waitingBeneath([session("a", { parent_id: "b" }), session("b", { parent_id: "a" })], [{ id: "a" }]).size).toBe(0);
 });

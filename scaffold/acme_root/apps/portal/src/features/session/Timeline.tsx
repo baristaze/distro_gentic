@@ -1,8 +1,9 @@
 // A session's history as a chat: each entry the timeline model makes, drawn
-// as its row, and the status line under the last. Nothing here reads or
-// decides: a row folds or opens, a call's line opens it in the pane, and a
-// card's button calls the view-model.
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+// as its row, the status line under the last, and the outline on its edge.
+// Nothing here reads or decides: a row folds or opens, a call's line opens
+// it in the pane, and a card's button calls the view-model. What a model or
+// a sub-agent wrote is drawn as text or as the kit's Markdown, never as HTML.
+import { useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Link } from "react-router-dom";
 import {
   AskIcon,
@@ -19,8 +20,11 @@ import {
   LogView,
   Markdown,
   Muted,
+  OutlineIcon,
+  ParentIcon,
   PlanIcon,
   PullRequestIcon,
+  ReportIcon,
   ResultIcon,
   SpinnerIcon,
   SubAgentIcon,
@@ -30,7 +34,7 @@ import {
   type KitIcon,
 } from "../../design/kit";
 import { shortTime } from "../sessions/sessionsModel";
-import { CUT_NOTE, duration, type BodyKind, type Call, type CallLine, type CallState, type CardKind, type Entry, type ThoughtEntry } from "./timelineModel";
+import { CUT_NOTE, duration, type BodyKind, type Call, type CallLine, type CallState, type CardKind, type ChildPhase, type Entry, type OutlineMark, type ThoughtEntry } from "./timelineModel";
 import type { SessionVm } from "./useSessionVm";
 
 /** A line's words, a `quoted` run drawn as code. */
@@ -273,20 +277,92 @@ function DeliveryCard({ entry }: { entry: Extract<Entry, { kind: "card" }> }) {
   );
 }
 
-function SubAgentCard({ entry }: { entry: Extract<Entry, { kind: "subagent" }> }) {
+const PHASE_DOTS: Record<ChildPhase, string> = { needs_you: "needs", working: "running", waiting: "waiting", done: "done" };
+
+/** The sub-agents one response started: a row each, live until it ends. */
+function SubAgentsCard({ entry }: { entry: Extract<Entry, { kind: "subagents" }> }) {
   return (
-    <section className="acme-tcard" data-card="subagent" aria-label="Sub-agent">
+    <section className="acme-tcard" data-card="subagents" aria-label={entry.title}>
       <header className="acme-tcard-head">
         <SubAgentIcon size={16} />
-        <span className="acme-tcard-kind">Sub-agent · {entry.agent}</span>
-        <StateMark state={entry.line.call.state} />
+        <strong>{entry.title}</strong>
       </header>
-      <strong className="acme-tcard-title">{entry.title}</strong>
-      {entry.childId ? (
-        <div className="acme-tcard-actions">
-          <Link to={`/sessions/${entry.childId}`}>Open</Link>
-        </div>
+      <ul className="acme-subagents" aria-label="Its sub-agents">
+        {entry.rows.map((row) => (
+          <li key={row.key} className="acme-subagent" data-phase={row.phase ?? undefined}>
+            <span className="acme-row-dot" data-dot={row.phase ? PHASE_DOTS[row.phase] : "waiting"} aria-hidden="true" />
+            <span className="acme-subagent-main">
+              <span className="acme-subagent-title">{row.title}</span>
+              <span className="acme-subagent-doing">
+                <span className="acme-subagent-agent">{row.agent}</span>
+                <span className="acme-subagent-words">
+                  <Gist text={row.activity ?? row.words} />
+                </span>
+              </span>
+            </span>
+            {row.seconds !== null ? <span className="acme-subagent-time">{duration(row.seconds)}</span> : null}
+            {row.childId ? (
+              <Link className="acme-subagent-open" to={`/sessions/${row.childId}`} aria-label={`Open ${row.title}`}>
+                Open
+              </Link>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/** A sub-agent's report: how its loop stands, its last answer folded, and
+ * the way to the child. */
+function ReportCard({ entry }: { entry: Extract<Entry, { kind: "report" }> }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <section className="acme-tcard" data-card="report" aria-label={`Report from ${entry.title}`}>
+      <header className="acme-tcard-head">
+        <ReportIcon size={16} />
+        <span className="acme-tcard-kind">
+          Report from <strong className="acme-tcard-who">{entry.title}</strong>
+        </span>
+        <Muted>{shortTime(entry.at)}</Muted>
+      </header>
+      <span className="acme-report-outcome" data-tone={entry.tone}>
+        {entry.outcome}
+      </span>
+      {entry.text ? (
+        <>
+          <button type="button" className="acme-fold-line" aria-expanded={open} onClick={() => setOpen(!open)}>
+            <ChevronRightIcon size={14} className="acme-fold-mark" />
+            <span>The report</span>
+          </button>
+          {open ? (
+            <div className="acme-tcard-body">
+              <Markdown text={entry.text} />
+            </div>
+          ) : null}
+        </>
       ) : null}
+      <div className="acme-tcard-actions">
+        <Link to={`/sessions/${entry.childId}`} aria-label={`Open ${entry.title}`}>
+          Open
+        </Link>
+      </div>
+    </section>
+  );
+}
+
+/** What the session that started this one asked of it, linking back. */
+function FromCard({ entry }: { entry: Extract<Entry, { kind: "from" }> }) {
+  return (
+    <section className="acme-tcard" data-card="from" aria-label={`From ${entry.title}`}>
+      <header className="acme-tcard-head">
+        <ParentIcon size={16} />
+        <span className="acme-tcard-kind">
+          From <Link to={`/sessions/${entry.sessionId}`}>{entry.title}</Link>
+        </span>
+        <Muted>{shortTime(entry.at)}</Muted>
+      </header>
+      <Markdown text={entry.text} />
     </section>
   );
 }
@@ -350,8 +426,12 @@ function EntryRow({ entry, vm }: { entry: Entry; vm: SessionVm }): ReactNode {
       return <AskCard entry={entry} vm={vm} />;
     case "card":
       return <DeliveryCard entry={entry} />;
-    case "subagent":
-      return <SubAgentCard entry={entry} />;
+    case "subagents":
+      return <SubAgentsCard entry={entry} />;
+    case "report":
+      return <ReportCard entry={entry} />;
+    case "from":
+      return <FromCard entry={entry} />;
     case "product": {
       const card = vm.tools[entry.line.call.tool]?.card;
       return card && vm.slotSession ? card(vm.slotSession, entry.line.call) : <CallRow line={entry.line} onOpen={vm.openCall} />;
@@ -371,6 +451,73 @@ function EntryRow({ entry, vm }: { entry: Entry; vm: SessionVm }): ReactNode {
 /** Near enough to the end that new rows keep it in view. */
 const NEAR_END_PX = 80;
 
+/** The ticks on the timeline's edge, each where its row sits in the whole
+ * history. Hovering, or its button, lists them; a click scrolls there. */
+function Outline({ marks, scroller, onEnd }: { marks: readonly OutlineMark[]; scroller: RefObject<HTMLDivElement | null>; onEnd: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [places, setPlaces] = useState<ReadonlyMap<string, number>>(new Map());
+  const rowOf = (key: string) => scroller.current?.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"]`) ?? null;
+  // Each tick sits where its row does, read again whenever the history's
+  // height changes.
+  useLayoutEffect(() => {
+    const box = scroller.current;
+    const list = box?.firstElementChild;
+    // Where no observer is (a page drawn outside a browser), no tick is placed.
+    if (!box || !list || marks.length === 0 || typeof ResizeObserver !== "function") return;
+    const place = () => {
+      const height = Math.max(1, box.scrollHeight);
+      const rowAt = (key: string) => box.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"]`)?.offsetTop ?? 0;
+      setPlaces(new Map(marks.map((mark) => [mark.key, Math.min(1, rowAt(mark.key) / height)])));
+    };
+    const watch = new ResizeObserver(place);
+    watch.observe(list);
+    return () => watch.disconnect();
+  }, [marks, scroller]);
+  if (marks.length === 0) return null;
+  const go = (key: string) => {
+    rowOf(key)?.scrollIntoView({ block: "center" });
+    setOpen(false);
+  };
+  return (
+    <nav className="acme-outline" aria-label="Outline" data-open={open || undefined} onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+      <button type="button" className="acme-outline-toggle" aria-expanded={open} aria-label="Outline" title="Outline" onClick={() => setOpen(!open)}>
+        <OutlineIcon size={14} />
+      </button>
+      <div className="acme-outline-rail" aria-hidden="true">
+        {marks.map((mark) => (
+          <span key={mark.key} className="acme-outline-tick" data-kind={mark.kind} style={{ top: `${(places.get(mark.key) ?? 0) * 100}%` }} />
+        ))}
+      </div>
+      {open ? (
+        <ul className="acme-outline-list">
+          {marks.map((mark) => (
+            <li key={mark.key}>
+              <button type="button" data-kind={mark.kind} onClick={() => go(mark.key)}>
+                <span className="acme-outline-dot" data-kind={mark.kind} aria-hidden="true" />
+                <span className="acme-outline-label">{mark.label}</span>
+                <Muted>{shortTime(mark.at)}</Muted>
+              </button>
+            </li>
+          ))}
+          <li>
+            <button
+              type="button"
+              className="acme-outline-end"
+              onClick={() => {
+                onEnd();
+                setOpen(false);
+              }}
+            >
+              <JumpIcon size={14} />
+              <span>Jump to latest</span>
+            </button>
+          </li>
+        </ul>
+      ) : null}
+    </nav>
+  );
+}
+
 /** The chat, scrolled to its end while the reader is there; a reader who
  * scrolled up keeps their place, and a button takes them to the latest. */
 export function Timeline({ vm }: { vm: SessionVm }) {
@@ -388,37 +535,48 @@ export function Timeline({ vm }: { vm: SessionVm }) {
     const box = scroller.current;
     if (box) setAtEnd(box.scrollHeight - box.scrollTop - box.clientHeight < NEAR_END_PX);
   };
+  const status = chat?.status;
   return (
-    <div className="acme-chat-scroll" ref={scroller} onScroll={onScroll}>
-      <ol className="acme-chat" aria-label="Timeline">
-        {chat === null ? (
-          <li>
-            <Muted>{vm.stepsError ? "The history could not be read." : "Loading"}</Muted>
-          </li>
-        ) : null}
-        {chat?.entries.length === 0 ? (
-          <li>
-            <Muted>Nothing yet. A message wakes the session.</Muted>
-          </li>
-        ) : null}
-        {chat?.entries.map((entry) => (
-          <li key={entry.key} className="acme-chat-row" data-kind={entry.kind}>
-            <EntryRow entry={entry} vm={vm} />
-          </li>
-        ))}
-        {chat ? (
-          <li className="acme-chat-status" data-needs-you={chat.status.needsYou || undefined} role="status">
-            {chat.status.working ? <SpinnerIcon size={14} className="acme-spin" /> : null}
-            <span>{chat.status.text}</span>
-          </li>
-        ) : null}
-      </ol>
-      {atEnd ? null : (
-        <button type="button" className="acme-jump" onClick={toEnd}>
-          <JumpIcon size={14} />
-          <span>Jump to latest</span>
-        </button>
-      )}
+    <div className="acme-chat-frame">
+      <div className="acme-chat-scroll" ref={scroller} onScroll={onScroll}>
+        <ol className="acme-chat" aria-label="Timeline">
+          {chat === null ? (
+            <li>
+              <Muted>{vm.stepsError ? "The history could not be read." : "Loading"}</Muted>
+            </li>
+          ) : null}
+          {chat?.entries.length === 0 ? (
+            <li>
+              <Muted>Nothing yet. A message wakes the session.</Muted>
+            </li>
+          ) : null}
+          {chat?.entries.map((entry) => (
+            <li key={entry.key} className="acme-chat-row" data-kind={entry.kind} data-key={entry.key}>
+              <EntryRow entry={entry} vm={vm} />
+            </li>
+          ))}
+          {status ? (
+            <li className="acme-chat-status" data-needs-you={status.needsYou || undefined} role="status">
+              {status.working ? <SpinnerIcon size={14} className="acme-spin" /> : null}
+              <span>
+                <Gist text={status.text} />
+              </span>
+              {status.open ? (
+                <Link className="acme-chat-status-open" to={`/sessions/${status.open}`}>
+                  Open
+                </Link>
+              ) : null}
+            </li>
+          ) : null}
+        </ol>
+        {atEnd ? null : (
+          <button type="button" className="acme-jump" onClick={toEnd}>
+            <JumpIcon size={14} />
+            <span>Jump to latest</span>
+          </button>
+        )}
+      </div>
+      <Outline marks={vm.marks} scroller={scroller} onEnd={toEnd} />
     </div>
   );
 }

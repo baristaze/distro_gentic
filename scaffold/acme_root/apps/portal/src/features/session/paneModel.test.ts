@@ -8,6 +8,7 @@ import type { SessionTab, SlotSession } from "../../app/product";
 import {
   addable,
   changedFiles,
+  childGroups,
   closeTab,
   delivered,
   KEPT_PANES,
@@ -234,4 +235,30 @@ describe("what the platform's tabs read from the calls", () => {
     expect(delivered([...calls, call("u6", { tool: "open_pull_request" })])).toBe(true);
     expect(delivered([call("u7", { tool: "open_pull_request", state: "held" })])).toBe(false);
   });
+});
+
+it("groups a session's sub-agents by where each stands: needs you, working, done", () => {
+  const child = (id: string, status: "running" | "parked" | "idle", park: { reason: "person" | "budget"; unlock: string; retry_at: null } | null = null) => ({
+    id,
+    title: id,
+    kind: "analysis",
+    status,
+    park,
+    archived_at: null,
+    created_at: "2026-10-05T10:00:00Z",
+    activity: null,
+    waits: null,
+  });
+  const groups = childGroups([
+    child("reads", "running"),
+    child("asks", "parked", { reason: "person", unlock: "answer", retry_at: null }),
+    child("spends", "parked", { reason: "budget", unlock: "budget", retry_at: null }),
+    child("done", "idle"),
+  ]);
+  expect(groups.map((group) => [group.label, group.children.map((one) => one.id)])).toEqual([
+    ["Needs you", ["asks"]],
+    ["Working", ["reads", "spends"]],
+    ["Done", ["done"]],
+  ]);
+  expect(childGroups([child("done", "idle")]).map((group) => group.label)).toEqual(["Done"]);
 });

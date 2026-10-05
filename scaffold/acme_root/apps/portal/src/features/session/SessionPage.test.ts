@@ -57,6 +57,7 @@ const step = (seq: number, fields: Partial<StepView>): StepView => ({
   thinking: "",
   tool_uses: [],
   tool_use_id: null,
+  agent: null,
   created_at: at,
   command: null,
   failure: null,

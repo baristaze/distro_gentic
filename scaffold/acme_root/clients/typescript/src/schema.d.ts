@@ -3052,6 +3052,22 @@ export interface components {
             shell: string;
         };
         /**
+         * AgentRefView
+         * @description The agent that wrote a message: its kind and the session it runs in.
+         *     The session is one of the same tree, which a reader of this session
+         *     reads too: a sub-agent's report names the child, a child's objective
+         *     its parent.
+         */
+        AgentRefView: {
+            /** Kind */
+            kind: string;
+            /**
+             * Session Id
+             * Format: uuid
+             */
+            session_id: string;
+        };
+        /**
          * AgentSessionPageView
          * @description One page of sessions, by id. `next_cursor` fetches the next page and
          *     is null on the last one.
@@ -6848,13 +6864,15 @@ export interface components {
          *     (`tool_uses`); a tool response names the call it answers
          *     (`tool_use_id`). Each of these is the step's content: where it is gone,
          *     its session's key revoked or its content never kept here, each is empty
-         *     as `text` is. The rest is its header's, by type: the tools a model
+         *     as `text` is. The rest is its header's, by type: the agent that wrote a
+         *     message, on a message an agent wrote (`agent`); the tools a model
          *     response called, why it stopped, and what it used; a tool call's tool,
          *     the id of the call it runs, and the class of its failure; a control's
          *     command; a park; a loop's outcome.
          */
         StepView: {
             actor: components["schemas"]["Actor"];
+            agent: components["schemas"]["AgentRefView"] | null;
             command: components["schemas"]["ControlCommand"] | null;
             /**
              * Created At
