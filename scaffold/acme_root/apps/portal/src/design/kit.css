@@ -1389,8 +1389,9 @@ select.acme-field {
   color: var(--acme-text);
 }
 
-/* One line high: a label with no room for all of it wraps under the
- * icon, out of sight, so a narrowed tab never shows a cut letter. */
+/* One line high, with no padding above or below it: a label with no room
+ * for all of it wraps under the icon, wholly out of sight, so a narrowed
+ * tab never shows a cut letter. */
 .acme-pane-tab-name {
   display: inline-flex;
   flex-wrap: wrap;
@@ -1401,18 +1402,21 @@ select.acme-field {
   height: 30px;
   min-width: 0;
   overflow: hidden;
-  padding: 5px 4px 5px 8px;
+  padding: 0 4px 0 8px;
   border: 0;
   background: transparent;
   color: inherit;
   font: inherit;
   font-size: 13px;
-  line-height: 20px;
+  line-height: 30px;
   cursor: pointer;
 }
 
+/* The icon's box is the line's whole height, its drawing centred in it,
+ * so the line it keeps alone is as high as the tab. */
 .acme-pane-tab-name > svg {
   flex-shrink: 0;
+  height: 30px;
 }
 
 .acme-pane-tab-name > span {
