@@ -38,8 +38,8 @@ export const PLATFORM_GISTS: Readonly<Record<string, Gist>> = {
     const path = asked(input, "path");
     return `${verb(output, "Searched", "Search")} for ${quoted(asked(input, "pattern"))}${path && path !== "." ? ` in ${path}` : ""}`;
   },
-  write_file: (input, output) => `${verb(output, "Wrote", "Write")} ${asked(input, "path") ?? "a file"} ${counts("", asked(input, "text") ?? "")}`,
-  edit_file: (input, output) => `${verb(output, "Edited", "Edit")} ${asked(input, "path") ?? "a file"} ${counts(asked(input, "old_text") ?? "", asked(input, "new_text") ?? "")}`,
+  write_file: (input, output) => `${verb(output, "Wrote", "Write")} ${asked(input, "path") ?? "a file"} ${counts("", asked(input, "text") ?? "")}`.trim(),
+  edit_file: (input, output) => `${verb(output, "Edited", "Edit")} ${asked(input, "path") ?? "a file"} ${counts(asked(input, "old_text") ?? "", asked(input, "new_text") ?? "")}`.trim(),
   run_command: (input, output) => {
     const code = exitCode(output);
     const line = commandLine((input as Record<string, unknown> | null)?.["argv"]);

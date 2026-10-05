@@ -1491,6 +1491,14 @@ select.acme-field {
   margin: 4px 0 8px 28px;
 }
 
+/* Under what the view cut short: it says the rest is not shown. */
+.acme-cut-note {
+  margin: 4px 0 0;
+  color: var(--acme-muted);
+  font-size: 12px;
+  font-style: italic;
+}
+
 /* A card in the chat: what the session asks of a person, or delivers. */
 .acme-tcard {
   display: grid;
