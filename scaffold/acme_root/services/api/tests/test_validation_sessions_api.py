@@ -200,8 +200,7 @@ async def test_a_member_starts_a_validation_under_its_key_and_reads_its_verdict(
 
 
 # A start on an API key runs at the key's role: the run never acts at the
-# role its starter's membership holds above the key, nor after the key is
-# revoked.
+# role its starter's membership holds above the key.
 
 
 async def test_a_session_started_on_a_key_runs_at_the_keys_role_while_it_holds(
@@ -242,18 +241,40 @@ async def test_a_session_started_on_a_key_runs_at_the_keys_role_while_it_holds(
     assert (finished.json()["status"], finished.json()["passed"]) == ("finished", True)
 
 
-    # Revoked before its run, the key runs nothing: the run fails for good.
-    queued = await client.post(
-        URL,
-        headers={**key, "Idempotency-Key": "on-key-revoked"},
-        json=start_of(ajax.project_id, head="e" * 40),
+# A session whose key is revoked between its start and its run runs nothing
+# and reads refused, with its reason, so a CI job polling it stops waiting.
+
+
+async def test_a_session_whose_key_is_revoked_before_its_run_reads_refused(
+    client: httpx.AsyncClient, container: AppContainer, executor: ScriptedExecutor
+) -> None:
+    ajax = await tenant(client, container, "ajax")
+    admin = await person(client, container, ajax.org_id, Role.ADMIN)
+    minted = await client.post(
+        "/v1/api-keys",
+        headers={**admin, "Idempotency-Key": "mint-ci-key"},
+        json={"name": "ci", "role": "member"},
     )
-    assert queued.status_code == 201, queued.text
-    revoked = await client.delete(f"/v1/api-keys/{minted.json()['api_key']['id']}", headers=admin)
+    assert minted.status_code == 201, minted.text
+    key_id = minted.json()["api_key"]["id"]
+    started = await client.post(
+        URL,
+        headers={"Authorization": f"Bearer {minted.json()['key']}"},
+        json=start_of(ajax.project_id),
+    )
+    assert started.status_code == 201, started.text
+    revoked = await client.delete(f"/v1/api-keys/{key_id}", headers=admin)
     assert revoked.status_code == 200, revoked.text
-    with pytest.raises(PreconditionFailed, match="runs on its starter's authority"):
-        await worker_runs(container)
-    assert len(executor.requests) == 2, "the revoked key's check never ran"
+
+    assert len(await worker_refuses(container)) == 1
+    read = await client.get(f"{URL}/{started.json()['id']}", headers=admin)
+
+    assert read.status_code == 200, read.text
+    verdict = read.json()
+    assert (verdict["status"], verdict["passed"], verdict["run"]) == ("refused", False, None)
+    assert f"runs on its starter's authority: api key {key_id}" in verdict["reason"]
+    assert executor.requests == [], "the revoked key's check never ran"
+    assert await worker_runs(container) == 0, "nothing of it is left on the queue"
 
 
 # The verdict holds the grade: a run that passed counts only when what served
