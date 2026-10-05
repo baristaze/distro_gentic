@@ -247,6 +247,7 @@ it("groups a session's sub-agents by where each stands: needs you, working, done
     archived_at: null,
     created_at: "2026-10-05T10:00:00Z",
     activity: null,
+    waits: null,
   });
   const groups = childGroups([
     child("reads", "running"),

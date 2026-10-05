@@ -232,6 +232,39 @@ export function nextToasts(state: ToastState, needing: ReadonlyMap<string, Needs
   return unchanged ? state : { seen: ids, toasts };
 }
 
+/** For each child, the first session beneath it, at any depth, that waits on
+ * a person: a sub-agent's own sub-agent that needs them shows on each
+ * session above it. Read from the sessions the shell keeps (every parked
+ * one, and the newest), linked by `parent_id`, with no read of its own. A
+ * child with none waiting beneath it is not in the map. */
+export function waitingBeneath(
+  sessions: readonly AgentSessionView[],
+  children: readonly Pick<AgentSessionView, "id">[],
+): Map<string, { id: string; title: string }> {
+  const below = new Map<string, AgentSessionView[]>();
+  const listed = new Set<string>();
+  for (const session of sessions) {
+    if (listed.has(session.id) || session.parent_id === null) continue;
+    listed.add(session.id);
+    below.set(session.parent_id, [...(below.get(session.parent_id) ?? []), session]);
+  }
+  const found = new Map<string, { id: string; title: string }>();
+  for (const child of children) {
+    const seen = new Set([child.id]);
+    const next = [...(below.get(child.id) ?? [])];
+    for (let session = next.shift(); session !== undefined; session = next.shift()) {
+      if (seen.has(session.id)) continue;
+      seen.add(session.id);
+      if (needsYou(session)) {
+        found.set(child.id, { id: session.id, title: session.title.trim() || "Untitled" });
+        break;
+      }
+      next.push(...(below.get(session.id) ?? []));
+    }
+  }
+  return found;
+}
+
 /** What a row that folds its sub-agents says of them: "2 sub-agents · 1
  * needs you". */
 export function treeWords(tree: ShellRow["tree"]): string {

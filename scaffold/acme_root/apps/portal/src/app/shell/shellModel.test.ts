@@ -4,7 +4,7 @@
 // session raises when it starts to need its person.
 import type { AgentSessionView, ParkView } from "@acme/client";
 import { expect, it } from "vitest";
-import { ago, DEFAULT_FILTER, groupOf, needingYou, nextToasts, NO_TOASTS, parseFilter, RECENT_MAX, shellGroups, statusWords, treeWords, type ShellRow } from "./shellModel";
+import { ago, DEFAULT_FILTER, groupOf, needingYou, nextToasts, NO_TOASTS, parseFilter, RECENT_MAX, shellGroups, statusWords, treeWords, waitingBeneath, type ShellRow } from "./shellModel";
 
 let clock = 0;
 function session(id: string, over: Partial<AgentSessionView> = {}): AgentSessionView {
@@ -166,4 +166,28 @@ it("raises a toast when a session of the person's, or a sub-agent in a tree of t
   const opened = nextToasts(raised, needingYou(holding, "u1", new Map([["mine", "run_command"]])), "child");
   expect(opened.toasts.map((toast) => toast.id)).toEqual(["mine"]);
   expect(nextToasts(opened, needingYou(quiet, "u1"), null).toasts).toEqual([]);
+});
+
+it("finds, for each child, a session beneath it at any depth that waits on a person", () => {
+  const onChildren = { status: "parked" as const, park: park("children", "children") };
+  const asks = { status: "parked" as const, park: park("person", "answer") };
+  const sessions = [
+    session("root", onChildren),
+    session("lead", { ...onChildren, parent_id: "root" }),
+    session("helper", { ...asks, parent_id: "lead", title: "Check the fixture" }),
+    session("helper", { ...asks, parent_id: "lead", title: "Check the fixture" }),
+    session("deep", { ...onChildren, parent_id: "root" }),
+    session("middle", { ...onChildren, parent_id: "deep" }),
+    session("bottom", { ...asks, parent_id: "middle", title: "  " }),
+    session("quiet", { status: "running", parent_id: "root" }),
+    session("gone", { ...asks, parent_id: "quiet", archived_at: "2026-10-05T11:00:00Z" }),
+    session("self", { ...asks, parent_id: "root" }),
+  ];
+  const found = waitingBeneath(sessions, [{ id: "lead" }, { id: "deep" }, { id: "quiet" }, { id: "self" }]);
+  expect([...found]).toEqual([
+    ["lead", { id: "helper", title: "Check the fixture" }],
+    ["deep", { id: "bottom", title: "Untitled" }],
+  ]);
+  // A loop in the links ends the walk.
+  expect(waitingBeneath([session("a", { parent_id: "b" }), session("b", { parent_id: "a" })], [{ id: "a" }]).size).toBe(0);
 });

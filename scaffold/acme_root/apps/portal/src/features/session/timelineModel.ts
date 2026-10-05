@@ -95,6 +95,9 @@ export interface ChildState {
   /** What it does now, read from its own history ("Running `pytest -q`");
    * null while that is not read. */
   activity: string | null;
+  /** A session beneath it, at any depth, that waits on a person; null when
+   * none does. */
+  waits: { id: string; title: string } | null;
 }
 
 /** One child in the card of the response that started it. */
@@ -184,9 +187,10 @@ export const SPAWN_TOOLS: ReadonlySet<string> = new Set(["spawn", "spawn_sub_age
 export const spawns = (tool: string) => SPAWN_TOOLS.has(tool) || tool.startsWith("hand_off");
 const handsOff = (tool: string) => tool.startsWith("hand_off");
 
-/** Where a sub-agent stands. An archived one is done with. */
-export function childPhase(child: Pick<ChildState, "status" | "park" | "archived_at">): ChildPhase {
-  if (needsYou(child)) return "needs_you";
+/** Where a sub-agent stands: it needs a person when it waits on one, or a
+ * session beneath it does. An archived one is done with. */
+export function childPhase(child: Pick<ChildState, "status" | "park" | "archived_at" | "waits">): ChildPhase {
+  if (needsYou(child) || child.waits !== null) return "needs_you";
   if (child.archived_at !== null || child.status === "idle") return "done";
   if (child.status === "running" || child.status === "pending") return "working";
   return "waiting";
@@ -194,11 +198,24 @@ export function childPhase(child: Pick<ChildState, "status" | "park" | "archived
 
 const PHASE_WORDS: Record<ChildPhase, string> = { needs_you: "needs you", working: "working", waiting: "waiting", done: "done" };
 
-/** A child's status in words, by its phase: "Needs you: an answer". */
+/** The session that needs a person in a child's stead: one beneath it that
+ * waits on one, while the child itself does not. */
+const beneath = (child: Pick<ChildState, "status" | "park" | "archived_at" | "waits">) => (needsYou(child) ? null : child.waits);
+
+/** A child's status in words, by its phase: "Needs you: an answer", "Needs
+ * you in a sub-agent: Check the fixture". */
 export function childWords(child: ChildState): string {
+  const below = beneath(child);
+  if (below) return `Needs you in a sub-agent: ${oneLine(below.title, 60)}`;
   const phase = childPhase(child);
   if (phase === "working") return "Working";
   return statusWords(child);
+}
+
+/** What a child does now, read from its own history, unless a session
+ * beneath it waits on a person: then its words say that instead. */
+export function childActivity(child: ChildState): string | null {
+  return beneath(child) ? null : child.activity;
 }
 
 /** The words of a report's first line: how the child's loop stands. The
@@ -540,7 +557,7 @@ export function timeline(given: TimelineInput): Timeline {
       childId,
       phase,
       words: child ? childWords(child) : STARTS[call.state],
-      activity: phase === "working" || phase === "needs_you" ? (child?.activity ?? null) : null,
+      activity: child && (phase === "working" || phase === "needs_you") ? childActivity(child) : null,
       seconds: to === null ? null : seconds(from, to),
     };
   };
@@ -870,7 +887,7 @@ function spawnedTitle(calls: ReadonlyMap<string, Call>, child: string): string |
  * sub-agents · Fix the flaky test: working · Check the fixture: needs you". */
 export function childrenLine(children: readonly ChildState[]): string {
   const n = children.length;
-  const each = children.map((child) => `${oneLine(child.title, 60)}: ${PHASE_WORDS[childPhase(child)]}`);
+  const each = children.map((child) => `${oneLine(child.title, 60)}: ${beneath(child) ? "needs you in a sub-agent" : PHASE_WORDS[childPhase(child)]}`);
   return [`Waiting on ${n === 1 ? "a sub-agent" : `${n} sub-agents`}`, ...each].join(" · ");
 }
 
@@ -933,9 +950,11 @@ function statusRow(input: TimelineInput, entries: readonly Entry[]): StatusRow {
     return row(asking ? "Needs you: answer the agent's question" : statusWords(session), true);
   }
   // A sub-agent that waits on a person needs them here too, whatever its
-  // parent does meanwhile.
+  // parent does meanwhile, and so does one beneath it: the line opens the
+  // one that waits.
   const waiting = input.children.find((child) => childPhase(child) === "needs_you");
-  if (waiting) return row(`Needs you in a sub-agent: ${oneLine(waiting.title, 80)}`, true, false, waiting.id);
+  const needer = waiting ? (beneath(waiting) ?? waiting) : null;
+  if (needer) return row(`Needs you in a sub-agent: ${oneLine(needer.title, 80)}`, true, false, needer.id);
   // A session reads pending until its first run parks or ends: once that
   // run streams or writes past its input, it works.
   const last = input.steps[input.steps.length - 1];

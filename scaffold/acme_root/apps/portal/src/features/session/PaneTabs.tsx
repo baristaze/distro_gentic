@@ -35,7 +35,7 @@ import { changedFiles, childGroups, delivered, latestPlan, stepOf, type ChildGro
 import { runRow, usageLine, type RunRow } from "./sessionModel";
 import { useSessionPage } from "./sessionContext";
 import { Body, StateMark } from "./Timeline";
-import { CUT_NOTE, callLine, childPhase, childWords, duration, editDiff, editOf, outputText, bodyKindOf } from "./timelineModel";
+import { CUT_NOTE, callLine, childActivity, childPhase, childWords, duration, editDiff, editOf, outputText, bodyKindOf } from "./timelineModel";
 
 const count = (n: number) => n.toLocaleString("en-US");
 
@@ -339,7 +339,7 @@ function SubAgentsTab() {
                     <span className="acme-subagent-title">{child.title}</span>
                     <span className="acme-subagent-doing">
                       <span className="acme-subagent-agent">{child.kind}</span>
-                      <span className="acme-subagent-words">{group.phase === "done" ? `Started ${shortTime(child.created_at)}` : (child.activity ?? childWords(child))}</span>
+                      <span className="acme-subagent-words">{group.phase === "done" ? `Started ${shortTime(child.created_at)}` : (childActivity(child) ?? childWords(child))}</span>
                     </span>
                   </span>
                   <Link className="acme-subagent-open" to={`/sessions/${child.id}`} aria-label={`Open ${child.title}`}>

@@ -3,6 +3,8 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { ApiError, type AgentSessionView } from "@acme/client";
 import { errorMessage } from "../../app/errorMessage";
 import type { SlotSession } from "../../app/product";
+import { useShellSessions } from "../../app/shell/shellContext";
+import { waitingBeneath } from "../../app/shell/shellModel";
 import { useSlot } from "../../app/slot";
 import type { PaletteCommand } from "../../design/kit";
 import { useAgentSession, useApprovals, useChildren, useChildSteps, useCommandProgress, useDelivery, useSessionActions, useSessionRecords, useSteps } from "../../queries/agentSessions";
@@ -27,6 +29,7 @@ const stateOf = (other: AgentSessionView): ChildState => ({
   archived_at: other.archived_at,
   created_at: other.created_at,
   activity: null,
+  waits: null,
 });
 
 /** The time now, read again every second while `ticking`: a running block's
@@ -76,6 +79,10 @@ export function useSessionVm(id: string) {
   const childList = useChildren(id, found);
   const childRecords = childList.data ?? NONE;
   const childSteps = useChildSteps(childRecords);
+  // What waits on a person beneath each child, from the sessions the shell
+  // keeps live: a sub-agent's sub-agent is no child of this one.
+  const listed = useShellSessions();
+  const waits = useMemo(() => waitingBeneath(listed, childRecords), [listed, childRecords]);
   const parentId = session.data?.parent_id ?? null;
   const parentRead = useAgentSession(parentId ?? "", parentId !== null);
   // The sessions its hand-offs started, each read as its own page reads it:
@@ -218,9 +225,9 @@ export function useSessionVm(id: string) {
       childRecords.map((child, index) => {
         const read = childSteps[index];
         const own = read ? timeline({ steps: read, live: [], session: child, held: [], gists, carded, children: [], handed: [], parent: null, now }).status.text : null;
-        return { ...stateOf(child), activity: own };
+        return { ...stateOf(child), activity: own, waits: waits.get(child.id) ?? null };
       }),
-    [childRecords, childSteps, gists, carded, now],
+    [childRecords, childSteps, waits, gists, carded, now],
   );
   const handed = useMemo<ChildState[]>(() => handedRecords.map(stateOf), [handedRecords]);
   const parentData = parentRead.data;

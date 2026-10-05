@@ -60,6 +60,8 @@ export function useShellVm() {
 
   return {
     nav: slot.nav,
+    /** Every session the bar holds, as read: what a page reads a tree from. */
+    sessions,
     groups,
     now,
     loading: newest.isPending || parked.isPending,

@@ -13,7 +13,7 @@ import { useSlot } from "../slot";
 import { THEME_CHOICES } from "../themeModel";
 import { LeftBar } from "./LeftBar";
 import { NeedsYouToasts } from "./NeedsYouToasts";
-import { ShellContext, type ShellActions } from "./shellContext";
+import { ShellContext, ShellSessionsContext, type ShellActions } from "./shellContext";
 import { SEARCH_PLACEHOLDER, shellCommands, shellKey, startCommands } from "./paletteModel";
 import { SettingsBar } from "./SettingsBar";
 import { inSettings } from "./settingsNavModel";
@@ -93,7 +93,7 @@ export function Shell({ children }: { children: ReactNode }) {
               </Tooltip>
             </div>
           ) : null}
-          {children}
+          <ShellSessionsContext.Provider value={vm.sessions}>{children}</ShellSessionsContext.Provider>
         </div>
       </div>
       {searching ? (

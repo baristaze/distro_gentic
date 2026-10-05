@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { StepView } from "@acme/client";
 import type { LiveStream } from "../../queries/live";
 import { commandLine, PLATFORM_GISTS } from "./toolGists";
+import { childGroups } from "./paneModel";
 import { answers, bodyKindOf, callsOf, childrenLine, doing, duration, editDiff, handedTo, isCut, MAX_SHOWN, outline, readReport, timeline, type ChildState, type Entry, type TimelineInput } from "./timelineModel";
 
 const T0 = Date.parse("2026-10-05T10:00:00Z");
@@ -322,7 +323,7 @@ const C2 = "0a1b2c3d-0000-4000-8000-000000000002";
 const PARENT = "0a1b2c3d-0000-4000-8000-0000000000ff";
 
 function child(id: string, title: string, fields: Partial<ChildState> = {}): ChildState {
-  return { id, title, kind: "analysis", status: "running", park: null, archived_at: null, created_at: at(10), activity: null, ...fields };
+  return { id, title, kind: "analysis", status: "running", park: null, archived_at: null, created_at: at(10), activity: null, waits: null, ...fields };
 }
 const asksPerson = { reason: "person" as const, unlock: "answer", retry_at: null };
 const READS = child(C1, "Read how the other parsers take a date", { activity: "Running `pytest -q`" });
@@ -470,6 +471,26 @@ describe("sub-agents", () => {
     expect(running.status).toMatchObject({ needsYou: true, open: C2 });
     // With no child waiting, it says what it waits on.
     expect(read([...twoSpawns(), parked], { session: onChildren, children: [READS] }).status).toMatchObject({ text: "Waiting on its sub-agents", needsYou: false });
+  });
+});
+
+describe("a session beneath a sub-agent that waits on a person", () => {
+  it("turns the root's status line, its child's row and park line, and the Sub-agents tab to it", () => {
+    const G = "0a1b2c3d-0000-4000-8000-0000000000bb";
+    // The child waits on its own sub-agents; one of them waits on its person.
+    const lead = child(C2, CHECKS.title, { status: "parked", park: onChildren.park, activity: "Waiting on its sub-agents", waits: { id: G, title: "Ask which date order" } });
+    const parked = step({ type: "parked", park: onChildren.park }, 6);
+    const root = read([...twoSpawns(), parked], { session: onChildren, children: [READS, lead] });
+    expect(root.status).toEqual({ text: "Needs you in a sub-agent: Ask which date order", needsYou: true, working: false, open: G });
+    expect(only(root.entries, "subagents").rows[1]).toMatchObject({ childId: C2, phase: "needs_you", words: "Needs you in a sub-agent: Ask which date order", activity: null });
+    expect(root.entries.at(-1)).toMatchObject({ text: `Waiting on 2 sub-agents · ${READS.title}: working · ${CHECKS.title}: needs you in a sub-agent` });
+    expect(childGroups([READS, lead]).map((group) => [group.label, group.children.map((one) => one.id)])).toEqual([
+      ["Needs you", [C2]],
+      ["Working", [C1]],
+    ]);
+    // A child that itself waits on its person is the one the line opens.
+    const both = read([...twoSpawns(), parked], { session: onChildren, children: [READS, { ...CHECKS, waits: { id: G, title: "Ask which date order" } }] });
+    expect(both.status).toMatchObject({ text: `Needs you in a sub-agent: ${CHECKS.title}`, open: C2 });
   });
 });
 
