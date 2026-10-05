@@ -33,7 +33,9 @@ class ValidationSessionView(View):
     was not there, never passes. A check a requirement rates runs its
     declared trials and passes only as that requirement judges them
     together, so one lucky trial never passes it; `run` is its last trial.
-    `reason` says why it did not pass, and is null otherwise."""
+    `reason` says why it did not pass, and is null otherwise. A session
+    whose check cannot run here, for good, is `refused`: it never passes,
+    `reason` says why it could not run, and `run` is null."""
 
     id: UUID
     created_at: datetime

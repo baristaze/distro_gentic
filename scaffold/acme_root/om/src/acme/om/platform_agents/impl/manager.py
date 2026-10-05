@@ -12,6 +12,7 @@ from acme.om.outbox.types.row import OutboxRow, outbox_row, versioned_row
 from acme.om.platform_agents.manager import PlatformAgentsManagerInterface
 from acme.om.platform_agents.storage import PlatformAgentsStorageInterface
 from acme.om.platform_agents.types.validation import (
+    REFUSAL_MAX,
     ValidationSession,
     ValidationStart,
     ValidationStatus,
@@ -97,12 +98,20 @@ class PlatformAgentsManagerImpl(PlatformAgentsManagerInterface):
         stored = await self.get_validation(ctx, session_id)
         if stored.status is ValidationStatus.FINISHED:
             return stored
+        if stored.refusal is not None:
+            raise PreconditionFailed(stored.refusal)
         # The evidence keeps the run with the session's id, and answers it
         # again when asked again: a retry after the run was kept runs
-        # nothing more.
-        validation = await self._evidence.run_check(
-            ctx, stored.id, stored.project_id, stored.check_name, stored.head, stored.base
-        )
+        # nothing more. What it refuses before anything runs no retry
+        # changes, so the session is refused with the reason, and its read
+        # ends there.
+        try:
+            validation = await self._evidence.run_check(
+                ctx, stored.id, stored.project_id, stored.check_name, stored.head, stored.base
+            )
+        except PreconditionFailed as refused:
+            await self.refuse_validation(ctx, session_id, refused.message)
+            raise
         if not validation.records:
             raise ValidationFailed(f"validation session {session_id} kept no run of its check")
         # A rated check's trials are one batch; the session names the last,
@@ -120,6 +129,10 @@ class PlatformAgentsManagerImpl(PlatformAgentsManagerInterface):
             raise PreconditionFailed(
                 f"validation session {session_id} finished already, with run {stored.run_id}"
             )
+        if stored.refusal is not None:
+            raise PreconditionFailed(
+                f"validation session {session_id} is refused: {stored.refusal}"
+            )
         now = self._clock()
         finished = stored.model_copy(
             update={
@@ -135,6 +148,32 @@ class PlatformAgentsManagerImpl(PlatformAgentsManagerInterface):
         await self._storage.write_validation(ctx.org_id, finished, stored.version, rows)
         await self._relay_all(ctx, rows)
         return finished
+
+    async def refuse_validation(
+        self, ctx: TenantContext, session_id: UUID, reason: str
+    ) -> ValidationSession:
+        ctx.require(Permission.WRITE)
+        stored = await self.get_validation(ctx, session_id)
+        if stored.status is ValidationStatus.REFUSED:
+            return stored
+        if stored.status is ValidationStatus.FINISHED:
+            raise PreconditionFailed(
+                f"validation session {session_id} finished already, with run {stored.run_id}"
+            )
+        now = self._clock()
+        refused = stored.model_copy(
+            update={
+                "status": ValidationStatus.REFUSED,
+                "refusal": reason[:REFUSAL_MAX],
+                "version": stored.version + 1,
+                "updated_at": now,
+                "updated_by": ctx.user_id,
+            }
+        )
+        rows = (versioned_row(ctx, UPDATED, refused.id, refused.version),)
+        await self._storage.write_validation(ctx.org_id, refused, stored.version, rows)
+        await self._relay_all(ctx, rows)
+        return refused
 
     async def purge_tenant(self, ctx: TenantContext) -> int:
         ctx.require(Permission.WRITE)

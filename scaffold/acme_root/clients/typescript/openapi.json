@@ -9378,7 +9378,7 @@
         "type": "object"
       },
       "ValidationSessionView": {
-        "description": "A validation session: what it runs, at which commit and from which,\nand where it stands. Once its run is recorded, `passed` is the verdict\nand `run` is that run; both are null while it waits. The run passes\nwhen it passed, at least one of its cases did, and what served it meets\nthe strictest grade the project's policy asks of the check, a twin when\nno requirement names it: a run on a double, or with a dependency that\nwas not there, never passes. A check a requirement rates runs its\ndeclared trials and passes only as that requirement judges them\ntogether, so one lucky trial never passes it; `run` is its last trial.\n`reason` says why it did not pass, and is null otherwise.",
+        "description": "A validation session: what it runs, at which commit and from which,\nand where it stands. Once its run is recorded, `passed` is the verdict\nand `run` is that run; both are null while it waits. The run passes\nwhen it passed, at least one of its cases did, and what served it meets\nthe strictest grade the project's policy asks of the check, a twin when\nno requirement names it: a run on a double, or with a dependency that\nwas not there, never passes. A check a requirement rates runs its\ndeclared trials and passes only as that requirement judges them\ntogether, so one lucky trial never passes it; `run` is its last trial.\n`reason` says why it did not pass, and is null otherwise. A session\nwhose check cannot run here, for good, is `refused`: it never passes,\n`reason` says why it could not run, and `run` is null.",
         "properties": {
           "base": {
             "title": "Base",
@@ -9480,7 +9480,8 @@
       "ValidationStatus": {
         "enum": [
           "queued",
-          "finished"
+          "finished",
+          "refused"
         ],
         "title": "ValidationStatus",
         "type": "string"
@@ -26239,7 +26240,7 @@
     },
     "/v1/validation-sessions/{session_id}": {
       "get": {
-        "description": "The session: `queued` while its check waits or runs, `finished` with\nits verdict and its run once the run is recorded.",
+        "description": "The session: `queued` while its check waits or runs, `finished` with\nits verdict and its run once the run is recorded, and `refused` with its\nreason when its check cannot run here, for good.",
         "operationId": "get_validation_v1_validation_sessions__session_id__get",
         "parameters": [
           {
