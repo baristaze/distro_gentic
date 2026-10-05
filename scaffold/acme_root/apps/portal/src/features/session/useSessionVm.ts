@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ApiError } from "@acme/client";
+import { ApiError, type AgentSessionView } from "@acme/client";
 import { errorMessage } from "../../app/errorMessage";
 import type { SlotSession } from "../../app/product";
 import { useSlot } from "../../app/slot";
 import type { PaletteCommand } from "../../design/kit";
-import { useAgentSession, useApprovals, useCommandProgress, useDelivery, useSessionActions, useSteps } from "../../queries/agentSessions";
+import { useAgentSession, useApprovals, useChildren, useChildSteps, useCommandProgress, useDelivery, useSessionActions, useSteps } from "../../queries/agentSessions";
 import { useLiveStreams } from "../../queries/live";
 import { useMe } from "../../queries/tenancy";
 import { useNoticesStore } from "../../store/notices";
@@ -13,7 +13,9 @@ import { paneOf, usePanesStore } from "../../store/panes";
 import { sessionRow } from "../sessions/sessionsModel";
 import { addable, closeTab, knownTabs, openCall, openTab, openThemselves, resizePane, shownTab, togglePane, type PaneState } from "./paneModel";
 import { allowed, composerOf, deliveryLines, parkLine, pullRequestBadge, splitCommand, statusLine } from "./sessionModel";
-import { answers, callsOf, timeline, type Call } from "./timelineModel";
+import { answers, callsOf, outline, timeline, type Call, type ChildState } from "./timelineModel";
+
+const NONE: readonly AgentSessionView[] = [];
 
 /** The time now, read again every second while `ticking`: a running block's
  * duration counts up. */
@@ -58,7 +60,14 @@ export function useSessionVm(id: string) {
   // which can be its run's park: its first run streams while it is pending.
   const runs = status === "running" || status === "pending";
   const live = useLiveStreams(id, found && runs);
-  const now = useNow(runs);
+  // Its sub-agents, what each works on now, and the session that started it.
+  const childList = useChildren(id, found);
+  const childRecords = childList.data ?? NONE;
+  const childSteps = useChildSteps(childRecords);
+  const parentId = session.data?.parent_id ?? null;
+  const parentRead = useAgentSession(parentId ?? "", parentId !== null);
+  // The clock ticks while it runs, or while a sub-agent does: their rows time them.
+  const now = useNow(runs || childRecords.some((child) => child.archived_at === null && child.status !== "idle"));
   const actions = useSessionActions(id);
   const [commandKey, setCommandKey] = useState<string | null>(null);
   const command = useCommandProgress(id, commandKey);
@@ -183,10 +192,22 @@ export function useSessionVm(id: string) {
   const held = approvals.data;
   const record = session.data;
   const history = steps.data;
-  const chat = useMemo(
-    () => (record && history ? timeline({ steps: history, live, session: record, held: held ?? [], gists, carded, now }) : null),
-    [record, history, live, held, gists, carded, now],
+  const children = useMemo<ChildState[]>(
+    () =>
+      childRecords.map((child, index) => {
+        const read = childSteps[index];
+        const own = read ? timeline({ steps: read, live: [], session: child, held: [], gists, carded, children: [], parent: null, now }).status.text : null;
+        return { id: child.id, title: child.title, kind: child.kind, status: child.status, park: child.park, archived_at: child.archived_at, created_at: child.created_at, activity: own };
+      }),
+    [childRecords, childSteps, gists, carded, now],
   );
+  const parentData = parentRead.data;
+  const parent = useMemo(() => (parentData ? { id: parentData.id, title: parentData.title } : null), [parentData]);
+  const chat = useMemo(
+    () => (record && history ? timeline({ steps: history, live, session: record, held: held ?? [], gists, carded, children, parent, now }) : null),
+    [record, history, live, held, gists, carded, children, parent, now],
+  );
+  const marks = useMemo(() => (chat ? outline(chat.entries) : []), [chat]);
   const slotSession: SlotSession | null = useMemo(
     () =>
       record
@@ -252,6 +273,7 @@ export function useSessionVm(id: string) {
     park: record?.park ? parkLine(record.park) : null,
     may,
     chat,
+    marks,
     stepsError: steps.error,
     slotSession,
     tools,

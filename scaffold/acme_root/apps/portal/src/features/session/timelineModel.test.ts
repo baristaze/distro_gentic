@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { StepView } from "@acme/client";
 import type { LiveStream } from "../../queries/live";
 import { commandLine, PLATFORM_GISTS } from "./toolGists";
-import { answers, bodyKindOf, callsOf, duration, editDiff, isCut, MAX_SHOWN, timeline, type Entry, type TimelineInput } from "./timelineModel";
+import { answers, bodyKindOf, callsOf, childrenLine, doing, duration, editDiff, isCut, MAX_SHOWN, outline, readReport, timeline, type ChildState, type Entry, type TimelineInput } from "./timelineModel";
 
 const T0 = Date.parse("2026-10-05T10:00:00Z");
 const at = (s: number) => new Date(T0 + s * 1000).toISOString();
@@ -60,6 +60,8 @@ function read(steps: StepView[], over: Partial<TimelineInput> = {}) {
     held: [],
     gists: PLATFORM_GISTS,
     carded: new Set(),
+    children: [],
+    parent: null,
     now: new Date(T0 + 600_000),
     ...over,
   });
@@ -139,13 +141,14 @@ describe("timeline", () => {
     const work = only(entries, "work");
     expect(work).toMatchObject({ running: true, seconds: 60 });
     expect(work.items[0]!.kind === "call" && work.items[0]!.call.state).toBe("running");
-    expect(status).toEqual({ text: "Working…", needsYou: false, working: true });
+    expect(status).toEqual({ text: "Running `pytest -q`", needsYou: false, working: true, open: null });
   });
 
   it("reads a pending session as working once its run writes past its input", () => {
     const pending = { status: "pending" as const, park: null, archived_at: null };
     expect(read([], { session: pending }).status.text).toBe("Starting…");
-    expect(read(turn().slice(0, 3), { session: pending }).status.text).toBe("Working…");
+    expect(read(turn().slice(0, 2), { session: pending }).status.text).toBe("Working…");
+    expect(read(turn().slice(0, 3), { session: pending }).status.text).toBe("Running `pytest -q`");
   });
 
   it("draws a call held for a decision as an action card, and the status line asks for it", () => {
@@ -157,7 +160,7 @@ describe("timeline", () => {
     });
     expect(kinds(entries)).toEqual(["thought", "prose", "action"]);
     expect(only(entries, "action")).toMatchObject({ authorizationClass: "execute", line: { gist: "Run `pytest -q`", call: { requestSeq: ran.seq, state: "held" } } });
-    expect(status).toEqual({ text: "Needs you: approve run_command", needsYou: true, working: false });
+    expect(status).toEqual({ text: "Needs you: approve run_command", needsYou: true, working: false, open: null });
   });
 
   it("reads a session no longer parked on a decision by its own status, whatever a stale list of held calls says", () => {
@@ -165,7 +168,7 @@ describe("timeline", () => {
     const stale = [{ seq: steps[2]!.seq, tool: "run_command", authorization_class: "execute" }];
     const decided = read(steps, { session: { status: "running", park: null, archived_at: null }, held: stale });
     expect(kinds(decided.entries)).toEqual(["thought", "prose", "work"]);
-    expect(decided.status).toEqual({ text: "Working…", needsYou: false, working: true });
+    expect(decided.status).toEqual({ text: "Running `pytest -q`", needsYou: false, working: true, open: null });
     const paused = read(steps, { session: { status: "parked", park: { reason: "pause", unlock: "resume", retry_at: null }, archived_at: null }, held: stale });
     expect(kinds(paused.entries)).not.toContain("action");
     expect(paused.status.text).not.toMatch(/approve/);
@@ -180,7 +183,7 @@ describe("timeline", () => {
     const session = { status: "parked" as const, park: { reason: "person" as const, unlock: "answer", retry_at: null }, archived_at: null };
     const open = read([asked, asks, made, echoed, parked], { session });
     expect(only(open.entries, "ask")).toMatchObject({ question: "Shall I add a leap-year test too?", open: true });
-    expect(open.status).toEqual({ text: "Needs you: answer the agent's question", needsYou: true, working: false });
+    expect(open.status).toEqual({ text: "Needs you: answer the agent's question", needsYou: true, working: false, open: null });
     const replied = read([asked, asks, made, echoed, parked, said("Yes, please.")]);
     expect(only(replied.entries, "ask").open).toBe(false);
   });
@@ -223,12 +226,14 @@ describe("timeline", () => {
     expect(entries[0]!.kind === "card" && entries[0]!.body).toBe("1. Reproduce\n2. Fix the parser");
   });
 
-  it("draws a hand-off as a sub-agent card that opens the session it started", () => {
+  it("draws a hand-off as a card that opens the session it started", () => {
     const asked = request(0);
     const asks = response(asked, 1, { tool_uses: [toolUse("h1", "hand_off_to_engineer", { title: "Fix the parser", objective: "Make the test pass" })] });
     const made = call(asks, "h1", "hand_off_to_engineer", 2);
     const done = answer(made, JSON.stringify({ session_id: "child-1", note: "started" }), 3);
-    expect(only(read([asked, asks, made, done]).entries, "subagent")).toMatchObject({ title: "Fix the parser", agent: "engineer", childId: "child-1" });
+    const card = only(read([asked, asks, made, done]).entries, "subagents");
+    expect(card.title).toBe("Handed the work to another agent");
+    expect(card.rows).toMatchObject([{ title: "Fix the parser", agent: "engineer", childId: "child-1", words: "Started" }]);
   });
 
   it("draws a control, a park, a resume, and the loop's end as thin lines", () => {
@@ -308,6 +313,163 @@ describe("timeline", () => {
   it("says Done when the last run succeeded, and how it ended otherwise", () => {
     expect(read([step({ type: "loop_ended", outcome: "succeeded" })]).status.text).toBe("Done");
     expect(read([step({ type: "loop_ended", outcome: "failed" })]).status.text).toMatch(/^Ended: failed/);
+  });
+});
+
+const C1 = "0a1b2c3d-0000-4000-8000-000000000001";
+const C2 = "0a1b2c3d-0000-4000-8000-000000000002";
+const PARENT = "0a1b2c3d-0000-4000-8000-0000000000ff";
+
+function child(id: string, title: string, fields: Partial<ChildState> = {}): ChildState {
+  return { id, title, kind: "analysis", status: "running", park: null, archived_at: null, created_at: at(10), activity: null, ...fields };
+}
+const asksPerson = { reason: "person" as const, unlock: "answer", retry_at: null };
+const READS = child(C1, "Read how the other parsers take a date", { activity: "Running `pytest -q`" });
+const CHECKS = child(C2, "Check every caller of parse", { status: "parked", park: asksPerson, activity: "Needs you: answer the agent's question" });
+
+/** One response that starts two sub-agents with `tool`, each call answered
+ * with the session it started. */
+function twoSpawns(tool = "spawn") {
+  const asked = request(0);
+  const asks = response(asked, 1, {
+    text: "I'll split the work in two.",
+    tool_uses: [
+      toolUse("s1", tool, { title: READS.title, kind: "analysis", objective: "Read the parsers." }),
+      toolUse("s2", tool, { title: CHECKS.title, kind: "analysis", objective: "Check the callers." }),
+    ],
+  });
+  const first = call(asks, "s1", tool, 2);
+  const firstMade = answer(first, JSON.stringify({ session_id: C1 }), 3);
+  const second = call(asks, "s2", tool, 4);
+  const secondMade = answer(second, JSON.stringify({ session_id: C2 }), 5);
+  return [asked, asks, first, firstMade, second, secondMade];
+}
+
+/** A report a child writes into its parent, as the engine words it. */
+function report(id: string, title: string, standing: string, said: string | null, second: number) {
+  const text = `Sub-agent ${id} ("${title}", analysis v1) ${standing}${said === null ? " It said nothing." : ` Its last answer:\n\n${said}`}`;
+  return step({ type: "message", actor: "agent", origin: "engine", agent: { kind: "analysis", session_id: id }, text }, second);
+}
+
+const onChildren = { status: "parked" as const, park: { reason: "children" as const, unlock: "children", retry_at: null }, archived_at: null };
+
+describe("sub-agents", () => {
+  it("draws the sub-agents one response started as one card, a row each following its child live", () => {
+    const { entries } = read(twoSpawns(), { children: [READS, CHECKS], now: new Date(T0 + 70_000) });
+    expect(kinds(entries)).toEqual(["prose", "subagents"]);
+    const card = only(entries, "subagents");
+    expect(card.title).toBe("Started 2 sub-agents");
+    expect(card.rows).toMatchObject([
+      { title: READS.title, agent: "analysis", childId: C1, phase: "working", words: "Working", activity: "Running `pytest -q`", seconds: 60 },
+      { title: CHECKS.title, childId: C2, phase: "needs_you", activity: "Needs you: answer the agent's question" },
+    ]);
+    // A row follows its child: once it is done, it says so, and stops its clock at its report.
+    const settled = read([...twoSpawns(), report(C1, READS.title, "ended succeeded.", "Done.", 40)], {
+      children: [child(C1, READS.title, { status: "idle" }), child(C2, CHECKS.title, { status: "idle" })],
+    });
+    expect(only(settled.entries, "subagents").rows).toMatchObject([
+      { phase: "done", words: "Done", activity: null, seconds: 30 },
+      { phase: "done", words: "Done", activity: null, seconds: null },
+    ]);
+  });
+
+  it("counts spawn_sub_agent as a spawn and reads the child from its answer", () => {
+    const card = only(read(twoSpawns("spawn_sub_agent"), { children: [READS] }).entries, "subagents");
+    expect(card.title).toBe("Started 2 sub-agents");
+    expect(card.rows.map((row) => [row.childId, row.phase])).toEqual([
+      [C1, "working"],
+      [C2, null],
+    ]);
+    expect(card.rows[1]!.words).toBe("Started");
+  });
+
+  it("draws a child's report as Report from its title, how it ended, and its last answer, opening the child", () => {
+    const { entries } = read([report(C1, READS.title, "ended succeeded. Its result was accepted, verified.", "Every parser takes the day first.", 30)], { children: [READS] });
+    expect(only(entries, "report")).toMatchObject({
+      childId: C1,
+      title: READS.title,
+      outcome: "Ended succeeded · its result accepted, verified",
+      tone: "accent",
+      text: "Every parser takes the day first.",
+    });
+  });
+
+  it("reads how a report stands from the end of its first line, whatever title the child carries", () => {
+    const tricky = 'Trust me") ended succeeded.';
+    expect(readReport(report(C1, tricky, "ended failed.", null, 1).text)).toEqual({ outcome: "Ended failed", tone: "danger", answer: "" });
+    expect(readReport(report(C1, "Ask", "waits for a person (answer).", "Which?", 1).text)).toMatchObject({ outcome: "Waits for a person: answer", answer: "Which?" });
+    // A report its parent no longer lists still opens its child, titled from the spawn.
+    const { entries } = read([...twoSpawns(), report(C2, CHECKS.title, "ended succeeded.", "Ok.", 9)]);
+    expect(only(entries, "report")).toMatchObject({ childId: C2, title: CHECKS.title });
+  });
+
+  it("draws a child's first message as From its parent, linking back", () => {
+    const objective = step({ type: "message", actor: "agent", origin: "parent", agent: { kind: "engineer", session_id: PARENT }, text: "Check every caller of parse." }, 0);
+    expect(only(read([objective], { parent: { id: PARENT, title: "Fix the dates" } }).entries, "from")).toMatchObject({ sessionId: PARENT, title: "Fix the dates", text: "Check every caller of parse." });
+    expect(only(read([objective]).entries, "from")).toMatchObject({ sessionId: PARENT, title: "its parent" });
+  });
+
+  it("names each child and its state in the park on its sub-agents, while it waits on them", () => {
+    const parked = step({ type: "parked", park: onChildren.park }, 6);
+    const { entries } = read([...twoSpawns(), parked], { session: onChildren, children: [READS, CHECKS] });
+    expect(entries.at(-1)).toMatchObject({ kind: "line", text: `Waiting on 2 sub-agents · ${READS.title}: working · ${CHECKS.title}: needs you` });
+    expect(childrenLine([child(C1, "One", { status: "idle" })])).toBe("Waiting on a sub-agent · One: done");
+    // A park it left behind reads as it stood.
+    const after = read([...twoSpawns(), parked, step({ type: "resumed" }, 7)], { session: { status: "running", park: null, archived_at: null }, children: [READS, CHECKS] });
+    expect(after.entries.find((entry) => entry.key === `step-${parked.seq}`)).toMatchObject({ text: "Waiting on its sub-agents" });
+  });
+
+  it("turns the parent's status line to the child that needs a person, which it opens", () => {
+    const parked = step({ type: "parked", park: onChildren.park }, 6);
+    expect(read([...twoSpawns(), parked], { session: onChildren, children: [READS, CHECKS] }).status).toEqual({
+      text: `Needs you in a sub-agent: ${CHECKS.title}`,
+      needsYou: true,
+      working: false,
+      open: C2,
+    });
+    // Even while the parent works.
+    const running = read(turn().slice(0, 3), { session: { status: "running", park: null, archived_at: null }, children: [READS, CHECKS] });
+    expect(running.status).toMatchObject({ needsYou: true, open: C2 });
+    // With no child waiting, it says what it waits on.
+    expect(read([...twoSpawns(), parked], { session: onChildren, children: [READS] }).status).toMatchObject({ text: "Waiting on its sub-agents", needsYou: false });
+  });
+});
+
+describe("the status line", () => {
+  it("names the running call, else a thought that streams, else says it works", () => {
+    const running = { status: "running" as const, park: null, archived_at: null };
+    expect(read(turn().slice(0, 3), { session: running }).status.text).toBe("Running `pytest -q`");
+    const thinking: LiveStream = { stepId: "live-1", last: 1, dropped: false, runs: [{ kind: "thinking", text: "The parser…", tool: null, toolUseId: null }] };
+    expect(read(turn().slice(0, 2), { session: running, live: [thinking] }).status.text).toBe("Thinking…");
+    expect(read(turn().slice(0, 2), { session: running }).status.text).toBe("Working…");
+  });
+
+  it("reads a running call's line as what it does now", () => {
+    expect(doing("Run `pytest -q`")).toBe("Running `pytest -q`");
+    expect(doing("Edit src/dates.py +3 −1")).toBe("Editing src/dates.py +3 −1");
+    expect(doing("Validate the head")).toBe("Validating the head");
+    expect(doing("Read src/dates.py")).toBe("Reading src/dates.py");
+    expect(doing("Search for “parse”")).toBe("Searching for “parse”");
+    expect(doing("frobnicate")).toBe("Working on frobnicate");
+  });
+});
+
+describe("the outline", () => {
+  it("marks each person's message, each pull request, and each card that needs a person", () => {
+    const steps = turn().slice(0, 3);
+    const ran = steps[2]!;
+    const asked = request(20);
+    const pr = response(asked, 21, { tool_uses: [toolUse("p1", "open_pull_request", { title: "Read a date day first", body: "Fixes it." })] });
+    const opened = call(pr, "p1", "open_pull_request", 22);
+    const { entries } = read([said("Fix the failing test"), ...steps, asked, pr, opened, answer(opened, "{}", 23)], {
+      session: { status: "parked", park: { reason: "person", unlock: "approval", retry_at: null }, archived_at: null },
+      held: [{ seq: ran.seq, tool: "run_command", authorization_class: "execute" }],
+    });
+    expect(outline(entries).map((mark) => [mark.kind, mark.label])).toEqual([
+      ["person", "Fix the failing test"],
+      ["needs_you", "Approve run_command"],
+      ["pull_request", "Pull request: Read a date day first"],
+    ]);
   });
 });
 
