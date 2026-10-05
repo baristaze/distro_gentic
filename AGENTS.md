@@ -124,6 +124,10 @@ make setup && make check            # the copy's fast gate
 cp .env.example .env && make infra-up migrate migrate-check test-integration
 ```
 
+CI's `images` job builds each of the copy's images, as the copy's own
+CI does. In the copy, `docker build -f deployment/docker/<image>.Dockerfile .`
+builds one.
+
 `.github/pins/` holds every tool version the Makefile and CI run.
 
 ## Conventions
