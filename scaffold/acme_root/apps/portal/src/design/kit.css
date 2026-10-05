@@ -1341,6 +1341,7 @@ select.acme-field {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
   padding: 5px 4px 5px 8px;
   border: 0;
   background: transparent;
@@ -1393,13 +1394,21 @@ select.acme-field {
   color: var(--acme-text);
 }
 
+/* A view fits the pane's width: a card no wider than the pane, a table
+ * wider than its card scrolling inside it. */
 .acme-pane-view {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   align-content: start;
   gap: 16px;
   min-width: 0;
   overflow: auto;
   padding: 16px;
+}
+
+.acme-pane-view .acme-card {
+  min-width: 0;
+  overflow-x: auto;
 }
 
 .acme-pane-stack {
@@ -1423,6 +1432,7 @@ select.acme-field {
   gap: 8px;
   margin: 0;
   padding-left: 16px;
+  overflow-wrap: anywhere;
 }
 
 .acme-pane-plan {
