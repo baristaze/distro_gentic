@@ -99,18 +99,18 @@ class PlatformAgentsManagerImpl(PlatformAgentsManagerInterface):
         stored = await self.get_validation(ctx, session_id)
         if stored.status is ValidationStatus.FINISHED:
             return stored
-        # The evidence keeps the run with the session's id, and answers it
-        # again when asked again: a retry after the run was kept runs
-        # nothing more. It runs on its starter's authority, as an agent's
-        # validation runs on its principal's.
-        validation = await self._evidence.run_check(
-            await self._starter(ctx, stored),
-            stored.id,
-            stored.project_id,
-            stored.check_name,
-            stored.head,
-            stored.base,
-        )
+        # The evidence keeps the run with the session's id: a retry after the
+        # run was kept runs nothing more, and finishes with it whoever its
+        # starter is now. A run not kept yet runs on its starter's authority,
+        # as an agent's validation runs on its principal's.
+        kept = await self._evidence.get_validations(ctx, stored.id, 1)
+        if kept:
+            validation = kept[0]
+        else:
+            starter = await self._starter(ctx, stored)
+            validation = await self._evidence.run_check(
+                starter, stored.id, stored.project_id, stored.check_name, stored.head, stored.base
+            )
         if not validation.records:
             raise ValidationFailed(f"validation session {session_id} kept no run of its check")
         # A rated check's trials are one batch; the session names the last,
