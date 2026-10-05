@@ -92,8 +92,8 @@ ACME_PORTAL_URL=http://127.0.0.1:5173 pnpm --filter @acme/portal e2e
 The script holds one turn, so the runner restarts before the check runs
 again. The pace keeps the run open long enough to see it under Running.
 The check signs in as the seeded owner, starts a session on Home, sees it
-under Running and then Recent in the left bar, and reads its thread,
-timeline, and evidence. It then signs in a person of another org, who
+under Running and then Recent in the left bar, and reads its chat and, in
+the panel, its evidence. It then signs in a person of another org, who
 finds no row of it and nothing at its address. The records check needs
 only the API, on the scripted providers, and this dev server: in Settings
 the owner makes a project with a read credential, saves a provider key,
@@ -101,3 +101,26 @@ and creates an API key, and then makes an automation; each is read back
 from the API. The credential's password and the provider key come back in
 no reply and on no screen, and the API key shows once, then on no screen.
 Their screenshots land in `e2e/screenshots/`, which git ignores.
+
+The timeline check plays the engineer's scene: it thinks, plans, runs a
+failing test, edits, runs it again, opens a pull request, asks its person,
+validates, and submits its result. Its API and runner are
+`portal_stack.py`'s, which register a scene engineer that works in a
+directory on this host and clone the org's repository from a folder of
+bare ones; the forge is its twin, seeded with it:
+
+```bash
+uv run --package acme-api python services/api/tests/portal_check.py script .local/scene.json --scene engineer
+# with ACME_FORGE_INTEGRATION=twin and ACME_WORKSPACE_BACKEND=host set for
+# the seed, both processes, and the check, and PORTAL_REPOSITORIES naming
+# an empty folder:
+uv run --package acme-api python services/api/tests/portal_stack.py api --port 8000
+uv run --package acme-session-runner python services/api/tests/portal_stack.py runner
+ACME_PORTAL_URL=http://127.0.0.1:5173 pnpm --filter @acme/portal e2e e2e/timeline.spec.ts
+```
+
+The check writes the scene's repository and its project's policy itself
+(`portal_check.py scene`). It sees the first thought and words stream
+before their step lands, pauses and resumes the session from its header,
+approves each command it holds, answers its question, and opens a work
+block and a diff. Each moment is shot light and dark.

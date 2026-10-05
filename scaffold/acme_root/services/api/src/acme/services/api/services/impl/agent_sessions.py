@@ -1,5 +1,9 @@
+from typing import Any
 from uuid import UUID
 
+from pydantic import JsonValue
+
+from acme.infra.base import thaw_mapping
 from acme.integrations.model_providers.types import Usage
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.types.agent_session import (
@@ -39,6 +43,7 @@ from acme.services.api.services.impl.session_reads import (
 )
 from acme.services.api.services.impl.tenancy import decode_cursor, encode_cursor
 from acme.services.api.types.agent_sessions import (
+    MAX_SHOWN,
     AgentSessionPageView,
     AgentSessionView,
     ApprovalPageView,
@@ -55,6 +60,7 @@ from acme.services.api.types.agent_sessions import (
     StepUsageView,
     StepView,
     ToolCallPageView,
+    ToolUseView,
 )
 from acme.services.api.types.common import LIMIT_MAX, clamp_limit
 
@@ -109,6 +115,52 @@ def text_of(step: Step) -> str:
     return step.as_text()
 
 
+def thinking_of(step: Step) -> str:
+    """What a model response thought, one block a line; a redacted block
+    says nothing, and neither does a step whose content is gone."""
+    if not step.content.is_plain():
+        return ""
+    return "\n".join(block.text for block in step.children.thinking if not block.redacted)
+
+
+def shown(value: Any) -> JsonValue:
+    """A tool input's value as a view shows it: each string it holds cut at
+    `MAX_SHOWN`, an ellipsis marking the cut."""
+    if isinstance(value, str):
+        return value if len(value) <= MAX_SHOWN else value[:MAX_SHOWN] + "\u2026"
+    if isinstance(value, dict):
+        return {str(key): shown(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [shown(item) for item in value]
+    return value
+
+
+def tool_uses_of(step: Step) -> list[ToolUseView]:
+    """The calls a model response made, with what each asked; none when its
+    content is gone."""
+    if step.type is not StepType.MODEL_RESPONSE or not step.content.is_plain():
+        return []
+    return [
+        ToolUseView(
+            id=use.id,
+            name=use.name,
+            input={k: shown(v) for k, v in thaw_mapping(use.input).items()},
+        )
+        for use in step.as_tool_uses()
+    ]
+
+
+def tool_use_id_of(step: Step) -> str | None:
+    """The call a tool step belongs to: a request's from its header, which
+    stays, as its tool does; a response's from its result, gone with its
+    content."""
+    if isinstance(step.header, ToolRequestHeader):
+        return step.header.tool_use_id
+    if step.type is StepType.TOOL_RESPONSE and step.content.is_plain():
+        return step.as_tool_response().tool_use_id
+    return None
+
+
 def usage_view(usage: Usage | None) -> StepUsageView | None:
     return None if usage is None else StepUsageView.model_validate(usage.model_dump())
 
@@ -127,6 +179,9 @@ def step_view(step: Step) -> StepView:
         refs=list(step.refs),
         created_at=step.created_at,
         text=text_of(step),
+        thinking=thinking_of(step),
+        tool_uses=tool_uses_of(step),
+        tool_use_id=tool_use_id_of(step),
         tools=[use.name for use in step.as_tool_uses()] if responded is not None else [],
         stop_reason=None if responded is None else responded.stop_reason,
         usage=usage_view(responded.usage) if responded is not None else None,

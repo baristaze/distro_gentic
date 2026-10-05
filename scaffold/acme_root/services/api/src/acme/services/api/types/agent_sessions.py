@@ -9,7 +9,7 @@ from enum import StrEnum
 from typing import Self
 from uuid import UUID
 
-from pydantic import Field, model_validator
+from pydantic import Field, JsonValue, model_validator
 
 from acme.integrations.model_providers.types import StopReason
 from acme.om.agent_sessions.types.agent_session import SessionStatus
@@ -74,12 +74,32 @@ class StepUsageView(View):
     thinking: int
 
 
+MAX_SHOWN = 4_096
+"""The most characters one string of a tool use's input carries in a
+step's view; a longer one is cut there and ends in an ellipsis."""
+
+
+class ToolUseView(View):
+    """One call a model response made: its id, which the call's request and
+    response name, the tool, and what the tool was asked, each string cut
+    at `MAX_SHOWN`."""
+
+    id: str
+    name: str
+    input: dict[str, JsonValue]
+
+
 class StepView(View):
     """One step of a session's history, in its order. `text` is what it
-    says: a message's words, a model's answer, a tool's result. The rest is
-    its header's, by type: the tools a model response called, why it
-    stopped, and what it used; a tool call's tool and the class of its
-    failure; a control's command; a park; a loop's outcome."""
+    says: a message's words, a model's answer, a tool's result. A model
+    response also says what it thought (`thinking`) and the calls it made
+    (`tool_uses`); a tool response names the call it answers
+    (`tool_use_id`). Each of these is the step's content: where it is gone,
+    its session's key revoked or its content never kept here, each is empty
+    as `text` is. The rest is its header's, by type: the tools a model
+    response called, why it stopped, and what it used; a tool call's tool,
+    the id of the call it runs, and the class of its failure; a control's
+    command; a park; a loop's outcome."""
 
     id: UUID
     seq: int
@@ -91,6 +111,9 @@ class StepView(View):
     refs: list[UUID]
     created_at: datetime
     text: str
+    thinking: str
+    tool_uses: list[ToolUseView]
+    tool_use_id: str | None
     tools: list[str]
     stop_reason: StopReason | None
     usage: StepUsageView | None

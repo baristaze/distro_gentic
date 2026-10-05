@@ -8318,7 +8318,7 @@
         "type": "object"
       },
       "StepView": {
-        "description": "One step of a session's history, in its order. `text` is what it\nsays: a message's words, a model's answer, a tool's result. The rest is\nits header's, by type: the tools a model response called, why it\nstopped, and what it used; a tool call's tool and the class of its\nfailure; a control's command; a park; a loop's outcome.",
+        "description": "One step of a session's history, in its order. `text` is what it\nsays: a message's words, a model's answer, a tool's result. A model\nresponse also says what it thought (`thinking`) and the calls it made\n(`tool_uses`); a tool response names the call it answers\n(`tool_use_id`). Each of these is the step's content: where it is gone,\nits session's key revoked or its content never kept here, each is empty\nas `text` is. The rest is its header's, by type: the tools a model\nresponse called, why it stopped, and what it used; a tool call's tool,\nthe id of the call it runs, and the class of its failure; a control's\ncommand; a park; a loop's outcome.",
         "properties": {
           "actor": {
             "$ref": "#/components/schemas/Actor"
@@ -8419,6 +8419,10 @@
             "title": "Text",
             "type": "string"
           },
+          "thinking": {
+            "title": "Thinking",
+            "type": "string"
+          },
           "tool": {
             "anyOf": [
               {
@@ -8429,6 +8433,24 @@
               }
             ],
             "title": "Tool"
+          },
+          "tool_use_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Use Id"
+          },
+          "tool_uses": {
+            "items": {
+              "$ref": "#/components/schemas/ToolUseView"
+            },
+            "title": "Tool Uses",
+            "type": "array"
           },
           "tools": {
             "items": {
@@ -8462,6 +8484,9 @@
           "refs",
           "created_at",
           "text",
+          "thinking",
+          "tool_uses",
+          "tool_use_id",
           "tools",
           "stop_reason",
           "usage",
@@ -8759,6 +8784,33 @@
           "updated_by"
         ],
         "title": "ToolPolicyView",
+        "type": "object"
+      },
+      "ToolUseView": {
+        "description": "One call a model response made: its id, which the call's request and\nresponse name, the tool, and what the tool was asked, each string cut\nat `MAX_SHOWN`.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "input": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Input",
+            "type": "object"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "input"
+        ],
+        "title": "ToolUseView",
         "type": "object"
       },
       "TotpConfirmedView": {

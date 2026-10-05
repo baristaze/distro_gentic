@@ -1,7 +1,8 @@
 """Agent sessions over the live app, in memory: a session started on a kind,
-spoken to, steered, and read a page at a time; a retried send kept once;
-the routes each role may call; a history whose key is revoked, read as its
-shape; and the tenant boundary on every route that names a session. The
+spoken to, steered, and read a page at a time; a step read with what its
+model thought and the calls it made; a retried send kept once; the routes
+each role may call; a history whose key is revoked, read as its shape; and
+the tenant boundary on every route that names a session. The
 loop is the session runner's and never runs here: a send lands the work
 that asks for it."""
 
@@ -24,10 +25,13 @@ from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.context import Role
 from acme.om.intake.tools import COMMENT
+from acme.om.steps.types.content import Content, TextBlock, ToolUseBlock
+from acme.om.steps.types.step import Step
 from acme.om.tools.types.tool import ToolClass
 from acme.om.work.storage.impl.memory import WorkStorageMemoryImpl
 from acme.om.work.types.work_item import WorkKind
 from acme.services.api.container import AppContainer
+from acme.services.api.types.agent_sessions import MAX_SHOWN
 
 ASSISTANT = AgentKind(
     name="assistant",
@@ -65,6 +69,43 @@ async def start(client: httpx.AsyncClient, headers: dict[str, str]) -> dict[str,
     )
     assert answered.status_code == 201, answered.text
     return answered.json()
+
+
+THOUGHT = "the total is summed before the import ends"
+PATCH = "+" * (MAX_SHOWN + 10)
+"""An input string longer than a view shows."""
+
+
+async def said_whole_turn(
+    client: httpx.AsyncClient, owner: dict[str, str], container: AppContainer, path: str
+) -> None:
+    """A person's message, then the model's call and answer, which thought
+    and asked for a tool with a long input, then the tool's call and
+    result, appended as a run writes them."""
+    said = await client.post(f"{path}/messages", headers=created(owner), json={"text": "go"})
+    assert said.status_code == 201, said.text
+    managers = container.managers
+    ctx = await managers.tenancy.authenticate(
+        seed_request(), owner["Authorization"].removeprefix("Bearer ")
+    )
+    sid, loop_id = UUID(path.rsplit("/", 1)[1]), UUID(said.json()["loop_id"])
+    request = make_request(sid, loop_id, (UUID(said.json()["id"]),))
+    response = asked_with(
+        make_response(sid, loop_id, request.id), {"lines": [1, 200], "patch": PATCH}
+    )
+    call = make_tool_request(sid, loop_id, response.id)
+    answer = make_tool_response(sid, loop_id, call.id)
+    epoch = await managers.steps.begin_run(ctx, sid)
+    await managers.steps.append_steps(ctx, sid, epoch, [request, response, call, answer])
+
+
+def asked_with(response: Step, given: dict[str, Any]) -> Step:
+    """The response, its one tool use asking for `given`."""
+    blocks = (
+        TextBlock(text="reading the import log"),
+        ToolUseBlock(id="call_1", name="read_log", input=given),
+    )
+    return Step.model_validate({**response.model_dump(), "content": Content(blocks=blocks)})
 
 
 def runs_of(container: AppContainer, session_id: str) -> int:
@@ -106,6 +147,37 @@ async def test_a_session_is_started_spoken_to_steered_and_read(
     rest = await client.get(f"{path}/steps", headers=owner, params={"after_seq": 1})
     assert [s["type"] for s in rest.json()["items"]] == ["control"]
     assert rest.json()["has_more"] is False
+
+
+async def test_a_step_reads_with_what_its_model_thought_and_the_calls_it_made(
+    client: httpx.AsyncClient, owner: dict[str, str], container: AppContainer
+) -> None:
+    """A model response reads with its thinking and each call it made, a
+    string of its input cut where a view stops; the tool's call and its
+    result each name the call they run. A step of no such content reads
+    empty there."""
+    session = await start(client, owner)
+    path = f"/v1/agent-sessions/{session['id']}"
+    await said_whole_turn(client, owner, container, path)
+
+    read = await client.get(f"{path}/steps", headers=owner)
+
+    assert read.status_code == 200, read.text
+    step = {item["type"]: item for item in read.json()["items"]}
+    assert step["model_response"]["thinking"] == THOUGHT
+    assert step["model_response"]["tool_uses"] == [
+        {
+            "id": "call_1",
+            "name": "read_log",
+            "input": {"lines": [1, 200], "patch": PATCH[:MAX_SHOWN] + "\u2026"},
+        }
+    ]
+    assert step["tool_request"]["tool_use_id"] == "call_1"
+    assert step["tool_response"]["tool_use_id"] == "call_1"
+    assert step["tool_response"]["text"] == "200 lines"
+    for quiet in ("message", "model_request", "tool_request", "tool_response"):
+        assert (step[quiet]["thinking"], step[quiet]["tool_uses"]) == ("", [])
+    assert step["message"]["tool_use_id"] is None
 
 
 async def test_a_kind_that_names_the_comment_tool_starts_and_is_spoken_to(
@@ -182,23 +254,19 @@ async def test_a_history_whose_key_is_revoked_reads_as_its_shape_alone(
     client: httpx.AsyncClient, owner: dict[str, str], container: AppContainer
 ) -> None:
     """Revoking a session's key leaves each step's content absent: the history
-    still reads, every step in its place, saying nothing."""
+    still reads, every step in its place, saying nothing, thinking nothing,
+    and naming no call it made or answered. A tool's call keeps the id of the
+    call it runs, which is its header's, as its tool is."""
     session = await start(client, owner)
     path = f"/v1/agent-sessions/{session['id']}"
-    said = await client.post(f"{path}/messages", headers=created(owner), json={"text": "go"})
-    assert said.status_code == 201, said.text
+    await said_whole_turn(client, owner, container, path)
+    before = (await client.get(f"{path}/steps", headers=owner)).json()["items"]
+    assert before[2]["thinking"] == THOUGHT and before[2]["tool_uses"]
     managers = container.managers
     ctx = await managers.tenancy.authenticate(
         seed_request(), owner["Authorization"].removeprefix("Bearer ")
     )
-    sid, loop_id = UUID(session["id"]), UUID(said.json()["loop_id"])
-    request = make_request(sid, loop_id, (UUID(said.json()["id"]),))
-    response = make_response(sid, loop_id, request.id)
-    call = make_tool_request(sid, loop_id, response.id)
-    answer = make_tool_response(sid, loop_id, call.id)
-    epoch = await managers.steps.begin_run(ctx, sid)
-    await managers.steps.append_steps(ctx, sid, epoch, [request, response, call, answer])
-    await managers.privacy.revoke_key(ctx, sid)
+    await managers.privacy.revoke_key(ctx, UUID(session["id"]))
 
     read = await client.get(f"{path}/steps", headers=owner)
 
@@ -212,6 +280,10 @@ async def test_a_history_whose_key_is_revoked_reads_as_its_shape_alone(
         "tool_response",
     ]
     assert {step["text"] for step in items} == {""}
+    assert {step["thinking"] for step in items} == {""}
+    assert [step["tool_uses"] for step in items] == [[]] * 5
+    assert [step["tool_use_id"] for step in items] == [None, None, None, "call_1", None]
+    assert THOUGHT not in read.text and PATCH[:64] not in read.text
 
 
 async def test_a_kind_the_product_does_not_run_starts_nothing(

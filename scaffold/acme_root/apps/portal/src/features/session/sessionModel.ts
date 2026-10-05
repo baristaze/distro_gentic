@@ -1,19 +1,15 @@
-// Pure: what a session's page says. The status and why a parked session
-// waits, the thread and the timeline its history reads as, its tool calls,
-// its runs, what it delivered, and what a person may do to it now. No React,
-// no fetch.
+// Pure: what a session's page says, past its timeline (`timelineModel.ts`).
+// The status and why a parked session waits, the composer's words, its tool
+// calls, its runs, what it delivered, and what a person may do to it now.
+// No React, no fetch.
 import type {
   AgentSessionView,
-  ApprovalView,
   DeliveryView,
   ExecutionView,
   ParkView,
-  QuestionView,
   SessionModelUsageView,
-  StepView,
   ToolCallView,
 } from "@acme/client";
-import { looksLikeDiff, parseJsonText } from "../../design/kit";
 
 export type Tone = "plain" | "accent" | "danger";
 
@@ -86,174 +82,7 @@ export function parkLine(park: ParkView): ParkLine {
   };
 }
 
-/** What a session asks of a person now: the calls it holds for a decision,
- * then the parks only an unlock clears, oldest first. */
-export interface Ask {
-  seq: number;
-  kind: "decision" | "unlock";
-  what: string;
-  at: string;
-}
-
-export function asks(approvals: readonly ApprovalView[], questions: readonly QuestionView[]): Ask[] {
-  return [
-    ...approvals.map((call) => ({
-      seq: call.seq,
-      kind: "decision" as const,
-      what: `Run ${call.tool} (${call.authorization_class.replace(/_/g, " ")})`,
-      at: call.requested_at,
-    })),
-    ...questions.map((question) => ({
-      seq: question.seq,
-      kind: "unlock" as const,
-      what: `Clear it by ${UNLOCKS[question.unlock] ?? question.unlock.replace(/_/g, " ")}`,
-      at: question.asked_at,
-    })),
-  ].sort((a, b) => a.seq - b.seq);
-}
-
-/** What the message box shows while empty: while the agent waits on a
- * person's answer (parked on a person with no call to decide), the answer;
- * otherwise a reply or a steer, as the slot's example says it. */
-export function messagePlaceholder(parkReason: string | null | undefined, held: readonly Ask[], reply: string): string {
-  return parkReason === "person" && !held.some((ask) => ask.kind === "decision") ? "Answer the agent's question" : reply;
-}
-
-/** What a deny's note shows while empty. */
-export const DENY_NOTE_PLACEHOLDER = 'Tell the agent why, e.g. "Leave the migrations alone"';
-
-/** Who said a thing in a session's thread. */
-export type Speaker = "person" | "program" | "engine" | "agent" | "parent" | "outside";
-
-export const SPEAKERS: Record<Speaker, string> = {
-  person: "A person",
-  program: "A program",
-  engine: "The engine",
-  agent: "The agent",
-  parent: "The parent agent",
-  outside: "Something outside",
-};
-
-/** Who a step speaks for, from its actor and its origin: an agent's message
- * that came from its parent is the parent's (its objective), a program is
- * an API key's caller, and the engine's own notice (a nudge) is the
- * engine's. */
-export function speakerOf(step: Pick<StepView, "actor" | "origin">): Speaker {
-  if (step.actor === "agent" && step.origin === "parent") return "parent";
-  switch (step.actor) {
-    case "person":
-      return "person";
-    case "program":
-      return "program";
-    case "engine":
-      return "engine";
-    case "external":
-      return "outside";
-    case "agent":
-    case "model":
-      return "agent";
-  }
-}
-
-export interface ThreadEntry {
-  seq: number;
-  who: Speaker;
-  /** Who said it, in words. */
-  label: string;
-  text: string;
-  at: string;
-}
-
-/** The conversation: what each sender said and what the agent answered, in
- * order. A model answer that only called tools says nothing here. */
-export function thread(steps: readonly StepView[]): ThreadEntry[] {
-  const entries: ThreadEntry[] = [];
-  const said = (step: StepView, who: Speaker) => entries.push({ seq: step.seq, who, label: SPEAKERS[who], text: step.text, at: step.created_at });
-  for (const step of steps) {
-    if (step.type === "message") said(step, speakerOf(step));
-    else if (step.type === "model_response" && step.text.trim()) said(step, "agent");
-  }
-  return entries;
-}
-
-/** How a step's text reads best. */
-export type BodyKind = "markdown" | "json" | "diff" | "log" | "none";
-
-export function bodyKind(step: Pick<StepView, "type" | "text">): BodyKind {
-  if (!step.text.trim()) return "none";
-  if (step.type === "message" || step.type === "model_response" || step.type === "summary") return "markdown";
-  if (looksLikeDiff(step.text)) return "diff";
-  if (parseJsonText(step.text) !== undefined) return "json";
-  return "log";
-}
-
-export interface TimelineEntry {
-  seq: number;
-  type: StepView["type"];
-  at: string;
-  title: string;
-  detail: string | null;
-  tone: Tone;
-  body: string;
-  bodyKind: BodyKind;
-}
-
 const words = (value: string) => value.replace(/_/g, " ");
-
-function titleOf(step: StepView): { title: string; detail: string | null; tone: Tone } {
-  switch (step.type) {
-    case "message":
-      return { title: `Message from ${SPEAKERS[speakerOf(step)].toLowerCase()}`, detail: `by ${words(step.origin)}`, tone: "plain" };
-    case "model_request":
-      return { title: "Model called", detail: null, tone: "plain" };
-    case "model_response":
-      return {
-        title: "Model answered",
-        detail: step.tools.length > 0 ? `called ${step.tools.join(", ")}` : step.stop_reason ? words(step.stop_reason) : null,
-        tone: step.stop_reason === "refusal" || step.stop_reason === "content_filter" ? "danger" : "plain",
-      };
-    case "tool_request":
-      return { title: `Called ${step.tool ?? "a tool"}`, detail: null, tone: "plain" };
-    case "tool_response":
-      return step.failure
-        ? { title: `${step.tool ?? "A tool"} failed`, detail: words(step.failure), tone: "danger" }
-        : { title: `${step.tool ?? "A tool"} answered`, detail: null, tone: "plain" };
-    case "control":
-      return { title: `Control: ${words(step.command ?? "unknown")}`, detail: null, tone: "plain" };
-    case "parked":
-      return step.park
-        ? { title: "Parked", detail: `${parkLine(step.park).reason} Cleared by ${parkLine(step.park).unlock}.`, tone: "accent" }
-        : { title: "Parked", detail: null, tone: "accent" };
-    case "resumed":
-      return { title: "Resumed", detail: null, tone: "plain" };
-    case "loop_ended":
-      return {
-        title: `Loop ended${step.outcome ? `: ${step.outcome}` : ""}`,
-        detail: null,
-        tone: step.outcome === "failed" || step.outcome === "errored" ? "danger" : step.outcome === "succeeded" ? "accent" : "plain",
-      };
-    case "summary":
-      return { title: "Summary", detail: null, tone: "plain" };
-    case "switched":
-      return { title: "Switched model", detail: null, tone: "plain" };
-    case "environment_changed":
-      return { title: "Environment changed", detail: null, tone: "plain" };
-    case "event":
-      return { title: "Event", detail: null, tone: "plain" };
-  }
-}
-
-/** Every step as one entry of the timeline, in order. */
-export function timeline(steps: readonly StepView[]): TimelineEntry[] {
-  return steps.map((step) => ({
-    seq: step.seq,
-    type: step.type,
-    at: step.created_at,
-    ...titleOf(step),
-    body: step.text,
-    bodyKind: bodyKind(step),
-  }));
-}
 
 export interface ToolCallRow {
   seq: number;
@@ -360,7 +189,9 @@ export function allowed(session: AgentSessionView, mayWrite: boolean): Allowed {
   if (!mayWrite) return none;
   return {
     send: !handedOver,
-    pause: session.status === "running",
+    // A session reads pending until its first run parks or ends, so a run
+    // may hold it while it is pending: a pause parks it at its next step.
+    pause: session.status === "running" || session.status === "pending",
     resume: paused,
     cancel: open && !handedOver,
     compact: session.status === "idle",
@@ -433,19 +264,47 @@ export function splitCommand(line: string): SplitCommand {
   return { argv };
 }
 
-export type SessionTab = "thread" | "timeline" | "tools" | "evidence" | "changes" | "children" | "live";
+export type SessionTab = "tools" | "evidence" | "changes" | "children" | "live";
 
+/** The parts of a session past its chat, in its panel. */
 export const SESSION_TABS: readonly { value: SessionTab; label: string }[] = [
-  { value: "thread", label: "Thread" },
-  { value: "timeline", label: "Timeline" },
-  { value: "tools", label: "Tool calls" },
-  { value: "evidence", label: "Evidence" },
+  { value: "live", label: "Workspace" },
   { value: "changes", label: "Changes" },
+  { value: "evidence", label: "Evidence" },
+  { value: "tools", label: "Tool calls" },
   { value: "children", label: "Sub-agents" },
-  { value: "live", label: "Live" },
 ];
 
-/** The part of the page the address bar names; the thread otherwise. */
-export function sessionTab(value: string | null): SessionTab {
-  return SESSION_TABS.find((tab) => tab.value === value)?.value ?? "thread";
+/** The part of the panel the address bar names; null keeps the panel shut. */
+export function sessionPanel(value: string | null): SessionTab | null {
+  return SESSION_TABS.find((tab) => tab.value === value)?.value ?? null;
+}
+
+export interface ComposerWords {
+  label: string;
+  placeholder: string;
+}
+
+const REPLY = 'Reply or steer, e.g. "Also add a test for leap years"';
+
+/** What the composer is for now: an answer while the agent asks, a message
+ * that replies or steers otherwise. */
+export function composerOf(asking: boolean, reply: string | undefined): ComposerWords {
+  return asking ? { label: "Answer", placeholder: "Answer the agent's question" } : { label: "Message", placeholder: reply ?? REPLY };
+}
+
+export interface PullRequestBadge {
+  /** "#12", or the handle when it names no number. */
+  label: string;
+  handle: string;
+  more: number;
+}
+
+/** The pull request the session opened, for its header; null before one. */
+export function pullRequestBadge(delivery: Pick<DeliveryView, "work">): PullRequestBadge | null {
+  const opened = delivery.work.filter((work) => work.kind === "pull_request").map((work) => work.handle);
+  const last = opened[opened.length - 1];
+  if (last === undefined) return null;
+  const number = /(\d+)\s*$/.exec(last)?.[1];
+  return { label: number ? `#${number}` : last, handle: last, more: opened.length - 1 };
 }

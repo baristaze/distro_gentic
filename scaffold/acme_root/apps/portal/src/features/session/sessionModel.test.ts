@@ -1,47 +1,20 @@
 import { describe, expect, it } from "vitest";
-import type { AgentSessionView, ExecutionView, StepView, ToolCallView } from "@acme/client";
+import type { AgentSessionView, ExecutionView, ToolCallView } from "@acme/client";
 import {
   allowed,
-  asks,
-  bodyKind,
+  composerOf,
   deliveryLines,
-  messagePlaceholder,
   parkLine,
+  pullRequestBadge,
   runRow,
-  sessionTab,
+  sessionPanel,
   splitCommand,
   statusLine,
-  thread,
-  timeline,
   toolCallRow,
   usageLine,
 } from "./sessionModel";
 
 const at = "2026-10-03T10:00:00Z";
-
-function step(seq: number, fields: Partial<StepView>): StepView {
-  return {
-    id: `step-${seq}`,
-    seq,
-    loop_id: "loop-1",
-    type: "event",
-    actor: "engine",
-    origin: "engine",
-    text: "",
-    created_at: at,
-    command: null,
-    failure: null,
-    outcome: null,
-    park: null,
-    refs: [],
-    responds_to: null,
-    stop_reason: null,
-    tool: null,
-    tools: [],
-    usage: null,
-    ...fields,
-  };
-}
 
 const session: AgentSessionView = {
   id: "s1",
@@ -58,17 +31,6 @@ const session: AgentSessionView = {
   deleted_at: null,
 };
 
-const HISTORY = [
-  step(1, { type: "message", actor: "person", origin: "portal", text: "Please **tidy** it." }),
-  step(2, { type: "model_request", actor: "engine" }),
-  step(3, { type: "model_response", actor: "model", text: "", tools: ["read_file"], stop_reason: "tool_use" }),
-  step(4, { type: "tool_request", actor: "agent", tool: "read_file", text: '{"path": "README.md"}' }),
-  step(5, { type: "tool_response", actor: "program", tool: "read_file", text: "@@ -1 +1 @@\n-old\n+new" }),
-  step(6, { type: "tool_response", actor: "program", tool: "run", failure: "timeout", text: "still going" }),
-  step(7, { type: "model_response", actor: "model", text: "Done: the README reads well now.", stop_reason: "end_turn" }),
-  step(8, { type: "loop_ended", outcome: "succeeded" }),
-];
-
 describe("status and parks", () => {
   it("says archived first, and a parked session in the warning tone", () => {
     expect(statusLine({ status: "parked", archived_at: null })).toEqual({ label: "parked", tone: "danger" });
@@ -83,73 +45,6 @@ describe("status and parks", () => {
     expect(parkLine({ reason: "provider", unlock: "provider", retry_at: at })).toMatchObject({ action: null, retryAt: at });
   });
 
-  it("lists what the session asks of a person, oldest first", () => {
-    const listed = asks(
-      [{ seq: 9, session_id: "s1", tool: "deploy", authorization_class: "outward_facing", principal_id: "p", requested_at: at }],
-      [{ seq: 4, session_id: "s1", unlock: "deadline", asked_at: at }],
-    );
-    expect(listed.map((ask) => [ask.seq, ask.kind, ask.what])).toEqual([
-      [4, "unlock", "Clear it by moving its deadline"],
-      [9, "decision", "Run deploy (outward facing)"],
-    ]);
-  });
-});
-
-describe("the history", () => {
-  it("reads the thread as what a person said and what the agent answered", () => {
-    expect(thread(HISTORY).map((entry) => [entry.seq, entry.who])).toEqual([
-      [1, "person"],
-      [7, "agent"],
-    ]);
-  });
-
-  it("labels each message by its actor and its origin", () => {
-    const said = thread([
-      step(1, { type: "message", actor: "agent", origin: "parent", text: "Find the failing test." }),
-      step(2, { type: "message", actor: "engine", origin: "engine", text: "You have not called a tool in a while." }),
-      step(3, { type: "message", actor: "program", origin: "api", text: "Build 42 failed." }),
-      step(4, { type: "message", actor: "person", origin: "portal", text: "Go on." }),
-      step(5, { type: "message", actor: "agent", origin: "engine", text: "My notes." }),
-      step(6, { type: "message", actor: "external", origin: "integration", text: "A comment on the issue." }),
-    ]);
-    expect(said.map((entry) => [entry.who, entry.label])).toEqual([
-      ["parent", "The parent agent"],
-      ["engine", "The engine"],
-      ["program", "A program"],
-      ["person", "A person"],
-      ["agent", "The agent"],
-      ["outside", "Something outside"],
-    ]);
-    expect(timeline([step(1, { type: "message", actor: "agent", origin: "parent", text: "Go." })])[0]!.title).toBe("Message from the parent agent");
-  });
-
-  it("reads every step as a timeline entry with the body kind its text needs", () => {
-    const entries = timeline(HISTORY);
-    expect(entries.map((entry) => [entry.seq, entry.title, entry.bodyKind])).toEqual([
-      [1, "Message from a person", "markdown"],
-      [2, "Model called", "none"],
-      [3, "Model answered", "none"],
-      [4, "Called read_file", "json"],
-      [5, "read_file answered", "diff"],
-      [6, "run failed", "log"],
-      [7, "Model answered", "markdown"],
-      [8, "Loop ended: succeeded", "none"],
-    ]);
-    expect(entries[2]!.detail).toBe("called read_file");
-    expect([entries[5]!.tone, entries[5]!.detail]).toEqual(["danger", "timeout"]);
-    expect(entries[7]!.tone).toBe("accent");
-  });
-
-  it("reads a summary as Markdown and a tool's plain output as a log", () => {
-    expect(bodyKind({ type: "summary", text: "# Notes" })).toBe("markdown");
-    expect(bodyKind({ type: "tool_response", text: "ok\n" })).toBe("log");
-  });
-
-  it("reads a tool's output with lines outside its hunks as a log, so every line is drawn", () => {
-    const show = "commit 0123abc\nAuthor: A <a@example.test>\n\n    Tidy\n\ndiff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1 +1 @@\n-old\n+new\n";
-    expect(bodyKind({ type: "tool_response", text: show })).toBe("log");
-    expect(bodyKind({ type: "tool_response", text: "Changed:\n@@ -1 +1 @@\n-old\n+new" })).toBe("log");
-  });
 });
 
 describe("tool calls, runs, delivery, and usage", () => {
@@ -234,6 +129,7 @@ describe("what a person may do", () => {
 
   it("offers pause while it runs, resume while paused, and give back while a person has control", () => {
     expect(allowed({ ...session, status: "running" }, true)).toMatchObject({ pause: true, resume: false, cancel: true, archive: false });
+    expect(allowed({ ...session, status: "pending" }, true)).toMatchObject({ pause: true, resume: false, cancel: true, archive: false });
     expect(allowed({ ...session, status: "parked", park: { reason: "pause", unlock: "resume", retry_at: null } }, true)).toMatchObject({ resume: true, pause: false });
     expect(allowed({ ...session, status: "parked", park: { reason: "handover", unlock: "give_back", retry_at: null } }, true)).toMatchObject({
       giveBack: true,
@@ -265,19 +161,20 @@ describe("what a person may do", () => {
 });
 
 describe("the page's parts", () => {
-  it("opens the part the address bar names, and the thread otherwise", () => {
-    expect([sessionTab("evidence"), sessionTab("nope"), sessionTab(null)]).toEqual(["evidence", "thread", "thread"]);
+  it("opens the panel at the part the address bar names, and keeps it shut otherwise", () => {
+    expect([sessionPanel("evidence"), sessionPanel("nope"), sessionPanel(null)]).toEqual(["evidence", null, null]);
   });
-});
 
-describe("messagePlaceholder", () => {
-  const decision = { seq: 4, kind: "decision" as const, what: "Run run_command (execute)", at: "" };
-  const reply = 'Reply or steer, e.g. "Also add a test"';
+  it("turns the composer to an answer while the agent asks, and to a reply or a steer otherwise", () => {
+    expect(composerOf(true, undefined)).toEqual({ label: "Answer", placeholder: "Answer the agent's question" });
+    expect(composerOf(false, undefined).placeholder).toBe('Reply or steer, e.g. "Also add a test for leap years"');
+    expect(composerOf(false, "e.g. Re-run it").placeholder).toBe("e.g. Re-run it");
+  });
 
-  it("asks for the answer while the agent waits on a person's reply, and a reply or a steer otherwise", () => {
-    expect(messagePlaceholder("person", [], reply)).toBe("Answer the agent's question");
-    expect(messagePlaceholder("person", [decision], reply)).toBe(reply);
-    expect(messagePlaceholder("budget", [], reply)).toBe(reply);
-    expect(messagePlaceholder(null, [], reply)).toBe(reply);
+  it("badges the last pull request the session opened, by its number", () => {
+    const pr = (handle: string) => ({ kind: "pull_request" as const, handle, bound_at: at });
+    expect(pullRequestBadge({ work: [] })).toBeNull();
+    expect(pullRequestBadge({ work: [pr("forge/acme/first#3"), pr("forge/acme/first#12")] })).toEqual({ label: "#12", handle: "forge/acme/first#12", more: 1 });
+    expect(pullRequestBadge({ work: [pr("draft")] })?.label).toBe("draft");
   });
 });

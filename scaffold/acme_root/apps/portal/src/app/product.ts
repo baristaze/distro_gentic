@@ -7,13 +7,15 @@
 // platform screen in silence.
 import type { ReactNode } from "react";
 import type { RouteObject } from "react-router-dom";
-import type { AgentSessionView, ToolCallView } from "@acme/client";
+import type { AgentSessionView } from "@acme/client";
+import type { Call } from "../features/session/timelineModel";
 
 /** A session as a product's tab or tool card sees it. */
 export interface SlotSession {
   session: AgentSessionView;
-  /** Its tool calls, each with what it was asked and what it answered. */
-  calls: readonly ToolCallView[];
+  /** Its steps paired into tool calls, each with what it was asked and
+   * what it answered. */
+  calls: readonly Call[];
   /** Whether a run holds its loop now. */
   running: boolean;
   /** Shows one of the session's tabs. */
@@ -51,7 +53,7 @@ export interface ToolView {
   /** One line: what it was asked and what it answered. */
   gist: (input: unknown, output: unknown) => string;
   /** A card in the timeline, in place of the line. */
-  card?: (s: SlotSession, call: ToolCallView) => ReactNode;
+  card?: (s: SlotSession, call: Call) => ReactNode;
   /** The tab a click on the call opens. */
   tab?: string;
 }

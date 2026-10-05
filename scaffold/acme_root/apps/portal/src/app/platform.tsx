@@ -14,6 +14,7 @@ import { PlaybooksPage } from "../features/playbooks/PlaybooksPage";
 import { ProjectPage } from "../features/projects/ProjectPage";
 import { ProjectsPage } from "../features/projects/ProjectsPage";
 import { SessionPage } from "../features/session/SessionPage";
+import { PLATFORM_GISTS } from "../features/session/toolGists";
 import { SessionsPage } from "../features/sessions/SessionsPage";
 import { ApiKeysPage } from "../features/settings/ApiKeysPage";
 import { GeneralPage } from "../features/settings/GeneralPage";
@@ -89,7 +90,8 @@ export const PLATFORM: PortalProduct = {
     },
   ],
   sessionTabs: [],
-  tools: {},
+  // How each of the platform's tools reads in a session's timeline.
+  tools: Object.fromEntries(Object.entries(PLATFORM_GISTS).map(([name, gist]) => [name, { gist }])),
   settings: [
     {
       group: "Personal",

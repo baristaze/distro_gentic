@@ -11,6 +11,8 @@ import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError, type AgentSessionView, type ExecutionView, type MeView, type StepView } from "@acme/client";
 import { SessionsPage } from "../sessions/SessionsPage";
+import { PLATFORM } from "../../app/platform";
+import { SlotProvider } from "../../app/slot";
 import { keys } from "../../queries/keys";
 import { SessionPage } from "./SessionPage";
 
@@ -21,6 +23,9 @@ const net = vi.hoisted(() => ({
   environment: "local",
   projects: [] as { id: string; name: string }[],
   posts: [] as { path: string; body: unknown }[],
+  /** What the session's record says past the fixture's: its status, its park. */
+  over: {} as Partial<AgentSessionView>,
+  held: [] as unknown[],
 }));
 
 const at = "2026-10-03T10:00:00Z";
@@ -48,6 +53,9 @@ const step = (seq: number, fields: Partial<StepView>): StepView => ({
   actor: "engine",
   origin: "engine",
   text: "",
+  thinking: "",
+  tool_uses: [],
+  tool_use_id: null,
   created_at: at,
   command: null,
   failure: null,
@@ -85,7 +93,7 @@ const RUN: ExecutionView = {
 };
 
 function answer(path: string): unknown {
-  const held = HELD[net.org];
+  const held = { ...HELD[net.org], ...net.over };
   if (path === "/v1/me") return { app: "portal", role: "owner", permissions: ["read", "write"], user: { id: "u1" }, org: { id: net.org } } as unknown as MeView;
   if (path.startsWith("/v1/agent-sessions?")) return { items: [held], next_cursor: null };
   if (path.startsWith("/v1/projects?")) return net.projects;
@@ -108,6 +116,9 @@ function answer(path: string): unknown {
         step(3, { type: "loop_ended", outcome: "succeeded" }),
       ],
     };
+  if (part === "delivery")
+    return { branch: "fix-dates", branch_seen: true, project_id: null, report: null, work: [{ kind: "pull_request", handle: "forge/acme/first#7", bound_at: at }] };
+  if (part === "approvals") return net.held;
   if (part === "executions") return { items: [RUN], next_cursor: null };
   if (part === "validations") return [];
   if (part === "usage") return { calls: 1, input: 10, output: 5, thinking: 0, cache_read: 0, cache_write: 0, fills: [] };
@@ -151,7 +162,8 @@ async function open(org: "a" | "b", address: string, history: StepView[] | null 
     { initialEntries: [address] },
   );
   root = createRoot(container);
-  await act(async () => root!.render(createElement(QueryClientProvider, { client: queryClient }, createElement(RouterProvider, { router }))));
+  const page = createElement(SlotProvider, { slot: PLATFORM, children: createElement(RouterProvider, { router }) });
+  await act(async () => root!.render(createElement(QueryClientProvider, { client: queryClient }, page)));
   await settle();
   return queryClient;
 }
@@ -164,7 +176,7 @@ async function settle() {
 afterEach(async () => {
   await act(async () => root?.unmount());
   root = null;
-  Object.assign(net, { environment: "local", projects: [], posts: [] });
+  Object.assign(net, { environment: "local", projects: [], posts: [], over: {}, held: [] });
 });
 
 describe("a second org's session", () => {
@@ -184,35 +196,42 @@ describe("a second org's session", () => {
 });
 
 describe("the org's own session", () => {
-  it("draws its thread from the history", async () => {
+  const rows = () => [...container.querySelectorAll("[aria-label='Timeline'] > li[data-kind]")];
+
+  it("draws its history as a chat, the pull request it opened in its header, and its status last", async () => {
     await open("a", "/sessions/sa");
     expect(container.querySelector("h1")!.textContent).toBe("Ajax's own session");
-    const said = [...container.querySelectorAll("[aria-label='Messages'] li")].map((item) => item.getAttribute("data-who"));
-    expect(said).toEqual(["person", "agent"]);
-    expect(container.querySelector("[aria-label='Messages'] strong")!.textContent).toBe("docs");
+    expect(rows().map((row) => row.getAttribute("data-kind"))).toEqual(["person", "prose", "line"]);
+    expect(container.querySelector(".acme-bubble strong")!.textContent).toBe("docs");
+    expect(container.querySelector(".acme-pr-badge")!.textContent).toBe("#7");
+    expect(container.querySelector("[aria-label='Timeline'] [role='status']")!.textContent).toBe("Done");
+    expect(container.querySelector("textarea")!.getAttribute("placeholder")).toBe('Reply or steer, e.g. "Also add a test for leap years"');
   });
 
-  it("draws its timeline, every step in order", async () => {
-    await open("a", "/sessions/sa?tab=timeline");
-    const steps = [...container.querySelectorAll("[aria-label='Steps'] [data-title]")].map((title) => title.textContent);
-    expect(steps).toEqual(["Message from a person", "Model answered", "Loop ended: succeeded"]);
-  });
-
-  it("draws a 3,000-step timeline's lines and only the bodies opened", async () => {
-    const long = Array.from({ length: 3000 }, (_, index) =>
-      step(index + 1, { type: "tool_response", actor: "program", tool: "run", text: `output of step ${index + 1}` }),
-    );
-    const queryClient = await open("a", "/sessions/sa?tab=timeline", long);
-    const steps = container.querySelector("[aria-label='Steps']")!;
-    expect(steps.querySelectorAll("li")).toHaveLength(3000);
-    expect(steps.querySelectorAll(".acme-timeline-body")).toHaveLength(0);
+  it("folds a 3,000-step history into one work block, and draws a call's answer only once its row opens", async () => {
+    const long: StepView[] = [];
+    for (let n = 1; n <= 1000; n += 1) {
+      const asked = step(long.length + 1, { type: "model_response", actor: "model", tool_uses: [{ id: `u${n}`, name: "run_command", input: { argv: ["make", `t${n}`] } }] });
+      const made = step(long.length + 2, { type: "tool_request", actor: "agent", refs: [asked.id], tool: "run_command", tool_use_id: `u${n}` });
+      const said = step(long.length + 3, { type: "tool_response", actor: "program", responds_to: made.id, tool: "run_command", tool_use_id: `u${n}`, text: `output of call ${n}` });
+      long.push(asked, made, said);
+    }
+    const queryClient = await open("a", "/sessions/sa", long);
     expect(net.calls.filter((path) => path.includes("/steps?"))).toHaveLength(15);
-    const show = [...steps.querySelectorAll("li")][41]!.querySelector("button")!;
-    expect(show.textContent).toBe("Show");
-    await act(async () => show.click());
-    const bodies = [...steps.querySelectorAll(".acme-timeline-body")];
+    expect(rows().map((row) => row.getAttribute("data-kind"))).toEqual(["work"]);
+    const block = rows()[0]!.querySelector<HTMLButtonElement>(".acme-fold-line")!;
+    expect(block.textContent).toContain("1000 steps");
+    expect(container.querySelectorAll(".acme-call")).toHaveLength(0);
+    await act(async () => block.click());
+    const calls = [...container.querySelectorAll(".acme-call")];
+    expect(calls).toHaveLength(1000);
+    expect(container.querySelectorAll(".acme-call-body")).toHaveLength(0);
+    const line = calls[41]!.querySelector<HTMLButtonElement>(".acme-call-line")!;
+    expect(line.textContent).toContain("make t42");
+    await act(async () => line.click());
+    const bodies = [...container.querySelectorAll(".acme-call-body")];
     expect(bodies).toHaveLength(1);
-    expect(bodies[0]!.textContent).toContain("output of step 42");
+    expect(bodies[0]!.textContent).toContain("output of call 42");
 
     // A push for the session reads only the steps past the last one held.
     long.push(step(3001, { type: "loop_ended", outcome: "succeeded" }));
@@ -220,10 +239,27 @@ describe("the org's own session", () => {
     await act(async () => queryClient.invalidateQueries({ queryKey: keys.agentSessions.one("sa") }));
     await settle();
     expect(net.calls.filter((path) => path.includes("/steps?"))).toEqual(["/v1/agent-sessions/sa/steps?after_seq=3000&limit=200"]);
-    expect(steps.querySelectorAll("li")).toHaveLength(3001);
+    expect(rows().map((row) => row.getAttribute("data-kind"))).toEqual(["work", "line"]);
   });
 
-  it("draws its evidence: each run with its outcome and a twin's provenance", async () => {
+  it("draws a held call as an action card whose Approve sends the decision on that call", async () => {
+    net.over = { status: "parked", park: { reason: "person", unlock: "approval", retry_at: null } };
+    net.held = [{ seq: 3, session_id: "sa", tool: "run_command", authorization_class: "execute", principal_id: "u1", requested_at: at }];
+    await open("a", "/sessions/sa", [
+      step(1, { type: "message", actor: "person", origin: "portal", text: "Run the tests." }),
+      step(2, { type: "model_response", actor: "model", tool_uses: [{ id: "u1", name: "run_command", input: { argv: ["pytest", "-q"] } }] }),
+      step(3, { type: "tool_request", actor: "agent", refs: ["st2"], tool: "run_command", tool_use_id: "u1" }),
+    ]);
+    const card = container.querySelector("[aria-label='Action required']")!;
+    expect(card.textContent).toContain("pytest -q");
+    expect(card.textContent).toContain("execute");
+    expect(container.querySelector("[aria-label='Timeline'] [role='status']")!.textContent).toBe("Needs you: approve run_command");
+    const approve = [...card.querySelectorAll("button")].find((button) => button.textContent === "Approve")!;
+    await act(async () => approve.click());
+    expect(net.posts).toContainEqual({ path: "/v1/agent-sessions/sa/calls/3/decision", body: { approve: true } });
+  });
+
+  it("draws its evidence in the panel: each run with its outcome and a twin's provenance", async () => {
     await open("a", "/sessions/sa?tab=evidence");
     const cells = [...container.querySelectorAll("table[aria-label='Runs'] tbody td")].map((cell) => cell.textContent);
     expect(cells.slice(0, 5)).toEqual(["unit 1", "work", "passed", "twin, never reported as real", "4 passed"]);

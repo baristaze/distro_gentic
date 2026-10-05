@@ -96,6 +96,16 @@ async def steps_of(client: httpx.AsyncClient, owner: Headers, session_id: str) -
     return read.json()["items"]
 
 
+def says_nothing(steps: list[Any]) -> bool:
+    """Whether each step's content is gone from its view: no text, no
+    thought, no call a model made, and no call a result answers."""
+    return all(
+        (step["text"], step["thinking"], step["tool_uses"]) == ("", "", [])
+        and (step["type"] == "tool_request" or step["tool_use_id"] is None)
+        for step in steps
+    )
+
+
 def shape_of(steps: list[Any]) -> list[tuple[int, str, str]]:
     return [(step["seq"], step["type"], step["id"]) for step in steps]
 
@@ -115,6 +125,7 @@ async def test_an_admin_erases_a_sessions_content_and_its_shape_stays(
     before = await steps_of(client, owner, session_id)
     assert [step["type"] for step in before] == SHAPE
     assert before[0]["text"] == SAID
+    assert before[2]["thinking"] and before[2]["tool_uses"] and before[4]["tool_use_id"]
 
     erased = await client.post(f"/v1/retention/sessions/{session_id}/erase", headers=admin)
 
@@ -123,8 +134,8 @@ async def test_an_admin_erases_a_sessions_content_and_its_shape_stays(
     assert erased.json()["content_expired_at"] is not None
     after = await steps_of(client, owner, session_id)
     assert shape_of(after) == shape_of(before)
-    assert {step["text"] for step in after} == {""}
-    assert SAID not in str(after)
+    assert says_nothing(after)
+    assert SAID not in str(after) and before[2]["thinking"] not in str(after)
     ring = await container.storage.get_privacy_storage().read_keys(
         await org_of(container), UUID(session_id)
     )
@@ -194,7 +205,7 @@ async def test_an_admin_writes_the_policy_and_the_sweep_holds_sessions_to_it(
 
     after = await steps_of(client, owner, session_id)
     assert [step["type"] for step in after] == SHAPE
-    assert {step["text"] for step in after} == {""}
+    assert says_nothing(after)
     read = await client.get("/v1/retention/policy", headers=owner)
     assert read.json() == tightened.json()
 
