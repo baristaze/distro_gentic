@@ -96,12 +96,15 @@ workspace it works in, and which of its calls run without asking.
   nobody used, holding the delivered commit with the protected paths
   from its base, destroyed after the run. The run is recorded as an
   execution record, the record every run is, and finishing the session
-  names it. A session runs its check once: asked again after its run
-  was kept, it finishes with that run and runs nothing. Its verdict is
-  that run's, read at the check's grade: it passed when the run passed,
-  one of its cases did, and what served it meets the strictest grade the
-  policy's requirements ask of the check, a twin when none names it. A
-  run on a double, or with a dependency that was not there, never passes.
+  names it. A session runs its check once, or, when a requirement rates
+  the check, its declared trials: asked again after its runs were kept,
+  it finishes with the last and runs nothing. Its verdict is read at the
+  check's grade: a run passed when it passed, one of its cases did, and
+  what served it meets the strictest grade the policy's requirements ask
+  of the check, a twin when none names it. A rated check passes only as
+  its requirement judges all its trials together, so one lucky trial
+  never passes it. A run on a double, or with a dependency that was not
+  there, never passes.
 - **Purge.** A tenant deleted past its retention loses its validation
   sessions.
 

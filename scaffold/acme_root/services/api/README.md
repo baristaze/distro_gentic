@@ -110,8 +110,10 @@ app, and `main.py` is the `acme-api` command: `serve`, `migrate`,
 - **Validation sessions.** A member who may write starts one, under an
   Idempotency-Key, as a CI job asks for one: a check its project's policy
   declares, at a delivered head, with its checks from a base. The
-  platform's worker runs it once on a fresh executor. Any member reads
-  it, and once its run is recorded, its verdict and the run. A project
+  platform's worker runs it once on a fresh executor, or, for a check a
+  requirement rates, its declared trials, which pass only together. Any
+  member reads it, and once its run is recorded, its verdict and the run
+  (the last trial's, for a rated check). A project
   with no policy in the tenant is `404`, as another tenant's is, and a
   check the policy does not declare is `422`. (`/v1/validation-sessions`,
   `/v1/validation-sessions/{session_id}`)
