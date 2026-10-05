@@ -433,6 +433,25 @@ class HostsStorageContract:
         again = await storage.revoke_claimant(org, host.id, at + timedelta(1), new_id(), ())
         assert again == revoked
 
+    async def test_read_hosts_lists_the_live_hosts_seen_last_first_past_any_revoked(
+        self, storage: HostsStorageInterface
+    ) -> None:
+        """A host re-enrolls as a new row, so a pool's revoked rows pile up:
+        the list skips them, so its newest hosts are on it past a thousand."""
+        org, pool_id = new_id(), new_id()
+        for _ in range(1001):
+            gone = make_host(pool_id).model_copy(
+                update={"revoked_at": utcnow(), "revoked_by": new_id()}
+            )
+            await storage.enroll(org, gone, make_credential(gone.id), ())
+        quiet = make_host(pool_id)
+        quiet = quiet.model_copy(update={"last_seen_at": quiet.last_seen_at - timedelta(hours=1)})
+        newest = make_host(pool_id)
+        for host in (quiet, newest):
+            await storage.enroll(org, host, make_credential(host.id), ())
+        assert await storage.read_hosts(org, pool_id, 1000) == [newest, quiet]
+        assert await storage.read_hosts(org, pool_id, 1) == [newest]
+
     async def test_revoke_host_of_another_tenant_changes_nothing(
         self, storage: HostsStorageInterface
     ) -> None:

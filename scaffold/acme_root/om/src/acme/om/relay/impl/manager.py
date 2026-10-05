@@ -22,6 +22,7 @@ from acme.om.hosts.types.host import HostIdentity
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import outbox_row, versioned_row
 from acme.om.placement.kinds import HOST
+from acme.om.placement.rules import host_lane
 from acme.om.placement.types.claimant import Claimant
 from acme.om.placement.types.work import (
     ExecOperation,
@@ -165,8 +166,8 @@ class RelayManagerImpl(RelayManagerInterface):
         placed = await self._hosts.placement_of(ctx, owner)
         if placed.pool is None:
             raise ValidationFailed(f"session {owner} runs in the cloud; no host holds it")
-        statuses = await self._hosts.get_hosts(ctx, placed.pool.id)
-        host = next((status.host for status in statuses if status.host.id == host_id), None)
+        status = await self._hosts.get_host(ctx, placed.pool.id, host_id)
+        host = None if status is None else status.host
         if host is None or host.revoked_at is not None:
             raise ValidationFailed(f"host {host_id} is no live host of session {owner}'s pool")
         stored = await self._storage.read_binding(ctx.org_id, session_id)
@@ -252,11 +253,8 @@ class RelayManagerImpl(RelayManagerInterface):
         placed = await self._hosts.placement_of(ctx, binding.instance_of or session_id)
         if placed.pool is None:
             return None
-        statuses = await self._hosts.get_hosts(ctx, placed.pool.id)
-        live = any(
-            s.host.id == binding.host_id and s.host.revoked_at is None and s.online
-            for s in statuses
-        )
+        status = await self._hosts.get_host(ctx, placed.pool.id, binding.host_id)
+        live = status is not None and status.host.revoked_at is None and status.online
         return binding if live else None
 
     async def ask_release(self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec) -> bool:
@@ -344,6 +342,13 @@ class RelayManagerImpl(RelayManagerInterface):
                 f"session {call.session_id} is pinned to its tenant's hosts, and no host "
                 "holds its workspace yet; its calls never run on the platform's machines"
             )
+        if not await self._holds(ctx, binding.instance_of or call.session_id, binding.host_id):
+            # A revoked host never claims again: a command queued on its lane
+            # would wait for good. The run prepares again on the pool.
+            raise NoWorkspaceHost(
+                f"the host that held session {call.session_id}'s workspace is no longer a live "
+                "host of its pool; its workspace is made again before its calls run"
+            )
         sealed = await self._seal.seal(ctx, call.session_id, call.key, request)
         if sealed is None:
             raise ContentNotKept(
@@ -407,9 +412,12 @@ class RelayManagerImpl(RelayManagerInterface):
         item = await self._item(org_id, item_id)
         await self._admit(ctx, item.session_id, epoch)
         if item.state is ExecState.QUEUED:
-            # No host took it: it never runs, and the row it left is
-            # completed by the claim that finds it.
+            # No host took it: it never runs. Its row ends with it, unless a
+            # host claimed the row first: the claim that finds the item
+            # settled completes it.
             stopped = await self._settle(ctx, item, ExecOutcome(stopped=kind))
+            if stopped is not None:
+                await self._end_row(ctx, stopped)
             return stopped or await self._item(org_id, item_id)
         if item.state is ExecState.RUNNING:
             await self._control(ctx, item, kind)
@@ -653,7 +661,34 @@ class RelayManagerImpl(RelayManagerInterface):
     async def bindings(self, after: UUID | None) -> list[tuple[UUID, WorkspaceBinding]]:
         return await self._storage.read_bindings(after, self._options.sweep_batch)
 
+    async def end_host(self, rctx: RequestContext, org_id: UUID, host_id: UUID) -> int:
+        ctx = await self._service(rctx, org_id)
+        ended = await self._work.end_open_on_lane(
+            org_id, host_lane(host_id), "its host was revoked"
+        )
+        settled = 0
+        for row in ended:
+            if row.kind != WorkKind.EXEC:
+                continue
+            try:
+                payload = ExecPayload.model_validate(row.payload)
+            except ValidationError:
+                continue
+            item = await self._storage.read_item(org_id, payload.item_id)
+            if item is None or item.state not in (ExecState.QUEUED, ExecState.RUNNING):
+                continue
+            # The host is told nothing: a revoked host's calls are refused.
+            if await self._settle(ctx, item, ExecOutcome(stopped=StopKind.REVOKE)) is not None:
+                settled += 1
+                OUTCOMES.labels(subsystem="relay", outcome="interrupted").inc()
+        return settled
+
     async def purge_session(self, org_id: UUID, session_id: UUID) -> None:
+        # Its commands' queue rows end first: a row whose item is gone would
+        # wait for good on the lane of a host that never claims again.
+        await self._work.end_open_for_target(
+            org_id, WorkKind.EXEC, session_id, "its session was purged"
+        )
         while await self._storage.purge_session(org_id, session_id, self._options.purge_batch):
             pass
 
@@ -802,8 +837,8 @@ class RelayManagerImpl(RelayManagerInterface):
         placed = await self._hosts.placement_of(ctx, session_id)
         if placed.pool is None:
             return False
-        statuses = await self._hosts.get_hosts(ctx, placed.pool.id)
-        return any(s.host.id == host_id and s.host.revoked_at is None for s in statuses)
+        status = await self._hosts.get_host(ctx, placed.pool.id, host_id)
+        return status is not None and status.host.revoked_at is None
 
     async def _attach(self, ctx: TenantContext, item: ExecItem, call: ExecCall) -> ExecItem:
         """The item a call that sent it before meets: as it stands, so the
@@ -911,6 +946,15 @@ class RelayManagerImpl(RelayManagerInterface):
         if written is not None and revoke:
             await self._control(ctx, item, StopKind.REVOKE)
         return written
+
+    async def _end_row(self, ctx: TenantContext, item: ExecItem) -> None:
+        """Ends the queue row of an item that never ran, while it is queued:
+        a host that is gone never claims it to find the item settled."""
+        try:
+            row = await self._work.get_item(ctx, item.row_id)
+        except NotFound:
+            return
+        await self._work.end_queued(ctx, row, "its command was stopped before a host took it")
 
     async def _control(self, ctx: TenantContext, item: ExecItem, kind: StopKind) -> None:
         """A control message for the host that holds the item; its row is

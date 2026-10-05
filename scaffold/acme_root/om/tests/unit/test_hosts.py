@@ -95,6 +95,7 @@ def hosts(managers: Managers, storage: StorageMemoryImpl, clock: Clock) -> Hosts
         HostsOptions(),
         platform_claimant_kinds(),
         clock=clock,
+        revoked=managers.relay.end_host,
     )
 
 
@@ -210,6 +211,31 @@ async def test_only_a_live_enrollment_token_enrolls_a_host(
     assert len(await hosts.get_hosts(owner, pool.id)) == 1
 
 
+async def test_a_token_whose_issuer_left_or_was_lowered_enrolls_nothing(
+    managers: Managers, hosts: HostsManagerImpl
+) -> None:
+    owner = await an_owner(managers)
+    pool = await hosts.create_pool(owner, a_pool())
+    leaving = await a_member(managers, "ajax", Role.ADMIN)
+    _, user, _ = await managers.tenancy.add_member(
+        request(APP), "ajax", "bea@ajax.test", "Bea", Role.ADMIN
+    )
+    lowered = await managers.tenancy.member_context(request(APP), owner.org_id, user.id)
+    left_token = await hosts.issue_enrollment_token(leaving, pool.id)
+    lowered_token = await hosts.issue_enrollment_token(lowered, pool.id)
+    kept = await hosts.issue_enrollment_token(owner, pool.id)
+    await managers.tenancy.members.remove_member(owner, leaving.user_id)
+    await managers.tenancy.members.update_membership_role(owner, lowered.user_id, Role.MEMBER)
+    enrollment = Enrollment(name="host-1", advertisement=PROBED, exec_version=1)
+    for token in (left_token, lowered_token):
+        with pytest.raises(CredentialExpired):
+            await hosts.enroll(request(), token.token, enrollment)
+    assert await hosts.get_hosts(owner, pool.id) == ()
+    # A token of an issuer who still manages the members enrolls.
+    await hosts.enroll(request(), kept.token, enrollment)
+    assert len(await hosts.get_hosts(owner, pool.id)) == 1
+
+
 async def test_a_host_credential_is_no_platform_credential_and_no_other_is_a_hosts(
     managers: Managers, hosts: HostsManagerImpl
 ) -> None:
@@ -270,8 +296,9 @@ async def test_a_copy_rotated_after_the_hosts_own_rotation_ends_the_host(
     for credential in (copy, rotated.credential):
         with pytest.raises(CredentialExpired):
             await hosts.authenticate(request(), credential)
-    (status,) = await hosts.get_hosts(owner, pool.id)
-    assert status.host.revoked_at == clock.now and not status.online
+    assert await hosts.get_hosts(owner, pool.id) == ()
+    status = await hosts.get_host(owner, pool.id, issued.claimant_id)
+    assert status is not None and status.host.revoked_at == clock.now and not status.online
 
 
 async def test_a_copy_rotating_every_half_hour_does_not_outlive_its_hour(
@@ -315,8 +342,9 @@ async def test_a_copy_that_rotates_first_ends_at_the_hosts_next_beat(
     # refused, and the host and every credential it holds are revoked.
     with pytest.raises(CredentialExpired):
         await hosts.authenticate(request(), issued.credential)
-    (status,) = await hosts.get_hosts(owner, pool.id)
-    assert status.host.revoked_at == clock.now and not status.online
+    assert await hosts.get_hosts(owner, pool.id) == ()
+    status = await hosts.get_host(owner, pool.id, issued.claimant_id)
+    assert status is not None and status.host.revoked_at == clock.now and not status.online
     with pytest.raises(CredentialExpired):
         await hosts.authenticate(request(), held.credential)
 
@@ -339,8 +367,9 @@ async def test_a_revoked_host_is_refused_and_handed_nothing(
         await hosts.rotate(request(), identity)
     with pytest.raises(CredentialExpired):
         await hosts.heartbeat(request(), identity, HostReport(advertisement=PROBED, exec_version=1))
-    (status,) = await hosts.get_hosts(owner, pool.id)
-    assert not status.online
+    assert await hosts.get_hosts(owner, pool.id) == ()
+    status = await hosts.get_host(owner, pool.id, host.claimant_id)
+    assert status is not None and status.host.revoked_at is not None and not status.online
 
 
 async def test_only_an_owner_or_an_admin_lets_hosts_in(

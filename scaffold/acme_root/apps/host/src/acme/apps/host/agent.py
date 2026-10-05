@@ -145,6 +145,9 @@ class HostAgent:
             self._probed = await startup(
                 self._probes, client, self._settings.max_clock_skew_seconds, self._now
             )
+        if not self._probed.open_egress:
+            reached = next(r for r in self._probed.results if r.name == "metadata")
+            log.warning("open egress is refused here: %s", reached.detail)
         held = load_credential(self._settings.credential_path)
         if (
             held is not None
@@ -193,7 +196,7 @@ class HostAgent:
         if answer.item is None:
             return None
         ask = ask_of(answer.item)
-        refused = refusals(self._ceilings, self._modes(), ask)
+        refused = refusals(self._ceilings, self._modes(), ask, open_egress=self.probed.open_egress)
         if refused:
             log.warning("item %s refused: %s", answer.item.id, "; ".join(refused))
             await self._executor.refuse(answer.item, refused)

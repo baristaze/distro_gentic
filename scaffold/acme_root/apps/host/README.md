@@ -59,6 +59,17 @@ macOS.
   starts. Nothing else of the host's environment reaches a command, not
   even the proxies Docker's own config names. A workspace with no egress
   gets neither, and no secret may land in their variables.
+- **Keeps open egress off a machine that reaches its cloud's metadata
+  service.** A cloud hands a machine's own credentials to whatever asks
+  its metadata service from the machine. A workspace's commands leave
+  from the host's own network, since a rootless engine sends a
+  container's connections out as the host's user, so a command under
+  open egress could read those credentials and send them on. As it
+  starts, the host tries `169.254.169.254` (AWS, Azure, GCP, and most
+  others), `fd00:ec2::254` (AWS), and `metadata.google.internal` (GCP).
+  While one answers, it refuses every item that asks for open egress;
+  an item with an allowlist still runs. `deployment/host/README.md` says
+  how to drop them for the host's user.
 - **Lets go of an instance when asked.** The platform asks the host
   that holds a session's workspace to release it once no run accounts
   for it past a grace, after it has pushed the checkout's work. The host

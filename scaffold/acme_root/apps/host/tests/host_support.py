@@ -171,13 +171,15 @@ def failing(name: str) -> Probe:
     return Probe(name, False, "failed in the test")
 
 
-def probes(*modes: IsolationMode) -> Probes:
+def probes(*modes: IsolationMode, metadata_answers: bool = False) -> Probes:
     """The startup's own probes of the machine, each passing, and the
-    platform's real one; the isolation probes pass for `modes` alone."""
+    platform's real one; the isolation probes pass for `modes` alone, and
+    the metadata probe fails only when `metadata_answers`."""
     return Probes(
         trust_store=lambda: passing("trust_store"),
         proxy=lambda: passing("proxy"),
         platform_and_clock=platform_and_clock,
+        metadata=lambda: failing("metadata") if metadata_answers else passing("metadata"),
         isolation={
             mode: (lambda m=mode: passing(m.value) if m in modes else failing(m.value))
             for mode in IsolationMode
