@@ -17,9 +17,9 @@ The decision: `../../scaffold/acme_root/docs/adr/2025-a-product-adds-its-own-kin
 
 ## Input
 
-`<KIND> --claimant <claimant> [--stream <stream>]`, and what the work
-carries, where it runs, and who claims it, in the arguments or in the
-conversation.
+`<KIND> --claimant <claimant> [--stream <stream>] [--reads <stream>]`,
+and what the work carries, where it runs, and who claims it, in the
+arguments or in the conversation.
 
 Example: `RENDER --claimant batch`, for "a render job carries its frame
 count and runs on a node of the batch pool its payload names".
@@ -32,10 +32,17 @@ count and runs on a node of the batch pool its payload names".
   `om/src/<name>/om/placement/kinds.py` holds it. `host` is the
   platform's: stop and say so. A claimant kind the product already
   registered is reused, never registered twice.
-- `--stream` names a stream kind in lower case when the work streams
-  what a person watches live while it runs, or when the claimant reads
-  what the product sends it while it runs (`STREAM_KIND` in
+- `--stream` names a stream kind in lower case that the work writes
+  while it runs, what a person watches live (`STREAM_KIND` in
   `om/src/<name>/om/watch/kinds.py`). `step` is the platform's.
+- `--reads` names a stream kind in lower case that the claimant reads
+  while it runs, what the product's own code sends it.
+- Each direction is a stream kind of its own. A work that streams a log
+  out and reads cues in takes `--stream <log> --reads <cues>`: two
+  kinds, never one kind that sets both `claimant=` and `reader=`. A run
+  for a work kind the product already registered adds only its new
+  stream kind to `product_kinds.py` and that kind's cases to
+  `test_<kind>_kind.py`, and registers nothing twice.
 
 A kind a worker of the product's own runs from a lane it serves, with no
 claimant, is the guideline's kind of work: `arch-scaffold-worker`, not
@@ -62,7 +69,7 @@ in `om/src/<name>/om/placement/kinds.py`, `StreamKind` in
 
 | File | Change |
 |------|--------|
-| `om/src/<name>/om/product_kinds.py` | the kind's payload, its lane, and its `WorkKindSpec`; its claimant kind's `ClaimantKindSpec`, unless the product registered it already; with `--stream`, its `StreamKind`; each in `PRODUCT_KINDS`, the one `ProductKinds` the product declares |
+| `om/src/<name>/om/product_kinds.py` | the kind's payload, its lane, and its `WorkKindSpec`; its claimant kind's `ClaimantKindSpec`, unless the product registered it already; with `--stream` or `--reads`, each its `StreamKind`; each in `PRODUCT_KINDS`, the one `ProductKinds` the product declares |
 
 Every process's entry point hands its root `PRODUCT_KINDS`: `build` of
 the API's, the session runner's, and the maintenance worker's
@@ -92,17 +99,16 @@ sets ports of its own sets `kinds=PRODUCT_KINDS` among them.
    letters and an underscore that no registered kind and no credential
    of the platform's carries (`root.PLATFORM_PREFIXES`). A kind it names
    is taken only when the kind names it back.
-5. With `--stream`: a `StreamKind` with its entries, its bytes, and its
-   open streams of one group, each the most one stream of the kind may
-   hold; `claimant=` the `--claimant` kind when it writes the stream for
-   the item it holds; and `reader=` the `--claimant` kind when it reads
-   the stream for the item it holds, what the product's own code writes
-   for it. Set `claimant=` only when the product's claimant writes the
-   stream through the gateway, and `reader=` only when it reads it
-   there; a stream only the product's own service writes and reads has
-   neither. The open streams of every group and the idle time are the
-   step's; a kind never sets them. This skill registers the kind and
-   adds no stream route. The claimant appends at
+5. With `--stream` or `--reads`: a `StreamKind` for each, with its
+   entries, its bytes, and its open streams of one group, each the most
+   one stream of the kind may hold. The `--stream` kind sets `claimant=`
+   the `--claimant` kind when the claimant writes it through the gateway
+   for the item it holds; one the product's own service writes has
+   none. The `--reads` kind sets `reader=` the `--claimant` kind, which
+   reads, for the item it holds, what the product's own code writes; it
+   never sets `claimant=`. The open streams of every group and the idle
+   time are the step's; a kind never sets them. This skill registers
+   the kind and adds no stream route. The claimant appends at
    `POST /v1/claimants/me/items/{item_id}/streams/{kind}`, and a member
    of the item's tenant opens a handle at
    `/v1/work-items/{item_id}/streams/{kind}/live` and reads at
@@ -129,11 +135,13 @@ sets ports of its own sets `kinds=PRODUCT_KINDS` among them.
    - a write that asks for the kind lands it on its lane, and a payload
      off its shape is refused:
      `test_a_write_that_asks_for_a_products_kind_lands_it_on_its_lane`;
-   - with `--stream`, the kind is held to its bounds and the cache's,
-     and its writer and its reader, each when it sets one, are claimant
-     kinds of the product's own:
-     `test_a_products_stream_kind_is_held_to_its_bounds`,
-     `test_a_stream_kind_a_claimant_writes_names_a_claimant_kind_of_the_products_own`,
+   - with `--stream` or `--reads`, each stream kind is held to its
+     bounds and the cache's:
+     `test_a_products_stream_kind_is_held_to_its_bounds`; a `--stream`
+     kind that sets `claimant=` names a claimant kind of the product's
+     own as its writer:
+     `test_a_stream_kind_a_claimant_writes_names_a_claimant_kind_of_the_products_own`;
+     and a `--reads` kind names one as its reader:
      `test_a_stream_kind_a_claimant_reads_names_a_claimant_kind_of_the_products_own`.
 7. A claimant reaches the gateway as a host does: an owner issues a
    token of its kind for a pool (`/v1/host-pools/{pool_id}/enrollment-tokens`
