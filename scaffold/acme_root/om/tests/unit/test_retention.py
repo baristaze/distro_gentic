@@ -40,7 +40,12 @@ from acme.om.retention.impl.projects import SessionProjectNullImpl
 from acme.om.retention.manager import RetentionManagerInterface
 from acme.om.retention.projects import SessionProjectInterface
 from acme.om.retention.rules import tighter
-from acme.om.retention.types.policy import ProjectRetention, RetentionPolicy
+from acme.om.retention.types.policy import (
+    MAX_LIFETIME,
+    ProjectRetention,
+    RetentionPolicy,
+    TenantRetention,
+)
 from acme.om.root import Managers, build_managers
 from acme.om.steps.types.content import ContentState
 from acme.om.steps.types.header import ControlCommand, ControlHeader, Park, ParkReason
@@ -397,6 +402,42 @@ async def test_a_session_stuck_past_its_shapes_life_holds_back_no_other_tenant(
     assert await roots.said(other, waiting.id) == []
 
 
+async def test_a_snapshot_that_cannot_fold_holds_back_no_other_tenant(
+    roots: Roots, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A stored policy whose lifetime runs a snapshot's expiry past a date's
+    last year cannot fold into it. The pass records the failure and goes on:
+    another tenant's tightening folds, and its content, due by it, goes."""
+    broken = await roots.tenant()
+    stuck = await roots.session_saying(broken)
+    now = utcnow()
+    stored = TenantRetention(
+        id=new_id(),
+        created_at=now,
+        updated_at=now,
+        created_by=broken.user_id,
+        updated_by=broken.user_id,
+        policy=a_policy(timedelta(days=3_000_000)),
+        version=1,
+    )
+    retention = roots.storage.get_retention_storage()
+    assert await retention.create_policy(broken.org_id, stored, ())
+    other = await roots.tenant()
+    await roots.declare(other, a_policy(MONTH))
+    waiting = await roots.session_saying(other)
+    await roots.declare(other, a_policy(WEEK))
+
+    await roots.sweep(WEEK + DAY)
+    assert await roots.said(other, waiting.id) == []
+    folded = await roots.managers.retention.get_snapshot(other, waiting.id)
+    assert folded.policy.content_lifetime == WEEK and folded.content_expired_at is not None
+    behind = await roots.managers.retention.get_snapshot(broken, stuck.id)
+    assert behind.policy_version == 0, "it stays behind for the next pass"
+    failed = [r for r in caplog.records if "its fold failed" in r.getMessage()]
+    assert [str(stuck.id) in r.getMessage() for r in failed] == [True]
+    assert failed[0].exc_info is not None and failed[0].exc_info[0] is OverflowError
+
+
 # The snapshot: tightening reaches it at the next sweep, loosening never.
 
 
@@ -673,6 +714,27 @@ async def test_the_policy_is_written_by_who_manages_members_and_by_its_version(
     with pytest.raises(PreconditionFailed):
         await roots.managers.retention.write_policy(owner, first)
     assert await roots.managers.retention.get_policy(owner) == written
+
+
+async def test_a_lifetime_past_a_century_is_refused_in_a_policy_and_in_a_narrowing(
+    roots: Roots,
+) -> None:
+    owner = await roots.tenant()
+    first = await roots.managers.retention.get_policy(owner)
+    past = MAX_LIFETIME + DAY
+    with pytest.raises(ValidationFailed, match="at most"):
+        await roots.managers.retention.write_policy(
+            owner, first.model_copy(update={"policy": a_policy(past)})
+        )
+    narrowing = ProjectRetention(project_id=new_id(), policy=a_policy(WEEK, past))
+    with pytest.raises(ValidationFailed, match="past"):
+        await roots.managers.retention.write_policy(
+            owner, first.model_copy(update={"projects": (narrowing,)})
+        )
+    assert (await roots.managers.retention.get_policy(owner)).version == 0, "nothing stored"
+
+    at_bound = first.model_copy(update={"policy": a_policy(MAX_LIFETIME, MAX_LIFETIME)})
+    assert (await roots.managers.retention.write_policy(owner, at_bound)).version == 1
 
 
 def test_tighter_takes_the_stricter_of_each_field_and_is_its_own_identity() -> None:

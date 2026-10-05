@@ -29,11 +29,12 @@ from acme.om.retention.rules import (
     effective,
     expiries,
     folded,
+    past_bound,
     region_conflicts,
     shape_due,
 )
 from acme.om.retention.storage import RetentionStorageInterface
-from acme.om.retention.types.policy import TenantRetention
+from acme.om.retention.types.policy import MAX_LIFETIME, TenantRetention
 from acme.om.retention.types.snapshot import SessionRetention
 from acme.om.steps.types.header import ControlCommand, ControlHeader
 from acme.om.steps.types.step import Actor, Origin, Step, StepType
@@ -105,7 +106,13 @@ class RetentionManagerImpl(RetentionManagerInterface):
 
     async def write_policy(self, ctx: TenantContext, policy: TenantRetention) -> TenantRetention:
         ctx.require(Permission.MANAGE_MEMBERS)
+        if past_bound(policy.policy):
+            raise ValidationFailed(f"a lifetime is at most {MAX_LIFETIME.days} days")
         for project in policy.projects:
+            if past_bound(project.policy):
+                raise ValidationFailed(
+                    f"project {project.project_id} names a lifetime past {MAX_LIFETIME.days} days"
+                )
             if region_conflicts(policy.policy, project.policy):
                 raise ValidationFailed(
                     f"project {project.project_id} names a region its tenant does not"
@@ -229,12 +236,21 @@ class RetentionManagerImpl(RetentionManagerInterface):
         now = self._clock()
         behind = await self._storage.read_behind(self._options.sweep_batch)
         for org_id, snapshot, tenant in behind:
-            current = effective(tenant, snapshot.project_id)
-            # A write that loses its compare-and-set leaves the snapshot to
-            # the next pass, which reads it again.
-            await self._storage.write_snapshot(
-                org_id, folded(snapshot, current, tenant.version, now), snapshot.version
-            )
+            try:
+                current = effective(tenant, snapshot.project_id)
+                # A write that loses its compare-and-set leaves the snapshot
+                # to the next pass, which reads it again.
+                await self._storage.write_snapshot(
+                    org_id, folded(snapshot, current, tenant.version, now), snapshot.version
+                )
+            except Exception:
+                # The snapshot stays behind for the next pass; every other
+                # tenant's fold, and every expiry due, goes on in this one.
+                log.exception(
+                    "session %s of org %s stays behind its policy: its fold failed",
+                    snapshot.session_id,
+                    org_id,
+                )
         due = await self._storage.read_due(now, self._options.sweep_batch)
         contexts: dict[UUID, TenantContext | None] = {}
         for org_id, snapshot in due:
