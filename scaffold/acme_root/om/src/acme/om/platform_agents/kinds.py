@@ -198,7 +198,9 @@ SUB_AGENTS = (
     "spawn_sub_agent: a short title, and an objective that stands on its own, since a "
     "sub-agent sees none of your history. Keep working, or wait for their reports with "
     "wait_for_sub_agents; each report wakes you. Start one only for work worth a session "
-    "of its own: every sub-agent spends from the budget your whole tree shares."
+    "of its own: every sub-agent spends from the budget your whole tree shares. A "
+    "sub-agent works on a fresh checkout of the default branch, without your changes: ask "
+    "it about what is on the default branch, or hand it what it needs in its objective."
 )
 """The prompt layer of a kind that starts sub-agents."""
 

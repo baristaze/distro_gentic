@@ -255,6 +255,16 @@ def test_every_kind_roots_the_engines_tree_and_the_engineer_and_analysis_start_s
             assert SPAWN_SUB_AGENT not in kind.tools, kind.name
 
 
+def test_the_sub_agent_layer_says_a_sub_agent_starts_from_the_default_branch() -> None:
+    """A sub-agent's workspace is a fresh checkout of the default branch, so
+    every kind that starts one is told its sub-agents lack its changes, and
+    asks about the default branch or hands over what they need."""
+    for kind in (ENGINEER_KIND, ANALYSIS_KIND):
+        assert kinds.SUB_AGENTS in kind.prompts, kind.name
+    assert "a fresh checkout of the default branch, without your changes" in kinds.SUB_AGENTS
+    assert "hand it what it needs in its objective" in kinds.SUB_AGENTS
+
+
 def test_the_engineers_step_guard_is_sized_for_a_change_and_its_share_follows_it() -> None:
     """An engineer a spawn or an automation starts parks for a person past the
     calls a change takes, never at the engine's default guard, and its share

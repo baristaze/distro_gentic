@@ -33,8 +33,10 @@ two tools, and their policy runs a spawn unattended. That is safe
 because a child's calls are still decided under its own kind and under
 every kind above it, and the strictest decision holds. A prompt layer
 says when to split: questions that do not depend on each other, each
-worth a session of its own. Each change is a new version, and the
-version before it stays shipped while a session may run it.
+worth a session of its own. It also says that a sub-agent works on a
+fresh checkout of the default branch, without its parent's changes, so
+its objective carries what it needs. Each change is a new version, and
+the version before it stays shipped while a session may run it.
 
 **A sub-agent runs as the engineer or as analysis, each under its
 share.** A spawn names one of the two, or takes its caller's. Both
