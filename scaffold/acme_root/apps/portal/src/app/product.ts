@@ -10,6 +10,14 @@ import type { RouteObject } from "react-router-dom";
 import type { AgentSessionView } from "@acme/client";
 import type { Call } from "../features/session/timelineModel";
 
+/** What a route says of itself, as its `handle`: one line on the page, and
+ * what each of its parameters names. The route catalog lists it, so the
+ * support assistant learns the site from the routes the router serves. */
+export interface RouteAbout {
+  about: string;
+  params?: Readonly<Record<string, string>>;
+}
+
 /** A session as a product's tab or tool card sees it. */
 export interface SlotSession {
   session: AgentSessionView;

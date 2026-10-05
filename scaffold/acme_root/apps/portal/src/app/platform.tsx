@@ -41,6 +41,7 @@ import {
 import { useKnowledge } from "../queries/knowledge";
 import { Moved } from "./Moved";
 import type { PortalProduct } from "./product";
+import { paramNames } from "./routeCatalog";
 
 /** How many suggested entries wait on a review; null until read. */
 function useSuggestedCount(): number | null {
@@ -62,16 +63,35 @@ export const MOVED: readonly { from: string; to: string }[] = [
 
 export const PLATFORM: PortalProduct = {
   routes: [
-    { path: "/", element: <HomePage /> },
-    { path: "/sessions", element: <SessionsPage /> },
-    { path: "/sessions/:sessionId", element: <SessionPage /> },
-    { path: "/automations", element: <AutomationsPage /> },
-    { path: "/automations/:automationId", element: <AutomationPage /> },
-    { path: "/knowledge", element: <KnowledgePage /> },
-    { path: "/knowledge/:entryId", element: <EntryPage /> },
-    { path: "/settings", element: <SettingsPage /> },
-    { path: "/orgs/new", element: <NewOrgPage /> },
-    ...MOVED.map(({ from, to }) => ({ path: from, element: <Moved to={to} /> })),
+    { path: "/", element: <HomePage />, handle: { about: "Home: a box to describe a task, the agent and the project it starts on, and starter prompts" } },
+    {
+      path: "/sessions",
+      element: <SessionsPage />,
+      handle: { about: "All sessions of the org, filtered by status, by whose, by agent, and by title; `?needs=you` shows the ones waiting on you" },
+    },
+    {
+      path: "/sessions/:sessionId",
+      element: <SessionPage />,
+      handle: {
+        about: "One session: its status and what it waits on, its chat, and a pane of what it did (its steps, workspace, changes, evidence, and sub-agents)",
+        params: { sessionId: "the session's id" },
+      },
+    },
+    { path: "/automations", element: <AutomationsPage />, handle: { about: "The org's automations, a new one, and the automation principal" } },
+    {
+      path: "/automations/:automationId",
+      element: <AutomationPage />,
+      handle: { about: "One automation: its state, what fires it, what it does, its limits, whom it runs as, its brief, and its edit", params: { automationId: "the automation's id" } },
+    },
+    { path: "/knowledge", element: <KnowledgePage />, handle: { about: "Knowledge: what every session should know, and the suggestions waiting on a review" } },
+    { path: "/knowledge/:entryId", element: <EntryPage />, handle: { about: "One knowledge entry, its review, and its edit", params: { entryId: "the entry's id" } } },
+    { path: "/settings", element: <SettingsPage />, handle: { about: "Settings: every section, by group" } },
+    { path: "/orgs/new", element: <NewOrgPage />, handle: { about: "A new org of the signed-in person's own" } },
+    ...MOVED.map(({ from, to }) => ({
+      path: from,
+      element: <Moved to={to} />,
+      handle: { about: `An old address: it lands on \`${to}\``, params: Object.fromEntries(paramNames(from).map((name) => [name, `as \`${to}\` names it`])) },
+    })),
   ],
   nav: [
     {
@@ -143,7 +163,11 @@ export const PLATFORM: PortalProduct = {
       about: "Each bound to its repository, and the credential it is read with",
       routes: [
         { path: "/settings/projects", element: <ProjectsPage /> },
-        { path: "/settings/projects/:projectId", element: <ProjectPage /> },
+        {
+          path: "/settings/projects/:projectId",
+          element: <ProjectPage />,
+          handle: { about: "One project: its repository, the credential it is read with, its name, and its removal", params: { projectId: "the project's id" } },
+        },
       ],
     },
     {
