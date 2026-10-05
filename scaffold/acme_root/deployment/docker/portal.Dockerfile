@@ -17,6 +17,7 @@ RUN pnpm install --frozen-lockfile --filter @acme/portal...
 COPY clients/typescript clients/typescript
 COPY apps/portal apps/portal
 COPY deployment/realtime-timeouts.json deployment/
+COPY deployment/cloud/environments.json deployment/cloud/
 ARG VITE_API_URL=
 ARG VITE_SENTRY_DSN=
 ARG VITE_SENTRY_ENVIRONMENT=local
