@@ -22,7 +22,7 @@ export function Pane({ vm }: { vm: SessionVm }) {
         <div className="acme-pane-tabs" role="tablist" aria-label="The session's views">
           {pane.open.map((tab) => (
             <div key={tab.id} className="acme-pane-tab" data-active={tab.id === active.id || undefined}>
-              <Tooltip tip={tab.tip}>
+              <Tooltip tip={`${tab.label} · ${tab.tip}`}>
                 <button
                   type="button"
                   role="tab"

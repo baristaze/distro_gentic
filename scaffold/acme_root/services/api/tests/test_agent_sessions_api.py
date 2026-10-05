@@ -1,6 +1,7 @@
 """Agent sessions over the live app, in memory: a session started on a kind,
 spoken to, steered, and read a page at a time; a step read with what its
-model thought and the calls it made; a retried send kept once; the routes
+model thought and the calls it made; a message read with the agent that
+wrote it; a retried send kept once; the routes
 each role may call; a history whose key is revoked, read as its shape; and
 the tenant boundary on every route that names a session. The
 loop is the session runner's and never runs here: a send lands the work
@@ -22,10 +23,14 @@ from contracts.step_storage import (
 from contracts.tools import Command
 
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
+from acme.om.agents.types.report import Report
+from acme.om.agents.types.request import Spawn
 from acme.om.attribution.types.authority import AuthorityMode
+from acme.om.budgets.types.amount import Amount
 from acme.om.context import Role
 from acme.om.intake.tools import COMMENT
 from acme.om.steps.types.content import Content, TextBlock, ToolUseBlock
+from acme.om.steps.types.header import LoopOutcome
 from acme.om.steps.types.step import Step
 from acme.om.tools.types.tool import ToolClass
 from acme.om.work.storage.impl.memory import WorkStorageMemoryImpl
@@ -47,13 +52,19 @@ PRODUCT_TOOLS = (Command("set_role", authorization_class=ToolClass.CONFIGURATION
 # A kind that acts as the platform's account through the session runner's
 # `comment`, which the container's own catalog classes.
 COMMENTER = ASSISTANT.model_copy(update={"name": "commenter", "tools": (COMMENT,)})
+# A kind whose tree holds one sub-agent, and the kind it starts, whose share
+# is the budget its spawn writes.
+LEAD = ASSISTANT.model_copy(update={"name": "lead", "tree": TreeLimits(height=2, count=1)})
+HELPER = ASSISTANT.model_copy(update={"name": "helper", "share": Amount(cost_micros=5_000)})
 
 
 @pytest.fixture
 def container(tmp_path: Path) -> AppContainer:
     """The test container with the kinds the product runs and its tools."""
     return build_container(
-        tmp_path, agent_kinds=(ASSISTANT, CONFIGURER, COMMENTER), tool_catalog=PRODUCT_TOOLS
+        tmp_path,
+        agent_kinds=(ASSISTANT, CONFIGURER, COMMENTER, LEAD, HELPER),
+        tool_catalog=PRODUCT_TOOLS,
     )
 
 
@@ -178,6 +189,52 @@ async def test_a_step_reads_with_what_its_model_thought_and_the_calls_it_made(
     for quiet in ("message", "model_request", "tool_request", "tool_response"):
         assert (step[quiet]["thinking"], step[quiet]["tool_uses"]) == ("", [])
     assert step["message"]["tool_use_id"] is None
+
+
+async def test_a_message_an_agent_wrote_names_it_and_a_persons_names_none(
+    client: httpx.AsyncClient, owner: dict[str, str], container: AppContainer
+) -> None:
+    """A child's report in its parent names the child, so a reader of the
+    parent can open it, and the child's objective names its parent. A
+    person's message, and every step that is no message, names no agent."""
+    answered = await client.post(
+        "/v1/agent-sessions",
+        headers=created(owner),
+        json={"kind": "lead", "title": "the slow export", "project_id": PROJECT_ID},
+    )
+    assert answered.status_code == 201, answered.text
+    parent = answered.json()
+    path = f"/v1/agent-sessions/{parent['id']}"
+    said = await client.post(f"{path}/messages", headers=created(owner), json={"text": "split it"})
+    assert said.status_code == 201, said.text
+    managers = container.managers
+    ctx = await managers.tenancy.authenticate(
+        seed_request(), owner["Authorization"].removeprefix("Bearer ")
+    )
+    spawn = Spawn(
+        id=uuid4(), kind="helper", title="Read the export log", objective="Report what timed out."
+    )
+    child = await managers.agents.spawn(ctx, UUID(parent["id"]), spawn)
+    report = Report(loop_id=uuid4(), outcome=LoopOutcome.SUCCEEDED, answer="The query did.")
+    await managers.agents.report_to_parent(ctx, child.id, report)
+    await client.post(f"{path}/controls", headers=created(owner), json={"command": "pause"})
+
+    read = await client.get(f"{path}/steps", headers=owner)
+    child_read = await client.get(f"/v1/agent-sessions/{child.id}/steps", headers=owner)
+
+    assert read.status_code == 200, read.text
+    items = read.json()["items"]
+    assert [(step["type"], step["actor"]) for step in items] == [
+        ("message", "person"),
+        ("message", "agent"),
+        ("control", "person"),
+    ]
+    assert items[0]["agent"] is None
+    assert items[1]["agent"] == {"kind": "helper", "session_id": str(child.id)}
+    assert items[2]["agent"] is None
+    objective = child_read.json()["items"][0]
+    assert (objective["origin"], objective["text"]) == ("parent", "Report what timed out.")
+    assert objective["agent"] == {"kind": "lead", "session_id": parent["id"]}
 
 
 async def test_a_kind_that_names_the_comment_tool_starts_and_is_spoken_to(

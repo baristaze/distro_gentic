@@ -341,6 +341,26 @@
         "title": "AdvertisementView",
         "type": "object"
       },
+      "AgentRefView": {
+        "description": "The agent that wrote a message: its kind and the session it runs in.\nThe session is one of the same tree, which a reader of this session\nreads too: a sub-agent's report names the child, a child's objective\nits parent.",
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "session_id"
+        ],
+        "title": "AgentRefView",
+        "type": "object"
+      },
       "AgentSessionPageView": {
         "description": "One page of sessions, by id. `next_cursor` fetches the next page and\nis null on the last one.",
         "properties": {
@@ -8318,10 +8338,20 @@
         "type": "object"
       },
       "StepView": {
-        "description": "One step of a session's history, in its order. `text` is what it\nsays: a message's words, a model's answer, a tool's result. A model\nresponse also says what it thought (`thinking`) and the calls it made\n(`tool_uses`); a tool response names the call it answers\n(`tool_use_id`). Each of these is the step's content: where it is gone,\nits session's key revoked or its content never kept here, each is empty\nas `text` is. The rest is its header's, by type: the tools a model\nresponse called, why it stopped, and what it used; a tool call's tool,\nthe id of the call it runs, and the class of its failure; a control's\ncommand; a park; a loop's outcome.",
+        "description": "One step of a session's history, in its order. `text` is what it\nsays: a message's words, a model's answer, a tool's result. A model\nresponse also says what it thought (`thinking`) and the calls it made\n(`tool_uses`); a tool response names the call it answers\n(`tool_use_id`). Each of these is the step's content: where it is gone,\nits session's key revoked or its content never kept here, each is empty\nas `text` is. The rest is its header's, by type: the agent that wrote a\nmessage, on a message an agent wrote (`agent`); the tools a model\nresponse called, why it stopped, and what it used; a tool call's tool,\nthe id of the call it runs, and the class of its failure; a control's\ncommand; a park; a loop's outcome.",
         "properties": {
           "actor": {
             "$ref": "#/components/schemas/Actor"
+          },
+          "agent": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentRefView"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "command": {
             "anyOf": [
@@ -8487,6 +8517,7 @@
           "thinking",
           "tool_uses",
           "tool_use_id",
+          "agent",
           "tools",
           "stop_reason",
           "usage",

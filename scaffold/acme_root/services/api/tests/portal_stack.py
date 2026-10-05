@@ -7,7 +7,8 @@ the browser check and by no gate:
 
 Both register the scene's engineer beside the product's kinds: the
 platform's engineer in a directory on this host in place of its container,
-which also writes a plan and asks its person. The runner's executor writes
+which also writes a plan and asks its person, and roots a tree of two
+sub-agents (`portal_check.py tree` writes one). The runner's executor writes
 the results stream a fresh executor would, and each bound repository is
 cloned from a folder of bare repositories on this host
 (`PORTAL_REPOSITORIES`, as `portal_check.py repository` writes one) instead
@@ -22,6 +23,8 @@ from uuid import UUID
 
 if TYPE_CHECKING:
     from acme.om.root import ProductKinds
+    from acme.services.api.container import AppContainer
+    from acme.services.api.settings import ApiSettings
 
 REPO = Path(__file__).resolve().parents[3]
 
@@ -29,6 +32,7 @@ REPO = Path(__file__).resolve().parents[3]
 def scene_kinds() -> ProductKinds:
     """The product's kinds, and the scene's engineer as its latest version."""
     from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
+    from acme.om.agents.types.kind import TreeLimits
     from acme.om.platform_agents.kinds import ENGINEER_KIND
     from acme.om.product_kinds import PRODUCT_KINDS
     from acme.om.root import ProductKinds
@@ -41,27 +45,21 @@ def scene_kinds() -> ProductKinds:
             "version": ENGINEER_KIND.version + 1,
             "isolation": host,
             "tools": (*ENGINEER_KIND.tools, WRITE_PLAN, ASK_PERSON),
+            "tree": TreeLimits(height=2, count=2),
         }
     )
     return ProductKinds(agents=(*PRODUCT_KINDS.agents, engineer))
 
 
-def api(port: int) -> int:
-    import uvicorn
-
+def scene_container(settings: ApiSettings) -> AppContainer:
+    """The API's container over the scene's kinds."""
     from acme.infra.impl.configured import InfraConfiguredImpl
     from acme.integrations.impl.configured import IntegrationsConfiguredImpl
     from acme.om.platform_agents.settings import shipped_agents
     from acme.om.root import PlatformPorts
-    from acme.services.api.app import create_app
-    from acme.services.api.container import AppContainer, boot, postgres_storage
-    from acme.services.api.main import configure_server_logging, server_options
-    from acme.services.api.settings import ApiSettings
+    from acme.services.api.container import AppContainer, postgres_storage
 
-    settings = ApiSettings()
-    boot(settings)
-    configure_server_logging()
-    container = AppContainer.over(
+    return AppContainer.over(
         settings,
         postgres_storage(settings),
         InfraConfiguredImpl(settings),
@@ -69,6 +67,20 @@ def api(port: int) -> int:
         ports=PlatformPorts(kinds=scene_kinds()),
         platform_agents=shipped_agents(settings, settings.environment),
     )
+
+
+def api(port: int) -> int:
+    import uvicorn
+
+    from acme.services.api.app import create_app
+    from acme.services.api.container import boot
+    from acme.services.api.main import configure_server_logging, server_options
+    from acme.services.api.settings import ApiSettings
+
+    settings = ApiSettings()
+    boot(settings)
+    configure_server_logging()
+    container = scene_container(settings)
     uvicorn.run(create_app(container), host=settings.host, port=port, **server_options(settings))
     return 0
 

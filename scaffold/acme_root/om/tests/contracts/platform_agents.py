@@ -23,13 +23,15 @@ from acme.om.agents.impl.loop import LoopOptions
 from acme.om.agents.types.kind import AgentKind
 from acme.om.agents.types.request import Start
 from acme.om.attribution.types.principal import Principal, PrincipalKind
+from acme.om.automations import AutomationsManagerInterface
+from acme.om.automations.root import build_automations
 from acme.om.base import new_id
 from acme.om.context import Role, TenantContext
 from acme.om.evidence import ExecutorInterface, WorkProductInterface
 from acme.om.platform_agents.catalog import PlatformAgents
 from acme.om.platform_agents.rules import TENANT_USERS
 from acme.om.platform_agents.types.corpus import Corpus, Document
-from acme.om.root import Managers, build_managers
+from acme.om.root import Managers, ProductKinds, build_managers
 from acme.om.steps.types.content import TextBlock, ToolResultBlock, ToolUseBlock
 from acme.om.steps.types.header import ToolFailure, ToolResponseHeader
 from acme.om.steps.types.step import Step, StepType
@@ -85,6 +87,7 @@ class Platform:
     anthropic: ModelProviderReadingImpl
     openai: ModelProviderScriptedImpl
     owner: TenantContext
+    automations: AutomationsManagerInterface
 
     async def start(self, kind: str) -> UUID:
         session = await self.managers.agents.start_session(
@@ -133,19 +136,22 @@ def platform_over(
     kinds: tuple[AgentKind, ...] = (),
     executor: ExecutorInterface | None = None,
     work_product: WorkProductInterface | None = None,
+    product_kinds: ProductKinds | None = None,
 ) -> Platform:
     """The managers with the platform's agents shipped over `corpus`, each
-    principal a member of the tenant at every call. `storage` None is the
-    memory storage, and `owner` None a fresh tenant's owner; a suite over
-    Postgres hands in both. `kinds` are the adopter's beside the shipped
-    ones, and `executor` and `work_product` the evidence's ports, None the
-    root's own."""
+    principal a member of the tenant at every call, and the automations the
+    assistant reads, built over them. `storage` None is the memory storage,
+    and `owner` None a fresh tenant's owner; a suite over Postgres hands in
+    both. `kinds` are the adopter's beside the shipped ones, `executor` and
+    `work_product` the evidence's ports, None the root's own, and
+    `product_kinds` what a product adds, None nothing."""
     anthropic = ModelProviderReadingImpl(ProviderName.ANTHROPIC)
     openai = ModelProviderScriptedImpl(ProviderName.OPENAI)
     providers = ModelProvidersOverImpl(
         {ProviderName.ANTHROPIC: anthropic, ProviderName.OPENAI: openai}
     )
     storage = storage or StorageMemoryImpl()
+    automations: list[AutomationsManagerInterface] = []
     managers = build_managers(
         storage,
         InfraLocalImpl(tmp_path),
@@ -156,9 +162,12 @@ def platform_over(
         agent_kinds=kinds,
         executor=executor,
         work_product=work_product,
+        product_kinds=product_kinds,
+        automations=lambda: automations[0],
     )
+    automations.append(build_automations(storage, managers, project_required=False))
     owner = owner or context(Role.OWNER, make_org())
-    return Platform(storage, managers, anthropic, openai, owner)
+    return Platform(storage, managers, anthropic, openai, owner, automations[0])
 
 
 def calls(name: str, use_id: str, **tool_input: object) -> ToolUseBlock:

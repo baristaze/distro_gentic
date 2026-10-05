@@ -139,3 +139,19 @@ stack runs no host, so `portal_check.py host` stands in for the one that
 holds the workspace, on a clone of the scene's repository at the
 engineer's branch. It gives control back and reads the agent's reply,
 hides and shows the pane, and reloads to find its tabs kept.
+
+The sub-agents check runs on the same stack, with `ACME_CORPUS_ROOT` set
+for the check too, since the tree it writes starts the scene's engineer:
+
+```bash
+ACME_PORTAL_URL=http://127.0.0.1:5173 pnpm --filter @acme/portal e2e e2e/subagents.spec.ts
+```
+
+No shipped kind spawns a sub-agent, so `portal_check.py tree` writes the
+engineer's tree through storage, within its bounds: one answer that starts
+two sub-agents, a park on them, the first one's report, and the second at
+work. The check reads the card that follows each child, opens the report's
+child and comes back from its first card, and folds the parent's row in
+the left bar. The tree's next beats park the second child on its person,
+which raises a toast on the page open, then end it, which settles the
+card.

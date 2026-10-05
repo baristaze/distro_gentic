@@ -29,13 +29,13 @@ import {
   type Column,
   type LightboxItem,
 } from "../../design/kit";
-import { useBounds, useChildren, useExecutions, useToolCalls, useUsage, useValidations } from "../../queries/agentSessions";
-import { shortTime, sessionRow, type SessionRow } from "../sessions/sessionsModel";
-import { changedFiles, delivered, latestPlan, stepOf } from "./paneModel";
+import { useBounds, useExecutions, useToolCalls, useUsage, useValidations } from "../../queries/agentSessions";
+import { shortTime } from "../sessions/sessionsModel";
+import { changedFiles, childGroups, delivered, latestPlan, stepOf, type ChildGroup } from "./paneModel";
 import { runRow, usageLine, type RunRow } from "./sessionModel";
 import { useSessionPage } from "./sessionContext";
 import { Body, StateMark } from "./Timeline";
-import { CUT_NOTE, callLine, duration, editDiff, editOf, outputText, bodyKindOf } from "./timelineModel";
+import { CUT_NOTE, callLine, childActivity, childPhase, childWords, duration, editDiff, editOf, outputText, bodyKindOf } from "./timelineModel";
 
 const count = (n: number) => n.toLocaleString("en-US");
 
@@ -306,19 +306,15 @@ function PlanTab() {
   );
 }
 
-const CHILD_COLUMNS: Column<SessionRow>[] = [
-  { key: "title", header: "Title", cell: (child) => <Link to={`/sessions/${child.id}`}>{child.title}</Link>, sortValue: (child) => child.title },
-  { key: "status", header: "Status", cell: (child) => <Pill tone={child.tone}>{child.status}</Pill>, sortValue: (child) => child.status },
-  { key: "kind", header: "Agent", cell: (child) => child.kind, sortValue: (child) => child.kind },
-  { key: "started", header: "Started", cell: (child) => shortTime(child.startedAt), sortValue: (child) => child.startedAt },
-];
+const GROUP_DOTS: Record<ChildGroup["phase"], string> = { needs_you: "needs", working: "running", done: "done" };
 
-/** The sessions it started, and how far its tree may grow. */
+/** The sessions it started, grouped by where each stands, with what each
+ * does now and the way to it; and how far its tree may grow. */
 function SubAgentsTab() {
   const vm = useSessionPage();
-  const children = useChildren(vm.id);
   const bounds = useBounds(vm.id);
   const tree = bounds.data?.tree;
+  const groups = childGroups(vm.children);
   return (
     <Card title="Sub-agents" id="children">
       <div className="acme-pane-stack">
@@ -327,11 +323,33 @@ function SubAgentsTab() {
             Its tree has spawned {tree.size} of the {tree.count} sub-agents it may, at most {tree.height} deep.
           </Muted>
         ) : null}
-        {children.isPending ? (
-          <Muted>Loading</Muted>
-        ) : (
-          <DataTable label="Sub-agents" columns={CHILD_COLUMNS} rows={(children.data ?? []).map(sessionRow)} rowKey={(child) => child.id} empty="It started no sub-agents." />
-        )}
+        {vm.childrenPending ? <Muted>Loading</Muted> : null}
+        {!vm.childrenPending && groups.length === 0 ? <Muted>It started no sub-agents.</Muted> : null}
+        {groups.map((group) => (
+          <section key={group.phase} className="acme-child-group" aria-label={group.label}>
+            <h3 className="acme-child-group-title">
+              {group.label}
+              <span className="acme-side-group-count">{group.children.length}</span>
+            </h3>
+            <ul className="acme-subagents">
+              {group.children.map((child) => (
+                <li key={child.id} className="acme-subagent" data-phase={childPhase(child)}>
+                  <span className="acme-row-dot" data-dot={GROUP_DOTS[group.phase]} aria-hidden="true" />
+                  <span className="acme-subagent-main">
+                    <span className="acme-subagent-title">{child.title}</span>
+                    <span className="acme-subagent-doing">
+                      <span className="acme-subagent-agent">{child.kind}</span>
+                      <span className="acme-subagent-words">{group.phase === "done" ? `Started ${shortTime(child.created_at)}` : (childActivity(child) ?? childWords(child))}</span>
+                    </span>
+                  </span>
+                  <Link className="acme-subagent-open" to={`/sessions/${child.id}`} aria-label={`Open ${child.title}`}>
+                    Open
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
       </div>
     </Card>
   );
