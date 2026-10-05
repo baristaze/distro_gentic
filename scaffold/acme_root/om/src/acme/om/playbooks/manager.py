@@ -45,7 +45,9 @@ class PlaybooksManagerInterface(ABC):
     @abstractmethod
     async def gates_of(self, ctx: TenantContext, session_id: UUID) -> tuple[PlaybookGate, ...]:
         """The gates of every playbook the session, or a session above it in
-        its tree, invoked: a sub-agent meets every gate its ancestors met."""
+        its tree, invoked, a session marked deleted included: a sub-agent
+        meets every gate its ancestors met. A session of the chain that
+        cannot be read is `NotFound`, since the gates it invoked are unknown."""
         ...
 
     @abstractmethod

@@ -32,7 +32,7 @@ from acme.om.agents.types.run import RunEnd
 from acme.om.base import new_id, utcnow
 from acme.om.budgets.types.budget import BudgetScopeKind
 from acme.om.context import Role
-from acme.om.exceptions import NotAuthorized
+from acme.om.exceptions import NotAuthorized, NotFound
 from acme.om.playbooks.manager import PlaybooksManagerInterface
 from acme.om.playbooks.root import PlaybooksLayer
 from acme.om.playbooks.rules import GATES_KEY, narrowed, skill_md
@@ -234,6 +234,64 @@ async def test_a_sub_agent_waits_for_a_person_where_its_ancestors_gate_holds_a_c
     loop.anthropic.add(reply(said("The total is in.")))
     await loop.loops.run(loop.owner, grandchild)
     assert loop.tools["lookup"].ran_as == [loop.owner.user_id]
+
+
+async def test_a_sub_agent_meets_the_gates_invoked_above_a_session_a_person_deleted(
+    tmp_path: Path,
+) -> None:
+    """The engine holds a call under a deleted ancestor for a person; their
+    approval never lifts the deny the root's playbook holds above it."""
+    loop, playbooks = deep(tmp_path)
+    root = await loop.start()
+    await playbooks.publish(loop.owner, draft(gate(Decision.DENY, tool="lookup")))
+    await playbooks.invoke(loop.owner, root, "answer-a-question")
+    child, grandchild = await sub_agents(loop, root)
+    loop.anthropic.add(reply(said("My sub-agent will find it.")))
+    await loop.loops.run(loop.owner, child)
+    await loop.managers.agent_sessions.delete_session(loop.owner, child)
+    loop.anthropic.add(reply(use("lookup")))
+    held = await loop.loops.run(loop.owner, grandchild)
+    assert held.end is RunEnd.PARKED and held.park is not None
+    (request,) = [s for s in await loop.history(grandchild) if s.type is StepType.TOOL_REQUEST]
+    await loop.managers.tools.decide_call(loop.owner, grandchild, request.seq, approve=True)
+    loop.anthropic.add(reply(said("I may not look it up.")))
+    await loop.loops.run(loop.owner, grandchild)
+    steps = await loop.history(grandchild)
+    (answer,) = [s for s in steps if s.type is StepType.TOOL_RESPONSE]
+    assert isinstance(answer.header, ToolResponseHeader)
+    assert answer.header.failure is ToolFailure.DENIED
+    assert loop.tools["lookup"].ran_as == []
+
+
+async def test_the_gates_above_a_session_that_cannot_be_read_are_not_found(tmp_path: Path) -> None:
+    loop, playbooks = deep(tmp_path)
+    root = await loop.start()
+    child, grandchild = await sub_agents(loop, root)
+    await loop.storage.get_agent_session_storage().purge_tenant(loop.owner.org_id, [child])
+    with pytest.raises(NotFound):
+        await playbooks.gates_of(loop.owner, grandchild)
+
+
+async def test_a_call_whose_gates_are_not_found_waits_for_a_person(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Even a call the tenant's policy lets run unattended."""
+    loop, playbooks = deep(tmp_path)
+    policy = await loop.managers.tools.get_policy(loop.owner)
+    rules = (PolicyRule(tool="lookup", decision=Decision.ALLOW),)
+    await loop.managers.tools.write_policy(loop.owner, policy.model_copy(update={"rules": rules}))
+
+    async def unread(*args: Any) -> None:
+        raise NotFound("a session of the chain cannot be read")
+
+    monkeypatch.setattr(playbooks, "gates_of", unread)
+    session_id = await loop.start()
+    await loop.say(session_id, "What is the total?")
+    loop.anthropic.add(reply(use("lookup")))
+    run = await loop.loops.run(loop.owner, session_id)
+    assert run.end is RunEnd.PARKED and run.park is not None
+    assert run.park.reason is ParkReason.PERSON and run.park.unlock == "approval"
+    assert loop.tools["lookup"].ran_as == []
 
 
 async def test_an_invocation_is_once_a_version(platform: Wired) -> None:

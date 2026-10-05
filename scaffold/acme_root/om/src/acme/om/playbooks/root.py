@@ -47,6 +47,7 @@ class PlaybooksLayer:
             playbooks = PlaybooksManagerImpl(
                 self._storage.get_playbook_storage(),
                 managers.agent_sessions,
+                self._storage.get_agent_session_storage(),
                 managers.agents,
                 managers.tenancy,
                 managers.outbox,

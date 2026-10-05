@@ -5,6 +5,7 @@ from uuid import UUID
 from pydantic import Field
 
 from acme.om.agent_sessions import AgentSessionsManagerInterface
+from acme.om.agent_sessions.storage import AgentSessionStorageInterface
 from acme.om.agents import AgentsManagerInterface
 from acme.om.base import Platform, derived_id, new_id, utcnow
 from acme.om.context import Permission, TenantContext
@@ -44,6 +45,7 @@ class PlaybooksManagerImpl(PlaybooksManagerInterface):
         self,
         storage: PlaybookStorageInterface,
         sessions: AgentSessionsManagerInterface,
+        session_rows: AgentSessionStorageInterface,
         agents: AgentsManagerInterface,
         tenancy: TenancyManagerInterface,
         relay: OutboxRelayInterface,
@@ -52,6 +54,7 @@ class PlaybooksManagerImpl(PlaybooksManagerInterface):
     ) -> None:
         self._storage = storage
         self._sessions = sessions
+        self._session_rows = session_rows
         self._agents = agents
         self._tenancy = tenancy
         self._relay = relay
@@ -130,6 +133,11 @@ class PlaybooksManagerImpl(PlaybooksManagerInterface):
         gates: list[PlaybookGate] = []
         at: UUID | None = session_id
         while at is not None:
+            # The row as stored: a session marked deleted still lends its
+            # gates, and the walk goes on above it.
+            session = await self._session_rows.read_session(ctx.org_id, at)
+            if session is None:
+                raise NotFound(f"agent session {at} cannot be read, nor the gates it invoked")
             invocations = await self._storage.read_invocations(
                 ctx.org_id, at, self._options.per_session
             )
@@ -137,12 +145,7 @@ class PlaybooksManagerImpl(PlaybooksManagerInterface):
                 playbook = await self._storage.read_playbook(ctx.org_id, invocation.playbook_id)
                 if playbook is not None:
                     gates.extend(playbook.gates)
-            try:
-                at = (await self._sessions.get_session(ctx, at)).parent_id
-            except NotFound:
-                # Marked deleted: its own gates still hold, and no session
-                # above it can be read.
-                break
+            at = session.parent_id
         return tuple(gates)
 
     async def purge_tenant(self, ctx: TenantContext) -> int:
