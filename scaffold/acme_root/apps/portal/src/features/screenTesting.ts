@@ -111,10 +111,18 @@ export async function unmount(): Promise<void> {
   root = null;
 }
 
+/** A field's name: the element it is labelled by, or its label's words. */
+function nameOf(control: Element): string | null {
+  const by = control.getAttribute("aria-labelledby");
+  if (by) return document.getElementById(by)?.textContent ?? null;
+  return control.closest("label")?.querySelector("span")?.textContent ?? null;
+}
+
 /** The field whose label says `label`. */
 export function field(label: string): HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | undefined {
-  const found = [...container.querySelectorAll("label")].find((each) => each.querySelector("span")?.textContent === label);
-  return found?.querySelector("input, select, textarea") ?? undefined;
+  return [...container.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>("input, select, textarea")].find(
+    (control) => nameOf(control) === label,
+  );
 }
 
 /** Types into a field as a person does, so React hears the change. */

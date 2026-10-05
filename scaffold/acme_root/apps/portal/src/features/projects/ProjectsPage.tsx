@@ -9,7 +9,7 @@ import type { ProjectRow } from "./projectsModel";
 import { useProjectsVm } from "./useProjectsVm";
 
 const COLUMNS: Column<ProjectRow>[] = [
-  { key: "name", header: "Name", cell: (row) => <Link to={`/projects/${row.id}`}>{row.name}</Link>, sortValue: (row) => row.name },
+  { key: "name", header: "Name", cell: (row) => <Link to={`/settings/projects/${row.id}`}>{row.name}</Link>, sortValue: (row) => row.name },
   { key: "repository", header: "Repository", cell: (row) => <code>{row.repository}</code>, sortValue: (row) => row.repository },
   { key: "created", header: "Made", cell: (row) => shortTime(row.createdAt), sortValue: (row) => row.createdAt },
 ];

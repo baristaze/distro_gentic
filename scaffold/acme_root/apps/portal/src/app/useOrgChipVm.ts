@@ -45,6 +45,6 @@ export function useOrgChipVm() {
     newOrg: () => navigate("/orgs/new"),
     openSettings: () => navigate("/settings"),
     mayInvite: me.data?.permissions.includes("manage_members") ?? false,
-    invite: () => navigate("/settings#members"),
+    invite: () => navigate("/settings/members"),
   };
 }

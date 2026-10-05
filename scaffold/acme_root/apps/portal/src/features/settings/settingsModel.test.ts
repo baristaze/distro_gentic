@@ -4,12 +4,14 @@ import {
   apiKeyRows,
   canManageKeys,
   canManageMembers,
+  checkDisplayName,
   checkInvite,
   grantableRoles,
   invitableRoles,
   invitationRows,
   keyState,
   memberRows,
+  orgLines,
   ssoAvailable,
 } from "./settingsModel";
 
@@ -139,5 +141,30 @@ describe("the role control", () => {
     expect(grantableRoles(as("member", ["read", "write", "manage_keys"]), bob.id, "viewer")).toEqual([]);
     expect(grantableRoles(me, bob.id, null)).toEqual([]);
     expect(grantableRoles(undefined, bob.id, "member")).toEqual([]);
+  });
+});
+
+describe("checkDisplayName", () => {
+  it("asks for a name, and keeps it within what the server keeps", () => {
+    expect(checkDisplayName("  ")).toBe("Write the name others see.");
+    expect(checkDisplayName("x".repeat(201))).toBe("A name is at most 200 characters.");
+    expect(checkDisplayName(" Ada Lovelace ")).toBeNull();
+  });
+});
+
+describe("orgLines", () => {
+  const me = {
+    app: "portal",
+    role: "admin",
+    permissions: [],
+    user: { id: "u1", email: "ada@a.test", display_name: "Ada", created_at: "" },
+    org: { id: "o1", name: "Ajax", slug: "ajax", kind: "team", created_at: "", deleted_at: null },
+  } as unknown as MeView;
+
+  it("says the org's name, short name, kind, the person's role, and its members", () => {
+    expect(orgLines(me, 3)).toEqual({ name: "Ajax", slug: "ajax", kind: "A team's", role: "admin", members: "3 members" });
+    expect(orgLines(me, 1).members).toBe("1 member");
+    expect(orgLines(me, null).members).toBeNull();
+    expect(orgLines({ ...me, org: { ...me.org, kind: "personal" } }, 1).kind).toBe("Your personal org");
   });
 });

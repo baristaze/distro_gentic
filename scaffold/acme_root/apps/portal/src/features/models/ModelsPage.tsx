@@ -57,7 +57,7 @@ export function ModelsPage() {
     });
   }
   return (
-    <Page title="Models" notice={<ProviderNotice />}>
+    <Page title="Models and keys" notice={<ProviderNotice />}>
       {vm.error ? <Banner>{errorMessage(vm.error, "The models could not be read.")}</Banner> : null}
       <Card title="The org's own keys" id="keys">
         <div style={form}>

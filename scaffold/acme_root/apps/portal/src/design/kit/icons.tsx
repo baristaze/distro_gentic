@@ -10,17 +10,22 @@ import type { JSX } from "react";
 import type { LucideIcon, LucideProps } from "lucide-react";
 import {
   Archive,
+  ArrowLeft,
   ArrowUp,
   BookOpen,
   Bot,
+  Building2,
+  ChartColumn,
   ChevronDown,
   Crown,
   ExternalLink,
   Eye,
   FileText,
+  Fingerprint,
   FolderGit2,
   Info,
   Keyboard,
+  KeyRound,
   LayoutList,
   ListFilter,
   LogOut,
@@ -28,6 +33,7 @@ import {
   Moon,
   PanelLeft,
   Plus,
+  ScrollText,
   Search,
   Shield,
   SquarePen,
@@ -121,3 +127,21 @@ export const InfoIcon = kitIcon(Info);
 export const ChevronIcon = kitIcon(ChevronDown);
 /** A box: archived. */
 export const ArchiveIcon = kitIcon(Archive);
+
+/** An arrow to the left: back to where the person came from. */
+export const BackIcon = kitIcon(ArrowLeft);
+
+/** A building: the organization. */
+export const OrgIcon = kitIcon(Building2);
+
+/** A key: an API key. */
+export const KeyIcon = kitIcon(KeyRound);
+
+/** A fingerprint: signing in. */
+export const SignOnIcon = kitIcon(Fingerprint);
+
+/** Columns: what was spent. */
+export const UsageIcon = kitIcon(ChartColumn);
+
+/** A scroll: the record of what happened. */
+export const AuditIcon = kitIcon(ScrollText);

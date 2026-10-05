@@ -18,7 +18,7 @@ export function ProviderNotice() {
           {notice.cause === "key" ? (
             <>
               {" "}
-              <Link to="/models">Save a key</Link>
+              <Link to="/settings/models">Save a key</Link>
             </>
           ) : null}
         </div>

@@ -8,7 +8,7 @@ import { shortTime } from "../sessions/sessionsModel";
 import { credentialLine } from "./projectsModel";
 import { useProjectVm } from "./useProjectVm";
 
-const back = <Link to="/projects">← Projects</Link>;
+const back = <Link to="/settings/projects">← Projects</Link>;
 const label = { color: tokens.color.muted } as const;
 const value = { margin: 0 } as const;
 const form = { display: "grid", gap: tokens.space.md } as const;
