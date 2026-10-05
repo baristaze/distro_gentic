@@ -33,6 +33,31 @@ file. The platform's own sit in `src/app/platform.tsx` in the same shape.
 The shell joins the two and refuses an id or an address they share, so a
 product never shadows a platform screen
 ([ADR 2042](../../docs/adr/2042-a-product-fills-the-portals-slot-and-never-shadows-a-platform-screen.md)).
+Each route says what it shows in its `handle`: one line, and what each
+parameter names. The route catalog lists them, and
+[`docs/portal-routes.md`](../../docs/portal-routes.md) is its Markdown, in
+the support assistant's corpus. Its test fails while a page says nothing
+or the document differs; `vitest run -u src/app/routeCatalog.test.ts`
+writes it again.
+
+## Support
+
+"?" beside the user chip, ⌘/, or "Ask support" in the search opens the
+support dock: a conversation with the platform assistant at the right
+edge, beside whatever page is open. ✕ or Esc closes it. The dock is the
+shell's own column, so it never shares one with the page. When a session's
+page is short of room, its pane folds to its icon rail first, and only then
+does the dock narrow, never leaving the story under its minimum. Under 1100
+pixels the dock is a sheet over the page, and Expand gives the chat the
+page's width.
+
+A link in a reply is a chip only when the router serves its address; it
+opens that page in the main area and leaves the dock as it is. Any other
+link shows as its words and its address. Each message carries the page the
+person is on, as data. The dock keeps its draft and its conversation while
+the person moves between pages, and continues a person's standing
+conversation only when it is their own
+([ADR 2045](../../docs/adr/2045-the-support-dock-continues-a-conversation-only-when-it-is-the-persons-own.md)).
 
 ## Layout
 

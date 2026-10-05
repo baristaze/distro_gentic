@@ -29,6 +29,7 @@ RUN uv sync --frozen --no-dev --package acme-session-runner
 # API does (ACME_CORPUS_ROOT).
 COPY llms.txt ./
 COPY apps/cli/README.md apps/cli/
+COPY docs/portal-routes.md docs/
 
 FROM python:3.14-slim
 RUN apt-get update \
