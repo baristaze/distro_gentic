@@ -116,6 +116,15 @@ describe("what a person may do", () => {
     expect(allowed(session, true)).toMatchObject({ archive: true, compact: true });
   });
 
+  it("lets a person send at any time, running or not, until a person takes control", () => {
+    const parked = (reason: "pause" | "handover", unlock: "resume" | "give_back") => ({ ...session, status: "parked" as const, park: { reason, unlock, retry_at: null } });
+    expect(allowed({ ...session, status: "running" }, true).send).toBe(true);
+    expect(allowed({ ...session, status: "pending" }, true).send).toBe(true);
+    expect(allowed(parked("pause", "resume"), true).send).toBe(true);
+    expect(allowed(session, true).send).toBe(true);
+    expect(allowed(parked("handover", "give_back"), true).send).toBe(false);
+  });
+
   it("splits a typed command at spaces and keeps a quoted run whole", () => {
     expect(splitCommand(`git commit -m "a message"`)).toEqual({ argv: ["git", "commit", "-m", "a message"] });
     expect(splitCommand("  ls   -la ")).toEqual({ argv: ["ls", "-la"] });

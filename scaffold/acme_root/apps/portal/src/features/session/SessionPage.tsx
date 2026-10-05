@@ -163,7 +163,9 @@ function SessionHeader({ vm }: { vm: SessionVm }) {
 }
 
 /** Pinned under the chat: a reply or a steer, or the answer while the agent
- * asks; Send on Cmd-Enter; Pause while it runs. */
+ * asks. Send works at any time, running or not, on Cmd-Enter too: a message
+ * sent while the agent works is queued, and its next step reads it. While
+ * the session runs, Pause sits beside Send and never replaces it. */
 function Composer({ vm }: { vm: SessionVm }) {
   const [draft, setDraft] = useState("");
   if (!vm.may?.send) {

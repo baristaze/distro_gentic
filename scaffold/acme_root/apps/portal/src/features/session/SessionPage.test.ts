@@ -301,6 +301,20 @@ describe("the org's own session", () => {
     expect(new URLSearchParams(address()).get("pane")).toBe("workspace");
   });
 
+  it("keeps Send open while the session runs, with Pause beside it", async () => {
+    net.over = { status: "running" };
+    await open("a", "/sessions/sa");
+    const composer = container.querySelector<HTMLFormElement>("form[aria-label='Send a message']")!;
+    const field = composer.querySelector<HTMLTextAreaElement>("textarea")!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(field, "Use the fixture in conftest.py");
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const send = composer.querySelector<HTMLButtonElement>("button[aria-label='Send']")!;
+    expect(send.disabled).toBe(false);
+    expect([...composer.querySelectorAll("button")].map((button) => button.textContent || button.getAttribute("aria-label"))).toEqual(["Pause", "Send"]);
+  });
+
   it("opens Workspace by itself once while it runs; closed, it stays closed", async () => {
     net.over = { status: "running" };
     await open("a", "/sessions/sa");
