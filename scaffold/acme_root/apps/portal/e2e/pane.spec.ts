@@ -108,7 +108,7 @@ test("a session's pane: tabs that open themselves once, a step from its row, and
   for (const [name, holds] of [
     ["Evidence", "Validations"],
     ["Plan", "Run `tests/test_dates.py` and see it fail.".replace(/`/g, "")],
-    ["Sub-agents", "It started no sub-agents."],
+    ["Sub-agents", "Its tree has spawned 2 of the 10 sub-agents it may"],
     ["Usage", "model calls"],
   ] as const) {
     await pane.getByRole("button", { name: "Open a view" }).click();

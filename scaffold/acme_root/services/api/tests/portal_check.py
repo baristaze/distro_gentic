@@ -10,9 +10,13 @@ itself and by no gate:
 `script` writes the scripted provider's script: one turn that answers in
 Markdown and calls nothing, so a session runs its loop offline and the
 same way every time. With `--scene engineer` it is the engineer's scene
-instead: it thinks, plans, runs a failing test, reads, edits, runs the
-test again, opens a pull request on the forge's twin, asks its person,
-validates, and submits its result. A message after that, such as a
+instead: it thinks and plans, starts two analysis sub-agents in one
+answer and waits on them, the first reading the parser and the second
+searching for its callers, each then reporting; woken, it runs a failing
+test, reads, edits, runs the test again, opens a pull request on the
+forge's twin, asks its person, validates, and submits its result. The
+runner runs one loop at a time, so the sub-agents take their turns after
+their parent parks, in the order it started them. A message after that, such as a
 person's giving back, gets a reply that validates the head again and
 submits the result again, since an engineer's loop ends only on its
 result. Each command and each validation wait for a decision, since its
@@ -25,7 +29,8 @@ scene runs on: the org's first repository as a bare one under `<root>`
 (`portal_stack.py` clones from there), holding a parser whose test fails,
 and the validation policy of the org's first project. `tree` starts the
 scene's engineer for the org's owner and writes its tree straight through
-storage, since no shipped kind spawns a sub-agent: one answer that starts
+storage, for what the scene does not reach, a sub-agent that asks its
+person: one answer that starts
 two, each in a slot its tree's bounds hold, and a park on them; the first
 reads, ends, and reports; the second still searches. It prints the ids
 of the root and its sub-agents. Given the root, it plays the next beat:
@@ -139,16 +144,25 @@ THOUGHT = (
     "then read the parser and change only the order of the parts."
 )
 OPENING = (
-    "I'll run the failing test first to see it fail, then read the parser. "
+    "I'll ask two sub-agents what decides the fix, run the failing test to see it fail, "
+    "then read the parser. "
     "The fix should be one line: the parts of the date in the order it is written. "
     "Here is the plan."
 )
 AFTER = "I read what you did. The test passes on the branch, so nothing else changes. I'll validate the head again."
 PLAN = (
-    "1. Run `tests/test_dates.py` and see it fail.\n"
-    "2. Read `src/dates.py` and take the day first.\n"
-    "3. Run the test again and commit.\n"
-    "4. Open a pull request, validate its head, and submit the result."
+    "1. Ask two sub-agents how the parser takes a date and who calls it.\n"
+    "2. Run `tests/test_dates.py` and see it fail.\n"
+    "3. Read `src/dates.py` and take the day first.\n"
+    "4. Run the test again and commit.\n"
+    "5. Open a pull request, validate its head, and submit the result."
+)
+CALLED = (
+    "One caller passes `parse` a date: tests/test_dates.py, with 05/10/2026, written day first."
+)
+BOTH = (
+    "Both reported: `parse` takes the month first, and its one caller writes the day "
+    "first. I'll run the failing test."
 )
 
 
@@ -182,7 +196,21 @@ def engineer_scene() -> list[Any]:
 
     return [
         turn(ThinkingBlock(text=THOUGHT), TextBlock(text=OPENING), use("write_plan", plan=PLAN)),
-        turn(use("run_command", argv=["python3", "tests/test_dates.py"])),
+        turn(
+            TextBlock(text=SPLIT),
+            *(
+                use("spawn_sub_agent", title=title, objective=objective, kind="analysis")
+                for title, objective in CHILDREN
+            ),
+            use("wait_for_sub_agents"),
+        ),
+        # The first sub-agent's loop, then the second's, once their parent parks.
+        turn(use("read_file", path="src/dates.py")),
+        turn(TextBlock(text=READ)),
+        turn(use("search_code", pattern="parse(")),
+        turn(TextBlock(text=CALLED)),
+        # Woken by the second report, the parent goes on.
+        turn(TextBlock(text=BOTH), use("run_command", argv=["python3", "tests/test_dates.py"])),
         turn(
             ThinkingBlock(text="It read May: the parser takes the month first."),
             use("read_file", path="src/dates.py"),
@@ -419,7 +447,7 @@ async def write_tree(slug: str) -> None:
         # The tree began a minute ago: its sessions and their steps alike.
         began = utcnow() - timedelta(minutes=1)
 
-        # The root: an engineer, whose kind lets its tree hold two sub-agents.
+        # The root: the scene's engineer, whose tree holds ten sub-agents.
         root = await managers.agents.start_session(
             owner, Start(id=new_id(), kind=ENGINEER, title=TREE_ASK)
         )
@@ -432,6 +460,8 @@ async def write_tree(slug: str) -> None:
         response = told.response(told.request([told.message(TREE_ASK)]), SPLIT, uses)
         for (use_id, tool, _), child_id in zip(uses, ids, strict=True):
             told.result(told.call(response, use_id, tool), f'{{"session_id": "{child_id}"}}')
+        # Its own unlock, never the engine's: a report then leaves the root
+        # parked, so no step asks for a run that would take the scene's turns.
         waits = Park(reason=ParkReason.CHILDREN, unlock="children")
         told.steps.append(parked_step(new_id(), root.id, told.loop_id, waits, told.then()))
 

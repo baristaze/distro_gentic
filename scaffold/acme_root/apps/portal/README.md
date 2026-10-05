@@ -102,12 +102,14 @@ from the API. The credential's password and the provider key come back in
 no reply and on no screen, and the API key shows once, then on no screen.
 Their screenshots land in `e2e/screenshots/`, which git ignores.
 
-The timeline check plays the engineer's scene: it thinks, plans, runs a
-failing test, edits, runs it again, opens a pull request, asks its person,
-validates, and submits its result. Its API and runner are
-`portal_stack.py`'s, which register a scene engineer that works in a
-directory on this host and clone the org's repository from a folder of
-bare ones; the forge is its twin, seeded with it:
+The timeline check plays the engineer's scene: it thinks, plans, starts
+two analysis sub-agents and waits for their reports, runs a failing test,
+edits, runs it again, opens a pull request, asks its person, validates,
+and submits its result. Its API and runner are `portal_stack.py`'s, which
+register a scene engineer and analysis that work in a directory on this
+host and clone the org's repository from a folder of bare ones; the forge
+is its twin, seeded with it. The runner runs one loop at a time, since
+one script answers every session, and a scene plays once per runner:
 
 ```bash
 uv run --package acme-api python services/api/tests/portal_check.py script .local/scene.json --scene engineer
@@ -141,17 +143,21 @@ engineer's branch. It gives control back and reads the agent's reply,
 hides and shows the pane, and reloads to find its tabs kept.
 
 The sub-agents check runs on the same stack, with `ACME_CORPUS_ROOT` set
-for the check too, since the tree it writes starts the scene's engineer:
+for the check too, since the tree it writes starts the scene's engineer,
+and on a runner of its own, since it plays the scene:
 
 ```bash
 ACME_PORTAL_URL=http://127.0.0.1:5173 pnpm --filter @acme/portal e2e e2e/subagents.spec.ts
 ```
 
-No shipped kind spawns a sub-agent, so `portal_check.py tree` writes the
-engineer's tree through storage, within its bounds: one answer that starts
-two sub-agents, a park on them, the first one's report, and the second at
-work. The check reads the card that follows each child, opens the report's
-child and comes back from its first card, and folds the parent's row in
-the left bar. The tree's next beats park the second child on its person,
-which raises a toast on the page open, then end it, which settles the
-card.
+The scene never has a sub-agent ask its person, so `portal_check.py tree`
+first writes an engineer's tree through storage, within its bounds: one
+answer that starts two sub-agents, a park on them, the first one's report,
+and the second at work. The check reads the card that follows each child,
+opens the report's child and comes back from its first card, and folds the
+parent's row in the left bar. The tree's next beats park the second child
+on its person, which raises a toast on the page open, then end it, which
+settles the card. Then the check plays the scene: the engineer's answer
+starts two analysis sub-agents, and the check follows each child's row
+until it is done, reads each report, and finds the tree's bounds in the
+Sub-agents tab: 2 of the 10 sub-agents it may start.
