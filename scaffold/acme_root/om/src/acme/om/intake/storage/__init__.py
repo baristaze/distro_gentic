@@ -56,10 +56,10 @@ class IntakeStorageInterface(ABC):
         ...
 
     @abstractmethod
-    async def delete_user_links(self, org_id: UUID, user_id: UUID, limit: int) -> list[AccountLink]:
-        """At most `limit` of the accounts linked to the user in the tenant
-        gone, in one statement; the links it deleted answer, none when it
-        held none."""
+    async def delete_user_links(self, org_id: UUID, user_id: UUID, ids: Sequence[UUID]) -> int:
+        """The links among `ids` of the user in the tenant gone, in one
+        statement, and no other: a link its caller has not read stays.
+        Returns how many went."""
         ...
 
     @abstractmethod

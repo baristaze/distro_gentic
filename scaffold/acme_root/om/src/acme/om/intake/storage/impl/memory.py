@@ -67,13 +67,14 @@ class IntakeStorageMemoryImpl(MemoryStorageBase, IntakeStorageInterface):
             del self._links[held.id]
             return True
 
-    async def delete_user_links(self, org_id: UUID, user_id: UUID, limit: int) -> list[AccountLink]:
+    async def delete_user_links(self, org_id: UUID, user_id: UUID, ids: Sequence[UUID]) -> int:
         async with self._lock:
+            wanted = set(ids)
             rows = self._rows(self._links, org_id)
-            gone = [link for link in rows if link.user_id == user_id][:limit]
+            gone = [link for link in rows if link.user_id == user_id and link.id in wanted]
             for link in gone:
                 del self._links[link.id]
-            return gone
+            return len(gone)
 
     def _link(self, org_id: UUID, integration: str, external_id: str) -> AccountLink | None:
         found = [

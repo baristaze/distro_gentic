@@ -138,9 +138,8 @@ class IntakeManagerImpl(IntakeManagerInterface):
             raise NotFound(f"{integration} account {external_id} is linked to no user")
         if link.user_id != ctx.user_id:
             ctx.require(Permission.MANAGE_MEMBERS)
-        if await self._storage.delete_link(ctx.org_id, integration, external_id):
-            facts: dict[str, object] = {"integration": integration, "user_id": str(link.user_id)}
-            await self._audit(ctx, UNLINKED, link.id, facts)
+        await self._unlinked(ctx, link)
+        await self._storage.delete_link(ctx.org_id, integration, external_id)
 
     async def forget_member(self, ctx: TenantContext, user_id: UUID) -> int:
         ctx.require(Permission.MANAGE_MEMBERS)
@@ -148,15 +147,13 @@ class IntakeManagerImpl(IntakeManagerInterface):
             return 0
         batch, forgotten = self._options.links, 0
         while True:
-            gone = await self._storage.delete_user_links(ctx.org_id, user_id, batch)
-            for link in gone:
-                facts: dict[str, object] = {
-                    "integration": link.integration,
-                    "user_id": str(user_id),
-                }
-                await self._audit(ctx, UNLINKED, link.id, facts)
-            forgotten += len(gone)
-            if len(gone) < batch:
+            links = await self._storage.read_user_links(ctx.org_id, user_id, batch)
+            for link in links:
+                await self._unlinked(ctx, link)
+            if links:
+                ids = [link.id for link in links]
+                forgotten += await self._storage.delete_user_links(ctx.org_id, user_id, ids)
+            if len(links) < batch:
                 return forgotten
 
     async def get_links(self, ctx: TenantContext, user_id: UUID) -> tuple[AccountLink, ...]:
@@ -371,3 +368,12 @@ class IntakeManagerImpl(IntakeManagerInterface):
         self, ctx: TenantContext, kind: str, target: UUID, facts: dict[str, object]
     ) -> None:
         await self._events.append_event(ctx, audit_event(ctx, new_id(), kind, target, facts))
+
+    async def _unlinked(self, ctx: TenantContext, link: AccountLink) -> None:
+        """A link's end, audited before its delete under an id the link
+        derives: a stop between the two leaves the link, and the rerun
+        appends the same entry, which answers as the one held, then deletes.
+        An erasure is never without its record, nor recorded twice."""
+        facts: dict[str, object] = {"integration": link.integration, "user_id": str(link.user_id)}
+        entry_id = derived_id(link.id, link.created_at, UNLINKED)
+        await self._events.append_event(ctx, audit_event(ctx, entry_id, UNLINKED, link.id, facts))

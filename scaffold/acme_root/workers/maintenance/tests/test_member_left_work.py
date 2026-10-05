@@ -3,6 +3,7 @@ account's deletion, and the queue unlinks every outside account linked to
 them there: none of their ids stays linked, the account links again to the
 person added back, and a member who stays keeps theirs."""
 
+import asyncio
 from datetime import timedelta
 from pathlib import Path
 from uuid import UUID
@@ -11,7 +12,9 @@ import pytest
 from worker_support import build_container, request, sign_in, signing
 
 from acme.om.context import Role, TenantContext
+from acme.om.events.types.event import Event
 from acme.om.exceptions import NotFound
+from acme.om.intake.impl.manager import UNLINKED
 from acme.om.tenancy.types.user import User
 from acme.om.work.types.work_item import WorkKind
 from acme.workers.maintenance.container import WorkerContainer
@@ -107,3 +110,42 @@ async def test_a_member_who_holds_a_place_keeps_their_links(tmp_path: Path) -> N
 
     assert await intake.forget_member(ann, bob.id) == 0
     assert [link.external_id for link in await intake.get_links(ann, bob.id)] == ["U-BOB"]
+
+
+async def test_a_stop_between_the_audits_and_the_delete_loses_no_record(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The handler stopped after the first audit of the links it read (the
+    drain cancels it, or its lease is lost) has deleted nothing; run again,
+    it deletes every link and writes each link's audit once."""
+    container = build_container(tmp_path)
+    intake, events, work = container.intake, container.managers.events, container.managers.work
+    ann = await sign_in(container)
+    bob = await add_bob(container)
+    linked = [
+        await intake.link_account(ann, "chat", "U-BOB", bob.id),
+        await intake.link_account(ann, "forge", "bob-gh", bob.id),
+    ]
+    await container.managers.tenancy.members.remove_member(ann, bob.id)
+    claimed = await work.claim(request(), "default", [WorkKind.MEMBER_LEFT], "test", LEASE)
+    assert claimed is not None
+    ctx, item = claimed
+    handler = build_loop(container)._handlers[item.kind]  # pyright: ignore[reportPrivateUsage]
+    append = events.append_event
+
+    async def appended_then_stopped(ctx: TenantContext, entry: Event) -> Event:
+        await append(ctx, entry)
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(events, "append_event", appended_then_stopped)
+    with pytest.raises(asyncio.CancelledError):
+        await handler.handle(ctx, item)
+    monkeypatch.undo()
+    assert len(await intake.get_links(ann, bob.id)) == 2
+
+    await handler.handle(ctx, item)
+    await work.complete(ctx, item)
+    assert await intake.get_links(ann, bob.id) == ()
+    entries = await events.get_events(ann, 0, 100)
+    audited = [e.target_id for e in entries if e.kind == UNLINKED]
+    assert sorted(audited) == sorted(link.id for link in linked)

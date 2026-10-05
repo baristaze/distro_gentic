@@ -68,8 +68,9 @@ class IntakeManagerInterface(ABC):
         """Platform-internal: `MEMBER_LEFT`'s. Every account linked to a user
         who holds no place in the tenant any more gone, each audited as
         unlinked, so an erased person's outside ids stay linked nowhere and
-        the account is free to link again. A user who holds a place keeps
-        theirs. Returns how many links went."""
+        the account is free to link again. Each audit is written before its
+        link goes, so a rerun after a stop writes it once. A user who holds
+        a place keeps theirs. Returns how many links went."""
         ...
 
     @abstractmethod
