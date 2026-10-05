@@ -78,6 +78,7 @@ export type ApprovalPageView = Schemas["ApprovalPageView"];
 export type UsagePageView = Schemas["UsagePageView"];
 export type BudgetUsageView = Schemas["BudgetUsageView"];
 export type StepView = Schemas["StepView"];
+export type ToolUseView = Schemas["ToolUseView"];
 export type StepPageView = Schemas["StepPageView"];
 export type StepType = Schemas["StepType"];
 export type MessageRequest = Schemas["MessageRequest"];

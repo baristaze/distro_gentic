@@ -8,6 +8,15 @@ import { api } from "../app/api";
 
 export const LIVE_POLL_MS = 1000;
 
+/** A run of one stream's parts of one kind, for one call when they name
+ * one: a tool's input names the call it asks for, as its output may. */
+export interface LiveRun {
+  kind: LivePartView["kind"];
+  tool: string | null;
+  toolUseId: string | null;
+  text: string;
+}
+
 /** One open stream as the viewer holds it: its parts joined into runs of one
  * kind, the last place read, and whether the buffer dropped parts before
  * the first one held. */
@@ -15,16 +24,17 @@ export interface LiveStream {
   stepId: string;
   last: number | null;
   dropped: boolean;
-  runs: { kind: LivePartView["kind"]; tool: string | null; text: string }[];
+  runs: LiveRun[];
 }
 
-function joined(runs: LiveStream["runs"], parts: readonly LivePartView[]): LiveStream["runs"] {
+function joined(runs: readonly LiveRun[], parts: readonly LivePartView[]): LiveRun[] {
   const out = runs.map((run) => ({ ...run }));
   for (const part of parts) {
     const tail = out[out.length - 1];
     const tool = part.tool ?? null;
-    if (tail && tail.kind === part.kind && tail.tool === tool) tail.text += part.text;
-    else out.push({ kind: part.kind, tool, text: part.text });
+    const toolUseId = part.tool_use_id ?? null;
+    if (tail && tail.kind === part.kind && tail.tool === tool && tail.toolUseId === toolUseId) tail.text += part.text;
+    else out.push({ kind: part.kind, tool, toolUseId, text: part.text });
   }
   return out;
 }

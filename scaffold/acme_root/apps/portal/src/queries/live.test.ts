@@ -6,8 +6,8 @@ import { mergeLive } from "./live";
 
 vi.mock("../app/api", () => ({ api: {} }));
 
-function part(n: number, kind: LivePartView["kind"], text: string, tool: string | null = null): LivePartView {
-  return { n, last: n, kind, text, tool, index: null, channel: null, tool_use_id: null };
+function part(n: number, kind: LivePartView["kind"], text: string, tool: string | null = null, toolUseId: string | null = null): LivePartView {
+  return { n, last: n, kind, text, tool, index: null, channel: null, tool_use_id: toolUseId };
 }
 
 describe("mergeLive", () => {
@@ -20,10 +20,20 @@ describe("mergeLive", () => {
         last: 3,
         dropped: false,
         runs: [
-          { kind: "text", tool: null, text: "Hello" },
-          { kind: "tool_output", tool: "run", text: "ok" },
+          { kind: "text", tool: null, toolUseId: null, text: "Hello" },
+          { kind: "tool_output", tool: "run", toolUseId: null, text: "ok" },
         ],
       },
+    ]);
+  });
+
+  it("starts a new run where a tool's input names another call", () => {
+    const read = mergeLive([], [
+      { step_id: "a", first: 1, dropped: false, parts: [part(1, "tool_input", '{"a"', "run", "u1"), part(2, "tool_input", ":1}", "run", "u1"), part(3, "tool_input", "{}", "run", "u2")] },
+    ]);
+    expect(read[0]!.runs).toEqual([
+      { kind: "tool_input", tool: "run", toolUseId: "u1", text: '{"a":1}' },
+      { kind: "tool_input", tool: "run", toolUseId: "u2", text: "{}" },
     ]);
   });
 
@@ -33,6 +43,6 @@ describe("mergeLive", () => {
       { step_id: "b", first: 1, dropped: true, parts: [part(5, "text", "y")] },
     ]);
     const next = mergeLive(held, [{ step_id: "b", first: 1, dropped: false, parts: [] }]);
-    expect(next).toEqual([{ stepId: "b", last: 5, dropped: true, runs: [{ kind: "text", tool: null, text: "y" }] }]);
+    expect(next).toEqual([{ stepId: "b", last: 5, dropped: true, runs: [{ kind: "text", tool: null, toolUseId: null, text: "y" }] }]);
   });
 });
