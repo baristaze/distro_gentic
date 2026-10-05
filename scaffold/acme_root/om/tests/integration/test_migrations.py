@@ -6,9 +6,10 @@ data migration passes the fence it runs under and fails when it misses rows,
 a workspace's notices move to the one notice and back, every tenant's, the
 one notice leaves the table with every notice kept in the list, the
 validation sessions' station columns leave the table with every session this
-release wrote kept, and a platform automation this release writes reads as the
+release wrote kept, a platform automation this release writes reads as the
 previous release's after a downgrade, which drops the automations of a
-product's kind."""
+product's kind, and a refused validation session goes back to queued, kept,
+when its reason's column leaves."""
 
 import asyncio
 import time
@@ -17,9 +18,8 @@ from uuid import UUID
 import pytest
 from contracts.automation_storage import make_automation
 from contracts.event_storage import make_event
-from contracts.platform_agents_storage import finished, make_validation
+from contracts.platform_agents_storage import finished, make_validation, refused
 from contracts.workspace_storage import make_workspace
-from pydantic import ValidationError
 from sqlalchemy import Connection, text
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -28,7 +28,7 @@ from acme.om.automations.types.automation import Action
 from acme.om.base import new_id
 from acme.om.events.storage.impl.postgres import EventStoragePostgresImpl
 from acme.om.platform_agents.storage.impl.postgres import PlatformAgentsStoragePostgresImpl
-from acme.om.platform_agents.types.validation import ValidationSession
+from acme.om.platform_agents.types.validation import ValidationSession, ValidationStatus
 from acme.om.storage.impl.pg_base import LoginSessions
 from acme.om.storage.migrate import (
     RUN_AGAIN,
@@ -401,19 +401,20 @@ async def seed_sessions(pg_sessions: LoginSessions) -> dict[UUID, ValidationSess
 async def test_the_station_columns_leave_and_every_session_this_release_wrote_stays(
     pg_sessions: LoginSessions, migrated: dict[DatabaseRole, str]
 ) -> None:
-    """At the release before, each tenant holds a session that release wrote
-    and one written on a station, which it cannot read. Forward, the
+    """At the release before, each tenant holds a session this release
+    wrote, taken down to it, and one written on a station. Forward, the
     station's columns are gone, the commit columns take no null, the station
     session is gone, and every value of the other is kept."""
     core = migrated[DatabaseRole.CORE]
     storage = PlatformAgentsStoragePostgresImpl(pg_sessions)
-    await downgrade(DatabaseRole.CORE, core, V0_2_0_HEAD)
     held = await seed_sessions(pg_sessions)
-    stale = {org: await written_on_a_station(core, org) for org in held}
+    await downgrade(DatabaseRole.CORE, core, V0_2_0_HEAD)
+    for org in held:
+        await written_on_a_station(core, org)
     assert await session_shape(core) == V0_2_0_SESSION_SHAPE
-    for org, session_id in stale.items():
-        with pytest.raises(ValidationError):
-            await storage.read_validation(org, session_id)
+    for org in held:
+        both = await in_tenant(core, org, "SELECT count(*) FROM core.validation_sessions")
+        assert both == [(2,)]
 
     await upgrade(DatabaseRole.CORE, core)
 
@@ -429,8 +430,8 @@ async def test_the_station_columns_come_back_null_and_the_sessions_stay(
     pg_sessions: LoginSessions, migrated: dict[DatabaseRole, str]
 ) -> None:
     """Down, the station's columns are back, nullable and null, the commit
-    columns take a null again, and every session is kept and read; up again,
-    the schema agrees with the mapping."""
+    columns take a null again, and every session is kept with its commit;
+    up again, the schema agrees with the mapping and every session reads."""
     held = await seed_sessions(pg_sessions)
     core = migrated[DatabaseRole.CORE]
     storage = PlatformAgentsStoragePostgresImpl(pg_sessions)
@@ -439,18 +440,52 @@ async def test_the_station_columns_come_back_null_and_the_sessions_stay(
 
     assert await session_shape(core) == V0_2_0_SESSION_SHAPE
     for org, session in held.items():
-        assert await storage.read_validation(org, session.id) == session
         assert await in_tenant(
             core,
             org,
-            "SELECT lab_id, check_version, parameters FROM core.validation_sessions"
-            f" WHERE id = '{session.id}'",
-        ) == [(None, None, None)]
+            "SELECT project_id, head, base, lab_id, check_version, parameters"
+            f" FROM core.validation_sessions WHERE id = '{session.id}'",
+        ) == [(session.project_id, session.head, session.base, None, None, None)]
 
     await upgrade(DatabaseRole.CORE, core)
     assert await check(DatabaseRole.CORE, core) == []
     for org, session in held.items():
         assert await storage.read_validation(org, session.id) == session
+
+
+BEFORE_REFUSAL = "202610041904"
+"""A core head before a validation session held why it was refused."""
+
+
+async def test_a_refused_session_goes_back_to_queued_and_is_kept(
+    pg_sessions: LoginSessions, migrated: dict[DatabaseRole, str]
+) -> None:
+    """The release before knows no refused session. Down, each tenant's goes
+    back to queued and is kept, its reason going with the column, and every
+    other session is as it was; up again, the schema agrees with the
+    mapping and every session reads."""
+    storage = PlatformAgentsStoragePostgresImpl(pg_sessions)
+    core = migrated[DatabaseRole.CORE]
+    held = await seed_sessions(pg_sessions)
+    gone: dict[UUID, ValidationSession] = {}
+    for org in held:
+        session = make_validation()
+        assert await storage.create_validation(org, session, ())
+        gone[org] = refused(session, "the project declares no check report.totals")
+        await storage.write_validation(org, gone[org], 1, ())
+
+    await downgrade(DatabaseRole.CORE, core, BEFORE_REFUSAL)
+
+    for org, session in held.items():
+        statuses = await in_tenant(core, org, "SELECT id, status FROM core.validation_sessions")
+        assert dict(statuses) == {gone[org].id: "queued", session.id: session.status}
+    await upgrade(DatabaseRole.CORE, core)
+    assert await check(DatabaseRole.CORE, core) == []
+    for org, session in held.items():
+        assert await storage.read_validation(org, session.id) == session
+        back = await storage.read_validation(org, gone[org].id)
+        assert back is not None
+        assert (back.status, back.refusal) == (ValidationStatus.QUEUED, None)
 
 
 PREVIOUS_ACTION = {"kind", "brief", "agent_kind", "title", "project_id", "session_id"}

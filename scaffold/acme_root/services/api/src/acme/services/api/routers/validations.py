@@ -33,5 +33,6 @@ async def get_validation(
     ctx: Ctx, validations: ValidationsService, session_id: UUID
 ) -> ValidationSessionView:
     """The session: `queued` while its check waits or runs, `finished` with
-    its verdict and its run once the run is recorded."""
+    its verdict and its run once the run is recorded, and `refused` with its
+    reason when its check cannot run here, for good."""
     return await validations.get_validation(ctx, session_id)
