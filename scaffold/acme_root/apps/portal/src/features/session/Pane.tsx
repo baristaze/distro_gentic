@@ -51,6 +51,17 @@ export function Pane({ vm, folded = false }: { vm: SessionVm; folded?: boolean }
         </div>
         {peek ? (
           <div className="acme-pane-peek" role="region" aria-label={active.label} style={{ width: pane.width }}>
+            <div className="acme-pane-head">
+              <strong className="acme-pane-peek-name">
+                {active.icon}
+                {active.label}
+              </strong>
+              <Tooltip tip="Fold it to the rail" shortcut="Esc">
+                <button type="button" className="acme-icon-button" aria-label={`Fold ${active.label}`} onClick={() => setPeek(false)}>
+                  <CloseTabIcon />
+                </button>
+              </Tooltip>
+            </div>
             <div className="acme-pane-view" id="pane-view" data-tab={active.id}>
               {active.render(vm.slotSession)}
             </div>

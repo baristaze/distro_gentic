@@ -3205,8 +3205,24 @@ select.acme-field {
   bottom: 0;
   z-index: 6;
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   max-width: calc(100vw - 48px);
   border-left: 1px solid var(--acme-border);
   background: var(--acme-bg);
   box-shadow: var(--acme-shadow-lg);
+}
+
+.acme-pane-peek-name {
+  display: inline-flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 8px;
+  padding-left: 8px;
+  font-size: 13px;
+}
+
+/* Expanded, the composer keeps the chat's measure. */
+.acme-dock[data-mode="expanded"] .acme-dock-composer > * {
+  max-width: 820px;
+  margin: 0 auto;
 }

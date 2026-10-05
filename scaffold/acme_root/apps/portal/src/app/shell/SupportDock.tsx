@@ -137,7 +137,7 @@ export function SupportDock({
           <form className="acme-composer" aria-label="Ask support" onSubmit={onSubmit}>
             <TextArea label="Ask support" hideLabel rows={2} autoFocus placeholder={SUPPORT_EXAMPLE} value={draft} onChange={onDraft} onKeyDown={onKey} />
             <div className="acme-composer-bar">
-              {vm.working ? <Muted>It works; a message now is read at its next step.</Muted> : null}
+              {vm.working ? <Muted>Working: send at any time</Muted> : null}
               <span className="acme-composer-gap" />
               <Tooltip tip="Send" shortcut="⌘↵" side="top">
                 <button type="submit" className="acme-send" aria-label="Send" disabled={vm.sending || !draft.trim()}>
