@@ -1221,7 +1221,14 @@ select.acme-field {
 .acme-status-pill {
   font: inherit;
   font-size: 12px;
+  white-space: nowrap;
   cursor: default;
+}
+
+/* The pill and the ⓘ keep their width, so the header's gap stays between
+ * the pill and the title however narrow it gets: the title gives way. */
+.acme-session-head > .acme-tip-anchor {
+  flex-shrink: 0;
 }
 
 .acme-session-title {
