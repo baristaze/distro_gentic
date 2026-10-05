@@ -90,12 +90,23 @@ export function useParkedSessions() {
   return { ...query, data: query.data?.pages.flatMap((page) => page.items), isPending: query.isPending || walking };
 }
 
+const sessionQuery = (id: string, enabled: boolean) => ({
+  queryKey: keys.agentSessions.one(id),
+  queryFn: ({ signal }: { signal: AbortSignal }) => api.get<AgentSessionView>(path(id), { signal }),
+  enabled,
+});
+
 export function useAgentSession(id: string, enabled = true) {
-  return useQuery({
-    queryKey: keys.agentSessions.one(id),
-    queryFn: ({ signal }) => api.get<AgentSessionView>(path(id), { signal }),
-    enabled,
-  });
+  return useQuery(sessionQuery(id, enabled));
+}
+
+const recordsOf = (read: readonly { data?: AgentSessionView }[]) => read.map((one) => one.data);
+
+/** Several sessions' records, in their order, each the read its own page
+ * makes, so a push about one reads it again. One array for as long as no
+ * record changes. */
+export function useSessionRecords(ids: readonly string[]): readonly (AgentSessionView | undefined)[] {
+  return useQueries({ queries: ids.map((id) => sessionQuery(id, true)), combine: recordsOf });
 }
 
 function bySeq<T extends { seq: number }>(pages: InfiniteData<{ items: T[] }> | undefined): T[] | undefined {

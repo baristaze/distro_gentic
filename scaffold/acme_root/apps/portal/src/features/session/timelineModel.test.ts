@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { StepView } from "@acme/client";
 import type { LiveStream } from "../../queries/live";
 import { commandLine, PLATFORM_GISTS } from "./toolGists";
-import { answers, bodyKindOf, callsOf, childrenLine, doing, duration, editDiff, isCut, MAX_SHOWN, outline, readReport, timeline, type ChildState, type Entry, type TimelineInput } from "./timelineModel";
+import { answers, bodyKindOf, callsOf, childrenLine, doing, duration, editDiff, handedTo, isCut, MAX_SHOWN, outline, readReport, timeline, type ChildState, type Entry, type TimelineInput } from "./timelineModel";
 
 const T0 = Date.parse("2026-10-05T10:00:00Z");
 const at = (s: number) => new Date(T0 + s * 1000).toISOString();
@@ -61,6 +61,7 @@ function read(steps: StepView[], over: Partial<TimelineInput> = {}) {
     gists: PLATFORM_GISTS,
     carded: new Set(),
     children: [],
+    handed: [],
     parent: null,
     now: new Date(T0 + 600_000),
     ...over,
@@ -381,6 +382,43 @@ describe("sub-agents", () => {
       [C2, null],
     ]);
     expect(card.rows[1]!.words).toBe("Started");
+  });
+
+  it("shows a hand-off's row by the session it handed to, once that record is read", () => {
+    const H = "0a1b2c3d-0000-4000-8000-0000000000aa";
+    const asked = request(0);
+    const asks = response(asked, 1, { tool_uses: [toolUse("h1", "hand_off_to_engineer", { title: "Fix the parser", objective: "Make the test pass" })] });
+    const made = call(asks, "h1", "hand_off_to_engineer", 2);
+    const steps = [asked, asks, made, answer(made, JSON.stringify({ session_id: H }), 3)];
+    expect(handedTo(steps)).toEqual([H]);
+    expect(handedTo(twoSpawns())).toEqual([]);
+    const handed = child(H, "Fix the parser", { kind: "engineer", created_at: at(3) });
+    expect(only(read(steps, { handed: [handed] }).entries, "subagents").rows).toMatchObject([{ childId: H, phase: "working", words: "Working", seconds: 597 }]);
+    const settled = read(steps, { handed: [{ ...handed, status: "idle" }] });
+    expect(only(settled.entries, "subagents").rows).toMatchObject([{ phase: "done", words: "Done", seconds: null }]);
+    // A child of the same id is not the session it handed to.
+    expect(only(read(steps, { children: [handed] }).entries, "subagents").rows[0]).toMatchObject({ phase: null, words: "Started" });
+  });
+
+  it("times a row with no record only while its call starts the child: a day later it has not grown", () => {
+    const H = "0a1b2c3d-0000-4000-8000-0000000000aa";
+    const asked = request(0);
+    const asks = response(asked, 1, { tool_uses: [toolUse("h1", "hand_off_to_engineer", { title: "Fix the parser" })] });
+    const made = call(asks, "h1", "hand_off_to_engineer", 2);
+    const running = { status: "running" as const, park: null, archived_at: null };
+    const dayLater = new Date(T0 + 86_400_000);
+    expect(only(read([asked, asks, made], { session: running, now: new Date(T0 + 10_000) }).entries, "subagents").rows[0]).toMatchObject({ words: "Starting", seconds: 8 });
+    const started = read([asked, asks, made, answer(made, JSON.stringify({ session_id: H }), 3)], { now: dayLater });
+    expect(only(started.entries, "subagents").rows[0]).toMatchObject({ words: "Started", seconds: null });
+    // A spawn that did not start, was denied, or was stopped reads so, with no time.
+    const spawnAsks = response(asked, 1, { tool_uses: [toolUse("s1", "spawn_sub_agent", { title: "Read the parsers" })] });
+    const spawned = call(spawnAsks, "s1", "spawn_sub_agent", 2);
+    for (const [failure, words] of [["permanent", "Did not start"], ["denied", "Denied"]] as const) {
+      const failed = read([asked, spawnAsks, spawned, answer(spawned, "No room in the tree.", 3, failure)], { now: dayLater });
+      expect(only(failed.entries, "subagents").rows[0]).toMatchObject({ words, seconds: null });
+    }
+    const stopped = read([asked, spawnAsks, spawned, step({ type: "loop_ended", outcome: "cancelled" }, 4)], { now: dayLater });
+    expect(only(stopped.entries, "subagents").rows[0]).toMatchObject({ words: "Stopped", seconds: null });
   });
 
   it("draws a child's report as Report from its title, how it ended, and its last answer, opening the child", () => {

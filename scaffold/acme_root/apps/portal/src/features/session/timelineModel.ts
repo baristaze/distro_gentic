@@ -111,7 +111,8 @@ export interface SubAgentRow {
   words: string;
   activity: string | null;
   /** How long it has run: to its report once it reported its end, to now
-   * while it works; null when not known. */
+   * while it works. Before its record is read, how long its call has taken
+   * to start it, and only while that call runs. Null when not known. */
   seconds: number | null;
 }
 
@@ -159,6 +160,9 @@ export interface TimelineInput {
   carded: ReadonlySet<string>;
   /** Its sub-agents, as read. */
   children: readonly ChildState[];
+  /** The sessions its hand-offs started, as read: none is a child of it, so
+   * each is read by the id its hand-off's answer names (`handedTo`). */
+  handed: readonly ChildState[];
   /** The session that started it, when it is a sub-agent and that is read. */
   parent: { id: string; title: string } | null;
   now: Date;
@@ -416,7 +420,7 @@ const OUTCOMES: Record<string, "plain" | "accent" | "danger"> = {
 };
 
 /** Each call the history holds, by the id the model gave it. */
-function pairCalls(input: TimelineInput, loopEnded: ReadonlySet<string>): Map<string, Call> {
+function pairCalls(input: Pick<TimelineInput, "steps" | "held" | "session">, loopEnded: ReadonlySet<string>): Map<string, Call> {
   const { steps, held, session } = input;
   const calls = new Map<string, Call>();
   const requests = new Map<string, StepView>();
@@ -505,6 +509,7 @@ export function timeline(given: TimelineInput): Timeline {
   for (const step of steps) if (!loopStarts.has(step.loop_id)) loopStarts.set(step.loop_id, step.created_at);
   const stored = new Set(steps.map((step) => step.id));
   const children = new Map(input.children.map((child) => [child.id, child]));
+  const handed = new Map(input.handed.map((other) => [other.id, other]));
   // When each child reported the end of its loop: where its time stops.
   const endedAt = new Map<string, string>();
   for (const step of steps) {
@@ -515,12 +520,18 @@ export function timeline(given: TimelineInput): Timeline {
     const line = callLine(call, gists);
     const title = field(call.input, "title", "objective") ?? "A sub-agent";
     const named = childOf(call.output);
-    // A call whose answer names no session finds its child by its title.
-    const child = (named !== null ? children.get(named) : undefined) ?? (named === null ? input.children.find((one) => one.title === title) : undefined);
+    // A call whose answer names no session finds its child by its title. A
+    // hand-off's session is no child: it is read by the id its answer names.
+    const child =
+      (named !== null ? (handsOff(call.tool) ? handed.get(named) : children.get(named)) : undefined) ??
+      (named === null ? input.children.find((one) => one.title === title) : undefined);
     const childId = named ?? child?.id ?? null;
     const phase = child ? childPhase(child) : null;
+    // With no record read, its time is its call's, and only while that call
+    // runs: once the call answers, nothing tells how long a child ran.
+    const starting = call.state === "running" || call.state === "asked";
     const from = child?.created_at ?? call.startedAt;
-    const to = childId !== null && endedAt.has(childId) ? endedAt.get(childId)! : phase === "done" ? null : now;
+    const to = !child ? (starting ? now : null) : childId !== null && endedAt.has(childId) ? endedAt.get(childId)! : phase === "done" ? null : now;
     return {
       key: `row-${call.id}`,
       line,
@@ -528,7 +539,7 @@ export function timeline(given: TimelineInput): Timeline {
       agent: handsOff(call.tool) ? words(call.tool.slice("hand_off_to_".length)) : (field(call.input, "kind") ?? child?.kind ?? "agent"),
       childId,
       phase,
-      words: child ? childWords(child) : call.state === "running" || call.state === "asked" ? "Starting" : call.state === "done" ? "Started" : STARTS[call.state],
+      words: child ? childWords(child) : STARTS[call.state],
       activity: phase === "working" || phase === "needs_you" ? (child?.activity ?? null) : null,
       seconds: to === null ? null : seconds(from, to),
     };
@@ -815,6 +826,19 @@ function cardOf(card: CardKind, call: Call): { title: string; facts: string[]; b
 function childOf(output: string | null): string | null {
   const answer = parseJsonText(output ?? "") as Record<string, unknown> | undefined;
   return field(answer, "session_id", "child_id", "id");
+}
+
+/** The sessions its hand-offs started, each once, in order, by the id each
+ * answer names: what is read to show how each stands, since a session a
+ * hand-off starts is no child of it. */
+export function handedTo(steps: readonly StepView[]): string[] {
+  const asIdle = { status: "idle" as const, park: null, archived_at: null };
+  const ids = new Set<string>();
+  for (const call of pairCalls({ steps, held: [], session: asIdle }, new Set()).values()) {
+    const named = handsOff(call.tool) ? childOf(call.output) : null;
+    if (named) ids.add(named);
+  }
+  return [...ids];
 }
 
 /** How a spawn reads before its child's record is read. */

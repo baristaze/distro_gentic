@@ -5,7 +5,7 @@ import { errorMessage } from "../../app/errorMessage";
 import type { SlotSession } from "../../app/product";
 import { useSlot } from "../../app/slot";
 import type { PaletteCommand } from "../../design/kit";
-import { useAgentSession, useApprovals, useChildren, useChildSteps, useCommandProgress, useDelivery, useSessionActions, useSteps } from "../../queries/agentSessions";
+import { useAgentSession, useApprovals, useChildren, useChildSteps, useCommandProgress, useDelivery, useSessionActions, useSessionRecords, useSteps } from "../../queries/agentSessions";
 import { useLiveStreams } from "../../queries/live";
 import { useMe } from "../../queries/tenancy";
 import { useNoticesStore } from "../../store/notices";
@@ -13,9 +13,21 @@ import { paneOf, usePanesStore } from "../../store/panes";
 import { sessionRow } from "../sessions/sessionsModel";
 import { addable, closeTab, knownTabs, openCall, openTab, openThemselves, resizePane, shownTab, togglePane, type PaneState } from "./paneModel";
 import { allowed, composerOf, deliveryLines, parkLine, pullRequestBadge, splitCommand, statusLine } from "./sessionModel";
-import { answers, callsOf, outline, timeline, type Call, type ChildState } from "./timelineModel";
+import { answers, callsOf, handedTo, outline, timeline, type Call, type ChildState } from "./timelineModel";
 
 const NONE: readonly AgentSessionView[] = [];
+
+/** A session it started as its page reads it, before what it does now is read. */
+const stateOf = (other: AgentSessionView): ChildState => ({
+  id: other.id,
+  title: other.title,
+  kind: other.kind,
+  status: other.status,
+  park: other.park,
+  archived_at: other.archived_at,
+  created_at: other.created_at,
+  activity: null,
+});
 
 /** The time now, read again every second while `ticking`: a running block's
  * duration counts up. */
@@ -66,8 +78,17 @@ export function useSessionVm(id: string) {
   const childSteps = useChildSteps(childRecords);
   const parentId = session.data?.parent_id ?? null;
   const parentRead = useAgentSession(parentId ?? "", parentId !== null);
-  // The clock ticks while it runs, or while a sub-agent does: their rows time them.
-  const now = useNow(runs || childRecords.some((child) => child.archived_at === null && child.status !== "idle"));
+  // The sessions its hand-offs started, each read as its own page reads it:
+  // none is a child of it. A read that answers for another id is no record.
+  const handedIds = useMemo(() => handedTo(steps.data ?? []), [steps.data]);
+  const handedRead = useSessionRecords(handedIds);
+  const handedRecords = useMemo(
+    () => handedRead.flatMap((other, index) => (other && other.id === handedIds[index] ? [other] : [])),
+    [handedRead, handedIds],
+  );
+  // The clock ticks while it runs, or while a session it started does: their rows time them.
+  const works = (other: AgentSessionView) => other.archived_at === null && other.status !== "idle";
+  const now = useNow(runs || childRecords.some(works) || handedRecords.some(works));
   const actions = useSessionActions(id);
   const [commandKey, setCommandKey] = useState<string | null>(null);
   const command = useCommandProgress(id, commandKey);
@@ -196,16 +217,17 @@ export function useSessionVm(id: string) {
     () =>
       childRecords.map((child, index) => {
         const read = childSteps[index];
-        const own = read ? timeline({ steps: read, live: [], session: child, held: [], gists, carded, children: [], parent: null, now }).status.text : null;
-        return { id: child.id, title: child.title, kind: child.kind, status: child.status, park: child.park, archived_at: child.archived_at, created_at: child.created_at, activity: own };
+        const own = read ? timeline({ steps: read, live: [], session: child, held: [], gists, carded, children: [], handed: [], parent: null, now }).status.text : null;
+        return { ...stateOf(child), activity: own };
       }),
     [childRecords, childSteps, gists, carded, now],
   );
+  const handed = useMemo<ChildState[]>(() => handedRecords.map(stateOf), [handedRecords]);
   const parentData = parentRead.data;
   const parent = useMemo(() => (parentData ? { id: parentData.id, title: parentData.title } : null), [parentData]);
   const chat = useMemo(
-    () => (record && history ? timeline({ steps: history, live, session: record, held: held ?? [], gists, carded, children, parent, now }) : null),
-    [record, history, live, held, gists, carded, children, parent, now],
+    () => (record && history ? timeline({ steps: history, live, session: record, held: held ?? [], gists, carded, children, handed, parent, now }) : null),
+    [record, history, live, held, gists, carded, children, handed, parent, now],
   );
   const marks = useMemo(() => (chat ? outline(chat.entries) : []), [chat]);
   const slotSession: SlotSession | null = useMemo(
