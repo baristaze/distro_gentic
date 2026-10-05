@@ -30,6 +30,7 @@ from acme.om.attribution.impl.manager import (
     AttributionOptions,
     members_context,
 )
+from acme.om.automations import AutomationsManagerInterface
 from acme.om.automations.actions import AutomationActionInterface
 from acme.om.base import utcnow
 from acme.om.benchmarks import BenchmarksManagerInterface
@@ -97,7 +98,12 @@ from acme.om.placement.kinds import (
     platform_work_kinds,
 )
 from acme.om.platform_agents import PlatformAgentsManagerInterface
-from acme.om.platform_agents.catalog import PlatformAgents, refuse_reach, with_shipped
+from acme.om.platform_agents.catalog import (
+    PlatformAgents,
+    refuse_reach,
+    with_assistant_tools,
+    with_shipped,
+)
 from acme.om.platform_agents.impl.manager import PlatformAgentsManagerImpl, PlatformAgentsOptions
 from acme.om.platform_agents.kinds import SHIPPED
 from acme.om.privacy import PrivacyManagerInterface
@@ -280,6 +286,7 @@ class ProductKinds:
     streams: tuple[StreamKind, ...] = ()
     executors: Mapping[str, ExecutorInterface] = field(default_factory=lambda: {})
     actions: ProductActions = no_actions
+    assistant_tools: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         for spec in self.work:
@@ -369,6 +376,12 @@ def intake_absent() -> IntakeManagerInterface:
     """No intake in this process: a loud null, so a tool that binds its
     session's work refuses rather than act where no event can find it."""
     raise Unavailable("no intake binds a session's work in this process")
+
+
+def automations_absent() -> AutomationsManagerInterface:
+    """No automations in this process: a loud null, so a tool that reads
+    the tenant's automations refuses rather than answer that it has none."""
+    raise Unavailable("no automations are read in this process")
 
 
 def knowledge_absent() -> KnowledgeManagerInterface:
@@ -520,6 +533,7 @@ def build_managers(
     platform_agents: PlatformAgents | None = None,
     intake: Callable[[], IntakeManagerInterface] | None = None,
     knowledge: Callable[[], KnowledgeManagerInterface] | None = None,
+    automations: Callable[[], AutomationsManagerInterface] | None = None,
     environment: str = LOCAL,
     tenant_keys: TenantKeysInterface | None = None,
     session_projects: SessionProjectInterface | None = None,
@@ -628,14 +642,18 @@ def build_managers(
 
     `platform_agents` ships the platform's agents, with the corpus its
     assistant answers from: their kinds join `agent_kinds` and their tools
-    join `tool_catalog`, ahead of the adopter's. A catalog that holds two
+    join `tool_catalog`, ahead of the adopter's, and the product's
+    `assistant_tools` join the assistant's. A catalog that holds two
     tools of one name, or lets the assistant reach past reading and handing
-    work on, is refused at boot (`UnsafeConfiguration`). None ships none.
+    work on, or a slot that names a tool the catalog does not hold, is
+    refused at boot (`UnsafeConfiguration`). None ships none.
     `intake` answers the intake the process builds over these managers,
     where the engineer's pull request is bound to its session; None binds
     nothing, so that tool opens none. `knowledge` answers the knowledge the
     process builds over them, which the agents search, read, and suggest
-    to; None keeps none, so those tools refuse.
+    to; None keeps none, so those tools refuse. `automations` answers the
+    automations the process builds over them, which the assistant reads;
+    None reads none, so those readers refuse.
 
     The platform's retention takes three. `tenant_keys` says whose key
     service holds each tenant's keys; None is infra's for every tenant, and
@@ -681,12 +699,17 @@ def build_managers(
     if platform_agents is not None:
         # Their tools read the managers built below, so each edge is bound
         # at call time.
-        agent_kinds = (*SHIPPED, *agent_kinds)
+        agent_kinds = (*with_assistant_tools(SHIPPED, product.assistant_tools), *agent_kinds)
         tool_catalog = with_shipped(
             platform_agents,
             tool_catalog,
             domain_classes,
             sessions=lambda: managers.agent_sessions,
+            steps=lambda: managers.steps,
+            projects=lambda: managers.projects,
+            work=lambda: managers.work,
+            hosts=lambda: managers.hosts,
+            automations=automations or automations_absent,
             policies=lambda: managers.tools,
             agents=lambda: managers.agents,
             evidence=lambda: managers.evidence,

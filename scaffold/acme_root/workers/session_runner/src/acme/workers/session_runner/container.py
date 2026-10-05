@@ -16,7 +16,8 @@ from acme.integrations.impl.configured import IntegrationsConfiguredImpl
 from acme.integrations.root import IntegrationsInterface
 from acme.om.attribution.impl.manager import members_context
 from acme.om.attribution.types.principal import Principal
-from acme.om.automations.root import automation_principals
+from acme.om.automations import AutomationsManagerInterface
+from acme.om.automations.root import automation_principals, build_automations
 from acme.om.base import new_id
 from acme.om.billing.root import build_money_gate, refuse_open_money
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
@@ -35,7 +36,7 @@ from acme.om.playbooks.root import PlaybooksLayer
 from acme.om.product_kinds import PRODUCT_KINDS
 from acme.om.relay.impl.placement import PlacementRelayedImpl
 from acme.om.relay.impl.transport import TransportPlacedImpl, TransportRelayImpl
-from acme.om.root import Managers, PlatformPorts, build_managers
+from acme.om.root import LOCAL, Managers, PlatformPorts, build_managers
 from acme.om.storage.impl.postgres import StoragePostgresImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.tools.attachments import AttachmentReaderInterface
@@ -186,6 +187,9 @@ class RunnerContainer:
         # record each act with intake, and the engineer's pull request binds
         # its work there; the container builds it below.
         acts = (CommentImpl(lambda: held[0].intake, integrations.get_integration),)
+        # The automations the platform assistant reads, built below over the
+        # managers, as the API and the maintenance worker build them.
+        automations: list[AutomationsManagerInterface] = []
 
         def stage() -> RequestContext:
             """The request stage each relayed operation runs under, minted
@@ -212,6 +216,7 @@ class RunnerContainer:
             platform_agents=platform_agents,
             intake=lambda: held[0].intake,
             knowledge=knowledge.manager,
+            automations=lambda: automations[0],
             budget_gate=ports.budget_gate or build_money_gate(storage),
             result_gate=ports.result_gate,
             executor=ports.executor,
@@ -229,6 +234,14 @@ class RunnerContainer:
             stream_sink=stream,
         )
         built.append(managers)
+        automations.append(
+            build_automations(
+                storage,
+                managers,
+                project_required=settings.environment != LOCAL,
+                actions=ports.kinds.actions,
+            )
+        )
         refuse_open_money(settings.environment, managers)
         trust.build(managers)
         matrix.build(managers)

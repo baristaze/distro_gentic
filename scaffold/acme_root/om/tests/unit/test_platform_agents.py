@@ -129,6 +129,11 @@ def shipped_catalog() -> tuple[ToolInterface, ...]:
         (),
         (),
         sessions=unbound,  # pyright: ignore[reportArgumentType]
+        steps=unbound,  # pyright: ignore[reportArgumentType]
+        projects=unbound,  # pyright: ignore[reportArgumentType]
+        work=unbound,  # pyright: ignore[reportArgumentType]
+        hosts=unbound,  # pyright: ignore[reportArgumentType]
+        automations=unbound,  # pyright: ignore[reportArgumentType]
         policies=unbound,  # pyright: ignore[reportArgumentType]
         agents=unbound,  # pyright: ignore[reportArgumentType]
         evidence=unbound,  # pyright: ignore[reportArgumentType]
@@ -189,6 +194,7 @@ def test_every_shipped_agent_is_a_profile_that_sets_its_powers() -> None:
         ("analysis", 2),
         ("planner", 1),
         ("platform_assistant", 1),
+        ("platform_assistant", 2),
     ]
     for kind in SHIPPED:
         assert set(kind.tools) <= set(classes), f"{kind.name} names a tool the catalog lacks"
