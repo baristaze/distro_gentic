@@ -1071,8 +1071,8 @@ def build_managers(
     )
     # A host's credential, its claims through placement, and where each
     # session runs. An exec item a claim takes is started by the relay before
-    # it reaches a host; the relay is built below, so the edge is bound at
-    # call time.
+    # it reaches a host, and the work that waits on a revoked host is ended
+    # by it; the relay is built below, so both edges are bound at call time.
     hosts = HostsManagerImpl(
         storage.get_hosts_storage(),
         PlacementClaimsRelayedImpl(placement, lambda: managers.relay),
@@ -1081,6 +1081,7 @@ def build_managers(
         outbox,
         hosts_options or HostsOptions(),
         claimant_kinds,
+        revoked=lambda rctx, org_id, host_id: managers.relay.end_host(rctx, org_id, host_id),
     )
     # The validation sessions: platform work on the queue, with no agent.
     platform = PlatformAgentsManagerImpl(

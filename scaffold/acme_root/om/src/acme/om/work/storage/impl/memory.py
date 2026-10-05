@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import datetime, timedelta
 from uuid import UUID
 
@@ -103,6 +103,53 @@ class WorkStorageMemoryImpl(MemoryStorageBase, WorkStorageInterface):
                 or (other.available_at, other.id) < (item.available_at, item.id)
             )
         )
+
+    async def end_open_on_lane(
+        self, org_id: UUID, lane: str, reason: str, now: datetime, limit: int
+    ) -> list[WorkItem]:
+        return await self._end_open(org_id, lambda item: item.lane == lane, reason, now, limit)
+
+    async def end_open_for_target(
+        self, org_id: UUID, kind: str, target_id: UUID, reason: str, now: datetime, limit: int
+    ) -> list[WorkItem]:
+        return await self._end_open(
+            org_id,
+            lambda item: item.kind == kind and item.target_id == target_id,
+            reason,
+            now,
+            limit,
+        )
+
+    async def _end_open(
+        self,
+        org_id: UUID,
+        matches: Callable[[WorkItem], bool],
+        reason: str,
+        now: datetime,
+        limit: int,
+    ) -> list[WorkItem]:
+        async with self._lock:
+            found = [
+                item
+                for item in self._rows(self._items, org_id)
+                if item.status in (WorkStatus.QUEUED, WorkStatus.CLAIMED) and matches(item)
+            ][:limit]
+            ended: list[WorkItem] = []
+            for item in found:
+                done = item.model_copy(
+                    update={
+                        "status": WorkStatus.DONE,
+                        "last_error": reason,
+                        "claimed_by": None,
+                        "claim_token": None,
+                        "lease_expires_at": None,
+                        "updated_at": now,
+                        "updated_by": EMPTY_UUID,
+                    }
+                )
+                self._items[item.id] = (org_id, done)
+                ended.append(done)
+            return ended
 
     async def has_open_item(self, org_id: UUID, kind: str, target_id: UUID) -> bool:
         return any(

@@ -89,6 +89,25 @@ class WorkStorageInterface(ABC):
         ...
 
     @abstractmethod
+    async def end_open_on_lane(
+        self, org_id: UUID, lane: str, reason: str, now: datetime, limit: int
+    ) -> list[WorkItem]:
+        """At most `limit` of the tenant's items on `lane` that are queued or
+        claimed, ended as done with `reason` as their last word and their
+        claim cleared, in one statement; returns them as written. The claim's
+        index serves it, and an item a worker is settling right now is left
+        to the next call."""
+        ...
+
+    @abstractmethod
+    async def end_open_for_target(
+        self, org_id: UUID, kind: str, target_id: UUID, reason: str, now: datetime, limit: int
+    ) -> list[WorkItem]:
+        """As `end_open_on_lane`, for the tenant's items of `kind` on
+        `target_id`. The status index holds few open items to read."""
+        ...
+
+    @abstractmethod
     async def has_open_item(self, org_id: UUID, kind: str, target_id: UUID) -> bool:
         """Whether one of the tenant's items of `kind` on `target_id` is
         queued or claimed. One read of the items in those passing statuses,

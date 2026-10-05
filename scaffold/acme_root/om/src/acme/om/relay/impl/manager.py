@@ -22,6 +22,7 @@ from acme.om.hosts.types.host import HostIdentity
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import outbox_row, versioned_row
 from acme.om.placement.kinds import HOST
+from acme.om.placement.rules import host_lane
 from acme.om.placement.types.claimant import Claimant
 from acme.om.placement.types.work import (
     ExecOperation,
@@ -650,7 +651,34 @@ class RelayManagerImpl(RelayManagerInterface):
     async def bindings(self, after: UUID | None) -> list[tuple[UUID, WorkspaceBinding]]:
         return await self._storage.read_bindings(after, self._options.sweep_batch)
 
+    async def end_host(self, rctx: RequestContext, org_id: UUID, host_id: UUID) -> int:
+        ctx = await self._service(rctx, org_id)
+        ended = await self._work.end_open_on_lane(
+            org_id, host_lane(host_id), "its host was revoked"
+        )
+        settled = 0
+        for row in ended:
+            if row.kind != WorkKind.EXEC:
+                continue
+            try:
+                payload = ExecPayload.model_validate(row.payload)
+            except ValidationError:
+                continue
+            item = await self._storage.read_item(org_id, payload.item_id)
+            if item is None or item.state not in (ExecState.QUEUED, ExecState.RUNNING):
+                continue
+            # The host is told nothing: a revoked host's calls are refused.
+            if await self._settle(ctx, item, ExecOutcome(stopped=StopKind.REVOKE)) is not None:
+                settled += 1
+                OUTCOMES.labels(subsystem="relay", outcome="interrupted").inc()
+        return settled
+
     async def purge_session(self, org_id: UUID, session_id: UUID) -> None:
+        # Its commands' queue rows end first: a row whose item is gone would
+        # wait for good on the lane of a host that never claims again.
+        await self._work.end_open_for_target(
+            org_id, WorkKind.EXEC, session_id, "its session was purged"
+        )
         while await self._storage.purge_session(org_id, session_id, self._options.purge_batch):
             pass
 

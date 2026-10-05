@@ -15,7 +15,7 @@ from sqlalchemy import (
     select,
     update,
 )
-from sqlalchemy.sql import Select
+from sqlalchemy.sql import ColumnElement, Select
 
 from acme.om.base import EMPTY_UUID, new_id, utcnow
 from acme.om.exceptions import TenantMismatch, UniqueKeyTaken
@@ -158,6 +158,58 @@ class WorkStoragePostgresImpl(PgStorageBase, WorkStorageInterface):
         )
         async with self._session_for(stmt, org_id=org_id) as session:
             return (await session.execute(stmt)).scalar_one()
+
+    async def end_open_on_lane(
+        self, org_id: UUID, lane: str, reason: str, now: datetime, limit: int
+    ) -> list[WorkItem]:
+        return await self._end_open(org_id, (WorkItems.lane == lane,), reason, now, limit)
+
+    async def end_open_for_target(
+        self, org_id: UUID, kind: str, target_id: UUID, reason: str, now: datetime, limit: int
+    ) -> list[WorkItem]:
+        where = (WorkItems.kind == kind, WorkItems.target_id == target_id)
+        return await self._end_open(org_id, where, reason, now, limit)
+
+    async def _end_open(
+        self,
+        org_id: UUID,
+        where: tuple[ColumnElement[bool], ...],
+        reason: str,
+        now: datetime,
+        limit: int,
+    ) -> list[WorkItem]:
+        open_filter = (
+            WorkItems.org_id == org_id,
+            WorkItems.status.in_((WorkStatus.QUEUED.value, WorkStatus.CLAIMED.value)),
+            *where,
+        )
+        # Chosen and locked once: an item a worker is settling right now is
+        # skipped, and it is the next call's.
+        batch = (
+            select(WorkItems.id)
+            .where(*open_filter)
+            .limit(limit)
+            .with_for_update(skip_locked=True)
+            .scalar_subquery()
+        )
+        stmt = (
+            update(WorkItems)
+            .where(WorkItems.id.in_(batch), *open_filter)
+            .values(
+                status=WorkStatus.DONE.value,
+                last_error=reason,
+                claimed_by=None,
+                claim_token=None,
+                lease_expires_at=None,
+                updated_at=now,
+                updated_by=EMPTY_UUID,
+            )
+            .returning(WorkItems)
+        )
+        async with self._session_for(stmt, org_id=org_id) as session:
+            ended = [to_model(row, WorkItem) for row in (await session.execute(stmt)).scalars()]
+            await session.commit()
+            return ended
 
     async def has_open_item(self, org_id: UUID, kind: str, target_id: UUID) -> bool:
         stmt = select(

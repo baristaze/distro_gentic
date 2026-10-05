@@ -257,6 +257,10 @@ MANAGER_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         ("EvidenceManagerInterface", "purge_session"),
         ("ProjectsManagerInterface", "purge_session"),
         ("RelayManagerInterface", "purge_session"),
+        # And what ends with them on the queue: the commands of a purged
+        # session, and the work on a revoked host's lane, its one claimant.
+        ("WorkManagerInterface", "end_open_for_target"),
+        ("WorkManagerInterface", "end_open_on_lane"),
         # The sweep's gauges of the queue, read across tenants like the purge.
         ("WorkManagerInterface", "oldest_ready_age"),
         ("WorkManagerInterface", "failed_within"),
@@ -359,6 +363,10 @@ REQUEST_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
         # And the sweep's settlement of the items whose lease ended, across
         # tenants, each under its tenant's service context.
         ("RelayManagerInterface", "settle_expired"),
+        # And the settlement of the items a revoked host held or was to run,
+        # under its tenant's service context, whoever revoked it: a person,
+        # or a host whose credential was presented twice.
+        ("RelayManagerInterface", "end_host"),
         # A live read, by its handle alone: the handle is the authority, as a
         # presigned URL is, and the read mints no context.
         ("WatchManagerInterface", "read_live"),

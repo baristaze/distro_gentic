@@ -1,6 +1,6 @@
 import logging
 import secrets
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 from uuid import UUID
 
@@ -122,10 +122,16 @@ def claimant_of(identity: ClaimantIdentity) -> Claimant:
     )
 
 
+ClaimantRevoked = Callable[[RequestContext, UUID, UUID], Awaitable[object]]
+"""What ends with a claimant once it is revoked: the work that waits on it,
+by the request that revoked it, its tenant, and its id."""
+
+
 class HostsManagerImpl(HostsManagerInterface):
     """`claimants` is the one registry of claimant kinds the root built: the
     kind an enrollment token may name, and the prefix each kind's
-    credential carries."""
+    credential carries. `revoked` ends what waits on a claimant either
+    revocation ends, by a person or on a reused credential."""
 
     def __init__(
         self,
@@ -137,8 +143,11 @@ class HostsManagerImpl(HostsManagerInterface):
         options: HostsOptions,
         claimants: ClaimantKinds,
         clock: Callable[[], datetime] = utcnow,
+        *,
+        revoked: ClaimantRevoked,
     ) -> None:
         self._claimants = claimants
+        self._revoked = revoked
         self._storage = storage
         self._placement = placement
         self._sessions = sessions
@@ -183,14 +192,14 @@ class HostsManagerImpl(HostsManagerInterface):
             for host in await self._storage.read_hosts(ctx.org_id, pool_id, self._options.max_hosts)
         )
 
-    async def get_host(
-        self, ctx: TenantContext, pool_id: UUID, host_id: UUID
-    ) -> HostStatus | None:
+    async def get_host(self, ctx: TenantContext, pool_id: UUID, host_id: UUID) -> HostStatus | None:
         ctx.require(Permission.READ)
         host = await self._storage.read_host(ctx.org_id, host_id)
         if host is None or host.pool_id != pool_id:
             return None
-        return HostStatus(host=host, online=online(host, self._clock(), self._options.online_window))
+        return HostStatus(
+            host=host, online=online(host, self._clock(), self._options.online_window)
+        )
 
     async def get_claimants(
         self, ctx: TenantContext, pool_id: UUID
@@ -258,6 +267,7 @@ class HostsManagerImpl(HostsManagerInterface):
         if revoked is None:
             raise NotFound(f"claimant {claimant_id} not found")
         await self._relay.relay_all(ctx.org_id, rows)
+        await self._revoked(ctx, ctx.org_id, claimant_id)
         return revoked
 
     async def place_session(
@@ -588,6 +598,7 @@ class HostsManagerImpl(HostsManagerInterface):
         )
         await self._storage.revoke_claimant(org_id, claimant.id, at, claimant.created_by, rows)
         await self._relay.relay_all(org_id, rows)
+        await self._revoked(rctx, org_id, claimant.id)
         OUTCOMES.labels(subsystem="hosts", outcome="credential_reused").inc()
         log.warning(
             "%s %s: a rotated credential was presented again; revoked", claimant.kind, claimant.id

@@ -95,6 +95,7 @@ def hosts(managers: Managers, storage: StorageMemoryImpl, clock: Clock) -> Hosts
         HostsOptions(),
         platform_claimant_kinds(),
         clock=clock,
+        revoked=managers.relay.end_host,
     )
 
 

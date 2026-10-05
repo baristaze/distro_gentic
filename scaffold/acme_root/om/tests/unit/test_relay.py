@@ -411,6 +411,40 @@ async def test_a_host_past_a_thousand_revoked_rows_of_its_pool_binds_and_holds(
     assert listed == {wall.holder.host_id, wall.other.host_id, newest.host_id}
 
 
+async def test_revoking_a_host_ends_the_work_on_its_lane_and_settles_its_commands(
+    wall: Wall,
+) -> None:
+    relay, work, org = wall.managers.relay, wall.managers.work, wall.owner.org_id
+    host = Host(wall.managers, wall.holder)
+    running = await relay.send(request(), org, _call(wall, command(wall.epoch)), 0)
+    await host.claim_soon()
+    queued = await relay.send(request(), org, _call(wall, command(wall.epoch)), 0)
+    assert (await relay.watch(request(), org, running.id, -1)).state is ExecState.RUNNING
+
+    await wall.managers.hosts.revoke_host(wall.owner, wall.holder.host_id)
+
+    for sent in (running, queued):
+        settled = await relay.watch(request(), org, sent.id, -1)
+        assert settled.state is ExecState.INTERRUPTED
+        assert settled.outcome == ExecOutcome(stopped=StopKind.REVOKE)
+        row = await work.get_item(wall.owner, sent.row_id)
+        assert (row.status, row.last_error) == (WorkStatus.DONE, "its host was revoked")
+    # Nothing is left waiting on the lane, so nothing holds the backlog alarm.
+    assert await work.oldest_ready_age() == timedelta(0)
+
+
+async def test_a_purged_sessions_commands_leave_no_queue_row_behind(wall: Wall) -> None:
+    relay, work, org = wall.managers.relay, wall.managers.work, wall.owner.org_id
+    queued = await relay.send(request(), org, _call(wall, command(wall.epoch)), 0)
+
+    await relay.purge_session(org, wall.workspace.id)
+
+    row = await work.get_item(wall.owner, queued.row_id)
+    assert (row.status, row.last_error) == (WorkStatus.DONE, "its session was purged")
+    assert await Host(wall.managers, wall.holder).claim() is None
+    assert await work.oldest_ready_age() == timedelta(0)
+
+
 async def test_a_cancel_or_an_interrupt_reaches_the_hosts_control_stream(wall: Wall) -> None:
     host = Host(wall.managers, wall.holder)
     relay = wall.managers.relay
