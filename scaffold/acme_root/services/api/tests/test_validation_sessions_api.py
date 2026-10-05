@@ -7,9 +7,10 @@ session; a check the policy does not declare is refused before anything is
 queued. A run passes only at the grade the policy asks of its check: on a
 double, or with a dependency that was not there, it never does. A check
 the policy rates runs its declared trials and passes only on the batch:
-one trial never passes it. A session started on an API key runs at the
+one trial never passes it. A session the worker refuses for good reads
+refused, with its reason. A session started on an API key runs at the
 key's role, never at the role its starter's membership holds, and only
-while the key holds."""
+while the key holds: once it does not, the session reads refused."""
 
 from dataclasses import dataclass
 from datetime import timedelta
@@ -65,6 +66,7 @@ class Tenant:
     org_id: UUID
     owner: Headers
     project_id: UUID
+    ctx: TenantContext
 
 
 async def tenant(
@@ -89,7 +91,7 @@ async def tenant(
     graded = Requirement(check="unit", grade=grade, paths=("docs/**",), rate=rate)
     policy = policy.model_copy(update={"requirements": (*policy.requirements, graded)})
     await container.managers.evidence.write_policy(ctx, policy)
-    return Tenant(org.id, owner, project_id)
+    return Tenant(org.id, owner, project_id, ctx)
 
 
 def start_of(project_id: UUID, check: str = "unit", head: str = HEAD) -> dict[str, str]:
@@ -114,6 +116,28 @@ async def worker_runs(container: AppContainer) -> int:
         await container.managers.platform_agents.run_validation(ctx, item.target_id)
         await container.managers.work.complete(ctx, item)
         ran += 1
+
+
+async def worker_refuses(container: AppContainer) -> list[str]:
+    """The platform's worker, as it settles a check that cannot run: every
+    validation on the queue refused, and its work failed for good. Answers
+    the reasons."""
+    reasons: list[str] = []
+    while True:
+        claimed = await container.managers.work.claim(
+            RequestContext(request_id=new_id(), app=WORKER),
+            "default",
+            (WorkKind.VALIDATION,),
+            "maintenance-test",
+            LEASE,
+        )
+        if claimed is None:
+            return reasons
+        ctx, item = claimed
+        with pytest.raises(PreconditionFailed) as refusal:
+            await container.managers.platform_agents.run_validation(ctx, item.target_id)
+        reasons.append(refusal.value.message)
+        await container.managers.work.fail_for_good(ctx, item, f"refused: {reasons[-1]}")
 
 
 # Check 1: a member who may write starts a validation session for a head and
@@ -216,6 +240,7 @@ async def test_a_session_started_on_a_key_runs_at_the_keys_role_while_it_holds(
     }
     finished = await client.get(f"{URL}/{on_key.json()['id']}", headers=admin)
     assert (finished.json()["status"], finished.json()["passed"]) == ("finished", True)
+
 
     # Revoked before its run, the key runs nothing: the run fails for good.
     queued = await client.post(
@@ -359,3 +384,49 @@ async def test_a_viewer_starts_none_and_another_tenant_starts_and_reads_nothing(
     # Its own tenant's verdict, the viewer reads, as it reads every record.
     seen = await client.get(f"{URL}/{session_id}", headers=viewer)
     assert (seen.status_code, seen.json()["passed"]) == (200, True)
+
+
+# Check 3: a session the worker refuses for good, for a check its policy
+# dropped after the start or one no executor here can run, reads refused
+# with its reason, so a CI job polling it stops waiting.
+
+
+@pytest.mark.parametrize(
+    ("change", "reason"),
+    [
+        ({"name": "lint"}, "declares no check unit"),
+        ({"capabilities": ("gpu",)}, "the check unit needs gpu, which the executor lacks"),
+    ],
+    ids=["dropped", "unoffered"],
+)
+async def test_a_session_the_worker_refuses_for_good_reads_refused_with_its_reason(
+    client: httpx.AsyncClient,
+    container: AppContainer,
+    executor: ScriptedExecutor,
+    change: dict[str, object],
+    reason: str,
+) -> None:
+    ajax = await tenant(client, container, "ajax")
+    started = await client.post(URL, headers=ajax.owner, json=start_of(ajax.project_id))
+    assert started.status_code == 201, started.text
+    evidence = container.managers.evidence
+    policy = await evidence.get_policy(ajax.ctx, policy_key(ajax.project_id))
+    checks = tuple(each.model_copy(update=change) for each in policy.checks)
+    await evidence.write_policy(
+        ajax.ctx, policy.model_copy(update={"checks": checks, "requirements": ()})
+    )
+    assert len(await worker_refuses(container)) == 1
+
+    read = await client.get(f"{URL}/{started.json()['id']}", headers=ajax.owner)
+
+    assert read.status_code == 200, read.text
+    verdict = read.json()
+    assert (verdict["status"], verdict["passed"], verdict["run"], verdict["finished_at"]) == (
+        "refused",
+        False,
+        None,
+        None,
+    )
+    assert reason in verdict["reason"]
+    assert executor.requests == []
+    assert await worker_runs(container) == 0, "nothing of it is left on the queue"

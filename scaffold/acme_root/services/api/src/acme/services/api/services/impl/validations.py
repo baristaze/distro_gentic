@@ -52,6 +52,10 @@ class ValidationsServiceImpl(ValidationsServiceInterface):
             order = {run: at for at, run in enumerate(kept[0].records)} if kept else {}
             batch = [each for each in runs if each.validation_id == record.validation_id]
             reason = session_refusal(policy, record, batch, session.head, order)
+        passed = None if record is None else reason is None
+        if session.refusal is not None:
+            # A refused session never ran: it did not pass, and says why.
+            passed, reason = False, session.refusal
         return ValidationSessionView(
             id=session.id,
             created_at=session.created_at,
@@ -62,7 +66,7 @@ class ValidationsServiceImpl(ValidationsServiceInterface):
             base=session.base,
             status=session.status,
             finished_at=session.finished_at,
-            passed=None if record is None else reason is None,
+            passed=passed,
             reason=reason,
             run=None if record is None else execution_view(record),
         )

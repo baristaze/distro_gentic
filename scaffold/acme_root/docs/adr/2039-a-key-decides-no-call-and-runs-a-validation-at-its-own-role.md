@@ -40,7 +40,8 @@ membership holds now, capped by that key's role, as an agent's
 validation runs under its principal's. The executor receives that
 context, so one that asks who may run reads the key's role. A starter
 who left, a key revoked or expired, or a role that no longer writes
-refuses the run for good.
+refuses the session for good: it runs nothing and reads refused, with
+the reason.
 
 ## Consequences
 
