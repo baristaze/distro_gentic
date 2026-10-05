@@ -139,7 +139,8 @@ evidence is EVD-03.)
 
 **Principle.** Automations turn events into bounded work. A trigger, an
 event with filters or a schedule, leads to an action: start a session,
-message a standing session, or a product's own action. A product's
+message a standing session (refused while enabled, until a run's cap can
+end with its run), or a product's own action. A product's
 action may refuse the person who writes the automation, or the
 principal it is set to run as, so one its firings would refuse is never
 saved. An automation runs as its creator or as the tenant's automation

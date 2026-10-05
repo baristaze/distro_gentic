@@ -480,7 +480,9 @@ evidence ([Execution Records](#execution-records)).
 
 **Automations** turn events into bounded work. A trigger, an event with
 filters or a schedule, leads to an action: start a session, or message a
-standing session (a CI triage session, say). A product adds actions of
+standing session (a CI triage session, say). A message action is refused
+while its automation is enabled, until a run's cap can end with its run,
+since a standing session outlives the run. A product adds actions of
 its own, each with a check that says when the work it started ended, so
 its run stays at work until then. A product's action may also refuse the
 person who writes the automation, or the principal it is set to run as,
