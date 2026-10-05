@@ -320,7 +320,13 @@ def wired(
         CallCredentialsPlatformImpl(providers),
         infra.get_outages(),
         StreamSinkMemoryImpl(),
-        engine_tools(managers.steps, AttachmentReaderNullImpl()) + catalog,
+        engine_tools(
+            managers.steps,
+            managers.agent_sessions,
+            AttachmentReaderNullImpl(),
+            lambda: managers.agents,
+        )
+        + catalog,
         LoopOptions(control_poll=timedelta(milliseconds=1)),
         clock,
         sleep,
