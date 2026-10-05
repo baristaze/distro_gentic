@@ -81,7 +81,6 @@ test("a session's pane: tabs that open themselves once, a step from its row, and
   expect(await tabNames()).toEqual(["Workspace", "Changes"]);
   await expect(pane.getByRole("list", { name: "Changed files" })).toContainText("src/dates.py");
   await expect(pane.getByRole("list", { name: "Changed files" })).toContainText("+1 −1");
-  check("tree", SLUG, sessionId);
   await shoot(owner, "three-panes");
   await shoot(owner, "tab-changes");
 
@@ -109,7 +108,7 @@ test("a session's pane: tabs that open themselves once, a step from its row, and
   for (const [name, holds] of [
     ["Evidence", "Validations"],
     ["Plan", "Run `tests/test_dates.py` and see it fail.".replace(/`/g, "")],
-    ["Sub-agents", "Check every caller of parse"],
+    ["Sub-agents", "It started no sub-agents."],
     ["Usage", "model calls"],
   ] as const) {
     await pane.getByRole("button", { name: "Open a view" }).click();

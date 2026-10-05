@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 // The shell every signed-in page sits in: the left bar (the org chip, the
 // search, New session, the slot's entries, the sessions grouped by what
-// they ask, and the user chip), the search over the whole app, and its keys.
+// they ask, each parent folding its sub-agents, and the user chip), the
+// search over the whole app, its keys, and the toast a session raises when
+// it starts to need its person.
 // The real shell, chips, and menus run over a fake transport; the pages
 // behind the routes are stand-ins.
 import { act, createElement, type ReactNode } from "react";
@@ -142,7 +144,7 @@ beforeEach(async () => {
   net.permissions = ["read", "write"];
   net.sessions = [];
   localStorage.clear();
-  usePreferencesStore.setState({ theme: "system", sidebarFolded: false, sessionFilter: DEFAULT_FILTER });
+  usePreferencesStore.setState({ theme: "system", sidebarFolded: false, sessionFilter: DEFAULT_FILTER, foldedTrees: [] });
   useSessionStore.getState().setSession("ses_ajax", "ajax");
   root = createRoot(container);
 });
@@ -185,6 +187,42 @@ it("groups the sessions into Needs you, Running, and Recent, a sub-agent under i
   expect(q("ul[aria-label='Needs you']")!.textContent).toContain("Needs your decision: run_command");
   const row = [...container.querySelectorAll<HTMLAnchorElement>(".acme-side-row")].find((a) => a.textContent?.includes("done"))!;
   expect(row.getAttribute("href")).toBe("/sessions/done");
+});
+
+it("folds a parent row's sub-agents, saying how many and how many need the person, and keeps the fold", async () => {
+  net.sessions = [
+    session("runs", { status: "parked", park: { reason: "children", unlock: "children", retry_at: null } }),
+    session("reads", { parent_id: "runs", root_id: "runs", status: "running" }),
+    session("asks", { parent_id: "runs", root_id: "runs", status: "parked", park: { reason: "person", unlock: "answer", retry_at: null } }),
+  ];
+  await mount();
+  const fold = q<HTMLButtonElement>("button[aria-label='Fold the sub-agents of runs']")!;
+  expect(fold.getAttribute("aria-expanded")).toBe("true");
+  expect(q("ul[aria-label='Sub-agents of runs']")!.textContent).toContain("reads");
+  await act(async () => fold.click());
+  expect(q("ul[aria-label='Sub-agents of runs']")).toBeNull();
+  expect(q(".acme-row-tree")!.textContent).toBe("2 sub-agents · 1 needs you");
+  expect(usePreferencesStore.getState().foldedTrees).toEqual(["runs"]);
+  await act(async () => q<HTMLButtonElement>("button[aria-label='Show the sub-agents of runs']")!.click());
+  expect(q("ul[aria-label='Sub-agents of runs']")!.textContent).toContain("asks");
+});
+
+it("raises a toast on any page when a sub-agent of the person's starts to need them, which opens it", async () => {
+  const running = [session("runs", { status: "running" }), session("asks", { title: "Check every caller", parent_id: "runs", root_id: "runs", status: "running" })];
+  net.sessions = running;
+  await mount("/settings");
+  expect(q(".acme-needs-toasts")).toBeNull();
+  net.sessions = running.map((one) => (one.id === "asks" ? { ...one, status: "parked", park: { reason: "person", unlock: "answer", retry_at: null } } : one));
+  await act(async () => queryClient.invalidateQueries());
+  await settle();
+  const toast = q(".acme-needs-toasts")!;
+  expect(toast.textContent).toContain("Check every caller");
+  expect(toast.textContent).toContain("Answer its question");
+  const open = [...toast.querySelectorAll("button")].find((button) => button.textContent === "Open")!;
+  await act(async () => open.click());
+  await settle();
+  expect(router.state.location.pathname).toBe("/sessions/asks");
+  expect(q(".acme-needs-toasts")).toBeNull();
 });
 
 it("narrows the sessions by the filter it keeps, and says so when none matches", async () => {

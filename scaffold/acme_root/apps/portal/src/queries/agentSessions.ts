@@ -2,8 +2,8 @@
 // person sends it, and its live view. Every read goes through the API under
 // the signed-in member's org; a session another org holds answers 404 and
 // is never in a list.
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient, type InfiniteData, type QueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo } from "react";
 import type {
   AgentSessionPageView,
   AgentSessionView,
@@ -90,11 +90,23 @@ export function useParkedSessions() {
   return { ...query, data: query.data?.pages.flatMap((page) => page.items), isPending: query.isPending || walking };
 }
 
-export function useAgentSession(id: string) {
-  return useQuery({
-    queryKey: keys.agentSessions.one(id),
-    queryFn: ({ signal }) => api.get<AgentSessionView>(path(id), { signal }),
-  });
+const sessionQuery = (id: string, enabled: boolean) => ({
+  queryKey: keys.agentSessions.one(id),
+  queryFn: ({ signal }: { signal: AbortSignal }) => api.get<AgentSessionView>(path(id), { signal }),
+  enabled,
+});
+
+export function useAgentSession(id: string, enabled = true) {
+  return useQuery(sessionQuery(id, enabled));
+}
+
+const recordsOf = (read: readonly { data?: AgentSessionView }[]) => read.map((one) => one.data);
+
+/** Several sessions' records, in their order, each the read its own page
+ * makes, so a push about one reads it again. One array for as long as no
+ * record changes. */
+export function useSessionRecords(ids: readonly string[]): readonly (AgentSessionView | undefined)[] {
+  return useQueries({ queries: ids.map((id) => sessionQuery(id, true)), combine: recordsOf });
 }
 
 function bySeq<T extends { seq: number }>(pages: InfiniteData<{ items: T[] }> | undefined): T[] | undefined {
@@ -118,19 +130,34 @@ async function stepsAfter(id: string, after: number, signal: AbortSignal): Promi
  * long session's poll and its pushes read what is new, never the whole
  * history again. While it is active it is read every few seconds as well as
  * on a push. */
-export function useSteps(id: string, active: boolean, enabled = true) {
-  const queryClient = useQueryClient();
+function stepsQuery(queryClient: QueryClient, id: string, active: boolean, enabled: boolean) {
   const queryKey = keys.agentSessions.read(id, "steps");
-  return useQuery({
+  return {
     queryKey,
-    queryFn: async ({ signal }) => {
+    queryFn: async ({ signal }: { signal: AbortSignal }) => {
       const held = queryClient.getQueryData<StepView[]>(queryKey) ?? [];
       const fresh = await stepsAfter(id, held[held.length - 1]?.seq ?? 0, signal);
       return fresh.length === 0 ? held : [...held, ...fresh];
     },
-    refetchInterval: active ? ACTIVE_POLL_MS : false,
+    refetchInterval: active ? ACTIVE_POLL_MS : (false as const),
     enabled,
-  });
+  };
+}
+
+export function useSteps(id: string, active: boolean, enabled = true) {
+  return useQuery(stepsQuery(useQueryClient(), id, active, enabled));
+}
+
+const stepsOf = (read: readonly { data?: StepView[] }[]) => read.map((one) => one.data);
+
+/** The histories of a session's sub-agents, in their order, each read as
+ * its own page reads it, so opening one shows what is already held: what
+ * each does now shows on its parent's page. A child that is done is not
+ * read again. One array for as long as no history changes. */
+export function useChildSteps(children: readonly AgentSessionView[]): readonly (StepView[] | undefined)[] {
+  const queryClient = useQueryClient();
+  const works = (child: AgentSessionView) => child.archived_at === null && child.status !== "idle";
+  return useQueries({ queries: children.map((child) => stepsQuery(queryClient, child.id, works(child), works(child))), combine: stepsOf });
 }
 
 export function useToolCalls(id: string, active: boolean, enabled = true) {
@@ -161,7 +188,10 @@ function useCursorWalk<T>(id: string, part: string, route: string, enabled: bool
     enabled,
   });
   const walking = useWalk(query);
-  return { ...query, data: query.data?.pages.flatMap((page) => page.items), isPending: query.isPending || walking };
+  // One list for as long as no page changes, so what is made from it is made once.
+  const pages = query.data;
+  const data = useMemo(() => pages?.pages.flatMap((page) => page.items), [pages]);
+  return { ...query, data, isPending: query.isPending || walking };
 }
 
 export function useExecutions(id: string, enabled = true) {
@@ -176,6 +206,26 @@ function useRead<T>(id: string, part: string, route: string, enabled: boolean) {
   return useQuery({
     queryKey: keys.agentSessions.read(id, part),
     queryFn: ({ signal }) => api.get<T>(`${path(id)}/${route}`, { signal }),
+    enabled,
+  });
+}
+
+/** How many steps before a park its question is looked for in. */
+const ASKED_WINDOW = 8;
+
+/** The steps that led to a session's park on its person's answer, where
+ * the agent asked its question: a short read once the park is known, never
+ * the whole history. Empty when it waits on no answer. */
+export function useStepsBeforeAnswer(id: string, enabled: boolean) {
+  return useQuery({
+    queryKey: keys.agentSessions.read(id, "asked"),
+    queryFn: async ({ signal }) => {
+      const parks = await api.get<QuestionView[]>(`${path(id)}/questions`, { signal });
+      const park = parks.find((one) => one.unlock === "answer");
+      if (!park) return [];
+      const after = Math.max(0, park.seq - ASKED_WINDOW);
+      return (await api.get<StepPageView>(`${path(id)}/steps?after_seq=${after}&limit=${ASKED_WINDOW}`, { signal })).items;
+    },
     enabled,
   });
 }
