@@ -49,7 +49,7 @@ from acme.om.retention.types.policy import (
     TenantRetention,
 )
 from acme.om.root import Managers, build_managers
-from acme.om.steps.types.content import ContentState
+from acme.om.steps.types.content import Content, ContentState, TextBlock
 from acme.om.steps.types.header import (
     ControlCommand,
     ControlHeader,
@@ -60,6 +60,7 @@ from acme.om.steps.types.header import (
 )
 from acme.om.steps.types.step import Actor, Origin, Step, StepType
 from acme.om.storage.impl.memory import StorageMemoryImpl
+from acme.om.windows.types.policy import CompactionPolicy
 
 # What `make_session` names, so the agents manager classes every tool it
 # offers.
@@ -759,6 +760,35 @@ async def test_a_sub_agent_at_work_below_a_session_past_its_shapes_life_ends_by_
     with pytest.raises(NotFound):
         await sessions.get_session(owner, root.id)
     assert (await roots.managers.retention.get_snapshot(owner, root.id)).shape_expired_at
+
+
+async def test_a_cancelled_sub_agents_report_over_the_bound_is_dropped_and_its_loop_ends(
+    roots: Roots,
+) -> None:
+    """A report over the bound seals its whole under its parent's key, which
+    is revoked once the parent's content is past its life. The report is
+    dropped as a shorter one is, the sub-agent's loop ends, and the next
+    pass marks the session above."""
+    owner = await roots.tenant()
+    await roots.declare(owner, a_policy(WEEK, MONTH))
+    sessions, steps = roots.managers.agent_sessions, roots.managers.steps
+    root, child, request, epoch = await a_tree(roots, owner)
+    said = make_response(child.id, request.loop_id, request.id)
+    long = TextBlock(text="x" * (CompactionPolicy().result_bound + 1))
+    said = said.model_copy(update={"content": Content(blocks=(long, *said.content.blocks[1:]))})
+    await steps.append_steps(owner, child.id, epoch, [said])
+    person = Park(reason=ParkReason.PERSON, unlock="approval")
+    await sessions.park(owner, child.id, epoch, request.loop_id, person)
+
+    await roots.sweep(MONTH + DAY)
+    held = (await steps.get_cursor(owner, root.id)).head
+    await roots.managers.loop.run(owner, child.id)
+
+    assert (await sessions.get_session(owner, child.id)).status is SessionStatus.IDLE
+    assert (await steps.get_cursor(owner, root.id)).head == held, "no report reached it"
+    await roots.sweep(MONTH + DAY + roots.options.retry_after)
+    with pytest.raises(NotFound):
+        await sessions.get_session(owner, root.id)
 
 
 # The tenant's key, revoked.
