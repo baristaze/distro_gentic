@@ -44,7 +44,7 @@ export interface DockLayout {
 }
 
 export interface DockSpace {
-  dock: DockState;
+  dock: Pick<DockState, "open" | "expanded">;
   /** The window's width. */
   viewport: number;
   /** The left bar's width; 0 while it is folded away. */

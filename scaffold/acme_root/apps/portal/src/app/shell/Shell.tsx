@@ -76,8 +76,15 @@ export function Shell({ children }: { children: ReactNode }) {
   }, [navigate, toggle, toggleSupport]);
 
   // The dock beside the page, or over it, and whether the page's pane folds.
-  const layout = dockLayout({ dock, viewport, sidebar: vm.folded ? 0 : vm.width, width: dockWidth, pane });
-  const split = useMemo<PaneSplit>(() => ({ paneFolded: layout.paneFolded, setPane }), [layout.paneFolded]);
+  const sidebar = vm.folded ? 0 : vm.width;
+  const layout = dockLayout({ dock, viewport, sidebar, width: dockWidth, pane });
+  // A page asks for the width its pane has now, so its answer does not wait
+  // for the width to reach the shell.
+  const { open, expanded } = dock;
+  const split = useMemo<PaneSplit>(
+    () => ({ folds: (width) => dockLayout({ dock: { open, expanded }, viewport, sidebar, width: dockWidth, pane: width }).paneFolded, setPane }),
+    [open, expanded, viewport, sidebar, dockWidth],
+  );
   // A move of the main area keeps the dock's conversation and draft; a sheet
   // closes and an expanded dock returns to the split, so the page shows.
   const mode = useRef(layout.mode);

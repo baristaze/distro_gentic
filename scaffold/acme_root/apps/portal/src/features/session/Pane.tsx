@@ -3,7 +3,8 @@
 // and the edge a person drags, or moves by the arrows, to resize it. When
 // the support dock needs the room, the pane folds to its icon rail: a tab's
 // icon shows its view over the story's edge, and a second click, or Esc,
-// folds it again.
+// folds it again. A tab or a step asked for from outside the rail (a call
+// line, a command, the address) shows there too.
 import { useEffect, useState, type KeyboardEvent } from "react";
 import { CloseTabIcon, Menu, MenuItem, PanelIcon, PlusIcon, Tooltip, useSplitter } from "../../design/kit";
 import { PANE } from "./paneModel";
@@ -14,6 +15,13 @@ export function Pane({ vm, folded = false }: { vm: SessionVm; folded?: boolean }
   const splitter = useSplitter(pane.width, vm.resizePane, PANE, "left");
   const active = vm.tabs.find((tab) => tab.id === pane.shown);
   const [peek, setPeek] = useState(false);
+  // An ask waits until the pane shows: folded, it opens the peek; in full,
+  // the person sees it there.
+  const [answered, setAnswered] = useState(0);
+  if (active && vm.slotSession && pane.asks !== answered) {
+    setAnswered(pane.asks);
+    if (folded) setPeek(true);
+  }
   // The active tab stays in sight when the strip holds more than fits.
   useEffect(() => {
     document.getElementById(`pane-tab-${pane.shown}`)?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
@@ -39,8 +47,12 @@ export function Pane({ vm, folded = false }: { vm: SessionVm; folded?: boolean }
                   aria-pressed={showing}
                   data-active={tab.id === active.id || undefined}
                   onClick={() => {
+                    if (showing) {
+                      setPeek(false);
+                      return;
+                    }
                     vm.openTab(tab.id);
-                    setPeek(!showing);
+                    setPeek(true);
                   }}
                 >
                   {tab.icon}

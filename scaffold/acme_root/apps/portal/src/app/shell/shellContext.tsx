@@ -46,22 +46,24 @@ export function useShellSessions(): readonly AgentSessionView[] {
 }
 
 /** What the shell and a page that splits itself tell each other: the
- * page's pane width while it shows, and whether that pane folds to its rail
- * to make room for the support dock. */
+ * page's pane width while it shows, and whether a pane of a width folds to
+ * its rail to make room for the support dock. */
 export interface PaneSplit {
-  paneFolded: boolean;
+  folds: (width: number | null) => boolean;
   setPane: (width: number | null) => void;
 }
 
-export const PaneSplitContext = createContext<PaneSplit>({ paneFolded: false, setPane: () => undefined });
+export const PaneSplitContext = createContext<PaneSplit>({ folds: () => false, setPane: () => undefined });
 
 /** Tells the shell the page's pane width while it shows (null while it does
- * not), and answers whether the pane folds to its rail for the dock. */
+ * not), and answers whether the pane folds to its rail for the dock. The
+ * answer is for the width the page has now, so the render that first shows
+ * the pane already shows it folded. */
 export function usePaneSplit(width: number | null): boolean {
-  const { paneFolded, setPane } = useContext(PaneSplitContext);
+  const { folds, setPane } = useContext(PaneSplitContext);
   useEffect(() => {
     setPane(width);
     return () => setPane(null);
   }, [width, setPane]);
-  return paneFolded;
+  return folds(width);
 }

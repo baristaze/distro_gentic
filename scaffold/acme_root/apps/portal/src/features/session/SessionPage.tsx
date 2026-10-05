@@ -76,7 +76,7 @@ export function SessionPage() {
             <Timeline key={vm.id} vm={vm} />
             <Composer key={`composer-${vm.id}`} vm={vm} />
           </section>
-          <Pane vm={vm} folded={folded} />
+          <Pane key={`pane-${vm.id}`} vm={vm} folded={folded} />
         </div>
       </div>
     </SessionVmContext.Provider>
