@@ -106,10 +106,14 @@ keeps its others (`/etc/nftables.conf`), and restart the host:
 ```bash
 sudo nft add table inet acme_host
 sudo nft add chain inet acme_host out '{ type filter hook output priority 0; }'
-sudo nft add rule inet acme_host out meta skuid acme-host ip daddr 169.254.169.254 drop
-sudo nft add rule inet acme_host out meta skuid acme-host ip6 daddr fd00:ec2::254 drop
+sudo nft add rule inet acme_host out meta skuid acme-host ip daddr 169.254.169.254 tcp dport 80 drop
+sudo nft add rule inet acme_host out meta skuid acme-host ip6 daddr fd00:ec2::254 tcp dport 80 drop
 sudo systemctl restart acme-host
 ```
+
+The rules drop TCP port 80 alone, the port the probe tries: on GCP the
+metadata address is also the machine's DNS server, so a rule for every
+port would drop the host user's name lookups.
 
 A rule in the unit (`IPAddressDeny=`) does not do it: the engine runs
 outside the unit, so the host would find the service closed while its
