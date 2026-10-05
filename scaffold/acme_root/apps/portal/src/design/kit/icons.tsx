@@ -19,6 +19,7 @@ import {
   Building2,
   ChartColumn,
   Check,
+  CircleQuestionMark,
   ChevronDown,
   ChevronRight,
   CornerLeftUp,
@@ -44,8 +45,10 @@ import {
   ListTree,
   LoaderCircle,
   LogOut,
+  Maximize2,
   MessageCircleQuestionMark,
   MessageSquareText,
+  Minimize2,
   Monitor,
   Moon,
   Network,
@@ -202,6 +205,13 @@ export const ChangesIcon = kitIcon(FileDiff);
 export const EvidenceIcon = kitIcon(ClipboardCheck);
 /** A cross: close a tab. */
 export const CloseTabIcon = kitIcon(X);
+
+/** A question mark in a circle: ask support. */
+export const SupportIcon = kitIcon(CircleQuestionMark);
+/** Arrows apart: the dock takes the main area's width. */
+export const ExpandIcon = kitIcon(Maximize2);
+/** Arrows together: the dock returns to its column. */
+export const CollapseIcon = kitIcon(Minimize2);
 
 /** An arrow to the left: back to where the person came from. */
 export const BackIcon = kitIcon(ArrowLeft);

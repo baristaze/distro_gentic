@@ -2,7 +2,7 @@
 // search, New session, the platform's and the product's entries, the
 // sessions grouped by what they ask (Needs you, Running, Recent) with each
 // sub-agent under its parent, a tree whose parent row folds it, and the user
-// chip. Its edge drags to resize.
+// chip with "?" beside it, which opens support. Its edge drags to resize.
 import { useId, type ReactNode } from "react";
 import { Link, NavLink } from "react-router-dom";
 import {
@@ -14,6 +14,7 @@ import {
   SegmentedControl,
   Select,
   SidebarIcon,
+  SupportIcon,
   Tooltip,
   useSplitter,
 } from "../../design/kit";
@@ -142,7 +143,18 @@ function FilterPanel({ vm }: { vm: ShellVm }) {
   );
 }
 
-export function LeftBar({ vm, nav, onSearch }: { vm: ShellVm; nav: readonly NavEntry[]; onSearch: () => void }) {
+export function LeftBar({
+  vm,
+  nav,
+  onSearch,
+  support,
+}: {
+  vm: ShellVm;
+  nav: readonly NavEntry[];
+  onSearch: () => void;
+  /** The support dock: whether it is open, and what "?" does. */
+  support: { open: boolean; toggle: () => void };
+}) {
   const splitter = useSplitter(vm.width, vm.setWidth, vm.bounds);
   return (
     <aside className="acme-sidebar" aria-label="Sidebar">
@@ -217,6 +229,11 @@ export function LeftBar({ vm, nav, onSearch }: { vm: ShellVm; nav: readonly NavE
       </div>
       <div className="acme-sidebar-foot">
         <AccountMenu />
+        <Tooltip tip={support.open ? "Close support" : "Ask support"} shortcut="⌘/" side="top">
+          <button type="button" className="acme-icon-button" aria-label="Ask support" aria-expanded={support.open} onClick={support.toggle}>
+            <SupportIcon />
+          </button>
+        </Tooltip>
       </div>
       <div className="acme-splitter" aria-label="Resize the sidebar" title="Drag to resize; double-click resets" {...splitter} />
     </aside>

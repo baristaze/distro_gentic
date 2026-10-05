@@ -2,18 +2,19 @@
 // The shell every signed-in page sits in: the left bar (the org chip, the
 // search, New session, the slot's entries, the sessions grouped by what
 // they ask, each parent folding its sub-agents, and the user chip), the
-// search over the whole app, its keys, and the toast a session raises when
-// it starts to need its person.
+// search over the whole app, its keys, the toast a session raises when it
+// starts to need its person, and the support dock beside the page.
 // The real shell, chips, and menus run over a fake transport; the pages
 // behind the routes are stand-ins.
 import { act, createElement, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, Outlet, RouterProvider } from "react-router-dom";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentSessionView, MeView, OrgView, UserView } from "@acme/client";
 import { PREFERENCES_STORAGE_KEY, usePreferencesStore } from "../../store/preferences";
 import { useSessionStore } from "../../store/session";
+import { useSupportStore } from "../../store/support";
 import { EMPTY_PRODUCT, type PortalProduct } from "../product";
 import { queryClient } from "../queryClient";
 import { SlotProvider } from "../slot";
@@ -26,6 +27,7 @@ const net = vi.hoisted(() => ({
   logout: { provider_logout_url: null as string | null },
   permissions: ["read", "write"] as string[],
   sessions: [] as unknown[],
+  started: 0,
 }));
 
 const at = "2026-10-05T10:00:00Z";
@@ -56,6 +58,12 @@ vi.mock("../api", () => ({
         return Promise.resolve({ app: "portal", role: "owner", permissions: net.permissions, user, org } as MeView);
       }
       if (path.startsWith("/v1/auth/memberships")) return Promise.resolve({ items: [{ org, user, role: "owner" }], next_cursor: null });
+      const one = /^\/v1\/agent-sessions\/([^/?]+)(\/steps)?/.exec(path);
+      if (one) {
+        const found = (net.sessions as AgentSessionView[]).find((each) => each.id === one[1]);
+        if (!found) return Promise.reject(new Error(`no session ${one[1]}`));
+        return Promise.resolve(one[2] ? { items: [], has_more: false } : found);
+      }
       if (path.startsWith("/v1/agent-sessions?status=parked")) {
         const parked = (net.sessions as AgentSessionView[]).filter((each) => each.status === "parked");
         return Promise.resolve({ items: parked, next_cursor: null });
@@ -69,6 +77,13 @@ vi.mock("../api", () => ({
     post: (path: string, body: unknown) => {
       net.posts.push({ path, body });
       if (path === "/v1/auth/logout") return Promise.resolve(net.logout);
+      if (path === "/v1/agent-sessions") {
+        net.started += 1;
+        const started = session(`support-${net.started}`, { kind: "platform_assistant", title: "Support" });
+        net.sessions = [...net.sessions, started];
+        return Promise.resolve(started);
+      }
+      if (/^\/v1\/agent-sessions\/[^/]+\/messages$/.test(path)) return Promise.resolve({});
       return Promise.reject(new Error(`no answer for ${path}`));
     },
   },
@@ -143,7 +158,10 @@ beforeEach(async () => {
   net.logout = { provider_logout_url: null };
   net.permissions = ["read", "write"];
   net.sessions = [];
+  net.started = 0;
   localStorage.clear();
+  useSupportStore.setState({ conversations: {} });
+  Object.defineProperty(window, "innerWidth", { value: 1440, configurable: true });
   usePreferencesStore.setState({ theme: "system", sidebarFolded: false, sessionFilter: DEFAULT_FILTER, foldedTrees: [] });
   useSessionStore.getState().setSession("ses_ajax", "ajax");
   root = createRoot(container);
@@ -408,4 +426,134 @@ it("goes to the identity provider's logout when the server names one", async () 
   expect(net.posts[0]!.body).toEqual({ return_to: "http://localhost:5173/signed-out" });
   expect(useSessionStore.getState().token).toBeNull();
   expect(assign).toHaveBeenCalledWith("https://api.workos.com/user_management/sessions/logout?session_id=s1");
+});
+
+describe("the support dock", () => {
+  const dock = () => q("aside[aria-label='Support']");
+  const ask = () => q<HTMLButtonElement>("button[aria-label='Ask support']")!;
+  const field = () => q<HTMLTextAreaElement>("aside[aria-label='Support'] textarea")!;
+  const typeIn = (text: string) =>
+    act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(field(), text);
+      field().dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  const send = async () => {
+    await act(async () => q<HTMLButtonElement>("aside[aria-label='Support'] button[aria-label='Send']")!.click());
+    await settle();
+  };
+
+  it('opens from "?" beside the user chip, from Cmd-/, and from "Ask support" in the search; its close button and Esc close it', async () => {
+    await mount("/sessions");
+    expect(dock()).toBeNull();
+    expect(ask().closest(".acme-sidebar-foot")).not.toBeNull();
+    await act(async () => ask().click());
+    expect(dock()!.dataset.mode).toBe("side");
+    expect(ask().getAttribute("aria-expanded")).toBe("true");
+    await act(async () => q<HTMLButtonElement>("button[aria-label='Close support']")!.click());
+    expect(dock()).toBeNull();
+
+    await key(window as unknown as Element, "/", { metaKey: true });
+    expect(dock()).not.toBeNull();
+    await key(field(), "Escape");
+    expect(dock()).toBeNull();
+
+    await key(window as unknown as Element, "k", { metaKey: true });
+    const option = [...container.querySelectorAll<HTMLElement>("[role='option']")].find((o) => o.querySelector(".acme-palette-label")?.textContent === "Ask support")!;
+    await act(async () => option.click());
+    expect(dock()).not.toBeNull();
+    expect(router.state.location.pathname).toBe("/sessions");
+  });
+
+  it("keeps its draft while the main area moves to another page beside it", async () => {
+    await mount("/sessions");
+    await act(async () => ask().click());
+    await typeIn("Why is my session parked?");
+    await act(async () => router.navigate("/automations"));
+    expect(container.textContent).toContain("automations");
+    expect(dock()!.dataset.mode).toBe("side");
+    expect(field().value).toBe("Why is my session parked?");
+  });
+
+  it("is a sheet under 1100 pixels, which a move to another page closes and which opens again with its draft", async () => {
+    Object.defineProperty(window, "innerWidth", { value: 900, configurable: true });
+    await mount("/sessions");
+    await act(async () => ask().click());
+    expect(dock()!.dataset.mode).toBe("sheet");
+    await typeIn("Where are the API keys?");
+    await act(async () => router.navigate("/knowledge"));
+    expect(dock()).toBeNull();
+    await act(async () => ask().click());
+    expect(field().value).toBe("Where are the API keys?");
+  });
+
+  it("expands over the main area, and a move to another page returns it beside the page", async () => {
+    await mount("/sessions");
+    await act(async () => ask().click());
+    await act(async () => q<HTMLButtonElement>("button[aria-label='Expand']")!.click());
+    expect(dock()!.dataset.mode).toBe("expanded");
+    expect(q(".acme-main")!.hidden).toBe(true);
+    await act(async () => router.navigate("/automations"));
+    expect(dock()!.dataset.mode).toBe("side");
+    expect(q(".acme-main")!.hidden).toBe(false);
+  });
+
+  it("starts the person's conversation on the platform assistant with their first message, the page riding as data, and continues it", async () => {
+    await mount("/sessions/s1");
+    await act(async () => ask().click());
+    await typeIn("Why is this one stuck?");
+    await send();
+    expect(net.posts.map((post) => post.path)).toEqual(["/v1/agent-sessions", "/v1/agent-sessions/support-1/messages"]);
+    expect(net.posts[0]!.body).toEqual({ kind: "platform_assistant", title: "Support" });
+    const text = (net.posts[1]!.body as { text: string }).text;
+    expect(text.split("\n").slice(0, 3)).toEqual(["Why is this one stuck?", "", "~~~page"]);
+    expect(JSON.parse(text.split("\n")[3]!)).toMatchObject({ path: "/sessions/s1" });
+    expect(useSupportStore.getState().conversations["o1/u1"]).toBe("support-1");
+    expect(field().value).toBe("");
+
+    await typeIn("And the other one?");
+    await send();
+    expect(net.posts.map((post) => post.path).slice(2)).toEqual(["/v1/agent-sessions/support-1/messages"]);
+  });
+
+  it("never reads another member's session through the dock, nor a session of another kind, and starts the person's own instead", async () => {
+    net.sessions = [
+      session("theirs", { kind: "platform_assistant", created_by: "u2" }),
+      session("engineer", { kind: "engineer" }),
+    ];
+    for (const kept of ["theirs", "engineer"]) {
+      net.gets.length = 0;
+      net.posts.length = 0;
+      useSupportStore.setState({ conversations: { "o1/u1": kept } });
+      await mount("/sessions");
+      await act(async () => ask().click());
+      await settle();
+      expect(net.gets).toContain(`/v1/agent-sessions/${kept}`);
+      expect(net.gets.filter((path) => path.startsWith(`/v1/agent-sessions/${kept}/`))).toEqual([]);
+      expect(dock()!.textContent).toContain("Ask how the platform works");
+      expect(q("aside[aria-label='Support'] a[href^='/sessions/']")).toBeNull();
+      await typeIn("Hello");
+      await send();
+      expect(net.posts[0]!.path).toBe("/v1/agent-sessions");
+      expect(net.posts[1]!.path).not.toContain(kept);
+      await act(async () => root.render(null));
+      queryClient.clear();
+    }
+  });
+
+  it("continues the person's own conversation, and New conversation starts the next message afresh", async () => {
+    net.sessions = [session("work"), session("mine", { kind: "platform_assistant", title: "Support" })];
+    useSupportStore.setState({ conversations: { "o1/u1": "mine" } });
+    await mount("/sessions");
+    await act(async () => ask().click());
+    await settle();
+    expect(net.gets.some((path) => path.startsWith("/v1/agent-sessions/mine/steps"))).toBe(true);
+    expect(q("aside[aria-label='Support'] a[href='/sessions/mine']")!.textContent).toBe("As a session");
+    // The left bar lists the work; the conversation is the dock's.
+    expect(group("Recent")).toEqual(["work"]);
+    await act(async () => q<HTMLButtonElement>("button[aria-label='New conversation']")!.click());
+    expect(useSupportStore.getState().conversations["o1/u1"]).toBeUndefined();
+    await typeIn("A new question");
+    await send();
+    expect(net.posts.map((post) => post.path)).toEqual(["/v1/agent-sessions", "/v1/agent-sessions/support-1/messages"]);
+  });
 });

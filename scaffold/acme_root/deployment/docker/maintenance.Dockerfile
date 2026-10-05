@@ -26,6 +26,7 @@ RUN uv sync --frozen --no-dev --package acme-maintenance
 COPY llms.txt ./
 COPY apps/cli/README.md apps/cli/
 COPY docs/object-model.md docs/
+COPY docs/portal-routes.md docs/
 
 FROM python:3.14-slim
 RUN useradd --create-home --uid 10001 acme

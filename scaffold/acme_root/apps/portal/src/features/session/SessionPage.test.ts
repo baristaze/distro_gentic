@@ -4,7 +4,7 @@
 // session another org holds answers 404. The page shows only what the routes
 // return for the member's org, and asks for nothing of a session it was
 // refused.
-import { act, createElement } from "react";
+import { act, createElement, type ComponentType } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -12,6 +12,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError, type AgentSessionView, type ExecutionView, type MeView, type StepView } from "@acme/client";
 import { SessionsPage } from "../sessions/SessionsPage";
 import { PLATFORM } from "../../app/platform";
+import { PaneSplitContext, ShellContext, type ShellActions } from "../../app/shell/shellContext";
+import type { PaletteCommand } from "../../design/kit";
 import { SlotProvider } from "../../app/slot";
 import { keys } from "../../queries/keys";
 import { usePanesStore } from "../../store/panes";
@@ -153,7 +155,7 @@ document.body.append(container);
 let root: ReturnType<typeof createRoot> | null = null;
 let router: ReturnType<typeof createMemoryRouter> | null = null;
 
-async function open(org: "a" | "b", address: string, history: StepView[] | null = null) {
+async function open(org: "a" | "b", address: string, history: StepView[] | null = null, page: ComponentType = SessionPage) {
   net.org = org;
   net.calls = [];
   net.history = history;
@@ -161,13 +163,13 @@ async function open(org: "a" | "b", address: string, history: StepView[] | null 
   router = createMemoryRouter(
     [
       { path: "/sessions", Component: SessionsPage },
-      { path: "/sessions/:sessionId", Component: SessionPage },
+      { path: "/sessions/:sessionId", Component: page },
     ],
     { initialEntries: [address] },
   );
   root = createRoot(container);
-  const page = createElement(SlotProvider, { slot: PLATFORM, children: createElement(RouterProvider, { router: router! }) });
-  await act(async () => root!.render(createElement(QueryClientProvider, { client: queryClient }, page)));
+  const app = createElement(SlotProvider, { slot: PLATFORM, children: createElement(RouterProvider, { router: router! }) });
+  await act(async () => root!.render(createElement(QueryClientProvider, { client: queryClient }, app)));
   await settle();
   return queryClient;
 }
@@ -335,5 +337,63 @@ describe("the org's own session", () => {
     // A new visit to the same session keeps it closed.
     await open("a", "/sessions/sa");
     expect(pane()).toBeNull();
+  });
+});
+
+describe("beside the support dock, its pane folded to the rail", () => {
+  /** The commands the page offers the shell's search (Cmd-K). */
+  let offered: readonly PaletteCommand[] = [];
+  const actions: ShellActions = {
+    offer: (commands) => {
+      if (commands) offered = commands;
+    },
+    openSearch: () => undefined,
+    openShortcuts: () => undefined,
+    toggleSupport: () => undefined,
+  };
+  /** The page as the shell holds it while the dock needs the room: its pane folds whenever it shows. */
+  const besideDock = () =>
+    createElement(
+      ShellContext.Provider,
+      { value: actions },
+      createElement(PaneSplitContext.Provider, { value: { folds: (width: number | null) => width !== null, setPane: () => undefined } }, createElement(SessionPage)),
+    );
+  const rail = () => container.querySelector("[aria-label='Session pane'][data-rail]");
+  const peek = () => container.querySelector(".acme-pane-peek");
+  const history = [
+    step(1, { type: "model_response", actor: "model", tool_uses: [{ id: "u1", name: "run_command", input: { argv: ["pytest", "-q"] } }] }),
+    step(2, { type: "tool_request", actor: "agent", refs: ["st1"], tool: "run_command", tool_use_id: "u1" }),
+    step(3, { type: "tool_response", actor: "program", responds_to: "st2", tool: "run_command", tool_use_id: "u1", text: '{"stdout": "3 passed\\n", "exit_code": 0}' }),
+  ];
+
+  it("opens a step asked for from its call line as the rail's peek, and again once folded", async () => {
+    await open("a", "/sessions/sa", history, besideDock);
+    expect(rail()).toBeNull();
+    await act(async () => container.querySelector<HTMLButtonElement>(".acme-work .acme-fold-line")!.click());
+    await act(async () => container.querySelector<HTMLButtonElement>(".acme-call-line")!.click());
+    await settle();
+    expect(rail()).not.toBeNull();
+    expect(peek()!.getAttribute("aria-label")).toBe("Step");
+    expect(peek()!.textContent).toContain("3 passed");
+    await act(async () => container.querySelector<HTMLButtonElement>("button[aria-label='Fold Step']")!.click());
+    expect(peek()).toBeNull();
+    // The same line asked for again shows it again.
+    await act(async () => container.querySelector<HTMLButtonElement>(".acme-call-line")!.click());
+    expect(peek()!.getAttribute("aria-label")).toBe("Step");
+  });
+
+  it("opens the tab the address names as the peek, on the visit", async () => {
+    await open("a", "/sessions/sa?pane=evidence", null, besideDock);
+    expect(rail()).not.toBeNull();
+    expect(peek()!.getAttribute("aria-label")).toBe("Evidence");
+  });
+
+  it("opens a tab a command asks for as the peek, and keeps a tab that opens itself on the rail", async () => {
+    net.over = { status: "running" };
+    await open("a", "/sessions/sa", null, besideDock);
+    expect(rail()!.querySelector("button[aria-label='Workspace']")).not.toBeNull();
+    expect(peek()).toBeNull();
+    await act(async () => offered.find((command) => command.id === "tab-changes")!.run());
+    expect(peek()!.getAttribute("aria-label")).toBe("Changes");
   });
 });

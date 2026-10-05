@@ -1,20 +1,87 @@
 // A session's right pane: its open tabs, each with its icon, label, and ✕;
 // a "+" that lists the views not open; the active tab's view under them;
-// and the edge a person drags, or moves by the arrows, to resize it.
-import { useEffect } from "react";
+// and the edge a person drags, or moves by the arrows, to resize it. When
+// the support dock needs the room, the pane folds to its icon rail: a tab's
+// icon shows its view over the story's edge, and a second click, or Esc,
+// folds it again. A tab or a step asked for from outside the rail (a call
+// line, a command, the address) shows there too.
+import { useEffect, useState, type KeyboardEvent } from "react";
 import { CloseTabIcon, Menu, MenuItem, PanelIcon, PlusIcon, Tooltip, useSplitter } from "../../design/kit";
 import { PANE } from "./paneModel";
 import type { SessionVm } from "./useSessionVm";
 
-export function Pane({ vm }: { vm: SessionVm }) {
+export function Pane({ vm, folded = false }: { vm: SessionVm; folded?: boolean }) {
   const pane = vm.pane;
   const splitter = useSplitter(pane.width, vm.resizePane, PANE, "left");
   const active = vm.tabs.find((tab) => tab.id === pane.shown);
+  const [peek, setPeek] = useState(false);
+  // An ask waits until the pane shows: folded, it opens the peek; in full,
+  // the person sees it there.
+  const [answered, setAnswered] = useState(0);
+  if (active && vm.slotSession && pane.asks !== answered) {
+    setAnswered(pane.asks);
+    if (folded) setPeek(true);
+  }
   // The active tab stays in sight when the strip holds more than fits.
   useEffect(() => {
     document.getElementById(`pane-tab-${pane.shown}`)?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
   }, [pane.shown]);
   if (!active || !vm.slotSession) return null;
+  if (folded) {
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      event.preventDefault();
+      setPeek(false);
+    };
+    return (
+      <aside className="acme-pane" data-rail="" aria-label="Session pane" onKeyDown={onEscape}>
+        <div className="acme-pane-rail" role="toolbar" aria-label="The session's views" aria-orientation="vertical">
+          {pane.open.map((tab) => {
+            const showing = peek && tab.id === active.id;
+            return (
+              <Tooltip key={tab.id} tip={`${tab.label} · ${tab.tip}`} side="left">
+                <button
+                  type="button"
+                  className="acme-icon-button"
+                  aria-label={tab.label}
+                  aria-pressed={showing}
+                  data-active={tab.id === active.id || undefined}
+                  onClick={() => {
+                    if (showing) {
+                      setPeek(false);
+                      return;
+                    }
+                    vm.openTab(tab.id);
+                    setPeek(true);
+                  }}
+                >
+                  {tab.icon}
+                </button>
+              </Tooltip>
+            );
+          })}
+        </div>
+        {peek ? (
+          <div className="acme-pane-peek" role="region" aria-label={active.label} style={{ width: pane.width }}>
+            <div className="acme-pane-head">
+              <strong className="acme-pane-peek-name">
+                {active.icon}
+                {active.label}
+              </strong>
+              <Tooltip tip="Fold it to the rail" shortcut="Esc">
+                <button type="button" className="acme-icon-button" aria-label={`Fold ${active.label}`} onClick={() => setPeek(false)}>
+                  <CloseTabIcon />
+                </button>
+              </Tooltip>
+            </div>
+            <div className="acme-pane-view" id="pane-view" data-tab={active.id}>
+              {active.render(vm.slotSession)}
+            </div>
+          </div>
+        ) : null}
+      </aside>
+    );
+  }
   return (
     <aside className="acme-pane" aria-label="Session pane" style={{ width: pane.width }}>
       <div className="acme-pane-splitter" aria-label="Resize the panel" title="Drag to resize; double-click resets" {...splitter} />

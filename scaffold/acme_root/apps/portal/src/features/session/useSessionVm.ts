@@ -34,7 +34,7 @@ const stateOf = (other: AgentSessionView): ChildState => ({
 
 /** The time now, read again every second while `ticking`: a running block's
  * duration counts up. */
-function useNow(ticking: boolean): Date {
+export function useNow(ticking: boolean): Date {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     if (!ticking) return;
@@ -125,6 +125,23 @@ export function useSessionVm(id: string) {
   const change = useCallback((next: (pane: PaneState) => PaneState) => changePane(id, (before) => next(knownTabs(before, known))), [changePane, id, known]);
   const shown = shownTab(pane);
   const stepCall = pane.step;
+  // Each time a person asks to see a tab or a step (a call line, a command,
+  // the address), past the tabs that open themselves: a pane folded to its
+  // rail shows what was asked. They count afresh for each session, from the
+  // address the visit opens at.
+  const addressAsks = (): number => {
+    const tab = params.get("pane");
+    return tab !== null && known.has(tab) ? 1 : 0;
+  };
+  const [asked, setAsked] = useState(() => ({ id, count: addressAsks() }));
+  if (asked.id !== id) setAsked({ id, count: addressAsks() });
+  const ask = useCallback(
+    (next: (pane: PaneState) => PaneState) => {
+      change(next);
+      setAsked((before) => ({ id, count: (before.id === id ? before.count : 0) + 1 }));
+    },
+    [change, id],
+  );
   // The address the page opens at names a tab, and a call: they open, once a visit.
   const visited = useRef<string | null>(null);
   useEffect(() => {
@@ -150,7 +167,7 @@ export function useSessionVm(id: string) {
     }
     setParams(next, { replace: true });
   }, [shown, stepCall, params, setParams, id, known]);
-  const showTab = useCallback((tab: string) => change((before) => openTab(before, tab)), [change]);
+  const showTab = useCallback((tab: string) => ask((before) => openTab(before, tab)), [ask]);
 
   const send = (text: string, done: () => void) =>
     actions.message.mutate(text, { onSuccess: done, onError: fail("The message was not sent.") });
@@ -267,9 +284,9 @@ export function useSessionVm(id: string) {
     (call: Pick<Call, "id" | "tool">) => {
       const tab = tools[call.tool]?.tab;
       const target = tab !== undefined && known.has(tab) ? tab : "step";
-      change((before) => openCall(before, target, call.id));
+      ask((before) => openCall(before, target, call.id));
     },
-    [tools, known, change],
+    [tools, known, ask],
   );
   const byId = (tabId: string) => tabs.find((tab) => tab.id === tabId);
   const openIds = new Set(pane.tabs);
@@ -285,6 +302,8 @@ export function useSessionVm(id: string) {
         (tabId) => byId(tabId) ?? [],
       ),
       isOpen: (tabId: string) => openIds.has(tabId),
+      /** How many times a person has asked to see a tab or a step. */
+      asks: asked.id === id ? asked.count : 0,
     },
     openTab: showTab,
     closeTab: (tabId: string) => change((before) => closeTab(before, tabId)),

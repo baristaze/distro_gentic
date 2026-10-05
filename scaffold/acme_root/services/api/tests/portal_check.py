@@ -1,7 +1,7 @@
 """What the portal's browser check needs from the stack, run by the check
 itself and by no gate:
 
-    python services/api/tests/portal_check.py script <path> [--scene engineer]
+    python services/api/tests/portal_check.py script <path> [--scene engineer|support]
     python services/api/tests/portal_check.py evidence <slug> <session_id>
     python services/api/tests/portal_check.py scene <root> <slug>
     python services/api/tests/portal_check.py tree <slug> [<root_id>]
@@ -16,7 +16,10 @@ validates, and submits its result. A message after that, such as a
 person's giving back, gets a reply that validates the head again and
 submits the result again, since an engineer's loop ends only on its
 result. Each command and each validation wait for a decision, since its
-plan's answer, a tool's output, marks it.
+plan's answer, a tool's output, marks it. With `--scene support` it is
+the platform assistant answering in the support dock: it searches its
+corpus, then answers with a link to a page of the portal and a link to
+another site.
 `evidence` records on one session of the org what an executor writes: two
 runs of a check and a validation of one of them. The local stack runs no
 executor, so the check writes the records its evidence screen reads
@@ -205,6 +208,42 @@ def engineer_scene() -> list[Any]:
     ]
 
 
+SUPPORT_ANSWER = (
+    "It waits on its two sub-agents, and goes on once both report. "
+    "Each one's place is on [all sessions](/sessions), and the "
+    "[platform guide](https://example.com/guide) says how a tree waits."
+)
+
+
+def support_scene() -> list[Any]:
+    """The platform assistant's turns in the support dock: a search of its
+    corpus, then an answer that links a page of the portal and another
+    site."""
+    from acme.integrations.model_providers.calls import ModelReply
+    from acme.integrations.model_providers.content import TextBlock, ToolUseBlock
+    from acme.integrations.model_providers.types import StopReason, Usage
+
+    search = ToolUseBlock(
+        id="use_support_1",
+        name="search_corpus",
+        input={"query": "a session waits on its sub-agents"},
+    )
+    return [
+        ModelReply(
+            blocks=(search,),
+            stop_reason=StopReason.TOOL_USE,
+            usage=Usage(input=900, output=30),
+            model=SONNET,
+        ),
+        ModelReply(
+            blocks=(TextBlock(text=SUPPORT_ANSWER),),
+            stop_reason=StopReason.END_TURN,
+            usage=Usage(input=1400, output=60),
+            model=SONNET,
+        ),
+    ]
+
+
 def write_script(path: Path, scene: str | None = None) -> None:
     from acme.integrations.model_providers.calls import ModelReply
     from acme.integrations.model_providers.content import TextBlock
@@ -217,7 +256,8 @@ def write_script(path: Path, scene: str | None = None) -> None:
         usage=Usage(input=160, output=40),
         model=SONNET,
     )
-    turns: list[Turn] = engineer_scene() if scene == "engineer" else [reply]
+    scenes = {"engineer": engineer_scene, "support": support_scene}
+    turns: list[Turn] = scenes[scene]() if scene is not None else [reply]
     path.write_bytes(SCRIPT.dump_json({ProviderName.ANTHROPIC: turns}))
 
 

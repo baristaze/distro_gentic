@@ -3,10 +3,13 @@
 // parked on anything else), Recent (idle, the newest thirty). A sub-agent
 // nests under its parent, and a tree sits in the group of its most urgent
 // member, so a child that needs a person lifts its tree into Needs you and
-// is never hidden under a quiet parent. No React, no fetch.
+// is never hidden under a quiet parent. A support conversation is the
+// dock's, and shows only under the platform assistant's filter. No React,
+// no fetch.
 import type { AgentSessionView } from "@acme/client";
 import { parkLine } from "../../features/session/sessionModel";
 import type { SessionFilter } from "./sessionFilter";
+import { listedFor } from "./supportModel";
 
 export { DEFAULT_FILTER, filtering, parseFilter, type SessionFilter } from "./sessionFilter";
 
@@ -94,7 +97,7 @@ const RANK: Record<Group, number> = { needs_you: 0, running: 1, recent: 2 };
 function kept(session: AgentSessionView, filter: SessionFilter, me: string | null): boolean {
   if (session.archived_at !== null && !filter.archived) return false;
   if (filter.owner === "mine" && session.created_by !== me) return false;
-  if (filter.kind && session.kind !== filter.kind) return false;
+  if (!listedFor(session, filter.kind)) return false;
   if (filter.status !== "any" && session.status !== filter.status) return false;
   return true;
 }
