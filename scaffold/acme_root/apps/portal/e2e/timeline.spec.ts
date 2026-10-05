@@ -24,7 +24,8 @@ test.use({ viewport: { width: 1440, height: 900 } });
 async function shoot(page: Page, name: string): Promise<void> {
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
-    await page.screenshot({ path: `${SHOTS}timeline-${name}-${scheme}.png` });
+    // A scheme's colors ease in: the shot ends each transition first.
+    await page.screenshot({ path: `${SHOTS}timeline-${name}-${scheme}.png`, animations: "disabled" });
   }
   await page.emulateMedia({ colorScheme: "light" });
 }

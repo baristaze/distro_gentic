@@ -3,7 +3,7 @@
 // Running while the session runner plays the scripted provider's answer
 // (paced, so the run stays open to be seen), then under Recent. The check
 // records the session's evidence as an executor would, since the local stack
-// runs none, and reads the thread, the timeline, and the evidence on the
+// runs none, and reads the chat and, in the panel, the evidence on the
 // session's page. A person of another org then finds no row of it in the
 // left bar or in All sessions, and nothing of it at its address.
 import { execFileSync } from "node:child_process";
@@ -40,7 +40,8 @@ test("a member starts a session on Home, sees it run and finish in the left bar,
   console.log(`running: ${await bar.getByRole("list", { name: "Running" }).innerText()}`);
   await owner.screenshot({ path: `${SHOTS}shell-running.png` });
 
-  const answer = owner.getByRole("list", { name: "Messages" }).locator("[data-who='agent']");
+  const chat = owner.getByRole("list", { name: "Timeline" });
+  const answer = chat.locator("[data-kind='prose']");
   await expect(answer).toContainText("one voice", { timeout: 90_000 });
   await expect(answer.locator("strong")).toHaveText("one voice");
   await expect(bar.getByRole("list", { name: "Recent" })).toContainText(title);
@@ -49,14 +50,13 @@ test("a member starts a session on Home, sees it run and finish in the left bar,
 
   recordEvidence(sessionId);
 
-  await owner.getByRole("radio", { name: "Timeline", exact: true }).click();
-  const steps = owner.getByRole("list", { name: "Steps" });
-  await expect(steps).toContainText("Message from a person");
-  await expect(steps).toContainText("Model answered");
-  await expect(steps).toContainText("Loop ended");
-  console.log(`timeline: ${(await steps.locator("[data-title]").allTextContents()).join(" | ")}`);
-  await owner.screenshot({ path: `${SHOTS}session-timeline.png`, fullPage: true });
+  await expect(chat.locator("[data-kind='person']")).toContainText(title);
+  await expect(chat.locator("[data-kind='line']").last()).toContainText("Run ended: succeeded");
+  await expect(chat.getByRole("status")).toHaveText("Done");
+  console.log(`chat: ${(await chat.locator("li[data-kind]").evaluateAll((rows) => rows.map((row) => row.getAttribute("data-kind")))).join(" | ")}`);
+  await owner.screenshot({ path: `${SHOTS}session-chat.png`, fullPage: true });
 
+  await owner.getByRole("button", { name: "Show the panel" }).click();
   await owner.getByRole("radio", { name: "Evidence", exact: true }).click();
   const runs = owner.getByRole("table", { name: "Runs" });
   await expect(runs.locator("tbody tr")).toHaveCount(3);
@@ -73,7 +73,7 @@ test("a member starts a session on Home, sees it run and finish in the left bar,
   await stranger.goto("/sessions");
   await expect(stranger.getByRole("heading", { level: 1, name: "All sessions" })).toBeVisible();
   await expect(stranger.getByRole("main").getByText("No sessions yet.")).toBeVisible();
-  await stranger.goto(`/sessions/${sessionId}?tab=timeline`);
+  await stranger.goto(`/sessions/${sessionId}?tab=evidence`);
   await expect(stranger.getByRole("heading", { level: 1 })).toHaveText("No session here");
   await expect(stranger.getByText(title)).toHaveCount(0);
   console.log(`another org at /sessions/${sessionId}: ${await stranger.getByRole("heading", { level: 1 }).textContent()}`);
