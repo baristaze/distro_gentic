@@ -566,6 +566,25 @@ def test_a_stream_kind_a_claimant_writes_names_a_claimant_kind_of_the_products_o
             )
 
 
+def test_a_stream_kind_a_claimant_reads_names_a_claimant_kind_of_the_products_own(
+    tmp_path: Path,
+) -> None:
+    cues = StreamKind("render_cues", entries=2, bytes=1024, streams=1, reader=BATCH)
+    streams = build_kind_streams(
+        InfraLocalImpl(tmp_path), ProductKinds(claimants=(BATCH_CLAIMANT,), streams=(cues,))
+    )
+    assert (streams.reader("render_cues"), streams.writer("render_cues")) == (BATCH, None)
+    assert streams.reader(STEP) is None and streams.reader("unregistered") is None
+    # A claimant reads only for an item it holds, and the host holds none
+    # here, nor does a kind nobody registered: each is refused at boot.
+    for reader in ("host", "nobody"):
+        with pytest.raises(ValueError, match=f"is read by {reader}, which is no claimant kind"):
+            ProductKinds(
+                claimants=(BATCH_CLAIMANT,),
+                streams=(StreamKind("render_cues", 2, 1024, 1, reader=reader),),
+            )
+
+
 # An executor for a validation's environment, held at the gate as the
 # platform's is.
 

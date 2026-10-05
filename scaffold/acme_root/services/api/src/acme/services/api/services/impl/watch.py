@@ -8,7 +8,7 @@ from acme.om.hosts.types.host import ClaimantIdentity
 from acme.om.steps.types.stream import StreamPart, TextPart, ThinkingPart, ToolInputPart
 from acme.om.watch import WatchManagerInterface
 from acme.om.watch.types.control import HandCommand
-from acme.om.watch.types.live import MAX_SEEN, ItemSeen, Seen
+from acme.om.watch.types.live import MAX_SEEN, ItemPage, ItemSeen, Seen
 from acme.services.api.services.impl.agent_sessions import session_view
 from acme.services.api.services.watch import WatchServiceInterface
 from acme.services.api.types.agent_sessions import AgentSessionView
@@ -59,6 +59,26 @@ def item_seen_of(after: Sequence[str]) -> tuple[ItemSeen, ...]:
     return tuple(seen)
 
 
+def item_page_view(page: ItemPage) -> ItemPageView:
+    """An item's open streams of one kind, each entry's bytes in base64."""
+    return ItemPageView(
+        item_id=page.item_id,
+        kind=page.kind,
+        streams=[
+            ItemStreamView(
+                stream=stream.stream,
+                first=stream.first,
+                dropped=stream.dropped,
+                entries=[
+                    EntryView(n=entry.n, data=base64.b64encode(entry.data).decode())
+                    for entry in stream.entries
+                ],
+            )
+            for stream in page.streams
+        ],
+    )
+
+
 def part_view(part: StreamPart) -> LivePartView:
     view = LivePartView(kind=PartKind(part.kind), n=part.n, last=part.end, text=part.text)
     if isinstance(part, TextPart | ThinkingPart):
@@ -107,6 +127,20 @@ class WatchServiceImpl(WatchServiceInterface):
     ) -> None:
         await self._watch.append_as(rctx, claimant, item_id, kind, body.appended())
 
+    async def read_as(
+        self,
+        rctx: RequestContext,
+        claimant: ClaimantIdentity,
+        item_id: UUID,
+        kind: str,
+        claim_token: UUID,
+        after: Sequence[str],
+    ) -> ItemPageView:
+        seen = item_seen_of(after)
+        return item_page_view(
+            await self._watch.read_as(rctx, claimant, item_id, kind, claim_token, seen)
+        )
+
     async def open_item_live(self, ctx: TenantContext, item_id: UUID, kind: str) -> ItemReadView:
         live = await self._watch.open_item_live(ctx, item_id, kind)
         return ItemReadView(
@@ -116,23 +150,7 @@ class WatchServiceImpl(WatchServiceInterface):
     async def read_item_live(
         self, rctx: RequestContext, handle: str, after: Sequence[str]
     ) -> ItemPageView:
-        page = await self._watch.read_item_live(rctx, handle, item_seen_of(after))
-        return ItemPageView(
-            item_id=page.item_id,
-            kind=page.kind,
-            streams=[
-                ItemStreamView(
-                    stream=stream.stream,
-                    first=stream.first,
-                    dropped=stream.dropped,
-                    entries=[
-                        EntryView(n=entry.n, data=base64.b64encode(entry.data).decode())
-                        for entry in stream.entries
-                    ],
-                )
-                for stream in page.streams
-            ],
-        )
+        return item_page_view(await self._watch.read_item_live(rctx, handle, item_seen_of(after)))
 
     async def take_control(self, ctx: TenantContext, session_id: UUID) -> AgentSessionView:
         return session_view(await self._watch.take_control(ctx, session_id))

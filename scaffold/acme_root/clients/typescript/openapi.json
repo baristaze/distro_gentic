@@ -18162,6 +18162,135 @@
       }
     },
     "/v1/claimants/me/items/{item_id}/streams/{kind}": {
+      "get": {
+        "description": "The item's open streams of a kind the claimant's own kind reads, for\nthe item it holds under the claim token its claim was handed (the\n`Claim-Token` header) with a live lease, each after the last entry read\n(`after=<stream>:<last>`, once a stream). Any other item, any other\nkind, and a lapsed lease are not found; each call spends the\ncredential's budget of reads.",
+        "operationId": "read_streams_v1_claimants_me_items__item_id__streams__kind__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "pattern": "^[a-z][a-z0-9_]{0,31}$",
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "claim-token",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Claim-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemPageView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Streams",
+        "tags": [
+          "claimants"
+        ]
+      },
       "post": {
         "description": "Appends to a stream of a kind the claimant's own kind writes, for\nthe item it holds under the body's claim token. Any other item, and\nany other kind, is not found; each call spends the credential's\nbudget of writes.",
         "operationId": "append_v1_claimants_me_items__item_id__streams__kind__post",

@@ -256,7 +256,7 @@ class ProductKinds:
     its permission, its lane, and the claimant kind that takes it through
     the gateway; its claimant kinds; its secret owner kinds (`TrustLayer`);
     its stream kinds, each with its bounds (`watch.root.build_stream`) and the
-    claimant kind of its own that writes it, if any; its executors, by
+    claimant kinds of its own that write and read it, if any; its executors, by
     the validation environment each runs; and its kinds of automation
     action, each acting in a firing, saying when the run it started
     ended, and checking the person who writes one (`automations.actions`). Its agent kinds join the platform's
@@ -285,15 +285,17 @@ class ProductKinds:
         for spec in self.work:
             if spec.claimant is None:
                 raise ValueError(f"{spec.name} names no claimant kind, so nothing would claim it")
-        # A stream a claimant writes is bound to an item it holds, and only a
-        # product's claimant holds one: the host's items are the relay's.
+        # A stream a claimant writes or reads is bound to an item it holds,
+        # and only a product's claimant holds one: the host's items are the
+        # relay's.
         own = {claimant.name for claimant in self.claimants}
         for stream in self.streams:
-            if stream.claimant is not None and stream.claimant not in own:
-                raise ValueError(
-                    f"stream kind {stream.name} is written by {stream.claimant}, "
-                    "which is no claimant kind of the product's"
-                )
+            for role, kind in (("written", stream.claimant), ("read", stream.reader)):
+                if kind is not None and kind not in own:
+                    raise ValueError(
+                        f"stream kind {stream.name} is {role} by {kind}, "
+                        "which is no claimant kind of the product's"
+                    )
 
 
 @dataclass(frozen=True)
