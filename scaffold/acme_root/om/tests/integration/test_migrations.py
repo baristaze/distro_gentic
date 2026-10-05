@@ -12,6 +12,7 @@ product's kind."""
 
 import asyncio
 import time
+from datetime import datetime
 from uuid import UUID
 
 import pytest
@@ -19,7 +20,6 @@ from contracts.automation_storage import make_automation
 from contracts.event_storage import make_event
 from contracts.platform_agents_storage import finished, make_validation
 from contracts.workspace_storage import make_workspace
-from pydantic import ValidationError
 from sqlalchemy import Connection, text
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -398,22 +398,61 @@ async def seed_sessions(pg_sessions: LoginSessions) -> dict[UUID, ValidationSess
     return held
 
 
+def as_sql(value: object) -> str:
+    """A value as a SQL literal: null, or its text quoted."""
+    if value is None:
+        return "NULL"
+    return f"'{value.isoformat() if isinstance(value, datetime) else value}'"
+
+
+async def written_before(url: str) -> dict[UUID, ValidationSession]:
+    """Two tenants, each with a session as the release before wrote it, one
+    queued and one finished with its run: its project and its commits, and
+    none of the columns a later release added, which the storage now maps."""
+    held: dict[UUID, ValidationSession] = {}
+    for session in (make_validation(), finished(make_validation())):
+        org = new_id()
+        values = (
+            session.id,
+            org,
+            session.created_at,
+            session.updated_at,
+            session.created_by,
+            session.updated_by,
+            session.project_id,
+            session.check_name,
+            session.head,
+            session.base,
+            session.status.value,
+            session.run_id,
+            session.finished_at,
+            session.version,
+        )
+        await in_tenant(
+            url,
+            org,
+            "INSERT INTO core.validation_sessions (id, org_id, created_at, updated_at,"
+            " created_by, updated_by, project_id, check_name, head, base, status, run_id,"
+            f" finished_at, version) VALUES ({', '.join(as_sql(v) for v in values)})",
+        )
+        held[org] = session
+    return held
+
+
 async def test_the_station_columns_leave_and_every_session_this_release_wrote_stays(
     pg_sessions: LoginSessions, migrated: dict[DatabaseRole, str]
 ) -> None:
     """At the release before, each tenant holds a session that release wrote
-    and one written on a station, which it cannot read. Forward, the
-    station's columns are gone, the commit columns take no null, the station
-    session is gone, and every value of the other is kept."""
+    and one written on a station. Forward, the station's columns are gone,
+    the commit columns take no null, the station session is gone, and every
+    value of the other is kept."""
     core = migrated[DatabaseRole.CORE]
     storage = PlatformAgentsStoragePostgresImpl(pg_sessions)
     await downgrade(DatabaseRole.CORE, core, V0_2_0_HEAD)
-    held = await seed_sessions(pg_sessions)
-    stale = {org: await written_on_a_station(core, org) for org in held}
+    held = await written_before(core)
+    for org in held:
+        await written_on_a_station(core, org)
     assert await session_shape(core) == V0_2_0_SESSION_SHAPE
-    for org, session_id in stale.items():
-        with pytest.raises(ValidationError):
-            await storage.read_validation(org, session_id)
 
     await upgrade(DatabaseRole.CORE, core)
 
@@ -439,13 +478,25 @@ async def test_the_station_columns_come_back_null_and_the_sessions_stay(
 
     assert await session_shape(core) == V0_2_0_SESSION_SHAPE
     for org, session in held.items():
-        assert await storage.read_validation(org, session.id) == session
         assert await in_tenant(
             core,
             org,
-            "SELECT lab_id, check_version, parameters FROM core.validation_sessions"
+            "SELECT project_id::text, head, base, status, run_id::text, version,"
+            " lab_id, check_version, parameters FROM core.validation_sessions"
             f" WHERE id = '{session.id}'",
-        ) == [(None, None, None)]
+        ) == [
+            (
+                str(session.project_id),
+                session.head,
+                session.base,
+                session.status.value,
+                None if session.run_id is None else str(session.run_id),
+                session.version,
+                None,
+                None,
+                None,
+            )
+        ]
 
     await upgrade(DatabaseRole.CORE, core)
     assert await check(DatabaseRole.CORE, core) == []
