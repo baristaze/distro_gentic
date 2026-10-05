@@ -277,6 +277,14 @@ def test_the_engineers_layers_name_analysis_for_a_question_and_the_engineer_for_
     assert ANALYSIS_KIND.share == ANALYSIS_SHARE
 
 
+def test_analysis_waits_for_every_report_before_it_answers() -> None:
+    """Analysis ends its session with a turn that calls no tool, so its
+    prompt has it wait for every sub-agent's report before that turn."""
+    assert ANALYSIS_KIND.done_rule is DoneRule.ANSWER
+    layers = " ".join(ANALYSIS_KIND.prompts)
+    assert "wait for every sub-agent's report with wait_for_sub_agents before you answer" in layers
+
+
 def test_the_engineers_step_guard_is_sized_for_a_change_and_its_share_follows_it() -> None:
     """An engineer a spawn or an automation starts parks for a person past the
     calls a change takes, never at the engine's default guard, and its share

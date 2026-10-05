@@ -295,11 +295,19 @@ also more than three of the main role's worst-case calls at a full
 window, so its first call is never refused. Its tree's budget still
 bounds it, and a share never raises that budget."""
 
+ANALYSIS_WAITS = (
+    "Once you start a sub-agent, wait for every sub-agent's report with "
+    "wait_for_sub_agents before you answer: a turn with no tool call is your answer, and "
+    "it ends your session."
+)
+"""Analysis's layer on its sub-agents: it answers with a turn that calls no
+tool, so it waits for every report before that turn."""
+
 ANALYSIS_KIND = ANALYSIS_V2.model_copy(
     update={
         "version": 3,
         "tools": (*ANALYSIS_V2.tools, SPAWN_SUB_AGENT, WAIT_FOR_SUB_AGENTS),
-        "prompts": (*ANALYSIS_V2.prompts, SUB_AGENTS),
+        "prompts": (*ANALYSIS_V2.prompts, SUB_AGENTS, ANALYSIS_WAITS),
         "policy": allowing(ToolClass.READ, ToolClass.EXECUTE, ToolClass.SPAWN),
         "share": ANALYSIS_SHARE,
     }
