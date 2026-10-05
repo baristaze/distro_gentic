@@ -12,7 +12,6 @@ import { UsagePage } from "./usage/UsagePage";
 
 const net = vi.hoisted(() => ({}) as ReturnType<typeof newNet>);
 vi.mock("../app/api", async () => (await import("./screenTesting")).fakeApi(net));
-vi.mock("../app/AppNav", () => ({ AppNav: () => null }));
 vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 
 const at = "2026-10-03T10:00:00Z";

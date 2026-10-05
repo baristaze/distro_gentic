@@ -1,4 +1,3 @@
-import { AppNav } from "../../app/AppNav";
 import { errorMessage } from "../../app/errorMessage";
 import { Banner, Button, Card, DataTable, Muted, Page, type Column } from "../../design/kit";
 import { tokens } from "../../design/tokens";
@@ -20,7 +19,7 @@ const COLUMNS: Column<Row>[] = [
 export function AuditPage() {
   const vm = useAuditVm();
   return (
-    <Page title="Audit" nav={<AppNav />} notice={<ProviderNotice />}>
+    <Page title="Audit" notice={<ProviderNotice />}>
       {vm.error ? <Banner>{errorMessage(vm.error, "The audit could not be read.")}</Banner> : null}
       <Card title="What happened in the org" id="audit">
         <div style={{ display: "grid", gap: tokens.space.md }}>

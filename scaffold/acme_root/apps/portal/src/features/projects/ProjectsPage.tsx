@@ -1,6 +1,5 @@
 import type { FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { AppNav } from "../../app/AppNav";
 import { errorMessage } from "../../app/errorMessage";
 import { Banner, Button, Card, DataTable, ErrorText, Muted, Page, TextField, type Column } from "../../design/kit";
 import { tokens } from "../../design/tokens";
@@ -22,7 +21,7 @@ export function ProjectsPage() {
     vm.submit();
   };
   return (
-    <Page title="Projects" nav={<AppNav />} notice={<ProviderNotice />}>
+    <Page title="Projects" notice={<ProviderNotice />}>
       {vm.error ? <Banner>{errorMessage(vm.error, "The projects could not be read.")}</Banner> : null}
       {vm.mayManage ? (
         <Card title="New project" id="new">

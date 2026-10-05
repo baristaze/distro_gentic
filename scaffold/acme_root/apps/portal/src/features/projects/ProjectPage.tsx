@@ -1,6 +1,5 @@
 import type { FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
-import { AppNav } from "../../app/AppNav";
 import { errorMessage } from "../../app/errorMessage";
 import { Banner, Button, Card, ConfirmDialog, ErrorText, Muted, Page, TextField } from "../../design/kit";
 import { tokens } from "../../design/tokens";
@@ -21,7 +20,7 @@ export function ProjectPage() {
   const vm = useProjectVm(projectId);
   if (vm.missing) {
     return (
-      <Page title="No project here" back={back} nav={<AppNav />}>
+      <Page title="No project here" back={back}>
         <Card>
           <Muted>This org holds no project with this address. It may belong to another org, or it was removed.</Muted>
         </Card>
@@ -30,7 +29,7 @@ export function ProjectPage() {
   }
   if (!vm.project) {
     return (
-      <Page title="Project" back={back} nav={<AppNav />}>
+      <Page title="Project" back={back}>
         {vm.error ? <Banner>{errorMessage(vm.error, "The project could not be read.")}</Banner> : <Muted>Loading</Muted>}
       </Page>
     );
@@ -45,7 +44,7 @@ export function ProjectPage() {
     vm.submitCredential();
   };
   return (
-    <Page title={project.name} back={back} nav={<AppNav />} notice={<ProviderNotice />}>
+    <Page title={project.name} back={back} notice={<ProviderNotice />}>
       <Card title="Repository" id="repository">
         <dl style={{ display: "grid", gridTemplateColumns: "max-content 1fr", gap: `${tokens.space.sm} ${tokens.space.md}`, margin: 0 }}>
           <dt style={label}>Repository</dt>

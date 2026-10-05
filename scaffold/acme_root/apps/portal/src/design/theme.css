@@ -31,7 +31,7 @@
   --acme-shadow-sm: 0 1px 2px rgba(16, 16, 24, 0.05);
   --acme-shadow-md: 0 1px 2px rgba(16, 16, 24, 0.04), 0 4px 12px rgba(16, 16, 24, 0.06);
   --acme-shadow-lg: 0 2px 4px rgba(16, 16, 24, 0.04), 0 12px 32px rgba(16, 16, 24, 0.12);
-  --acme-topbar: rgba(255, 255, 255, 0.82);
+  --acme-sidebar: #fbfbfc;
 }
 
 /* The dark values, twice: once for a system in dark mode (unless the person
@@ -66,7 +66,7 @@
     --acme-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
     --acme-shadow-md: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.3);
     --acme-shadow-lg: 0 2px 4px rgba(0, 0, 0, 0.4), 0 12px 32px rgba(0, 0, 0, 0.5);
-    --acme-topbar: rgba(23, 23, 27, 0.82);
+    --acme-sidebar: #131316;
   }
 }
 
@@ -99,7 +99,7 @@
   --acme-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --acme-shadow-md: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.3);
   --acme-shadow-lg: 0 2px 4px rgba(0, 0, 0, 0.4), 0 12px 32px rgba(0, 0, 0, 0.5);
-  --acme-topbar: rgba(23, 23, 27, 0.82);
+  --acme-sidebar: #131316;
 }
 
 *,

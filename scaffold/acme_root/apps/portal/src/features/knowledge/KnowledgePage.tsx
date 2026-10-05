@@ -1,6 +1,5 @@
 import type { FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { AppNav } from "../../app/AppNav";
 import { errorMessage } from "../../app/errorMessage";
 import { Banner, Button, Card, DataTable, ErrorText, Muted, Page, SegmentedControl, TextArea, TextField, type Column } from "../../design/kit";
 import { tokens } from "../../design/tokens";
@@ -28,7 +27,7 @@ export function KnowledgePage() {
     vm.submit();
   };
   return (
-    <Page title="Knowledge" nav={<AppNav />} notice={<ProviderNotice />}>
+    <Page title="Knowledge" notice={<ProviderNotice />}>
       {vm.error ? <Banner>{errorMessage(vm.error, "The knowledge could not be read.")}</Banner> : null}
       <Card title="The org's knowledge" id="knowledge">
         <div style={{ display: "grid", gap: tokens.space.md }}>

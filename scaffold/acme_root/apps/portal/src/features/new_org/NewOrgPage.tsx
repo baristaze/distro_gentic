@@ -1,4 +1,3 @@
-import { AppNav } from "../../app/AppNav";
 import { Button, Card, ErrorText, Muted, Page, TextField } from "../../design/kit";
 import { tokens } from "../../design/tokens";
 import { useNewOrgVm } from "./useNewOrgVm";
@@ -6,7 +5,7 @@ import { useNewOrgVm } from "./useNewOrgVm";
 export function NewOrgPage() {
   const vm = useNewOrgVm();
   return (
-    <Page title="New organization" nav={<AppNav />}>
+    <Page title="New organization">
       <Card>
         <form
           onSubmit={(event) => {

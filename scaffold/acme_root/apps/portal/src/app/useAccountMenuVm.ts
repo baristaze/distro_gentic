@@ -3,10 +3,14 @@ import { useLogout, useMe } from "../queries/tenancy";
 import { useNoticesStore } from "../store/notices";
 import { usePreferencesStore } from "../store/preferences";
 import { noteSignedOut } from "../store/signInState";
-import { shortEmail } from "./accountModel";
+import { initialOf } from "./accountModel";
+import { useShellActions } from "./shell/shellContext";
 import { forgetSession } from "./forgetSession";
 import { signOut } from "./signOut";
 import { THEME_CHOICES } from "./themeModel";
+
+/** The platform's documentation: the README of the repository it is built from. */
+export const DOCS_URL = __DOCS_URL__;
 
 export function useAccountMenuVm() {
   const navigate = useNavigate();
@@ -15,6 +19,7 @@ export function useAccountMenuVm() {
   const notify = useNoticesStore((s) => s.notify);
   const theme = usePreferencesStore((s) => s.theme);
   const setTheme = usePreferencesStore((s) => s.setTheme);
+  const shell = useShellActions();
 
   // The server session is revoked, then the token and the cache go; the
   // realtime channel closes with the token. A sign-out finishes here even
@@ -36,15 +41,19 @@ export function useAccountMenuVm() {
     });
 
   const email = me.data?.user.email ?? "";
+  const name = me.data?.user.display_name.trim() || email;
   return {
     email,
-    shortEmail: shortEmail(email),
+    name,
+    initial: initialOf(name),
     orgName: me.data?.org.name ?? "",
     ready: me.data !== undefined,
     theme,
     themes: THEME_CHOICES,
     setTheme,
     openSettings: () => navigate("/settings"),
+    openShortcuts: shell.openShortcuts,
+    docsUrl: DOCS_URL,
     signOut: leave,
     signingOut: logout.isPending,
   };

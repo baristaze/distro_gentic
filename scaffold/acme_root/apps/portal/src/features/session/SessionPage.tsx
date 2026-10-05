@@ -1,8 +1,7 @@
-import { useCallback } from "react";
 import { Link, useParams } from "react-router-dom";
-import { AppNav } from "../../app/AppNav";
 import { errorMessage } from "../../app/errorMessage";
-import { Banner, Card, CommandPalette, Muted, Page, SegmentedControl, usePaletteKey } from "../../design/kit";
+import { usePageCommands } from "../../app/shell/shellContext";
+import { Banner, Card, Muted, Page, SegmentedControl } from "../../design/kit";
 import { SESSION_TABS } from "./sessionModel";
 import { ChangesPart, ChildrenPart, EvidencePart, LivePart, SessionHeader, ThreadPart, TimelinePart, ToolCallsPart } from "./SessionParts";
 import { useSessionVm } from "./useSessionVm";
@@ -16,11 +15,11 @@ const back = <Link to="/sessions">← Sessions</Link>;
 export function SessionPage() {
   const { sessionId = "" } = useParams();
   const vm = useSessionVm(sessionId);
-  const { setPaletteOpen } = vm;
-  usePaletteKey(useCallback(() => setPaletteOpen(true), [setPaletteOpen]));
+  // What the page can do now, offered first in the shell's search (Cmd-K).
+  usePageCommands(vm.commands);
   if (vm.missing) {
     return (
-      <Page title="No session here" back={back} nav={<AppNav />}>
+      <Page title="No session here" back={back}>
         <Card>
           <Muted>This org holds no session with this address. It may belong to another org, or it was deleted.</Muted>
         </Card>
@@ -29,13 +28,13 @@ export function SessionPage() {
   }
   if (!vm.session) {
     return (
-      <Page title="Session" back={back} nav={<AppNav />}>
+      <Page title="Session" back={back}>
         {vm.error ? <Banner>{errorMessage(vm.error, "The session could not be read.")}</Banner> : <Muted>Loading</Muted>}
       </Page>
     );
   }
   return (
-    <Page title={vm.session.title} back={back} nav={<AppNav />}>
+    <Page title={vm.session.title} back={back}>
       <SessionHeader vm={vm} />
       <div style={{ overflowX: "auto" }}>
         <SegmentedControl label="Part of the session" value={vm.tab} options={SESSION_TABS} onChange={vm.setTab} />
@@ -47,7 +46,6 @@ export function SessionPage() {
       {vm.tab === "changes" ? <ChangesPart vm={vm} /> : null}
       {vm.tab === "children" ? <ChildrenPart vm={vm} /> : null}
       {vm.tab === "live" ? <LivePart vm={vm} /> : null}
-      {vm.paletteOpen ? <CommandPalette commands={vm.commands} onClose={() => setPaletteOpen(false)} /> : null}
     </Page>
   );
 }

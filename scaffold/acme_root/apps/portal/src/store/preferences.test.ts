@@ -43,7 +43,7 @@ describe("preferences store", () => {
     const { usePreferencesStore } = await import("./preferences");
     expect(usePreferencesStore.getState().theme).toBe("system");
     usePreferencesStore.getState().setTheme("dark");
-    expect(JSON.parse(local.getItem(KEY) as string).state).toEqual({ theme: "dark" });
+    expect(JSON.parse(local.getItem(KEY) as string).state).toMatchObject({ theme: "dark" });
   });
 
   it("reads a stored theme back, and an unknown one as the system's", async () => {
@@ -61,6 +61,21 @@ describe("preferences store", () => {
     const { usePreferencesStore } = await import("./preferences");
     expect(usePreferencesStore.getState()).not.toHaveProperty("other");
     usePreferencesStore.getState().setTheme("light");
-    expect(JSON.parse(local.getItem(KEY) as string).state).toEqual({ theme: "light" });
+    expect(JSON.parse(local.getItem(KEY) as string).state).not.toHaveProperty("other");
+  });
+
+  it("keeps the left bar's width inside its bounds, its fold, and its filter", async () => {
+    local.setItem(
+      KEY,
+      JSON.stringify({ state: { sidebarWidth: 9000, sidebarFolded: "yes", sessionFilter: { owner: "mine", status: "lost" } }, version: 0 }),
+    );
+    const { usePreferencesStore, SIDEBAR } = await import("./preferences");
+    const state = usePreferencesStore.getState();
+    expect(state.sidebarWidth).toBe(SIDEBAR.max);
+    expect(state.sidebarFolded).toBe(false);
+    expect(state.sessionFilter).toEqual({ owner: "mine", status: "any", kind: "", archived: false });
+    state.setSidebarWidth(10);
+    state.toggleSidebar();
+    expect(JSON.parse(local.getItem(KEY) as string).state).toMatchObject({ sidebarWidth: SIDEBAR.min, sidebarFolded: true });
   });
 });

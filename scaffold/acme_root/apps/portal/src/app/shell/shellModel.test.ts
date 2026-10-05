@@ -1,0 +1,126 @@
+// The left bar's sessions: grouped by what they ask of a person, sub-agents
+// nested under their parent, and nothing that needs a person hidden in a
+// quieter group.
+import type { AgentSessionView, ParkView } from "@acme/client";
+import { expect, it } from "vitest";
+import { ago, DEFAULT_FILTER, groupOf, parseFilter, RECENT_MAX, shellGroups, statusWords, type ShellRow } from "./shellModel";
+
+let clock = 0;
+function session(id: string, over: Partial<AgentSessionView> = {}): AgentSessionView {
+  clock += 1;
+  return {
+    id,
+    title: `Session ${id}`,
+    kind: "engineer",
+    kind_version: 1,
+    status: "idle",
+    park: null,
+    parent_id: null,
+    root_id: over.parent_id ?? id,
+    created_by: "u1",
+    created_at: `2026-10-05T10:${String(clock).padStart(2, "0")}:00Z`,
+    archived_at: null,
+    deleted_at: null,
+    ...over,
+  };
+}
+const park = (reason: ParkView["reason"], unlock: string): ParkView => ({ reason, unlock, retry_at: null });
+const ids = (rows: readonly ShellRow[]) => rows.map((row) => row.id);
+const options = { filter: DEFAULT_FILTER, me: "u1" };
+
+it("groups rows into Needs you, Running, and Recent", () => {
+  const sessions = [
+    session("asks", { status: "parked", park: park("person", "approval") }),
+    session("runs", { status: "running" }),
+    session("starts", { status: "pending" }),
+    session("waits", { status: "parked", park: park("resource", "workspace") }),
+    session("done"),
+  ];
+  const groups = shellGroups(sessions, options);
+  expect(ids(groups.needsYou)).toEqual(["asks"]);
+  expect(ids(groups.running)).toEqual(["waits", "starts", "runs"]);
+  expect(ids(groups.recent)).toEqual(["done"]);
+});
+
+it("nests children under their parent, oldest first, and counts a session read twice once", () => {
+  const parent = session("parent", { status: "running" });
+  const first = session("first", { parent_id: "parent", root_id: "parent" });
+  const second = session("second", { parent_id: "parent", root_id: "parent", status: "running" });
+  const grandchild = session("grand", { parent_id: "second", root_id: "parent" });
+  const groups = shellGroups([second, parent, grandchild, first, parent], options);
+  expect(ids(groups.running)).toEqual(["parent"]);
+  expect(ids(groups.running[0]!.children)).toEqual(["first", "second"]);
+  expect(ids(groups.running[0]!.children[1]!.children)).toEqual(["grand"]);
+  expect(groups.recent).toEqual([]);
+});
+
+it("lifts a tree into Needs you when a child needs a person, so the child is never hidden", () => {
+  const parent = session("parent", { status: "parked", park: park("children", "children") });
+  const child = session("child", { parent_id: "parent", status: "parked", park: park("person", "approval") });
+  const groups = shellGroups([parent, child], { ...options, held: new Map([["child", "run_command"]]) });
+  expect(ids(groups.needsYou)).toEqual(["parent"]);
+  expect(groups.needsYou[0]!.children[0]).toMatchObject({ id: "child", dot: "needs", words: "Needs your decision: run_command" });
+  expect(groups.running).toEqual([]);
+});
+
+it("shows a child whose parent is not read as a row of its own", () => {
+  const groups = shellGroups([session("orphan", { parent_id: "gone", status: "running" })], options);
+  expect(ids(groups.running)).toEqual(["orphan"]);
+});
+
+it("keeps the newest thirty in Recent", () => {
+  const many = Array.from({ length: RECENT_MAX + 5 }, (_, n) => session(`s${n}`));
+  const recent = shellGroups(many, options).recent;
+  expect(recent).toHaveLength(RECENT_MAX);
+  expect(recent[0]!.id).toBe(`s${RECENT_MAX + 4}`);
+});
+
+it("narrows by owner, agent, status, and leaves the archived out unless asked", () => {
+  const sessions = [
+    session("mine"),
+    session("theirs", { created_by: "u2" }),
+    session("analysis", { kind: "analysis" }),
+    session("archived", { archived_at: "2026-10-05T11:00:00Z" }),
+    session("running", { status: "running" }),
+  ];
+  const shown = (filter: Partial<typeof DEFAULT_FILTER>) => {
+    const groups = shellGroups(sessions, { filter: { ...DEFAULT_FILTER, ...filter }, me: "u1" });
+    return [...groups.needsYou, ...groups.running, ...groups.recent].map((row) => row.id).sort();
+  };
+  expect(shown({})).toEqual(["analysis", "mine", "running", "theirs"]);
+  expect(shown({ owner: "mine" })).toEqual(["analysis", "mine", "running"]);
+  expect(shown({ kind: "analysis" })).toEqual(["analysis"]);
+  expect(shown({ status: "running" })).toEqual(["running"]);
+  expect(shown({ archived: true })).toContain("archived");
+  expect(groupOf(sessions[3]!)).toBe("recent");
+});
+
+it("says each status in words", () => {
+  expect(statusWords(session("a", { status: "parked", park: park("person", "approval") }))).toBe("Needs your decision");
+  expect(statusWords(session("b", { status: "parked", park: park("person", "principal") }))).toBe("Needs you: naming a principal for it");
+  expect(statusWords(session("c", { status: "parked", park: park("resource", "workspace") }))).toBe("Waiting for a workspace");
+  expect(statusWords(session("d", { status: "parked", park: park("pause", "resume") }))).toBe("Paused");
+  expect(statusWords(session("e", { status: "pending" }))).toBe("Starting");
+  expect(statusWords(session("f"))).toBe("Done");
+  expect(statusWords(session("g", { archived_at: "2026-10-05T11:00:00Z" }))).toBe("Archived");
+});
+
+it("reads a stored filter field by field", () => {
+  expect(parseFilter({ owner: "mine", status: "idle", kind: "analysis", archived: true })).toEqual({
+    owner: "mine",
+    status: "idle",
+    kind: "analysis",
+    archived: true,
+  });
+  expect(parseFilter({ owner: "all", status: "gone", kind: 3 })).toEqual(DEFAULT_FILTER);
+  expect(parseFilter(null)).toEqual(DEFAULT_FILTER);
+});
+
+it("says how long ago, in the row's short words", () => {
+  const now = new Date("2026-10-05T12:00:00Z");
+  expect(ago("2026-10-05T11:59:30Z", now)).toBe("now");
+  expect(ago("2026-10-05T11:55:00Z", now)).toBe("5m");
+  expect(ago("2026-10-05T09:00:00Z", now)).toBe("3h");
+  expect(ago("2026-10-03T12:00:00Z", now)).toBe("2d");
+  expect(ago("not a time", now)).toBe("");
+});

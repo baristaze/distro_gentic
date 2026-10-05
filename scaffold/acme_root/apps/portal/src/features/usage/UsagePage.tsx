@@ -1,4 +1,3 @@
-import { AppNav } from "../../app/AppNav";
 import { errorMessage } from "../../app/errorMessage";
 import { Banner, Button, Card, DataTable, Muted, Page, Pill, type Column } from "../../design/kit";
 import { tokens } from "../../design/tokens";
@@ -22,7 +21,7 @@ const COLUMNS: Column<UsageRow>[] = [
 export function UsagePage() {
   const vm = useUsageVm();
   return (
-    <Page title="Usage" nav={<AppNav />} notice={<ProviderNotice />}>
+    <Page title="Usage" notice={<ProviderNotice />}>
       {vm.error ? <Banner>{errorMessage(vm.error, "The usage could not be read.")}</Banner> : null}
       <Card title="Budgets" id="usage">
         <div style={{ display: "grid", gap: tokens.space.md }}>

@@ -1,63 +1,43 @@
-import { useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { runtimeConfig } from "../../app/config";
-import { errorMessage } from "../../app/errorMessage";
-import { useAgentSessions, useStartSession } from "../../queries/agentSessions";
-import { useProjects } from "../../queries/projects";
+import { useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
+import { useSlot } from "../../app/slot";
+import { useAgentSessions } from "../../queries/agentSessions";
 import { useMe } from "../../queries/tenancy";
-import {
-  projectChoice,
-  projectRequired,
-  sessionRow,
-  startRequest,
-  statusFilter,
-  type NewSessionDraft,
-  type StatusFilter,
-} from "./sessionsModel";
+import { listed, listFilterParams, narrowed, readListFilter, serverStatus, sessionRow, type ListFilter } from "./sessionsModel";
 
-/** The tenant's sessions in the status the address bar names, a page at a
- * time, and a new one started from a title, a kind, and the project it works
- * in. A member who may not write sees the list and no form. */
+/** All sessions: the tenant's sessions in the status the address bar names,
+ * a page at a time, narrowed to whose they are, the agent, the archived,
+ * and words of the title. The filter lives in the address bar, so a link
+ * keeps it. */
 export function useSessionsVm() {
   const [params, setParams] = useSearchParams();
-  const filter = statusFilter(params.get("status"));
-  const list = useAgentSessions(filter === "any" ? null : filter);
+  const filter = readListFilter(params);
+  const list = useAgentSessions(serverStatus(filter.status));
   const me = useMe();
-  const mayWrite = me.data?.permissions.includes("write") ?? false;
-  const projects = useProjects(mayWrite);
-  const required = projectRequired(runtimeConfig().environment);
-  const choice = projectChoice(projects.data ?? null, required);
-  const start = useStartSession();
-  const navigate = useNavigate();
-  const [draft, setDraft] = useState<NewSessionDraft>({ title: "", kind: "", projectId: "" });
-  const [problem, setProblem] = useState<string | null>(null);
-  const submit = () => {
-    const made = startRequest(draft, { required, count: projects.data?.length ?? 0 });
-    if ("problem" in made) {
-      setProblem(made.problem);
-      return;
-    }
-    setProblem(null);
-    start.mutate(made.request, {
-      onSuccess: (session) => navigate(`/sessions/${session.id}`),
-      onError: (caught) => setProblem(errorMessage(caught, "The session did not start.")),
-    });
-  };
+  const slot = useSlot();
+  const meId = me.data?.user.id ?? null;
+  const rows = useMemo(
+    () => (list.data ? listed(list.data, filter, meId).map(sessionRow) : null),
+    // The filter is read from the address bar on every render; its parts are the keys.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [list.data, filter.status, filter.owner, filter.kind, filter.archived, filter.query, meId],
+  );
+  const kinds = useMemo(() => {
+    const named = slot.agents.map((agent) => ({ value: agent.kind, label: agent.label }));
+    const seen = [...new Set((list.data ?? []).map((session) => session.kind))]
+      .filter((kind) => !named.some((agent) => agent.value === kind))
+      .map((kind) => ({ value: kind, label: kind }));
+    return [{ value: "", label: "Any agent" }, ...named, ...seen];
+  }, [slot.agents, list.data]);
   return {
     filter,
-    setFilter: (next: StatusFilter) => setParams(next === "any" ? {} : { status: next }),
-    rows: list.data?.map(sessionRow) ?? null,
+    setFilter: (change: Partial<ListFilter>) => setParams(listFilterParams({ ...filter, ...change }), { replace: true }),
+    narrowed: narrowed(filter) || filter.status !== "any",
+    kinds,
+    rows,
     error: list.error,
     hasMore: list.hasNextPage,
     loadingMore: list.isFetchingNextPage,
     loadMore: () => void list.fetchNextPage(),
-    mayWrite,
-    draft,
-    setDraft,
-    projectOptions: choice.options,
-    // What the form says: the last start's problem, or why none can start.
-    problem: problem ?? (projects.error ? errorMessage(projects.error, "The projects could not be read.") : choice.problem),
-    submit,
-    starting: start.isPending,
   };
 }

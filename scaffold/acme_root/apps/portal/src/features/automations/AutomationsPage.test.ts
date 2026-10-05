@@ -11,7 +11,6 @@ import { AutomationsPage } from "./AutomationsPage";
 
 const net = vi.hoisted(() => ({}) as ReturnType<typeof newNet>);
 vi.mock("../../app/api", async () => (await import("../screenTesting")).fakeApi(net));
-vi.mock("../../app/AppNav", () => ({ AppNav: () => null }));
 vi.mock("../../app/config", () => ({ runtimeConfig: () => ({ environment: "local" }) }));
 vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 

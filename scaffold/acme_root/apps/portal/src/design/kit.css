@@ -9,27 +9,6 @@
   font-size: 14px;
 }
 
-.acme-topbar {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  padding: 10px clamp(16px, 4vw, 40px);
-  border-bottom: 1px solid var(--acme-border);
-}
-
-/* The blur sits on a layer of its own: a backdrop-filter on the bar itself
-   would pin the live dot, a fixed child, to the bar instead of the window. */
-.acme-topbar::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background: var(--acme-topbar);
-  backdrop-filter: saturate(180%) blur(12px);
-  -webkit-backdrop-filter: saturate(180%) blur(12px);
-}
-
-.acme-topbar-inner,
 .acme-column {
   max-width: 880px;
   margin: 0 auto;
@@ -426,35 +405,21 @@ select.acme-field {
   color: var(--acme-text);
 }
 
-/* The chrome: the org chip on the left, the settings gear and the account
-   menu on the right. */
-.acme-nav {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-}
-
-.acme-nav-end {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-  margin-left: auto;
-}
-
 /* The chip is two controls in one frame: the org's name, which goes home,
    and the caret, which opens the switcher. */
 .acme-org-chip {
   display: inline-flex;
   align-items: center;
-  flex-shrink: 0;
+  min-width: 0;
   gap: 2px;
 }
 
+/* A long name ends in an ellipsis, so the caret and the bar's own buttons
+   stay in reach. */
 .acme-org-home {
   display: inline-flex;
   align-items: center;
+  min-width: 0;
   gap: 8px;
   font-weight: 600;
   color: var(--acme-text);
@@ -485,7 +450,19 @@ select.acme-field {
     color 120ms ease;
 }
 
+.acme-org-chip > :not(.acme-org-home) {
+  flex-shrink: 0;
+}
+
+.acme-org-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .acme-org-caret {
+  flex-shrink: 0;
   justify-content: center;
   width: 24px;
   height: 32px;
@@ -511,36 +488,9 @@ select.acme-field {
   cursor: default;
 }
 
-/* The account's address in its button: cut short with an ellipsis when the
-   bar is tight, and only the part before the @ on a narrow window. */
-.acme-account-email {
-  min-width: 0;
-  max-width: 240px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.acme-account-email[data-short] {
-  display: none;
-}
-
-@media (max-width: 600px) {
-  .acme-account-email {
-    max-width: 120px;
-  }
-
-  .acme-account-email[data-short] {
-    display: inline;
-  }
-
-  .acme-account-email:not([data-short]) {
-    display: none;
-  }
-}
-
 .acme-org-avatar {
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: center;
   width: 24px;
@@ -1193,7 +1143,24 @@ select.acme-field {
 }
 
 .acme-palette-option {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
   cursor: pointer;
+}
+
+.acme-palette-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acme-palette-hint {
+  flex-shrink: 0;
+  color: var(--acme-muted);
+  font-size: 12px;
 }
 
 .acme-palette-option[aria-selected="true"] {
@@ -1257,4 +1224,696 @@ select.acme-field {
 .acme-facts dd {
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+/* Keys, as a shortcut names them: "⌘K". */
+.acme-keys {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 5px;
+  min-height: 18px;
+  border: 1px solid var(--acme-border);
+  border-radius: 4px;
+  background: var(--acme-surface-subtle);
+  color: var(--acme-muted);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.acme-menu-item .acme-keys {
+  margin-left: auto;
+}
+
+/* A tooltip: the tooltip's colours, fixed to the window beside its control. */
+.acme-tip-anchor {
+  display: inline-flex;
+  min-width: 0;
+}
+
+.acme-tooltip:not([hidden]) {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 60;
+  max-width: 280px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: var(--acme-tooltip-bg);
+  color: var(--acme-tooltip-text);
+  box-shadow: var(--acme-shadow-md);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  pointer-events: none;
+  white-space: normal;
+}
+
+.acme-tooltip-keys {
+  font-family: inherit;
+  font-size: 11px;
+  opacity: 0.7;
+  white-space: nowrap;
+}
+
+/* The ⓘ beside a field's name. */
+.acme-info-tip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--acme-muted);
+  cursor: help;
+}
+
+.acme-info-tip:hover {
+  color: var(--acme-text);
+}
+
+/* A panel of controls that opens from a button. */
+.acme-popover {
+  background: var(--acme-surface);
+  border: 1px solid var(--acme-border);
+  border-radius: 10px;
+  box-shadow: var(--acme-shadow-lg);
+  padding: 12px;
+  animation: acme-pop-in 120ms ease-out;
+}
+
+/* A checkbox with its words. */
+.acme-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* The shell: the left bar beside the page on show. Each scrolls on its own. */
+.acme-shell {
+  display: grid;
+  grid-template-columns: var(--acme-sidebar-width, 260px) minmax(0, 1fr);
+  height: 100vh;
+}
+
+.acme-shell[data-folded] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.acme-main {
+  position: relative;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.acme-main > .acme-app {
+  min-height: 100%;
+}
+
+.acme-unfold {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 5;
+}
+
+.acme-sidebar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: 100vh;
+  background: var(--acme-sidebar);
+  border-right: 1px solid var(--acme-border);
+}
+
+.acme-sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 10px 10px 6px;
+}
+
+.acme-sidebar-head > .acme-tip-anchor {
+  flex-shrink: 0;
+}
+
+.acme-sidebar-top {
+  display: grid;
+  gap: 2px;
+  padding: 4px 10px 8px;
+}
+
+.acme-side-search,
+.acme-side-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--acme-text);
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.acme-side-search {
+  margin-bottom: 4px;
+  border-color: var(--acme-border);
+  background: var(--acme-surface);
+  color: var(--acme-muted);
+}
+
+.acme-side-search:hover,
+.acme-side-link:hover {
+  background: var(--acme-surface-subtle);
+}
+
+.acme-side-link[aria-current="page"] {
+  background: var(--acme-accent-soft);
+  color: var(--acme-link);
+  font-weight: 550;
+}
+
+.acme-side-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.acme-side-nav {
+  display: grid;
+  gap: 2px;
+}
+
+.acme-side-count {
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--acme-accent-soft);
+  color: var(--acme-link);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+}
+
+.acme-side-sessions-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 10px 4px 20px;
+  border-top: 1px solid var(--acme-border);
+}
+
+.acme-side-heading {
+  flex: 1 1 auto;
+  color: var(--acme-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.acme-filter-trigger {
+  position: relative;
+  width: 28px;
+  height: 28px;
+}
+
+.acme-filter-on {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--acme-accent);
+}
+
+.acme-filter-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.acme-side-viewall {
+  padding: 4px 8px;
+  border-radius: 6px;
+  color: var(--acme-muted);
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.acme-side-viewall:hover {
+  background: var(--acme-surface-subtle);
+  color: var(--acme-text);
+}
+
+.acme-sidebar-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 10px 12px;
+}
+
+.acme-side-note,
+.acme-side-empty {
+  margin: 8px 10px;
+  color: var(--acme-muted);
+  font-size: 13px;
+}
+
+.acme-side-empty p {
+  margin: 0 0 6px;
+}
+
+.acme-side-group + .acme-side-group {
+  margin-top: 6px;
+}
+
+.acme-side-group-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 10px 4px;
+  color: var(--acme-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.acme-side-group-count {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.acme-side-rows,
+.acme-row-children {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.acme-row-children {
+  margin-left: 15px;
+  padding-left: 8px;
+  border-left: 1px solid var(--acme-border);
+}
+
+.acme-side-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  color: var(--acme-text);
+  text-decoration: none;
+  transition: background-color 120ms ease;
+}
+
+.acme-side-row:hover {
+  background: var(--acme-surface-subtle);
+}
+
+.acme-side-row[aria-current="page"] {
+  background: var(--acme-accent-soft);
+}
+
+.acme-row-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--acme-border-strong);
+}
+
+.acme-row-dot[data-dot="needs"] {
+  background: var(--acme-pending);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--acme-pending) 22%, transparent);
+}
+
+.acme-row-dot[data-dot="running"] {
+  background: var(--acme-live);
+  animation: acme-pulse 1.6s ease-in-out infinite;
+}
+
+.acme-row-dot[data-dot="waiting"] {
+  background: var(--acme-muted);
+}
+
+.acme-row-dot[data-dot="archived"] {
+  background: transparent;
+  border: 1px solid var(--acme-border-strong);
+}
+
+.acme-row-main {
+  display: grid;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.acme-row-title,
+.acme-row-words {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acme-row-title {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.acme-row-words {
+  color: var(--acme-muted);
+  font-size: 12px;
+}
+
+.acme-side-row[data-dot="needs"] .acme-row-words {
+  color: var(--acme-warning-text);
+}
+
+.acme-row-ago {
+  flex-shrink: 0;
+  color: var(--acme-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 20px;
+}
+
+.acme-sidebar-foot {
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--acme-border);
+}
+
+/* The edge of the left bar: drag it, or move it by the arrows. */
+.acme-splitter {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  bottom: 0;
+  z-index: 4;
+  width: 6px;
+  cursor: col-resize;
+}
+
+.acme-splitter:hover,
+.acme-splitter:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--acme-accent) 35%, transparent);
+}
+
+/* The user chip: the avatar with the live dot on its corner, the name, the org. */
+.acme-user-chip {
+  position: relative;
+}
+
+.acme-user-chip > div {
+  width: 100%;
+}
+
+.acme-user-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--acme-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.acme-user-trigger:not(:disabled):hover,
+.acme-user-trigger[aria-expanded="true"] {
+  background: var(--acme-surface-subtle);
+}
+
+.acme-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--acme-accent);
+  color: var(--acme-accent-text);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.acme-user-lines {
+  display: grid;
+  flex: 1 1 auto;
+  min-width: 0;
+  line-height: 1.3;
+}
+
+.acme-user-name,
+.acme-user-org {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acme-user-name {
+  font-size: 13px;
+  font-weight: 550;
+}
+
+.acme-user-org {
+  color: var(--acme-muted);
+  font-size: 12px;
+}
+
+.acme-user-caret {
+  color: var(--acme-muted);
+  transform: rotate(180deg);
+}
+
+.acme-connection {
+  position: absolute;
+  top: 26px;
+  left: 28px;
+  padding: 2px;
+  border-radius: 50%;
+}
+
+.acme-connection-dot {
+  display: block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--acme-pending);
+}
+
+.acme-connection-dot[data-tone="live"] {
+  background: var(--acme-live);
+}
+
+.acme-connection-tip:not([hidden]) {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 6px);
+  white-space: nowrap;
+}
+
+/* The keys the portal answers, in the shortcuts dialog. */
+.acme-shortcuts {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.acme-shortcuts > div {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.acme-shortcuts dd {
+  margin: 0;
+}
+
+/* Filters in a row that wraps. */
+.acme-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 16px;
+}
+
+/* Home: one box in the middle of the page, its chips under it, and three
+   starter prompts. */
+.acme-home {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 18vh clamp(16px, 4vw, 40px) 64px;
+}
+
+.acme-home-ask {
+  margin: 0 0 4px;
+  font-size: 26px;
+  font-weight: 650;
+  text-align: center;
+}
+
+.acme-composer {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--acme-border-strong);
+  border-radius: 14px;
+  background: var(--acme-surface);
+  box-shadow: var(--acme-shadow-md);
+}
+
+.acme-composer:focus-within {
+  border-color: var(--acme-accent);
+  box-shadow: 0 0 0 3px var(--acme-focus-ring);
+}
+
+.acme-composer .acme-field {
+  min-height: 96px;
+  padding: 4px;
+  border: 0 !important;
+  box-shadow: none !important;
+  resize: none;
+  font-size: 15px;
+}
+
+.acme-composer-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.acme-composer-gap {
+  flex: 1 1 auto;
+}
+
+/* A chip: a small rounded button that opens a menu of choices. */
+.acme-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  max-width: 260px;
+  padding: 0 10px;
+  border: 1px solid var(--acme-border);
+  border-radius: 999px;
+  background: var(--acme-surface);
+  color: var(--acme-text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.acme-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acme-chip:not(:disabled):hover,
+.acme-chip[aria-expanded="true"] {
+  background: var(--acme-surface-subtle);
+}
+
+.acme-chip:disabled {
+  color: var(--acme-muted);
+  cursor: default;
+}
+
+/* A choice with a line about it, in a chip's menu. */
+.acme-choice {
+  display: grid;
+  gap: 2px;
+  white-space: normal;
+}
+
+.acme-choice-about {
+  color: var(--acme-muted);
+  font-size: 12px;
+}
+
+.acme-send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--acme-accent);
+  color: var(--acme-accent-text);
+  cursor: pointer;
+}
+
+.acme-send:not(:disabled):hover {
+  background: var(--acme-accent-hover);
+}
+
+.acme-send:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.acme-starters {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.acme-starter {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--acme-border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--acme-muted);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.acme-starter:not(:disabled):hover {
+  background: var(--acme-surface);
+  color: var(--acme-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .acme-row-dot[data-dot="running"],
+  .acme-popover {
+    animation: none;
+  }
 }

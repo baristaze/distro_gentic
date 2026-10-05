@@ -1,5 +1,4 @@
 import type { FormEvent } from "react";
-import { AppNav } from "../../app/AppNav";
 import { errorMessage } from "../../app/errorMessage";
 import { Banner, Button, Card, ErrorText, Markdown, Muted, Page, TextArea, TextField } from "../../design/kit";
 import { tokens } from "../../design/tokens";
@@ -21,7 +20,7 @@ export function PlaybooksPage() {
     vm.submit();
   };
   return (
-    <Page title="Playbooks" nav={<AppNav />} notice={<ProviderNotice />}>
+    <Page title="Playbooks" notice={<ProviderNotice />}>
       <Card title="Open a playbook" id="open">
         <form onSubmit={onFind} style={{ display: "flex", gap: tokens.space.sm, alignItems: "end", flexWrap: "wrap" }} aria-label="Open a playbook">
           <TextField label="Playbook name" value={vm.lookup} placeholder="release-notes" onChange={vm.setLookup} />

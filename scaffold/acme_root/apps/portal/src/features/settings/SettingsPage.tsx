@@ -1,5 +1,6 @@
+import { Link } from "react-router-dom";
+import { useSlot } from "../../app/slot";
 import { Banner, Button, Card, ErrorText, LinkButton, Muted, Page, Select, Table, TextField } from "../../design/kit";
-import { AppNav } from "../../app/AppNav";
 import { tokens } from "../../design/tokens";
 import { DeleteAccountCard } from "./DeleteAccountCard";
 import { DeleteOrgCard } from "./DeleteOrgCard";
@@ -15,9 +16,22 @@ export function SettingsPage() {
   const invites = useInvitationsVm(vm.me);
   const leaving = useDeleteAccountVm(vm.me);
   const closing = useDeleteOrgVm(vm.me);
+  const sections = useSlot().settings;
   return (
-    <Page title="Settings" nav={<AppNav />}>
+    <Page title="Settings">
       {vm.error ? <Banner>{vm.error.message}</Banner> : null}
+      {sections.length > 0 ? (
+        <Card title="Sections" id="sections">
+          <ul aria-label="Sections" style={{ margin: 0, paddingLeft: tokens.space.lg, display: "grid", gap: tokens.space.sm }}>
+            {sections.map((section) => (
+              <li key={section.id}>
+                <Link to={section.routes[0]?.path ?? "/settings"}>{section.label}</Link>
+                <Muted>: {section.about}</Muted>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
       <Card title="Members" id="members">
         {vm.loading ? (
           <Muted>Loading</Muted>

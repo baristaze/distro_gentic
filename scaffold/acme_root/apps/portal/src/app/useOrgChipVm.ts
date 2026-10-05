@@ -43,5 +43,8 @@ export function useOrgChipVm() {
     switching: exchange.isPending,
     pick,
     newOrg: () => navigate("/orgs/new"),
+    openSettings: () => navigate("/settings"),
+    mayInvite: me.data?.permissions.includes("manage_members") ?? false,
+    invite: () => navigate("/settings#members"),
   };
 }

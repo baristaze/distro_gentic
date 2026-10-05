@@ -1,5 +1,4 @@
 import { Link, useParams } from "react-router-dom";
-import { AppNav } from "../../app/AppNav";
 import { errorMessage } from "../../app/errorMessage";
 import { Banner, Button, Card, Markdown, Muted, Page, Pill } from "../../design/kit";
 import { tokens } from "../../design/tokens";
@@ -17,7 +16,7 @@ export function AutomationPage() {
   const vm = useAutomationVm(automationId);
   if (vm.missing) {
     return (
-      <Page title="No automation here" back={back} nav={<AppNav />}>
+      <Page title="No automation here" back={back}>
         <Card>
           <Muted>This org holds no automation with this address. It may belong to another org.</Muted>
         </Card>
@@ -26,14 +25,14 @@ export function AutomationPage() {
   }
   if (!vm.automation) {
     return (
-      <Page title="Automation" back={back} nav={<AppNav />}>
+      <Page title="Automation" back={back}>
         {vm.error ? <Banner>{errorMessage(vm.error, "The automation could not be read.")}</Banner> : <Muted>Loading</Muted>}
       </Page>
     );
   }
   const automation = vm.automation;
   return (
-    <Page title={automation.name} back={back} nav={<AppNav />} notice={<ProviderNotice />}>
+    <Page title={automation.name} back={back} notice={<ProviderNotice />}>
       {vm.saved ? <Banner>The automation is saved.</Banner> : null}
       <Card title="What it does" id="automation">
         <dl

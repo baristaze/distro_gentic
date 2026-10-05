@@ -1,6 +1,18 @@
 import { describe, expect, it } from "vitest";
 import type { AgentSessionView } from "@acme/client";
-import { NO_PROJECT, projectChoice, projectRequired, sessionRow, startRequest, statusFilter, TITLE_MAX } from "./sessionsModel";
+import {
+  listed,
+  listFilterParams,
+  NO_PROJECT,
+  projectChoice,
+  projectRequired,
+  readListFilter,
+  serverStatus,
+  sessionRow,
+  startRequest,
+  statusFilter,
+  TITLE_MAX,
+} from "./sessionsModel";
 
 const session: AgentSessionView = {
   id: "s1",
@@ -23,7 +35,39 @@ describe("sessions model", () => {
   });
 
   it("reads a status filter from the address bar, and anything else as every status", () => {
-    expect([statusFilter("parked"), statusFilter("bogus"), statusFilter(null)]).toEqual(["parked", "any", "any"]);
+    expect([statusFilter("parked"), statusFilter("needs_you"), statusFilter("bogus"), statusFilter(null)]).toEqual([
+      "parked",
+      "needs_you",
+      "any",
+      "any",
+    ]);
+    expect([serverStatus("any"), serverStatus("needs_you"), serverStatus("idle")]).toEqual([null, "parked", "idle"]);
+  });
+
+  it("keeps the whole filter in the address bar, and only what narrows the list", () => {
+    const filter = readListFilter(new URLSearchParams("needs=you&owner=mine&agent=analysis&archived=1&q=flaky"));
+    expect(filter).toEqual({ status: "needs_you", owner: "mine", kind: "analysis", archived: true, query: "flaky" });
+    expect(listFilterParams(filter)).toEqual({ status: "needs_you", owner: "mine", agent: "analysis", archived: "1", q: "flaky" });
+    expect(listFilterParams(readListFilter(new URLSearchParams("owner=all")))).toEqual({});
+  });
+
+  it("narrows the sessions read to whose they are, the agent, the archived, the title's words, and those that need a person", () => {
+    const one = (id: string, over: Partial<AgentSessionView>): AgentSessionView => ({ ...session, id, title: id, ...over });
+    const sessions = [
+      one("Flaky test", { created_by: "u1", kind: "engineer" }),
+      one("Docs", { created_by: "u2", kind: "analysis" }),
+      one("Old", { created_by: "u1", archived_at: "2026-10-04T00:00:00Z" }),
+      one("Asks", { status: "parked", park: { reason: "person", unlock: "approval", retry_at: null } }),
+      one("Waits", { status: "parked", park: { reason: "provider", unlock: "provider", retry_at: null } }),
+    ];
+    const ids = (filter: Partial<Parameters<typeof listed>[1]>) =>
+      listed(sessions, { status: "any", owner: "everyone", kind: "", archived: false, query: "", ...filter }, "u1").map((each) => each.id);
+    expect(ids({})).toEqual(["Flaky test", "Docs", "Asks", "Waits"]);
+    expect(ids({ owner: "mine" })).toEqual(["Flaky test", "Asks", "Waits"]);
+    expect(ids({ kind: "analysis" })).toEqual(["Docs"]);
+    expect(ids({ archived: true })).toContain("Old");
+    expect(ids({ query: "FLAKY" })).toEqual(["Flaky test"]);
+    expect(ids({ status: "needs_you" })).toEqual(["Asks"]);
   });
 
   it("starts a session only with a title and a kind, trimmed", () => {
