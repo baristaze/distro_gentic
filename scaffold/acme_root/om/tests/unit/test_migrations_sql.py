@@ -1,5 +1,7 @@
 """The migration files obey the role rules without a database."""
 
+from pathlib import Path
+
 import pytest
 
 from acme.om.media.types.file import FileStatus
@@ -75,6 +77,37 @@ def test_a_function_is_checked_by_its_schema_alone() -> None:
     check_role_of_sql(DatabaseRole.CORE, "DROP FUNCTION core.touch_updated_at()")
     with pytest.raises(RuntimeError):
         check_role_of_sql(DatabaseRole.CORE, "CREATE FUNCTION queue.f() RETURNS trigger")
+
+
+def test_a_table_one_chain_drops_passes_that_role_and_fails_another(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Only a role's own up files make a dropped table: a down file's drop does
+    not, and neither does a drop of a name the live role map gives another role."""
+    for role, up, down in (
+        (DatabaseRole.CORE, "DROP TABLE IF EXISTS core.retired_ledgers", "DROP TABLE core.ghosts"),
+        (DatabaseRole.QUEUE, "DROP TABLE queue.orgs", ""),
+    ):
+        sql = tmp_path / "sql" / role.value
+        sql.mkdir(parents=True)
+        (sql / "202601010000_retire.up.sql").write_text(f"{up};\n")
+        (sql / "202601010000_retire.down.sql").write_text(f"{down};\n")
+    monkeypatch.setattr("acme.om.storage.migrate.MIGRATIONS_DIR", tmp_path)
+    dropped_tables.cache_clear()
+    try:
+        assert dropped_tables(DatabaseRole.CORE) == {"retired_ledgers"}
+        assert dropped_tables(DatabaseRole.QUEUE) == frozenset()
+        check_role_of_sql(DatabaseRole.CORE, "CREATE TABLE core.retired_ledgers (id uuid)")
+        with pytest.raises(LookupError):
+            check_role_of_sql(DatabaseRole.QUEUE, "CREATE TABLE queue.retired_ledgers (id uuid)")
+        with pytest.raises(RuntimeError):
+            check_role_of_sql(DatabaseRole.QUEUE, "DROP TABLE core.retired_ledgers")
+        with pytest.raises(LookupError):
+            check_role_of_sql(DatabaseRole.CORE, "CREATE TABLE core.ghosts (id uuid)")
+        with pytest.raises(RuntimeError):
+            check_role_of_sql(DatabaseRole.QUEUE, "CREATE TABLE queue.orgs (id uuid)")
+    finally:
+        dropped_tables.cache_clear()
 
 
 @pytest.mark.parametrize("role", list(DatabaseRole))

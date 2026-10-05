@@ -4,7 +4,7 @@ secret on the far side of its session's wall is refused, at its gate and
 again before it runs, and never reaches a transport. And every call that
 runs has its audit entry written first, with its four answers apart."""
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -56,6 +56,7 @@ class ToolsManagerTrustedImpl(ToolsManagerInterface):
         *,
         holds_private: bool = True,
         tree_deadline: datetime | None = None,
+        above: Sequence[PolicyLayer] = (),
     ) -> Gate:
         resolved = await self._resolved(ctx, registry, request)
         if isinstance(resolved, Step):
@@ -69,6 +70,7 @@ class ToolsManagerTrustedImpl(ToolsManagerInterface):
             workspace,
             holds_private=holds_private,
             tree_deadline=tree_deadline,
+            above=above,
         )
 
     async def execute(

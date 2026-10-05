@@ -4,7 +4,7 @@ policy beneath says, and a call a gate holds for approval runs only on a
 person's approval of exactly that call, as the tenant's approvers decide
 it. A call the policy beneath refuses or holds stays refused or held."""
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -13,6 +13,7 @@ from acme.infra.transports import OutputSink
 from acme.infra.workspaces import IsolationSpec, Workspace
 from acme.om.base import new_id, utcnow
 from acme.om.context import TenantContext
+from acme.om.exceptions import NotFound
 from acme.om.playbooks.manager import PlaybooksManagerInterface
 from acme.om.playbooks.rules import narrowed
 from acme.om.steps import StepsManagerInterface
@@ -20,7 +21,7 @@ from acme.om.steps.types.header import ToolFailure, ToolRequestHeader
 from acme.om.steps.types.step import Step
 from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.tools.registry import ToolRegistry
-from acme.om.tools.rules import approver_roles, response, verdict
+from acme.om.tools.rules import approver_roles, response, strictest, verdict
 from acme.om.tools.types.call import Gate, GateOutcome, JobHandle, JobNotStarted, Verdict
 from acme.om.tools.types.policy import Decision, PolicyLayer, ToolPolicy
 
@@ -55,6 +56,7 @@ class ToolsManagerPlaybooksImpl(ToolsManagerInterface):
         *,
         holds_private: bool = True,
         tree_deadline: datetime | None = None,
+        above: Sequence[PolicyLayer] = (),
     ) -> Gate:
         beneath = await self._inner.gate(
             ctx,
@@ -65,6 +67,7 @@ class ToolsManagerPlaybooksImpl(ToolsManagerInterface):
             workspace,
             holds_private=holds_private,
             tree_deadline=tree_deadline,
+            above=above,
         )
         if beneath.outcome is not GateOutcome.RUN:
             return beneath
@@ -213,7 +216,12 @@ class ToolsManagerPlaybooksImpl(ToolsManagerInterface):
         header = request.header
         if not isinstance(header, ToolRequestHeader):
             return decided
-        gates = await self._playbooks().gates_of(ctx, request.session_id)
+        try:
+            gates = await self._playbooks().gates_of(ctx, request.session_id)
+        except NotFound:
+            # A session of its chain cannot be read, nor the gates it
+            # invoked: the call waits for a person rather than run past them.
+            return strictest(decided, Decision.APPROVE)
         return narrowed(decided, gates, header.tool, header.authorization_class)
 
     async def _approvers(self, ctx: TenantContext, request: Step) -> tuple[Any, ...]:

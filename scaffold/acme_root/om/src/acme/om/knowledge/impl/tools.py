@@ -7,7 +7,7 @@ A session's subject is its title and what its principals said to it so
 far. A session that has made a model request recalls nothing more here;
 an entry recalled once is never recalled twice."""
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -70,6 +70,7 @@ class ToolsManagerRecallImpl(ToolsManagerInterface):
         *,
         holds_private: bool = True,
         tree_deadline: datetime | None = None,
+        above: Sequence[PolicyLayer] = (),
     ) -> Gate:
         return await self._inner.gate(
             ctx,
@@ -80,6 +81,7 @@ class ToolsManagerRecallImpl(ToolsManagerInterface):
             workspace,
             holds_private=holds_private,
             tree_deadline=tree_deadline,
+            above=above,
         )
 
     async def execute(
