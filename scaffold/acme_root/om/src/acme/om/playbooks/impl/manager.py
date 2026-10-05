@@ -128,13 +128,21 @@ class PlaybooksManagerImpl(PlaybooksManagerInterface):
     async def gates_of(self, ctx: TenantContext, session_id: UUID) -> tuple[PlaybookGate, ...]:
         ctx.require(Permission.READ)
         gates: list[PlaybookGate] = []
-        invocations = await self._storage.read_invocations(
-            ctx.org_id, session_id, self._options.per_session
-        )
-        for invocation in invocations:
-            playbook = await self._storage.read_playbook(ctx.org_id, invocation.playbook_id)
-            if playbook is not None:
-                gates.extend(playbook.gates)
+        at: UUID | None = session_id
+        while at is not None:
+            invocations = await self._storage.read_invocations(
+                ctx.org_id, at, self._options.per_session
+            )
+            for invocation in invocations:
+                playbook = await self._storage.read_playbook(ctx.org_id, invocation.playbook_id)
+                if playbook is not None:
+                    gates.extend(playbook.gates)
+            try:
+                at = (await self._sessions.get_session(ctx, at)).parent_id
+            except NotFound:
+                # Marked deleted: its own gates still hold, and no session
+                # above it can be read.
+                break
         return tuple(gates)
 
     async def purge_tenant(self, ctx: TenantContext) -> int:

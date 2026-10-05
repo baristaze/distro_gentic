@@ -44,7 +44,8 @@ class PlaybooksManagerInterface(ABC):
 
     @abstractmethod
     async def gates_of(self, ctx: TenantContext, session_id: UUID) -> tuple[PlaybookGate, ...]:
-        """The gates of every playbook the session invoked."""
+        """The gates of every playbook the session, or a session above it in
+        its tree, invoked: a sub-agent meets every gate its ancestors met."""
         ...
 
     @abstractmethod
