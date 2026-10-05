@@ -17,7 +17,8 @@ kinds of thing [Acme is made of](../../../../README.md).
 - **Publish** the next version of a name, by a person in person.
 - **Invoke** a version in a session, by a principal in person who may
   instruct it. Its brief arrives as that principal's message, and its
-  gates hold there, and in every sub-agent below it, from then on.
+  gates hold there, and in every sub-agent below it, from then on, a
+  session between them marked deleted or not.
 
 ## The rules
 
@@ -33,4 +34,6 @@ kinds of thing [Acme is made of](../../../../README.md).
 
 A root wraps its tools manager in the playbooks layer, so every call of
 a session passes, after the policy beneath it, the gates of the
-playbooks it and each session above it invoked.
+playbooks it and each session above it invoked. Where a session of that
+chain cannot be read, its gates are unknown, and the call waits for a
+person.
