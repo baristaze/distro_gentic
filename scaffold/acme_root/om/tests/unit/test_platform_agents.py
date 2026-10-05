@@ -136,7 +136,7 @@ def shipped_catalog() -> tuple[ToolInterface, ...]:
         unbound,  # pyright: ignore[reportArgumentType]
         unbound,  # pyright: ignore[reportArgumentType]
         unbound,  # pyright: ignore[reportArgumentType]
-        unbound,
+        unbound,  # pyright: ignore[reportArgumentType]
     )
     return *engine, *with_shipped(
         PlatformAgents(corpus=CORPUS),
