@@ -58,7 +58,7 @@ it("refuses a product's page at a platform address, whatever its parameter is ca
 
 it("refuses a product's settings page at a platform address, and a page at a platform setting's", () => {
   expect(
-    refusal({ settings: [{ group: "Lab", id: "lab", label: "Lab", icon: null, about: "", routes: [{ path: "/sessions", element: page }] }] }),
+    refusal({ settings: [{ group: "Extras", id: "extras", label: "Extras", icon: null, about: "", routes: [{ path: "/sessions", element: page }] }] }),
   ).toContain('address "/sessions"');
   expect(refusal({ routes: [{ path: "/projects", element: page }] })).toContain('address "/projects"');
 });
