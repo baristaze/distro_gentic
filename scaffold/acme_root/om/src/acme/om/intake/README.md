@@ -80,6 +80,11 @@ of](../../../../README.md).
 - **An account is linked by a person, in person,** never by an agent's
   call, and unlinked in person by its user or by a person who manages
   the tenant's members.
+- **A person's links go when their place does.** A member's removal,
+  and an account's deletion, ask the queue in the same commit to unlink
+  every account linked to them in the tenant, so none of their outside
+  ids stays linked, and the account is free to link again. No account
+  links to a user who left.
 - **Every row belongs to one org,** and goes with the org.
 
 <!-- agents-only

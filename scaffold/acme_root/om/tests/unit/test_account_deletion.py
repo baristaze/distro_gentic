@@ -238,10 +238,17 @@ async def test_the_account_goes_in_one_commit_and_asks_for_the_rest(
     assert (ajax.id, "tenancy.user.deleted", bob_in_ajax.id) in kinds
     assert (ajax.id, "tenancy.session.revoked", bob.security.credential_id) in kinds
     assert (personal.id, "tenancy.api_key.deleted", key.api_key.id) in kinds
-    # The rest runs in his personal org, and is the one work the commit asks for.
-    work = [r for r in relay.rows if asks_for_work(r.kind)]
-    assert [r.kind for r in work] == [work_row_kind(WorkKind.DELETE_ACCOUNT)]
-    rest = work[0]
+    # The rest runs in his personal org; in Ajax, what it keeps of him
+    # beyond his place goes by the queue too. Those are the work the commit
+    # asks for.
+    work = {r.kind: r for r in relay.rows if asks_for_work(r.kind)}
+    assert sorted(work) == [
+        work_row_kind(WorkKind.DELETE_ACCOUNT),
+        work_row_kind(WorkKind.MEMBER_LEFT),
+    ]
+    left = work[work_row_kind(WorkKind.MEMBER_LEFT)]
+    assert (left.org_id, left.target_id) == (ajax.id, bob_in_ajax.id)
+    rest = work[work_row_kind(WorkKind.DELETE_ACCOUNT)]
     assert (rest.org_id, rest.target_id) == (personal.id, personal.id)
     assert rest.payload == {"provider_user_id": identity.subject}
     # The personal org stays until the provider's side is done.
