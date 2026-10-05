@@ -20,7 +20,7 @@ of its pool holds (`PlacedWorkspacesInterface`), which this process neither
 makes nor lets go, and its checkout runs there through the relay."""
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -221,6 +221,7 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         *,
         holds_private: bool = True,
         tree_deadline: datetime | None = None,
+        above: Sequence[PolicyLayer] = (),
     ) -> Gate:
         return await self._inner.gate(
             ctx,
@@ -231,6 +232,7 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
             workspace,
             holds_private=holds_private,
             tree_deadline=tree_deadline,
+            above=above,
         )
 
     async def execute(

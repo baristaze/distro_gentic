@@ -4,7 +4,7 @@ policy beneath says, and a call a gate holds for approval runs only on a
 person's approval of exactly that call, as the tenant's approvers decide
 it. A call the policy beneath refuses or holds stays refused or held."""
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -55,6 +55,7 @@ class ToolsManagerPlaybooksImpl(ToolsManagerInterface):
         *,
         holds_private: bool = True,
         tree_deadline: datetime | None = None,
+        above: Sequence[PolicyLayer] = (),
     ) -> Gate:
         beneath = await self._inner.gate(
             ctx,
@@ -65,6 +66,7 @@ class ToolsManagerPlaybooksImpl(ToolsManagerInterface):
             workspace,
             holds_private=holds_private,
             tree_deadline=tree_deadline,
+            above=above,
         )
         if beneath.outcome is not GateOutcome.RUN:
             return beneath
