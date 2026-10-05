@@ -61,10 +61,13 @@ class RetentionStorageInterface(ABC):
         ...
 
     @abstractmethod
-    async def read_behind(self, limit: int) -> list[tuple[UUID, SessionRetention, TenantRetention]]:
+    async def read_behind(
+        self, now: datetime, limit: int
+    ) -> list[tuple[UUID, SessionRetention, TenantRetention]]:
         """Cross-tenant: the sweep's read, in the system scope, of at most
         `limit` snapshots that have not yet folded their tenant's current
-        policy, each named with its tenant and that policy."""
+        policy, each named with its tenant and that policy. A snapshot whose
+        next attempt is after `now` is left out."""
         ...
 
     @abstractmethod

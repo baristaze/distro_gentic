@@ -30,7 +30,10 @@ class ExecutorInterface(ABC):
     async def run(self, ctx: TenantContext, request: ExecutionRequest) -> ExecutorReport:
         """Runs the request's checks on an executor nobody used before, each
         its count of trials, and answers the results stream it wrote, its
-        own name, and its hash of the stream."""
+        own name, and its hash of the stream. `ctx` is the live context of
+        whom the run is for: an agent's call's principal, or a validation
+        session's starter, at a role capped by the API key they spoke
+        through. An executor that asks who may run reads that role."""
         ...
 
 

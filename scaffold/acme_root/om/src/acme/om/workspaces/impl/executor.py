@@ -9,7 +9,17 @@ project's repository by the platform (`Tree`) and written in as files. A
 hidden suite's source is a repository of its own, which the request
 names by its project. No
 credential and no history enters the instance, and nothing leaves it: its
-egress is none. Each check's
+egress is none. Every file of the tree the request protects, or keeps
+untouched, is read-only before a check runs, and a trial after which one
+is not as the executor left it ran to no verdict: its inode, its mode, its
+size, and the time its inode last changed, which no process of the
+instance sets back, are read before the first trial and after each. A
+folder stays writable: a check, or the head's code, may add a new file in
+a protected folder, and no file the tree held there changes unseen. The
+digest holds against code that leaves the instance's `stat` and
+`sha256sum` as they are; code that puts its own first on the path fakes
+it, and only a check run as a user apart from the tree's owner stops
+that. Each check's
 command template runs with `{version}` and `{out}` filled, in the tree,
 under the environment of the instance's image and its transport, never one
 an agent set. Each trial's results stream is read back within the bound,
@@ -29,8 +39,10 @@ its pool gives it, and reached through the relay
 (`PlacedInstancesInterface`). A root that wires no such way refuses its
 checks, loudly."""
 
+import io
 import json
 import logging
+import tarfile
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 from uuid import UUID
@@ -53,6 +65,7 @@ from acme.om.context import TenantContext
 from acme.om.evidence.collector import collect, digest
 from acme.om.evidence.executor import ExecutorInterface
 from acme.om.evidence.rates import stops_at
+from acme.om.evidence.rules import protected_paths
 from acme.om.evidence.types.contract import SCHEMAS, CheckDeclaration, Offer
 from acme.om.evidence.types.record import VERSION, ExecutionRecord, RunOutcome
 from acme.om.evidence.types.validation import ExecutionRequest, ExecutorReport, Prepared
@@ -69,6 +82,23 @@ OUT = "out"
 """Where each trial's results stream goes, beside the tree, never in it."""
 UNPACK = 'mkdir -p "$1" "$2" && tar -xf "$3" -C "$1" && rm -f "$3" && pwd'
 """Unpacks the tree and answers the instance's root, as its commands see it."""
+LOCK = 'chmod -- a-w "$@"'
+"""Makes each file of the tree a run protects read-only, and never a
+folder: no process of the check writes the file without changing its mode,
+and a new file beside it is the check's to write."""
+SEEN = (
+    "seen=$(if stat -c %i . >/dev/null 2>&1;"
+    ' then stat -c "%n %i %a %s %z" -- "$@";'
+    ' else stat -f "%N %i %Lp %z %Fc" -- "$@"; fi)'
+    " && if command -v sha256sum >/dev/null;"
+    ' then printf "%s\\n" "$seen" | sha256sum;'
+    ' else printf "%s\\n" "$seen" | shasum -a 256; fi'
+)
+"""One digest of what the instance holds at each file and link a run
+protects: its inode, mode, size, and the time its inode last changed, to the nanosecond,
+by GNU's `stat` and `sha256sum`, or by BSD's `stat` and `shasum` on a host
+that has those. A write, a change of mode, or a replacement moves that
+time, and no process of the instance sets it back. A path gone fails it."""
 EPOCH = 1
 """The one epoch of an instance's commands: no other run ever reaches it."""
 Tree = Callable[
@@ -219,6 +249,7 @@ class ExecutorWorkspacesImpl(ExecutorInterface):
         rate's rule stops it, and their results streams, one after another,
         in `workspace` through `transport`. A trial failed unless its run
         passed, as `ExecutionRecord.passing` says."""
+        locked, guarded = _protected(tree, request.protected + request.untouched)
         await transport.write_file(workspace, ARCHIVE, tree, EPOCH)
         unpacked = await self._command(
             transport,
@@ -230,6 +261,22 @@ class ExecutorWorkspacesImpl(ExecutorInterface):
         if unpacked.exit_code != 0 or not unpacked.stdout.strip():
             raise Unavailable(f"the tree did not unpack in its instance: {unpacked.stderr[-300:]}")
         root = unpacked.stdout.strip().splitlines()[-1]
+        if locked:
+            made = await self._command(
+                transport,
+                workspace,
+                ("sh", "-c", LOCK, "sh", *locked),
+                TREE,
+                self._options.setup_time,
+            )
+            if made.exit_code != 0:
+                raise Unavailable(
+                    f"the paths the run protects stayed writable in its instance: "
+                    f"{made.stderr[-300:]}"
+                )
+        sealed = await self._seen(transport, workspace, guarded)
+        if guarded and sealed is None:
+            raise Unavailable("the instance did not show what it holds at the paths it protects")
         streams: list[bytes] = []
         read = 0
         rates = request.rates or (None,) * len(request.checks)
@@ -242,7 +289,15 @@ class ExecutorWorkspacesImpl(ExecutorInterface):
                     break
                 out = f"{OUT}/{index}-{trial}.jsonl"
                 stream, record = await self._trial(
-                    transport, workspace, request, check, prepared, f"{root}/{out}", out, read
+                    transport,
+                    workspace,
+                    request,
+                    check,
+                    prepared,
+                    f"{root}/{out}",
+                    out,
+                    read,
+                    (guarded, sealed),
                 )
                 read += len(stream)
                 failed.append(not record.passing)
@@ -259,23 +314,29 @@ class ExecutorWorkspacesImpl(ExecutorInterface):
         out: str,
         path: str,
         read: int,
+        seal: tuple[tuple[str, ...], str | None],
     ) -> tuple[bytes, ExecutionRecord]:
         """One trial of `check`: its template filled, with `out` where the
         command writes its results stream, and run in the tree; the stream
         read back from `path`, the same file from the instance's root,
         within what is left of the bound; and the run it holds. A trial
-        that ran past its time, wrote no stream, one past the bound or
-        longer than one read of the transport carries (such as the relay's
-        into a tenant's wall), or one the collector does not read as one
-        run of `check` at the version asked, ran to no verdict: its stream
-        is an `errored` run the executor writes in its place."""
+        that ran past its time, changed a path the run protects (`seal`
+        holds those paths, and their digest before the first trial),
+        wrote no stream, one past the bound or longer than one read of the
+        transport carries (such as the relay's into a tenant's wall), or
+        one the collector does not read as one run of `check` at the
+        version asked, ran to no verdict: its stream is an `errored` run
+        the executor writes in its place."""
         argv = tuple(part.format(version=request.version, out=out) for part in check.command)
         started = self._clock()
         ran = await self._command(transport, workspace, argv, TREE, self._options.trial_time)
         left = self._options.max_results_bytes - read
         stream, why = b"", None
+        guarded, sealed = seal
         if ran.timed_out:
             why = "ran past its time"
+        elif await self._seen(transport, workspace, guarded) != sealed:
+            why = "changed a path the run protects"
         else:
             try:
                 stream = await transport.read_file(workspace, path, max(left, 0) + 1)
@@ -341,6 +402,38 @@ class ExecutorWorkspacesImpl(ExecutorInterface):
             effect="unsafe",
         )
         return await transport.run(workspace, command, seal=SEAL)
+
+    async def _seen(
+        self, transport: TransportInterface, workspace: Workspace, paths: tuple[str, ...]
+    ) -> str | None:
+        """The digest `SEEN` answers for `paths`, in the tree; None when there
+        are none, or when one is gone or the instance cannot tell."""
+        if not paths:
+            return None
+        seen = await self._command(
+            transport, workspace, ("sh", "-c", SEEN, "sh", *paths), TREE, self._options.setup_time
+        )
+        answer = seen.stdout.strip()
+        return answer if seen.exit_code == 0 and answer else None
+
+
+def _protected(tree: bytes, patterns: tuple[str, ...]) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """The paths of `tree` a pattern of `patterns` matches, as its tar names
+    them, and never a folder: the files made read-only, then those with
+    every link among them, which the digest covers. A link is never
+    followed: its own inode is what the digest reads. A folder stays
+    writable, and a new file a check writes in one changes no digest."""
+    if not patterns:
+        return (), ()
+    try:
+        with tarfile.open(fileobj=io.BytesIO(tree)) as archive:
+            members = archive.getmembers()
+    except tarfile.TarError as unread:
+        raise Unavailable(f"the tree is no tar the executor reads: {unread}") from None
+    held = (member.name for member in members if not member.isdir())
+    guarded = protected_paths(patterns, held)
+    lockable = {member.name for member in members if member.isfile()}
+    return tuple(path for path in guarded if path in lockable), guarded
 
 
 def _asked(record: ExecutionRecord, check: CheckDeclaration, version: str) -> bool:

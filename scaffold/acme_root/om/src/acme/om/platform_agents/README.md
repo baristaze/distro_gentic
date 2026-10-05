@@ -105,9 +105,10 @@ workspace it works in, and which of its calls run without asking.
   its requirement judges all its trials together, so one lucky trial
   never passes it. A run on a double, or with a dependency that was not
   there, never passes. A check that cannot run, for good, because the
-  policy no longer declares it or no executor offers what it needs,
-  refuses the session with that reason: it runs nothing, its work fails
-  for good, and its read says `refused` rather than waiting.
+  policy no longer declares it, no executor offers what it needs, or its
+  starter or their key no longer may run it, refuses the session with
+  that reason: it runs nothing, its work fails for good, and its read
+  says `refused` rather than waiting.
 - **Purge.** A tenant deleted past its retention loses its validation
   sessions.
 

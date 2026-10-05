@@ -1,8 +1,9 @@
 """A session's reads over the live app, in memory: the tenant's sessions
 listed in a status a page at a time, a session's children, archive, delete
 and restore, each by the role that may; what a session asks of a person
-and the calls it holds, per session and across the tenant; its bounds, its
-tool calls, and its usage, and the tenant's usage across its budgets; the
+and the calls it holds, per session and across the tenant, which a
+decision sent on an API key never frees; its bounds, its tool calls, and
+its usage, and the tenant's usage across its budgets; the
 runs and validations a session's evidence holds, and what it delivered;
 and every route that names a session, called by another tenant with one
 that exists, answered as an unknown id is. No runner works behind the API
@@ -347,6 +348,40 @@ async def test_a_sessions_tool_calls_carry_their_decision_and_answer_and_its_usa
     assert usage.status_code == 200, usage.text
     assert (usage.json()["calls"], usage.json()["input"], usage.json()["output"]) == (1, 100, 20)
     assert [f["fill"] for f in usage.json()["fills"]] == ["anthropic/claude-sonnet-5-5"]
+
+
+async def test_a_decision_sent_on_an_api_key_is_refused_and_the_call_stays_held(
+    client: httpx.AsyncClient, owner: dict[str, str], container: AppContainer
+) -> None:
+    """An approval is a person's. The owner's own key, at the owner's role,
+    which may approve the call's class, decides nothing: the decision is
+    refused, nothing lands in the history, and the call waits for a person
+    still, whom the owner's own decision then answers."""
+    session = await a_loop(client, container, owner, calls=1, park=APPROVAL)
+    path = f"/v1/agent-sessions/{session['id']}"
+    minted = await client.post(
+        "/v1/api-keys", headers=created(owner), json={"name": "ci", "role": "owner"}
+    )
+    assert minted.status_code == 201, minted.text
+    program = {"Authorization": f"Bearer {minted.json()['key']}"}
+
+    decided = await client.post(
+        f"{path}/calls/4/decision", headers=created(program), json={"approve": True}
+    )
+    held = await client.get(f"{path}/approvals", headers=owner)
+    calls = await client.get(f"{path}/tool-calls", headers=owner)
+    after = await client.get(path, headers=owner)
+
+    assert decided.status_code == 403, decided.text
+    assert decided.json()["error"]["code"] == "not_authorized"
+    assert [(a["seq"], a["tool"]) for a in held.json()] == [(4, "read_log")]
+    assert [(c["seq"], c["decision"]) for c in calls.json()["items"]] == [(4, None)]
+    assert (after.json()["status"], after.json()["park"]["unlock"]) == ("parked", "approval")
+    by_person = await client.post(
+        f"{path}/calls/4/decision", headers=created(owner), json={"approve": True}
+    )
+    assert by_person.status_code == 201, by_person.text
+    assert (await client.get(f"{path}/approvals", headers=owner)).json() == []
 
 
 def test_an_approved_call_that_ran_stays_approved_once_its_approval_lapses() -> None:

@@ -27,7 +27,8 @@ class PlatformAgentsManagerInterface(ABC):
         its project (`NotFound`, as another tenant's project is), or the
         policy declares no such check (`ValidationFailed`). A start asked
         again under the same id, of a check still declared, answers the
-        session as stored."""
+        session as stored. A start on an API key records the key, so its
+        run acts no higher than the key's role."""
         ...
 
     @abstractmethod
@@ -42,13 +43,16 @@ class PlatformAgentsManagerInterface(ABC):
         check run on a fresh executor, through the evidence namespace, at
         its head with the checks, fixtures, and runner from its base (once,
         or its declared trials when a requirement rates it), and the session
-        finished with the execution record its last run wrote. A
+        finished with the execution record its last run wrote. The check
+        runs under its starter's live context, at the role they hold now
+        capped by the API key they started it on, never the service role. A
         finished session runs nothing. Asked again after the run was kept,
         it runs nothing more and finishes with that run. A check that cannot
-        run here, for good (its project's policy no longer declares it, or
-        no executor offers what it needs), refuses the session with that
-        reason (`refuse_validation`) and raises `PreconditionFailed`; a
-        refused session runs nothing and raises it again."""
+        run here, for good (its project's policy no longer declares it, no
+        executor offers what it needs, its starter may no longer write, or
+        the key no longer holds), refuses the session with that reason
+        (`refuse_validation`) and raises `PreconditionFailed`; a refused
+        session runs nothing and raises it again."""
         ...
 
     @abstractmethod

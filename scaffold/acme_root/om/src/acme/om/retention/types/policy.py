@@ -23,6 +23,12 @@ REGION = r"^[a-z0-9][a-z0-9-]{0,31}$"
 MAX_PROJECTS = 500
 """The narrowings one tenant's policy holds at most."""
 
+MAX_LIFETIME = timedelta(days=36500)
+"""The longest lifetime a policy is written with: a century. A lifetime is
+added to a session's creation date, and a date has a last year. The write
+refuses a lifetime past it (`retention.rules.past_bound`); the type does
+not, so a stored row that holds one still reads."""
+
 
 class RetentionPolicy(Platform):
     """How long what a session says is kept (`content_lifetime`) and how long

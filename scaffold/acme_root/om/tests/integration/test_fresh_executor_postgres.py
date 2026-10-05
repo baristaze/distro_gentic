@@ -5,8 +5,10 @@ project's repository, with the checks and their fixture from the base,
 and the container is gone after. The validation hashes to the results the
 run wrote, and the result gate confirms the success they show. A
 validation session runs as the platform's own work on the same executor,
-a head that plants a runner of its own still runs the base's, and a head's
-`.gitattributes` leaves nothing out of the tree the checks run on."""
+a head that plants a runner of its own still runs the base's, a head's
+`.gitattributes` leaves nothing out of the tree the checks run on, a
+head whose code changes the base's fixture while it runs has no verdict,
+and a check may write a new file beside that fixture."""
 
 import subprocess
 from collections.abc import AsyncIterator
@@ -64,6 +66,34 @@ APP = AppContext(type=AppType.PORTAL, version="portal@test")
 WORKER = AppContext(type=AppType.WORKER, version="worker@test")
 PLANTED = RUNNER.replace('cart.get("TOTAL") == expected', "True")
 """A runner a head plants: it passes whatever the cart holds."""
+REWRITES = """\
+import os
+
+os.chmod("checks/expected.txt", 0o644)
+with open("checks/expected.txt", "w") as fixture:
+    fixture.write("4")
+TOTAL = 4
+"""
+"""A cart whose code makes the base's fixture writable, while the check
+runs, and writes its own total there."""
+
+BUILDS = """\
+with open("checks/built.txt", "w") as built:
+    built.write("3")
+TOTAL = 3
+"""
+"""A cart that totals right, and whose code, while the check runs, writes
+a new file beside the base's fixture."""
+REPLACES = """\
+import os
+
+os.remove("checks/expected.txt")
+with open("checks/expected.txt", "w") as fixture:
+    fixture.write("4")
+TOTAL = 4
+"""
+"""A cart whose code removes the base's fixture from its folder, which
+stays writable, while the check runs, and writes its own total there."""
 
 
 class ReadBack(TransportContainerImpl):
@@ -245,6 +275,51 @@ async def test_a_heads_attributes_leave_nothing_out_of_the_checks(
         owner, session_id, Result(claim=Claim.SUCCEEDED, evidence=(record.id,))
     )
     assert not verdict.accepted, "the gate refuses a success the checks never showed"
+
+
+# Check 1, while the head runs: the base's fixture is read-only in the
+# container, and a head whose code changes it anyway has no verdict.
+
+
+async def test_a_head_whose_code_changes_the_bases_fixture_while_it_runs_has_no_verdict(
+    storage: StoragePostgresImpl, tmp_path: Path
+) -> None:
+    delivered = Delivered(storage, tmp_path)
+    owner, session_id, head = await delivered.session({"src/cart.py": REWRITES})
+    evidence = delivered.managers.evidence
+
+    await evidence.validate(owner, session_id, RunPurpose.VALIDATION)
+
+    (record,) = (await evidence.get_runs(owner, session_id, None, 10)).items
+    assert (record.version, record.outcome, record.isolation) == (
+        head,
+        RunOutcome.ERRORED,
+        "container",
+    ), "a changed protected path leaves the trial without a verdict"
+    assert gone(UUID(record.executor.removeprefix("executor:")))
+
+
+# Check 3: a new file in a protected folder fails no check, and a head
+# whose code replaces a file there still has no verdict.
+
+
+@pytest.mark.parametrize(
+    ("cart", "outcome"),
+    [(BUILDS, RunOutcome.PASSED), (REPLACES, RunOutcome.ERRORED)],
+    ids=["writes-beside", "replaces"],
+)
+async def test_a_new_file_in_a_protected_folder_passes_and_a_replaced_one_has_no_verdict(
+    storage: StoragePostgresImpl, tmp_path: Path, cart: str, outcome: RunOutcome
+) -> None:
+    delivered = Delivered(storage, tmp_path)
+    owner, session_id, head = await delivered.session({"src/cart.py": cart})
+    evidence = delivered.managers.evidence
+
+    await evidence.validate(owner, session_id, RunPurpose.VALIDATION)
+
+    (record,) = (await evidence.get_runs(owner, session_id, None, 10)).items
+    assert (record.version, record.outcome, record.isolation) == (head, outcome, "container")
+    assert gone(UUID(record.executor.removeprefix("executor:")))
 
 
 # Check 2: a validation session is platform work, run on the same fresh

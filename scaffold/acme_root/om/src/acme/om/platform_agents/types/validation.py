@@ -2,9 +2,9 @@
 on a fresh executor. It is work on the same queue an agent's work takes,
 and its run is the same execution record an agent's validation writes. The
 session holds which of its project's checks it runs, at which commit and
-from which protected source, and, once the run is recorded, which record
-it is. A check that cannot run here, for good, refuses the session, which
-then holds why."""
+from which protected source, the API key its starter started it on, if
+one, and, once the run is recorded, which record it is. A check that
+cannot run here, for good, refuses the session, which then holds why."""
 
 from datetime import datetime
 from enum import StrEnum
@@ -44,6 +44,7 @@ class ValidationStart(Platform):
 
 class ValidationSession(Identifiable, Trackable):
     MANAGER_OWNED_FIELDS: ClassVar[tuple[str, ...]] = (
+        "key_id",
         "status",
         "run_id",
         "finished_at",
@@ -55,6 +56,10 @@ class ValidationSession(Identifiable, Trackable):
     check_name: str = Field(pattern=CHECK)
     head: str = Field(pattern=COMMIT)
     base: str = Field(pattern=COMMIT)
+    # The API key its starter spoke through, if one: its run acts on the
+    # starter's authority no higher than the key's role, and only while the
+    # key holds.
+    key_id: UUID | None = None
     status: ValidationStatus = ValidationStatus.QUEUED
     # The execution record of its run, once the run is recorded: a rated
     # check's last trial, whose validation holds the whole batch.
