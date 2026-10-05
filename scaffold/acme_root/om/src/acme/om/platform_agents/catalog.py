@@ -45,6 +45,7 @@ from acme.om.platform_agents.tools import (
 )
 from acme.om.platform_agents.types.corpus import Corpus, Document
 from acme.om.projects import ProjectsManagerInterface
+from acme.om.relay import RelayManagerInterface
 from acme.om.steps import StepsManagerInterface
 from acme.om.tools import ToolsManagerInterface
 from acme.om.tools.tool import ToolInterface
@@ -88,6 +89,7 @@ def with_shipped(
     projects: Callable[[], ProjectsManagerInterface],
     work: Callable[[], WorkManagerInterface],
     hosts: Callable[[], HostsManagerInterface],
+    relay: Callable[[], RelayManagerInterface],
     automations: Callable[[], AutomationsManagerInterface],
     policies: Callable[[], ToolsManagerInterface],
     agents: Callable[[], AgentsManagerInterface],
@@ -143,7 +145,7 @@ def with_shipped(
         SearchCorpusImpl(shipped.corpus),
         ReadSessionImpl(sessions, steps, policies, projects),
         ListSessionsImpl(sessions, projects),
-        ReadWaitImpl(sessions, work, hosts),
+        ReadWaitImpl(sessions, work, hosts, relay),
         ListProjectsImpl(projects),
         ReadProjectImpl(projects),
         ListAutomationsImpl(automations),

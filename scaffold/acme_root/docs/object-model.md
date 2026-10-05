@@ -65,7 +65,7 @@ has.
 | `person` | a call held for approval, a question, or a call far above the session's norm | a decision on the call, or an answer as a message | a held call: the roles the tool policy lets decide its class, the owner and admins unless the policy names others; a question: the person who asked for the work, or an admin when they have left; a call above its norm: an admin or the owner | `read_session` names each held call and who decides it |
 | `provider` | a model provider's outage, rate limit, or billing or credential error | the provider answers again; the session retries at its own time | nobody: it retries by itself; a tenant's own key that fails needs an admin to fix it | `read_session` gives the retry time |
 | `budget` | the budget gate refused the next call | the budget is raised or resets, or the account is topped up | an admin or the owner, who set budgets | `read_session` names the budget in what clears it |
-| `resource` | a workspace no host can give yet, or a scarce resource in line | the resource frees; the session asks again at its retry time | nobody: it takes its turn | `read_session`, `read_wait` |
+| `resource` | a workspace no host can give yet, or a scarce resource in line | the host comes back, or the resource frees; the session asks again at its retry time | when the one host that holds its workspace is offline: whoever runs that machine brings it back; an admin or the owner can revoke it, and another host of the pool prepares a new workspace without the old one's files; a person who may write can move the session to the cloud or another pool. Otherwise nobody: it takes its turn | `read_session` gives the retry time; `read_wait` names the host that holds the workspace, whether it is online, and since when |
 | `job` | a long-running job a tool started | the job reports, or its deadline passes | nobody | `read_session` |
 | `children` | sub-agents that have not reported | each child reports | nobody; a person who may write can cancel a child | `read_session` lists the children |
 | `handover` | a person working in the session's environment by hand | that person gives it back | the person who took it over | `read_session` |
@@ -73,7 +73,8 @@ has.
 
 A session waits without a park too. A `pending` session waits on the
 work queue, and a session pinned to the org's own hosts waits for one of
-them to be online: see the next section.
+them to be online, or for the one that holds its workspace: see the next
+section.
 
 ## The work queue and the hosts
 
@@ -87,11 +88,14 @@ A **host pool** is a set of the org's own machines, inside its wall. A
 **host** joins a pool with an enrollment token an admin issued, and it
 is online while it calls in. A session **placed** in a pool runs there;
 with no host online it waits, and it never moves to the cloud unless a
-person moves it.
+person moves it. A **workspace** lives on the host that prepared it, so
+the session runs there: while that host is offline, the session waits
+for it, even with other hosts of the pool online.
 
 Reader: `read_wait` (the loop's item: queued or running, its lane, since
 when, its attempts, and the org's loops running ahead of it; where the
-session runs, and which of the pool's hosts are online).
+session runs, which of the pool's hosts are online, and the host that
+holds its workspace, whether it is online, and since when).
 
 ## Tools and who agrees to them
 

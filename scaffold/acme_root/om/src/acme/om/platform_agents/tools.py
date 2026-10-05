@@ -51,6 +51,7 @@ from acme.om.exceptions import (
     ValidationFailed,
 )
 from acme.om.hosts import HostsManagerInterface
+from acme.om.hosts.types.host import HostStatus
 from acme.om.intake import IntakeManagerInterface
 from acme.om.intake.tools import FORGE
 from acme.om.intake.types.link import HandleKind
@@ -62,6 +63,7 @@ from acme.om.platform_agents.types.corpus import Corpus, Passage
 from acme.om.platform_agents.types.draft import PolicyDraft
 from acme.om.projects import ProjectsManagerInterface
 from acme.om.projects.types.project import Project
+from acme.om.relay import RelayManagerInterface
 from acme.om.steps import StepsManagerInterface
 from acme.om.steps.types.content import MAX_NAME
 from acme.om.steps.types.header import ParkReason, ToolFailure, ToolRequestHeader
@@ -1124,7 +1126,8 @@ class SessionWait(Platform):
     pool_id: UUID | None = None
     hosts_online: int = 0
     hosts: tuple[PoolHost, ...] = ()  # the pool's, the one seen last first
-    waits_for_a_host: bool  # pinned to a pool with no host online
+    workspace_host: PoolHost | None = None  # the host that holds its workspace
+    waits_for_a_host: bool  # no host of its pool online, or its workspace's host offline
 
 
 CLOUD = "cloud"
@@ -1133,7 +1136,9 @@ CLOUD = "cloud"
 class ReadWaitImpl(NativeToolImpl):
     """Reads what a session waits on beyond its park: its loop's item on the
     work queue, the tenant's own loops running ahead of it, and where it runs,
-    the cloud or a pool of the tenant's hosts and which of them are online."""
+    the cloud or a pool of the tenant's hosts and which of them are online,
+    and the host that holds its workspace, which it waits for while that
+    host is offline."""
 
     SPEC = ToolSpec(
         name=kinds.READ_WAIT,
@@ -1142,7 +1147,9 @@ class ReadWaitImpl(NativeToolImpl):
             "queue (queued or running, its lane, since when, its attempts, and how many of "
             "the tenant's loops run ahead of it), and where it runs: the cloud, or the "
             "tenant's pool it is pinned to, with the pool's hosts and which are online. A "
-            "pinned session with no host online waits for one."
+            "pinned session with no host online waits for one. A workspace lives on the host "
+            "that prepared it: while that host is offline, the session waits for it, even "
+            "with other hosts online, and its last_seen_at says since when."
         ),
         input_model=SessionInput,
         output_model=SessionWait,
@@ -1158,10 +1165,12 @@ class ReadWaitImpl(NativeToolImpl):
         sessions: Callable[[], AgentSessionsManagerInterface],
         work: Callable[[], WorkManagerInterface],
         hosts: Callable[[], HostsManagerInterface],
+        relay: Callable[[], RelayManagerInterface],
     ) -> None:
         self._sessions = sessions
         self._work = work
         self._hosts = hosts
+        self._relay = relay
 
     async def run(
         self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
@@ -1185,16 +1194,19 @@ class ReadWaitImpl(NativeToolImpl):
         placement = await self._hosts().placement_of(ctx, session.id)
         pool = placement.pool
         hosts: tuple[PoolHost, ...] = ()
+        holder: HostStatus | None = None
         if pool is not None:
             hosts = tuple(
-                PoolHost(
-                    host_id=status.host.id,
-                    name=status.host.name,
-                    online=status.online,
-                    last_seen_at=status.host.last_seen_at,
-                )
+                _pool_host(status)
                 for status in (await self._hosts().get_hosts(ctx, pool.id))[:HOSTS_MAX]
             )
+            binding = await self._relay().binding_of(ctx, session.id)
+            if binding is not None:
+                holder = await self._hosts().get_host(ctx, pool.id, binding.host_id)
+                # A revoked host took the workspace with it: another host of
+                # the pool prepares one, so nothing pins the session to it.
+                if holder is not None and holder.host.revoked_at is not None:
+                    holder = None
         park = session.park
         return SessionWait(
             session_id=session.id,
@@ -1206,8 +1218,18 @@ class ReadWaitImpl(NativeToolImpl):
             pool_id=None if pool is None else pool.id,
             hosts_online=placement.hosts_online,
             hosts=hosts,
-            waits_for_a_host=placement.waiting,
+            workspace_host=None if holder is None else _pool_host(holder),
+            waits_for_a_host=placement.waiting or (holder is not None and not holder.online),
         )
+
+
+def _pool_host(status: HostStatus) -> PoolHost:
+    return PoolHost(
+        host_id=status.host.id,
+        name=status.host.name,
+        online=status.online,
+        last_seen_at=status.host.last_seen_at,
+    )
 
 
 class PageInput(ToolInput):

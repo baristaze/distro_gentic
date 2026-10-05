@@ -8,11 +8,12 @@ every park reason the engine has, with the reader that shows each."""
 import json
 import re
 from collections.abc import Callable
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from uuid import UUID
 
 import pytest
+from contracts.hosts_storage import make_credential, make_host
 from contracts.loops import reply, said
 from contracts.platform_agents import CORPUS, Platform, calls, platform_over
 from contracts.project_storage import in_project
@@ -22,9 +23,11 @@ from acme.om.agents.types.kind import NO_WORKSPACE, AgentKind, DoneRule, TreeLim
 from acme.om.agents.types.request import Start
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.base import Platform as Record
-from acme.om.base import new_id
+from acme.om.base import new_id, utcnow
 from acme.om.context import TenantContext
 from acme.om.exceptions import UnsafeConfiguration
+from acme.om.hosts.impl.manager import HostsOptions
+from acme.om.hosts.types.pool import HostPool
 from acme.om.platform_agents import kinds
 from acme.om.platform_agents.catalog import PlatformAgents, read_corpus, with_assistant_tools
 from acme.om.platform_agents.kinds import (
@@ -260,6 +263,65 @@ async def test_a_list_of_sessions_filters_by_park_reason_and_project_and_reads_o
     in_it = json.loads(text)
     assert [s["session_id"] for s in in_it["sessions"]] == [str(first)]
     assert in_it["next"] is None
+
+
+# Check: read_wait on a session pinned to an offline host names that host
+# and that it is offline, beside the pool's other hosts.
+
+
+async def a_host(platform: Platform, pool_id: UUID, name: str, last_seen_at: datetime) -> UUID:
+    """A host of the pool, enrolled at its storage, last seen at `last_seen_at`."""
+    host = make_host(pool_id).model_copy(update={"name": name, "last_seen_at": last_seen_at})
+    hosts = platform.storage.get_hosts_storage()
+    await hosts.enroll(platform.owner.org_id, host, make_credential(host.id), ())
+    return host.id
+
+
+async def test_a_wait_on_the_offline_host_that_holds_the_workspace_names_that_host(
+    tmp_path: Path,
+) -> None:
+    platform = platform_over(tmp_path)
+    hosts = platform.managers.hosts
+    now = utcnow()
+    pool = await hosts.create_pool(
+        platform.owner,
+        HostPool(
+            id=new_id(),
+            created_at=now,
+            updated_at=now,
+            created_by=platform.owner.user_id,
+            updated_by=platform.owner.user_id,
+            name="build",
+            region="eu-west",
+        ),
+    )
+    # The host that prepared the workspace is silent; the other calls in.
+    silent_since = now - 2 * HostsOptions().online_window
+    holder = await a_host(platform, pool.id, "host-1", silent_since)
+    await a_host(platform, pool.id, "host-2", now)
+    pinned = await platform.start(kinds.ENGINEER)
+    await hosts.place_session(platform.owner, pinned, pool.id)
+    await platform.managers.relay.bind_workspace(platform.owner, pinned, holder, "/srv/work")
+    asking = await platform.start(kinds.PLATFORM_ASSISTANT)
+    await platform.say(asking, "Why has my session not started?")
+    platform.anthropic.add(
+        reply(calls(kinds.READ_WAIT, "use_wait", session_id=str(pinned))),
+        reply(said("It waits for host-1, which is offline.")),
+    )
+
+    await platform.managers.loop.run(platform.owner, asking)
+
+    failure, text = await platform.answer(asking, "use_wait")
+    wait = json.loads(text)
+    assert failure is None
+    # Another host of its pool is online, and the session still waits: for
+    # the one that holds its workspace, offline since it was last seen.
+    assert wait["hosts_online"] == 1
+    assert {h["name"]: h["online"] for h in wait["hosts"]} == {"host-1": False, "host-2": True}
+    assert wait["workspace_host"]["name"] == "host-1"
+    assert wait["workspace_host"]["online"] is False
+    assert datetime.fromisoformat(wait["workspace_host"]["last_seen_at"]) == silent_since
+    assert wait["waits_for_a_host"] is True
 
 
 # Check: docs/object-model.md names every park reason the engine has.

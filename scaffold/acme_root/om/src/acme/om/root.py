@@ -709,6 +709,7 @@ def build_managers(
             projects=lambda: managers.projects,
             work=lambda: managers.work,
             hosts=lambda: managers.hosts,
+            relay=lambda: managers.relay,
             automations=automations or automations_absent,
             policies=lambda: managers.tools,
             agents=lambda: managers.agents,
