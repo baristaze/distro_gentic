@@ -107,3 +107,18 @@ The check writes the scene's repository and its project's policy itself
 before their step lands, pauses and resumes the session from its header,
 approves each command it holds, answers its question, and opens a work
 block and a diff. Each moment is shot light and dark.
+
+The pane check plays the same scene on the same stack, with
+`PORTAL_API_URL` naming the API:
+
+```bash
+PORTAL_API_URL=http://127.0.0.1:8000 ACME_PORTAL_URL=http://127.0.0.1:5173 pnpm --filter @acme/portal e2e e2e/pane.spec.ts
+```
+
+It sees Workspace open itself while the session runs and Changes once it
+delivers, opens a step from a line of a work block, and opens the other
+views from "+". It then takes control and runs `pytest -q`: the local
+stack runs no host, so `portal_check.py host` stands in for the one that
+holds the workspace, on a clone of the scene's repository at the
+engineer's branch. It gives control back and reads the agent's reply,
+hides and shows the pane, and reloads to find its tabs kept.
