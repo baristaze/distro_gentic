@@ -32,9 +32,9 @@ from acme.om.intake.root import build_intake
 from acme.om.intake.tools import CommentImpl
 from acme.om.knowledge.impl.manager import KnowledgeOptions
 from acme.om.knowledge.root import build_knowledge
-from acme.om.media.impl.manager import MediaOptions
 from acme.om.matrix.impl.resolver import MatrixOptions
 from acme.om.matrix.root import MatrixLayer
+from acme.om.media.impl.manager import MediaOptions
 from acme.om.models.impl.manager import ModelsOptions
 from acme.om.notifications.impl.manager import NotificationsOptions
 from acme.om.notifications.root import build_notifications
