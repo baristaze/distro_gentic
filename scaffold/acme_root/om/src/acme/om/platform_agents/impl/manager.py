@@ -130,7 +130,9 @@ class PlatformAgentsManagerImpl(PlatformAgentsManagerInterface):
                 f"validation session {session_id} finished already, with run {stored.run_id}"
             )
         if stored.refusal is not None:
-            raise PreconditionFailed(f"validation session {session_id} is refused: {stored.refusal}")
+            raise PreconditionFailed(
+                f"validation session {session_id} is refused: {stored.refusal}"
+            )
         now = self._clock()
         finished = stored.model_copy(
             update={
