@@ -171,10 +171,14 @@ def _readable(path: str, readable: tuple[str, ...]) -> bool:
     return any(normal == root or normal.startswith(root.rstrip("/") + "/") for root in readable)
 
 
-def refusals(ceilings: Ceilings, probed: frozenset[IsolationMode], ask: Ask) -> list[str]:
+def refusals(
+    ceilings: Ceilings, probed: frozenset[IsolationMode], ask: Ask, *, open_egress: bool
+) -> list[str]:
     """Why the host will not run the item, one reason per ceiling it passes;
     empty when it fits. `probed` is what the host's own startup showed it
-    can provide, and an item never runs at a mode outside it."""
+    can provide, and an item never runs at a mode outside it. `open_egress`
+    is whether its startup found no cloud metadata service answering: where
+    one answers, no item runs with open egress, whatever the ceilings say."""
     if ask.kind == "WORKSPACE" and ask.operation in WITHIN_A_WORKSPACE:
         return []
     found: list[str] = []
@@ -189,6 +193,8 @@ def refusals(ceilings: Ceilings, probed: frozenset[IsolationMode], ask: Ask) -> 
             found.append(f"isolation {ask.isolation.value} this host did not probe")
     if ceilings.egress is not None and (ask.egress is None or not ask.egress <= ceilings.egress):
         found.append("egress beyond this host's allowlist")
+    if ask.egress is None and not open_egress:
+        found.append("open egress on a host that reaches its cloud's metadata service")
     if not all(_readable(path, ceilings.readable) for path in ask.reads):
         found.append("a read outside this host's readable paths")
     if ask.by_person and not ceilings.people_commands:

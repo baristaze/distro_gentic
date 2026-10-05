@@ -122,8 +122,13 @@ class HostsStoragePostgresImpl(PgStorageBase, HostsStorageInterface):
     async def read_hosts(self, org_id: UUID, pool_id: UUID, limit: int) -> list[Host]:
         stmt = (
             select(Hosts)
-            .where(Hosts.org_id == org_id, Hosts.pool_id == pool_id, Hosts.kind == HOST)
-            .order_by(Hosts.id)
+            .where(
+                Hosts.org_id == org_id,
+                Hosts.pool_id == pool_id,
+                Hosts.kind == HOST,
+                Hosts.revoked_at.is_(None),
+            )
+            .order_by(Hosts.last_seen_at.desc(), Hosts.id)
             .limit(limit)
         )
         async with self._session_for(stmt, org_id=org_id) as session:

@@ -14,9 +14,15 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
-from contracts.intake import Wired, wired
-from contracts.loops import call, reply, said, use
+from contracts.doubles import context
+from contracts.factories import make_org
+from contracts.intake import STEADY, Wired, wired
+from contracts.loops import Lookup, call, reply, said, use
+from contracts.notification_storage import make_notification
+from contracts.tools import Command
 
+from acme.infra.impl.local import InfraLocalImpl
+from acme.om.agent_sessions.impl.manager import AgentSessionsOptions
 from acme.om.agent_sessions.rules import QUESTION
 from acme.om.agents.types.request import Start
 from acme.om.agents.types.run import LoopRun, RunEnd
@@ -27,9 +33,11 @@ from acme.om.budgets.types.budget import Budget, BudgetScopeKind, WindowKind
 from acme.om.context import Role, TenantContext
 from acme.om.evidence.types.provenance import Provenance
 from acme.om.notifications.types.notification import PORTAL, Notification
+from acme.om.root import build_managers
 from acme.om.steps.rules import message_step
 from acme.om.steps.types.header import Park, ParkReason
 from acme.om.steps.types.step import StepType
+from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tools.types.policy import Decision, PolicyRule
 
 
@@ -175,6 +183,11 @@ async def test_a_park_on_a_person_tells_its_requester_alone(platform: Wired) -> 
     assert routed(notified)
 
 
+SAYS_A_QUESTION_WAITS = (
+    "the records asks you a question: read it in the session, and answer with a message."
+)
+
+
 async def asked(platform: Wired, requester: TenantContext, question: str) -> LoopRun:
     """A session of `requester`'s whose agent asked them `question`, and
     then answers once it is answered."""
@@ -205,12 +218,17 @@ async def test_a_question_tells_its_requester_to_answer_with_a_message_once(
     link = f"/v1/agent-sessions/{run.session_id}/messages"
     assert {(n.action, n.link) for n in notified} == {("answer_question", link)}
     assert routed(notified)
-    # The question, on one line, escaped, and cut short.
-    (text,) = {n.text for n in notified}
-    assert 'asks you: "Which week\'s report is \\"wrong\\"? The last one, or the one' in text
-    assert '…" Answer with a message' in text and len(text) < 400
+    # The post quotes the question, on one line, escaped, and cut short.
     (posted,) = platform.chat.posted
-    assert posted.text == f"{text} {link}"
+    assert 'asks you: "Which week\'s report is \\"wrong\\"? The last one, or the one' in posted.text
+    assert '…" Answer with a message' in posted.text and len(posted.text) < 400
+    assert posted.text.endswith(f" {link}")
+    # The rows keep none of it: the question is the session's sealed
+    # content, and a row outlives the session's key.
+    (text,) = {n.text for n in notified}
+    assert text == SAYS_A_QUESTION_WAITS
+    for kept in await platform.notifications.get_notifications(requester, 10):
+        assert "week" not in kept.text.lower()
     # The answer is a message, and clears the park: nothing is told again.
     resumed = await run_after(platform, requester, run.session_id, "Week 12.")
     assert resumed.end is RunEnd.ENDED
@@ -227,9 +245,39 @@ async def test_a_question_that_holds_a_link_is_not_quoted(platform: Wired) -> No
 
     (notified,) = await platform.notifications.notify_park(platform.service, run)
 
-    assert notified.text == (
-        "the records asks you a question: read it in the session, and answer with a message."
+    assert notified.text == SAYS_A_QUESTION_WAITS
+
+
+async def test_a_purged_session_takes_its_notifications_and_leaves_the_others(
+    tmp_path: Path,
+) -> None:
+    storage = StorageMemoryImpl()
+    managers = build_managers(
+        storage,
+        InfraLocalImpl(tmp_path),
+        agent_kinds=(STEADY,),
+        tool_catalog=(Lookup(), Command("call_api")),
+        agent_sessions_options=AgentSessionsOptions(retention=timedelta(0)),
     )
+    member = context(Role.MEMBER, make_org())
+    gone, kept = [
+        (
+            await managers.agents.start_session(
+                member, Start(id=new_id(), kind=STEADY.name, title="the records")
+            )
+        ).id
+        for _ in range(2)
+    ]
+    notifications = storage.get_notification_storage()
+    for session_id in (gone, gone, kept):
+        row = make_notification(member.user_id).model_copy(update={"session_id": session_id})
+        await notifications.create_notification(member.org_id, row)
+    await managers.agent_sessions.delete_session(member, gone)
+
+    assert await managers.agent_sessions.purge_across_tenants() == 1
+
+    left = await notifications.read_notifications(member.org_id, member.user_id, 10)
+    assert {n.session_id for n in left} == {kept} and len(left) == 1
 
 
 async def test_a_call_far_above_its_norm_tells_who_approves_it_never_its_requester(

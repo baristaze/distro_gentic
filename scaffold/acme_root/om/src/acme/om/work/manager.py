@@ -116,6 +116,22 @@ class WorkManagerInterface(ABC):
         ...
 
     @abstractmethod
+    async def end_open_on_lane(self, org_id: UUID, lane: str, reason: str) -> list[WorkItem]:
+        """Platform-internal: ends every item of the tenant queued or claimed
+        on `lane`, as done, with `reason` as its last word, for a lane whose
+        one claimant is gone, such as a revoked host: no claim would take
+        them, and a hold of theirs is refused. Returns the items it ended."""
+        ...
+
+    @abstractmethod
+    async def end_open_for_target(
+        self, org_id: UUID, kind: str, target_id: UUID, reason: str
+    ) -> list[WorkItem]:
+        """Platform-internal: as `end_open_on_lane`, for the tenant's items
+        of `kind` on `target_id`, such as a purged session's commands."""
+        ...
+
+    @abstractmethod
     async def has_open(self, ctx: TenantContext, kind: str, target_id: UUID) -> bool:
         """Whether an item of `kind` on `target_id` waits for a worker or
         runs: one of the tenant's, queued or claimed. An item handed back

@@ -164,6 +164,14 @@ class LeaseLosingWork(WorkManagerInterface):
     async def end_queued(self, ctx: TenantContext, item: WorkItem, reason: str) -> WorkItem | None:
         return await self._inner.end_queued(ctx, item, reason)
 
+    async def end_open_on_lane(self, org_id: UUID, lane: str, reason: str) -> list[WorkItem]:
+        return await self._inner.end_open_on_lane(org_id, lane, reason)
+
+    async def end_open_for_target(
+        self, org_id: UUID, kind: str, target_id: UUID, reason: str
+    ) -> list[WorkItem]:
+        return await self._inner.end_open_for_target(org_id, kind, target_id, reason)
+
     async def get_item(self, ctx: TenantContext, item_id: UUID) -> WorkItem:
         return await self._inner.get_item(ctx, item_id)
 

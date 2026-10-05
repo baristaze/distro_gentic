@@ -17,6 +17,7 @@ CROSS_TENANT_CASES: frozenset[str] = frozenset(
         "read_notification",
         "read_notifications",
         "mark_read",
+        "purge_session",
         "purge_tenant",
     }
 )
@@ -103,3 +104,19 @@ class NotificationStorageContract:
         assert await storage.purge_tenant(org_a, 10) == 1
         assert await storage.purge_tenant(org_a, 10) == 0
         assert await storage.read_notification(org_b, kept.id) == kept
+
+    async def test_purge_session_takes_that_sessions_rows_alone_in_batches(
+        self, storage: NotificationStorageInterface
+    ) -> None:
+        org, other = new_id(), new_id()
+        gone = make_notification(new_id())
+        also = gone.model_copy(update={"id": new_id(), "recipient": new_id()})
+        kept = make_notification(new_id())
+        for notification in (gone, also, kept):
+            await storage.create_notification(org, notification)
+        assert await storage.purge_session(other, gone.session_id, 10) == 0
+        assert await storage.purge_session(org, gone.session_id, 1) == 1
+        assert await storage.purge_session(org, gone.session_id, 10) == 1
+        assert await storage.purge_session(org, gone.session_id, 10) == 0
+        assert await storage.read_notification(org, gone.id) is None
+        assert await storage.read_notification(org, kept.id) == kept

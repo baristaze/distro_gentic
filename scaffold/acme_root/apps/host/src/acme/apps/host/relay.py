@@ -539,8 +539,10 @@ class _Parts:
                             await client.push_exec_part(
                                 self._item_id, self._seq, OutputStream(stream), chunk
                             )
-                    except ApiError as error:
-                        log.warning("item %s: a part was refused: %s", self._item_id, error)
+                    except (ApiError, *WIRE_FAILURES) as error:
+                        # A part lost on the wire is lost alone: the result
+                        # carries the whole output, and is still pushed.
+                        log.warning("item %s: a part was not taken: %s", self._item_id, error)
                     self._seq += 1
 
 

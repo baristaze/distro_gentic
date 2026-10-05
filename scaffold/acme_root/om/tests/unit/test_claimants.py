@@ -77,6 +77,7 @@ def hosts(managers: Managers, storage: StorageMemoryImpl, clock: Clock) -> Hosts
         OPTIONS,
         ClaimantKinds((*platform_claimant_kinds(), *PRODUCT.claimants), PLATFORM_PREFIXES),
         clock=clock,
+        revoked=managers.relay.end_host,
     )
 
 
@@ -219,6 +220,19 @@ async def test_a_claimants_credential_claims_only_its_kinds_work_in_its_tenants_
 
 
 # A revoked or expired credential is refused.
+
+
+async def test_a_claimant_token_whose_issuer_left_enrolls_nothing(
+    managers: Managers, hosts: HostsManagerImpl
+) -> None:
+    owner = await an_owner(managers, "ajax")
+    pool = await a_batch_pool(hosts, owner)
+    leaving = await a_member(managers, "ajax", Role.ADMIN)
+    issued = await hosts.issue_enrollment_token(leaving, pool.id, BATCH)
+    await managers.tenancy.members.remove_member(owner, leaving.user_id)
+    with pytest.raises(CredentialExpired, match="issuer left"):
+        await hosts.enroll_claimant(request(), issued.token, ClaimantEnrollment(name="node-1"))
+    assert await hosts.get_claimants(owner, pool.id) == ()
 
 
 async def test_a_revoked_or_expired_claimant_credential_is_refused(

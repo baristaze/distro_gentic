@@ -19,6 +19,11 @@ def claimant_of(row: EnrolledClaimant | Host) -> EnrolledClaimant:
     )
 
 
+def _seen_last_first(row: Host) -> tuple[float, UUID]:
+    """The order the Postgres impl lists a pool's hosts in."""
+    return (-row.last_seen_at.timestamp(), row.id)
+
+
 class HostsStorageMemoryImpl(MemoryStorageBase, HostsStorageInterface):
     def __init__(self, outbox: OutboxLandingInterface | None = None) -> None:
         super().__init__(outbox)
@@ -103,9 +108,9 @@ class HostsStorageMemoryImpl(MemoryStorageBase, HostsStorageInterface):
         hosts = [
             host
             for host in self._rows(self._hosts, org_id)
-            if isinstance(host, Host) and host.pool_id == pool_id
+            if isinstance(host, Host) and host.pool_id == pool_id and host.revoked_at is None
         ]
-        return hosts[:limit]
+        return sorted(hosts, key=_seen_last_first)[:limit]
 
     async def read_claimants(
         self, org_id: UUID, pool_id: UUID, limit: int

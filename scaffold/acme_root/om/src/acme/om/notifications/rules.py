@@ -191,7 +191,8 @@ def quoted(question: str) -> str | None:
 
 def question_text(title: str, question: str | None) -> str:
     """What a question's notification says: the question, quoted, when it
-    can be; else that one waits in the session."""
+    can be and is given; else that one waits in the session. The row a
+    notification leaves is told none, so it quotes nothing sealed."""
     shown = None if question is None else quoted(question)
     if shown is None:
         return f"{title} asks you a question: read it in the session, and answer with a message."

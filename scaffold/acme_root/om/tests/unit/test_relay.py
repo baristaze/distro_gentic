@@ -18,6 +18,7 @@ from uuid import UUID
 
 import pytest
 from contracts.agent_session_storage import make_session
+from contracts.hosts_storage import make_credential, make_host
 from contracts.project_storage import in_project
 
 from acme.infra.impl.local import InfraLocalImpl
@@ -388,6 +389,89 @@ async def test_a_repeatable_items_lease_runs_out_and_it_goes_back_to_its_workspa
 
 # Check 3: a stop reaches the host's control stream at once, and a command
 # carrying a stale writer epoch is refused.
+
+
+async def test_a_host_past_a_thousand_revoked_rows_of_its_pool_binds_and_holds(
+    wall: Wall,
+) -> None:
+    # Each host re-enrolled as a new row, and each old row stays revoked.
+    for _ in range(1000):
+        gone = make_host(wall.pool.id).model_copy(
+            update={"revoked_at": utcnow(), "revoked_by": wall.owner.user_id}
+        )
+        await wall.storage.get_hosts_storage().enroll(
+            wall.owner.org_id, gone, make_credential(gone.id), ()
+        )
+    newest = await enrolled(wall.managers, wall.owner, wall.pool, "host-3")
+    relay, owner, session_id = wall.managers.relay, wall.owner, wall.workspace.id
+    bound = await relay.bind_workspace(owner, session_id, newest.host_id, WHERE)
+    assert bound.host_id == newest.host_id
+    assert await relay.holder(owner, session_id) == bound
+    listed = {status.host.id for status in await wall.managers.hosts.get_hosts(owner, wall.pool.id)}
+    assert listed == {wall.holder.host_id, wall.other.host_id, newest.host_id}
+
+
+async def test_revoking_a_host_ends_the_work_on_its_lane_and_settles_its_commands(
+    wall: Wall,
+) -> None:
+    relay, work, org = wall.managers.relay, wall.managers.work, wall.owner.org_id
+    host = Host(wall.managers, wall.holder)
+    running = await relay.send(request(), org, _call(wall, command(wall.epoch)), 0)
+    await host.claim_soon()
+    queued = await relay.send(request(), org, _call(wall, command(wall.epoch)), 0)
+    assert (await relay.watch(request(), org, running.id, -1)).state is ExecState.RUNNING
+
+    await wall.managers.hosts.revoke_host(wall.owner, wall.holder.host_id)
+
+    for sent in (running, queued):
+        settled = await relay.watch(request(), org, sent.id, -1)
+        assert settled.state is ExecState.INTERRUPTED
+        assert settled.outcome == ExecOutcome(stopped=StopKind.REVOKE)
+        row = await work.get_item(wall.owner, sent.row_id)
+        assert (row.status, row.last_error) == (WorkStatus.DONE, "its host was revoked")
+    # Nothing is left waiting on the lane, so nothing holds the backlog alarm.
+    assert await work.oldest_ready_age() == timedelta(0)
+
+
+async def test_a_purged_sessions_commands_leave_no_queue_row_behind(wall: Wall) -> None:
+    relay, work, org = wall.managers.relay, wall.managers.work, wall.owner.org_id
+    queued = await relay.send(request(), org, _call(wall, command(wall.epoch)), 0)
+
+    await relay.purge_session(org, wall.workspace.id)
+
+    row = await work.get_item(wall.owner, queued.row_id)
+    assert (row.status, row.last_error) == (WorkStatus.DONE, "its session was purged")
+    assert await Host(wall.managers, wall.holder).claim() is None
+    assert await work.oldest_ready_age() == timedelta(0)
+
+
+async def test_a_command_sent_after_its_host_was_revoked_is_refused_and_queues_no_row(
+    wall: Wall,
+) -> None:
+    relay, work, org = wall.managers.relay, wall.managers.work, wall.owner.org_id
+    await wall.managers.hosts.revoke_host(wall.owner, wall.holder.host_id)
+
+    with pytest.raises(NoWorkspaceHost):
+        await relay.send(request(), org, _call(wall, command(wall.epoch)), 0)
+
+    assert await work.latest_for_target(wall.owner, WorkKind.EXEC, wall.workspace.id) is None
+    assert await work.oldest_ready_age() == timedelta(0)
+
+
+async def test_stopping_a_command_no_host_took_ends_its_queue_row(wall: Wall) -> None:
+    relay, work, org = wall.managers.relay, wall.managers.work, wall.owner.org_id
+    queued = await relay.send(request(), org, _call(wall, command(wall.epoch)), 0)
+
+    stopped = await relay.stop(request(), org, queued.id, StopKind.DEADLINE, wall.epoch)
+
+    assert stopped.state is ExecState.INTERRUPTED
+    row = await work.get_item(wall.owner, queued.row_id)
+    assert (row.status, row.last_error) == (
+        WorkStatus.DONE,
+        "its command was stopped before a host took it",
+    )
+    assert await Host(wall.managers, wall.holder).claim() is None
+    assert await work.oldest_ready_age() == timedelta(0)
 
 
 async def test_a_cancel_or_an_interrupt_reaches_the_hosts_control_stream(wall: Wall) -> None:

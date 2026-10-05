@@ -78,6 +78,8 @@ from acme.om.models.impl.resolver import ModelResolverTableImpl, ResolverOptions
 from acme.om.models.layer import ModelsLayer
 from acme.om.models.manager import ModelsManagerInterface
 from acme.om.models.prices import ModelPricesInterface
+from acme.om.notifications.impl.manager import NotificationsOptions
+from acme.om.notifications.storage import NotificationStorageInterface
 from acme.om.orchestrations import OrchestrationsManagerInterface
 from acme.om.orchestrations.impl.manager import OrchestrationsManagerImpl, OrchestrationsOptions
 from acme.om.outbox import OutboxRelayInterface
@@ -375,20 +377,29 @@ def knowledge_absent() -> KnowledgeManagerInterface:
 
 
 async def purge_held(
-    managers: Managers, org_id: UUID, session_id: UUID, tree_id: UUID | None
+    managers: Managers,
+    notifications: NotificationStorageInterface,
+    org_id: UUID,
+    session_id: UUID,
+    tree_id: UUID | None,
 ) -> None:
     """What the windows, the tools, the relay, attribution, the evidence, the
-    projects, and the agents hold of a session the sweep purges: its
-    artifacts, its workspace with its transport's records, and its relayed
-    exec items with their output, which go with its history,
-    its authority, its runs, its project's row, and its tree when it was
-    the tree's last session."""
+    projects, the notifications, and the agents hold of a session the sweep
+    purges: its artifacts, its workspace with its transport's records, and
+    its relayed exec items with their output, which go with its history,
+    its authority, its runs, its project's row, who was told it waits, and
+    its tree when it was the tree's last session. The notifications are
+    built over these managers by the processes that tell, so their rows are
+    reached through their storage."""
     await managers.windows.purge_artifacts(org_id, session_id)
     await managers.tools.purge_workspace(org_id, session_id)
     await managers.relay.purge_session(org_id, session_id)
     await managers.attribution.purge_authority(org_id, session_id)
     await managers.evidence.purge_session(org_id, session_id)
     await managers.projects.purge_session(org_id, session_id)
+    batch = NotificationsOptions().purge_batch
+    while await notifications.purge_session(org_id, session_id, batch):
+        pass
     if tree_id is not None:
         await managers.agents.purge_tree(org_id, tree_id)
 
@@ -801,17 +812,18 @@ def build_managers(
         writes,
         held,
     )
+    notification_storage = storage.get_notification_storage()
     engine_sessions = AgentSessionsManagerImpl(
         storage.get_agent_session_storage(),
         steps,
         tenancy,
         outbox,
         agent_sessions_options or AgentSessionsOptions(),
-        # What attribution and the agents hold of a purged session goes with
-        # it. Both are built below on this manager, so the edge is bound at
-        # call time.
+        # What attribution, the agents, and the notifications hold of a
+        # purged session goes with it. The managers are built below on this
+        # one, so the edge is bound at call time.
         purged=lambda org_id, session_id, tree_id: purge_held(
-            managers, org_id, session_id, tree_id
+            managers, notification_storage, org_id, session_id, tree_id
         ),
     )
     privacy = PrivacyManagerImpl(
@@ -1059,8 +1071,8 @@ def build_managers(
     )
     # A host's credential, its claims through placement, and where each
     # session runs. An exec item a claim takes is started by the relay before
-    # it reaches a host; the relay is built below, so the edge is bound at
-    # call time.
+    # it reaches a host, and the work that waits on a revoked host is ended
+    # by it; the relay is built below, so both edges are bound at call time.
     hosts = HostsManagerImpl(
         storage.get_hosts_storage(),
         PlacementClaimsRelayedImpl(placement, lambda: managers.relay),
@@ -1069,6 +1081,7 @@ def build_managers(
         outbox,
         hosts_options or HostsOptions(),
         claimant_kinds,
+        revoked=lambda rctx, org_id, host_id: managers.relay.end_host(rctx, org_id, host_id),
     )
     # The validation sessions: platform work on the queue, with no agent.
     platform = PlatformAgentsManagerImpl(

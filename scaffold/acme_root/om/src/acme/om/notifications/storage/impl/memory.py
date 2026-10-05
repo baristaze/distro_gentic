@@ -36,6 +36,17 @@ class NotificationStorageMemoryImpl(MemoryStorageBase, NotificationStorageInterf
                 self._notifications[held.id] = (org_id, held)
             return held
 
+    async def purge_session(self, org_id: UUID, session_id: UUID, limit: int) -> int:
+        async with self._lock:
+            ids = [
+                row.id
+                for org, row in self._notifications.values()
+                if org == org_id and row.session_id == session_id
+            ][:limit]
+            for row_id in ids:
+                del self._notifications[row_id]
+            return len(ids)
+
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:
         async with self._lock:
             ids = [row.id for org, row in self._notifications.values() if org == org_id][:limit]

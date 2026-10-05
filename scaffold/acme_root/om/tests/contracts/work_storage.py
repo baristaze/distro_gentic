@@ -21,6 +21,8 @@ CROSS_TENANT_CASES: frozenset[str] = frozenset(
         "count_claimed_ahead",
         "count_ready_on_lanes",
         "create_item",
+        "end_open_for_target",
+        "end_open_on_lane",
         "has_open_item",
         "read_item",
         "read_item_by_key",
@@ -661,3 +663,55 @@ class WorkStorageContract:
         assert await storage.count_failed_since(utcnow() - timedelta(hours=1)) == 2
         assert await storage.count_failed_since(utcnow() - timedelta(hours=3)) == 3
         assert await storage.count_failed_since(utcnow()) == 0
+
+    async def test_end_open_on_lane_ends_its_queued_and_held_items_alone(
+        self, storage: WorkStorageInterface, lane: str
+    ) -> None:
+        """A revoked host's lane: its queued and claimed items end as done,
+        their claim cleared, in batches; a settled item, another lane's, and
+        another tenant's stay as they were."""
+        org, other = new_id(), new_id()
+        queued, held = make_item(lane=lane), make_item(lane=lane)
+        settled = make_item(lane=lane).model_copy(update={"status": WorkStatus.FAILED})
+        elsewhere = make_item(lane=f"{lane}-other")
+        for item in (queued, held, settled, elsewhere):
+            await storage.create_item(org, item)
+        theirs = make_item(lane=lane)
+        await storage.create_item(other, theirs)
+        claimed = await storage.claim_next(lane, [WorkKind.NOOP], "w1", LEASE)
+        assert claimed is not None and claimed[1].id in {queued.id, held.id}
+        now = utcnow()
+        assert await storage.end_open_on_lane(new_id(), lane, "gone", now, 10) == []
+        first = await storage.end_open_on_lane(org, lane, "gone", now, 1)
+        second = await storage.end_open_on_lane(org, lane, "gone", now, 10)
+        assert await storage.end_open_on_lane(org, lane, "gone", now, 10) == []
+        assert {item.id for item in (*first, *second)} == {queued.id, held.id}
+        for item in (*first, *second):
+            stored = await storage.read_item(org, item.id)
+            assert stored is not None and stored.status is WorkStatus.DONE
+            assert (stored.last_error, stored.claim_token, stored.lease_expires_at) == (
+                "gone",
+                None,
+                None,
+            )
+        for tenant, kept in ((org, settled), (org, elsewhere), (other, theirs)):
+            stored = await storage.read_item(tenant, kept.id)
+            assert stored is not None and stored.status is kept.status
+
+    async def test_end_open_for_target_ends_that_targets_open_items_alone(
+        self, storage: WorkStorageInterface, lane: str
+    ) -> None:
+        org, other = new_id(), new_id()
+        mine = make_item(lane=lane)
+        also = make_item(lane=lane).model_copy(update={"target_id": mine.target_id})
+        kept = make_item(lane=lane)
+        for item in (mine, also, kept):
+            await storage.create_item(org, item)
+        target = mine.target_id
+        now = utcnow()
+        assert await storage.end_open_for_target(other, WorkKind.NOOP, target, "x", now, 10) == []
+        assert await storage.end_open_for_target(org, WorkKind.EXEC, target, "x", now, 10) == []
+        ended = await storage.end_open_for_target(org, WorkKind.NOOP, target, "x", now, 10)
+        assert {item.id for item in ended} == {mine.id, also.id}
+        stored = await storage.read_item(org, kept.id)
+        assert stored is not None and stored.status is WorkStatus.QUEUED

@@ -192,7 +192,8 @@ class NotificationsManagerImpl(NotificationsManagerInterface):
                 Ask(
                     action=ANSWER_QUESTION,
                     link=message_link(session.id),
-                    text=question_text(title, asked_question(history)),
+                    text=question_text(title, None),
+                    posted=question_text(title, asked_question(history)),
                     recipients=recipients,
                 )
             ]
@@ -230,9 +231,10 @@ class NotificationsManagerImpl(NotificationsManagerInterface):
                 continue
             provenance: Provenance | None = None
             if channel != PORTAL:
+                said = ask.posted or ask.text
                 try:
                     posted = await self._integrations(channel).post(
-                        address, f"{ask.text} {ask.link}" if ask.link else ask.text
+                        address, f"{said} {ask.link}" if ask.link else said
                     )
                 except InfraException:
                     log.warning(

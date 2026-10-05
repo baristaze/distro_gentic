@@ -37,6 +37,12 @@ class NotificationStorageInterface(ABC):
         ...
 
     @abstractmethod
+    async def purge_session(self, org_id: UUID, session_id: UUID, limit: int) -> int:
+        """At most `limit` of the notifications of a session the sweep
+        purges; returns how many went."""
+        ...
+
+    @abstractmethod
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:
         """At most `limit` rows of a deleted tenant past its retention; returns
         how many went."""

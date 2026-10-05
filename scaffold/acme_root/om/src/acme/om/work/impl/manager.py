@@ -273,6 +273,24 @@ class WorkManagerImpl(WorkManagerInterface):
         )
         return await self._storage.write_item_if_queued(ctx.org_id, ended)
 
+    async def end_open_on_lane(self, org_id: UUID, lane: str, reason: str) -> list[WorkItem]:
+        ended: list[WorkItem] = []
+        while batch := await self._storage.end_open_on_lane(
+            org_id, lane, reason, utcnow(), self._options.purge_batch
+        ):
+            ended.extend(batch)
+        return ended
+
+    async def end_open_for_target(
+        self, org_id: UUID, kind: str, target_id: UUID, reason: str
+    ) -> list[WorkItem]:
+        ended: list[WorkItem] = []
+        while batch := await self._storage.end_open_for_target(
+            org_id, kind, target_id, reason, utcnow(), self._options.purge_batch
+        ):
+            ended.extend(batch)
+        return ended
+
     async def fail_for_good(self, ctx: TenantContext, item: WorkItem, error: str) -> WorkItem:
         return await self._fail(ctx, item, error, True)
 
