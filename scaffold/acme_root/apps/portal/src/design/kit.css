@@ -779,9 +779,26 @@ select.acme-field {
   width: min(380px, calc(100vw - 32px));
 }
 
+/* Its colours follow the theme (theme.css): in dark, a raised surface with
+ * a ring, as a popover is, never a light box on the dark page. The ring is a
+ * shadow, so it takes no room. */
 .acme-needs-toasts .acme-toast {
-  box-shadow: var(--acme-shadow-lg);
+  background: var(--acme-needs-toast-bg);
+  color: var(--acme-needs-toast-text);
+  box-shadow:
+    0 0 0 1px var(--acme-needs-toast-ring),
+    var(--acme-shadow-lg);
   animation: acme-fade-in 200ms ease-out both;
+}
+
+.acme-needs-toasts .acme-toast-action:hover,
+.acme-needs-toasts .acme-toast-close:hover {
+  background: color-mix(in srgb, var(--acme-needs-toast-text) 14%, transparent);
+}
+
+.acme-needs-toasts .acme-toast-action:focus-visible,
+.acme-needs-toasts .acme-toast-close:focus-visible {
+  outline-color: var(--acme-needs-toast-text);
 }
 
 .acme-needs-toast {

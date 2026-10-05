@@ -26,6 +26,11 @@
   --acme-pending: #c96a05;
   --acme-tooltip-bg: #1a1a1f;
   --acme-tooltip-text: #ffffff;
+  /* A toast that a session needs its person: the tooltip's colours here, a
+     raised surface in dark, as a popover is there. */
+  --acme-needs-toast-bg: var(--acme-tooltip-bg);
+  --acme-needs-toast-text: var(--acme-tooltip-text);
+  --acme-needs-toast-ring: transparent;
   --acme-focus: #6d6bf0;
   --acme-focus-ring: rgba(82, 80, 214, 0.28);
   --acme-shadow-sm: 0 1px 2px rgba(16, 16, 24, 0.05);
@@ -61,6 +66,9 @@
     --acme-pending: #f0a33a;
     --acme-tooltip-bg: #ececf1;
     --acme-tooltip-text: #17171b;
+    --acme-needs-toast-bg: var(--acme-surface);
+    --acme-needs-toast-text: var(--acme-text);
+    --acme-needs-toast-ring: var(--acme-border);
     --acme-focus: #8d8bff;
     --acme-focus-ring: rgba(141, 139, 255, 0.32);
     --acme-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
@@ -94,6 +102,9 @@
   --acme-pending: #f0a33a;
   --acme-tooltip-bg: #ececf1;
   --acme-tooltip-text: #17171b;
+  --acme-needs-toast-bg: var(--acme-surface);
+  --acme-needs-toast-text: var(--acme-text);
+  --acme-needs-toast-ring: var(--acme-border);
   --acme-focus: #8d8bff;
   --acme-focus-ring: rgba(141, 139, 255, 0.32);
   --acme-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
