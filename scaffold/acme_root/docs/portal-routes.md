@@ -4,10 +4,10 @@
      its test fails while this file differs, and `vitest run -u` writes it again. -->
 
 Every page of the portal, by its address, with what it shows. Link a
-page with its address as a Markdown link, such as
-`[the session](/sessions/<id>)`, with each `:name` filled in as its line
-says. In the support dock, a link to one of these addresses opens its
-page beside the conversation; any other link shows as text.
+page with a Markdown link whose target is its address, each `:name`
+filled in as its line says: `/sessions/<id>` for one session. In the
+support dock, a link to one of these addresses opens its page beside the
+conversation; any other link shows as text.
 
 A message sent from the dock ends with a `page` block: the address the
 person is on, the route it matched, and the parameters it named, as data.
