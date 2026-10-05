@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { StepView } from "@acme/client";
 import type { LiveStream } from "../../queries/live";
 import { commandLine, PLATFORM_GISTS } from "./toolGists";
-import { duration, editDiff, timeline, type Entry, type TimelineInput } from "./timelineModel";
+import { answers, bodyKindOf, callsOf, duration, editDiff, timeline, type Entry, type TimelineInput } from "./timelineModel";
 
 const T0 = Date.parse("2026-10-05T10:00:00Z");
 const at = (s: number) => new Date(T0 + s * 1000).toISOString();
@@ -167,6 +167,17 @@ describe("timeline", () => {
     expect(only(replied.entries, "ask").open).toBe(false);
   });
 
+  it("draws a park only a person clears as the agent's ask that holds its unlock, which no message answers", () => {
+    const parked = step({ type: "parked", park: { reason: "person", unlock: "step_guard", retry_at: null } }, 3);
+    const session = { status: "parked" as const, park: { reason: "person" as const, unlock: "step_guard", retry_at: null }, archived_at: null };
+    const { entries, status } = read([...turn(), parked], { session });
+    const ask = entries[entries.length - 1]!;
+    expect(ask).toMatchObject({ kind: "ask", open: true, unlock: "step_guard", line: null });
+    expect(answers(ask)).toBe(false);
+    expect(status.needsYou).toBe(true);
+    expect(status.text).not.toContain("answer");
+  });
+
   it("draws a plan, a pull request, a validation, and a result as cards", () => {
     const asked = request(0);
     const asks = response(asked, 1, {
@@ -296,5 +307,29 @@ describe("the platform's lines", () => {
 
   it("says a duration the short way", () => {
     expect([duration(0.2), duration(4), duration(72), duration(7500)]).toEqual(["1s", "4s", "1m 12s", "2h 5m"]);
+  });
+});
+
+describe("a call's body", () => {
+  it("reads an answer with lines outside its hunks as a log, so every line is drawn", () => {
+    const show = "commit 0123abc\nAuthor: A <a@example.test>\n\n    Tidy\n\ndiff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1 +1 @@\n-old\n+new\n";
+    expect(bodyKindOf(show)).toBe("log");
+    expect(bodyKindOf("Changed:\n@@ -1 +1 @@\n-old\n+new")).toBe("log");
+    expect(bodyKindOf("--- a/a\n+++ b/a\n@@ -1 +1 @@\n-old\n+new")).toBe("diff");
+    expect(bodyKindOf('{"ok": true}')).toBe("json");
+  });
+});
+
+describe("the calls a product reads", () => {
+  it("hands every call the entries hold, in order, a card's and a block's alike", () => {
+    const steps = turn();
+    const asked = request(10);
+    const plans = response(asked, 11, { tool_uses: [toolUse("p1", "write_plan", { plan: "1. Fix it." })] });
+    const made = call(plans, "p1", "write_plan", 12);
+    const { entries } = read([...steps, asked, plans, made, answer(made, JSON.stringify({ plan: "1. Fix it." }), 12)]);
+    expect(callsOf(entries).map((each) => [each.id, each.tool])).toEqual([
+      ["u1", "run_command"],
+      ["p1", "write_plan"],
+    ]);
   });
 });

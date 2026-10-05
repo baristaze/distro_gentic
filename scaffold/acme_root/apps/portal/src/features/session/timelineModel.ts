@@ -562,6 +562,13 @@ export function timeline(input: TimelineInput): Timeline {
     last.running = true;
     last.seconds = seconds(last.at, now);
   }
+  // A park only a person clears, past a decision or an answer, asks for its
+  // unlock in a card of its own at the end.
+  const park = session.status === "parked" ? session.park : null;
+  if (park && park.reason === "person" && park.unlock !== "answer" && park.unlock !== "approval") {
+    const at = steps[steps.length - 1]?.created_at ?? now.toISOString();
+    entries.push({ kind: "ask", key: `unlock-${park.unlock}`, at, question: statusWords(session), line: null, open: true, unlock: park.unlock });
+  }
   return { entries, status: statusRow(input, entries) };
 }
 
@@ -605,11 +612,26 @@ function childOf(output: string | null): string | null {
   return field(answer, "session_id", "child_id", "id");
 }
 
+/** Every call the entries hold, in order: what a product's tab or card reads. */
+export function callsOf(entries: readonly Entry[]): Call[] {
+  const calls: Call[] = [];
+  for (const entry of entries) {
+    if (entry.kind === "work") for (const item of entry.items) if (item.kind === "call") calls.push(item.call);
+    if (entry.kind === "action" || entry.kind === "card" || entry.kind === "subagent" || entry.kind === "product") calls.push(entry.line.call);
+    if (entry.kind === "ask" && entry.line) calls.push(entry.line.call);
+  }
+  return calls;
+}
+
+/** Whether an entry is the agent's question still waiting for an answer: the
+ * composer's next message answers it. */
+export const answers = (entry: Entry) => entry.kind === "ask" && entry.open && entry.unlock === null;
+
 function statusRow(input: TimelineInput, entries: readonly Entry[]): StatusRow {
   const { session, held } = input;
   if (session.archived_at !== null) return { text: "Archived", needsYou: false, working: false };
   if (held.length > 0) return { text: `Needs you: approve ${held[0]!.tool}`, needsYou: true, working: false };
-  const asking = entries.some((entry) => entry.kind === "ask" && entry.open);
+  const asking = entries.some(answers);
   if (session.status === "parked" && session.park?.reason === "person") {
     return { text: asking ? "Needs you: answer the agent's question" : statusWords(session), needsYou: true, working: false };
   }

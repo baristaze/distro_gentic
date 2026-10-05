@@ -1,235 +1,31 @@
-// The parts of a session's page, one per tab, and the header above them.
-// Each draws what the view-model hands it; nothing here reads or decides.
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+// The parts of a session's panel, one per tab: its tool calls, its
+// evidence, its changes, its sub-agents, and its workspace. Each draws what
+// the view-model hands it; nothing here reads or decides.
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  Banner,
   Button,
   Card,
   DataTable,
-  DiffView,
   ErrorText,
   JsonView,
   Lightbox,
   LogView,
-  Markdown,
   Muted,
   Pill,
   TextArea,
   TextField,
-  parseJsonText,
   type Column,
   type LightboxItem,
 } from "../../design/kit";
 import { tokens } from "../../design/tokens";
 import { shortTime, type SessionRow } from "../sessions/sessionsModel";
-import type { RunRow, TimelineEntry, ToolCallRow } from "./sessionModel";
+import type { RunRow, ToolCallRow } from "./sessionModel";
 import type { SessionVm } from "./useSessionVm";
 
 const row = { display: "flex", flexWrap: "wrap", alignItems: "center", gap: tokens.space.sm } as const;
 const stack = { display: "grid", gap: tokens.space.md } as const;
 const small = { fontSize: tokens.font.size.sm } as const;
-
-export function StepBody({ entry }: { entry: Pick<TimelineEntry, "body" | "bodyKind" | "title"> }): ReactNode {
-  switch (entry.bodyKind) {
-    case "markdown":
-      return <Markdown text={entry.body} />;
-    case "json":
-      return <JsonView value={parseJsonText(entry.body)} label={entry.title} />;
-    case "diff":
-      return <DiffView text={entry.body} />;
-    case "log":
-      return <LogView output={entry.body} label={entry.title} />;
-    case "none":
-      return null;
-  }
-}
-
-export function SessionHeader({ vm }: { vm: SessionVm }) {
-  const session = vm.session!;
-  const raw = session.raw;
-  const [notes, setNotes] = useState<Record<number, string>>({});
-  return (
-    <Card id="session">
-      <div style={stack}>
-        <div style={{ ...row, ...small }} data-facts>
-          <Pill tone={session.status.tone}>{session.status.label}</Pill>
-          <Muted>
-            {raw.kind} v{raw.kind_version} · started {shortTime(raw.created_at)}
-          </Muted>
-          {raw.parent_id ? (
-            <Muted>
-              · a sub-agent of <Link to={`/sessions/${raw.parent_id}`}>its parent</Link>
-            </Muted>
-          ) : null}
-          {raw.root_id !== raw.id && raw.root_id !== raw.parent_id ? (
-            <Muted>
-              · in the tree of <Link to={`/sessions/${raw.root_id}`}>its root</Link>
-            </Muted>
-          ) : null}
-        </div>
-        {vm.park ? (
-          <Banner>
-            <div style={stack}>
-              <span>
-                {vm.park.reason} It is cleared by {vm.park.unlock}.
-                {vm.park.retryAt ? ` It tries again by itself at ${shortTime(vm.park.retryAt)}.` : ""}
-              </span>
-              {vm.park.action === "resume" && vm.may?.resume ? (
-                <div>
-                  <Button onClick={() => vm.control("resume")}>Resume</Button>
-                </div>
-              ) : null}
-              {vm.park.action === "give_back" && vm.may?.giveBack && vm.tab !== "live" ? (
-                <div>
-                  <Button onClick={() => vm.setTab("live")}>Go to the live view to give it back</Button>
-                </div>
-              ) : null}
-            </div>
-          </Banner>
-        ) : null}
-        {vm.asks.length > 0 ? (
-          <div style={stack} aria-label="It asks you" role="group">
-            {vm.asks.map((ask) => (
-              <div key={ask.seq} style={stack} data-ask={ask.kind}>
-                <span>
-                  <strong>{ask.what}</strong> <Muted style={small}>since {shortTime(ask.at)}</Muted>
-                </span>
-                {vm.may?.send && ask.kind === "decision" ? (
-                  <div style={row}>
-                    <TextField label="Note (optional)" value={notes[ask.seq] ?? ""} onChange={(note) => setNotes({ ...notes, [ask.seq]: note })} />
-                    <Button onClick={() => vm.decide(ask.seq, true, notes[ask.seq] ?? "")}>Approve</Button>
-                    <Button tone="danger" onClick={() => vm.decide(ask.seq, false, notes[ask.seq] ?? "")}>
-                      Deny
-                    </Button>
-                  </div>
-                ) : null}
-                {vm.may?.send && ask.kind === "unlock" ? (
-                  <div>
-                    <Button onClick={() => vm.control("unlock")}>Clear it</Button>
-                  </div>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        ) : null}
-        {vm.may ? (
-          <div style={row}>
-            {vm.may.pause ? (
-              <Button tone="plain" onClick={() => vm.control("pause")}>
-                Pause
-              </Button>
-            ) : null}
-            {vm.may.cancel ? (
-              <Button tone="plain" onClick={() => vm.control("cancel")}>
-                Cancel the loop
-              </Button>
-            ) : null}
-            {vm.may.compact ? (
-              <Button tone="plain" onClick={() => vm.control("compact")}>
-                Compact
-              </Button>
-            ) : null}
-            <Muted style={{ ...small, marginLeft: "auto" }}>Ctrl K or ⌘K: every command</Muted>
-          </div>
-        ) : null}
-      </div>
-    </Card>
-  );
-}
-
-export function ThreadPart({ vm }: { vm: SessionVm }) {
-  const [draft, setDraft] = useState("");
-  const onSubmit = (event: FormEvent) => {
-    event.preventDefault();
-    if (draft.trim()) vm.send(draft.trim(), () => setDraft(""));
-  };
-  return (
-    <Card title="Thread" id="thread">
-      <div style={stack}>
-        {vm.thread === null ? <Muted>Loading</Muted> : null}
-        {vm.thread?.length === 0 ? <Muted>Nothing said yet. A message wakes the session.</Muted> : null}
-        <ol style={{ ...stack, listStyle: "none", margin: 0, padding: 0 }} aria-label="Messages">
-          {vm.thread?.map((entry) => (
-            <li key={entry.seq} data-who={entry.who} style={{ display: "grid", gap: tokens.space.xs }}>
-              <Muted style={small}>
-                {entry.label} · {shortTime(entry.at)}
-              </Muted>
-              <Markdown text={entry.text} />
-            </li>
-          ))}
-        </ol>
-        {vm.may?.send ? (
-          <form onSubmit={onSubmit} style={stack} aria-label="Send a message">
-            <TextArea label="Message" value={draft} onChange={setDraft} />
-            <div>
-              <Button type="submit" disabled={vm.sending || !draft.trim()}>
-                {vm.sending ? "Sending" : "Send"}
-              </Button>
-            </div>
-          </form>
-        ) : null}
-      </div>
-    </Card>
-  );
-}
-
-/** Every step as a line of the timeline; a step's body is drawn only once
- * its entry is opened, so a long session draws its lines and not its
- * thousands of outputs. */
-export function TimelinePart({ vm }: { vm: SessionVm }) {
-  const entries = vm.timeline;
-  const [opened, setOpened] = useState<ReadonlySet<number>>(() => new Set());
-  const withBodies = useMemo(() => (entries ?? []).filter((entry) => entry.bodyKind !== "none"), [entries]);
-  const bodyIndex = useMemo(() => new Map(withBodies.map((entry, index) => [entry.seq, index])), [withBodies]);
-  const items: LightboxItem[] = useMemo(
-    () => withBodies.map((entry) => ({ title: `${entry.seq}. ${entry.title}`, content: <StepBody entry={entry} /> })),
-    [withBodies],
-  );
-  const toggle = (seq: number) =>
-    setOpened((was) => {
-      const next = new Set(was);
-      if (!next.delete(seq)) next.add(seq);
-      return next;
-    });
-  return (
-    <Card title="Timeline" id="timeline">
-      {entries === null ? <Muted>Loading</Muted> : null}
-      {vm.stepsError ? <ErrorText>The history could not be read.</ErrorText> : null}
-      {entries?.length === 0 ? <Muted>No steps yet.</Muted> : null}
-      <ol className="acme-timeline" aria-label="Steps">
-        {entries?.map((entry) => (
-          <li key={entry.seq} data-type={entry.type} data-tone={entry.tone}>
-            <div style={row}>
-              <span className="acme-timeline-seq">{entry.seq}</span>
-              <strong data-title>{entry.title}</strong>
-              {entry.detail ? <Muted style={small}>{entry.detail}</Muted> : null}
-              <Muted style={{ ...small, marginLeft: "auto" }}>{shortTime(entry.at)}</Muted>
-              {entry.bodyKind !== "none" ? (
-                <Button tone="plain" onClick={() => toggle(entry.seq)}>
-                  {opened.has(entry.seq) ? "Hide" : "Show"}
-                </Button>
-              ) : null}
-              {entry.bodyKind !== "none" && entry.bodyKind !== "markdown" ? (
-                <Button tone="plain" onClick={() => vm.setShown(bodyIndex.get(entry.seq) ?? 0)}>
-                  Enlarge
-                </Button>
-              ) : null}
-            </div>
-            {entry.bodyKind !== "none" && opened.has(entry.seq) ? (
-              <div className="acme-timeline-body">
-                <StepBody entry={entry} />
-              </div>
-            ) : null}
-          </li>
-        ))}
-      </ol>
-      {vm.shown !== null && items.length > 0 ? (
-        <Lightbox items={items} index={Math.min(vm.shown, items.length - 1)} onIndex={vm.setShown} onClose={() => vm.setShown(null)} />
-      ) : null}
-    </Card>
-  );
-}
 
 const TOOL_COLUMNS: Column<ToolCallRow>[] = [
   { key: "seq", header: "Step", cell: (call) => call.seq, sortValue: (call) => call.seq },

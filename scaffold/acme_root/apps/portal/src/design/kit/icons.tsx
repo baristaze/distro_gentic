@@ -10,26 +10,42 @@ import type { JSX } from "react";
 import type { LucideIcon, LucideProps } from "lucide-react";
 import {
   Archive,
+  ArrowDown,
   ArrowUp,
   BookOpen,
   Bot,
+  Check,
   ChevronDown,
+  ChevronRight,
+  CircleX,
+  Copy,
   Crown,
   ExternalLink,
   Eye,
   FileText,
+  Flag,
   FolderGit2,
+  GitPullRequest,
   Info,
   Keyboard,
   LayoutList,
+  ListChecks,
   ListFilter,
+  LoaderCircle,
   LogOut,
+  MessageCircleQuestionMark,
   Monitor,
   Moon,
+  Network,
   PanelLeft,
+  PanelRight,
+  Pause,
+  Play,
   Plus,
   Search,
   Shield,
+  ShieldAlert,
+  ShieldCheck,
   SquarePen,
   Sun,
   User,
@@ -121,3 +137,35 @@ export const InfoIcon = kitIcon(Info);
 export const ChevronIcon = kitIcon(ChevronDown);
 /** A box: archived. */
 export const ArchiveIcon = kitIcon(Archive);
+/** A chevron right: a folded row that opens. */
+export const ChevronRightIcon = kitIcon(ChevronRight);
+/** A check: a call that answered. */
+export const CheckIcon = kitIcon(Check);
+/** A crossed circle: a call that failed or was denied. */
+export const FailedIcon = kitIcon(CircleX);
+/** A turning circle: a call that runs. */
+export const SpinnerIcon = kitIcon(LoaderCircle);
+/** A shield with a mark: a call that waits for a person's decision. */
+export const HeldIcon = kitIcon(ShieldAlert);
+/** Two bars: pause. */
+export const PauseIcon = kitIcon(Pause);
+/** A triangle: resume. */
+export const PlayIcon = kitIcon(Play);
+/** A panel on the right: show or hide the session's panel. */
+export const PanelIcon = kitIcon(PanelRight);
+/** Two sheets: copy. */
+export const CopyIcon = kitIcon(Copy);
+/** An arrow down: jump to the latest. */
+export const JumpIcon = kitIcon(ArrowDown);
+/** A pull request. */
+export const PullRequestIcon = kitIcon(GitPullRequest);
+/** A checked list: a plan. */
+export const PlanIcon = kitIcon(ListChecks);
+/** A shield with a check: a validation. */
+export const ValidationIcon = kitIcon(ShieldCheck);
+/** A flag: a result. */
+export const ResultIcon = kitIcon(Flag);
+/** Linked nodes: a sub-agent. */
+export const SubAgentIcon = kitIcon(Network);
+/** A speech bubble with a question mark: the agent asks. */
+export const AskIcon = kitIcon(MessageCircleQuestionMark);
