@@ -130,9 +130,9 @@ class AcceptanceHarnessImpl(AcceptanceHarnessInterface):
         run alone, from the repository its project binds, and every path
         its patterns match comes from there, whatever the head holds there.
         Every other path the scenario forbids comes from its base, and the
-        executor holds all of them read-only while the suite runs, so no
-        copy the head makes of what scores a run, in its delivery or while
-        it runs, scores it. Its
+        executor holds each file of them the tree holds read-only while the
+        suite runs, so no file that scores a run scores it as the head
+        rewrote it, in its delivery or while it runs. Its
         runs belong to the verdict: none is stored where the session's
         evidence is."""
         if delivery is None:

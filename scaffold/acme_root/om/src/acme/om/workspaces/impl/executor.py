@@ -9,11 +9,13 @@ project's repository by the platform (`Tree`) and written in as files. A
 hidden suite's source is a repository of its own, which the request
 names by its project. No
 credential and no history enters the instance, and nothing leaves it: its
-egress is none. Every path of the tree the request protects, or keeps
+egress is none. Every file of the tree the request protects, or keeps
 untouched, is read-only before a check runs, and a trial after which one
 is not as the executor left it ran to no verdict: its inode, its mode, its
 size, and the time its inode last changed, which no process of the
-instance sets back, are read before the first trial and after each. So
+instance sets back, are read before the first trial and after each. A
+folder stays writable: a check, or the head's code, may add a new file in
+a protected folder, and no file the tree held there changes unseen. So
 the head's code neither rewrites what scores it while it runs nor puts it
 back unseen. Each check's
 command template runs with `{version}` and `{out}` filled, in the tree,
@@ -79,8 +81,9 @@ OUT = "out"
 UNPACK = 'mkdir -p "$1" "$2" && tar -xf "$3" -C "$1" && rm -f "$3" && pwd'
 """Unpacks the tree and answers the instance's root, as its commands see it."""
 LOCK = 'chmod -- a-w "$@"'
-"""Makes each file and folder of the tree a run protects read-only: no
-process of the check writes it, or adds to it, without changing its mode."""
+"""Makes each file of the tree a run protects read-only, and never a
+folder: no process of the check writes the file without changing its mode,
+and a new file beside it is the check's to write."""
 SEEN = (
     "seen=$(if stat -c %i . >/dev/null 2>&1;"
     ' then stat -c "%n %i %a %s %z" -- "$@";'
@@ -89,8 +92,8 @@ SEEN = (
     ' then printf "%s\\n" "$seen" | sha256sum;'
     ' else printf "%s\\n" "$seen" | shasum -a 256; fi'
 )
-"""One digest of what the instance holds at each path a run protects: its
-inode, mode, size, and the time its inode last changed, to the nanosecond,
+"""One digest of what the instance holds at each file and link a run
+protects: its inode, mode, size, and the time its inode last changed, to the nanosecond,
 by GNU's `stat` and `sha256sum`, or by BSD's `stat` and `shasum` on a host
 that has those. A write, a change of mode, or a replacement moves that
 time, and no process of the instance sets it back. A path gone fails it."""
@@ -414,9 +417,10 @@ class ExecutorWorkspacesImpl(ExecutorInterface):
 
 def _protected(tree: bytes, patterns: tuple[str, ...]) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """The paths of `tree` a pattern of `patterns` matches, as its tar names
-    them: the files and folders made read-only, then those with every link
-    among them, which the digest covers. A link is never followed: its own
-    inode is what the digest reads."""
+    them, and never a folder: the files made read-only, then those with
+    every link among them, which the digest covers. A link is never
+    followed: its own inode is what the digest reads. A folder stays
+    writable, and a new file a check writes in one changes no digest."""
     if not patterns:
         return (), ()
     try:
@@ -424,8 +428,9 @@ def _protected(tree: bytes, patterns: tuple[str, ...]) -> tuple[tuple[str, ...],
             members = archive.getmembers()
     except tarfile.TarError as unread:
         raise Unavailable(f"the tree is no tar the executor reads: {unread}") from None
-    guarded = protected_paths(patterns, (member.name for member in members))
-    lockable = {member.name for member in members if member.isfile() or member.isdir()}
+    held = (member.name for member in members if not member.isdir())
+    guarded = protected_paths(patterns, held)
+    lockable = {member.name for member in members if member.isfile()}
     return tuple(path for path in guarded if path in lockable), guarded
 
 

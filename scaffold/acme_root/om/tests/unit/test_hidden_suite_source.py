@@ -4,9 +4,10 @@ reads the tree at the head with every path of the suite taken from that
 repository, and the suite's own files run there, whatever the head holds
 at those paths. Both repositories are on this disk, read by their URLs;
 the instance is the twins', and each check's command runs for real in
-the tree the executor wrote into it. Every path the run protects is
+the tree the executor wrote into it. Every file the run protects is
 read-only to the head's code while it runs, and one it changes anyway
-leaves the trial without a verdict."""
+leaves the trial without a verdict; a folder stays writable, and a check
+may write a new file there."""
 
 import asyncio
 import hashlib
@@ -137,6 +138,26 @@ atexit.register(put_back)
 """A head that leaves the defect, and whose code makes what scores the
 suite writable, writes over it, and puts it back as it was when the run
 ends."""
+REPLACES = (
+    DEFECT
+    + f"""
+import os
+
+os.remove("checks/score.py")
+with open("checks/score.py", "w") as scorer:
+    scorer.write({GAMED!r})
+os.chmod("checks/score.py", 0o444)
+"""
+)
+"""A head that leaves the defect, and whose code removes what scores the
+suite from its folder, which stays writable, and writes its own at the
+same path."""
+BUILDING_RUNNER = SCORED_RUNNER.replace(
+    "score = {}\n",
+    'with open("checks/score.built", "w") as built:\n    built.write("built")\nscore = {}\n',
+)
+"""A hidden suite's runner that builds beside what scores it: it writes a
+new file in the folder the scenario forbids before it scores."""
 COMPLETE = CheckDeclaration(
     name="totals-complete",
     version="1",
@@ -459,3 +480,35 @@ async def test_a_head_whose_code_rewrites_what_scores_the_suite_while_it_runs_fa
         (COMPLETE.name, RunOutcome.ERRORED)
     ], "a changed scorer leaves the trial without a verdict"
     assert Link.HIDDEN in put_back.broken()
+
+
+# Check 3: a check that writes a new file in a protected folder passes at
+# a correct head, and a head whose code replaces a file there still has a
+# trial without a verdict.
+
+
+async def test_a_check_that_writes_a_new_file_in_a_protected_folder_passes_at_a_correct_head(
+    tmp_path: Path,
+) -> None:
+    repositories = Repositories(
+        tmp_path,
+        base={"src/totals.py": DEFECT, "checks/score.py": SCORE},
+        runner=BUILDING_RUNNER,
+        forbidden=("hidden/**", "checks/**"),
+    )
+
+    # The runner writes a new file beside the scorer, in the folder the
+    # scenario forbids, and the head that fixes the defect passes.
+    fixed = await repositories.judge({"src/totals.py": FIX})
+    assert [(run.check, run.version, run.outcome) for run in fixed.hidden] == [
+        (COMPLETE.name, fixed.head, RunOutcome.PASSED)
+    ], "a new file in a protected folder fails no check"
+    assert Link.HIDDEN not in fixed.broken()
+
+    # A head whose code removes the scorer, as the folder lets it, and
+    # writes its own at the same path: the trial is errored, never a pass.
+    replaced = await repositories.judge({"src/totals.py": REPLACES})
+    assert [(run.check, run.outcome) for run in replaced.hidden] == [
+        (COMPLETE.name, RunOutcome.ERRORED)
+    ], "a replaced scorer leaves the trial without a verdict"
+    assert Link.HIDDEN in replaced.broken()
