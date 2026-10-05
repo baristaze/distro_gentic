@@ -169,12 +169,14 @@ app, and `main.py` is the `acme-api` command: `serve`, `migrate`,
   own kind writes, a bounded batch at a time, which a member of the
   item's tenant reads by a handle, as a session's. Each entry carries
   the hash it crossed the wall with, and an append with one that does
-  not match is `422 crossing_refused`.
+  not match is `422 crossing_refused`. It reads the item's streams of a
+  kind its own kind reads, under its claim token, while its lease is
+  live; any other item or kind, and a lapsed lease, are `404`.
   (`/v1/claimants/enrollments`, `/v1/claimants/me/credentials`,
   `/v1/claimants/me/claims`, `/v1/claimants/me/items/{item_id}`,
   `.../lease`, `.../report`, `.../streams/{kind}`,
   `/v1/work-items/{item_id}/streams/{kind}/live`, `/v1/live/items`, ADR
-  2029, ADR 2030)
+  2029, ADR 2030, ADR 2038)
 - **The exec work a host holds.** With its own credential alone, a host
   reads what an item it holds runs, pushes its output a part at a time
   and how it ended, and renews its lease. Each push carries the bytes as
