@@ -1,6 +1,7 @@
 // A session's right pane: its open tabs, each with its icon, label, and ✕;
 // a "+" that lists the views not open; the active tab's view under them;
 // and the edge a person drags, or moves by the arrows, to resize it.
+import { useEffect } from "react";
 import { CloseTabIcon, Menu, MenuItem, PanelIcon, PlusIcon, Tooltip, useSplitter } from "../../design/kit";
 import { PANE } from "./paneModel";
 import type { SessionVm } from "./useSessionVm";
@@ -9,6 +10,10 @@ export function Pane({ vm }: { vm: SessionVm }) {
   const pane = vm.pane;
   const splitter = useSplitter(pane.width, vm.resizePane, PANE, "left");
   const active = vm.tabs.find((tab) => tab.id === pane.shown);
+  // The active tab stays in sight when the strip holds more than fits.
+  useEffect(() => {
+    document.getElementById(`pane-tab-${pane.shown}`)?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  }, [pane.shown]);
   if (!active || !vm.slotSession) return null;
   return (
     <aside className="acme-pane" aria-label="Session pane" style={{ width: pane.width }}>

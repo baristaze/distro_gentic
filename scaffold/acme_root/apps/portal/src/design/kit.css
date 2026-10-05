@@ -1311,12 +1311,20 @@ select.acme-field {
   scrollbar-width: none;
 }
 
+/* A tab gives up its label before the strip scrolls: an inactive one
+ * narrows to its icon, its ✕ shown on hover; the active one keeps its
+ * width. */
 .acme-pane-tab {
   display: inline-flex;
-  flex-shrink: 0;
+  flex: 0 1 auto;
   align-items: center;
+  min-width: 34px;
   border-radius: 8px;
   color: var(--acme-muted);
+}
+
+.acme-pane-tab .acme-tip-anchor {
+  overflow: hidden;
 }
 
 .acme-pane-tab:hover {
@@ -1324,6 +1332,7 @@ select.acme-field {
 }
 
 .acme-pane-tab[data-active] {
+  flex-shrink: 0;
   background: var(--acme-surface-subtle);
   color: var(--acme-text);
 }
@@ -1339,6 +1348,17 @@ select.acme-field {
   font: inherit;
   font-size: 13px;
   cursor: pointer;
+}
+
+.acme-pane-tab-name > svg {
+  flex-shrink: 0;
+}
+
+.acme-pane-tab-name > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .acme-pane-tab[data-active] .acme-pane-tab-name {
@@ -1362,6 +1382,10 @@ select.acme-field {
 .acme-pane-tab[data-active] .acme-pane-tab-close,
 .acme-pane-tab-close:focus-visible {
   opacity: 1;
+}
+
+.acme-pane-tab:not([data-active], :hover, :focus-within) .acme-pane-tab-close {
+  display: none;
 }
 
 .acme-pane-tab-close:hover {
