@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AgentSessionView, ExecutionView, ToolCallView } from "@acme/client";
+import type { AgentSessionView, ExecutionView } from "@acme/client";
 import {
   allowed,
   composerOf,
@@ -7,10 +7,8 @@ import {
   parkLine,
   pullRequestBadge,
   runRow,
-  sessionPanel,
   splitCommand,
   statusLine,
-  toolCallRow,
   usageLine,
 } from "./sessionModel";
 
@@ -47,28 +45,7 @@ describe("status and parks", () => {
 
 });
 
-describe("tool calls, runs, delivery, and usage", () => {
-  const call: ToolCallView = {
-    seq: 4,
-    loop_id: "loop-1",
-    tool: "deploy",
-    authorization_class: "outward_facing",
-    principal_id: "p",
-    requested_at: at,
-    responded_at: null,
-    response_seq: null,
-    decision: null,
-    decided_by: null,
-    failure: null,
-  };
-
-  it("says where each tool call stands", () => {
-    expect(toolCallRow({ ...call, decision: "pending" })).toMatchObject({ state: "waits for a decision", tone: "danger" });
-    expect(toolCallRow({ ...call, failure: "denied", decision: "denied" }).state).toBe("denied");
-    expect(toolCallRow({ ...call, responded_at: at, response_seq: 5 }).state).toBe("answered");
-    expect(toolCallRow(call).state).toBe("running");
-  });
-
+describe("runs, delivery, and usage", () => {
   it("says a run's check, outcome, cases, and a twin's provenance beside it", () => {
     const run: ExecutionView = {
       id: "r1",
@@ -161,10 +138,6 @@ describe("what a person may do", () => {
 });
 
 describe("the page's parts", () => {
-  it("opens the panel at the part the address bar names, and keeps it shut otherwise", () => {
-    expect([sessionPanel("evidence"), sessionPanel("nope"), sessionPanel(null)]).toEqual(["evidence", null, null]);
-  });
-
   it("turns the composer to an answer while the agent asks, and to a reply or a steer otherwise", () => {
     expect(composerOf(true, undefined)).toEqual({ label: "Answer", placeholder: "Answer the agent's question" });
     expect(composerOf(false, undefined).placeholder).toBe('Reply or steer, e.g. "Also add a test for leap years"');

@@ -14,6 +14,7 @@ import { SessionsPage } from "../sessions/SessionsPage";
 import { PLATFORM } from "../../app/platform";
 import { SlotProvider } from "../../app/slot";
 import { keys } from "../../queries/keys";
+import { usePanesStore } from "../../store/panes";
 import { SessionPage } from "./SessionPage";
 
 const net = vi.hoisted(() => ({
@@ -119,6 +120,7 @@ function answer(path: string): unknown {
   if (part === "delivery")
     return { branch: "fix-dates", branch_seen: true, project_id: null, report: null, work: [{ kind: "pull_request", handle: "forge/acme/first#7", bound_at: at }] };
   if (part === "approvals") return net.held;
+  if (part === "tool-calls") return { has_more: false, items: [] };
   if (part === "executions") return { items: [RUN], next_cursor: null };
   if (part === "validations") return [];
   if (part === "usage") return { calls: 1, input: 10, output: 5, thinking: 0, cache_read: 0, cache_write: 0, fills: [] };
@@ -148,13 +150,14 @@ vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 const container = document.createElement("div");
 document.body.append(container);
 let root: ReturnType<typeof createRoot> | null = null;
+let router: ReturnType<typeof createMemoryRouter> | null = null;
 
 async function open(org: "a" | "b", address: string, history: StepView[] | null = null) {
   net.org = org;
   net.calls = [];
   net.history = history;
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const router = createMemoryRouter(
+  router = createMemoryRouter(
     [
       { path: "/sessions", Component: SessionsPage },
       { path: "/sessions/:sessionId", Component: SessionPage },
@@ -162,7 +165,7 @@ async function open(org: "a" | "b", address: string, history: StepView[] | null 
     { initialEntries: [address] },
   );
   root = createRoot(container);
-  const page = createElement(SlotProvider, { slot: PLATFORM, children: createElement(RouterProvider, { router }) });
+  const page = createElement(SlotProvider, { slot: PLATFORM, children: createElement(RouterProvider, { router: router! }) });
   await act(async () => root!.render(createElement(QueryClientProvider, { client: queryClient }, page)));
   await settle();
   return queryClient;
@@ -176,6 +179,8 @@ async function settle() {
 afterEach(async () => {
   await act(async () => root?.unmount());
   root = null;
+  usePanesStore.setState({ panes: {} });
+  localStorage.clear();
   Object.assign(net, { environment: "local", projects: [], posts: [], over: {}, held: [] });
 });
 
@@ -188,7 +193,7 @@ describe("a second org's session", () => {
   });
 
   it("shows nothing of it at its address, and nothing past the refused read is asked for", async () => {
-    await open("b", "/sessions/sa?tab=timeline");
+    await open("b", "/sessions/sa?pane=evidence");
     expect(container.querySelector("h1")!.textContent).toBe("No session here");
     expect(container.textContent).not.toContain("Ajax");
     expect(net.calls.filter((path) => path.startsWith("/v1/agent-sessions/"))).toEqual(["/v1/agent-sessions/sa"]);
@@ -208,7 +213,7 @@ describe("the org's own session", () => {
     expect(container.querySelector("textarea")!.getAttribute("placeholder")).toBe('Reply or steer, e.g. "Also add a test for leap years"');
   });
 
-  it("folds a 3,000-step history into one work block, and draws a call's answer only once its row opens", async () => {
+  it("folds a 3,000-step history into one work block, and draws a call's answer only once its chevron opens it", async () => {
     const long: StepView[] = [];
     for (let n = 1; n <= 1000; n += 1) {
       const asked = step(long.length + 1, { type: "model_response", actor: "model", tool_uses: [{ id: `u${n}`, name: "run_command", input: { argv: ["make", `t${n}`] } }] });
@@ -226,9 +231,8 @@ describe("the org's own session", () => {
     const calls = [...container.querySelectorAll(".acme-call")];
     expect(calls).toHaveLength(1000);
     expect(container.querySelectorAll(".acme-call-body")).toHaveLength(0);
-    const line = calls[41]!.querySelector<HTMLButtonElement>(".acme-call-line")!;
-    expect(line.textContent).toContain("make t42");
-    await act(async () => line.click());
+    expect(calls[41]!.querySelector(".acme-call-line")!.textContent).toContain("make t42");
+    await act(async () => calls[41]!.querySelector<HTMLButtonElement>(".acme-call-fold")!.click());
     const bodies = [...container.querySelectorAll(".acme-call-body")];
     expect(bodies).toHaveLength(1);
     expect(bodies[0]!.textContent).toContain("output of call 42");
@@ -259,10 +263,55 @@ describe("the org's own session", () => {
     expect(net.posts).toContainEqual({ path: "/v1/agent-sessions/sa/calls/3/decision", body: { approve: true } });
   });
 
-  it("draws its evidence in the panel: each run with its outcome and a twin's provenance", async () => {
-    await open("a", "/sessions/sa?tab=evidence");
+  const pane = () => container.querySelector("[aria-label='Session pane']");
+  const tabNames = () => [...container.querySelectorAll("[role='tab']")].map((tab) => tab.textContent);
+  const address = () => router!.state.location.search;
+
+  it("draws its evidence in the pane's tab the address names: each run with its outcome and a twin's provenance", async () => {
+    await open("a", "/sessions/sa?pane=evidence");
+    expect(tabNames()).toEqual(["Evidence"]);
     const cells = [...container.querySelectorAll("table[aria-label='Runs'] tbody td")].map((cell) => cell.textContent);
     expect(cells.slice(0, 5)).toEqual(["unit 1", "work", "passed", "twin, never reported as real", "4 passed"]);
-    expect(container.textContent).toContain("1 model call: 10 tokens in, 5 out");
+    expect(net.calls.some((path) => path.includes("/usage"))).toBe(false);
+  });
+
+  it("opens a call's step in the pane from its line, and puts the step in the address", async () => {
+    await open("a", "/sessions/sa", [
+      step(1, { type: "model_response", actor: "model", tool_uses: [{ id: "u1", name: "run_command", input: { argv: ["pytest", "-q"] } }] }),
+      step(2, { type: "tool_request", actor: "agent", refs: ["st1"], tool: "run_command", tool_use_id: "u1" }),
+      step(3, { type: "tool_response", actor: "program", responds_to: "st2", tool: "run_command", tool_use_id: "u1", text: '{"stdout": "3 passed\\n", "exit_code": 0}' }),
+    ]);
+    expect(pane()).toBeNull();
+    await act(async () => container.querySelector<HTMLButtonElement>(".acme-work .acme-fold-line")!.click());
+    await act(async () => container.querySelector<HTMLButtonElement>(".acme-call-line")!.click());
+    await settle();
+    expect(tabNames()).toEqual(["Step"]);
+    const shown = container.querySelector("[aria-label='Step']")!;
+    expect(shown.textContent).toContain("run_command");
+    expect(shown.textContent).toContain("3 passed");
+    expect(shown.textContent).toContain("None needed");
+    expect(new URLSearchParams(address()).get("pane")).toBe("step");
+    expect(new URLSearchParams(address()).get("call")).toBe("u1");
+    // "+" offers the rest; Plan is not among them, since it wrote none.
+    await act(async () => container.querySelector<HTMLButtonElement>("button[aria-label='Open a view']")!.click());
+    const offered = [...document.querySelectorAll("[role='menuitem']")].map((item) => item.textContent);
+    expect(offered).toEqual(["Workspace", "Changes", "Evidence", "Sub-agents", "Usage"]);
+    await act(async () => (document.querySelector("[role='menuitem']") as HTMLButtonElement).click());
+    expect(tabNames()).toEqual(["Step", "Workspace"]);
+    expect(new URLSearchParams(address()).get("pane")).toBe("workspace");
+  });
+
+  it("opens Workspace by itself once while it runs; closed, it stays closed", async () => {
+    net.over = { status: "running" };
+    await open("a", "/sessions/sa");
+    expect(tabNames()).toEqual(["Workspace"]);
+    expect(pane()!.textContent).toContain("Take control");
+    await act(async () => container.querySelector<HTMLButtonElement>("button[aria-label='Close Workspace']")!.click());
+    expect(pane()).toBeNull();
+    expect(new URLSearchParams(address()).get("pane")).toBeNull();
+    await act(async () => root?.unmount());
+    // A new visit to the same session keeps it closed.
+    await open("a", "/sessions/sa");
+    expect(pane()).toBeNull();
   });
 });

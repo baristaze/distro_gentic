@@ -1,6 +1,6 @@
 // Pure: what a session's page says, past its timeline (`timelineModel.ts`).
-// The status and why a parked session waits, the composer's words, its tool
-// calls, its runs, what it delivered, and what a person may do to it now.
+// The status and why a parked session waits, the composer's words, its
+// runs, what it delivered, and what a person may do to it now.
 // No React, no fetch.
 import type {
   AgentSessionView,
@@ -8,7 +8,6 @@ import type {
   ExecutionView,
   ParkView,
   SessionModelUsageView,
-  ToolCallView,
 } from "@acme/client";
 
 export type Tone = "plain" | "accent" | "danger";
@@ -80,27 +79,6 @@ export function parkLine(park: ParkView): ParkLine {
     retryAt: park.retry_at,
     action,
   };
-}
-
-const words = (value: string) => value.replace(/_/g, " ");
-
-export interface ToolCallRow {
-  seq: number;
-  tool: string;
-  state: string;
-  tone: Tone;
-  requestedAt: string;
-  decidedBy: string | null;
-}
-
-export function toolCallRow(call: ToolCallView): ToolCallRow {
-  let state = "running";
-  let tone: Tone = "accent";
-  if (call.decision === "pending") [state, tone] = ["waits for a decision", "danger"];
-  else if (call.decision === "denied" || call.decision === "expired") [state, tone] = [call.decision, "danger"];
-  else if (call.failure) [state, tone] = [`failed: ${words(call.failure)}`, "danger"];
-  else if (call.responded_at) [state, tone] = ["answered", "plain"];
-  return { seq: call.seq, tool: call.tool, state, tone, requestedAt: call.requested_at, decidedBy: call.decided_by };
 }
 
 export interface RunRow {
@@ -262,22 +240,6 @@ export function splitCommand(line: string): SplitCommand {
   if (problem) return { problem };
   if (argv.length === 0) return { problem: "Type a command." };
   return { argv };
-}
-
-export type SessionTab = "tools" | "evidence" | "changes" | "children" | "live";
-
-/** The parts of a session past its chat, in its panel. */
-export const SESSION_TABS: readonly { value: SessionTab; label: string }[] = [
-  { value: "live", label: "Workspace" },
-  { value: "changes", label: "Changes" },
-  { value: "evidence", label: "Evidence" },
-  { value: "tools", label: "Tool calls" },
-  { value: "children", label: "Sub-agents" },
-];
-
-/** The part of the panel the address bar names; null keeps the panel shut. */
-export function sessionPanel(value: string | null): SessionTab | null {
-  return SESSION_TABS.find((tab) => tab.value === value)?.value ?? null;
 }
 
 export interface ComposerWords {

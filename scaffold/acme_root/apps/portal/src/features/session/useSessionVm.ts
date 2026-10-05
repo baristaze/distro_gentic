@@ -5,40 +5,15 @@ import { errorMessage } from "../../app/errorMessage";
 import type { SlotSession } from "../../app/product";
 import { useSlot } from "../../app/slot";
 import type { PaletteCommand } from "../../design/kit";
-import {
-  useAgentSession,
-  useApprovals,
-  useBounds,
-  useChildren,
-  useCommandProgress,
-  useDelivery,
-  useExecutions,
-  useSessionActions,
-  useSteps,
-  useToolCalls,
-  useUsage,
-  useValidations,
-} from "../../queries/agentSessions";
+import { useAgentSession, useApprovals, useCommandProgress, useDelivery, useSessionActions, useSteps } from "../../queries/agentSessions";
 import { useLiveStreams } from "../../queries/live";
 import { useMe } from "../../queries/tenancy";
 import { useNoticesStore } from "../../store/notices";
+import { paneOf, usePanesStore } from "../../store/panes";
 import { sessionRow } from "../sessions/sessionsModel";
-import {
-  allowed,
-  composerOf,
-  deliveryLines,
-  parkLine,
-  pullRequestBadge,
-  runRow,
-  SESSION_TABS,
-  sessionPanel,
-  splitCommand,
-  statusLine,
-  toolCallRow,
-  usageLine,
-  type SessionTab,
-} from "./sessionModel";
-import { answers, callsOf, timeline } from "./timelineModel";
+import { addable, closeTab, knownTabs, openCall, openTab, openThemselves, resizePane, shownTab, togglePane, type PaneState } from "./paneModel";
+import { allowed, composerOf, deliveryLines, parkLine, pullRequestBadge, splitCommand, statusLine } from "./sessionModel";
+import { answers, callsOf, timeline, type Call } from "./timelineModel";
 
 /** The time now, read again every second while `ticking`: a running block's
  * duration counts up. */
@@ -52,14 +27,22 @@ function useNow(ticking: boolean): Date {
   return now;
 }
 
+/** A product's predicate, read safely: one that throws says no. */
+function asks(predicate: ((s: SlotSession) => boolean) | undefined, s: SlotSession): boolean {
+  try {
+    return predicate?.(s) === true;
+  } catch {
+    return false;
+  }
+}
+
 /** One session's page: its header, its history as a chat with what streams
- * now at its end, the composer under it, and a panel of its other parts.
- * Its reads wait on the session itself: a session the member's org does
- * not hold answers 404, and then nothing else is asked for. A part of the
- * panel reads only while it is open. */
+ * now at its end, the composer under it, and its right pane of tabs. Its
+ * reads wait on the session itself: a session the member's org does not
+ * hold answers 404, and then nothing else is asked for. A tab reads its own
+ * routes, and only while it is drawn. */
 export function useSessionVm(id: string) {
   const [params, setParams] = useSearchParams();
-  const panel = sessionPanel(params.get("tab"));
   const navigate = useNavigate();
   const notify = useNoticesStore((s) => s.notify);
   const slot = useSlot();
@@ -69,14 +52,8 @@ export function useSessionVm(id: string) {
   const status = session.data?.status;
   const active = status === "running" || status === "pending" || status === "parked";
   const steps = useSteps(id, active, found);
-  const toolCalls = useToolCalls(id, active, found && panel === "tools");
   const approvals = useApprovals(id, found && status === "parked");
-  const executions = useExecutions(id, found && panel === "evidence");
-  const validations = useValidations(id, found && panel === "evidence");
-  const usage = useUsage(id, found && panel === "evidence");
-  const bounds = useBounds(id, found && (panel === "evidence" || panel === "children"));
   const delivery = useDelivery(id, found);
-  const children = useChildren(id, found && panel === "children");
   // A session reads as pending until a step after its input is projected,
   // which can be its run's park: its first run streams while it is pending.
   const runs = status === "running" || status === "pending";
@@ -85,7 +62,6 @@ export function useSessionVm(id: string) {
   const actions = useSessionActions(id);
   const [commandKey, setCommandKey] = useState<string | null>(null);
   const command = useCommandProgress(id, commandKey);
-  const [shown, setShown] = useState<number | null>(null);
   const [commandProblem, setCommandProblem] = useState<string | null>(null);
 
   // A stream that ends has become a step: read it now, not at the next poll,
@@ -101,10 +77,43 @@ export function useSessionVm(id: string) {
 
   const may = session.data ? allowed(session.data, me.data?.permissions.includes("write") ?? false) : null;
   const fail = useCallback((what: string) => (caught: unknown) => notify(errorMessage(caught, what), { tone: "problem" }), [notify]);
-  const setPanel = useCallback(
-    (next: SessionTab | null) => setParams(next === null ? {} : { tab: next }, { replace: true }),
-    [setParams],
-  );
+
+  // The pane: kept per session in this browser, its active tab and the call
+  // Step shows mirrored in the address (`?pane=`, `?call=`).
+  const tabs = slot.sessionTabs;
+  const known = useMemo(() => new Set(tabs.map((tab) => tab.id)), [tabs]);
+  const kept = usePanesStore((s) => paneOf(s.panes, id));
+  const changePane = usePanesStore((s) => s.change);
+  const pane = useMemo(() => knownTabs(kept, known), [kept, known]);
+  const change = useCallback((next: (pane: PaneState) => PaneState) => changePane(id, (before) => next(knownTabs(before, known))), [changePane, id, known]);
+  const shown = shownTab(pane);
+  const stepCall = pane.step;
+  // The address the page opens at names a tab, and a call: they open, once a visit.
+  const visited = useRef<string | null>(null);
+  useEffect(() => {
+    if (visited.current === id) return;
+    visited.current = id;
+    const asked = params.get("pane");
+    const call = params.get("call");
+    if (asked !== null && known.has(asked)) change((before) => (call ? openCall(before, asked, call) : openTab(before, asked)));
+  }, [id, known, change, params]);
+  // Then the address follows the pane: the pane is its one writer.
+  useEffect(() => {
+    const now = knownTabs(paneOf(usePanesStore.getState().panes, id), known);
+    const tab = shownTab(now);
+    const call = tab === null ? null : now.step;
+    if (params.get("pane") === tab && params.get("call") === call) return;
+    const next = new URLSearchParams(params);
+    for (const [key, value] of [
+      ["pane", tab],
+      ["call", call],
+    ] as const) {
+      if (value === null) next.delete(key);
+      else next.set(key, value);
+    }
+    setParams(next, { replace: true });
+  }, [shown, stepCall, params, setParams, id, known]);
+  const showTab = useCallback((tab: string) => change((before) => openTab(before, tab)), [change]);
 
   const send = (text: string, done: () => void) =>
     actions.message.mutate(text, { onSuccess: done, onError: fail("The message was not sent.") });
@@ -149,10 +158,11 @@ export function useSessionVm(id: string) {
   const copyLink = () => copy(window.location.href.split("?")[0]!, "The link");
 
   const commands: PaletteCommand[] = useMemo(() => {
-    const list: PaletteCommand[] = SESSION_TABS.map((each) => ({
-      id: `tab-${each.value}`,
+    const list: PaletteCommand[] = tabs.map((each) => ({
+      id: `tab-${each.id}`,
       label: `Show ${each.label.toLowerCase()}`,
-      run: () => setPanel(each.value),
+      keywords: ["tab", "panel"],
+      run: () => showTab(each.id),
     }));
     list.push({ id: "sessions", label: "Go to sessions", keywords: ["list", "back"], run: () => navigate("/sessions") });
     if (may?.pause) list.push({ id: "pause", label: "Pause the session", run: () => control("pause") });
@@ -164,7 +174,7 @@ export function useSessionVm(id: string) {
     return list;
     // The actions' closures are rebuilt each render; the list follows what may be done.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [may?.pause, may?.resume, may?.cancel, may?.compact, may?.takeControl, may?.archive, setPanel, navigate]);
+  }, [may?.pause, may?.resume, may?.cancel, may?.compact, may?.takeControl, may?.archive, tabs, showTab, navigate]);
 
   const missing = session.error instanceof ApiError && session.error.status === 404;
   const tools = slot.tools;
@@ -183,17 +193,59 @@ export function useSessionVm(id: string) {
         ? {
             session: record,
             calls: chat ? callsOf(chat.entries) : [],
-            running: record.status === "running",
-            open: (tab: string) => setPanel(sessionPanel(tab)),
+            // A session reads pending through its first run until it parks.
+            running: record.status === "running" || record.status === "pending",
+            open: showTab,
           }
         : null,
-    [record, chat, setPanel],
+    [record, chat, showTab],
   );
+  const offers = useMemo(
+    () =>
+      slotSession && chat
+        ? tabs.map((tab) => ({ tab, offered: asks(tab.offered, slotSession), opensItself: asks(tab.opensItself, slotSession) }))
+        : [],
+    [tabs, slotSession, chat],
+  );
+  // A tab that first has something opens itself, once a session.
+  const wanting = offers.filter((offer) => offer.offered && offer.opensItself).map((offer) => offer.tab.id).join(" ");
+  useEffect(() => {
+    if (wanting) change((before) => openThemselves(before, wanting.split(" ")));
+  }, [wanting, change]);
+  /** Shows a call: in the tab its tool names, else in Step. */
+  const showCall = useCallback(
+    (call: Pick<Call, "id" | "tool">) => {
+      const tab = tools[call.tool]?.tab;
+      const target = tab !== undefined && known.has(tab) ? tab : "step";
+      change((before) => openCall(before, target, call.id));
+    },
+    [tools, known, change],
+  );
+  const byId = (tabId: string) => tabs.find((tab) => tab.id === tabId);
+  const openIds = new Set(pane.tabs);
   const asking = chat?.entries.some(answers) ?? false;
   return {
     id,
-    panel,
-    setPanel,
+    tabs,
+    pane: {
+      width: pane.width,
+      shown,
+      open: pane.tabs.flatMap((tabId) => byId(tabId) ?? []),
+      addable: addable(pane, offers.map((offer) => ({ id: offer.tab.id, offered: offer.offered, opensItself: offer.opensItself }))).flatMap(
+        (tabId) => byId(tabId) ?? [],
+      ),
+      isOpen: (tabId: string) => openIds.has(tabId),
+    },
+    openTab: showTab,
+    closeTab: (tabId: string) => change((before) => closeTab(before, tabId)),
+    /** Hides the pane, or shows it: at Workspace while it runs, else at Changes, when no tab is open. */
+    togglePane: () => change((before) => togglePane(before, slotSession?.running ? "workspace" : "changes")),
+    resizePane: (width: number) => change((before) => resizePane(before, width)),
+    stepCall,
+    openCall: showCall,
+    /** Shows the call with this id in Step. */
+    openStep: (callId: string) => showCall({ id: callId, tool: "" }),
+    gists,
     missing,
     error: missing ? null : session.error,
     session: record ? { ...sessionRow(record), raw: record, status: statusLine(record) } : null,
@@ -205,14 +257,7 @@ export function useSessionVm(id: string) {
     tools,
     composer: composerOf(asking, slot.examples.reply),
     pullRequest: delivery.data ? pullRequestBadge(delivery.data) : null,
-    toolCalls: toolCalls.isPending ? null : (toolCalls.data ?? []).map(toolCallRow),
-    runs: executions.isPending ? null : (executions.data ?? []).map(runRow),
-    rawRuns: executions.data ?? [],
-    validations: validations.data ?? [],
-    usage: usage.data ? usageLine(usage.data) : null,
-    bounds: bounds.data ?? null,
     delivery: delivery.data ? deliveryLines(delivery.data) : null,
-    children: children.isPending ? null : (children.data ?? []).map(sessionRow),
     live,
     command: command.data ?? null,
     commandKey,
@@ -229,8 +274,6 @@ export function useSessionVm(id: string) {
     sending: actions.message.isPending,
     deciding: actions.decide.isPending,
     commands,
-    shown,
-    setShown,
   };
 }
 

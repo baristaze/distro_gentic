@@ -14,6 +14,7 @@ import { NewOrgPage } from "../features/new_org/NewOrgPage";
 import { PlaybooksPage } from "../features/playbooks/PlaybooksPage";
 import { ProjectPage } from "../features/projects/ProjectPage";
 import { ProjectsPage } from "../features/projects/ProjectsPage";
+import { PLATFORM_TABS } from "../features/session/PaneTabs";
 import { SessionPage } from "../features/session/SessionPage";
 import { PLATFORM_GISTS } from "../features/session/toolGists";
 import { SessionsPage } from "../features/sessions/SessionsPage";
@@ -58,7 +59,8 @@ export const PLATFORM: PortalProduct = {
       count: useSuggestedCount,
     },
   ],
-  sessionTabs: [],
+  // The tabs of a session's right pane.
+  sessionTabs: PLATFORM_TABS,
   // How each of the platform's tools reads in a session's timeline.
   tools: Object.fromEntries(Object.entries(PLATFORM_GISTS).map(([name, gist]) => [name, { gist }])),
   settings: [
