@@ -418,6 +418,32 @@ async def test_a_moved_deadline_unlocks_every_session_of_the_tree_it_parked(
     assert await statuses() == [SessionStatus.PENDING] * 2
 
 
+async def test_a_moved_deadline_unlocks_the_tree_past_a_deleted_session(
+    managers: Managers,
+) -> None:
+    """A child that ended and was deleted waits on nothing: the unlock
+    passes over it to the child after it."""
+    ctx = context(Role.MEMBER)
+    agents, steps, sessions = managers.agents, managers.steps, managers.agent_sessions
+    root = await start(managers, ctx)
+    children = [await agents.spawn(ctx, root.id, spawn()) for _ in range(2)]
+    gone, child = sorted(children, key=lambda session: session.id)
+    (objective,) = (await steps.get_steps(ctx, gone.id, 0, 1)).items
+    request = make_request(gone.id, objective.id, (objective.id,))
+    response = make_response(gone.id, objective.id, request.id)
+    epoch = await steps.begin_run(ctx, gone.id)
+    await steps.append_steps(ctx, gone.id, epoch, [request, response, ended(gone.id, objective.id)])
+    assert (await sessions.project_status(ctx, gone.id)).status is SessionStatus.IDLE
+    await sessions.delete_session(ctx, gone.id)
+    (opening,) = (await steps.get_steps(ctx, child.id, 0, 1)).items
+    epoch = await steps.begin_run(ctx, child.id)
+    await sessions.park(ctx, child.id, epoch, opening.loop_id, deadline_park())
+
+    await agents.set_deadline(ctx, root.id, utcnow() + timedelta(hours=1))
+
+    assert (await sessions.get_session(ctx, child.id)).status is SessionStatus.PENDING
+
+
 async def test_a_tree_stops_at_its_height_and_its_count(managers: Managers) -> None:
     ctx = context(Role.MEMBER)
     agents = managers.agents
@@ -472,25 +498,28 @@ async def test_a_deleted_child_is_walked_through_and_every_live_session_is_cance
 ) -> None:
     """A deleted session answers no write, so the cascade passes it by:
     its sibling and what runs below it are still cancelled, and a moved
-    deadline still reaches the tree."""
+    deadline still reaches the tree. It is deleted while nothing below it
+    is at work, and a message wakes the session below after."""
     ctx = context(Role.MEMBER)
     agents, steps, sessions = managers.agents, managers.steps, managers.agent_sessions
     root = await start(managers, ctx)
     gone = await agents.spawn(ctx, root.id, spawn("delivery"))
     sibling = await agents.spawn(ctx, root.id, spawn())
     below = await agents.spawn(ctx, gone.id, spawn())
-    (objective,) = (await steps.get_steps(ctx, gone.id, 0, 1)).items
-    request = make_request(gone.id, objective.id, (objective.id,))
-    response = make_response(gone.id, objective.id, request.id)
-    epoch = await steps.begin_run(ctx, gone.id)
-    await steps.append_steps(ctx, gone.id, epoch, [request, response, ended(gone.id, objective.id)])
-    assert (await sessions.project_status(ctx, gone.id)).status is SessionStatus.IDLE
+    for session_id in (below.id, gone.id):
+        (objective,) = (await steps.get_steps(ctx, session_id, 0, 1)).items
+        request = make_request(session_id, objective.id, (objective.id,))
+        response = make_response(session_id, objective.id, request.id)
+        epoch = await steps.begin_run(ctx, session_id)
+        done = [request, response, ended(session_id, objective.id)]
+        await steps.append_steps(ctx, session_id, epoch, done)
+        assert (await sessions.project_status(ctx, session_id)).status is SessionStatus.IDLE
     await sessions.delete_session(ctx, gone.id)
     epoch = await steps.begin_run(ctx, sibling.id)
     opening = (await steps.get_steps(ctx, sibling.id, 0, 1)).items[0]
     await steps.append_steps(ctx, sibling.id, epoch, [make_parked(sibling.id, opening.id)])
     assert (await sessions.project_status(ctx, sibling.id)).status is SessionStatus.PARKED
-    (asked,) = (await steps.get_steps(ctx, below.id, 0, 1)).items
+    (asked,) = await steps.append_inputs(ctx, below.id, [make_message(below.id)])
     epoch = await steps.begin_run(ctx, below.id)
     await steps.append_steps(ctx, below.id, epoch, [make_request(below.id, asked.id, (asked.id,))])
     assert (await sessions.project_status(ctx, below.id)).status is SessionStatus.RUNNING
@@ -692,13 +721,8 @@ async def test_a_purged_session_leaves_no_authority_or_tree_behind(tmp_path: Pat
     root = await start(managers, ctx)
     child = await managers.agents.spawn(ctx, root.id, spawn())
     sibling = await start(managers, ctx)
-    await sessions.delete_session(ctx, root.id)
-    await sessions.purge_across_tenants()
-    with pytest.raises(NotFound):
-        await authority(ctx, root.id)
-    assert await trees.read_tree(ctx.org_id, root.id) is not None, "its child is left"
-    # Its objective woke it: its loop reads it and ends, and the idle child
-    # may be deleted.
+    # Its objective woke the child: its loop reads it and ends, so nothing
+    # below the root is at work, and the root may be deleted.
     (objective,) = (await managers.steps.get_steps(ctx, child.id, 0, 1)).items
     request = make_request(child.id, objective.id, (objective.id,))
     response = make_response(child.id, objective.id, request.id)
@@ -706,6 +730,11 @@ async def test_a_purged_session_leaves_no_authority_or_tree_behind(tmp_path: Pat
     done = [request, response, ended(child.id, objective.id)]
     await managers.steps.append_steps(ctx, child.id, epoch, done)
     assert (await sessions.project_status(ctx, child.id)).status is SessionStatus.IDLE
+    await sessions.delete_session(ctx, root.id)
+    await sessions.purge_across_tenants()
+    with pytest.raises(NotFound):
+        await authority(ctx, root.id)
+    assert await trees.read_tree(ctx.org_id, root.id) is not None, "its child is left"
     await sessions.delete_session(ctx, child.id)
     await sessions.purge_across_tenants()
     with pytest.raises(NotFound):

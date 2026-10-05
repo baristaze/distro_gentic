@@ -239,8 +239,10 @@ async def test_a_sub_agent_waits_for_a_person_where_its_ancestors_gate_holds_a_c
 async def test_a_sub_agent_meets_the_gates_invoked_above_a_session_a_person_deleted(
     tmp_path: Path,
 ) -> None:
-    """The engine holds a call under a deleted ancestor for a person; their
-    approval never lifts the deny the root's playbook holds above it."""
+    """A person deletes the middle session once nothing below it is at
+    work. A message wakes the grandchild after, and its call still meets the
+    deny the root's playbook holds above it: denied, never held for a
+    person, and never run."""
     loop, playbooks = deep(tmp_path)
     root = await loop.start()
     await playbooks.publish(loop.owner, draft(gate(Decision.DENY, tool="lookup")))
@@ -248,14 +250,16 @@ async def test_a_sub_agent_meets_the_gates_invoked_above_a_session_a_person_dele
     child, grandchild = await sub_agents(loop, root)
     loop.anthropic.add(reply(said("My sub-agent will find it.")))
     await loop.loops.run(loop.owner, child)
-    await loop.managers.agent_sessions.delete_session(loop.owner, child)
-    loop.anthropic.add(reply(use("lookup")))
-    held = await loop.loops.run(loop.owner, grandchild)
-    assert held.end is RunEnd.PARKED and held.park is not None
-    (request,) = [s for s in await loop.history(grandchild) if s.type is StepType.TOOL_REQUEST]
-    await loop.managers.tools.decide_call(loop.owner, grandchild, request.seq, approve=True)
-    loop.anthropic.add(reply(said("I may not look it up.")))
+    loop.anthropic.add(reply(said("I will look when asked.")))
     await loop.loops.run(loop.owner, grandchild)
+    # The grandchild's report woke the child: its own loop ends first.
+    loop.anthropic.add(reply(said("My sub-agent waits.")))
+    await loop.loops.run(loop.owner, child)
+    await loop.managers.agent_sessions.delete_session(loop.owner, child)
+    await loop.say(grandchild, "Look the total up.")
+    loop.anthropic.add(reply(use("lookup")), reply(said("I may not look it up.")))
+    run = await loop.loops.run(loop.owner, grandchild)
+    assert run.end is RunEnd.ENDED and run.park is None
     steps = await loop.history(grandchild)
     (answer,) = [s for s in steps if s.type is StepType.TOOL_RESPONSE]
     assert isinstance(answer.header, ToolResponseHeader)

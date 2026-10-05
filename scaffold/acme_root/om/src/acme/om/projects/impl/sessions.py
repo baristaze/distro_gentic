@@ -18,6 +18,7 @@ from acme.om.agent_sessions.types.agent_session import (
     AgentSessionPage,
     SessionStatus,
 )
+from acme.om.attribution.types.principal import AgentRef
 from acme.om.context import TenantContext
 from acme.om.projects.exceptions import ProjectFixed
 from acme.om.projects.storage import ProjectStorageInterface
@@ -80,6 +81,9 @@ class AgentSessionsInProjectImpl(AgentSessionsManagerInterface):
         self, ctx: TenantContext, parent_id: UUID, after: UUID | None, limit: int
     ) -> AgentSessionPage:
         return await self._inner.get_children(ctx, parent_id, after, limit)
+
+    async def get_ancestors(self, ctx: TenantContext, session_id: UUID) -> tuple[AgentRef, ...]:
+        return await self._inner.get_ancestors(ctx, session_id)
 
     async def get_sessions(
         self, ctx: TenantContext, status: SessionStatus | None, after: UUID | None, limit: int
