@@ -126,8 +126,9 @@ class RelayManagerInterface(ABC):
         execution or reads its result; only a repeatable one whose last run
         was stopped or lost is put on the queue again. `StaleExec` for a
         command whose epoch is below the session's; `NoWorkspaceHost` when no
-        host holds the workspace; `ContentNotKept` when the session keeps no
-        content at rest."""
+        live host of the session's pool holds the workspace, one revoked
+        included; `ContentNotKept` when the session keeps no content at
+        rest."""
         ...
 
     @abstractmethod
@@ -143,9 +144,9 @@ class RelayManagerInterface(ABC):
         self, rctx: RequestContext, org_id: UUID, item_id: UUID, kind: StopKind, epoch: int | None
     ) -> ExecItem:
         """Platform-internal: ends the item at once. One no host holds yet
-        never runs; one a host holds is stopped over its control stream.
-        `StaleExec` from a run below the item's epoch, whose stop would end
-        another run's command."""
+        never runs, and its queue row ends with it; one a host holds is
+        stopped over its control stream. `StaleExec` from a run below the
+        item's epoch, whose stop would end another run's command."""
         ...
 
     @abstractmethod

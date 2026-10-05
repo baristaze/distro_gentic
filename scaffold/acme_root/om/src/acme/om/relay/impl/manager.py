@@ -342,6 +342,13 @@ class RelayManagerImpl(RelayManagerInterface):
                 f"session {call.session_id} is pinned to its tenant's hosts, and no host "
                 "holds its workspace yet; its calls never run on the platform's machines"
             )
+        if not await self._holds(ctx, binding.instance_of or call.session_id, binding.host_id):
+            # A revoked host never claims again: a command queued on its lane
+            # would wait for good. The run prepares again on the pool.
+            raise NoWorkspaceHost(
+                f"the host that held session {call.session_id}'s workspace is no longer a live "
+                "host of its pool; its workspace is made again before its calls run"
+            )
         sealed = await self._seal.seal(ctx, call.session_id, call.key, request)
         if sealed is None:
             raise ContentNotKept(
@@ -405,9 +412,12 @@ class RelayManagerImpl(RelayManagerInterface):
         item = await self._item(org_id, item_id)
         await self._admit(ctx, item.session_id, epoch)
         if item.state is ExecState.QUEUED:
-            # No host took it: it never runs, and the row it left is
-            # completed by the claim that finds it.
+            # No host took it: it never runs. Its row ends with it, unless a
+            # host claimed the row first: the claim that finds the item
+            # settled completes it.
             stopped = await self._settle(ctx, item, ExecOutcome(stopped=kind))
+            if stopped is not None:
+                await self._end_row(ctx, stopped)
             return stopped or await self._item(org_id, item_id)
         if item.state is ExecState.RUNNING:
             await self._control(ctx, item, kind)
@@ -936,6 +946,15 @@ class RelayManagerImpl(RelayManagerInterface):
         if written is not None and revoke:
             await self._control(ctx, item, StopKind.REVOKE)
         return written
+
+    async def _end_row(self, ctx: TenantContext, item: ExecItem) -> None:
+        """Ends the queue row of an item that never ran, while it is queued:
+        a host that is gone never claims it to find the item settled."""
+        try:
+            row = await self._work.get_item(ctx, item.row_id)
+        except NotFound:
+            return
+        await self._work.end_queued(ctx, row, "its command was stopped before a host took it")
 
     async def _control(self, ctx: TenantContext, item: ExecItem, kind: StopKind) -> None:
         """A control message for the host that holds the item; its row is

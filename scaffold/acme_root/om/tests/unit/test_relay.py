@@ -445,6 +445,35 @@ async def test_a_purged_sessions_commands_leave_no_queue_row_behind(wall: Wall) 
     assert await work.oldest_ready_age() == timedelta(0)
 
 
+async def test_a_command_sent_after_its_host_was_revoked_is_refused_and_queues_no_row(
+    wall: Wall,
+) -> None:
+    relay, work, org = wall.managers.relay, wall.managers.work, wall.owner.org_id
+    await wall.managers.hosts.revoke_host(wall.owner, wall.holder.host_id)
+
+    with pytest.raises(NoWorkspaceHost):
+        await relay.send(request(), org, _call(wall, command(wall.epoch)), 0)
+
+    assert await work.latest_for_target(wall.owner, WorkKind.EXEC, wall.workspace.id) is None
+    assert await work.oldest_ready_age() == timedelta(0)
+
+
+async def test_stopping_a_command_no_host_took_ends_its_queue_row(wall: Wall) -> None:
+    relay, work, org = wall.managers.relay, wall.managers.work, wall.owner.org_id
+    queued = await relay.send(request(), org, _call(wall, command(wall.epoch)), 0)
+
+    stopped = await relay.stop(request(), org, queued.id, StopKind.DEADLINE, wall.epoch)
+
+    assert stopped.state is ExecState.INTERRUPTED
+    row = await work.get_item(wall.owner, queued.row_id)
+    assert (row.status, row.last_error) == (
+        WorkStatus.DONE,
+        "its command was stopped before a host took it",
+    )
+    assert await Host(wall.managers, wall.holder).claim() is None
+    assert await work.oldest_ready_age() == timedelta(0)
+
+
 async def test_a_cancel_or_an_interrupt_reaches_the_hosts_control_stream(wall: Wall) -> None:
     host = Host(wall.managers, wall.holder)
     relay = wall.managers.relay
