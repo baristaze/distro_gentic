@@ -1319,8 +1319,8 @@ select.acme-field {
 }
 
 /* A tab gives up its label before the strip scrolls: an inactive one
- * narrows to its icon, its ✕ shown on hover; the active one keeps its
- * width. */
+ * narrows to its icon alone, its ✕ shown on hover, its label in its
+ * tooltip and its name; the active one keeps its width. */
 .acme-pane-tab {
   display: inline-flex;
   flex: 0 1 auto;
@@ -1344,17 +1344,25 @@ select.acme-field {
   color: var(--acme-text);
 }
 
+/* One line high: a label with no room for all of it wraps under the
+ * icon, out of sight, so a narrowed tab never shows a cut letter. */
 .acme-pane-tab-name {
   display: inline-flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
   align-items: center;
-  gap: 6px;
+  gap: 0 6px;
+  box-sizing: border-box;
+  height: 30px;
   min-width: 0;
+  overflow: hidden;
   padding: 5px 4px 5px 8px;
   border: 0;
   background: transparent;
   color: inherit;
   font: inherit;
   font-size: 13px;
+  line-height: 20px;
   cursor: pointer;
 }
 
@@ -1363,9 +1371,7 @@ select.acme-field {
 }
 
 .acme-pane-tab-name > span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  flex-shrink: 0;
   white-space: nowrap;
 }
 
