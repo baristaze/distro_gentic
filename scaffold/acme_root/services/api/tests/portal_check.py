@@ -400,7 +400,7 @@ ADVERTISED = {
     "os": "this machine",
     "shell": "/bin/sh",
     "capabilities": ["git"],
-    "isolation_modes": ["host"],
+    "isolation_modes": ["directory"],
 }
 
 
