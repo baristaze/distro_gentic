@@ -1,10 +1,11 @@
 // One session: its header, its history as a chat with the composer pinned
-// under it, and its right pane of tabs beside them. A session the member's
-// org does not hold shows nothing of it.
+// under it, and its right pane of tabs beside them, folded to its rail when
+// the support dock needs the room. A session the member's org does not hold
+// shows nothing of it.
 import { useEffect, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { errorMessage } from "../../app/errorMessage";
-import { usePageCommands } from "../../app/shell/shellContext";
+import { usePageCommands, usePaneSplit } from "../../app/shell/shellContext";
 import {
   ArchiveIcon,
   Banner,
@@ -37,6 +38,8 @@ export function SessionPage() {
   const vm = useSessionVm(sessionId);
   // What the page can do now, offered first in the shell's search (Cmd-K).
   usePageCommands(vm.commands);
+  // The pane's width while it shows, for the dock; it folds when the dock needs the room.
+  const folded = usePaneSplit(vm.session && vm.pane.shown ? vm.pane.width : null);
   const { togglePane } = vm;
   // Option-Cmd-B shows or hides the pane.
   useEffect(() => {
@@ -73,7 +76,7 @@ export function SessionPage() {
             <Timeline key={vm.id} vm={vm} />
             <Composer key={`composer-${vm.id}`} vm={vm} />
           </section>
-          <Pane vm={vm} />
+          <Pane vm={vm} folded={folded} />
         </div>
       </div>
     </SessionVmContext.Provider>

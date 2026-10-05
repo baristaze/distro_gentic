@@ -34,7 +34,7 @@ const stateOf = (other: AgentSessionView): ChildState => ({
 
 /** The time now, read again every second while `ticking`: a running block's
  * duration counts up. */
-function useNow(ticking: boolean): Date {
+export function useNow(ticking: boolean): Date {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     if (!ticking) return;

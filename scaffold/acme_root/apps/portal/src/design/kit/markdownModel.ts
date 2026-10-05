@@ -1,13 +1,17 @@
 // Pure: the Markdown an agent writes, read into blocks and inline runs that
 // a component draws as elements. Nothing here becomes HTML: a tag in the
-// text stays text, and a link goes only where `safeHref` lets it.
+// text stays text, and a link goes only where `safeHref` lets it. A link to
+// a path on this site is kept apart, as a `path`, which draws as its text
+// unless the view that draws it decides otherwise.
 
 export type Inline =
   | { kind: "text"; text: string }
   | { kind: "code"; text: string }
   | { kind: "strong"; children: Inline[] }
   | { kind: "em"; children: Inline[] }
-  | { kind: "link"; href: string; children: Inline[] };
+  | { kind: "link"; href: string; children: Inline[] }
+  /** `[label](/a/path)`: a link to an address on this site, and the text it was written as. */
+  | { kind: "path"; href: string; children: Inline[]; raw: string };
 
 export type Block =
   | { kind: "heading"; level: number; children: Inline[] }
@@ -43,6 +47,7 @@ export function parseInline(text: string): Inline[] {
     else if (label !== undefined && href !== undefined) {
       const target = safeHref(href);
       if (target) push({ kind: "link", href: target, children: parseInline(label) });
+      else if (href.startsWith("/")) push({ kind: "path", href, children: parseInline(label), raw: whole });
       else push({ kind: "text", text: whole });
     } else if (strong !== undefined || strongToo !== undefined) {
       push({ kind: "strong", children: parseInline(strong ?? strongToo!) });
@@ -52,6 +57,11 @@ export function parseInline(text: string): Inline[] {
   }
   if (at < text.length) push({ kind: "text", text: text.slice(at) });
   return out;
+}
+
+/** The words of inline runs, without their marks. */
+export function plainText(nodes: readonly Inline[]): string {
+  return nodes.map((node) => ("children" in node ? plainText(node.children) : node.text)).join("");
 }
 
 const FENCE = /^\s*(```|~~~)\s*([\w+-]*)\s*$/;
