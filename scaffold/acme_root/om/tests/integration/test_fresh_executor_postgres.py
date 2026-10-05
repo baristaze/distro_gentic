@@ -5,8 +5,9 @@ project's repository, with the checks and their fixture from the base,
 and the container is gone after. The validation hashes to the results the
 run wrote, and the result gate confirms the success they show. A
 validation session runs as the platform's own work on the same executor,
-a head that plants a runner of its own still runs the base's, and a head's
-`.gitattributes` leaves nothing out of the tree the checks run on."""
+a head that plants a runner of its own still runs the base's, a head's
+`.gitattributes` leaves nothing out of the tree the checks run on, and a
+head whose code changes the base's fixture while it runs has no verdict."""
 
 import subprocess
 from collections.abc import AsyncIterator
@@ -64,6 +65,16 @@ APP = AppContext(type=AppType.PORTAL, version="portal@test")
 WORKER = AppContext(type=AppType.WORKER, version="worker@test")
 PLANTED = RUNNER.replace('cart.get("TOTAL") == expected', "True")
 """A runner a head plants: it passes whatever the cart holds."""
+REWRITES = """\
+import os
+
+os.chmod("checks/expected.txt", 0o644)
+with open("checks/expected.txt", "w") as fixture:
+    fixture.write("4")
+TOTAL = 4
+"""
+"""A cart whose code makes the base's fixture writable, while the check
+runs, and writes its own total there."""
 
 
 class ReadBack(TransportContainerImpl):
@@ -245,6 +256,28 @@ async def test_a_heads_attributes_leave_nothing_out_of_the_checks(
         owner, session_id, Result(claim=Claim.SUCCEEDED, evidence=(record.id,))
     )
     assert not verdict.accepted, "the gate refuses a success the checks never showed"
+
+
+# Check 1, while the head runs: the base's fixture is read-only in the
+# container, and a head whose code changes it anyway has no verdict.
+
+
+async def test_a_head_whose_code_changes_the_bases_fixture_while_it_runs_has_no_verdict(
+    storage: StoragePostgresImpl, tmp_path: Path
+) -> None:
+    delivered = Delivered(storage, tmp_path)
+    owner, session_id, head = await delivered.session({"src/cart.py": REWRITES})
+    evidence = delivered.managers.evidence
+
+    await evidence.validate(owner, session_id, RunPurpose.VALIDATION)
+
+    (record,) = (await evidence.get_runs(owner, session_id, None, 10)).items
+    assert (record.version, record.outcome, record.isolation) == (
+        head,
+        RunOutcome.ERRORED,
+        "container",
+    ), "a changed protected path leaves the trial without a verdict"
+    assert gone(UUID(record.executor.removeprefix("executor:")))
 
 
 # Check 2: a validation session is platform work, run on the same fresh
