@@ -194,6 +194,7 @@ def spec(mode: IsolationMode, egress: EgressMode = EgressMode.NONE) -> Isolation
         (spec(IsolationMode.HOST), CLOUD, 0, "a bare directory in the cloud"),
         (spec(IsolationMode.HOST), HostOffer(inside_wall=True), 0, "a directory run as anybody"),
         (spec(IsolationMode.TWIN), WALL, 0, "a twin outside local"),
+        (spec(IsolationMode.ACCOUNT), WALL, 0, "an account of the host outside local"),
         (spec(IsolationMode.CONTAINER, EgressMode.OPEN), CLOUD, 0, "open egress unbounded"),
         (spec(IsolationMode.VM, EgressMode.ALLOWLIST), WALL, 0, "an allowlist with no proxy"),
         (

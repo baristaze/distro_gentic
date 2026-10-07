@@ -2,7 +2,9 @@
 workspace held to its session's pin. A prepare asks for the pinned isolation
 whatever a loop asks, and the host refuses what it cannot give
 (`rules.host_refusal`) before its provider is reached, so the loop parks on
-the resource and no weaker place is made. A prepared workspace is brought
+the resource and no weaker place is made. Each refusal, the host's or its
+provider's, clears: a host of the session's placement may give it later, so
+the loop asks again and never ends for one. A prepared workspace is brought
 up to the session's branch; a release first pushes what the workspace
 holds, then lets go only of what its own run holds. Every other operation is
 the engine's, unchanged.
@@ -25,6 +27,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
+from acme.infra.exceptions import InfraException
 from acme.infra.transports import OutputSink
 from acme.infra.workspaces import IsolationMode, IsolationRefused, IsolationSpec, Workspace
 from acme.om.context import TenantContext
@@ -130,13 +133,18 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         running = len(self._directories.keys() - {session_id})
         why = host_refusal(pinned, self._offer, local=self._local, running=running)
         if why is not None:
-            raise IsolationRefused(why)
+            raise IsolationRefused(why, clears=True)
         # Held before the first await, so two prepares at once count each
         # other.
         if pinned.mode is IsolationMode.HOST:
             self._directories[session_id] = epoch
         try:
             workspace = await self._inner.prepare_workspace(ctx, session_id, pinned)
+        except InfraException as refused:
+            self._directories.pop(session_id, None)
+            if isinstance(refused, IsolationRefused) and not refused.clears:
+                raise IsolationRefused(refused.message, clears=True) from refused
+            raise
         except BaseException:
             self._directories.pop(session_id, None)
             raise

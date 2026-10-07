@@ -19,6 +19,7 @@ from uuid import UUID
 import pytest
 from contracts.agent_session_storage import make_session
 from contracts.hosts_storage import make_credential, make_host
+from contracts.loops import DELIVERY, loop_over, reply, said
 from contracts.project_storage import in_project
 
 from acme.infra.impl.local import InfraLocalImpl
@@ -30,6 +31,7 @@ from acme.infra.transports import (
     StaleCommand,
 )
 from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec, Workspace
+from acme.om.agents.types.run import RunEnd
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
 from acme.om.exceptions import NotFound, ToolFailed, Unavailable
@@ -66,7 +68,7 @@ from acme.om.relay.types.exec import (
 )
 from acme.om.retention.crossing import CrossingKind, CrossingRefused, declared
 from acme.om.root import Managers, build_managers
-from acme.om.steps.types.header import ToolFailure
+from acme.om.steps.types.header import ParkReason, ToolFailure
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.trust.types.identities import Executor, ExecutorKind
 from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
@@ -742,6 +744,47 @@ async def test_a_pinned_session_runs_through_the_relay_on_the_host_that_holds_it
             _call(wall, command(0)).model_copy(update={"session_id": unheld.id}),
             0,
         )
+
+
+# A session whose workspace waits on placement parks on the resource and
+# asks again, whether no host of its pool holds the workspace yet or the
+# host that holds it is offline: each refusal clears, so the loop never
+# ends for a host that would have come.
+
+
+async def test_a_session_whose_workspace_waits_on_placement_parks_and_asks_again(
+    tmp_path: Path,
+) -> None:
+    contained = DELIVERY.model_copy(update={"name": "contained", "isolation": CONTAINER})
+    # The session runner's layer: a pinned session's workspace is its host's.
+    loop = loop_over(tmp_path, kinds=(contained,), transport_layer=lambda direct: direct)
+    owner, hosts = loop.owner, loop.managers.hosts
+    pool = await pool_of(loop.managers, owner, "build")
+    session_id = await loop.start("contained")
+    await hosts.place_session(owner, session_id, pool.id)
+    await loop.say(session_id, "Build it.")
+    loop.anthropic.add(reply(said("Never asked.")))
+
+    waiting = await loop.loops.run(owner, session_id)
+    first = loop.clock()
+    # The host that holds it went silent since it prepared it.
+    silent = make_host(pool.id).model_copy(
+        update={"name": "host-1", "last_seen_at": utcnow() - 2 * HostsOptions().online_window}
+    )
+    await loop.storage.get_hosts_storage().enroll(
+        owner.org_id, silent, make_credential(silent.id), ()
+    )
+    await loop.managers.relay.bind_workspace(owner, session_id, silent.id, WHERE)
+    assert waiting.park is not None and waiting.park.retry_at is not None
+    loop.clock.now = waiting.park.retry_at
+    await loop.managers.agent_sessions.wake_session(owner, session_id, waiting.park)
+    offline = await loop.loops.run(owner, session_id)
+
+    for run, parked_at in ((waiting, first), (offline, loop.clock())):
+        assert run.end is RunEnd.PARKED and run.park is not None, "never ended errored"
+        assert (run.park.reason, run.park.unlock) == (ParkReason.RESOURCE, "workspace")
+        assert run.park.retry_at is not None and run.park.retry_at > parked_at, "it asks again"
+    assert loop.anthropic.calls == [] and loop.anthropic.remaining == 1, "no call was made"
 
 
 # A release: asked of the host that holds the workspace, answered by it.

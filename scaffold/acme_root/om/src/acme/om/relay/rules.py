@@ -44,8 +44,8 @@ HOST_ISOLATION: dict[IsolationMode, HostIsolation] = {
     IsolationMode.HOST: "directory",
 }
 """The engine's isolation modes a host runs, as the hosts name them. The
-twin and no workspace are not among them: an item at either names none,
-and every host refuses it."""
+twin, an account of the host, and no workspace are not among them: an item
+at any of them names none, and every host refuses it."""
 
 
 def key_time(key: UUID) -> datetime:

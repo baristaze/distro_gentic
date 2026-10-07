@@ -742,7 +742,10 @@ async def test_a_call_a_lost_run_may_have_started_is_settled_by_its_effect_befor
 @pytest.mark.parametrize(
     ("refusal", "reason"),
     [
-        (IsolationRefused("no host can give it the workspace yet"), ParkReason.RESOURCE),
+        (
+            IsolationRefused("no host can give it the workspace yet", clears=True),
+            ParkReason.RESOURCE,
+        ),
         (WorkspaceLost("the branch of the session is gone"), ParkReason.PERSON),
     ],
 )
@@ -805,7 +808,7 @@ async def test_an_approved_call_held_back_by_a_park_runs_once_after_a_workspace_
     prepare = loop.managers.tools.prepare_workspace
 
     async def refused(*args: object, **kwargs: object) -> Workspace:
-        raise IsolationRefused("no host can give it the workspace yet")
+        raise IsolationRefused("no host can give it the workspace yet", clears=True)
 
     monkeypatch.setattr(loop.managers.tools, "prepare_workspace", refused)
     waiting = await loop.loops.run(loop.owner, session_id)

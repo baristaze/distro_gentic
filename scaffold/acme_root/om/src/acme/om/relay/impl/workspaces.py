@@ -1,8 +1,9 @@
 """A pinned session's workspace, as the runner finds it: on the host of its
 pool that prepared it, and nowhere else. Until one holds it, a host of the
-pool is asked to prepare it, and the loop waits on the resource: nothing is
-made on one of the platform's machines in its stead, and no call is spent
-on a loop that cannot run."""
+pool is asked to prepare it, and the loop waits on the resource: each
+refusal here clears once a host comes, so nothing is made on one of the
+platform's machines in its stead, and no call is spent on a loop that
+cannot run."""
 
 from collections.abc import Callable
 from uuid import UUID
@@ -39,7 +40,8 @@ class PlacedWorkspacesRelayedImpl(PlacedWorkspacesInterface):
                     # waits for its host, and never moves on a guess.
                     raise IsolationRefused(
                         f"host {binding.host_name}, which holds session {session_id}'s "
-                        "workspace, is offline"
+                        "workspace, is offline",
+                        clears=True,
                     )
                 return Workspace(
                     id=session_id, org_id=ctx.org_id, spec=spec, location=binding.location
@@ -49,5 +51,6 @@ class PlacedWorkspacesRelayedImpl(PlacedWorkspacesInterface):
         await self._relay().ask_prepare(ctx, session_id, spec)
         raise IsolationRefused(
             f"no host of pool {placed.pool.name} holds session {session_id}'s workspace yet "
-            f"({placed.hosts_online} online); one prepares it when it claims the work"
+            f"({placed.hosts_online} online); one prepares it when it claims the work",
+            clears=True,
         )

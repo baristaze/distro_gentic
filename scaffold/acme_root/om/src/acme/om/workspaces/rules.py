@@ -140,11 +140,14 @@ def host_refusal(spec: IsolationSpec, offer: HostOffer, *, local: bool, running:
     """Why the host that `offer` describes refuses to prepare `spec`, with
     `running` other sessions' workspaces live on it; None when it may, and
     its provider decides the rest. In `local`, the developer's own machine,
-    the provider alone decides, as the twin's level is local's alone."""
+    the provider alone decides, as the twin's level and an account's are
+    local's alone."""
     if spec.mode is IsolationMode.NONE or local:
         return None
     if spec.mode is IsolationMode.TWIN:
         return "a twin plays a workspace in local alone"
+    if spec.mode is IsolationMode.ACCOUNT:
+        return "an account of the host runs a workspace in local alone"
     if spec.mode is IsolationMode.HOST:
         if not offer.inside_wall:
             return "a bare directory runs only inside a customer's wall"
