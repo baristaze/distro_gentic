@@ -28,7 +28,10 @@ the bottom:
 | platform | A Spec for a Closed-loop, Cloud-first, Distributed Agentic Platform | `https://github.com/baristaze/distro_gentic` | `distro_gentic_spec.md` | 2001 to 2999 |
 | product | its own spec's title, read in step 2 | this checkout | step 2 | 3001 and up |
 
-The nature of each layer, which the audit holds every concept to:
+A layer's title is its statement of its nature. The audit reads each
+title from the first heading of the layer's spec, at the release the
+chain names (step 4), and judges every concept against it. What each
+title holds:
 
 - **The guideline**: general software design for a multi-tenant,
   service-based system: the object model, interfaces, context, storage
@@ -46,10 +49,6 @@ The nature of each layer, which the audit holds every concept to:
 - **The product**: its domain: its nouns, its kinds of work, its
   screens, its integrations, and its choices on top of the platform's
   mechanisms: prices, plans, limits, and default values.
-
-Each layer's spec, at the commit the chain names, opens by saying what
-the layer is. Where it says more than the line above, the spec holds,
-and the report quotes it.
 
 A concept drifts in one of two directions:
 
@@ -131,15 +130,17 @@ no env file, and calls no API but git's.
    The release is the tag `describe` prints; with none, the one the
    render's subject names; with neither, "untagged" and the commit.
    Read the first heading of the layer's spec in the clone, the file
-   the chain's table names; a heading that differs from the table's
-   title is reported as the layer's title. The last command finds the
-   layer's own base, the render its commit holds: read that render's
-   subject and trailers as in step 3, for the next layer down. A layer
-   whose commit holds no render is the root, the guideline, and the
-   chain ends there. A source the chain's table does not name is read
-   the same way and reported as an unknown layer. A fourth layer below
-   the product is never read; the report names it. A clone that fails
-   is reported as not read, with git's line, and the chain ends there.
+   the chain's table names: it is the layer's title in the report, and
+   the nature step 7 judges against. Where it differs from the title
+   the chain's table lists, the report says so in one line. The last
+   command finds the layer's own base, the render its commit holds:
+   read that render's subject and trailers as in step 3, for the next
+   layer down. A layer whose commit holds no render is the root, the
+   guideline, and the chain ends there. A source the chain's table does
+   not name is read the same way and reported as an unknown layer. A
+   fourth layer below the product is never read; the report names it.
+   A clone that fails is reported as not read, with git's line, and the
+   chain ends there.
 5. List what each layer adds. A layer's own concepts are the files it
    added over its base, and a changed file is its change to a lower
    layer's concept:
@@ -166,9 +167,10 @@ no env file, and calls no API but git's.
    number lies in another layer's range than the layer that added it is
    a sign worth reading.
 7. Ask the question of each concept: does the layer it lives in
-   contradict its nature, as The chain states it? Judge by its name and
-   its one-line purpose first. Two searches find what a reading alone
-   misses, with `Grep` (whole word, any case) over each clone:
+   contradict its nature, as its title and The chain state it? Judge by
+   its name and its one-line purpose first. Two searches find what a
+   reading alone misses, with `Grep` (whole word, any case) over each
+   clone:
    - Up: each noun the product added (its namespaces, its kinds of
      work, its agent kinds, its spec's terms) is searched in every
      layer below it, and each of the platform's own nouns in the engine
@@ -225,6 +227,8 @@ no env file, and calls no API but git's.
 | platform | <title> | distro_gentic | <release> | <commit> | <render>, the engine at <release> |
 | engine | <title> | agentic_core | <release> | <commit> | <render>, the guideline at <release> |
 | guideline | <title> | swe_guidelines | <release> | <commit> | none: the root |
+
+<one line for each layer whose heading differs from the title the audit lists, or none>
 
 ## Drifts, by impact
 
