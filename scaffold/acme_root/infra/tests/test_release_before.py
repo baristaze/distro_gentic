@@ -151,7 +151,7 @@ def test_the_merge_base_runs_alone_when_there_is_no_release_branch(tmp_path: Pat
         "pytest",
         "-q",
         "-m",
-        "integration and not live",
+        "integration and not live and not benchmark",
         "-p",
         "no:cacheprovider",
         "--deselect",
