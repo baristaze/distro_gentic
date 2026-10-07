@@ -17,9 +17,9 @@ view.
 
 The product, this tree, is an instance of the platform. The platform
 adopts the engine, and the engine follows the guideline. Each layer
-takes the one beneath it whole as its base, renders it under its own
-name, and adds only what the layer beneath it does not hold. From the
-bottom:
+takes the scaffold of the one beneath it whole, as the base on its
+`scaffold` branch, and adds only what that layer does not hold. From
+the bottom:
 
 | Layer | Title | Repository | Spec | ADRs |
 |---|---|---|---|---|
@@ -99,20 +99,21 @@ no env file, and calls no API but git's.
    from. Read the product's commit (`git rev-parse HEAD`) and its tag
    (`git describe --tags --exact-match HEAD`; "untagged" when it has
    none).
-3. Find the product's base, the render its `HEAD` holds. The branch is
-   `scaffold`, or `origin/scaffold` when
-   `git rev-parse --verify --quiet scaffold` prints nothing. Then:
+3. Find the product's base: the render its `HEAD` holds, the newest
+   commit it reaches that carries a `Scaffold-Commit` trailer. Each
+   commit on a `scaffold` branch is one render, and the main branch
+   merges it, so the render is found from `HEAD` alone:
 
    ```bash
-   git merge-base HEAD <branch>
+   git log -1 --format=%H --grep='^Scaffold-Commit: ' HEAD
    git log -1 --format='%s%n%(trailers:key=Scaffold-Source,valueonly)%(trailers:key=Scaffold-Commit,valueonly)%(trailers:key=Scaffold-Name,valueonly)' <render>
    ```
 
    The subject names the platform's release ("The scaffold at v0.7.0
    (…)"); the trailers name its repository, its commit, and the name it
-   was rendered under. With no branch, or a render with no
-   `Scaffold-Commit`, the base is not recorded: stop, and write a
-   report that says so. `distro-upgrade-scaffold` records a base.
+   was rendered under. When the first command prints nothing, the base
+   is not recorded: stop, and write a report that says so.
+   `distro-upgrade-scaffold` records a base.
 4. Read the chain down, one layer at a time, at most three layers below
    the product. For each render's `Scaffold-Source` and
    `Scaffold-Commit`, clone the source once, as the last part of its
@@ -122,7 +123,7 @@ no env file, and calls no API but git's.
    git clone --quiet <Scaffold-Source> ~/Downloads/acme_ontology_drift_<yyyy-mm-dd>/<repository>
    git -C ~/Downloads/acme_ontology_drift_<yyyy-mm-dd>/<repository> switch --quiet --detach <Scaffold-Commit>
    git -C ~/Downloads/acme_ontology_drift_<yyyy-mm-dd>/<repository> describe --tags --exact-match <Scaffold-Commit>
-   git -C ~/Downloads/acme_ontology_drift_<yyyy-mm-dd>/<repository> rev-parse --verify --quiet origin/scaffold
+   git -C ~/Downloads/acme_ontology_drift_<yyyy-mm-dd>/<repository> log -1 --format=%H --grep='^Scaffold-Commit: ' <Scaffold-Commit>
    ```
 
    A clone left by an earlier run that day is fetched
@@ -131,32 +132,32 @@ no env file, and calls no API but git's.
    render's subject names; with neither, "untagged" and the commit.
    Read the first heading of the layer's spec in the clone, the file
    the chain's table names; a heading that differs from the table's
-   title is reported as the layer's title. When `origin/scaffold`
-   exists, the layer has a base of its own: run
-   `git -C <clone> merge-base <Scaffold-Commit> origin/scaffold` and
-   read that render's subject and trailers as in step 3, for the next
-   layer down. A layer with no `scaffold` branch is the root, the
-   guideline, and the chain ends there. A source the chain's table does
-   not name is read the same way and reported as an unknown layer. A
-   fourth layer below the product is never read; the report names it.
-   A clone that fails is reported as not read, with git's line, and the
-   chain ends there.
+   title is reported as the layer's title. The last command finds the
+   layer's own base, the render its commit holds: read that render's
+   subject and trailers as in step 3, for the next layer down. A layer
+   whose commit holds no render is the root, the guideline, and the
+   chain ends there. A source the chain's table does not name is read
+   the same way and reported as an unknown layer. A fourth layer below
+   the product is never read; the report names it. A clone that fails
+   is reported as not read, with git's line, and the chain ends there.
 5. List what each layer adds. A layer's own concepts are the files it
    added over its base, and a changed file is its change to a lower
    layer's concept:
    - The product: `git diff --name-status --find-renames <render> HEAD`
      here.
    - A layer with a base:
-     `git -C <clone> diff --name-status --find-renames <render> <Scaffold-Commit> -- scaffold/acme_root`,
-     where `<render>` is the merge base step 4 found in that clone.
+     `git -C <clone> diff --name-status --find-renames <render> <Scaffold-Commit> -- scaffold/`,
+     where `<render>` is the render step 4 found in that clone.
      Beside it, the texts that never reach a product: the headings of
      its spec, its `lenses/`, its `skills/`, and its `agents/`.
-   - The root: its whole `scaffold/acme_root/` and the same texts.
+   - The root: its whole `scaffold/` folder and the same texts.
 
-   A clone's paths carry `acme`; this tree's carry the name in
-   `Scaffold-Name`.
+   A layer's scaffold is the one folder under its `scaffold/` whose
+   name ends in `_root`, and the word before `_root` is the placeholder
+   name its paths carry. This tree's paths carry the product's name,
+   the `Scaffold-Name` of step 3.
 6. Group each layer's additions into concepts, by kind: a namespace
-   (`om/src/acme/om/<namespace>/`), a table (a migration under
+   (`om/src/<name>/om/<namespace>/`), a table (a migration under
    `om/migrations/`), an agent kind, an ADR (`docs/adr/`, its title is
    its decision), a skill (`.agents/skills/<name>/`, its description),
    a checker (`checkers/`) or a lens, an app, a service, a worker, or
@@ -200,8 +201,8 @@ no env file, and calls no API but git's.
   its report under `~/Downloads/`.
 - Never modifies a tracked file, never commits, never opens a pull
   request. In this checkout it runs only the git commands that read:
-  `status`, `rev-parse`, `merge-base`, `log`, `diff`, and `describe`.
-  It never fetches, switches, or checks out here.
+  `status`, `rev-parse`, `log`, `diff`, and `describe`. It never
+  fetches, switches, or checks out here.
 - Never files a ticket, and never pushes to or opens anything on a
   layer's repository: a proposed ticket is the person's to file.
 - Never reads more than three layers below the product, searches more
