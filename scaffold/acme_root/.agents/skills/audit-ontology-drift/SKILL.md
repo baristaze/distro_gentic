@@ -75,6 +75,11 @@ These are not drift:
   judged once, as that layer's, at that layer's path.
 - A noun in a migration on a layer's main branch, which never changes:
   a table one migration made and a later one dropped is history.
+- A layer's own tooling for applying its rules: its review and
+  scaffold skills and its agents, its `skills/` and `agents/`. They are
+  no concept of its domain, so an agent there is not an agent's concept
+  in the guideline. Its rules, its spec and its `lenses/`, and its
+  scaffold are judged.
 
 ## Input
 
@@ -152,7 +157,8 @@ no env file, and calls no API but git's.
      `git -C <clone> diff --name-status --find-renames <render> <Scaffold-Commit> -- scaffold/`,
      where `<render>` is the render step 4 found in that clone.
      Beside it, the texts that never reach a product: the headings of
-     its spec, its `lenses/`, its `skills/`, and its `agents/`.
+     its spec and its `lenses/`. Its `skills/` and `agents/` are its
+     tooling, never listed.
    - The root: its whole `scaffold/` folder and the same texts.
 
    A layer's scaffold is the one folder under its `scaffold/` whose
