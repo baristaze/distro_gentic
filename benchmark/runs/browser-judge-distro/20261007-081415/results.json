@@ -1,0 +1,69 @@
+{
+  "run_id": "20261007-081415",
+  "started_at": "2026-10-07T08:14:15Z",
+  "finished_at": "2026-10-07T08:39:24Z",
+  "repository_head": "9580f8f524a79808c1ee802c74a11d8a23b2aefc",
+  "prompt": "You are a highly senior software engineer and software architect specializing in distributed agent platforms and the infrastructure that runs fleets of agents.\n\nEvaluate the `distro_gentic` repository at https://github.com/baristaze/distro_gentic strictly on its software design and architecture merits. Judge the whole repository, not one file of it.\n\nYour goal is not merely to review `distro_gentic` in isolation. Your goal is to determine:\n\nWhat architectural problem it is actually solving.\nHow good its design is for that problem.\nWhich existing systems are its closest architectural adjacents.\nWhere `distro_gentic` is concretely stronger, weaker, broader, narrower, or simply different.\nHow all compared systems score under one consistent architectural rubric.\n\nEvaluate the material itself. Do not be biased by who wrote it, an agent or a human, by how fast it was written, or by how new it is.\n\n## Evaluation process\n\nFollow this order deliberately. Do not skip ahead.\n\n### 1. Understand and classify `distro_gentic`\n\nFirst, read the repository in full, starting with its specification, `distro_gentic_spec.md`.\n\nDetermine:\n\nWhat problem `distro_gentic` is trying to solve.\nIts intended abstraction level.\nIts architectural role inside an application.\nIts core execution model.\nIts primary abstractions.\nIts intended extension points.\nWhat it owns.\nWhat it deliberately delegates elsewhere.\nWhat it is.\nEqually importantly, what it is not.\n\n`distro_gentic` builds on an engine, `agentic_core`, which runs one agent's loop, and on general software design guidelines, and it cites both rather than repeat them. It is a platform that runs fleets of agents in a closed loop on that engine: placement, trust, money, workspaces and hosts, intake, evidence, and watching. Judge it as that, not as one agent's loop.\n\nDo not force it into the category of \"agent framework\" or \"agent orchestrator\" if a more precise category describes it better. Name the category you would file it under, in a few words, and say why that name fits better than the obvious ones.\n\nThen identify the closest existing architectural adjacents.\n\nPotential examples include:\n\nhosted autonomous coding-agent platforms, which take work in and run agents unattended on machines they provide\nagent orchestration on a durable-execution engine, where the overlap is durability and scheduling rather than the agent loop\nCI-driven agent runners, which start an agent from an event in a repository or a tracker and hand its result back\nother systems that are more directly comparable to what `distro_gentic` actually provides\n\nThese examples are suggestions, not mandatory choices. Name the specific systems yourself.\n\nSelect the **2 to 3 most relevant adjacents based on architectural overlap**, not popularity.\n\nFor each selected adjacent, briefly explain why it is a relevant comparison and what portion of `distro_gentic` it overlaps with.\n\n### 2. Define and freeze the scoring rubric\n\nBefore scoring anything, define a common architectural evaluation rubric.\n\nThe rubric should fit the category you identified in step 1.\n\nPotential areas include:\n\nconceptual model and abstraction quality\nseparation of concerns between the platform, the engine beneath it, and a product built on it\ncomposability and extensibility for a product built on it\nplacement and scheduling of sessions across runners and hosts\nworkspace isolation and multi-tenancy\ntrust boundaries, identity, and the wall around a tenant's data\ncost, budgets, and metering across a fleet\nintake of work from outside, and results going back\nevidence and auditability of what agents did\nwatching and steering live sessions\nfailure semantics at fleet scale: leases, retries, and recovery\ndeterminism, replayability, and testability\nobservability and operations\ntype safety and contract clarity\noperational complexity\ndeveloper ergonomics\narchitectural coherence and simplicity\n\nModify, combine, remove, or add criteria where appropriate after understanding the actual design.\n\nAvoid excessive fragmentation. Prefer approximately **8 to 12 meaningful architectural criteria** rather than a long checklist of overlapping concerns.\n\nFor each criterion:\n\nGive it a concise name.\nDefine exactly what it measures.\nDescribe what a `10/10` architecture would look like.\nAssign a weight.\nEnsure all weights sum to exactly **100**.\n\nOnce defined, **freeze the rubric**.\n\nDo not change criteria, definitions, weights, or scoring interpretation after you start scoring `distro_gentic` or its adjacents.\n\n### 3. Evaluate `distro_gentic`\n\nScore `distro_gentic` against every frozen criterion on a **0 to 10 scale**.\n\nUse the scale consistently:\n\n`0-2`: fundamentally absent, broken, or architecturally unsuitable\n`3-4`: significant weaknesses or major missing pieces\n`5-6`: reasonable but materially incomplete or compromised\n`7-8`: strong architecture with identifiable limitations\n`9`: excellent, unusually strong design\n`10`: exceptional and difficult to improve materially for the intended scope\n\nDo not treat `10` as merely \"supports the feature.\"\n\nFor every score:\n\nGround the assessment in concrete design decisions from the repository, and name the file and the section they come from.\nDistinguish specified architecture from aspirational language.\nIdentify important ambiguities and underspecified behavior.\nDo not award points for functionality that is merely implied.\nDo not penalize intentional narrowness when it improves coherence.\nDo not penalize the project simply because it is new.\n\nCalculate the weighted result: the sum of each score times its weight, divided by 10, rounded to a whole number.\n\n### 4. Evaluate the selected adjacents\n\nApply the **exact same frozen rubric** to every selected adjacent.\n\nUse their current architecture and primary documentation or source repositories where possible. Name the version or the date of what you read.\n\nEvaluate architectural properties, not ecosystem momentum.\n\nDo **not** use any of the following as scoring criteria:\n\nage of the project\nGitHub stars\nfollower count\ncommunity size\nmarket share\nproduction adoption\ncompany backing\nversion number\nnumber of integrations, where that number comes from ecosystem size rather than from the design\n\nWhere an adjacent's architecture is not documented well enough to score a criterion, say so, score only what is documented, and mark that score as low confidence. Never fill a gap with what the system probably does.\n\nCompare like with like. Where an adjacent covers less than `distro_gentic` (or more), score each criterion on what each system specifies for it, and say in a line that the scopes differ. Do not reward or penalize scope that the criterion does not measure.\n\nCalculate each adjacent's weighted result the same way.\n\n### 5. Compare\n\nPut every system side by side under the frozen rubric.\n\nThen say, concretely, where `distro_gentic` is:\n\nstronger: a design decision an adjacent lacks, and what it buys;\nweaker: a decision an adjacent makes better, and what it costs `distro_gentic`;\nbroader or narrower: what one owns that the other leaves to the application;\nsimply different: a trade-off where neither side is better, and when each choice wins.\n\nEach point names the design decision behind it, not a feature list.\n\n### 6. Recommend\n\nName the changes to the repository that would raise its score most, most valuable first. Each names the criterion it moves and roughly by how much. Prefer a change that removes or clarifies over one that adds.",
+  "contract": "## Report format\n\nAnswer in this shape, so evaluations compare:\n\nFirst line: `Score: NN/100`, the weighted score of `distro_gentic`, and nothing else on that line.\n`## Classification`: what it is, its abstraction level, what it owns, what it delegates, and what it is not, one line each; then the category you would file it under, in a few words.\n`## Adjacents`: each selected system, why it was chosen, and the part of `distro_gentic` it overlaps, one line each.\n`## Rubric`: a table of each criterion, what it measures, what a `10/10` looks like, and its weight; the weights sum to 100.\n`## Scores`: a table with one row per criterion (its weight, then each system's score) and a last row of each system's weighted result out of 100.\n`## distro_gentic, criterion by criterion`: for each criterion, its score and its grounding in the repository, with the ambiguities that held it back, a short paragraph each.\n`## Where it differs`: stronger, weaker, broader or narrower, and different, one line each.\n`## What I would change`: concrete edits to the repository, most valuable first, one line each.\n`## Method`: what you read (the repository's files, and the commit or tag they stood at; each adjacent's documentation or source with its version or date), how deep, and which scores rest on thin evidence, one line each.",
+  "sizes": {
+    "model": "m",
+    "effort": "m"
+  },
+  "note": "model=m effort=m resolved, before anything was sent, to: chatgpt.com Latest, High; claude.ai Opus 5.5, High; gemini.google.com 3.1 Pro, none; grok.com Expert, none",
+  "sessions": [
+    {
+      "site": "chatgpt.com",
+      "url": "[redacted]",
+      "model_label": "Latest",
+      "effort_label": "High",
+      "started_at": "2026-10-07T08:19:02Z",
+      "finished_at": "2026-10-07T08:33:50Z",
+      "score": 89,
+      "read_version": "current main at commit 9580f8f",
+      "polls": 2,
+      "response_path": "chatgpt.com.md",
+      "status": "ok"
+    },
+    {
+      "site": "claude.ai",
+      "url": "[redacted]",
+      "model_label": "not set",
+      "effort_label": "not set",
+      "started_at": "2026-10-07T08:21:57Z",
+      "finished_at": "2026-10-07T08:21:57Z",
+      "score": null,
+      "read_version": "not stated",
+      "polls": 0,
+      "response_path": "claude.ai.md",
+      "status": "not-run",
+      "note": "right after the send, the conversation page said Computer actions available for a connected device, so the response was stopped and nothing it answered is scored; please turn off computer actions in claude.ai before the next run"
+    },
+    {
+      "site": "gemini.google.com",
+      "url": "[redacted]",
+      "model_label": "3.1 Pro",
+      "effort_label": "none",
+      "started_at": "2026-10-07T08:24:51Z",
+      "finished_at": "2026-10-07T08:31:19Z",
+      "score": null,
+      "read_version": "not stated",
+      "polls": 1,
+      "response_path": "gemini.google.com.md",
+      "status": "refused",
+      "note": "the answer was already done at the first poll and Gemini shows no Worked for figure, so finished_at is the first poll's time; the product declined to evaluate, in its words: I cannot directly access or fetch the live GitHub repository"
+    },
+    {
+      "site": "grok.com",
+      "url": "[redacted]",
+      "model_label": "Expert",
+      "effort_label": "none",
+      "started_at": "2026-10-07T08:27:44Z",
+      "finished_at": "2026-10-07T08:36:20Z",
+      "score": 81,
+      "read_version": "9580f8f524a7 on main (2026-10-07, release 0.7.0)",
+      "polls": 6,
+      "response_path": "grok.com.md",
+      "status": "ok"
+    }
+  ]
+}
