@@ -73,24 +73,39 @@ class WorkspaceHostImpl(WorkspaceProviderInterface):
         return self._root.resolve() / org_id.hex / workspace_id.hex
 
     def _mark(self, org_id: UUID, workspace_id: UUID) -> Path:
-        return self._root.resolve() / org_id.hex / f"{workspace_id.hex}{HELD}"
+        return held_mark(self._root, org_id, workspace_id)
 
     def _held(self) -> list[HeldInstance]:
-        """Each mark under the root named by two ids in the form a prepare
-        writes them; anything else there, such as the transport's records,
-        is none of its own."""
-        found: list[HeldInstance] = []
-        for mark in sorted(self._root.resolve().glob(f"*/*{HELD}")):
-            org, workspace = mark.parent.name, mark.name.removesuffix(HELD)
-            try:
-                org_id, workspace_id = UUID(hex=org), UUID(hex=workspace)
-            except ValueError:
-                continue
-            if (org, workspace) != (org_id.hex, workspace_id.hex):
-                continue
-            directory = self._directory(org_id, workspace_id)
-            found.append(HeldInstance(id=workspace_id, org_id=org_id, location=str(directory)))
-        return found
+        return [
+            HeldInstance(
+                id=workspace_id,
+                org_id=org_id,
+                location=str(self._directory(org_id, workspace_id)),
+            )
+            for org_id, workspace_id in held_marks(self._root)
+        ]
+
+
+def held_mark(root: Path, org_id: UUID, workspace_id: UUID) -> Path:
+    """The mark a prepare leaves beside the directory of a workspace under
+    `root`, and never in it."""
+    return root.resolve() / org_id.hex / f"{workspace_id.hex}{HELD}"
+
+
+def held_marks(root: Path) -> list[tuple[UUID, UUID]]:
+    """The org and workspace ids of each mark under `root` named by two ids
+    in the form a prepare writes them; anything else there, such as the
+    transport's records, is none of its own."""
+    found: list[tuple[UUID, UUID]] = []
+    for mark in sorted(root.resolve().glob(f"*/*{HELD}")):
+        org, workspace = mark.parent.name, mark.name.removesuffix(HELD)
+        try:
+            org_id, workspace_id = UUID(hex=org), UUID(hex=workspace)
+        except ValueError:
+            continue
+        if (org, workspace) == (org_id.hex, workspace_id.hex):
+            found.append((org_id, workspace_id))
+    return found
 
 
 def remove_directory(directory: Path) -> None:

@@ -884,6 +884,55 @@ async def test_only_the_refusal_that_waits_for_the_other_workspace_clears(
     assert not root.exists()
 
 
+async def test_an_account_holds_each_workspace_from_its_prepare_to_its_release(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """As a host directory is: a mark beside the workspace's directory, never
+    in it, says it is held, so one whose run died before its release is
+    found and let go. Its location is the workspace's home."""
+    root = tmp_path / "workspaces"
+
+    def switched(account: str) -> Switch:
+        return Switch(account=account, uid=2001, gid=2001, setpriv="setpriv", prlimit="prlimit")
+
+    def opened(job: Path, gid: int) -> None:
+        (job / accounts.HOME).mkdir(parents=True, exist_ok=True)
+
+    async def serves(*_: object) -> bool:
+        return True
+
+    async def done(*_: object) -> None:
+        return None
+
+    setting = tmp_path / "protected_hardlinks"
+    setting.write_text("1\n")
+    monkeypatch.setattr(accounts, "HARDLINKS", setting)
+    monkeypatch.setattr(accounts, "switch_to", switched)
+    monkeypatch.setattr(accounts, "_opened", opened)
+    monkeypatch.setattr(accounts, "end_account", done)
+    monkeypatch.setattr(WorkspaceAccountImpl, "_took", serves)
+    monkeypatch.setattr(WorkspaceAccountImpl, "_cleared", done)
+    provider = WorkspaceAccountImpl(root, "acme-agent")
+    org = new_id()
+    first, second = [
+        await provider.prepare(org, new_id(), spec(IsolationMode.ACCOUNT)) for _ in range(2)
+    ]
+    assert sorted(await provider.held(), key=lambda held: held.location) == sorted(
+        (
+            HeldInstance(id=place.id, org_id=org, location=place.location)
+            for place in (first, second)
+        ),
+        key=lambda held: held.location,
+    )
+    assert await asyncio.to_thread(os.listdir, first.location) == [], "no mark in it"
+
+    await provider.release(first)
+    assert [held.id for held in await provider.held()] == [second.id]
+    await provider.purge(org, first.id)
+    await provider.purge(org, second.id)
+    assert await provider.held() == []
+
+
 @needs_an_account
 async def test_a_command_runs_as_the_account_with_no_group_no_capability_and_no_way_to_gain_one(
     monkeypatch: pytest.MonkeyPatch, account_root: Path, tmp_path: Path

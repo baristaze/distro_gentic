@@ -16,6 +16,8 @@ whatever `/proc` hides from this process, then each one in its directory,
 and closes the workspace to the account, so the next workspace's commands
 never reach its files. A purge clears what the account wrote, as the
 account, then removes the directory without following a link out of it.
+A prepare marks the workspace held beside its directory, as the host
+provider does, and its release or purge takes the mark away.
 
 What stays a product's: which account its host gives its agents, the
 grants it adds to that account, and how its host image makes it."""
@@ -36,6 +38,7 @@ from uuid import UUID
 from acme.infra.exceptions import InfraException
 from acme.infra.workspaces import (
     EgressMode,
+    HeldInstance,
     IsolationMode,
     IsolationRefused,
     IsolationSpec,
@@ -44,7 +47,7 @@ from acme.infra.workspaces import (
     WorkspaceProviderInterface,
     refusal,
 )
-from acme.infra.workspaces.host import remove_directory
+from acme.infra.workspaces.host import held_mark, held_marks, remove_directory
 from acme.infra.workspaces.stragglers import PROC, end_stragglers
 
 LIMITS = frozenset({"processes"})
@@ -296,6 +299,7 @@ class WorkspaceAccountImpl(WorkspaceProviderInterface):
                 )
             try:
                 await asyncio.to_thread(_opened, job, switch.gid)
+                await asyncio.to_thread(self._mark(org_id, workspace_id).touch, mode=0o600)
             except BaseException:
                 if fresh:
                     self._give_back()
@@ -303,6 +307,10 @@ class WorkspaceAccountImpl(WorkspaceProviderInterface):
         return Workspace(id=workspace_id, org_id=org_id, spec=spec, location=str(job / HOME))
 
     async def release(self, workspace: Workspace) -> None:
+        await self._release(workspace)
+        await asyncio.to_thread(self._mark(workspace.org_id, workspace.id).unlink, missing_ok=True)
+
+    async def _release(self, workspace: Workspace) -> None:
         job = self._job(workspace.org_id, workspace.id)
         switch = await asyncio.to_thread(switch_to, self._account)
         async with self._turn:
@@ -317,6 +325,19 @@ class WorkspaceAccountImpl(WorkspaceProviderInterface):
                 self._give_back()
 
     async def purge(self, org_id: UUID, workspace_id: UUID) -> None:
+        await self._purge(org_id, workspace_id)
+        await asyncio.to_thread(self._mark(org_id, workspace_id).unlink, missing_ok=True)
+
+    async def held(self) -> list[HeldInstance]:
+        marks = await asyncio.to_thread(held_marks, self._root)
+        return [
+            HeldInstance(
+                id=workspace_id, org_id=org_id, location=str(self._job(org_id, workspace_id) / HOME)
+            )
+            for org_id, workspace_id in marks
+        ]
+
+    async def _purge(self, org_id: UUID, workspace_id: UUID) -> None:
         job = self._job(org_id, workspace_id)
         if not await asyncio.to_thread(job.is_dir):
             return
@@ -348,6 +369,9 @@ class WorkspaceAccountImpl(WorkspaceProviderInterface):
     def _job(self, org_id: UUID, workspace_id: UUID) -> Path:
         """Named by ids alone, so no name climbs out of the root."""
         return self._root.resolve() / org_id.hex / workspace_id.hex
+
+    def _mark(self, org_id: UUID, workspace_id: UUID) -> Path:
+        return held_mark(self._root, org_id, workspace_id)
 
     async def _took(self, workspace_id: UUID, job: Path, switch: Switch) -> bool:
         """Whether the account serves `workspace_id`, whose directory is
