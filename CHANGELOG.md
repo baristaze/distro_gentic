@@ -5,37 +5,35 @@ included, stay on its GitHub release. Releases are tagged
 `vMAJOR.MINOR.PATCH`; see `CONTRIBUTING.md` for what bumps which
 number.
 
-## 0.7.0 (2026-10-07)
+## 0.8.0 (2026-10-07)
 
-The platform's base is the engine at v0.7.0, on the guideline at
-v0.52.0: a copy's local stack runs each database role on its own
-Postgres, and a job runs the release before on a branch's schema. The
-portal's image builds, and CI builds each of a copy's images. Minor: the
-base move adds a CI gate and a migrate command, and nothing is reversed.
-
-### Changed
-
-- The base moves to the engine at v0.7.0. A copy's local stack runs
-  `postgres-core`, `postgres-activity`, `postgres-queue`, and
-  `postgres-admin`, each with its own port and volume, and `migrate
-  ensure-logins` runs once per database; the cloud keeps one instance.
-  The platform's Postgres band in `.env.example` is 55452 to 55455. A
-  copy renames `<NAME>_POSTGRES_PORT` to `<NAME>_POSTGRES_CORE_PORT`, and
-  a second checkout repoints every database URL.
+A product asks, from its own checkout, which concept sits in the wrong
+layer of its adoption chain; the spec takes its new title; and the
+platform's base is the engine at v0.7.1. Minor: the scaffold gains an
+audit skill, and nothing is reversed.
 
 ### Added
 
-- `release-before`, from the guideline: a job in a copy's CI that runs
-  the integration suite of each release before on a branch's migrated
-  schema, with `make release-before`, `migrate stamp`, and
-  `scripts/release_before_deselect.txt`. It leaves the live tests and the
-  benchmarks out. The platform's CI runs it on a copy's branch that adds
-  a migration, in a job of its own beside the copy jobs.
-- The platform's CI has an `images` job: it renders a copy and builds
-  each image the copy's own CI builds (api, maintenance, session-runner,
-  portal), nothing pushed.
+- `audit-ontology-drift`, a skill in the scaffold that a product runs
+  from its own checkout. It walks the adoption chain down its renders'
+  trailers, lists each layer by its title (Software Design and
+  Architecture Guidelines; An Engine for Long-Running Agents; A Spec
+  for a Closed-loop, Cloud-first, Distributed Agentic Platform; and the
+  product's own), reads each layer at the commit the product holds, and
+  judges each concept a layer adds for drift in either direction. It
+  writes its report under `~/Downloads` and changes nothing in the
+  checkout. The spec says the gates hold the layers consistent with
+  each other and cannot say whether a concept belongs to a layer: that
+  is the question this audit asks.
 
-### Fixed
+### Changed
 
-- The portal's image builds: its Dockerfile copies
-  `deployment/cloud/environments.json`, which its Vite config imports.
+- The spec is titled "A Spec for a Closed-loop, Cloud-first,
+  Distributed Agentic Platform", and its subtitle names it a platform
+  spec for closed-loop agent fleets.
+- The base moves to the engine at v0.7.1, on the guideline's v0.52.1:
+  a copy's local Postgres reads healthy only once it takes a connection
+  over TCP (`infra/tests/test_local_postgres.py` holds it), and a copy
+  that names a test in its release-before deselect file keeps its unit
+  gate. The spec and the lenses cite the guideline at v0.52.1 and the
+  engine at v0.7.1.
