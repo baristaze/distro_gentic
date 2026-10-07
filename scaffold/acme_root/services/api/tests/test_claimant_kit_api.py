@@ -47,8 +47,8 @@ def _scan_lane(payload: ScanPayload) -> str:
     return f"scanner:{payload.pool_id}"
 
 
-def _scanner_claims(node: ClaimantRow) -> tuple[tuple[str, tuple[str, ...]], ...]:
-    return ((f"scanner:{node.pool_id}", (SCAN,)),)
+def _scanner_claims(claimant: ClaimantRow) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    return ((f"scanner:{claimant.pool_id}", (SCAN,)),)
 
 
 PRODUCT = ProductKinds(

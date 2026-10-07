@@ -86,19 +86,19 @@ def test_a_credential_is_due_at_half_its_life_and_a_hosts_file_still_loads(
 def test_a_kinds_settings_are_read_under_its_prefix(tmp_path: Path) -> None:
     env = {
         "ACME_API_URL": "https://api.acme.example/",
-        "ACME_LAB_NODE_HOME": str(tmp_path),
-        "ACME_LAB_NODE_NAME": "node-1",
-        "ACME_ENROLLMENT_TOKEN": "nod_once",
+        "ACME_DOC_SCANNER_HOME": str(tmp_path),
+        "ACME_DOC_SCANNER_NAME": "scanner-1",
+        "ACME_ENROLLMENT_TOKEN": "dsc_once",
     }
-    settings = ClaimantSettings(**claimant_env("ACME", "lab_node", env))
+    settings = ClaimantSettings(**claimant_env("ACME", "doc_scanner", env))
     assert (settings.api_url, settings.home, settings.name) == (
         "https://api.acme.example",
         tmp_path,
-        "node-1",
+        "scanner-1",
     )
-    assert settings.enrollment_token == "nod_once"
+    assert settings.enrollment_token == "dsc_once"
     assert settings.credential_path == tmp_path / "credential.json"
-    assert claimant_env("ACME", "lab_node", {})["home"].name == "acme-lab-node"
+    assert claimant_env("ACME", "doc_scanner", {})["home"].name == "acme-doc-scanner"
 
 
 def test_the_journal_keeps_a_report_until_it_is_sent_and_sets_aside_what_waits(
