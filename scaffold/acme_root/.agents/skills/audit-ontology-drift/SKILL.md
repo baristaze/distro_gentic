@@ -73,6 +73,8 @@ These are not drift:
   it.
 - What the product's tree carries unchanged from a lower layer: it is
   judged once, as that layer's, at that layer's path.
+- A noun in a migration on a layer's main branch, which never changes:
+  a table one migration made and a later one dropped is history.
 
 ## Input
 
@@ -89,8 +91,10 @@ no env file, and calls no API but git's.
 
 1. Run `git status --porcelain` here and keep what it prints; step 9
    compares. Make the report's folder,
-   `~/Downloads/acme_ontology_drift_<yyyy-mm-dd>/` (`mkdir -p`). The
-   layers' clones go in it, and nothing goes in this checkout.
+   `~/Downloads/acme_ontology_drift_<yyyy-mm-dd>/` (`mkdir -p`). It
+   holds the layers' clones and, at most, one list of additions for
+   each layer (`<layer>-additions.txt`, the list step 5 makes).
+   Nothing goes in this checkout.
 2. Read the product's title: the first heading of its own spec, the
    document `README.md` or `specs/README.md` names as the product's
    specification. When neither names one, it is the first heading of
@@ -166,7 +170,9 @@ no env file, and calls no API but git's.
 7. Ask the question of each concept: does the layer it lives in
    contradict its nature, as The chain states it? Judge by its name and
    its one-line purpose first. Two searches find what a reading alone
-   misses, with `Grep` (whole word, any case) over each clone:
+   misses, each over a clone at the chain's commit, whole words in any
+   case, a noun's forms in one search:
+   `git -C <clone> grep -n -w -i -e <noun> -e <its plural>`.
    - Up: each noun the product added (its namespaces, its kinds of
      work, its agent kinds, its spec's terms) is searched in every
      layer below it, and each of the platform's own nouns in the engine
@@ -176,9 +182,10 @@ no env file, and calls no API but git's.
      layers beneath it. A lower layer that holds the same mechanism
      means the upper one grew it again, unless it is a choice on top.
 
-   Search at most 40 nouns, each once in each layer below it. Read a
-   suspect in full before it is reported: at most 30 files read in full
-   in a run. A suspect past either count is listed under Not verified.
+   Search at most 40 nouns, a noun and its plural one, each once in
+   each layer below it. Read a suspect in full before it is reported:
+   at most 30 files read in full in a run. A suspect past either count
+   is listed under Not verified.
 8. Write the report, `~/Downloads/acme_ontology_drift_<yyyy-mm-dd>.md`.
    Each drift names the concept and its kind, where it is (the layer
    and the path at its commit), where it belongs (the layer), the
