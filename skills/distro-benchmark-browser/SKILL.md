@@ -156,7 +156,10 @@ Facts that decide how the steps below go. Read them before the browser.
    stop control ("Stop response") and record it `not-run` with the
    same `note`: its times are the moment of the stop, its `polls` the
    polls made, the poll that saw the line included, and nothing it
-   answered is scored.
+   answered is scored. A line that first shows after a site is done,
+   while its answer is read or its picture taken, counts the same: the
+   session is `not-run`, its finish time the moment the line was seen,
+   and nothing it answered is scored.
 
    Otherwise set the model and the effort, then verify with a
    screenshot of the chip. `model_label` is the model picker's checked
@@ -199,9 +202,10 @@ Facts that decide how the steps below go. Read them before the browser.
    chip; it is a check and is not saved.
 6. Do step 4 and step 5 for every site first, then poll each site at
    most thirty times, and count its polls into `polls`. A poll starts
-   at least a minute after the one before on the same site: when one
-   site is left, wait out the rest of that minute with ten-second waits
-   before its next poll. A poll is one batch: first a scaled (0.4)
+   at least a minute after the start of that site's last poll, and a
+   site's first poll at least a minute after its send: when one site is
+   left, wait out the rest of that minute with ten-second waits before
+   its next poll. A poll is one batch: first a scaled (0.4)
    screenshot, which brings the tab to the front, then up to five
    ten-second waits. On claude.ai and grok.com the signal is in the
    page text: end the batch with one `get_page_text` and keep it to
