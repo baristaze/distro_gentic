@@ -53,22 +53,26 @@ says so.
    - a conversation title from a page's sidebar; a progress or tool
      line of the answer is not one;
    - the name of any repository the prompt does not name, and that is
-     not a layer this repository builds on, alone or as
-     `<owner>/<name>`, in any case. The prompt names this repository,
-     `distro_gentic`, and the engine, `agentic_core`; the layers are
-     the engine and the guideline, `swe_guidelines`. Such a name is one
-     an answer reached through these three: the product the closing
-     Next section of `distro_gentic_spec.md` names, or another
-     repository of their owner's: the names `gh repo list` read (When
-     it runs). Redact each one an answer names, but this repository's
-     and the layers' it builds on, and only where it names that
-     repository: as `<owner>/<name>`, in a URL, or where the sentence
-     says it is a repository or a project. The same word in its
-     ordinary sense stays, and so does a folder or a file of this
-     repository, the engine, or the guideline. A system an answer sets
-     beside this one as an adjacent is not such a repository, and its
-     name stays, with the address of its own documentation or source,
-     unless step 2 redacted it from the person's list.
+     not a layer this repository builds on, in any case. The prompt
+     names this repository, `distro_gentic`, and the engine,
+     `agentic_core`; the layers are the engine and the guideline,
+     `swe_guidelines`. Such a name is one an answer reached through
+     these three: the product the closing Next section of
+     `distro_gentic_spec.md` names, or another repository of their
+     owner's: the names `gh repo list` read (When it runs), but this
+     repository's and the layers'. The Next section's product, and
+     each of those names that is not an ordinary word, is redacted
+     wherever it stands: bare, in backticks, as `<owner>/<name>`, in a
+     URL, or as the name of a product, an adjacent's included. A name
+     that is also an ordinary word or a common term is redacted only
+     where it names that repository: as `<owner>/<name>`, in a URL, or
+     where the sentence says it is a repository or a project; the word
+     in its ordinary sense stays. A folder or a file of this
+     repository, the engine, or the guideline stays. Any other system
+     an answer sets beside this one as an adjacent is not such a
+     repository, and its name stays, with the address of its own
+     documentation or source, unless step 2 redacted it from the
+     person's list.
 
    The prompt and the contract stay as typed: two runs compare only
    when both are the same text. The URLs of this repository, the
