@@ -10,7 +10,7 @@ from acme.om.evidence.storage import EvidenceStorageInterface
 from acme.om.evidence.storage.impl.postgres import EvidenceStoragePostgresImpl
 from acme.om.storage.impl.pg_base import LoginSessions, SessionFactory, set_scope
 from acme.om.storage.logins import RUNTIME_LOGIN, SYSTEM_LOGIN
-from acme.om.storage.migrate import ensure_logins_at
+from acme.om.storage.migrate import ensure_logins_everywhere
 from acme.om.storage.roles import DatabaseRole
 from acme.om.storage.settings import MigrationSettings
 
@@ -43,7 +43,7 @@ async def test_no_serving_login_rewrites_or_removes_a_run(
     and a DELETE by the database itself, after a deploy made the logins
     again. Only the purge login deletes them."""
     settings = migration_settings
-    await ensure_logins_at(settings.master_url(), settings.login_passwords())
+    await ensure_logins_everywhere(settings.master_databases(), settings.login_passwords())
     storage = EvidenceStoragePostgresImpl(pg_sessions)
     org, session = new_id(), new_id()
     validation, runs = make_validation(session, 1)

@@ -44,7 +44,7 @@ from acme.om.exceptions import SpenderUnknown
 from acme.om.root import build_managers
 from acme.om.storage.impl.pg_base import LoginSessions, SessionFactory, set_scope
 from acme.om.storage.impl.postgres import StoragePostgresImpl
-from acme.om.storage.migrate import ensure_logins_at
+from acme.om.storage.migrate import ensure_logins_everywhere
 from acme.om.storage.roles import DatabaseRole
 from acme.om.storage.settings import MigrationSettings
 
@@ -83,7 +83,7 @@ async def test_no_serving_login_rewrites_or_removes_a_ledger_entry(
     after a deploy made the logins again. The counts beside them stay theirs
     to move."""
     settings = migration_settings
-    await ensure_logins_at(settings.master_url(), settings.login_passwords())
+    await ensure_logins_everywhere(settings.master_databases(), settings.login_passwords())
     ledger = MoneyLedgerStoragePostgresImpl(pg_sessions)
     org = new_id()
     await ledger.post_credit(org, a_credit(9_000))
