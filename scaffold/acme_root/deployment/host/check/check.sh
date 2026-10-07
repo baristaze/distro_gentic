@@ -7,8 +7,11 @@
 # from inside its walls, as its own user with no capability, and advertises
 # the rootless engine its user runs; it writes neither its release nor its
 # ceilings, never reaches a rootful engine's socket, and refuses to start in
-# that socket's group; and its exposure stays at or under the bound. Needs
-# Docker; reaches nothing but the package indexes.
+# that socket's group; and its exposure stays at or under the bound. The host
+# installs through the claimant installer; another kind, installed through it
+# beside the host under names of its own, gets a unit, a user, and settings
+# that carry those names, behind the same walls. Needs Docker; reaches
+# nothing but the package indexes.
 #
 #   deployment/host/check/check.sh      (make host-check)
 set -euo pipefail
@@ -159,6 +162,39 @@ echo "${VERDICT}"
 SCORE="$(echo "${VERDICT}" | grep -oE '[0-9]+\.[0-9]+')"
 awk -v score="${SCORE}" -v most="${EXPOSURE_MAX}" 'BEGIN { exit !(score <= most) }' \
   || fail "the unit's exposure ${SCORE} is above ${EXPOSURE_MAX}"
+
+echo "==> another kind through the same installer, under names of its own"
+in_box sh -c 'printf "%s\n" "SCAN_API_URL=" "SCAN_SCANNER_NAME=" "SCAN_ENROLLMENT_TOKEN=" \
+  > /root/scanner.env.example'
+printf '%s\n' scn_check_from_a_file | docker exec -i "${BOX}" sh -c 'umask 077; cat > /root/scanner.token'
+in_box /src/deployment/claimant/install.sh --kind scanner --unit acme-scanner --user acme-scanner \
+  --env-prefix SCAN --command acme-host --settings /root/scanner.env.example \
+  --token-file /root/scanner.token --api-url "http://127.0.0.1:${PORT}" --name check-scanner \
+  --no-start >/dev/null || fail "the claimant installer failed for another kind"
+SCANNER="$(in_box systemctl cat acme-scanner.service)"
+grep -E '^(User|Group|EnvironmentFile|Environment|ExecStart)=' <<<"${SCANNER}"
+for line in User=acme-scanner EnvironmentFile=/etc/acme-scanner/scanner.env \
+  Environment=SCAN_SCANNER_HOME=/var/lib/acme-scanner \
+  "ExecStart=/opt/acme-scanner/own-group-only.sh /opt/acme-scanner/current/bin/acme-host run"; do
+  grep -qxF "${line}" <<<"${SCANNER}" || fail "the other kind's unit has no line ${line}"
+done
+[ "$(in_box id -u acme-scanner)" != 0 ] || fail "the other kind's user is root"
+in_box stat -c '%U %a %n' /etc/acme-scanner/scanner.env /var/lib/acme-scanner
+[ "$(in_box stat -c '%U %a' /etc/acme-scanner/scanner.env)" = "root 600" ] \
+  || fail "the other kind's settings are not root's alone"
+[ "$(in_box stat -c '%U %a' /var/lib/acme-scanner)" = "acme-scanner 700" ] \
+  || fail "the other kind's home is not its user's alone"
+for line in SCAN_API_URL=http://127.0.0.1:${PORT} SCAN_SCANNER_NAME=check-scanner \
+  SCAN_ENROLLMENT_TOKEN=scn_check_from_a_file; do
+  in_box grep -qxF "${line}" /etc/acme-scanner/scanner.env || fail "scanner.env has no line ${line}"
+done
+echo "the token reached scanner.env, under the kind's prefix"
+SCANNED="$(in_box systemd-analyze security --no-pager acme-scanner.service | tail -1)"
+echo "${SCANNED}"
+awk -v score="$(echo "${SCANNED}" | grep -oE '[0-9]+\.[0-9]+')" -v most="${EXPOSURE_MAX}" \
+  'BEGIN { exit !(score <= most) }' || fail "the other kind's exposure is above ${EXPOSURE_MAX}"
+in_box systemctl is-active --quiet acme-host || fail "the other kind's install stopped the host"
+echo "the host runs on beside it"
 
 echo "==> acme-host put in a rootful engine's socket group: the host refuses to start"
 in_box chgrp docker /run/docker.sock
