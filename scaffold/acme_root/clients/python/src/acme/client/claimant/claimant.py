@@ -41,6 +41,12 @@ CLAIM_LOST = frozenset({404, 409})
 """A report's answers when the item is no longer this claim's: its claim
 lapsed, or it settled."""
 
+REASON_MAX = 500
+"""The longest reason the platform records for a failure."""
+
+NO_REASON = "failed with no reason given"
+"""A failure's reason when the work gave a blank one."""
+
 Sender = Callable[[ApiClient, Entry], Awaitable[Any]]
 """Sends one kept report with the claimant's client."""
 
@@ -124,12 +130,20 @@ class Claimant:
     ) -> bool:
         """The item's answer, kept in the journal, then sent: whether the
         platform recorded it. One it did not answer waits in the journal,
-        and the next turn sends it."""
+        and the next turn sends it.
+
+        It is held to the report's shape before it is kept, so the platform
+        never refuses it for its reason: a failure names its reason and a
+        success names none, or it raises `ValueError`; a blank reason is
+        replaced by one that says so, and a long one is cut to
+        `REASON_MAX`."""
         if item.claim_token is None:
             raise ValueError(f"item {item.id} is held under no claim token")
+        if (outcome is ReportOutcome.failed) != (error is not None):
+            raise ValueError("a failure names its reason, and a success names none")
         body: dict[str, Any] = {"claim_token": str(item.claim_token), "outcome": outcome.value}
         if error is not None:
-            body["error"] = error
+            body["error"] = error[:REASON_MAX] if error.strip() else NO_REASON
         return await self.keep(Entry(str(item.id), str(item.id), body))
 
     async def keep(self, entry: Entry) -> bool:

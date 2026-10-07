@@ -19,7 +19,7 @@ import pytest
 from api_support import build_container, seed_request
 from fastapi import FastAPI
 
-from acme.client.claimant.claimant import Claimant
+from acme.client.claimant.claimant import NO_REASON, REASON_MAX, Claimant
 from acme.client.claimant.credential import load_credential
 from acme.client.claimant.enrollment import CredentialRefused
 from acme.client.claimant.settings import ClaimantSettings
@@ -136,7 +136,9 @@ async def tenant_of(container: AppContainer, owner: dict[str, str]) -> TenantCon
     return await container.managers.tenancy.authenticate(seed_request(), token)
 
 
-async def a_scan(container: AppContainer, owner: dict[str, str], pool_id: str) -> WorkItem:
+async def a_scan(
+    container: AppContainer, owner: dict[str, str], pool_id: str, max_attempts: int = 3
+) -> WorkItem:
     ctx = await tenant_of(container, owner)
     now = utcnow()
     item = WorkItem(
@@ -151,6 +153,7 @@ async def a_scan(container: AppContainer, owner: dict[str, str], pool_id: str) -
         request_id=new_id(),
         payload={"pool_id": pool_id, "pages": 3},
         available_at=now,
+        max_attempts=max_attempts,
     )
     return await container.managers.work.enqueue(ctx, item)
 
@@ -283,3 +286,43 @@ async def test_a_report_the_platform_did_not_answer_waits_in_the_journal_and_lan
     assert outage.reached.count(f"/v1/claimants/me/items/{second.id}/report") == 2
     assert claimant.journal.pending() == []
     assert await status_of(container, owner, second.id) is WorkStatus.DONE
+
+
+async def test_a_failure_is_held_to_the_reports_shape_recorded_and_never_run_again(
+    client: httpx.AsyncClient,
+    owner: dict[str, str],
+    container: AppContainer,
+    outage: Outage,
+    tmp_path: Path,
+) -> None:
+    pool_id, token = await a_pool_token(client, owner)
+    claimant = Claimant(settings(tmp_path, token), client_for(outage))
+    await claimant.start()
+    blank = await a_scan(container, owner, pool_id, max_attempts=1)
+    long = await a_scan(container, owner, pool_id, max_attempts=1)
+    held = (await claimant.turn()).item
+    assert held is not None and held.id == blank.id
+
+    # A failure with no reason, or a success with one, is the work's own
+    # mistake: raised, and nothing is kept or sent.
+    with pytest.raises(ValueError):
+        await claimant.report(held, ReportOutcome.failed)
+    with pytest.raises(ValueError):
+        await claimant.report(held, ReportOutcome.done, "it went well")
+    assert claimant.journal.pending() == [] and outage.reached == []
+
+    # A blank reason, and one past the platform's bound, are each recorded.
+    assert await claimant.report(held, ReportOutcome.failed, "")
+    held = (await claimant.turn()).item
+    assert held is not None and held.id == long.id
+    assert await claimant.report(held, ReportOutcome.failed, "x" * 5000)
+    ctx = await tenant_of(container, owner)
+    for item, reason in ((blank, NO_REASON), (long, "x" * REASON_MAX)):
+        recorded = await container.managers.work.get_item(ctx, item.id)
+        assert recorded.status is WorkStatus.FAILED, recorded
+        assert recorded.last_error is not None and recorded.last_error.endswith(f": {reason}")
+
+    # Nothing is set aside, and neither item is handed to the work again.
+    assert claimant.journal.pending() == []
+    assert list((tmp_path / "journal").glob("*.refused.json")) == []
+    assert (await claimant.turn()).item is None
