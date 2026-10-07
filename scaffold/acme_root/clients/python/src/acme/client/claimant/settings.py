@@ -55,7 +55,7 @@ def claimant_env(
     settings to add to."""
     env = os.environ if environ is None else environ
     home = env.get(variable(prefix, kind, "HOME"))
-    folder = f"{prefix.lower()}-{kind.replace('_', '-')}"
+    folder = f"{prefix}-{kind}".lower().replace("_", "-")
     return {
         "api_url": env.get(f"{prefix}_API_URL", DEFAULT_API_URL).rstrip("/"),
         "home": Path(home) if home else Path.home() / ".config" / folder,
