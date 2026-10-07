@@ -477,10 +477,11 @@ async def test_a_nudge_is_a_step_and_no_request_holds_two_model_turns_in_a_row(
     assert {nudge.id for nudge in nudges} <= delivered, "each nudge was delivered"
 
 
-# Check 10: a workspace that cannot meet the spec refuses before any call.
+# Check 10: a workspace that cannot meet the spec refuses before any call,
+# and the loop waits on the resource.
 
 
-async def test_a_workspace_that_cannot_meet_the_spec_ends_the_loop_before_any_call(
+async def test_a_workspace_that_cannot_meet_the_spec_parks_the_loop_before_any_call(
     tmp_path: Path,
 ) -> None:
     contained = DELIVERY.model_copy(
@@ -498,10 +499,12 @@ async def test_a_workspace_that_cannot_meet_the_spec_ends_the_loop_before_any_ca
 
     run = await loop.loops.run(loop.owner, session_id)
 
-    assert run.outcome is LoopOutcome.ERRORED
+    assert run.end is RunEnd.PARKED and run.park is not None
+    assert run.park.reason is ParkReason.RESOURCE and run.park.unlock == "workspace"
+    assert run.park.retry_at is not None and run.park.retry_at > loop.clock(), "it asks again"
     assert loop.anthropic.calls == [] and loop.anthropic.remaining == 1, "no call was made"
     steps = await loop.history(session_id)
-    assert [step.type for step in steps] == [StepType.MESSAGE, StepType.LOOP_ENDED]
+    assert [step.type for step in steps] == [StepType.MESSAGE, StepType.PARKED]
 
 
 # A workspace whose branch is lost, and nothing says why, waits for a person:

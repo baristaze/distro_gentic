@@ -10,7 +10,6 @@ import re
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from ipaddress import IPv4Address, IPv4Network, IPv6Address, IPv6Network, ip_address, ip_network
-from typing import NamedTuple
 from uuid import UUID
 
 from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
@@ -137,18 +136,7 @@ def pinned_egress(
 # What a host refuses.
 
 
-class HostRefusal(NamedTuple):
-    """Why a host refuses a spec, and whether the refusal clears: it does
-    when the host only runs all the directory sessions it may, and one of
-    them lets go."""
-
-    why: str
-    clears: bool = False
-
-
-def host_refusal(
-    spec: IsolationSpec, offer: HostOffer, *, local: bool, running: int
-) -> HostRefusal | None:
+def host_refusal(spec: IsolationSpec, offer: HostOffer, *, local: bool, running: int) -> str | None:
     """Why the host that `offer` describes refuses to prepare `spec`, with
     `running` other sessions' workspaces live on it; None when it may, and
     its provider decides the rest. In `local`, the developer's own machine,
@@ -157,21 +145,20 @@ def host_refusal(
     if spec.mode is IsolationMode.NONE or local:
         return None
     if spec.mode is IsolationMode.TWIN:
-        return HostRefusal("a twin plays a workspace in local alone")
+        return "a twin plays a workspace in local alone"
     if spec.mode is IsolationMode.ACCOUNT:
-        return HostRefusal("an account of the host runs a workspace in local alone")
+        return "an account of the host runs a workspace in local alone"
     if spec.mode is IsolationMode.HOST:
         if not offer.inside_wall:
-            return HostRefusal("a bare directory runs only inside a customer's wall")
+            return "a bare directory runs only inside a customer's wall"
         if not offer.dedicated_user:
-            return HostRefusal("a bare directory runs only as a dedicated, unprivileged user")
+            return "a bare directory runs only as a dedicated, unprivileged user"
         if offer.directory_only and running >= offer.directory_sessions:
-            why = f"this host runs {offer.directory_sessions} directory session(s) at once"
-            return HostRefusal(why, clears=True)
+            return f"this host runs {offer.directory_sessions} directory session(s) at once"
     if spec.egress.mode is not EgressMode.NONE and not offer.blocks_internal:
-        return HostRefusal("this host cannot keep a workspace's egress off the platform's insides")
+        return "this host cannot keep a workspace's egress off the platform's insides"
     if spec.egress.mode is EgressMode.ALLOWLIST and not offer.enforces_allowlist:
-        return HostRefusal("this host cannot hold an allowlist's destinations and methods")
+        return "this host cannot hold an allowlist's destinations and methods"
     return None
 
 
