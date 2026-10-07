@@ -21,10 +21,11 @@ import httpx
 import typer
 
 from acme.apps.host import ceilings
-from acme.apps.host.agent import HostAgent, NotEnrolled
+from acme.apps.host.agent import HostAgent
 from acme.apps.host.config import BadSetting, Settings, settings_from_env
 from acme.apps.host.probe import Misconfigured, Probe, real_probes, startup
 from acme.apps.host.relay import ExecutorRelayImpl
+from acme.client.claimant.enrollment import CredentialRefused, NotEnrolled
 from acme.client.client import WIRE_FAILURES, ApiClient, ApiError
 from acme.infra.exceptions import InfraException
 from acme.infra.secrets.local import SecretsLocalImpl
@@ -215,6 +216,8 @@ def _guarded(coroutine: Coroutine[Any, Any, None]) -> None:
         _fail(f"misconfigured: {error}", EXIT_MISCONFIGURED)
     except NotEnrolled as error:
         _fail(f"not enrolled: {error}", EXIT_NOT_ENROLLED)
+    except CredentialRefused as error:
+        _fail(f"refused: {error}", EXIT_REFUSED)
     except ApiError as error:
         # An answer the platform could not serve, or a 429, passes with time,
         # as it does once the host runs (`HostAgent.turn`).

@@ -104,7 +104,7 @@ async def test_a_pinned_session_waits_with_no_call_then_runs_its_tool_on_its_poo
     assert await host.tick() is not None  # its first beat, and the prepare it claims
     await host.idle()
     binding = await managers.relay.binding_of(owner, session.id)
-    assert binding is not None and binding.host_id == UUID(host.credential.host_id)
+    assert binding is not None and binding.host_id == UUID(host.credential.claimant_id)
     assert Path(binding.location).is_relative_to(root.resolve())
     assert not await managers.work.has_open(owner, WorkKind.WORKSPACE, session.id)
 

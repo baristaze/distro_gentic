@@ -53,7 +53,7 @@ async def test_the_first_host_to_answer_holds_the_workspace_and_a_second_lets_it
     await first.idle()
     assert await first.claim_once() is None  # the one ask is taken
     bound = await relay.binding_of(api.owner, session_id)
-    assert bound is not None and bound.host_id == UUID(first.credential.host_id)
+    assert bound is not None and bound.host_id == UUID(first.credential.claimant_id)
     assert made_in(bound.location, first_root)
 
     # A second prepare reaches another host of the pool while the first
@@ -101,7 +101,7 @@ async def test_a_session_moved_to_another_pool_is_prepared_by_a_host_of_that_poo
     assert await host.claim_once() is not None
     await host.idle()
     bound = await relay.binding_of(api.owner, session_id)
-    assert bound is not None and bound.host_id == UUID(host.credential.host_id)
+    assert bound is not None and bound.host_id == UUID(host.credential.claimant_id)
     assert made_in(bound.location, root)
     # The prepare asked of the pool it left ended: no host there makes it.
     stale, _ = await directory_host(api, left.id, tmp_path / "left", name="host-l")

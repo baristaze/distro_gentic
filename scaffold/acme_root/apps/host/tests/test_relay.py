@@ -138,7 +138,7 @@ async def relay_to(
             api.owner.org_id, make_binding(session.id, project_id)
         )
     await managers.hosts.place_session(api.owner, session.id, pool.id)
-    host_id = UUID(host.credential.host_id)
+    host_id = UUID(host.credential.claimant_id)
     await managers.relay.bind_workspace(api.owner, session.id, host_id, str(where))
     epoch = await managers.steps.begin_run(api.owner, session.id)
     workspace = Workspace(id=session.id, org_id=api.owner.org_id, spec=DIRECTORY, location="")

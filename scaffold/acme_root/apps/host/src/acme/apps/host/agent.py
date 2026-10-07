@@ -1,7 +1,8 @@
-"""A host's life as a client of the gateway. It probes, then enrolls once
-with its tenant's enrollment token, or picks up the credential it already
-holds. From then on it beats, rotates its credential at half its life, and
-claims: what it is handed is held to its owner's ceilings, and only then
+"""A host's life as a client of the gateway, on the claimant kit
+(`acme.client.claimant`). It probes, then enrolls once with its tenant's
+enrollment token, or picks up the credential it already holds, as every
+claimant does, through the host's own calls. From then on it beats,
+rotates its credential at half its life, and claims: what it is handed is held to its owner's ceilings, and only then
 given to the executor, which runs it beside the others it runs, up to the
 number its owner's ceilings allow. Beside its claims it holds one long-lived control
 stream open, which wakes it to claim at once and stops an item it runs at
@@ -22,10 +23,21 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from acme.apps.host.ceilings import Ask, Ceilings, ask_of, refusals
-from acme.apps.host.config import Credential, Settings, load_credential, save_credential
+from acme.apps.host.config import Settings
 from acme.apps.host.probe import Probed, Probes, startup
+from acme.client.claimant.backoff import Backoff
+from acme.client.claimant.credential import Credential
+from acme.client.claimant.enrollment import (
+    REFUSED,
+    ClientFactory,
+    Enrollment,
+    Issued,
+    RoutesInterface,
+    refused,
+)
 from acme.client.client import WIRE_FAILURES, ApiClient, ApiError
 from acme.client.types import (
+    AdvertisementBody,
     ClaimedWorkView,
     ControlKind,
     IsolationMode,
@@ -37,22 +49,38 @@ log = logging.getLogger(__name__)
 EXEC_VERSION = 1
 """The version of `exec` work this build of the host reads."""
 
-ENDS_THE_HOST = frozenset({401, 403, 426})
+ENDS_THE_HOST = REFUSED | {426}
 """The answers a host does not outlast: its credential refused, ended, or
 revoked, and the work it reads below the floor. Every other failure, an
-answer the API could not serve, a 429, or the wire, the host waits out and
-calls again with the credential it holds."""
-
-BACKOFF_FIRST_SECONDS = 1.0
-"""The wait after a first failure. It doubles per failure in a row."""
-
-BACKOFF_MAX_SECONDS = 120.0
-"""However many failures in a row, no wait is longer, a 429's ask included."""
+answer the API could not serve, a 429, or the wire, the host waits out
+(`Backoff`) and calls again with the credential it holds."""
 
 
-class NotEnrolled(RuntimeError):
-    """The host holds no live credential and was given no enrollment token:
-    its owner issues one, and the host is started with it once."""
+def host_issued(view: IssuedHostCredentialView) -> Issued:
+    return Issued(
+        token=view.token,
+        credential_id=view.credential_id,
+        claimant_id=view.host_id,
+        pool_id=view.pool_id,
+        expires_at=view.expires_at,
+    )
+
+
+class HostRoutes(RoutesInterface):
+    """The host's own enrollment, with what it probed and the version of
+    `exec` work it reads, at `/hosts/...`."""
+
+    def __init__(self, advertisement: Callable[[], AdvertisementBody]) -> None:
+        self._advertisement = advertisement
+
+    async def enroll(self, client: ApiClient, enrollment_token: str, name: str) -> Issued:
+        issued = await client.enroll_host(
+            enrollment_token, name, self._advertisement(), EXEC_VERSION
+        )
+        return host_issued(issued)
+
+    async def rotate(self, client: ApiClient) -> Issued:
+        return host_issued(await client.rotate_host_credential())
 
 
 class ExecutorInterface(ABC):
@@ -95,10 +123,6 @@ class Handled:
     refused: list[str]
 
 
-ClientFactory = Callable[[str | None], ApiClient]
-"""Builds the client for a bearer: the host's credential, or None."""
-
-
 class HostAgent:
     def __init__(
         self,
@@ -116,14 +140,14 @@ class HostAgent:
         self._client_for = client_for
         self._executor = executor or ExecutorPendingImpl()
         self._now = now
-        self._jitter = jitter
-        self._failures = 0
+        self._backoff = Backoff(jitter)
         self._probed: Probed | None = None
-        self._credential: Credential | None = None
+        self._enrollment = Enrollment(
+            settings, HostRoutes(lambda: self.probed.advertisement), client_for, now
+        )
         self.woken = asyncio.Event()
         """Set when the control stream says work reached this host's lanes."""
         self._seen: UUID | None = None  # the last control message the host saw
-        self._rotating = asyncio.Lock()
         self._running: set[asyncio.Task[None]] = set()
 
     @property
@@ -134,9 +158,7 @@ class HostAgent:
 
     @property
     def credential(self) -> Credential:
-        if self._credential is None:
-            raise RuntimeError("the host has not started")
-        return self._credential
+        return self._enrollment.credential
 
     async def start(self) -> None:
         """Probes, then enrolls or resumes. A failed probe raises
@@ -148,40 +170,18 @@ class HostAgent:
         if not self._probed.open_egress:
             reached = next(r for r in self._probed.results if r.name == "metadata")
             log.warning("open egress is refused here: %s", reached.detail)
-        held = load_credential(self._settings.credential_path)
-        if (
-            held is not None
-            and held.api_url == self._settings.api_url
-            and not held.ended(self._now())
-        ):
-            self._credential = held
+        if await self._enrollment.start():
             await self.beat()
-            return
-        token = self._settings.enrollment_token
-        if not token:
-            raise NotEnrolled("no live credential and no ACME_ENROLLMENT_TOKEN to enroll with")
-        async with self._client_for(None) as client:
-            issued = await client.enroll_host(
-                token, self._settings.name, self.probed.advertisement, EXEC_VERSION
-            )
-        self._keep(issued)
-        log.info("enrolled as host %s of pool %s", issued.host_id, issued.pool_id)
 
     async def beat(self) -> None:
-        async with self._client_for(self.credential.token) as client:
+        async with self.client() as client:
             await client.host_heartbeat(self.probed.advertisement, EXEC_VERSION)
 
     async def rotate_if_due(self) -> bool:
-        """Rotates once when due. One rotation at a time: a credential
-        rotated a second time ends the host, so a loop that beats beside the
-        claims never rotates with the one a turn just rotated."""
-        async with self._rotating:
-            if not self.credential.due(self._now()):
-                return False
-            async with self._client_for(self.credential.token) as client:
-                issued = await client.rotate_host_credential()
-            self._keep(issued)
-            return True
+        """Rotates once when due, one rotation at a time, so a loop that
+        beats beside the claims never rotates with the one a turn just
+        rotated (`Enrollment.rotate_if_due`)."""
+        return await self._enrollment.rotate_if_due()
 
     async def claim_once(self) -> Handled | None:
         """One claim, while the host runs fewer items than its ceilings allow:
@@ -191,7 +191,7 @@ class HostAgent:
         it ends, `woken` is set, so the loop claims again at once."""
         if len(self._running) >= self._ceilings.items_at_once:
             return None
-        async with self._client_for(self.credential.token) as client:
+        async with self.client() as client:
             answer = await client.claim_host_work(EXEC_VERSION)
         if answer.item is None:
             return None
@@ -223,8 +223,9 @@ class HostAgent:
         self.woken.set()
 
     def client(self) -> ApiClient:
-        """A client that calls with this host's credential as it is now."""
-        return self._client_for(self.credential.token)
+        """A client that calls with this host's credential as it is now;
+        none once the platform refused it."""
+        return self._enrollment.client()
 
     async def listen(self) -> None:
         """The control stream, held open from here until the platform ends
@@ -258,37 +259,16 @@ class HostAgent:
         except ApiError as error:
             if error.status in ENDS_THE_HOST:
                 log.warning("the platform refused: %s %s", error.code, error.message)
+                if refused(error):
+                    self._enrollment.refuse()
                 raise
             log.warning("the platform failed: %s %s", error.status, error.code)
-            return self._backoff(error.retry_after)
+            return self._backoff.failed(error.retry_after)
         except WIRE_FAILURES as error:
             log.warning("the platform is unreachable: %s", error)
-            return self._backoff(None)
-        self._failures = 0
+            return self._backoff.failed(None)
+        self._backoff.reset()
         return 0.0 if handled is not None else self._settings.beat_seconds
-
-    def _backoff(self, server_asked: float | None) -> float:
-        """The wait after one more failure in a row: the doubling curve, half
-        of it jitter so hosts that failed together do not return together,
-        or longer when the server asked, and never past the cap."""
-        self._failures += 1
-        full = min(BACKOFF_FIRST_SECONDS * 2 ** (self._failures - 1), BACKOFF_MAX_SECONDS)
-        curve = full / 2 + (full / 2) * self._jitter()
-        return min(max(curve, server_asked or 0.0), BACKOFF_MAX_SECONDS)
 
     def _modes(self) -> frozenset[IsolationMode]:
         return frozenset(self.probed.advertisement.isolation_modes or ())
-
-    def _keep(self, issued: IssuedHostCredentialView) -> None:
-        if issued.token is None:
-            raise NotEnrolled("the platform answered no credential")
-        self._credential = Credential(
-            api_url=self._settings.api_url,
-            token=issued.token,
-            credential_id=str(issued.credential_id),
-            host_id=str(issued.host_id),
-            pool_id=str(issued.pool_id),
-            issued_at=self._now(),
-            expires_at=issued.expires_at,
-        )
-        save_credential(self._settings.credential_path, self._credential)
