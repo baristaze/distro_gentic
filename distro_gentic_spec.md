@@ -901,6 +901,15 @@ provider calls and credentials:
 | `ops-integration-silent` | investigator | Why an integration's events stopped: deliveries, signatures, dead letters |
 | `ops-provider-outage` | investigator | Which provider and credential fails, its outage signal, and how many sessions park on it |
 | `audit-matrix-spend` | investigator | Spend by matrix version and plan tier, cache hits and misses, the cost of rebuilt caches |
+| `audit-ontology-drift` | none | Which concept sits in a layer its nature contradicts, read from the product down to the guideline |
+
+The gates hold the layers consistent with each other. They cannot say
+whether a concept sits in the right layer: they guarantee consistency,
+not relevance. Whether a concept belongs to a layer of the chain is an
+ontology question, and `audit-ontology-drift` asks it from the product,
+the one checkout where every layer is in view. A drift goes either
+way: a lower layer's concept grown again above it, or a higher layer's
+noun sunk below it.
 
 The operator dashboard, declared as code, adds the platform's signals,
 each with a bounded label: parks by reason and age, loop lanes' depth by

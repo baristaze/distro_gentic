@@ -99,6 +99,7 @@ AUDITS = [
     "audit-deploy-time",
     "audit-matrix-spend",
     "audit-model-spend",
+    "audit-ontology-drift",
     "audit-provider-calls",
     "audit-query-indexes",
     "audit-retention",
@@ -630,6 +631,26 @@ def test_an_audit_reports_and_never_changes_the_code(name: str) -> None:
     assert "## Output" in _skill(name)
 
 
+ONTOLOGY_LAYERS = [
+    "| guideline | Software Design and Architecture Guidelines |",
+    "| engine | An Engine for Long-Running Agents |",
+    "| platform | A Spec for a Closed-loop, Cloud-first, Distributed Agentic Platform |",
+    "| product | its own spec's title, read in step 2 |",
+]
+
+
+def test_the_ontology_audit_names_each_layer_and_only_reads_the_checkout() -> None:
+    """The report's chain names each layer by its title, so the audit
+    carries the titles; and the audit reads the product's checkout it
+    judges, so it never moves the checkout's head or its files."""
+    text = _skill("audit-ontology-drift")
+    for row in ONTOLOGY_LAYERS:
+        assert row in text, f"audit-ontology-drift no longer names: {row}"
+    prose = _prose("audit-ontology-drift")
+    assert "It never fetches, switches, or checks out here." in prose
+    assert "Run `git status --porcelain` here again. It prints what step 1 printed." in prose
+
+
 def _readme_needs(name: str) -> str:
     """What `ops/README.md` says a skill needs: its "Needs" cell, a note in parentheses left out."""
     row = re.search(rf"^\| `{re.escape(name)}` \| ([^|]+) \|", README.read_text(), re.MULTILINE)
@@ -725,6 +746,15 @@ COUNT_BOUNDS = {
     "ops-cloud-deployment-create": ["Its Next is the person's to run, never the session's"],
     "stress-test-create-or-update": ["Its Next is the person's to run, never the session's"],
     "audit-database-calls": ["the first run plus at most 1 rerun"],
+    "audit-ontology-drift": [
+        "at most three layers below the product",
+        "A fourth layer below the product is never read",
+        "Search at most 40 nouns, a noun and its plural one, each once in each layer below it.",
+        "at most 30 files read in full in a run",
+        "A suspect past either count is listed under Not verified.",
+        "Never reads more than three layers below the product, searches more than 40 nouns, "
+        "or reads more than 30 files in full.",
+    ],
     "docs-compact": [
         "One pass: each document is rewritten once in a run.",
         "the first run plus at most 3 reruns, then stop and say which gate fails and why",
