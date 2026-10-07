@@ -6,7 +6,7 @@ its disk before it calls with it. A credential the platform refused is
 never sent again: every call after it raises `CredentialRefused`.
 
 The calls that enroll and rotate are its kind's (`RoutesInterface`): a
-product's claimant's are `/claimants/...` (`ClaimantRoutes`); the host's
+product's claimant's are `/claimants/...` (`RoutesClaimantImpl`); the host's
 carry what it probed."""
 
 import asyncio
@@ -79,7 +79,7 @@ def claimant_issued(view: IssuedClaimantCredentialView) -> Issued:
     )
 
 
-class ClaimantRoutes(RoutesInterface):
+class RoutesClaimantImpl(RoutesInterface):
     """A product's claimant's calls: its name alone, beside its token."""
 
     async def enroll(self, client: ApiClient, enrollment_token: str, name: str) -> Issued:

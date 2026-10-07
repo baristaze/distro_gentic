@@ -24,10 +24,10 @@ from uuid import UUID
 
 from acme.client.claimant.backoff import Backoff
 from acme.client.claimant.enrollment import (
-    ClaimantRoutes,
     ClientFactory,
     CredentialRefused,
     Enrollment,
+    RoutesClaimantImpl,
     refused,
 )
 from acme.client.claimant.journal import Entry, Journal
@@ -75,7 +75,7 @@ class Claimant:
         jitter: Callable[[], float] | None = None,
     ) -> None:
         self._settings = settings
-        self.enrollment = Enrollment(settings, ClaimantRoutes(), client_for, now)
+        self.enrollment = Enrollment(settings, RoutesClaimantImpl(), client_for, now)
         self.journal = Journal(settings.journal_path)
         self._send = send
         self._backoff = Backoff(jitter) if jitter is not None else Backoff()

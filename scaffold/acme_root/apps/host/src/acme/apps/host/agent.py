@@ -66,7 +66,7 @@ def host_issued(view: IssuedHostCredentialView) -> Issued:
     )
 
 
-class HostRoutes(RoutesInterface):
+class RoutesHostImpl(RoutesInterface):
     """The host's own enrollment, with what it probed and the version of
     `exec` work it reads, at `/hosts/...`."""
 
@@ -143,7 +143,7 @@ class HostAgent:
         self._backoff = Backoff(jitter)
         self._probed: Probed | None = None
         self._enrollment = Enrollment(
-            settings, HostRoutes(lambda: self.probed.advertisement), client_for, now
+            settings, RoutesHostImpl(lambda: self.probed.advertisement), client_for, now
         )
         self.woken = asyncio.Event()
         """Set when the control stream says work reached this host's lanes."""

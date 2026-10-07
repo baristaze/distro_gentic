@@ -30,9 +30,9 @@ async with ApiClient(url, app="cli", app_version="cli@0.1.0", token=token) as ap
 
 ```python
 claimant = Claimant(ClaimantSettings.from_env("ACME", "scanner"), client_for)
-await claimant.start()                    # enrolls once, or picks up its credential
+await claimant.start()  # enrolls once, or picks up its credential
 while True:
-    turn = await claimant.turn()          # rotates, sends the journal, claims
+    turn = await claimant.turn()  # rotates, sends the journal, claims
     if turn.item is not None:
         await claimant.report(turn.item, await work(turn.item, claimant))
     await asyncio.sleep(turn.wait)
