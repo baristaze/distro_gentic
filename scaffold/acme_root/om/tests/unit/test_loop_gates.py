@@ -19,9 +19,12 @@ from acme.om.attribution.types.principal import Principal
 from acme.om.context import TenantContext
 from acme.om.exceptions import GateParked, PlatformException, SpenderUnknown
 from acme.om.models.types.fill import Fill, ModelRole
+from acme.om.projects.impl.policies import SessionProjectsBoundImpl
+from acme.om.projects.policies import SessionProjectsInterface
 from acme.om.root import Managers
 from acme.om.steps.types.header import Park, ParkReason
 from acme.om.steps.types.step import StepType
+from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.windows.impl.gate import CallGateBudgetImpl
 
 NORM = Park(reason=ParkReason.PERSON, unlock="norm")
@@ -36,12 +39,18 @@ class Parking(CallGateBudgetImpl):
         self,
         managers: Managers,
         clock: Clock,
+        projects: SessionProjectsInterface,
         *,
         turn: PlatformException | None = None,
         job: PlatformException | None = None,
     ) -> None:
         super().__init__(
-            managers.budget_gate, managers.pricing, managers.agent_sessions, managers.budgets, clock
+            managers.budget_gate,
+            managers.pricing,
+            managers.agent_sessions,
+            managers.budgets,
+            projects,
+            clock=clock,
         )
         self.turn, self.job = turn, job
         self.held = 0
@@ -96,12 +105,14 @@ async def test_a_gate_that_parks_a_model_call_parks_the_loop_where_it_says(
     tmp_path: Path, raised: PlatformException, park: Park
 ) -> None:
     gates: list[Parking] = []
+    storage = StorageMemoryImpl()
+    projects = SessionProjectsBoundImpl(storage.get_project_storage())
 
     def parking(managers: Managers, clock: Clock) -> Parking:
-        gates.append(Parking(managers, clock, turn=raised))
+        gates.append(Parking(managers, clock, projects, turn=raised))
         return gates[-1]
 
-    loop = loop_over(tmp_path, call_gate=parking)
+    loop = loop_over(tmp_path, storage=storage, call_gate=parking)
     session_id = await loop.start()
     await loop.say(session_id, "What is the total?")
     loop.anthropic.add(reply(said("Never asked.")))
@@ -126,12 +137,16 @@ async def test_a_gate_that_parks_a_spending_job_parks_the_loop_and_starts_nothin
     tmp_path: Path, raised: PlatformException, park: Park
 ) -> None:
     gates: list[Parking] = []
+    storage = StorageMemoryImpl()
+    projects = SessionProjectsBoundImpl(storage.get_project_storage())
 
     def parking(managers: Managers, clock: Clock) -> Parking:
-        gates.append(Parking(managers, clock, job=raised))
+        gates.append(Parking(managers, clock, projects, job=raised))
         return gates[-1]
 
-    loop = loop_over(tmp_path, kinds=(ASSISTANT, DELIVERY, BUILDER), call_gate=parking)
+    loop = loop_over(
+        tmp_path, storage=storage, kinds=(ASSISTANT, DELIVERY, BUILDER), call_gate=parking
+    )
     compute = loop.jobs["compute"]
     session_id = await loop.start("builder")
     await loop.say(session_id, "Start it.")

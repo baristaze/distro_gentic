@@ -6,6 +6,7 @@ and no usage recorded. A key the provider does not take is marked refused,
 and no outage is reported for the provider; a permission the key lacks is
 the call's alone, and the key stays."""
 
+from collections.abc import Callable
 from pathlib import Path
 from uuid import UUID
 
@@ -21,11 +22,15 @@ from acme.om.attribution.types.principal import Principal
 from acme.om.context import TenantContext
 from acme.om.exceptions import NoCredential
 from acme.om.models.credentials import PLATFORM_CREDENTIAL, CallClient, CallCredentialsInterface
+from acme.om.models.impl.resolver import ModelResolverTableImpl, ResolverOptions
 from acme.om.models.layer import ModelsLayer
 from acme.om.models.types.fill import Fill, ModelRole
+from acme.om.projects.impl.policies import SessionProjectsBoundImpl
+from acme.om.projects.policies import SessionProjectsInterface
 from acme.om.root import Managers
 from acme.om.steps.types.header import ParkReason
 from acme.om.steps.types.step import StepType
+from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.windows.impl.gate import CallGateBudgetImpl
 
 KEY = "key-1"
@@ -35,9 +40,16 @@ KEY = "key-1"
 class Told(CallGateBudgetImpl):
     """The budgets' gate, keeping the credential each hold was asked for."""
 
-    def __init__(self, managers: Managers, clock: Clock) -> None:
+    def __init__(
+        self, managers: Managers, clock: Clock, projects: SessionProjectsInterface
+    ) -> None:
         super().__init__(
-            managers.budget_gate, managers.pricing, managers.agent_sessions, managers.budgets, clock
+            managers.budget_gate,
+            managers.pricing,
+            managers.agent_sessions,
+            managers.budgets,
+            projects,
+            clock=clock,
         )
         self.credentials: list[str] = []
 
@@ -90,23 +102,37 @@ class OwnKey(CallCredentialsInterface):
         self.refusals.append((provider, credential))
 
 
+def keyed(
+    credentials: Callable[[ModelProvidersInterface], CallCredentialsInterface],
+) -> ModelsLayer:
+    """A layer of its credentials alone: the engine's resolver over the
+    prices, and the engine's models manager as it is."""
+    return ModelsLayer(
+        resolver=lambda prices: ModelResolverTableImpl(prices, ResolverOptions()),
+        models=lambda models, tenancy: models,
+        credentials=credentials,
+    )
+
+
 def keyed_loop(tmp_path: Path, layer: ModelsLayer) -> tuple[Loop, Told]:
     """A loop whose calls go out on the key `layer` answers, behind a gate
     that keeps what it was told."""
     gates: list[Told] = []
+    storage = StorageMemoryImpl()
+    projects = SessionProjectsBoundImpl(storage.get_project_storage())
 
     def told(managers: Managers, clock: Clock) -> Told:
-        gates.append(Told(managers, clock))
+        gates.append(Told(managers, clock, projects))
         return gates[-1]
 
-    loop = loop_over(tmp_path, call_gate=told, models_layer=layer)
+    loop = loop_over(tmp_path, storage=storage, call_gate=told, models_layer=layer)
     return loop, gates[0]
 
 
 async def test_a_call_whose_key_cannot_be_had_parks_on_its_provider_and_spends_nothing(
     tmp_path: Path,
 ) -> None:
-    loop, gate = keyed_loop(tmp_path, ModelsLayer(credentials=lambda providers: Keyless()))
+    loop, gate = keyed_loop(tmp_path, keyed(lambda providers: Keyless()))
     session_id = await loop.start()
     await loop.say(session_id, "What is the total?")
     loop.anthropic.add(reply(said("Never asked.")))
@@ -143,7 +169,7 @@ async def test_a_key_its_provider_refuses_is_marked_refused_and_no_outage_is_rep
     refused: list[tuple[ProviderName, str]],
 ) -> None:
     keys = OwnKey()
-    loop, gate = keyed_loop(tmp_path, ModelsLayer(credentials=keys.over))
+    loop, gate = keyed_loop(tmp_path, keyed(keys.over))
     session_id = await loop.start()
     await loop.say(session_id, "What is the total?")
     loop.anthropic.add(ScriptedFailure(kind=ErrorKind.CREDENTIAL, status=status, message=message))
