@@ -26,7 +26,9 @@ macOS.
   passed. No setting names a mode.
 - **Enrolls once.** With the enrollment token its owner issued, it gets
   a credential of its own, kept owner-only in its home. Every start after
-  that picks the credential up; it rotates it at half its life.
+  that picks the credential up; it rotates it at half its life. It does
+  so on the claimant kit (`acme.client.claimant`), as every claimant
+  does, through the host's own calls.
 - **Claims only what is pinned to it.** It states the version of `exec`
   work it reads, and nothing else. The platform hands it work of its own
   pool, read off its credential.

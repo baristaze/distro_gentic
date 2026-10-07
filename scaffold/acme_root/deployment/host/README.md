@@ -8,6 +8,12 @@ it to the least it needs
 Each needs [uv](https://docs.astral.sh/uv/) on the machine and the
 enrollment token its owner issued.
 
+The host is a claimant, and its Linux installer is the claimant
+installer, [`deployment/claimant/install.sh`](../claimant/install.sh),
+given the host's kind, unit, user, and prefix, and the host's own step,
+`dropin.sh`. A product's claimant installs through the same script under
+names of its own ([ADR 2046](../../docs/adr/2046-a-claimant-runs-on-the-platforms-claimant-kit-and-installs-through-one-installer.md)).
+
 ## Linux, with systemd
 
 ```bash
@@ -36,7 +42,8 @@ What it makes:
 | `/etc/acme-host/host.env` | root, 600 | The platform's URL, the host's name, the first start's token, the proxy and CA file. Written once; edit it there |
 | `/etc/acme-host/ceilings.toml` | root, 644 | The owner's ceilings, bound read-only into the host's home |
 | `/var/lib/acme-host` | `acme-host`, 700 | The host's home: its credential, its secret store, its records |
-| `/etc/systemd/system/acme-host.service` | root | The unit |
+| `/etc/systemd/system/acme-host.service` | root | The unit, rendered from `deployment/claimant/claimant.service` |
+| `/etc/systemd/system/acme-host.service.d/` | root | The host's drop-ins: `ceilings.conf` binds the ceilings; `engine.conf`, with `--engine rootless`, its engine |
 
 The unit runs the host as `acme-host`, never root. The token is spent
 once the host holds its credential. Running the installer again builds
@@ -67,7 +74,10 @@ over a socket, and its own state. Nothing else of the machine:
 
 `systemd-analyze security acme-host` scores it 1.3, "OK". `make
 host-check` holds that score under 1.5 and the rest of this list, on a
-container with systemd, and CI runs it.
+container with systemd, and CI runs it. It also installs another kind
+through the claimant installer beside the host, and holds that its
+unit, its user, and its settings carry that kind's names, behind the
+same walls.
 
 ### Its container engine
 

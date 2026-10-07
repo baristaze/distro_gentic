@@ -25,6 +25,8 @@ from acme.client.types import (
     AgentSessionView,
     AutomationRequest,
     AutomationView,
+    ClaimantClaimView,
+    ClaimantWorkView,
     ClaimView,
     ControlView,
     CrossingKind,
@@ -38,6 +40,7 @@ from acme.client.types import (
     HostView,
     InvitationPageView,
     InvitationView,
+    IssuedClaimantCredentialView,
     IssuedDownloadView,
     IssuedHostCredentialView,
     IssuedLoginView,
@@ -1098,6 +1101,51 @@ class ApiClient:
             async for line in response.aiter_lines():
                 if line.strip():
                     yield ControlView.model_validate_json(line)
+
+    # A product's claimant's own calls, the way a host's are: it enrolls
+    # once with an enrollment token of its kind, then calls with a
+    # credential of its own under its kind's prefix. None of them is
+    # retried here: an enrollment twice is two claimants, a credential
+    # rotated twice ends its claimant, and a lost report is the claimant's
+    # journal to send again (`acme.client.claimant`).
+
+    async def enroll_claimant(
+        self, enrollment_token: str, name: str
+    ) -> IssuedClaimantCredentialView:
+        """The claimant's own credential, in the clear once. Its kind and
+        its pool are the token's to say, never the claimant's."""
+        answer = await self.request(
+            "POST", "/v1/claimants/enrollments", json={"name": name}, token=enrollment_token
+        )
+        return IssuedClaimantCredentialView.model_validate(answer)
+
+    async def rotate_claimant_credential(self) -> IssuedClaimantCredentialView:
+        """The claimant's next credential; the one this client holds ends
+        after a short grace."""
+        answer = await self.request("POST", "/v1/claimants/me/credentials")
+        return IssuedClaimantCredentialView.model_validate(answer)
+
+    async def claim_claimant_work(self) -> ClaimantClaimView:
+        """The next item of the claimant's kind on the lanes its credential
+        names, or none."""
+        answer = await self.request("POST", "/v1/claimants/me/claims")
+        return ClaimantClaimView.model_validate(answer)
+
+    async def extend_claimant_lease(self, item_id: UUID, claim_token: UUID) -> ClaimantWorkView:
+        """Renews the lease on the item the claimant holds, under the claim
+        token its claim was handed."""
+        answer = await self.request(
+            "POST",
+            f"/v1/claimants/me/items/{item_id}/lease",
+            json={"claim_token": str(claim_token)},
+        )
+        return ClaimantWorkView.model_validate(answer)
+
+    async def report_claimant_work(self, item_id: UUID, body: dict[str, Any]) -> ClaimantWorkView:
+        """The claimant's answer for the item it holds: its `claim_token`,
+        its `outcome` (`done` or `failed`), and a failure's `error`."""
+        answer = await self.request("POST", f"/v1/claimants/me/items/{item_id}/report", json=body)
+        return ClaimantWorkView.model_validate(answer)
 
     # Events and the channel
 

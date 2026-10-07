@@ -17,9 +17,12 @@ import httpx
 import pytest
 from host_support import Stack, probes
 
-from acme.apps.host.agent import BACKOFF_MAX_SECONDS, ExecutorInterface, HostAgent, NotEnrolled
+from acme.apps.host.agent import ExecutorInterface, HostAgent
 from acme.apps.host.ceilings import Ask, Ceilings
-from acme.apps.host.config import BadSetting, load_credential, settings_from_env
+from acme.apps.host.config import BadSetting, settings_from_env
+from acme.client.claimant.backoff import BACKOFF_MAX_SECONDS
+from acme.client.claimant.credential import load_credential
+from acme.client.claimant.enrollment import NotEnrolled
 from acme.client.client import ApiClient, ApiError
 from acme.client.types import ClaimedWorkView, IsolationMode
 from acme.infra.workspaces.container import DEFAULT_IMAGE
@@ -150,7 +153,7 @@ async def test_a_host_enrolls_once_and_resumes_with_its_own_credential(
     await again.start()
     assert again.credential.token == held.token
     hosts = await api.container.managers.hosts.get_hosts(api.owner, pool.id)
-    assert [status.host.id for status in hosts] == [UUID(held.host_id)]
+    assert [status.host.id for status in hosts] == [UUID(held.claimant_id)]
     assert hosts[0].host.advertisement.isolation_modes == ("container",)
 
 
@@ -381,7 +384,7 @@ async def test_a_refused_credential_ends_the_host(api: Stack, tmp_path: Path) ->
     pool = await api.pool()
     host = agent(api, tmp_path, await api.token(pool.id))
     await host.start()
-    await api.container.managers.hosts.revoke_host(api.owner, UUID(host.credential.host_id))
+    await api.container.managers.hosts.revoke_host(api.owner, UUID(host.credential.claimant_id))
     with pytest.raises(ApiError) as refused:
         await host.turn()
     assert refused.value.status == 401

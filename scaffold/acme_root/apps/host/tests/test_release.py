@@ -322,7 +322,7 @@ async def test_a_killed_runs_instance_on_its_host_is_released_past_the_grace_wit
     await api.container.managers.hosts.place_session(owner, unrun.id, run.pool_id)
     there = await provider.prepare(owner.org_id, unrun.id, KIND.isolation)
     await managers.relay.bind_workspace(
-        owner, unrun.id, UUID(host.credential.host_id), there.location
+        owner, unrun.id, UUID(host.credential.claimant_id), there.location
     )
 
     assert await run.passes() == 0
