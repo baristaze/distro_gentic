@@ -79,7 +79,8 @@ their own on the local stack and drop it; their tools are in
 [audit/](audit/README.md). The platform requires two audits the
 guideline leaves optional, `audit-provider-calls` and
 `audit-credential-lifetimes`, since a platform of agents lives on
-provider calls and credentials, and adds `audit-matrix-spend`.
+provider calls and credentials, and adds `audit-matrix-spend` and
+`audit-ontology-drift`.
 
 | Skill | Needs | Answers |
 |-------|-------|---------|
@@ -91,6 +92,7 @@ provider calls and credentials, and adds `audit-matrix-spend`.
 | `audit-model-spend` | Supporter (the `read` operator token alone) | What an org's model calls spend by agent kind, kind version, and model role, the cache's hit rate, and what rebuilt caches cost. |
 | `audit-deploy-time` | Investigator | Where a deploy's minutes go, and what would shorten it. |
 | `audit-matrix-spend` | Investigator | What model calls spend by matrix version and plan tier, across the environment, the cache's hit rate, and what rebuilt caches cost. |
+| `audit-ontology-drift` | none | Which concept sits in a layer its nature contradicts, read from the product down to the guideline. |
 
 `tickets-triage` reads the tracker and the repository, and holds none of
 these roles.
