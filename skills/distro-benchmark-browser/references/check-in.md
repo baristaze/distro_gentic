@@ -18,7 +18,11 @@ nothing, and the output says the run was not checked in and why.
 Write nothing either, and say so, when no session of the run has a
 score: there is nothing to measure. When
 `benchmark/runs/browser-judge-distro/<run_id>/` is already there, stop
-and say so: a checked-in run is never written over.
+and say so: a checked-in run is never written over. Before anything is
+written, read the names step 3 under The folder needs, with
+`gh repo list <the URL's owner> --limit 200 --json name -q '.[].name'`.
+When it fails, or `gh` is not signed in, write nothing, and the output
+says so.
 
 ## The folder
 
@@ -31,7 +35,12 @@ and say so: a checked-in run is never written over.
      the whole value of the `- URL:` line in each answer's header;
    - every other address of a conversation, or of a share of one, in a
      `note` or an answer, which is what matches
-     `https?://(?:chatgpt\.com/(?:g/[^/\s]+/)?(?:c|share)/|claude\.ai/(?:chat|share)/|gemini\.google\.com/(?:app|share)/\w|g\.co/gemini/share/|grok\.com/(?:c|share)/)[^\s"')\]]*`.
+     `https?://(?:chatgpt\.com/(?:g/[^/\s]+/)?(?:c|share)/|claude\.ai/(?:chat|share)/|gemini\.google\.com/(?:app|share)/\w|g\.co/gemini/share/|grok\.com/(?:c|share)/)[^\s"')\]]*`;
+   - each name on the person's list of names never published, when it
+     exists: `~/.config/benchmark_browser/redact.txt`, outside the
+     repository, one name per line. Read it in this same `python3`
+     step, and replace each name in any case, wherever it stands, an
+     adjacent's name included. Never print the file or a name on it.
 3. Read every copy in full. Replace with `[redacted]`, with `python3`
    and by exact string, each of these where it stands, the words alone
    and not the sentence around them (`"[redacted], Connected"`):
@@ -50,12 +59,16 @@ and say so: a checked-in run is never written over.
      the engine and the guideline, `swe_guidelines`. Such a name is one
      an answer reached through these three: the product the closing
      Next section of `distro_gentic_spec.md` names, or another
-     repository of their owner's. Read those names with
-     `gh repo list <the URL's owner> --limit 200 --json name -q '.[].name'`,
-     and redact each one an answer names, but this repository's and the
-     layers' it builds on. A system an answer sets beside this
-     one as an adjacent is not such a repository, and its name stays,
-     with the address of its own documentation or source.
+     repository of their owner's: the names `gh repo list` read (When
+     it runs). Redact each one an answer names, but this repository's
+     and the layers' it builds on, and only where it names that
+     repository: as `<owner>/<name>`, in a URL, or where the sentence
+     says it is a repository or a project. The same word in its
+     ordinary sense stays, and so does a folder or a file of this
+     repository, the engine, or the guideline. A system an answer sets
+     beside this one as an adjacent is not such a repository, and its
+     name stays, with the address of its own documentation or source,
+     unless step 2 redacted it from the person's list.
 
    The prompt and the contract stay as typed: two runs compare only
    when both are the same text. The URLs of this repository, the
