@@ -95,14 +95,16 @@ class InfraSettings(BaseSettings):
 
     # Where tools run (ADR 1003 for their secrets). `none` prepares no
     # workspace and refuses every command; `host` a directory per workspace
-    # under the root, run as processes of this host, which a deployed
-    # environment refuses; `container` a container per workspace on the
-    # local Docker, from the image. The root also holds each transport's
-    # records of how commands ended, beside the workspaces. Each container
-    # carries the deployment's name, and a runner holds only those that
-    # carry its own.
-    workspace_backend: Literal["none", "host", "container"] = "none"
+    # under the root, run as processes of this host; `account` the same,
+    # each command run as the account named, one workspace at a time
+    # (ADR 1021); `container` a container per workspace on the local Docker,
+    # from the image. A deployed environment refuses `host` and `account`.
+    # The root also holds each transport's records of how commands ended,
+    # beside the workspaces. Each container carries the deployment's name,
+    # and a runner holds only those that carry its own.
+    workspace_backend: Literal["none", "host", "account", "container"] = "none"
     workspaces_root: Path = Path(".local/workspaces")
+    workspace_account: str = "acme-agent"
     workspace_image: str = DEFAULT_IMAGE
     workspace_deployment: str = Field(default="acme-local", min_length=1)
 
