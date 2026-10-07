@@ -145,8 +145,9 @@ no env file, and calls no API but git's.
    the guideline, and the chain ends there. A source the chain's table
    does not name is read the same way and reported as an unknown layer.
    A fourth layer below the product is never read; the report names it.
-   A clone that fails is reported as not read, with git's line, and the
-   chain ends there.
+   A clone that fails, or a `switch` to the recorded commit that fails,
+   is reported as not read, with git's line, and the chain ends there.
+   The clone's default branch is never read in the commit's place.
 5. List what each layer adds, and write each layer's list to
    `<layer>-additions.txt` in the report's folder. A layer's own
    concepts are the files it added over its base, and a changed file is
