@@ -142,9 +142,10 @@ no env file, and calls no API but git's.
    A fourth layer below the product is never read; the report names it.
    A clone that fails is reported as not read, with git's line, and the
    chain ends there.
-5. List what each layer adds. A layer's own concepts are the files it
-   added over its base, and a changed file is its change to a lower
-   layer's concept:
+5. List what each layer adds, and write each layer's list to
+   `<layer>-additions.txt` in the report's folder. A layer's own
+   concepts are the files it added over its base, and a changed file is
+   its change to a lower layer's concept:
    - The product: `git diff --name-status --find-renames <render> HEAD`
      here.
    - A layer with a base:
