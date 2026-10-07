@@ -50,7 +50,10 @@ and say so: a checked-in run is never written over.
      the engine and the guideline, `swe_guidelines`. Such a name is one
      an answer reached through these three: the product the closing
      Next section of `distro_gentic_spec.md` names, or another
-     repository of their owner's. A system an answer sets beside this
+     repository of their owner's. Read those names with
+     `gh repo list <the URL's owner> --limit 200 --json name -q '.[].name'`,
+     and redact each one an answer names, but this repository's and the
+     layers' it builds on. A system an answer sets beside this
      one as an adjacent is not such a repository, and its name stays,
      with the address of its own documentation or source.
 
