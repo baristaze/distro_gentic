@@ -634,7 +634,7 @@ def test_an_audit_reports_and_never_changes_the_code(name: str) -> None:
 ONTOLOGY_LAYERS = [
     "| guideline | Software Design and Architecture Guidelines |",
     "| engine | An Engine for Long-Running Agents |",
-    "| platform | A Platform for Closed-Loop Agent Fleets |",
+    "| platform | A Spec for a Closed-loop, Cloud-first, Distributed Agentic Platform |",
     "| product | its own spec's title, read in step 2 |",
 ]
 

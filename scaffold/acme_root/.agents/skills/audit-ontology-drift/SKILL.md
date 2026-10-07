@@ -25,7 +25,7 @@ the bottom:
 |---|---|---|---|---|
 | guideline | Software Design and Architecture Guidelines | `https://github.com/baristaze/swe_guidelines` | `architecture.md` | 0001 to 0999 |
 | engine | An Engine for Long-Running Agents | `https://github.com/baristaze/agentic_core` | `agentic_core_spec.md` | 1001 to 1999 |
-| platform | A Platform for Closed-Loop Agent Fleets | `https://github.com/baristaze/distro_gentic` | `distro_gentic_spec.md` | 2001 to 2999 |
+| platform | A Spec for a Closed-loop, Cloud-first, Distributed Agentic Platform | `https://github.com/baristaze/distro_gentic` | `distro_gentic_spec.md` | 2001 to 2999 |
 | product | its own spec's title, read in step 2 | this checkout | step 2 | 3001 and up |
 
 The nature of each layer, which the audit holds every concept to:
@@ -222,9 +222,9 @@ no env file, and calls no API but git's.
 | Layer | Title | Repository | Release | Commit | Its base |
 |---|---|---|---|---|---|
 | product | <title> (`<file>`) | this checkout | <tag or untagged> | <commit> | <render>, the platform at <release> |
-| platform | A Platform for Closed-Loop Agent Fleets | distro_gentic | <release> | <commit> | <render>, the engine at <release> |
-| engine | An Engine for Long-Running Agents | agentic_core | <release> | <commit> | <render>, the guideline at <release> |
-| guideline | Software Design and Architecture Guidelines | swe_guidelines | <release> | <commit> | none: the root |
+| platform | <title> | distro_gentic | <release> | <commit> | <render>, the engine at <release> |
+| engine | <title> | agentic_core | <release> | <commit> | <render>, the guideline at <release> |
+| guideline | <title> | swe_guidelines | <release> | <commit> | none: the root |
 
 ## Drifts, by impact
 
