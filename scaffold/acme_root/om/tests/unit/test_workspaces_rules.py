@@ -194,6 +194,7 @@ def spec(mode: IsolationMode, egress: EgressMode = EgressMode.NONE) -> Isolation
         (spec(IsolationMode.HOST), CLOUD, 0, "a bare directory in the cloud"),
         (spec(IsolationMode.HOST), HostOffer(inside_wall=True), 0, "a directory run as anybody"),
         (spec(IsolationMode.TWIN), WALL, 0, "a twin outside local"),
+        (spec(IsolationMode.ACCOUNT), WALL, 0, "an account of the host outside local"),
         (spec(IsolationMode.CONTAINER, EgressMode.OPEN), CLOUD, 0, "open egress unbounded"),
         (spec(IsolationMode.VM, EgressMode.ALLOWLIST), WALL, 0, "an allowlist with no proxy"),
         (
@@ -217,6 +218,23 @@ def test_a_host_takes_what_it_can_give_and_its_owner_sets_its_directory_sessions
     assert rules.host_refusal(spec(IsolationMode.HOST), owned, local=False, running=2) is None
     # In local, the developer's own machine, the provider alone decides.
     assert rules.host_refusal(spec(IsolationMode.HOST), CLOUD, local=True, running=9) is None
+
+
+def test_only_a_host_that_runs_all_its_directory_sessions_refuses_for_now() -> None:
+    """That refusal clears once one of them lets go, so the loop waits for
+    it; any other is the host's for good, and the loop ends."""
+    owned = WALL.model_copy(update={"directory_only": True})
+    full = rules.host_refusal(spec(IsolationMode.HOST), owned, local=False, running=1)
+    assert full is not None and full.clears
+    for asked, offer in [
+        (spec(IsolationMode.HOST), CLOUD),
+        (spec(IsolationMode.TWIN), WALL),
+        (spec(IsolationMode.ACCOUNT), WALL),
+        (spec(IsolationMode.CONTAINER, EgressMode.OPEN), CLOUD),
+        (spec(IsolationMode.VM, EgressMode.ALLOWLIST), WALL),
+    ]:
+        refused = rules.host_refusal(asked, offer, local=False, running=0)
+        assert refused is not None and not refused.clears, refused
 
 
 # Check 2: a vanished branch is rebuilt only when its fate is known.

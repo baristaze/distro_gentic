@@ -1,8 +1,9 @@
 """The tools manager as the platform runs it: the engine's, with every
 workspace held to its session's pin. A prepare asks for the pinned isolation
 whatever a loop asks, and the host refuses what it cannot give
-(`rules.host_refusal`) before its provider is reached, so the loop parks on
-the resource and no weaker place is made. A prepared workspace is brought
+(`rules.host_refusal`) before its provider is reached, so no weaker place is
+made: the loop parks on the resource while the host runs all the directory
+sessions it may, and ends on any other refusal. A prepared workspace is brought
 up to the session's branch; a release first pushes what the workspace
 holds, then lets go only of what its own run holds. Every other operation is
 the engine's, unchanged.
@@ -128,9 +129,9 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
                 self._held.hold(attached, epoch)
                 return attached
         running = len(self._directories.keys() - {session_id})
-        why = host_refusal(pinned, self._offer, local=self._local, running=running)
-        if why is not None:
-            raise IsolationRefused(why)
+        refused = host_refusal(pinned, self._offer, local=self._local, running=running)
+        if refused is not None:
+            raise IsolationRefused(refused.why, clears=refused.clears)
         # Held before the first await, so two prepares at once count each
         # other.
         if pinned.mode is IsolationMode.HOST:
