@@ -34,7 +34,8 @@ holds the buckets, the key, and a read of a tenant's own secrets under
 the application prefix. It reaches no inbound queue, since its work is a
 work item on its loop lane, and never the grant that writes and deletes
 a tenant's secrets. Its execution role injects the serving logins, the
-error tracker's DSN, and the platform's model keys. Each key holds "off"
+error tracker's DSN, the flags' SDK key, and the platform's model keys.
+Each key holds "off"
 until a person writes one, so a new environment spends nothing on the
 platform's account.
 

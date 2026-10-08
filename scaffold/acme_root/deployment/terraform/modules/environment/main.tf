@@ -123,8 +123,9 @@ locals {
   ]
 
   # Injected by its execution role, which reads these and no other: the
-  # serving logins' URLs, the error tracker's DSN, and the platform's model
-  # keys. No purge login, no identity provider's key.
+  # serving logins' URLs, the error tracker's DSN, the flags' SDK key (the
+  # infra root refuses the launchdarkly backend without it), and the
+  # platform's model keys. No purge login, no identity provider's key.
   session_runner_secrets = merge(local.process_secrets, {
     ACME_ANTHROPIC_API_KEY = module.secrets.model_key_secret_arns["anthropic"]
     ACME_OPENAI_API_KEY    = module.secrets.model_key_secret_arns["openai"]
