@@ -20,6 +20,7 @@ from acme.services.api.services import (
     AgentSessionsServiceInterface,
     EventsServiceInterface,
     EvidenceServiceInterface,
+    FlagsServiceInterface,
     FleetServiceInterface,
     HostsServiceInterface,
     MediaServiceInterface,
@@ -40,6 +41,7 @@ from acme.services.api.services.impl.benchmarks import BenchmarksServiceImpl
 from acme.services.api.services.impl.budgets import BudgetsServiceImpl
 from acme.services.api.services.impl.events import EventsServiceImpl
 from acme.services.api.services.impl.evidence import EvidenceServiceImpl
+from acme.services.api.services.impl.flags import FlagsServiceImpl
 from acme.services.api.services.impl.fleet import FleetServiceImpl
 from acme.services.api.services.impl.hosts import HostsServiceImpl
 from acme.services.api.services.impl.intake import IntakeServiceImpl
@@ -79,6 +81,7 @@ class ServicesImpl(ServicesInterface):
         admin: AdminServiceInterface,
         events: EventsServiceInterface,
         media: MediaServiceInterface,
+        flags: FlagsServiceInterface,
         realtime: RealtimeServiceInterface,
         webhooks: WebhooksServiceInterface,
         agent_sessions: AgentSessionsServiceInterface,
@@ -106,6 +109,7 @@ class ServicesImpl(ServicesInterface):
         self._admin = admin
         self._events = events
         self._media = media
+        self._flags = flags
         self._realtime = realtime
         self._webhooks = webhooks
         self._agent_sessions = agent_sessions
@@ -140,6 +144,9 @@ class ServicesImpl(ServicesInterface):
 
     def get_media_service(self) -> MediaServiceInterface:
         return self._media
+
+    def get_flags_service(self) -> FlagsServiceInterface:
+        return self._flags
 
     def get_realtime_service(self) -> RealtimeServiceInterface:
         return self._realtime
@@ -235,6 +242,7 @@ def build_services(
         ),
         events=EventsServiceImpl(managers.events),
         media=MediaServiceImpl(managers.media),
+        flags=FlagsServiceImpl(infra.get_flags()),
         realtime=RealtimeServiceImpl(
             managers.tenancy, managers.events, infra.get_topics(), head_max_age
         ),

@@ -83,6 +83,9 @@ conversation only when it is their own
   once, and the page shows only who set it and when. A new API key's
   secret shows once, until Done.
 - `src/queries/`: query keys and hooks, one file per API namespace.
+  `flags.ts` reads the session's flags as one snapshot from the API, and a
+  view-model reads a flag with `useFlag`. No flag vendor's SDK is in the
+  bundle.
 - `src/realtime/`: the socket; a push invalidates the queries of its entity.
 - `src/store/`, `src/design/`: client state and the design kit. The kit's
   views (a diff, a log, Markdown, JSON, a sortable table, a lightbox, a
