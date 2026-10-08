@@ -215,11 +215,14 @@ sets ports of its own sets `kinds=PRODUCT_KINDS` among them.
    outlasts its lease renews it with `claimant.renew`, timed by the
    kit's `LeaseClock`; a call of the kind's own, such as a stream's
    append (step 5), goes through `claimant.client()` in an `async with`,
-   never a client of its own. One call the client cannot make yet: a
-   `--reads` kind's read carries its claim token in the `Claim-Token`
-   header, which `ApiClient.request` does not send (ADR 2046). That one
-   request is the program's own: inside
-   `async with claimant.client() as api`, an `httpx.AsyncClient` in an
+   never a client of its own. A work opens `claimant.client()` for each
+   call or short burst and never holds one across a beat, since a
+   rotation retires the token a held client carries a minute later. One
+   call the client cannot make yet: a `--reads` kind's read carries its
+   claim token in the `Claim-Token` header, which `ApiClient.request`
+   does not send (ADR 2046). That one request is the program's own, made
+   afresh for each read: inside an `async with claimant.client() as api`
+   opened for that read alone, an `httpx.AsyncClient` in an
    `async with` of its own, on `api`'s `base_url`, `headers`, bearer
    `token`, and `timeout`, with the kit's `trust_store()`. Once the kit
    sends the header, the read goes through it.

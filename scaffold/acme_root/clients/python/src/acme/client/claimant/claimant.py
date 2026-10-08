@@ -134,7 +134,11 @@ class Claimant:
 
         A rotation under way when the work ends is finished before it
         returns, never cancelled: the platform ends the credential it
-        rotated, and one it issued but the claimant never kept is lost."""
+        rotated, and one it issued but the claimant never kept is lost.
+
+        A work opens `claimant.client()` for each call or short burst and
+        never holds one across a beat, since a rotation retires the token
+        a held client carries a minute later, and its calls are refused."""
         ended = asyncio.Event()
         beside = asyncio.create_task(self._keep_alive(ended))
         try:

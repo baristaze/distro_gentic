@@ -41,6 +41,10 @@ while True:
     await asyncio.sleep(turn.wait)
 ```
 
+Inside the loop, a work opens `claimant.client()` for each call or short
+burst and never holds one across a beat, since a rotation retires the
+token a held client carries a minute later.
+
 ```bash
 uv run pytest -q clients/python/tests
 ```
