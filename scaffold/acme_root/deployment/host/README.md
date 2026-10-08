@@ -77,7 +77,9 @@ host-check` holds that score under 1.5 and the rest of this list, on a
 container with systemd, and CI runs it. It also installs another kind
 through the claimant installer beside the host, and holds that its
 unit, its user, and its settings carry that kind's names, behind the
-same walls.
+same walls. That kind's drop-in grants it two groups: it starts in
+them and is refused in a third, while the host's unit grants none
+([`deployment/claimant/README.md`](../claimant/README.md)).
 
 ### Its container engine
 

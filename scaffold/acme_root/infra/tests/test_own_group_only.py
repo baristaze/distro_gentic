@@ -19,7 +19,7 @@ CHECK = ROOT / "deployment" / "claimant" / "own-group-only.sh"
 # The claimant's user, the gid of its own group, and the groups on the machine.
 USER = "acme-scanner"
 OWN = 990
-GROUP_FILE = {"acme-scanner": OWN, "dialout": 20, "plugdev": 46, "docker": 999}
+GROUP_FILE = {"acme-scanner": OWN, "users": 100, "acme-scanner-work": 991, "docker": 999}
 
 
 def _stand_ins(folder: Path, held: list[int]) -> None:
@@ -65,9 +65,9 @@ def _start(tmp_path: Path, held: list[int], *granted: str) -> subprocess.Complet
     ("held", "granted"),
     [
         ([], []),
-        ([20, 46], ["dialout", "plugdev"]),
-        ([20], ["dialout", "plugdev"]),
-        ([20, 46], ["20", "plugdev"]),
+        ([100, 991], ["users", "acme-scanner-work"]),
+        ([100], ["users", "acme-scanner-work"]),
+        ([100, 991], ["100", "acme-scanner-work"]),
     ],
     ids=["its-own-granted-none", "its-own-and-its-granted", "fewer-than-granted", "granted-by-gid"],
 )
@@ -83,14 +83,14 @@ def test_a_claimant_in_its_own_and_its_granted_groups_starts(
     ("held", "granted", "refused"),
     [
         ([999], [], "docker"),
-        ([20], [], "dialout"),
-        ([20, 46, 999], ["dialout", "plugdev"], "docker"),
-        ([20, 46], ["dialout"], "plugdev"),
-        ([20, 4242], ["dialout", "nosuch"], "4242"),
+        ([100], [], "users"),
+        ([100, 991, 999], ["users", "acme-scanner-work"], "docker"),
+        ([100, 991], ["users"], "acme-scanner-work"),
+        ([100, 4242], ["users", "nosuch"], "4242"),
     ],
     ids=[
         "granted-none-in-another",
-        "granted-none-in-a-device-group",
+        "granted-none-in-users",
         "in-one-beyond-its-granted",
         "in-one-of-two-granted-one",
         "in-a-nameless-gid-a-name-that-names-no-group",
@@ -107,7 +107,7 @@ def test_a_claimant_in_a_group_nobody_granted_is_refused(
 
 @pytest.mark.parametrize(
     "arguments",
-    [[], ["--granted"], ["--granted", "", "true"], ["--granted", "dialout"]],
+    [[], ["--granted"], ["--granted", "", "true"], ["--granted", "users"]],
     ids=["no-command", "granted-without-a-group", "an-empty-group", "granted-without-a-command"],
 )
 def test_a_malformed_start_is_refused_as_a_setting(tmp_path: Path, arguments: list[str]) -> None:

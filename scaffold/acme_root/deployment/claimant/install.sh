@@ -29,12 +29,13 @@
 # CLAIMANT_CONFIG, CLAIMANT_STATE, CLAIMANT_RELEASE, and CLAIMANT_DROPIN. A
 # hook that fails stops the install before the unit is enabled.
 #
-# A group the kind needs (a device's, or that of an account it runs work as)
-# the hook grants in a drop-in, with SupplementaryGroups=, never by adding the
-# user to the group. Once the hook has run, the installer reads the groups the
-# unit's drop-ins grant and passes exactly those to the unit's check
-# (own-group-only.sh --granted), which refuses any other group the user holds.
-# A kind that grants none, as the host, gets the check with none.
+# A group the kind needs (one that opens a file of the machine to it, or that
+# of an account it runs work as) the hook grants in a drop-in, with
+# SupplementaryGroups=, never by adding the user to the group. Once the hook
+# has run, the installer reads the groups the unit's drop-ins grant and passes
+# exactly those to the unit's check (own-group-only.sh --granted), which
+# refuses any other group the user holds. A kind that grants none, as the
+# host, gets the check with none.
 set -euo pipefail
 # Whatever the shell's umask, the release and the unit's files are readable
 # by the claimant's user: the modes below are the ones meant.
@@ -68,7 +69,7 @@ while [ $# -gt 0 ]; do
     --name) NAME="${2:-}"; shift 2 ;;
     --token-file) TOKEN_FILE="${2:-}"; shift 2 ;;
     --no-start) START=0; shift ;;
-    -h|--help) sed -n '2,37p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,38p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
