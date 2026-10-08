@@ -41,10 +41,11 @@ count and runs on a node of the batch pool its payload names".
   the distribution, its command, the unit, and the user, in the forms
   the conventions give `<name>`.
 - `--grants` names each group the claimant's work needs on its machine:
-  one that opens a file of the machine to it, or the group of an
-  account it runs work as. Without it, the claimant holds no group but
-  its own. It is this skill's flag, never the installer's: the
-  installer reads the grants from the unit (step 9).
+  the group of a file it reads or writes, or of an account it runs work
+  as. A group opens only what the unit lets the claimant see (step 9).
+  Without it, the claimant holds no group but its own. It is this
+  skill's flag, never the installer's: the installer reads the grants
+  from the unit (step 9).
 - `--stream` names a stream kind in lower case that the work writes
   while it runs, what a person watches live (`STREAM_KIND` in
   `om/src/<name>/om/watch/kinds.py`). `step` is the platform's.
@@ -191,10 +192,19 @@ sets ports of its own sets `kinds=PRODUCT_KINDS` among them.
    `Claimant(ClaimantSettings.from_env(ENV_PREFIX, KIND), client_for)`,
    with `client_for` shape `build_client` in
    `apps/host/src/<name>/apps/host/main.py`, starts it, and turns as the
-   loop in `clients/python/README.md` does. `run` stays a subcommand,
-   since the unit starts `<command> run`: as the one command, typer
-   keeps it one only under an `@app.callback()`. Each item a turn hands
-   it goes to `work` once, and its answer is reported:
+   loop in `clients/python/README.md` does, with one thing more. The kit
+   rotates the credential only inside a turn, and rotates it at half its
+   life, so a work longer than that can outlive it: its report and every
+   turn after are refused. So each `work` runs beside a task that, every
+   beat (`ClaimantSettings.beat_seconds`), awaits
+   `claimant.enrollment.rotate_if_due()` and logs a failure it outlasts
+   (`ApiError`, `WIRE_FAILURES`), shape `keep_alive` in the host's
+   `main.py`; the task is cancelled once `work` returns or raises. The
+   kit rotates one at a time, so the task and a turn never rotate one
+   credential twice. `run` stays a subcommand, since the unit starts
+   `<command> run`: as the one command, typer keeps it one only under an
+   `@app.callback()`. Each item a turn hands it goes to `work` once, and
+   its answer is reported:
    `ReportOutcome.done` for `None`, `ReportOutcome.failed` with the
    reason for a reason, and with the exception's text for one `work`
    raises. It exits with the host's codes, which the unit reads, shape
@@ -204,10 +214,21 @@ sets ports of its own sets `kinds=PRODUCT_KINDS` among them.
    claimant) -> str | None`, in `work.py`, is the product's: write its
    signature, a docstring of what it gets, and a body that raises
    `NotImplementedError`, and name it in the output as what the product
-   still needs. A work that outlasts its lease renews it with
-   `claimant.renew`, timed by the kit's `LeaseClock`; a call of the
-   kind's own, such as a stream's append (step 5), goes through
-   `claimant.client()`, never a client of its own.
+   still needs. The program imports `<name>.client` and its kit alone,
+   never `<name>.om`: its distribution depends on `<name>-client` and
+   `typer` only, so no OM ships to a customer's machine, and `work`
+   takes `item.payload`, a dict, as data it parses itself. A work that
+   outlasts its lease renews it with `claimant.renew`, timed by the
+   kit's `LeaseClock`; a call of the kind's own, such as a stream's
+   append (step 5), goes through `claimant.client()` in an `async with`,
+   never a client of its own. One call the client cannot make yet: a
+   `--reads` kind's read carries its claim token in the `Claim-Token`
+   header, which `ApiClient.request` does not send (ADR 2046). That one
+   request is the program's own: inside
+   `async with claimant.client() as api`, an `httpx.AsyncClient` in an
+   `async with` of its own, on `api`'s `base_url`, `headers`, bearer
+   `token`, and `timeout`, with the kit's `trust_store()`. Once the kit
+   sends the header, the read goes through it.
 9. The claimant installs through the one installer,
    `deployment/claimant/install.sh` (ADR 2046), never an installer, a
    unit, or a step that makes its user of its own.
@@ -230,29 +251,43 @@ sets ports of its own sets `kinds=PRODUCT_KINDS` among them.
    last two empty (`<CLAIMANT>` the kind in capitals), and each setting
    the work reads. With `--grants`, `dropin.sh` writes
    `$CLAIMANT_DROPIN/groups.conf` with one `SupplementaryGroups=` line
-   that names each group, as `deployment/claimant/README.md` shows. A
-   device file stays hidden by the unit's `PrivateDevices=yes` whatever
-   the group: what opens one is the kind's own drop-in, named in the
-   output as what the product still needs. It never adds the user to a
-   group (`usermod`, `gpasswd`): the unit's check refuses every group no
-   drop-in grants, and the installer passes it exactly the drop-ins'
-   grants (ADR 2047). Both scripts are executable (`chmod 755`): a
+   that names each group, as `deployment/claimant/README.md` shows.
+   What the unit makes read-only or hides stays so whatever the group:
+   `ProtectSystem=strict` leaves only its state directory writable,
+   `ProtectHome=yes` hides /home, and `PrivateDevices=yes` hides every
+   device file. A path the work writes outside the state directory
+   (`ReadWritePaths=`), a path under /home (`ProtectHome=`), and a
+   device (`PrivateDevices=no` with `DeviceAllow=`) each need the kind's
+   own drop-in, named in the output as what the product still needs.
+   It never adds the user to a group (`usermod`, `gpasswd`): the unit's
+   check refuses every group no drop-in grants, and the installer passes
+   it exactly the drop-ins' grants (ADR 2047). Both scripts are executable (`chmod 755`): a
    person runs the one, and the installer refuses a hook that is not.
 10. The tests of the program, in `apps/<claimant>/tests/test_<claimant>.py`:
     - the program, its install, and its settings name one kind and one
       prefix: `install.sh` passes `--kind` `KIND` and `--env-prefix`
       `ENV_PREFIX`, the settings example holds the three lines the
       installer fills under those names, and `claimant_env` of
-      `settings.py` in the kit, given the example's lines, reads the
-      URL, the name, and the token from them; with `--grants`,
-      `dropin.sh` grants exactly its groups:
+      `settings.py` in the kit, given the example's lines with those
+      three filled as the installer fills them (a value after each
+      `=`), reads back that URL, name, and token, never the hostname or
+      `None` an empty line gives; with `--grants`, `dropin.sh` grants
+      exactly its groups:
       `test_the_program_its_install_and_its_settings_name_one_kind`;
     - the program answers `--help`, which the installer runs once it
       builds the release: `test_the_program_answers_help`;
     - an item a turn hands the program goes to `work` once and is
       reported with its answer, done for none and failed with a reason
       for one, over a stand-in for `Claimant`:
-      `test_an_item_is_worked_once_and_reported_with_its_answer`.
+      `test_an_item_is_worked_once_and_reported_with_its_answer`;
+    - a work longer than the rotation's due time keeps the credential
+      live, over a stand-in whose `enrollment.rotate_if_due` rotates
+      only once a clock the test moves passes half the credential's
+      life, and a beat of a few milliseconds, never a real wait: a
+      `work` that moves the clock past that time, then waits at most a
+      second for the rotation, sees the credential rotated while it
+      runs, and its report is recorded:
+      `test_a_work_longer_than_the_rotation_keeps_its_credential_live`.
 
 Then the gate, `make check`, as After writing in the conventions runs
 it.
