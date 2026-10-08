@@ -38,5 +38,6 @@ not record.
 
 | Run | Started (UTC) | Head | Sizes | chatgpt.com | claude.ai | gemini.google.com | grok.com | Set | Note |
 |---|---|---|---|---|---|---|---|---|---|
+| [20261008-052600](20261008-052600/results.json) | 2026-10-08 05:26 | `a842890` | m, m | — | [70](20261008-052600/claude.ai.md) Opus 5.5, High | — | — | A | — |
 | [20261007-145111](20261007-145111/results.json) | 2026-10-07 14:51 | `76ed581` | m, m | — | [73](20261007-145111/claude.ai.md) Opus 5.5, High | — | — | A | — |
 | [20261007-081415](20261007-081415/results.json) | 2026-10-07 08:14 | `9580f8f` | m, m | [89](20261007-081415/chatgpt.com.md) Latest, High | [not-run](20261007-081415/claude.ai.md) | [refused](20261007-081415/gemini.google.com.md) 3.1 Pro | [81](20261007-081415/grok.com.md) Expert | A | claude.ai: the conversation page said Computer actions available for a connected device; gemini.google.com: the product declined to evaluate |

@@ -11,8 +11,8 @@ group beyond its own
 A group someone adds the user to is a door the unit's walls do not
 see: a rootful engine's socket group is root by another name.
 
-Some kinds need a group. One opens a file of the machine to the
-claimant; another is the group of an account the claimant runs work
+Some kinds need a group. One is the group of a file the claimant reads
+or writes; another is the group of an account the claimant runs work
 as. Under the check such a claimant can never start, so its kind
 replaces the unit's start and loses the check whole.
 
@@ -28,6 +28,12 @@ group the user holds is refused, with exit 6, as before.
 - The grant lives in the unit, where `systemctl show` and
   `systemd-analyze security` see it. A membership added in
   `/etc/group` is still refused, unless a drop-in grants that group.
+- A granted group gives the claimant that group's access to what the
+  unit lets it see, and no more. The unit's `PrivateDevices=yes` hides
+  every device file, whatever group the claimant holds. A kind whose
+  claimant opens a device shows it in a drop-in of its own, with
+  `PrivateDevices=no` and a `DeviceAllow=` for that device. That
+  drop-in is the kind's to write, and outside the check.
 - The installer takes no list of groups of its own. The check's list
   is the drop-ins' grants by construction, so the two never disagree.
   A kind whose groups follow from its own settings, read by the program

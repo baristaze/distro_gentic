@@ -9,8 +9,8 @@
 # for the claimant's whole life. It exits 6, which the unit does not restart.
 # install.sh puts it at /opt/<unit>/own-group-only.sh.
 #
-# A group the claimant's kind needs (one that opens a file of the machine to
-# it, or that of an account it runs work as) is granted in a drop-in of the
+# A group the claimant's kind needs (that of a file it reads or writes, or
+# that of an account it runs work as) is granted in a drop-in of the
 # unit, with SupplementaryGroups=, where the walls show it. install.sh reads
 # those grants once the kind's step has written them, and passes each here
 # with --granted, as a name or a gid. A unit with no grant passes none, and the
