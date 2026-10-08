@@ -28,6 +28,13 @@
 # its kind needs. It is handed CLAIMANT_KIND, CLAIMANT_UNIT, CLAIMANT_USER,
 # CLAIMANT_CONFIG, CLAIMANT_STATE, CLAIMANT_RELEASE, and CLAIMANT_DROPIN. A
 # hook that fails stops the install before the unit is enabled.
+#
+# A group the kind needs (a device's, or that of an account it runs work as)
+# the hook grants in a drop-in, with SupplementaryGroups=, never by adding the
+# user to the group. Once the hook has run, the installer reads the groups the
+# unit's drop-ins grant and passes exactly those to the unit's check
+# (own-group-only.sh --granted), which refuses any other group the user holds.
+# A kind that grants none, as the host, gets the check with none.
 set -euo pipefail
 # Whatever the shell's umask, the release and the unit's files are readable
 # by the claimant's user: the modes below are the ones meant.
@@ -61,7 +68,7 @@ while [ $# -gt 0 ]; do
     --name) NAME="${2:-}"; shift 2 ;;
     --token-file) TOKEN_FILE="${2:-}"; shift 2 ;;
     --no-start) START=0; shift ;;
-    -h|--help) sed -n '2,30p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,37p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -207,12 +214,16 @@ chown root:root "${ENV_FILE}"
 chmod 0600 "${ENV_FILE}"
 
 echo "==> the unit, ${UNIT_NAME}.service"
-UNIT_NEXT="$(mktemp)"
-sed -e "s|@UNIT@|${UNIT_NAME}|g" -e "s|@USER@|${USER_NAME}|g" -e "s|@KIND@|${KIND}|g" \
-  -e "s|@HOME_VARIABLE@|${HOME_VARIABLE}|g" -e "s|@COMMAND@|${COMMAND}|g" \
-  "${HERE}/claimant.service" > "${UNIT_NEXT}"
-install -m 0644 -o root -g root "${UNIT_NEXT}" "${UNIT}"
-rm -f "${UNIT_NEXT}"
+render_unit() {  # render_unit <the check's --granted flags, each after a space>
+  local next
+  next="$(mktemp)"
+  sed -e "s|@UNIT@|${UNIT_NAME}|g" -e "s|@USER@|${USER_NAME}|g" -e "s|@KIND@|${KIND}|g" \
+    -e "s|@HOME_VARIABLE@|${HOME_VARIABLE}|g" -e "s|@COMMAND@|${COMMAND}|g" \
+    -e "s|@GRANTED@|$1|g" "${HERE}/claimant.service" > "${next}"
+  install -m 0644 -o root -g root "${next}" "${UNIT}"
+  rm -f "${next}"
+}
+render_unit ""
 install -m 0755 -o root -g root "${HERE}/own-group-only.sh" "${PREFIX}/own-group-only.sh"
 install -d -m 0755 -o root -g root "${DROPIN}"
 if [ -n "${DROPIN_HOOK}" ]; then
@@ -223,6 +234,23 @@ if [ -n "${DROPIN_HOOK}" ]; then
     || { echo "the ${KIND} kind's step failed: fix what it says and install again" >&2; exit 2; }
 fi
 systemctl daemon-reload
+# The groups the drop-ins grant, as systemd reads them, are the ones the check
+# allows. Each lands in the unit's ExecStart, so each is held to a plain name
+# or a gid, which no specifier, variable, or separator can hide in.
+read -r -a GRANTS <<<"$(systemctl show -p SupplementaryGroups --value "${UNIT_NAME}.service")"
+GRANTED=""
+for group in ${GRANTS[@]+"${GRANTS[@]}"}; do
+  if ! [[ "${group}" =~ ^([A-Za-z_][A-Za-z0-9_.-]{0,31}|[0-9]{1,10})$ ]]; then
+    echo "a drop-in of ${UNIT_NAME} grants the group '${group}', which is no plain name or gid" >&2
+    exit 2
+  fi
+  GRANTED="${GRANTED} --granted ${group}"
+done
+if [ -n "${GRANTED}" ]; then
+  echo "    the check allows the groups its drop-ins grant: ${GRANTS[*]}"
+  render_unit "${GRANTED}"
+  systemctl daemon-reload
+fi
 systemctl enable "${UNIT_NAME}.service" >/dev/null
 
 if [ "${START}" = 0 ]; then
