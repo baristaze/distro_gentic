@@ -11,7 +11,8 @@ import { createRoot } from "react-dom/client";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { IssuedSessionView, MeView, MembershipChoiceView, OrgView, UserView } from "@acme/client";
+import type { FlagsView, IssuedSessionView, MeView, MembershipChoiceView, OrgView, UserView } from "@acme/client";
+import { keys } from "../queries/keys";
 import { useSessionStore } from "../store/session";
 import { queryClient } from "./queryClient";
 import { routes } from "./routes";
@@ -73,6 +74,8 @@ function answer(path: string): unknown {
   if (path.startsWith("/v1/agent-sessions")) return { items: [], next_cursor: null };
   if (path.startsWith("/v1/knowledge")) return [];
   if (path.startsWith("/v1/projects")) return { items: [], next_cursor: null };
+  // Uploads are off for Ajax alone, so a snapshot names the org it was read in.
+  if (path === "/v1/flags") return { flags: { "media-uploads": slug !== "ajax" } } satisfies FlagsView;
   if (path === "/v1/me/identity") return { id: "i1", email: user.email, operator_role: null, created_at: at, time_zone: null };
   throw new Error(`no read for ${path}`);
 }
@@ -143,6 +146,7 @@ it("shows the new org's home and sessions after a switch from the chip, read onc
   await open("/");
   expect(shownOrg()).toBe("Ajax");
   expect(container.querySelector("h1")!.textContent).toBe("Home");
+  expect(queryClient.getQueryData(keys.flags)).toEqual({ flags: { "media-uploads": false } });
 
   await act(async () => switcher().click());
   await act(async () => button("Beta").click());
@@ -154,6 +158,8 @@ it("shows the new org's home and sessions after a switch from the chip, read onc
   expect(after.every((read) => read.token === tokenOf("beta"))).toBe(true);
   expect(after.filter((read) => read.path === "/v1/me")).toHaveLength(1);
   expect(after.filter((read) => read.path.startsWith("/v1/agent-sessions?limit="))).toHaveLength(1);
+  expect(after.filter((read) => read.path === "/v1/flags")).toHaveLength(1);
+  expect(queryClient.getQueryData(keys.flags)).toEqual({ flags: { "media-uploads": true } });
 });
 
 it("lands on the new org's home after creating one at /orgs/new", async () => {

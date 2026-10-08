@@ -20,6 +20,7 @@ from acme.services.api.routers import (
     claimants,
     events,
     evidence,
+    flags,
     fleet,
     hosts,
     intake,
@@ -43,8 +44,9 @@ from acme.services.api.routers import (
 
 HOSTED: dict[str, tuple[APIRouter, ...]] = {
     # The operator plane is tenancy's: it lists and deletes orgs, and the
-    # platform's own operator routes ride beside it.
-    "tenancy": (tenancy.router, admin.router, fleet.router),
+    # platform's own operator routes ride beside it. The session's flags are
+    # too: they answer for the session's org and user.
+    "tenancy": (tenancy.router, admin.router, fleet.router, flags.router),
     # The realtime channel is the events stream pushed; its replay is `/events`.
     "events": (events.router, socket.router),
     "media": (media.router,),
