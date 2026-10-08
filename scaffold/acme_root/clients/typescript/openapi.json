@@ -3475,6 +3475,24 @@
         "title": "FillView",
         "type": "object"
       },
+      "FlagsView": {
+        "description": "The session's flags that a client may read, evaluated for its org and\nits user. A flag read on the server alone is never in it.",
+        "properties": {
+          "flags": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "description": "Each flag marked for clients, by name, and its value for the session's org and user.",
+            "title": "Flags",
+            "type": "object"
+          }
+        },
+        "required": [
+          "flags"
+        ],
+        "title": "FlagsView",
+        "type": "object"
+      },
       "GateBody": {
         "additionalProperties": false,
         "description": "The calls a gate selects, by tool or by class, and what they need: a\nperson's approval, or a denial. A gate never allows.",
@@ -18789,6 +18807,109 @@
         ]
       }
     },
+    "/v1/flags": {
+      "get": {
+        "description": "The flags marked for clients, for the session's org and user. A\nclient never decides what the server allows: an operation a flag gates\nis refused on the server whatever a client shows.",
+        "operationId": "get_flags_v1_flags_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "description": "The entity tag of the snapshot the caller holds. 304, with no body, when it is still current.",
+            "in": "header",
+            "name": "If-None-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The entity tag of the snapshot the caller holds. 304, with no body, when it is still current.",
+              "title": "If-None-Match"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlagsView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "304": {
+            "description": "The snapshot `If-None-Match` names is current."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Flags",
+        "tags": [
+          "flags"
+        ]
+      }
+    },
     "/v1/host-enrollment-tokens/{token_id}": {
       "delete": {
         "operationId": "revoke_enrollment_token_v1_host_enrollment_tokens__token_id__delete",
@@ -22747,6 +22868,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "feature_off: `media-uploads` is off"
           },
           "422": {
             "content": {
