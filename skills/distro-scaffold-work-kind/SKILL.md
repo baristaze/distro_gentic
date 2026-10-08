@@ -192,19 +192,13 @@ sets ports of its own sets `kinds=PRODUCT_KINDS` among them.
    `Claimant(ClaimantSettings.from_env(ENV_PREFIX, KIND), client_for)`,
    with `client_for` shape `build_client` in
    `apps/host/src/<name>/apps/host/main.py`, starts it, and turns as the
-   loop in `clients/python/README.md` does, with one thing more. The kit
-   rotates the credential only inside a turn, and rotates it at half its
-   life, so a work longer than that can outlive it: its report and every
-   turn after are refused. So each `work` runs beside a task that, every
-   beat (`ClaimantSettings.beat_seconds`), awaits
-   `claimant.enrollment.rotate_if_due()` and logs a failure it outlasts
-   (`ApiError`, `WIRE_FAILURES`), shape `keep_alive` in the host's
-   `main.py`; the task is cancelled once `work` returns or raises. The
-   kit rotates one at a time, so the task and a turn never rotate one
-   credential twice. `run` stays a subcommand, since the unit starts
-   `<command> run`: as the one command, typer keeps it one only under an
-   `@app.callback()`. Each item a turn hands it goes to `work` once, and
-   its answer is reported:
+   loop in `clients/python/README.md` does. As in that loop, each `work`
+   runs inside `async with claimant.keeping_alive()`: the kit rotates the
+   credential there when due, every beat, so a work longer than half the
+   credential's life never outlives it. `run` stays a subcommand, since
+   the unit starts `<command> run`: as the one command, typer keeps it
+   one only under an `@app.callback()`. Each item a turn hands it goes
+   to `work` once, and its answer is reported:
    `ReportOutcome.done` for `None`, `ReportOutcome.failed` with the
    reason for a reason, and with the exception's text for one `work`
    raises. It exits with the host's codes, which the unit reads, shape
@@ -221,11 +215,14 @@ sets ports of its own sets `kinds=PRODUCT_KINDS` among them.
    outlasts its lease renews it with `claimant.renew`, timed by the
    kit's `LeaseClock`; a call of the kind's own, such as a stream's
    append (step 5), goes through `claimant.client()` in an `async with`,
-   never a client of its own. One call the client cannot make yet: a
-   `--reads` kind's read carries its claim token in the `Claim-Token`
-   header, which `ApiClient.request` does not send (ADR 2046). That one
-   request is the program's own: inside
-   `async with claimant.client() as api`, an `httpx.AsyncClient` in an
+   never a client of its own. A work opens `claimant.client()` for each
+   call or short burst and never holds one across a beat, since a
+   rotation retires the token a held client carries a minute later. One
+   call the client cannot make yet: a `--reads` kind's read carries its
+   claim token in the `Claim-Token` header, which `ApiClient.request`
+   does not send (ADR 2046). That one request is the program's own, made
+   afresh for each read: inside an `async with claimant.client() as api`
+   opened for that read alone, an `httpx.AsyncClient` in an
    `async with` of its own, on `api`'s `base_url`, `headers`, bearer
    `token`, and `timeout`, with the kit's `trust_store()`. Once the kit
    sends the header, the read goes through it.
@@ -280,14 +277,12 @@ sets ports of its own sets `kinds=PRODUCT_KINDS` among them.
       reported with its answer, done for none and failed with a reason
       for one, over a stand-in for `Claimant`:
       `test_an_item_is_worked_once_and_reported_with_its_answer`;
-    - a work longer than the rotation's due time keeps the credential
-      live, over a stand-in whose `enrollment.rotate_if_due` rotates
-      only once a clock the test moves passes half the credential's
-      life, and a beat of a few milliseconds, never a real wait: a
-      `work` that moves the clock past that time, then waits at most a
-      second for the rotation, sees the credential rotated while it
-      runs, and its report is recorded:
-      `test_a_work_longer_than_the_rotation_keeps_its_credential_live`.
+    - each `work` runs inside the kit's `keeping_alive`, over the
+      stand-in for `Claimant`, whose `keeping_alive` records whether it
+      is open: a `work` sees it open:
+      `test_each_work_runs_while_its_credential_is_kept_live`. The kit's
+      own test holds that `keeping_alive` keeps the credential live
+      through a long work, so this one moves no clock.
 
 Then the gate, `make check`, as After writing in the conventions runs
 it.

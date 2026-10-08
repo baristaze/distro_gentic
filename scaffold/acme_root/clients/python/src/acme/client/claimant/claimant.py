@@ -12,10 +12,17 @@ An item claimed again whose report the journal keeps from an earlier
 claim is answered with that report, under the new claim, and never handed
 to the work a second time. A kind that reports through calls of its own
 gives its own `send`, and keeps its entries with `keep`; the journal, the
-order, and the outcomes are the same."""
+order, and the outcomes are the same.
 
+A turn rotates the credential only between works, so a work longer than
+half the credential's life would outlive it. A work runs inside
+`keeping_alive`, which rotates the credential when due every beat while
+the work runs."""
+
+import asyncio
+import contextlib
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import Enum
@@ -116,6 +123,30 @@ class Claimant:
         self._backoff.reset()
         return Turn(item, 0.0 if item is not None else self._settings.beat_seconds)
 
+    @contextlib.asynccontextmanager
+    async def keeping_alive(self) -> AsyncIterator[None]:
+        """Keeps the credential live while the work inside it runs: beside
+        it, every beat, the credential is rotated when due, as a turn
+        rotates it, and a failure it outlasts waits for the next beat. A
+        work longer than half the credential's life would otherwise outlive
+        it, and its report and every turn after would be refused. It stops
+        once the work ends, or once the platform refuses the credential.
+
+        A rotation under way when the work ends is finished before it
+        returns, never cancelled: the platform ends the credential it
+        rotated, and one it issued but the claimant never kept is lost.
+
+        A work opens `claimant.client()` for each call or short burst and
+        never holds one across a beat, since a rotation retires the token
+        a held client carries a minute later, and its calls are refused."""
+        ended = asyncio.Event()
+        beside = asyncio.create_task(self._keep_alive(ended))
+        try:
+            yield
+        finally:
+            ended.set()
+            await asyncio.shield(beside)
+
     async def renew(self, item: ClaimantWorkView) -> ClaimantWorkView:
         """Renews the lease on an item it holds. A failure is raised for
         the work to time against its lease (`LeaseClock`); a refused
@@ -165,6 +196,19 @@ class Claimant:
             log.warning("the journal waits: %s", failure)
             return False
         return True
+
+    async def _keep_alive(self, ended: asyncio.Event) -> None:
+        while not self.enrollment.refused:
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(ended.wait(), self._settings.beat_seconds)
+            if ended.is_set():
+                return
+            try:
+                await self.enrollment.rotate_if_due()
+            except CredentialRefused:
+                return
+            except (ApiError, *WIRE_FAILURES) as error:
+                log.warning("the credential's rotation failed: %s", error)
 
     async def _tick(self, claim: bool) -> ClaimantWorkView | None:
         await self.enrollment.rotate_if_due()
