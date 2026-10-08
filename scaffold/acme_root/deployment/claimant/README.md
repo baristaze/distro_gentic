@@ -42,15 +42,22 @@ door the walls do not see, and a rootful engine's socket group is root
 by another name.
 
 A kind whose claimant needs a group grants it in a drop-in its hook
-writes, never by adding the user to the group. Such a group opens a
-file of the machine to the claimant, or it is the group of an account
-the claimant runs work as:
+writes, never by adding the user to the group. Such a group is the
+group of an account the claimant runs work as, or the group of a file
+the claimant reads or writes:
 
 ```ini
 # $CLAIMANT_DROPIN/groups.conf
 [Service]
 SupplementaryGroups=acme-scanner-work
 ```
+
+A granted group gives the claimant that group's access to what the
+unit lets it see, and no more. The unit sets `PrivateDevices=yes`, so
+no device file is there to open, whatever group the claimant holds. A
+kind whose claimant opens a device shows it in a drop-in of its own,
+with `PrivateDevices=no` and a `DeviceAllow=` for that device. That
+drop-in is the kind's to write, and the check does not read it.
 
 Once the hook has run, the installer reads the groups the unit's
 drop-ins grant and passes exactly those to the check:

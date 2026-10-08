@@ -29,8 +29,8 @@
 # CLAIMANT_CONFIG, CLAIMANT_STATE, CLAIMANT_RELEASE, and CLAIMANT_DROPIN. A
 # hook that fails stops the install before the unit is enabled.
 #
-# A group the kind needs (one that opens a file of the machine to it, or that
-# of an account it runs work as) the hook grants in a drop-in, with
+# A group the kind needs (that of a file it reads or writes, or that of an
+# account it runs work as) the hook grants in a drop-in, with
 # SupplementaryGroups=, never by adding the user to the group. Once the hook
 # has run, the installer reads the groups the unit's drop-ins grant and passes
 # exactly those to the unit's check (own-group-only.sh --granted), which
