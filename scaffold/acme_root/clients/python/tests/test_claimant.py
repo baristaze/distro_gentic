@@ -164,9 +164,9 @@ def test_the_lease_clock_renews_at_half_the_shorter_and_asks_again_sooner_unansw
 async def test_a_work_longer_than_the_rotation_keeps_its_credential_live(tmp_path: Path) -> None:
     """A work that runs past half the credential's life, and past its end,
     over a clock the test moves and a beat of a few milliseconds: the
-    credential is rotated while the work runs, and its report is recorded.
-    The stand-in for the platform refuses a credential once it ends, as the
-    platform does."""
+    credential is rotated while the work runs and kept once it ends, and
+    its report is recorded. The stand-in for the platform refuses a
+    credential once it ends, as the platform does."""
     clock = [NOW]
     first = a_credential()
     settings = ClaimantSettings(
@@ -179,25 +179,30 @@ async def test_a_work_longer_than_the_rotation_keeps_its_credential_live(tmp_pat
     save_credential(settings.credential_path, first)
     ends = {first.token: first.expires_at}
     reports: list[dict[str, Any]] = []
-    item = ClaimantWorkView(
-        attempts=1,
-        claim_token=uuid4(),
-        id=uuid4(),
-        kind="scanner",
-        lease_expires_at=None,
-        org_id=uuid4(),
-        payload={},
-        status="claimed",
-        target_id=uuid4(),
+    rotated = asyncio.Event()
+    item = ClaimantWorkView.model_validate(
+        {
+            "attempts": 1,
+            "claim_token": str(uuid4()),
+            "id": str(uuid4()),
+            "kind": "scanner",
+            "lease_expires_at": None,
+            "org_id": str(uuid4()),
+            "payload": {},
+            "status": "claimed",
+            "target_id": str(uuid4()),
+        }
     )
 
-    def platform(request: httpx.Request) -> httpx.Response:
+    async def platform(request: httpx.Request) -> httpx.Response:
         bearer = request.headers["Authorization"].removeprefix("Bearer ")
         if bearer not in ends or clock[0] >= ends[bearer]:
             return httpx.Response(401, json={"error": {"code": "unauthorized", "message": "ended"}})
         if request.url.path == "/v1/claimants/me/credentials":
             token = f"scn_{len(ends) + 1}"
             ends[token] = clock[0] + timedelta(hours=1)
+            rotated.set()
+            await asyncio.sleep(0.01)  # its answer is still on the wire as the work ends
             return httpx.Response(
                 201,
                 json={
@@ -226,18 +231,18 @@ async def test_a_work_longer_than_the_rotation_keeps_its_credential_live(tmp_pat
     await claimant.start()  # picks up the credential it holds
     assert claimant.enrollment.credential == first
 
-    async def work() -> str:
+    async def work() -> None:
         clock[0] = NOW + timedelta(minutes=31)  # past half its life: due
         async with asyncio.timeout(1):
-            while claimant.enrollment.credential.token == first.token:
-                await asyncio.sleep(0.001)
+            await rotated.wait()  # rotated while the work runs
         clock[0] = NOW + timedelta(minutes=61)  # the first credential has ended
-        return claimant.enrollment.credential.token
 
     async with claimant.keeping_alive():
-        held = await work()
+        await work()
 
-    assert held != first.token and not claimant.enrollment.refused
+    held = claimant.enrollment.credential
+    assert held.token == "scn_2" and not claimant.enrollment.refused
+    assert load_credential(settings.credential_path) == held
     assert await claimant.report(item, ReportOutcome.done)
     assert reports == [{"claim_token": str(item.claim_token), "outcome": "done"}]
     assert claimant.journal.pending() == []

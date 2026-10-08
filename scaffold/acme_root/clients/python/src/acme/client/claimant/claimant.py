@@ -130,12 +130,18 @@ class Claimant:
         rotates it, and a failure it outlasts waits for the next beat. A
         work longer than half the credential's life would otherwise outlive
         it, and its report and every turn after would be refused. It stops
-        once the work ends, or once the platform refuses the credential."""
-        beside = asyncio.create_task(self._keep_alive())
+        once the work ends, or once the platform refuses the credential.
+
+        A rotation under way when the work ends is finished before it
+        returns, never cancelled: the platform ends the credential it
+        rotated, and one it issued but the claimant never kept is lost."""
+        ended = asyncio.Event()
+        beside = asyncio.create_task(self._keep_alive(ended))
         try:
             yield
         finally:
-            beside.cancel()
+            ended.set()
+            await asyncio.shield(beside)
 
     async def renew(self, item: ClaimantWorkView) -> ClaimantWorkView:
         """Renews the lease on an item it holds. A failure is raised for
@@ -187,9 +193,12 @@ class Claimant:
             return False
         return True
 
-    async def _keep_alive(self) -> None:
+    async def _keep_alive(self, ended: asyncio.Event) -> None:
         while not self.enrollment.refused:
-            await asyncio.sleep(self._settings.beat_seconds)
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(ended.wait(), self._settings.beat_seconds)
+            if ended.is_set():
+                return
             try:
                 await self.enrollment.rotate_if_due()
             except CredentialRefused:
