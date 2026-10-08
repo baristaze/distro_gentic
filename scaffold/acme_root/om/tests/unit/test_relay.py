@@ -22,6 +22,7 @@ from contracts.hosts_storage import make_credential, make_host
 from contracts.loops import DELIVERY, loop_over, reply, said
 from contracts.project_storage import in_project
 
+from acme.infra.exceptions import InfraValidationFailed
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.transports import (
     CommandResult,
@@ -704,6 +705,29 @@ async def test_a_relayed_read_crosses_whole_and_a_longer_file_is_refused_at_once
         output=ExecOutput(data=base64.b64encode(longer).decode()),
     )
     assert len(base64.b64encode(result.model_dump_json().encode())) <= RESULT_CHARS
+
+
+async def test_a_relayed_read_asks_from_its_offset_and_a_negative_one_sends_nothing(
+    wall: Wall,
+) -> None:
+    host = Host(wall.managers, wall.holder)
+    asked: list[ReadRequest] = []
+
+    async def answers(data: bytes) -> None:
+        row = await host.claim_soon()
+        detail = await wall.managers.relay.detail(request(), wall.holder, host.item_id(row))
+        asked.append(cast(ReadRequest, detail.request))
+        await host.finish(row, data=data)
+
+    reads = transport(wall.managers)
+    read, _ = await asyncio.gather(
+        reads.read_file(wall.workspace, "out/0-0.jsonl", 64, 7), answers(b"rest")
+    )
+    assert read == b"rest"
+    assert [(read.path, read.offset) for read in asked] == [("out/0-0.jsonl", 7)]
+    with pytest.raises(InfraValidationFailed, match="before the start"):
+        await reads.read_file(wall.workspace, "out/0-0.jsonl", 64, -1)
+    assert await host.claim() is None
 
 
 # Where a call runs: the placement picks the transport, and names the host.

@@ -238,6 +238,22 @@ async def test_a_relayed_command_runs_once_on_its_host_and_streams_its_output(
     assert await relayed.host.claim_once() is None
 
 
+async def test_a_relayed_read_from_an_offset_answers_only_what_follows_it(
+    relayed: Relayed,
+) -> None:
+    wrote = command(relayed.epoch, "sh", "-c", "printf 'head,tail' > grows.log")
+    waiting = asyncio.ensure_future(relayed.runner.run(relayed.workspace, wrote, seal=NO_SEAL))
+    await claims(relayed.host, waiting)
+    assert (await waiting).exit_code == 0
+    reading = asyncio.ensure_future(
+        relayed.runner.read_file(relayed.workspace, "grows.log", 64, offset=5)
+    )
+    while not reading.done():
+        if await relayed.host.tick() is None:
+            await asyncio.sleep(0.01)
+    assert await reading == b"tail"
+
+
 @pytest.mark.parametrize("kind", [StopKind.CANCEL, StopKind.INTERRUPT])
 async def test_a_stop_over_the_control_stream_ends_a_running_command_at_once(
     relayed: Relayed, kind: StopKind

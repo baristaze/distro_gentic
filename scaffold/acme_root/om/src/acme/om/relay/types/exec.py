@@ -51,6 +51,7 @@ class ReadRequest(Platform):
     operation: Literal[ExecOperation.READ_FILE] = ExecOperation.READ_FILE
     path: str
     max_bytes: int = Field(gt=0)
+    offset: int = Field(default=0, ge=0)
 
 
 class WriteRequest(Platform):

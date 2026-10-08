@@ -468,7 +468,9 @@ async def _operate(
                 stderr=ran.stderr,
             )
         case "read_file":
-            data = await transport.read_file(workspace, request["path"], request["max_bytes"])
+            data = await transport.read_file(
+                workspace, request["path"], request["max_bytes"], request.get("offset", 0)
+            )
             return _result(data=base64.b64encode(data).decode())
         case "write_file":
             data = base64.b64decode(request["data"])

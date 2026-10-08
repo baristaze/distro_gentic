@@ -277,7 +277,7 @@ class TransportInterface(ABC):
         it read, so a caller that follows a growing file reads only what is
         new; empty at or past its end. `InfraValidationFailed` for a
         negative offset. A transport that carries fewer in one read refuses
-        a file longer than it carries (`FileTooLarge`)."""
+        a rest of the file longer than it carries (`FileTooLarge`)."""
         ...
 
     @abstractmethod

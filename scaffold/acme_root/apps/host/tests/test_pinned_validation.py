@@ -104,8 +104,10 @@ class ReadBack(TransportLocalImpl):
         self.records = where / "records"
         self.read: list[tuple[str, bytes]] = []
 
-    async def read_file(self, workspace: Workspace, path: str, max_bytes: int) -> bytes:
-        data = await super().read_file(workspace, path, max_bytes)
+    async def read_file(
+        self, workspace: Workspace, path: str, max_bytes: int, offset: int = 0
+    ) -> bytes:
+        data = await super().read_file(workspace, path, max_bytes, offset)
         self.read.append((workspace.location, data))
         return data
 
