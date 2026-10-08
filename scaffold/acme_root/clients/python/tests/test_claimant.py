@@ -1,17 +1,22 @@
 """The claimant kit's parts that need no platform: the credential file,
 written owner-only and whole or not at all; the journal's entries and
-where each waits; and the lease clock. The kit against the live app is
-`services/api/tests/test_claimant_kit_api.py`."""
+where each waits; the lease clock; and the credential kept live through a
+long work, over a stand-in for the platform. The kit against the live app
+is `services/api/tests/test_claimant_kit_api.py`."""
 
+import asyncio
 import json
 import os
 import stat
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 from uuid import UUID, uuid4
 
+import httpx
 import pytest
 
+from acme.client.claimant.claimant import Claimant
 from acme.client.claimant.credential import (
     BadSetting,
     Credential,
@@ -21,6 +26,8 @@ from acme.client.claimant.credential import (
 from acme.client.claimant.journal import Entry, Journal
 from acme.client.claimant.lease import RETRY_FLOOR_SECONDS, LeaseClock
 from acme.client.claimant.settings import ClaimantSettings, claimant_env
+from acme.client.client import ApiClient
+from acme.client.types import ClaimantWorkView, ReportOutcome
 
 NOW = datetime(2026, 10, 7, 12, 0, tzinfo=UTC)
 
@@ -152,3 +159,85 @@ def test_the_lease_clock_renews_at_half_the_shorter_and_asks_again_sooner_unansw
     assert alone.renew_at == RETRY_FLOOR_SECONDS and not alone.out(0.5) and alone.out(1.0)
     alone.refused = True
     assert alone.out(0.0)
+
+
+async def test_a_work_longer_than_the_rotation_keeps_its_credential_live(tmp_path: Path) -> None:
+    """A work that runs past half the credential's life, and past its end,
+    over a clock the test moves and a beat of a few milliseconds: the
+    credential is rotated while the work runs, and its report is recorded.
+    The stand-in for the platform refuses a credential once it ends, as the
+    platform does."""
+    clock = [NOW]
+    first = a_credential()
+    settings = ClaimantSettings(
+        api_url=first.api_url,
+        home=tmp_path,
+        name="scanner-1",
+        enrollment_token=None,
+        beat_seconds=0.005,
+    )
+    save_credential(settings.credential_path, first)
+    ends = {first.token: first.expires_at}
+    reports: list[dict[str, Any]] = []
+    item = ClaimantWorkView(
+        attempts=1,
+        claim_token=uuid4(),
+        id=uuid4(),
+        kind="scanner",
+        lease_expires_at=None,
+        org_id=uuid4(),
+        payload={},
+        status="claimed",
+        target_id=uuid4(),
+    )
+
+    def platform(request: httpx.Request) -> httpx.Response:
+        bearer = request.headers["Authorization"].removeprefix("Bearer ")
+        if bearer not in ends or clock[0] >= ends[bearer]:
+            return httpx.Response(401, json={"error": {"code": "unauthorized", "message": "ended"}})
+        if request.url.path == "/v1/claimants/me/credentials":
+            token = f"scn_{len(ends) + 1}"
+            ends[token] = clock[0] + timedelta(hours=1)
+            return httpx.Response(
+                201,
+                json={
+                    "token": token,
+                    "credential_id": str(uuid4()),
+                    "claimant_id": first.claimant_id,
+                    "pool_id": first.pool_id,
+                    "kind": "scanner",
+                    "expires_at": ends[token].isoformat(),
+                },
+            )
+        assert request.url.path == f"/v1/claimants/me/items/{item.id}/report"
+        reports.append(json.loads(request.content))
+        return httpx.Response(200, json=item.model_dump(mode="json"))
+
+    def client_for(token: str | None) -> ApiClient:
+        return ApiClient(
+            settings.api_url,
+            app="api",
+            app_version="scanner@0.1.0",
+            token=token,
+            transport=httpx.MockTransport(platform),
+        )
+
+    claimant = Claimant(settings, client_for, now=lambda: clock[0])
+    await claimant.start()  # picks up the credential it holds
+    assert claimant.enrollment.credential == first
+
+    async def work() -> str:
+        clock[0] = NOW + timedelta(minutes=31)  # past half its life: due
+        async with asyncio.timeout(1):
+            while claimant.enrollment.credential.token == first.token:
+                await asyncio.sleep(0.001)
+        clock[0] = NOW + timedelta(minutes=61)  # the first credential has ended
+        return claimant.enrollment.credential.token
+
+    async with claimant.keeping_alive():
+        held = await work()
+
+    assert held != first.token and not claimant.enrollment.refused
+    assert await claimant.report(item, ReportOutcome.done)
+    assert reports == [{"claim_token": str(item.claim_token), "outcome": "done"}]
+    assert claimant.journal.pending() == []

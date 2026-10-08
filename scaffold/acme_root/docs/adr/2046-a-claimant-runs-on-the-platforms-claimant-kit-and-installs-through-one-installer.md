@@ -24,7 +24,9 @@ already lets a host import the client.
 
 - **The credential** is kept owner-only and written whole or not at
   all: a temporary file at mode 600, flushed, then moved over the one
-  before. It is rotated at half its life, one rotation at a time.
+  before. It is rotated at half its life, one rotation at a time, and
+  while a work runs too: a claimant runs each work inside
+  `Claimant.keeping_alive`, which rotates it when due every beat.
 - **Enrollment** happens once, with the token the owner issued, or the
   live credential held for the same platform is picked up. A credential
   the platform refused (401 or 403) is never sent again.

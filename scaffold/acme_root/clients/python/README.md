@@ -16,10 +16,11 @@ it, and nothing else in Python calls `/v1/*`.
 - `claimant/` is the claimant kit: what a client that claims work through
   the gateway from inside a customer's wall runs on, whatever its kind.
   It enrolls once, keeps its credential owner-only and writes it whole or
-  not at all, rotates it at half its life, never sends it once refused,
-  waits out a failure, and keeps each report in a journal until the
-  platform records it. The workspace host runs on it; a product's
-  claimant does too, through `Claimant` and the `/claimants/...` calls.
+  not at all, rotates it at half its life, while a work runs too, never
+  sends it once refused, waits out a failure, and keeps each report in a
+  journal until the platform records it. The workspace host runs on it;
+  a product's claimant does too, through `Claimant` and the
+  `/claimants/...` calls.
 
 ```python
 async with ApiClient(url, app="cli", app_version="cli@0.1.0", token=token) as api:
@@ -34,7 +35,9 @@ await claimant.start()  # enrolls once, or picks up its credential
 while True:
     turn = await claimant.turn()  # rotates, sends the journal, claims
     if turn.item is not None:
-        await claimant.report(turn.item, await work(turn.item, claimant))
+        async with claimant.keeping_alive():  # rotates every beat while it works
+            outcome = await work(turn.item, claimant)
+        await claimant.report(turn.item, outcome)
     await asyncio.sleep(turn.wait)
 ```
 

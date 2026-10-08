@@ -12,7 +12,8 @@ workspace host is one; a product's claimant is another (ADR 2046).
 - `journal.py`: the reports not yet sent, kept on its disk first.
 - `lease.py`: a lease timed on its own monotonic clock.
 - `claimant.py`: a product's claimant on the `/claimants/...` calls:
-  claim, renew, and report, with all of the above.
+  claim, renew, and report, with all of the above, and its credential
+  kept live while a work runs (`keeping_alive`).
 
 A kind's own calls, such as the host's probes and its exec work, stay in
 its own program; the kit holds nothing of one kind."""
