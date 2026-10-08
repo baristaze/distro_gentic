@@ -121,9 +121,10 @@ run "the_runner_holds_its_own_reads_and_no_queue" {
       "ACME_ANTHROPIC_API_KEY",
       "ACME_DATABASE_SYSTEM_URL",
       "ACME_DATABASE_URL",
+      "ACME_LAUNCHDARKLY_SDK_KEY",
       "ACME_OPENAI_API_KEY",
       "ACME_SENTRY_DSN",
     ])
-    error_message = "the runner is injected with the serving logins, the error tracker's DSN, and the platform's model keys: no purge login, no identity provider's key"
+    error_message = "the runner is injected with the serving logins, the error tracker's DSN, the flags' SDK key (the infra root it boots refuses the launchdarkly backend without it), and the platform's model keys: no purge login, no identity provider's key"
   }
 }
