@@ -10,8 +10,10 @@
 # that socket's group; and its exposure stays at or under the bound. The host
 # installs through the claimant installer; another kind, installed through it
 # beside the host under names of its own, gets a unit, a user, and settings
-# that carry those names, behind the same walls. Needs Docker; reaches
-# nothing but the package indexes.
+# that carry those names, behind the same walls. That kind's drop-in grants it
+# two groups: its unit's check allows exactly those, so it starts in them and
+# is refused in a third, while the host's unit allows none. Needs Docker;
+# reaches nothing but the package indexes.
 #
 #   deployment/host/check/check.sh      (make host-check)
 set -euo pipefail
@@ -167,17 +169,31 @@ echo "==> another kind through the same installer, under names of its own"
 in_box sh -c 'printf "%s\n" "SCAN_API_URL=" "SCAN_SCANNER_NAME=" "SCAN_ENROLLMENT_TOKEN=" \
   > /root/scanner.env.example'
 printf '%s\n' scn_check_from_a_file | docker exec -i "${BOX}" sh -c 'umask 077; cat > /root/scanner.token'
+# The kind's own step grants its claimant two groups, in a drop-in, never in
+# /etc/group: one of the machine's, and that of an account it runs work as,
+# which it makes.
+docker exec -i "${BOX}" sh -c 'cat > /root/scanner-dropin.sh && chmod 0755 /root/scanner-dropin.sh' <<'HOOK'
+#!/bin/sh
+getent group acme-scanner-work >/dev/null || groupadd --system acme-scanner-work
+printf '[Service]\nSupplementaryGroups=users acme-scanner-work\n' > "${CLAIMANT_DROPIN}/groups.conf"
+HOOK
 in_box /src/deployment/claimant/install.sh --kind scanner --unit acme-scanner --user acme-scanner \
   --env-prefix SCAN --command acme-host --settings /root/scanner.env.example \
   --token-file /root/scanner.token --api-url "http://127.0.0.1:${PORT}" --name check-scanner \
-  --no-start >/dev/null || fail "the claimant installer failed for another kind"
+  --dropin /root/scanner-dropin.sh --no-start >/dev/null || fail "the claimant installer failed for another kind"
 SCANNER="$(in_box systemctl cat acme-scanner.service)"
-grep -E '^(User|Group|EnvironmentFile|Environment|ExecStart)=' <<<"${SCANNER}"
+grep -E '^(User|Group|EnvironmentFile|Environment|ExecStart|SupplementaryGroups)=' <<<"${SCANNER}"
 for line in User=acme-scanner EnvironmentFile=/etc/acme-scanner/scanner.env \
-  Environment=SCAN_SCANNER_HOME=/var/lib/acme-scanner \
-  "ExecStart=/opt/acme-scanner/own-group-only.sh /opt/acme-scanner/current/bin/acme-host run"; do
+  Environment=SCAN_SCANNER_HOME=/var/lib/acme-scanner SupplementaryGroups="users acme-scanner-work" \
+  "ExecStart=/opt/acme-scanner/own-group-only.sh --granted users --granted acme-scanner-work /opt/acme-scanner/current/bin/acme-host run"; do
   grep -qxF "${line}" <<<"${SCANNER}" || fail "the other kind's unit has no line ${line}"
 done
+[ "$(in_box id -nG acme-scanner)" = acme-scanner ] || fail "the installer put the other kind's user in a group"
+HOST_START="$(in_box systemctl cat acme-host.service | grep '^ExecStart=')"
+echo "${HOST_START}"
+[ "${HOST_START}" = "ExecStart=/opt/acme-host/own-group-only.sh /opt/acme-host/current/bin/acme-host run" ] \
+  || fail "the host's unit grants its check a group"
+echo "the other kind's check allows the two groups its drop-in grants, and the host's allows none"
 [ "$(in_box id -u acme-scanner)" != 0 ] || fail "the other kind's user is root"
 in_box stat -c '%U %a %n' /etc/acme-scanner/scanner.env /var/lib/acme-scanner
 [ "$(in_box stat -c '%U %a' /etc/acme-scanner/scanner.env)" = "root 600" ] \
@@ -195,6 +211,32 @@ awk -v score="$(echo "${SCANNED}" | grep -oE '[0-9]+\.[0-9]+')" -v most="${EXPOS
   'BEGIN { exit !(score <= most) }' || fail "the other kind's exposure is above ${EXPOSURE_MAX}"
 in_box systemctl is-active --quiet acme-host || fail "the other kind's install stopped the host"
 echo "the host runs on beside it"
+
+echo "==> the other kind starts in the groups its drop-in grants, and is refused in a third"
+# Past the check, its claimant runs and stops on the settings a check gives it
+# no use for; the check's own refusal is 6, with its line in the journal.
+in_box systemctl start acme-scanner 2>/dev/null || true
+settled() { [ "$(in_box systemctl show -p ExecMainExitTimestampMonotonic --value acme-scanner)" != 0 ]; }
+wait_for 30 settled || fail "the other kind's claimant never ran to an end"
+# What the unit's own processes wrote, not what systemd wrote of them.
+SAID="$(in_box journalctl _SYSTEMD_UNIT=acme-scanner.service -o cat)"
+tail -1 <<<"${SAID}"
+[ "$(in_box systemctl show -p ExecMainStatus --value acme-scanner)" != 6 ] \
+  || fail "the other kind was refused in the groups its drop-in grants"
+grep -q '^refused: acme-scanner is in the group' <<<"${SAID}" \
+  && fail "the other kind's check refused a group its drop-in grants"
+[ -n "${SAID}" ] || fail "the other kind's claimant never ran past its check"
+echo "started past its check: $(in_box systemctl show -p SupplementaryGroups -p ExecMainStatus acme-scanner | paste -sd ' ' -)"
+in_box systemctl reset-failed acme-scanner 2>/dev/null || true
+in_box usermod -aG docker acme-scanner
+in_box systemctl restart acme-scanner 2>/dev/null || true
+scanner_refused() { in_box journalctl -u acme-scanner -o cat | grep -q '^refused: acme-scanner is in the group docker'; }
+wait_for 15 scanner_refused || { in_box journalctl -u acme-scanner -o cat | tail -20; fail "the other kind did not refuse the group"; }
+in_box journalctl -u acme-scanner -o cat | grep -m1 '^refused: acme-scanner is in the group docker'
+wait_for 10 settled || fail "the other kind's check never ended"
+[ "$(in_box systemctl show -p ExecMainStatus --value acme-scanner)" = 6 ] \
+  || fail "the other kind's refusal did not exit 6"
+echo "refused in docker, which no drop-in grants: $(in_box systemctl show -p ExecMainStatus acme-scanner)"
 
 echo "==> acme-host put in a rootful engine's socket group: the host refuses to start"
 in_box chgrp docker /run/docker.sock
