@@ -8,6 +8,8 @@ workspace whose instance went since its host prepared it, as after a
 reboot or a Docker restart, is prepared again, and its call runs."""
 
 import asyncio
+import base64
+import json
 import shutil
 import subprocess
 import time
@@ -15,13 +17,22 @@ from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 import httpx
 import pytest
 from contracts.agent_session_storage import make_session
 from contracts.project_storage import make_binding, make_project
-from host_support import Stack, Widened, container_host, directory_host, docker_runs, probes
+from host_support import (
+    DETAIL,
+    Stack,
+    Widened,
+    container_host,
+    directory_host,
+    docker_runs,
+    probes,
+)
 
 from acme.apps.host import main as host_main
 from acme.apps.host.agent import HostAgent
@@ -252,6 +263,49 @@ async def test_a_relayed_read_from_an_offset_answers_only_what_follows_it(
         if await relayed.host.tick() is None:
             await asyncio.sleep(0.01)
     assert await reading == b"tail"
+
+
+class Crossed(httpx.AsyncBaseTransport):
+    """The stack, noting the operation each `exec` item's detail hands the
+    host, and the output of each result the host pushes."""
+
+    def __init__(self, inner: httpx.AsyncBaseTransport) -> None:
+        self._inner = inner
+        self.asked: list[dict[str, Any]] = []
+        self.answered: list[dict[str, Any]] = []
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if request.method == "POST" and path.endswith("/result"):
+            pushed = json.loads(await request.aread())["data"]
+            self.answered.append(json.loads(base64.b64decode(pushed))["output"])
+        response = await self._inner.handle_async_request(request)
+        if request.method != "GET" or DETAIL.fullmatch(path) is None:
+            return response
+        body = await response.aread()
+        self.asked.append(json.loads(body)["request"])
+        headers = [(k, v) for k, v in response.headers.raw if k.lower() != b"content-length"]
+        return httpx.Response(response.status_code, headers=headers, content=body)
+
+
+async def test_a_host_echoes_the_offset_it_read_from_and_a_read_from_the_start_carries_none(
+    api: Stack, tmp_path: Path
+) -> None:
+    wire = Crossed(api.transport)
+    relayed = await relay_to(api, tmp_path, wire=wire)
+    (tmp_path / "workspace" / "grows.log").write_bytes(b"head,tail")
+    for offset, rest in [(0, b"head,tail"), (5, b"tail")]:
+        reading = asyncio.ensure_future(
+            relayed.runner.read_file(relayed.workspace, "grows.log", 64, offset=offset)
+        )
+        while not reading.done():
+            if await relayed.host.tick() is None:
+                await asyncio.sleep(0.01)
+        assert await reading == rest
+    # The read from the start is the item and the answer an earlier release
+    # sent: neither names an offset. The read past it is echoed.
+    assert [read.get("offset") for read in wire.asked] == [None, 5]
+    assert [answer.get("offset") for answer in wire.answered] == [None, 5]
 
 
 @pytest.mark.parametrize("kind", [StopKind.CANCEL, StopKind.INTERRUPT])

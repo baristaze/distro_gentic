@@ -18,6 +18,11 @@ from acme.om.placement.types.work import ExecEffect, ExecOperation
 Stream = Literal["stdout", "stderr"]
 
 
+def _from_the_start(offset: int) -> bool:
+    """An offset of 0, which the wire leaves out."""
+    return offset == 0
+
+
 class ExecState(StrEnum):
     QUEUED = "queued"  # sent, and no host holds it
     RUNNING = "running"  # a host holds it under a lease
@@ -51,7 +56,9 @@ class ReadRequest(Platform):
     operation: Literal[ExecOperation.READ_FILE] = ExecOperation.READ_FILE
     path: str
     max_bytes: int = Field(gt=0)
-    offset: int = Field(default=0, ge=0)
+    # Written only past the start, so a read from the start is the item a
+    # release before it wrote, which its API and its hosts still take.
+    offset: int = Field(default=0, ge=0, exclude_if=_from_the_start)
 
 
 class WriteRequest(Platform):
@@ -111,6 +118,10 @@ class ExecOutput(Platform):
     stdout: str = ""
     stderr: str = ""
     data: str | None = None  # a file's bytes, in base64
+    # The offset a read was answered from: a host echoes the one it read
+    # from past the start. A host before it echoes none, so the runner
+    # refuses its answer to such a read.
+    offset: int = Field(default=0, ge=0, exclude_if=_from_the_start)
     entries: tuple[FileEntry, ...] = ()
     detail: str = ""
 
