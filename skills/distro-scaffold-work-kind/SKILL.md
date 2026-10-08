@@ -69,7 +69,8 @@ It never goes in `ProductKinds`, which refuses a kind with no claimant.
 | File | Holds |
 |------|-------|
 | `om/tests/unit/test_<kind>_kind.py` | the cases of step 6, `<kind>` the kind's name in lower case |
-| `apps/<claimant>/pyproject.toml` | the distribution `<name>-<claimant>` over `<name>-client` alone, with its command of the same name, shape `apps/host/pyproject.toml` |
+| `apps/<claimant>/pyproject.toml` | the distribution `<name>-<claimant>` over `<name>-client` and `typer`, with its command of the same name, shape `apps/host/pyproject.toml` |
+| `apps/<claimant>/README.md` | what the program does, the command that installs it, and what stays the product's, shape `apps/host/README.md` |
 | `apps/<claimant>/src/<name>/apps/<claimant>/__init__.py`, `main.py` | the program on the claimant kit, step 8 |
 | `apps/<claimant>/src/<name>/apps/<claimant>/work.py` | `work`, the product's, step 8 |
 | `apps/<claimant>/tests/test_<claimant>.py` | the cases of step 10 |
@@ -190,20 +191,23 @@ sets ports of its own sets `kinds=PRODUCT_KINDS` among them.
    `Claimant(ClaimantSettings.from_env(ENV_PREFIX, KIND), client_for)`,
    with `client_for` shape `build_client` in
    `apps/host/src/<name>/apps/host/main.py`, starts it, and turns as the
-   loop in `clients/python/README.md` does. Each item a turn hands it
-   goes to `work` once, and its answer is reported:
+   loop in `clients/python/README.md` does. `run` stays a subcommand,
+   since the unit starts `<command> run`: as the one command, typer
+   keeps it one only under an `@app.callback()`. Each item a turn hands
+   it goes to `work` once, and its answer is reported:
    `ReportOutcome.done` for `None`, `ReportOutcome.failed` with the
-   reason for a reason. It exits with the host's codes, which the unit
-   reads, shape `_guarded` in that `main.py`: 1 refused
-   (`CredentialRefused`), 2 a bad setting, 3 not enrolled
-   (`NotEnrolled`), 4 the platform not yet reached; only 4 and a crash
-   restart it. `work(item, claimant) -> str | None`, in `work.py`, is
-   the product's: write its signature, a docstring of what it gets, and
-   a body that raises `NotImplementedError`, and name it in the output
-   as what the product still needs. A work that outlasts its lease
-   renews it with `claimant.renew`, timed by the kit's `LeaseClock`; a
-   call of the kind's own, such as a stream's append (step 5), goes
-   through `claimant.client()`, never a client of its own.
+   reason for a reason, and with the exception's text for one `work`
+   raises. It exits with the host's codes, which the unit reads, shape
+   `_guarded` in that `main.py`: 1 refused (`CredentialRefused`), 2 a
+   bad setting, 3 not enrolled (`NotEnrolled`), 4 the platform not yet
+   reached; only 4 and a crash restart it. `async def work(item,
+   claimant) -> str | None`, in `work.py`, is the product's: write its
+   signature, a docstring of what it gets, and a body that raises
+   `NotImplementedError`, and name it in the output as what the product
+   still needs. A work that outlasts its lease renews it with
+   `claimant.renew`, timed by the kit's `LeaseClock`; a call of the
+   kind's own, such as a stream's append (step 5), goes through
+   `claimant.client()`, never a client of its own.
 9. The claimant installs through the one installer,
    `deployment/claimant/install.sh` (ADR 2046), never an installer, a
    unit, or a step that makes its user of its own.
@@ -220,16 +224,18 @@ sets ports of its own sets `kinds=PRODUCT_KINDS` among them.
      --settings "${HERE}/<claimant>.env.example" --dropin "${HERE}/dropin.sh"
    ```
 
-   `--dropin` is there with `--grants` alone. The settings example
-   holds the three lines the installer fills, `<PREFIX>_API_URL=`,
+   `--dropin` is there with `--grants` alone. The settings example holds
+   the three lines the installer fills, `<PREFIX>_API_URL=`,
    `<PREFIX>_<CLAIMANT>_NAME=`, and `<PREFIX>_ENROLLMENT_TOKEN=`, the
-   last two empty (`<CLAIMANT>` the kind in capitals), and each
-   setting the work reads. With `--grants`,
-   `dropin.sh` writes `$CLAIMANT_DROPIN/groups.conf` with one
-   `SupplementaryGroups=` line that names each group, as
-   `deployment/claimant/README.md` shows. It never adds the user to a
-   group (`usermod`, `gpasswd`): the unit's check refuses every group
-   no drop-in grants, and the installer passes it exactly the drop-ins'
+   last two empty (`<CLAIMANT>` the kind in capitals), and each setting
+   the work reads. With `--grants`, `dropin.sh` writes
+   `$CLAIMANT_DROPIN/groups.conf` with one `SupplementaryGroups=` line
+   that names each group, as `deployment/claimant/README.md` shows. A
+   device file stays hidden by the unit's `PrivateDevices=yes` whatever
+   the group: what opens one is the kind's own drop-in, named in the
+   output as what the product still needs. It never adds the user to a
+   group (`usermod`, `gpasswd`): the unit's check refuses every group no
+   drop-in grants, and the installer passes it exactly the drop-ins'
    grants (ADR 2047). Both scripts are executable (`chmod 755`): a
    person runs the one, and the installer refuses a hook that is not.
 10. The tests of the program, in `apps/<claimant>/tests/test_<claimant>.py`:
