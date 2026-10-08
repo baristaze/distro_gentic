@@ -101,10 +101,14 @@ class InfraSettings(BaseSettings):
     # from the image. A deployed environment refuses `host` and `account`.
     # The root also holds each transport's records of how commands ended,
     # beside the workspaces. Each container carries the deployment's name,
-    # and a runner holds only those that carry its own.
+    # and a runner holds only those that carry its own. `account` refuses a
+    # host that lets an account link a file it does not own; where this
+    # process cannot read the host's fs.protected_hardlinks, as under a unit
+    # with ProcSubset=pid, `workspace_protected_hardlinks` declares it on.
     workspace_backend: Literal["none", "host", "account", "container"] = "none"
     workspaces_root: Path = Path(".local/workspaces")
     workspace_account: str = "acme-agent"
+    workspace_protected_hardlinks: bool = False
     workspace_image: str = DEFAULT_IMAGE
     workspace_deployment: str = Field(default="acme-local", min_length=1)
 

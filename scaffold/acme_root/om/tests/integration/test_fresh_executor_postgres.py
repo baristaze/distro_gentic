@@ -103,8 +103,10 @@ class ReadBack(TransportContainerImpl):
         super().__init__(records, secrets, BrokerNullImpl(), timedelta(seconds=120))
         self.read: list[bytes] = []
 
-    async def read_file(self, workspace: Workspace, path: str, max_bytes: int) -> bytes:
-        data = await super().read_file(workspace, path, max_bytes)
+    async def read_file(
+        self, workspace: Workspace, path: str, max_bytes: int, offset: int = 0
+    ) -> bytes:
+        data = await super().read_file(workspace, path, max_bytes, offset)
         self.read.append(data)
         return data
 

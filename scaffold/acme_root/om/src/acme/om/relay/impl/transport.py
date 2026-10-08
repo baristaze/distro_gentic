@@ -24,6 +24,7 @@ from acme.infra.transports import (
     RecordSeal,
     StaleCommand,
     TransportInterface,
+    file_offset,
 )
 from acme.infra.workspaces import IsolationMode, Workspace
 from acme.om.base import new_id, utcnow
@@ -171,14 +172,27 @@ class TransportRelayImpl(TransportInterface):
         a host's own go with the workspace it holds."""
         return None
 
-    async def read_file(self, workspace: Workspace, path: str, max_bytes: int) -> bytes:
+    async def read_file(
+        self, workspace: Workspace, path: str, max_bytes: int, offset: int = 0
+    ) -> bytes:
         """One item, whose result crosses the wall whole: it asks for no more
-        than `READ_BYTES` and a byte, so a longer file is refused at once
-        (`FileTooLarge`), never waited on as a result that cannot cross."""
-        request = ReadRequest(path=path, max_bytes=min(max_bytes, READ_BYTES + 1))
+        than `READ_BYTES` and a byte from `offset`, which the host's transport
+        reads from, so a longer rest of the file is refused at once
+        (`FileTooLarge`), never waited on as a result that cannot cross. A
+        host echoes the offset it read from; an answer that does not echo
+        it came from a host that read from the start, and is refused
+        (`CapabilityMissing`), never handed back as the bytes after it."""
+        request = ReadRequest(
+            path=path, max_bytes=min(max_bytes, READ_BYTES + 1), offset=file_offset(offset)
+        )
         progress = await self._file(workspace, request, "read_only", None)
         outcome, output = _ended(progress)
         _completed(outcome, output)
+        if output.offset != request.offset:
+            raise CapabilityMissing(
+                f"the workspace's host did not read from offset {request.offset}: a host "
+                "of an earlier release reads a file only from its start"
+            )
         data = base64.b64decode(output.data or "")
         if len(data) > READ_BYTES:
             raise FileTooLarge(READ_BYTES)
@@ -376,8 +390,10 @@ class TransportPlacedImpl(TransportInterface):
         await self._direct.purge_records(workspace_id)
         await self._relayed.purge_records(workspace_id)
 
-    async def read_file(self, workspace: Workspace, path: str, max_bytes: int) -> bytes:
-        return await (await self._for(workspace)).read_file(workspace, path, max_bytes)
+    async def read_file(
+        self, workspace: Workspace, path: str, max_bytes: int, offset: int = 0
+    ) -> bytes:
+        return await (await self._for(workspace)).read_file(workspace, path, max_bytes, offset)
 
     async def write_file(self, workspace: Workspace, path: str, data: bytes, epoch: int) -> None:
         await (await self._for(workspace)).write_file(workspace, path, data, epoch)

@@ -10,6 +10,7 @@ whole: a file longer than one carries is refused at once."""
 
 import asyncio
 import base64
+import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -22,8 +23,10 @@ from contracts.hosts_storage import make_credential, make_host
 from contracts.loops import DELIVERY, loop_over, reply, said
 from contracts.project_storage import in_project
 
+from acme.infra.exceptions import InfraValidationFailed
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.transports import (
+    CapabilityMissing,
     CommandResult,
     CommandSpec,
     FileTooLarge,
@@ -55,6 +58,7 @@ from acme.om.relay.impl.placement import PlacementRelayedImpl
 from acme.om.relay.impl.transport import TransportPlacedImpl, TransportRelayImpl
 from acme.om.relay.rules import READ_BYTES, RESULT_CHARS, exec_id, key_time
 from acme.om.relay.types.exec import (
+    REQUESTS,
     ExecCall,
     ExecOutcome,
     ExecOutput,
@@ -222,11 +226,17 @@ class Host:
         )
 
     async def finish(
-        self, row: WorkItem, exit_code: int = 0, stdout: str = "", data: bytes | None = None
+        self,
+        row: WorkItem,
+        exit_code: int = 0,
+        stdout: str = "",
+        data: bytes | None = None,
+        offset: int = 0,
     ) -> None:
         read = None if data is None else base64.b64encode(data).decode()
         result = ExecResult(
-            outcome=ExecOutcome(exit_code=exit_code), output=ExecOutput(stdout=stdout, data=read)
+            outcome=ExecOutcome(exit_code=exit_code),
+            output=ExecOutput(stdout=stdout, data=read, offset=offset),
         )
         data = result.model_dump_json().encode()
         await self.managers.relay.push_result(
@@ -704,6 +714,63 @@ async def test_a_relayed_read_crosses_whole_and_a_longer_file_is_refused_at_once
         output=ExecOutput(data=base64.b64encode(longer).decode()),
     )
     assert len(base64.b64encode(result.model_dump_json().encode())) <= RESULT_CHARS
+
+
+async def test_a_relayed_read_asks_from_its_offset_and_a_negative_one_sends_nothing(
+    wall: Wall,
+) -> None:
+    host = Host(wall.managers, wall.holder)
+    asked: list[ReadRequest] = []
+
+    async def answers(data: bytes) -> None:
+        row = await host.claim_soon()
+        detail = await wall.managers.relay.detail(request(), wall.holder, host.item_id(row))
+        asked.append(cast(ReadRequest, detail.request))
+        await host.finish(row, data=data, offset=7)
+
+    reads = transport(wall.managers)
+    read, _ = await asyncio.gather(
+        reads.read_file(wall.workspace, "out/0-0.jsonl", 64, 7), answers(b"rest")
+    )
+    assert read == b"rest"
+    assert [(read.path, read.offset) for read in asked] == [("out/0-0.jsonl", 7)]
+    with pytest.raises(InfraValidationFailed, match="before the start"):
+        await reads.read_file(wall.workspace, "out/0-0.jsonl", 64, -1)
+    assert await host.claim() is None
+
+
+async def test_a_read_from_the_start_is_the_earlier_item_and_an_unechoed_offset_is_refused(
+    wall: Wall,
+) -> None:
+    host = Host(wall.managers, wall.holder)
+    sent: list[dict[str, object]] = []
+
+    async def answers(data: bytes) -> None:
+        # A host of an earlier release: it reads from the start, echoing nothing.
+        row = await host.claim_soon()
+        detail = await wall.managers.relay.detail(request(), wall.holder, host.item_id(row))
+        sent.append(json.loads(REQUESTS.dump_json(detail.request)))
+        await host.finish(row, data=data)
+
+    reads = transport(wall.managers)
+    read, _ = await asyncio.gather(
+        reads.read_file(wall.workspace, "out/0-0.jsonl", 64), answers(b"head,tail")
+    )
+    # A read from the start carries no offset, as the earlier release wrote
+    # it and as its API and its hosts read it, and so does its answer.
+    assert read == b"head,tail"
+    assert sent == [{"operation": "read_file", "path": "out/0-0.jsonl", "max_bytes": 64}]
+    assert "offset" not in json.loads(ExecOutput(data="").model_dump_json())
+    # A read past the start that such a host answers is refused, never
+    # handed back as the bytes after the offset.
+    with pytest.raises(CapabilityMissing, match="did not read from offset 5"):
+        await asyncio.wait_for(
+            asyncio.gather(
+                reads.read_file(wall.workspace, "out/0-0.jsonl", 64, 5), answers(b"head,tail")
+            ),
+            timeout=10,
+        )
+    assert sent[1]["offset"] == 5
 
 
 # Where a call runs: the placement picks the transport, and names the host.

@@ -10,24 +10,33 @@ account may, and nothing of this process's: not its files, its credential,
 or its environment. No program that runs with this process's privileges
 sees the command's environment: it reaches the command after the switch.
 
-The account serves one workspace at a time, so every process of the
-account is that workspace's. A release ends each of them, as the account,
-whatever `/proc` hides from this process, then each one in its directory,
-and closes the workspace to the account, so the next workspace's commands
-never reach its files. A purge clears what the account wrote, as the
+What a command left holding its output once its own process has exited
+is ended as the account, which reaches the account's processes alone
+(ADR 1023). The account serves one workspace at a time, so every process
+of the account is that workspace's. A release ends each of them, as the
+account, whatever `/proc` hides from this process, then each one in its
+directory, and closes the workspace to the account, so the next
+workspace's commands never reach its files. A purge clears what the account wrote, as the
 account, then removes the directory without following a link out of it.
 A prepare marks the workspace held beside its directory, as the host
 provider does, and its release or purge takes the mark away.
+
+It runs under a hardened unit, which hides `/proc/sys` (`ProcSubset=pid`)
+and refuses a setuid or setgid bit (`RestrictSUIDSGID=yes`): the host's
+setting it needs is declared where it cannot be read, and a workspace is
+shared with the account's group by a default ACL, never by a setgid bit.
 
 What stays a product's: which account its host gives its agents, the
 grants it adds to that account, and how its host image makes it."""
 
 import asyncio
+import errno
 import fcntl
 import os
 import pwd
 import re
 import shutil
+import struct
 import sys
 import time
 from collections.abc import Sequence
@@ -64,7 +73,7 @@ at its deadline."""
 HARDLINKS = PROC / "sys" / "fs" / "protected_hardlinks"
 """Where the host says whether an account may link a file it does not own,
 which would reach this process's files from the workspace: 1 when it may
-not."""
+not. A unit with `ProcSubset=pid` hides it."""
 
 ACCOUNT_NAME = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
 
@@ -85,9 +94,15 @@ it and changes nothing in it, so what is below it stays what was made."""
 CLOSED_MODE = 0o700
 """A released workspace's directory: the account reaches nothing in it."""
 
-SHARED_MODE = 0o2770
-"""Its home and its temporary directory: the account's group writes there,
-and every entry made there is of that group."""
+SHARED_MODE = 0o770
+"""Its home, its temporary directory, and each directory made below them:
+the account's group writes there. No setgid bit, which a hardened unit
+refuses: what is made below is shared by `SHARED_BELOW`."""
+
+SHARED_BELOW = "system.posix_acl_default"
+"""The default ACL of the home and the temporary directory, which every entry
+made below them takes, whoever makes it: its owner as the entry's mode
+says, the account's group the same, and no one else anything."""
 
 UMASK = 0o007
 """What a command writes stays its group's, this process's included, and no
@@ -124,6 +139,36 @@ own view of `/proc` is read for one still alive, other than this shell; a
 zombie is dead, whoever reaps it. It answers 0 when none is, and prints
 each one alive otherwise. It runs builtins alone, so it starts no process
 of the account."""
+
+
+END_GROUP = """group=$0 found=' ' pass=0
+kill -STOP "-$group" 2>/dev/null
+while [ "$pass" -lt 3 ]; do
+  for stat in /proc/[0-9]*/stat; do
+    pid=${stat#/proc/}; pid=${pid%/stat}
+    [ "$pid" = "$$" ] && continue
+    case $found in *" $pid "*) continue ;; esac
+    line=
+    { read -r line < "$stat"; } 2>/dev/null
+    set -f; set -- ${line##*) }; set +f
+    if [ "$3" != "$group" ]; then
+      case $found in *" $2 "*) ;; *) continue ;; esac
+    fi
+    kill -STOP "$pid" 2>/dev/null
+    found="$found$pid "
+  done
+  pass=$((pass + 1))
+done
+kill -KILL "-$group" $found 2>/dev/null
+exit 0"""
+"""What ends, as the account, what a command whose group is `$0` left once
+its own process is over: each process of the group, and each one descended
+from one, frozen as the account's own view of `/proc` shows it, walked again
+after each freeze, then killed with the group. A process's name may hold
+spaces and parentheses, so its parent and its group are read after the last
+`) `. As the account, it signals the account's processes alone, whichever
+process a pid names by then. It runs builtins alone, so it starts no
+process of the account."""
 
 
 def temporary(home: Path) -> Path:
@@ -187,13 +232,39 @@ def effective_capabilities() -> set[int]:
     return {bit for bit in range(64) if mask >> bit & 1}
 
 
-def links_protected() -> bool:
-    """Whether the host keeps an account from linking a file it does not
-    own; not where it does not say."""
+def linking_refusal(declared: bool) -> str | None:
+    """Why this host may let an account link a file it does not own; None
+    when it keeps it from doing so. Its setting decides where this process
+    can read it, whatever is declared; where it cannot, as under a unit
+    with `ProcSubset=pid`, the runner's declaration that it is on decides."""
     try:
-        return HARDLINKS.read_text().strip() == "1"
+        setting = HARDLINKS.read_text().strip()
     except OSError:
-        return False
+        if declared:
+            return None
+        return (
+            "this process cannot read fs.protected_hardlinks, and the runner's "
+            "settings do not declare it on: an account may link a file it does not own"
+        )
+    if setting == "1":
+        return None
+    return "this host lets an account link a file it does not own (fs.protected_hardlinks is not 1)"
+
+
+def shared_below(gid: int) -> bytes:
+    """`SHARED_BELOW` as the kernel stores it: version 2, then each entry's
+    tag, permissions, and id, in the kernel's order. The owner and the group
+    `gid` hold what the mask lets through, which an entry's mode sets; the
+    owning group and others hold nothing."""
+    unnamed = 0xFFFFFFFF
+    entries = (
+        (0x01, 0o7, unnamed),  # the owner
+        (0x04, 0o0, unnamed),  # the owning group
+        (0x08, 0o7, gid),  # the account's group
+        (0x10, 0o7, unnamed),  # the mask
+        (0x20, 0o0, unnamed),  # others
+    )
+    return struct.pack("<I", 2) + b"".join(struct.pack("<HHI", *entry) for entry in entries)
 
 
 def switch_to(account: str) -> Switch:
@@ -260,6 +331,26 @@ async def end_account(switch: Switch, seconds: float = ENDING_SECONDS) -> None:
         await asyncio.sleep(0.05)
 
 
+async def end_group_as(switch: Switch, group: int, seconds: float = ENDING_SECONDS) -> None:
+    """Ends, as the account, what a command whose group is `group` left
+    (`END_GROUP`). An end that has not finished after `seconds` is cut off;
+    what it left then ends with the workspace's release."""
+    ending = await asyncio.create_subprocess_exec(
+        *switch.argv(END_GROUP, (str(group),)),
+        cwd="/",
+        env={},
+        stdin=asyncio.subprocess.DEVNULL,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    try:
+        await asyncio.wait_for(ending.wait(), seconds)
+    except TimeoutError:
+        ending.kill()
+        await ending.wait()
+
+
 class WorkspaceAccountImpl(WorkspaceProviderInterface):
     """A directory per workspace under `root`, its commands run as `account`
     by the local transport given the same account. It meets the account
@@ -270,11 +361,14 @@ class WorkspaceAccountImpl(WorkspaceProviderInterface):
     shares the root: a prepare while it serves another is refused, and a
     purge then removes only what this process can. A host that lets an
     account link a file it does not own is refused too: the link would
-    reach this process's files from the workspace."""
+    reach this process's files from the workspace. Where this process cannot
+    read the host's setting, `protected_hardlinks` is the runner's word that
+    it is on."""
 
-    def __init__(self, root: Path, account: str) -> None:
+    def __init__(self, root: Path, account: str, *, protected_hardlinks: bool = False) -> None:
         self._root = root
         self._account = account
+        self._protected_hardlinks = protected_hardlinks
         self._turn = asyncio.Lock()
         self._held: UUID | None = None
         self._lock: int | None = None
@@ -284,11 +378,9 @@ class WorkspaceAccountImpl(WorkspaceProviderInterface):
         if why is not None:
             raise IsolationRefused(why)
         switch = await asyncio.to_thread(switch_to, self._account)
-        if not await asyncio.to_thread(links_protected):
-            raise IsolationRefused(
-                "this host lets an account link a file it does not own "
-                "(fs.protected_hardlinks is not 1)"
-            )
+        linking = await asyncio.to_thread(linking_refusal, self._protected_hardlinks)
+        if linking is not None:
+            raise IsolationRefused(linking)
         job = self._job(org_id, workspace_id)
         async with self._turn:
             fresh = self._held is None
@@ -449,7 +541,10 @@ def _handed_over(lock: int, root: Path, job: Path) -> None:
 def _opened(job: Path, gid: int) -> None:
     """The workspace's directory, made where it is missing, and opened to the
     account: its home and its temporary directory shared with the account's
-    group, then the directory itself, last."""
+    group, and what is made below them too, then the directory itself, last.
+    `IsolationRefused` where the filesystem keeps no ACL."""
+    if sys.platform != "linux":
+        raise IsolationRefused("an account workspace runs on Linux alone")
     job.parent.mkdir(exist_ok=True)
     os.chmod(job.parent, PASSAGE_MODE)
     job.mkdir(mode=CLOSED_MODE, exist_ok=True)
@@ -457,6 +552,14 @@ def _opened(job: Path, gid: int) -> None:
         below.mkdir(mode=CLOSED_MODE, exist_ok=True)
         os.chown(below, -1, gid)
         os.chmod(below, SHARED_MODE)
+        try:
+            os.setxattr(below, SHARED_BELOW, shared_below(gid), follow_symlinks=False)
+        except OSError as error:
+            if error.errno != errno.EOPNOTSUPP:
+                raise
+            raise IsolationRefused(
+                f"the filesystem of {job} keeps no ACL, which a workspace is shared through"
+            ) from None
     os.chown(job, -1, gid)
     os.chmod(job, OPEN_MODE)
 

@@ -468,8 +468,11 @@ async def _operate(
                 stderr=ran.stderr,
             )
         case "read_file":
-            data = await transport.read_file(workspace, request["path"], request["max_bytes"])
-            return _result(data=base64.b64encode(data).decode())
+            offset = request.get("offset", 0)
+            data = await transport.read_file(
+                workspace, request["path"], request["max_bytes"], offset
+            )
+            return _result(data=base64.b64encode(data).decode(), offset=offset)
         case "write_file":
             data = base64.b64decode(request["data"])
             await transport.write_file(workspace, request["path"], data, detail.epoch or 0)
@@ -568,11 +571,14 @@ def _result(
     stdout: str = "",
     stderr: str = "",
     data: str | None = None,
+    offset: int = 0,
     entries: list[dict[str, Any]] | None = None,
     detail: str = "",
 ) -> dict[str, Any]:
     """An exec result as the platform reads it: how the item ended, in the
-    clear, and what it printed or read, which the platform seals."""
+    clear, and what it printed or read, which the platform seals. A read
+    past the start echoes the offset it read from, which the runner checks;
+    a read from the start carries none, as a host before it answered."""
     return {
         "outcome": {
             "exit_code": exit_code,
@@ -587,6 +593,7 @@ def _result(
             "stdout": stdout,
             "stderr": stderr,
             "data": data,
+            **({"offset": offset} if offset else {}),
             "entries": entries or [],
             "detail": detail,
         },
