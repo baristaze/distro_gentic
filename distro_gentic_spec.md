@@ -751,10 +751,11 @@ are evaluated apart, and neither is ever reported as the other.
 
 ### Outages and Anomalies
 
-The platform shares the engine's outage signal across its runners, one
-per provider and credential, in the shared cache, so a session meets a
-known outage in a second ([`agentic_core` Provider
-Errors][e-provider-errors]). An unreachable cache is a
+The platform shares the guideline's outage signal across its runners
+([Composition by decoration][g-decoration]), one mark per provider and
+credential, in the shared cache. A session that reads a mark parks on
+the provider, the engine's park, so it meets a known outage in a second
+([`agentic_core` Provider Errors][e-provider-errors]). An unreachable cache is a
 declared degraded answer: calls proceed, and each session's own
 retries and its park on the provider hold. A tenant on its own key has a signal of its own, and a
 billing or credential error on that key parks only its sessions. An
@@ -995,6 +996,7 @@ threat model each deployment writes.
 [g-operator]: https://github.com/baristaze/swe_guidelines/blob/v0.55.0/architecture.md#the-operator-context
 [g-kmap]: https://github.com/baristaze/swe_guidelines/blob/v0.55.0/architecture.md#the-knowledge-map
 [g-sweep]: https://github.com/baristaze/swe_guidelines/blob/v0.55.0/architecture.md#maintenance-without-a-scheduler
+[g-decoration]: https://github.com/baristaze/swe_guidelines/blob/v0.55.0/architecture.md#composition-by-decoration
 [g-opskills]: https://github.com/baristaze/swe_guidelines/blob/v0.55.0/architecture.md#operational-skills
 [g-roundtrip]: https://github.com/baristaze/swe_guidelines/blob/v0.55.0/architecture.md#the-telemetry-round-trip
 [g-lenses]: https://github.com/baristaze/swe_guidelines/blob/v0.55.0/lenses/README.md
