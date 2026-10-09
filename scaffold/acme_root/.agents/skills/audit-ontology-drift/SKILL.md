@@ -206,7 +206,10 @@ no env file, and calls no API but git's.
    its decision), a skill (`.agents/skills/<name>/`, its description),
    a checker (`checkers/`) or a lens, an app, a service, a worker, or
    an integration, and a section of a spec or a README (its heading). A
-   concept is judged once, at the layer that added it. An ADR whose
+   concept is judged once, at the layer that added it. A folder of the
+   product's that its own instructions say nothing builds is still the
+   product's: it is judged from its docstrings and READMEs, and what of
+   it is not read is listed under Not verified. An ADR whose
    number lies in another layer's range than the layer that added it is
    a sign worth reading.
 7. Ask the question of each concept: is the layer it lives in its
