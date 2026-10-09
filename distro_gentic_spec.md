@@ -907,9 +907,12 @@ The gates hold the layers consistent with each other. They cannot say
 whether a concept sits in the right layer: they guarantee consistency,
 not relevance. Whether a concept belongs to a layer of the chain is an
 ontology question, and `audit-ontology-drift` asks it from the product,
-the one checkout where every layer is in view. A drift goes either
-way: a lower layer's concept grown again above it, or a higher layer's
-noun sunk below it.
+the one checkout where every layer is in view. A concept's layer is
+the lowest one that can incorporate it whole, borrowing no noun or
+concept from a layer above; whether every instance of that layer needs
+it decides at most whether it is `optional` there, never its layer. A
+drift goes either way: a concept held above its layer, whether or not
+that layer holds it yet, or a higher layer's noun sunk below it.
 
 The operator dashboard, declared as code, adds the platform's signals,
 each with a bounded label: parks by reason and age, loop lanes' depth by
