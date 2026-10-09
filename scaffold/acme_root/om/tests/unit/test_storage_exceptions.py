@@ -398,6 +398,7 @@ REQUEST_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
         ("RetentionManagerInterface", "sweep"),
         # The service context a purge across tenants works a tenant's rows
         # under, minted from this stage, as the requeue's dead letter is.
+        ("TenancyManagerInterface", "sweep_context"),
         # The leases' sweep works each due org's leases and lines so.
         ("LeasesManagerInterface", "sweep"),
     }

@@ -42,13 +42,14 @@ ALLOWED: Counter[tuple[str, str, str]] = Counter(
         (TRANSITIONS, "TenancyManagerImpl.service_context", "build_context"): 1,
         (TRANSITIONS, "TenancyManagerImpl.member_context", "build_context"): 1,
         (TRANSITIONS, "TenancyManagerImpl.service_contexts", "build_context"): 1,
-        # The one service_contexts mints, for a tenant a purge across tenants
-        # found a row of.
         # A member's live context, for a call made on their authority.
         (TRANSITIONS, "TenancyManagerImpl.delegated_context", "build_context"): 1,
         # The tenant's automation principal's live context, by its grant, for
         # a call an automation's session makes on its authority.
         ("acme.om.automations.root", "automation_principals.live", "build_context"): 1,
+        # The one service_contexts mints, for a tenant a purge across tenants
+        # found a row of.
+        (TRANSITIONS, "TenancyManagerImpl.sweep_context", "build_context"): 1,
     }
 )
 """(module, enclosing definition, what is constructed) -> how many times."""
