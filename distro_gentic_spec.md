@@ -193,6 +193,9 @@ needs no item: the runner reaches it by the direct transport.
 A product built on the platform adds kinds of its own, each with its
 lane and the claimant that takes it through the gateway. The platform's
 kinds are registered the same way, and a claimant takes only its own.
+A product's scarce resource, a thing one holder uses at a time, is a
+kind it registers too: the guideline's [leases][g-leases] grant it,
+asking the product's hooks at each grant and its check at each ask.
 
 ### Fair Share
 
@@ -984,6 +987,7 @@ threat model each deployment writes.
 
 [g]: https://github.com/baristaze/swe_guidelines/blob/v0.59.0/architecture.md
 [g-workq]: https://github.com/baristaze/swe_guidelines/blob/v0.59.0/architecture.md#the-work-queue
+[g-leases]: https://github.com/baristaze/swe_guidelines/blob/v0.59.0/architecture.md#leases-on-a-resource
 [g-worker]: https://github.com/baristaze/swe_guidelines/blob/v0.59.0/architecture.md#shape-of-a-worker
 [g-workers]: https://github.com/baristaze/swe_guidelines/blob/v0.59.0/architecture.md#worker-roles
 [g-scale]: https://github.com/baristaze/swe_guidelines/blob/v0.59.0/architecture.md#scalability-by-design
