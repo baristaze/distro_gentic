@@ -29,8 +29,8 @@ a lane of its own, and the share route an operator writes.
 - **Each tier's share is its lane's cap.** `PlacementOptions.tier_shares`
   names a tier's share, and `default_share`, eight, holds for a tier it
   does not name and on a tenant's own lane. A runner passes its lane's
-  cap to the claim (`PlacementManagerInterface.lane_cap`), as the
-  maintenance worker passes its own.
+  cap to the claim (`PlacementOptions.lane_cap`), as the maintenance
+  worker passes its own.
 - **A tenant's own cap is the work queue's.** The share route,
   `PUT /admin/orgs/{org_id}/share`, writes the tenant's plan tier and its
   own-lane move to its share, and its `concurrency` as the tenant's own

@@ -37,16 +37,6 @@ class PlacementManagerInterface(ABC):
         ...
 
     @abstractmethod
-    def lane_cap(self, lane: str) -> int:
-        """Platform-internal: the cap a runner of the loop lane passes to the
-        claim, the most loops one tenant holds claimed there under a live
-        lease. A tier's lane takes its tier's share, or the platform's
-        default where the tier sets none; a tenant's own lane takes the
-        default. A tenant's own cap on the lane holds in its place, which
-        the claim reads itself."""
-        ...
-
-    @abstractmethod
     async def claim_for(
         self, rctx: RequestContext, claimant: Claimant, lease: timedelta
     ) -> tuple[TenantContext, WorkItem] | None:

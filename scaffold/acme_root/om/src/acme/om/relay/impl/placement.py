@@ -57,9 +57,6 @@ class PlacementClaimsRelayedImpl(PlacementManagerInterface):
     async def lane_for(self, org_id: UUID, item: WorkItem) -> str:
         return await self._inner.lane_for(org_id, item)
 
-    def lane_cap(self, lane: str) -> int:
-        return self._inner.lane_cap(lane)
-
     async def claim_for(
         self, rctx: RequestContext, claimant: Claimant, lease: timedelta
     ) -> tuple[TenantContext, WorkItem] | None:

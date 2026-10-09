@@ -19,6 +19,7 @@ from acme.om.context import (
     RequestContext,
     TenantContext,
 )
+from acme.om.placement.impl.manager import PlacementOptions
 from acme.om.placement.rules import tier_lane
 from acme.om.placement.storage import PlacementStorageInterface
 from acme.om.placement.storage.impl.postgres import PlacementStoragePostgresImpl
@@ -118,7 +119,7 @@ async def test_the_sweeps_carry_makes_a_shares_concurrency_the_cap_the_claim_hol
     claimed = []
     for _ in range(3):
         found = await managers.work.claim(
-            rctx, lane, [WorkKind.LOOP], "runner", LEASE, managers.placement.lane_cap(lane)
+            rctx, lane, [WorkKind.LOOP], "runner", LEASE, PlacementOptions().lane_cap(lane)
         )
         claimed.append(None if found is None else found[0].org_id)
     assert claimed == [ann.org_id, bob.org_id, None], "Ann waits at its carried cap of one"

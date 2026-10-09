@@ -56,8 +56,9 @@ environment is.
   its tenant. Any other item is not found. A report is held to its shape
   first. A host answers through the relay instead.
 - **The cap at the claim.** A runner passes its lane's cap to the claim
-  (`lane_cap`), and the claim passes over a tenant at its cap: its
-  loops wait where they are, unwritten, and spend no attempt.
+  (`PlacementOptions.lane_cap`), and the claim passes over a tenant at
+  its cap: its loops wait where they are, unwritten, and spend no
+  attempt.
 - **Set a share.** An operator writes a tenant's share, a new version
   each time, and the tenant's stream names the operator. Its
   `concurrency` is the tenant's own cap on its loop lane, which the

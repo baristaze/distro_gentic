@@ -10,7 +10,6 @@ import asyncio
 from collections.abc import Mapping
 from datetime import timedelta
 from pathlib import Path
-from typing import cast
 from uuid import UUID
 
 import pytest
@@ -46,15 +45,14 @@ from acme.om.placement.kinds import (
 from acme.om.placement.rules import host_lane, own_lane, pool_lane, tier_lane
 from acme.om.placement.storage.impl.memory import PlacementStorageMemoryImpl
 from acme.om.placement.types.claimant import Claimant
+from acme.om.placement.types.share import TierShare
 from acme.om.placement.types.work import ExecOperation, ExecPayload, WorkspaceOperation
 from acme.om.root import Managers, build_managers
 from acme.om.steps.rules import message_step
 from acme.om.steps.types.header import LoopOutcome
 from acme.om.steps.types.step import StepType
 from acme.om.storage.impl.memory import StorageMemoryImpl
-from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tenancy.rules import operator_permissions_of
-from acme.om.work import WorkManagerInterface
 from acme.om.work.impl.manager import DEAD_LETTER_KIND
 from acme.om.work.storage.impl.memory import WorkStorageMemoryImpl
 from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
@@ -309,31 +307,22 @@ async def test_work_routed_into_another_tenants_wall_is_never_handed_over(
 
 
 def test_each_loop_lane_passes_its_tiers_share_or_the_default() -> None:
-    placement = PlacementManagerImpl(
-        StorageMemoryImpl().get_placement_storage(),
-        cast(WorkManagerInterface, None),
-        cast(TenancyManagerInterface, None),
-        PlacementOptions(tier_shares={"pro": 3}, default_share=5),
-        platform_work_kinds(),
-        platform_claimant_kinds(),
-    )
-    assert placement.lane_cap(tier_lane("pro")) == 3
-    assert placement.lane_cap(tier_lane("standard")) == 5, "a tier with no share of its own"
-    assert placement.lane_cap(own_lane(new_id())) == 5, "a tenant's own lane"
+    options = PlacementOptions(tier_shares=(TierShare(tier="pro", share=3),), default_share=5)
+    assert options.lane_cap(tier_lane("pro")) == 3
+    assert options.lane_cap(tier_lane("standard")) == 5, "a tier with no share of its own"
+    assert options.lane_cap(own_lane(new_id())) == 5, "a tenant's own lane"
 
 
 async def test_a_tenant_at_its_tiers_share_is_passed_over_and_its_own_cap_holds_instead(
     tmp_path: Path, storage: StorageMemoryImpl
 ) -> None:
+    options = PlacementOptions(tier_shares=(TierShare(tier="standard", share=1),))
     managers = build_managers(
-        storage,
-        InfraLocalImpl(tmp_path),
-        tool_catalog=TOOLS,
-        placement_options=PlacementOptions(tier_shares={"standard": 1}),
+        storage, InfraLocalImpl(tmp_path), tool_catalog=TOOLS, placement_options=options
     )
     ajax, beta = await an_owner(managers, "ajax"), await an_owner(managers, "beta")
     lane = tier_lane("standard")
-    cap = managers.placement.lane_cap(lane)
+    cap = options.lane_cap(lane)
     for owner in (ajax, ajax, ajax, beta):
         await managers.work.enqueue(owner, an_item(owner, WorkKind.LOOP, {}))
 

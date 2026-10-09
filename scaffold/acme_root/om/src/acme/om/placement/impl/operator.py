@@ -29,7 +29,7 @@ from acme.om.placement.rules import (
     tier_lane,
 )
 from acme.om.placement.storage import PlacementStorageInterface
-from acme.om.placement.types.share import FairShare, ShareStanding
+from acme.om.placement.types.share import FairShare, ShareStanding, TierShare
 from acme.om.placement.types.standing import (
     Count,
     FleetCounts,
@@ -58,7 +58,7 @@ class PlacementOperatorOptions(Platform):
     set it. The root builds it from both, so neither is said twice."""
 
     default_tier: str
-    tier_shares: dict[str, int]
+    tier_shares: tuple[TierShare, ...]
     default_share: int
     online_window: timedelta
 

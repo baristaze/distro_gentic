@@ -31,6 +31,7 @@ from acme.om.context import (
 )
 from acme.om.placement.impl.manager import PlacementOptions
 from acme.om.placement.rules import tier_lane
+from acme.om.placement.types.share import TierShare
 from acme.om.root import PlatformPorts, ProductKinds
 from acme.om.steps.rules import message_step
 from acme.om.storage.impl.memory import StorageMemoryImpl
@@ -111,7 +112,7 @@ async def test_a_tenant_at_its_tiers_share_is_passed_over_while_anothers_loop_is
         InfraLocalImpl(tmp_path),
         IntegrationsOverImpl(IdentityProviderAbsentImpl(), scripted_model_providers()),
         ports=PlatformPorts(kinds=ProductKinds(agents=ABSENT, tools=lambda _managers: TOOLS)),
-        placement_options=PlacementOptions(tier_shares={tier: 1}),
+        placement_options=PlacementOptions(tier_shares=(TierShare(tier=tier, share=1),)),
     )
     managers = container.managers
     rctx = RequestContext(request_id=new_id(), app=APP)
@@ -154,6 +155,8 @@ async def test_a_tenant_at_its_tiers_share_is_passed_over_while_anothers_loop_is
             await asyncio.sleep(0.01)
         else:
             raise AssertionError("the runner never claimed the other tenant's loop")
+        # Read while the runner holds it: on stop it hands an item back.
+        (theirs,) = claimed
     finally:
         runner.stop()
         await running
@@ -169,5 +172,4 @@ async def test_a_tenant_at_its_tiers_share_is_passed_over_while_anothers_loop_is
     ), "passed over in its lane, no attempt spent"
     assert waiting.last_error is None, "never claimed, so never written"
     assert items[held[1].id].status is WorkStatus.CLAIMED, "the loop ahead runs on"
-    (theirs,) = await beta.items(storage)
     assert theirs.attempts == 1, "the other tenant's loop was claimed"

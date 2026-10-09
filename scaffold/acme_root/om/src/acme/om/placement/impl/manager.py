@@ -1,7 +1,6 @@
 import logging
 from collections.abc import Callable
 from datetime import datetime, timedelta
-from typing import Annotated
 from uuid import UUID
 
 from pydantic import Field
@@ -15,7 +14,7 @@ from acme.om.placement.manager import PlacementManagerInterface
 from acme.om.placement.rules import DEFAULT_TIER, lane_cap, loop_lane
 from acme.om.placement.storage import PlacementStorageInterface
 from acme.om.placement.types.claimant import Claimant, ClaimantReport, ReportOutcome
-from acme.om.placement.types.share import FairShare, PlanTier
+from acme.om.placement.types.share import FairShare, TierShare
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.work import WorkManagerInterface
 from acme.om.work.kinds import WorkKinds
@@ -30,9 +29,17 @@ class PlacementOptions(Platform):
     # Each plan tier's share: the most loops one tenant holds claimed on the
     # tier's lane, the cap its runners pass to the claim. A tier it does not
     # name, and a tenant's own lane, take the default share.
-    tier_shares: dict[PlanTier, Annotated[int, Field(ge=1, le=MAX_CAP)]] = {}
+    tier_shares: tuple[TierShare, ...] = ()
     default_share: int = Field(default=8, ge=1, le=MAX_CAP)
     purge_batch: int = 1000
+
+    def lane_cap(self, lane: str) -> int:
+        """The cap a runner of the loop lane passes to the claim, the most
+        loops one tenant holds claimed there under a live lease: its tier's
+        share, or the default where the tier names none and on a tenant's
+        own lane. A tenant's own cap on the lane holds in its place, which
+        the claim reads itself."""
+        return lane_cap(lane, self.tier_shares, self.default_share)
 
 
 class PlacementManagerImpl(PlacementManagerInterface):
@@ -59,9 +66,6 @@ class PlacementManagerImpl(PlacementManagerInterface):
         if item.kind == WorkKind.LOOP:
             return loop_lane(org_id, await self._share(org_id))
         return placed_lane(self._kinds.get(item.kind), item.payload) or item.lane
-
-    def lane_cap(self, lane: str) -> int:
-        return lane_cap(lane, self._options.tier_shares, self._options.default_share)
 
     async def claim_for(
         self, rctx: RequestContext, claimant: Claimant, lease: timedelta

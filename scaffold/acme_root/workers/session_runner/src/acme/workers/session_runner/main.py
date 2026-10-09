@@ -104,7 +104,7 @@ def build_runner(container: RunnerContainer, lane: str | None = None) -> WorkerL
         options=loop_options(
             container.settings,
             lane,
-            managers.placement.lane_cap(claimed_lane(container.settings, lane)),
+            container.placement.lane_cap(claimed_lane(container.settings, lane)),
         ),
     )
 

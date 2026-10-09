@@ -20,6 +20,7 @@ from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, OperatorRole, RequestContext
 from acme.om.exceptions import NotFound
+from acme.om.placement.impl.manager import PlacementOptions
 from acme.om.placement.impl.operator import SHARE_SET_KIND
 from acme.om.placement.rules import tier_lane
 from acme.om.trust.impl.operator import CONTENT_OPENED, GRANTED, REVOKED
@@ -179,7 +180,7 @@ async def test_a_tenants_own_cap_set_on_its_share_holds_at_the_claim_in_place_of
     claimed = []
     for _ in range(3):
         found = await managers.work.claim(
-            rctx, lane, [WorkKind.LOOP], "runner", LEASE, managers.placement.lane_cap(lane)
+            rctx, lane, [WorkKind.LOOP], "runner", LEASE, PlacementOptions().lane_cap(lane)
         )
         claimed.append(None if found is None else found[0].org_id)
     assert claimed == [ajax.org_id, beta.org_id, None], "Ajax waits at its own cap of one"

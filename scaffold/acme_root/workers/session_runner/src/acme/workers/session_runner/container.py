@@ -62,12 +62,16 @@ class RunnerContainer:
         integrations: IntegrationsInterface,
         managers: Managers,
         stream: StreamServiceInterface,
+        placement: PlacementOptions | None = None,
     ) -> None:
         self.settings = settings
         self.storage = storage
         self.infra = infra
         self.integrations = integrations
         self.managers = managers
+        # Placement's options, as the managers were built with them: each
+        # plan tier's share, the cap the runner's lane passes to the claim.
+        self.placement = placement or PlacementOptions()
         # The loop's stream sink: what it streams, on the shared cache.
         self.stream = stream
         # Where a session's acts through the platform's account are recorded;
@@ -151,6 +155,7 @@ class RunnerContainer:
         the cap the runner's lane passes to the claim; None keeps the
         root's."""
         ports = ports or PlatformPorts()
+        placing = placement_options or PlacementOptions()
         runner = Executor(kind=ExecutorKind.CLOUD, credential_id=new_id(), label=settings.runner_id)
         placement = PlacementRelayedImpl(
             PlacementHostsImpl(
@@ -232,7 +237,7 @@ class RunnerContainer:
             models_layer=matrix.layer,
             tools_layer=layers,
             transport_layer=placed,
-            placement_options=placement_options,
+            placement_options=placing,
             # A call of a session the tenant's automation principal started
             # runs on that principal's grant; every other on a member's place.
             principal_context=automation_principals(storage.get_automation_storage(), members),
@@ -252,7 +257,7 @@ class RunnerContainer:
         matrix.build(managers)
         playbooks.build(managers)
         knowledge.build(managers)
-        container = cls(settings, storage, infra, integrations, managers, stream)
+        container = cls(settings, storage, infra, integrations, managers, stream, placing)
         held.append(container)
         return container
 
