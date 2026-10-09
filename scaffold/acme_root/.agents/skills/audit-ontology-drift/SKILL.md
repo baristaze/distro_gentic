@@ -62,9 +62,9 @@ thing a layer applies it to: a line in front of one of a product's own
 resources is a line in front of a scarce resource, unless the concept
 needs what only that resource is.
 
-Whether every instance of a concept's layer needs it decides its tag
-there (`core` or `optional`), never its layer. Which repositories use
-it today decides neither.
+Whether every instance of a concept's layer needs it decides at most
+whether it is `optional` there, never its layer. Which repositories
+use it today decides neither.
 
 A concept drifts in one of two directions:
 
