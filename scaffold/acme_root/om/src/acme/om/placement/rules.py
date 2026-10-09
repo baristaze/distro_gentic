@@ -1,13 +1,13 @@
-"""Pure rules of the placement namespace: the lanes work goes to, the fair
-share's guard, and the bounded labels of the platform's gauges. Values in,
-values out; no clock, no storage, no settings. The lane of each kind, and
+"""Pure rules of the placement namespace: the lanes work goes to, the cap
+each loop lane passes to the claim, and the bounded labels of the
+platform's gauges. Values in, values out; no clock, no storage, no settings. The lane of each kind, and
 the lanes and kinds a claimant's identity claims, are the kinds' registry's
 (`placement.kinds`)."""
 
 from datetime import timedelta
 from uuid import UUID
 
-from acme.om.placement.types.share import FairShare
+from acme.om.placement.types.share import FairShare, TierShare
 from acme.om.work.types.work_item import WorkKind, relayed_lane
 
 DEFAULT_TIER = "standard"
@@ -30,6 +30,17 @@ def own_lane(org_id: UUID) -> str:
 
 def loop_lane(org_id: UUID, share: FairShare) -> str:
     return own_lane(org_id) if share.own_lane else tier_lane(share.plan_tier)
+
+
+def lane_cap(lane: str, tier_shares: tuple[TierShare, ...], default_share: int) -> int:
+    """The cap a loop lane passes to the claim: the most loops one tenant
+    holds claimed there, unless it has a cap of its own on the lane. A
+    tier's lane takes its tier's share, or the default where the tier sets
+    none; a tenant's own lane takes the default."""
+    rest = lane.removeprefix(LOOP_LANE_PREFIX)
+    if rest.startswith("org:"):
+        return default_share
+    return next((each.share for each in tier_shares if each.tier == rest), default_share)
 
 
 OWN_LANES = "(own)"
@@ -70,9 +81,3 @@ def host_lane(host_id: UUID) -> str:
 def pool_lane(pool_id: UUID) -> str:
     """A pool's lane: a workspace any host of the pool may prepare."""
     return f"pool:{pool_id}"
-
-
-def admits(ahead: int, concurrency: int) -> bool:
-    """Whether a claimed loop may run: fewer of its tenant's loops are
-    running ahead of it than its share allows."""
-    return ahead < concurrency

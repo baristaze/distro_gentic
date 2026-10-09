@@ -1,6 +1,7 @@
 """The placement swimlane: where each kind of a session's work runs, the
 claim the control plane makes for a host, and each tenant's fair share of
-the loops, held at the claim."""
+the loops: its plan tier's lane, or one of its own, and the cap the claim
+holds it to there."""
 
 from __future__ import annotations
 
@@ -11,7 +12,7 @@ from uuid import UUID
 
 from acme.om.context import OperatorContext, RequestContext, TenantContext
 from acme.om.placement.types.claimant import Claimant, ClaimantReport
-from acme.om.placement.types.share import FairShare
+from acme.om.placement.types.share import ShareStanding
 
 if TYPE_CHECKING:
     # The work queue fixes its payloads by kind, and the payloads of the
@@ -33,16 +34,6 @@ class PlacementManagerInterface(ABC):
         pool and one to release or purge to its host, and a product's kind
         where its own lane says. Any other kind keeps the lane it came with,
         the platform's own."""
-        ...
-
-    @abstractmethod
-    async def admit(self, ctx: TenantContext, item: WorkItem) -> timedelta | None:
-        """The guard a claimed loop meets before it runs: None when fewer of
-        its tenant's loops run ahead of it than the tenant's share allows,
-        and otherwise the delay it goes back to its lane for. The claim
-        stays the guideline's, so the loops ahead are those claimed under a
-        live lease before it in the claim order, and those claimed from any
-        other lane. Every other kind is admitted."""
         ...
 
     @abstractmethod
@@ -110,7 +101,7 @@ class PlacementManagerInterface(ABC):
 
 class PlacementOperatorManagerInterface(ABC):
     """The operators' plane of placement: one named org's fair share, which
-    a tenant never writes, so none can raise its own limit; where one of its
+    a tenant never writes, so none can raise its own cap; where one of its
     sessions' work stands, and what one of its hosts is handed. Each read
     names the tenant and is logged with the operator, and answers ids,
     counts, times, and states, never what the tenant wrote."""
@@ -123,14 +114,18 @@ class PlacementOperatorManagerInterface(ABC):
         *,
         plan_tier: str,
         own_lane: bool,
-        concurrency: int,
-    ) -> FairShare:
+        concurrency: int | None = None,
+    ) -> ShareStanding:
         """Writes the org's share, its first or a new version of it, and
         leaves an audit event in the org's stream that names the operator.
         Its loops enqueued from then on go to the lane it names; a loop
-        already queued stays in its lane. Requires the write permission.
-        NotFound when the org is not there or is deleted; ValidationFailed
-        when a field is out of its bounds."""
+        already queued stays in its lane. `concurrency` is the org's own cap
+        on that lane, written through the work queue's operator plane, which
+        holds it at the claim in place of the lane's; None clears it, so the
+        lane's holds. Only that lane's cap is written: on a move, the org's
+        own cap on the lane it leaves stays, with its loops queued there.
+        Requires the write permission. NotFound when the org is not there or
+        is deleted; ValidationFailed when a field is out of its bounds."""
         ...
 
     @abstractmethod
@@ -162,4 +157,14 @@ class PlacementOperatorManagerInterface(ABC):
         sessions by park reason and age, the ready loops by plan tier (every
         tenant's own lane under one label), and the hosts by state. Takes no
         context, because it reads for no tenant and no principal."""
+        ...
+
+    @abstractmethod
+    async def carry_caps(self, limit: int) -> int:
+        """Platform-internal: the sweep's carry, across every tenant, of at
+        most `limit` shares the release before wrote. Each one's
+        concurrency becomes the tenant's own cap on its loop lane, unless
+        the tenant holds one there already, and the share is marked carried,
+        so none is carried twice. Returns how many it marked. Takes no
+        context, because it acts for no tenant and no principal."""
         ...

@@ -135,10 +135,8 @@ class WorkStorageMemoryImpl(MemoryStorageBase, WorkStorageInterface):
             and other.status is WorkStatus.CLAIMED
             and other.lease_expires_at is not None
             and other.lease_expires_at > now
-            and (
-                other.lane != item.lane
-                or (other.available_at, other.id) < (item.available_at, item.id)
-            )
+            and other.lane == item.lane
+            and (other.available_at, other.id) < (item.available_at, item.id)
         )
 
     async def end_open_on_lane(

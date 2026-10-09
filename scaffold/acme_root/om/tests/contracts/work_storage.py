@@ -445,7 +445,7 @@ class WorkStorageContract:
         assert await storage.read_item_by_key(org, mine.idempotency_key) == mine
         assert await storage.read_item_by_key(elsewhere, mine.idempotency_key) == theirs
 
-    async def test_the_claims_ahead_are_live_of_the_kind_before_it_on_its_lane_or_on_another(
+    async def test_the_claims_ahead_are_live_of_the_kind_before_it_on_its_lane_alone(
         self, storage: WorkStorageInterface, lane: str
     ) -> None:
         org, now = new_id(), utcnow()
@@ -481,9 +481,10 @@ class WorkStorageContract:
         )
         for item in (mine, ahead, behind, elsewhere, lapsed, another_kind, queued):
             assert await storage.create_item(org, item) is InsertOutcome.INSERTED
-        assert await storage.count_claimed_ahead(org, mine, now) == 2, "ahead, and elsewhere"
-        assert await storage.count_claimed_ahead(org, behind, now) == 3
-        assert await storage.count_claimed_ahead(org, ahead, now) == 1, "elsewhere alone"
+        assert await storage.count_claimed_ahead(org, mine, now) == 1, "ahead, not elsewhere"
+        assert await storage.count_claimed_ahead(org, behind, now) == 2
+        assert await storage.count_claimed_ahead(org, ahead, now) == 0
+        assert await storage.count_claimed_ahead(org, elsewhere, now) == 0, "its own lane alone"
 
     async def test_count_claimed_ahead_of_another_tenant_counts_none(
         self, storage: WorkStorageInterface, lane: str

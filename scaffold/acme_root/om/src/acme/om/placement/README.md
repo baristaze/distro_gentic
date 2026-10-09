@@ -31,9 +31,12 @@ environment is.
   the prefix of its credential and the lanes and kinds its identity
   claims. The platform's go through them
   as a product's do.
-- **A fair share**: each tenant's plan tier, whether its loops run in a
-  lane of their own, and how many of them run at once. A tenant with
-  none has the default share: the `standard` tier and eight loops.
+- **A fair share**: each tenant's plan tier, and whether its loops run
+  in a lane of their own. A tenant with none has the `standard` tier.
+  How many of its loops run at once is the work queue's cap on its lane
+  ([work](../work/README.md)): its tier's share (`PlacementOptions`,
+  eight where a tier names none, and on a tenant's own lane), or its own
+  cap where an operator set one.
 
 ## What can happen
 
@@ -52,12 +55,20 @@ environment is.
   its lease, and reports it done or failed, only while it holds it, in
   its tenant. Any other item is not found. A report is held to its shape
   first. A host answers through the relay instead.
-- **The guard at the claim.** A claimed loop runs only while fewer of
-  its tenant's loops run ahead of it than its share allows. Otherwise it
-  goes back to its lane for a delay, with no attempt spent.
+- **The cap at the claim.** A runner passes its lane's cap to the claim
+  (`PlacementOptions.lane_cap`), and the claim passes over a tenant at
+  its cap: its loops wait where they are, unwritten, and spend no
+  attempt.
 - **Set a share.** An operator writes a tenant's share, a new version
-  each time, and the tenant's stream names the operator. A tenant never
-  writes its own.
+  each time, and the tenant's stream names the operator. Its
+  `concurrency` is the tenant's own cap on its loop lane, which the
+  share writes through the work queue's operator plane, and none clears
+  it. A move to another lane leaves the cap on the lane it leaves, where
+  its loops already queued stay. A tenant never writes its own.
+- **Carry a share.** A share the release before wrote holds a
+  concurrency of its own. The sweep writes it as the tenant's own cap
+  on its loop lane, unless the tenant holds one there already, and
+  marks the share carried, once.
 - **Read a standing.** An operator who names the tenant reads why one
   of its sessions is or is not moving (its park, its loop's item, lease,
   lane, and place in line, its share, and where it runs), and why one of
@@ -78,10 +89,9 @@ environment is.
   claimant kind it names, and a claimant kind that names another's kind
   takes none of it.
 - **The claim stays the guideline's.** The order within a lane is the
-  queue's own; the guard counts the loops claimed under a live lease
-  before an item in that order, and every one on another lane, so of
-  two loops claimed together the later waits, and neither waits on the
-  other forever. A loop whose runner lost its lease no longer counts.
+  queue's own, and so is the cap: the claim counts a tenant's loops
+  claimed on the lane under a live lease, so a loop whose runner lost
+  its lease no longer counts.
 - **Each lane in use has runners of its own.** A plan tier's lane, or a
   tenant's own, is served by runners started on it (`ACME_RUNNER_LANE`).
 - **A lost claim writes nothing.** A new claim of the same loop takes

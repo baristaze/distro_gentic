@@ -448,7 +448,6 @@ async def test_a_call_counts_under_its_tenants_plan_tier_beside_its_version(
         created_by=by,
         updated_by=by,
         plan_tier="pro",
-        concurrency=4,
     )
     assert await fleet.loop.storage.get_placement_storage().create_share(org_id, share)
     labelled = {"matrix_version": version, "plan_tier": "pro"}

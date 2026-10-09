@@ -152,6 +152,8 @@ STORAGE_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         ("WorkStorageInterface", "count_failed_since"),
         ("AgentSessionStorageInterface", "count_parked"),
         ("HostsStorageInterface", "count_hosts"),
+        # The sweep's read of the shares still to carry, across tenants.
+        ("PlacementStorageInterface", "read_uncarried"),
         ("WorkStorageInterface", "count_ready_by_lane"),
         # An item's place in line on a lane its tier's tenants share: a count.
         ("WorkStorageInterface", "count_ready_ahead"),
@@ -277,6 +279,9 @@ MANAGER_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         ("RelayManagerInterface", "bindings"),
         # The platform's gauges, read across every tenant like the queue's.
         ("PlacementOperatorManagerInterface", "fleet_counts"),
+        # And the sweep's carry of each share the release before wrote into
+        # its tenant's own cap, across tenants, acting for none.
+        ("PlacementOperatorManagerInterface", "carry_caps"),
         # And the sweep's tally of the platform's size, counted across tenants
         # for the operator plane's read: it counts for no tenant.
         ("TenancyOperatorManagerInterface", "tally_size"),

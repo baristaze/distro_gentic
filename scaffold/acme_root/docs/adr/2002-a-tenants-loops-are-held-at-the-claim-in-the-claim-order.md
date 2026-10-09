@@ -1,6 +1,6 @@
 # ADR 2002: A tenant's loops are held at the claim, in the claim order
 
-**Status**: accepted (2026-10-02)
+**Status**: accepted (2026-10-02), amended by [ADR 2048](2048-a-tenants-share-of-the-loops-is-the-work-queues-cap.md)
 
 ## Context
 

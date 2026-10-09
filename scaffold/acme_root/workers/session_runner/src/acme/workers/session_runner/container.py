@@ -30,6 +30,7 @@ from acme.om.matrix.impl.resolver import MatrixOptions
 from acme.om.matrix.root import MatrixLayer
 from acme.om.notifications.manager import NotificationsManagerInterface
 from acme.om.notifications.root import build_notifications
+from acme.om.placement.impl.manager import PlacementOptions
 from acme.om.platform_agents.catalog import PlatformAgents
 from acme.om.platform_agents.settings import shipped_agents
 from acme.om.playbooks.root import PlaybooksLayer
@@ -61,12 +62,16 @@ class RunnerContainer:
         integrations: IntegrationsInterface,
         managers: Managers,
         stream: StreamServiceInterface,
+        placement: PlacementOptions | None = None,
     ) -> None:
         self.settings = settings
         self.storage = storage
         self.infra = infra
         self.integrations = integrations
         self.managers = managers
+        # Placement's options, as the managers were built with them: each
+        # plan tier's share, the cap the runner's lane passes to the claim.
+        self.placement = placement or PlacementOptions()
         # The loop's stream sink: what it streams, on the shared cache.
         self.stream = stream
         # Where a session's acts through the platform's account are recorded;
@@ -125,6 +130,7 @@ class RunnerContainer:
         attachment_reader: AttachmentReaderInterface | None = None,
         ports: PlatformPorts | None = None,
         platform_agents: PlatformAgents | None = None,
+        placement_options: PlacementOptions | None = None,
     ) -> RunnerContainer:
         """The managers over whichever roots the caller chose, every tool call
         held to the trust swimlane's rules: audited with its four answers,
@@ -145,8 +151,11 @@ class RunnerContainer:
         that is not the money gate, is refused at boot. `platform_agents`
         ships the platform's agents beside the product's kinds, as the API
         does: a deployed runner reads them from its corpus root, and refuses
-        to boot with none."""
+        to boot with none. `placement_options` names each plan tier's share,
+        the cap the runner's lane passes to the claim; None keeps the
+        root's."""
         ports = ports or PlatformPorts()
+        placing = placement_options or PlacementOptions()
         runner = Executor(kind=ExecutorKind.CLOUD, credential_id=new_id(), label=settings.runner_id)
         placement = PlacementRelayedImpl(
             PlacementHostsImpl(
@@ -228,6 +237,7 @@ class RunnerContainer:
             models_layer=matrix.layer,
             tools_layer=layers,
             transport_layer=placed,
+            placement_options=placing,
             # A call of a session the tenant's automation principal started
             # runs on that principal's grant; every other on a member's place.
             principal_context=automation_principals(storage.get_automation_storage(), members),
@@ -247,7 +257,7 @@ class RunnerContainer:
         matrix.build(managers)
         playbooks.build(managers)
         knowledge.build(managers)
-        container = cls(settings, storage, infra, integrations, managers, stream)
+        container = cls(settings, storage, infra, integrations, managers, stream, placing)
         held.append(container)
         return container
 

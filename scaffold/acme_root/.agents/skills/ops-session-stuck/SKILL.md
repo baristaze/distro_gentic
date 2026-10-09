@@ -71,7 +71,7 @@ and name the refresh the preamble gives.
    ```bash
    set -a; . ~/.config/acme/ops/<env>.env; set +a
    curl -s -H "Authorization: Bearer $ACME_OPERATOR_TOKEN" "$ACME_API_URL/v1/admin/orgs/<org_id>/sessions/<session_id>/standing" \
-     | jq '{status, park, changed_at, pending_input, plan_tier, own_lane, concurrency, share_set, pool_id, hosts_online, loop, error: .error.code}'
+     | jq '{status, park, changed_at, pending_input, plan_tier, own_lane, concurrency, own_cap, share_set, pool_id, hosts_online, loop, error: .error.code}'
    ```
 
    The answer is ids, counts, times, and states, never what the session
@@ -97,7 +97,7 @@ and name the refresh the preamble gives.
    | `status` is `parked`, `park.reason` is `person`, `pause`, or `handover` | A person holds it: an approval, a question, a pause, or the environment | the tenant's people, on their own screens |
    | `status` is `parked`, `park.reason` is `job` or `children` | Its tool job or its sub-agents have not reported | none, unless `changed_at` is days old |
    | `status` is `pending`, `loop` is null or `loop.status` is `done` | An input waits and no loop item is open for it | `ops-investigate`: the outbox's relay |
-   | `status` is `pending`, `loop.status` is `queued`, `loop.running_ahead` at or above `concurrency` | Its tenant's share holds it: that many of its loops run ahead | an operator raises the share (`PUT /v1/admin/orgs/<org_id>/share`, the write token's) |
+   | `status` is `pending`, `loop.status` is `queued`, `loop.running_ahead` at or above `concurrency` | Its tenant's cap holds it at the claim: that many of its loops run ahead | an operator raises the tenant's own cap (`concurrency` on `PUT /v1/admin/orgs/<org_id>/share`, the write token's) |
    | `status` is `pending`, `loop.status` is `queued`, `loop.available_at` after now | It waits for its time: a delay its last claim set | none |
    | `status` is `pending`, `loop.status` is `queued` | It is `loop.ready_ahead` items into its lane `loop.lane`, and no runner took it | `ops-investigate`: the runners serving that lane |
 
@@ -124,7 +124,7 @@ and name the refresh the preamble gives.
 **Credential.** <profile and Arn, or local>; operator <email domain only>, READ
 **Standing.** <status>[, parked on <reason> since <changed_at>, unlock <unlock>, retry <retry_at or none>]
 **Loop.** <status> on <lane>, attempt <attempts> of <max_attempts>, lease until <lease_expires_at or none>, <ready_ahead> ahead in line, <running_ahead> of its tenant's running ahead
-**Share.** <plan_tier>, <concurrency> at once, own lane <yes|no>, <set by an operator | the default>
+**Share.** <plan_tier>, <concurrency> at once (<its own cap | its tier's share>), own lane <yes|no>, <set by an operator | the default>
 **Runs in.** <the cloud | pool <pool_id>, <hosts_online> hosts online>
 
 ## Cause

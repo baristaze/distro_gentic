@@ -515,7 +515,9 @@ export interface paths {
          * Set Share
          * @description Writes the org's fair share, a new version, with an entry in the
          *     org's stream that names the operator. Its loops enqueued from then on go
-         *     to the lane it names. Requires the write permission.
+         *     to the lane it names. `concurrency` is the org's own cap on that lane,
+         *     which the claim holds in place of its tier's share; with none, the
+         *     tier's share holds. Requires the write permission.
          */
         put: operations["set_share_v1_admin_orgs__org_id__share_put"];
         post?: never;
@@ -5819,8 +5821,8 @@ export interface components {
          * LoopStandingView
          * @description The session's loop item made last, and its place in line:
          *     `ready_ahead` items of any tenant are ready before it on its lane, and
-         *     `running_ahead` of its tenant's loops run ahead of it, which the claim
-         *     counts against the share.
+         *     `running_ahead` of its tenant's loops run ahead of it on that lane,
+         *     which the claim holds to the tenant's cap there.
          */
         LoopStandingView: {
             /** Attempts */
@@ -6960,8 +6962,11 @@ export interface components {
         /**
          * SessionStandingView
          * @description Why a session is or is not moving. `changed_at` is its last change:
-         *     when it parked, for a parked one. `pool_id` null is the cloud, where
-         *     `hosts_online` is null; `share_set` false is the default share.
+         *     when it parked, for a parked one. `concurrency` is the cap the claim
+         *     holds its tenant to on the lane its loop stands on, or, with no loop,
+         *     the lane its next goes to: its own where `own_cap`, else the lane's.
+         *     `pool_id` null is the cloud, where `hosts_online` is null; `share_set`
+         *     false is the default tier.
          */
         SessionStandingView: {
             /**
@@ -6974,6 +6979,8 @@ export interface components {
             /** Hosts Online */
             hosts_online: number | null;
             loop: components["schemas"]["LoopStandingView"] | null;
+            /** Own Cap */
+            own_cap: boolean;
             /** Own Lane */
             own_lane: boolean;
             park: components["schemas"]["ParkView"] | null;
@@ -7049,11 +7056,12 @@ export interface components {
          * SetShareRequest
          * @description A tenant's fair share: the plan tier whose lane its loops run in,
          *     whether they run in a lane of their own instead, and how many of them
-         *     run at once.
+         *     run at once there, its own cap, which holds in place of its tier's
+         *     share. With no `concurrency`, the tier's share holds.
          */
         SetShareRequest: {
             /** Concurrency */
-            concurrency: number;
+            concurrency?: number | null;
             /**
              * Own Lane
              * @default false
@@ -7092,6 +7100,8 @@ export interface components {
         /**
          * ShareView
          * @description A tenant's fair share as the operator wrote it, at its version.
+         *     `concurrency` is the most of its loops that run at once on its lane:
+         *     its own cap where `own_cap`, else its tier's share.
          */
         ShareView: {
             /** Concurrency */
@@ -7101,6 +7111,8 @@ export interface components {
              * Format: uuid
              */
             org_id: string;
+            /** Own Cap */
+            own_cap: boolean;
             /** Own Lane */
             own_lane: boolean;
             /** Plan Tier */

@@ -97,6 +97,10 @@ and a settlement through the gate, under its lines' locks."""
 STALLED_SWEEP_BATCH = 100
 """Pending sessions one read of the stalled sweep takes. Each costs a read of
 its tenant and an enqueue."""
+
+SHARE_CARRY_BATCH = 100
+"""Shares one carry takes up. Each costs a read of its tenant's cap, a write
+of it where there is none, and the share's mark."""
 LEASE_SWEEP_BATCH = LeasesOptions().sweep_batch
 """Leases and requests one org's lease sweep ends; a sweep that ends as many
 or more may have left some due."""

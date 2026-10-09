@@ -638,8 +638,9 @@ def build_managers(
     environment. A name the platform holds is refused at boot. None adds
     nothing.
 
-    `placement_options` is the fair share of a tenant no operator gave one,
-    and the delay a loop over its share waits; None keeps the defaults.
+    `placement_options` is the plan tier of a tenant no operator gave one,
+    and each tier's share, the cap its lane passes to the claim; None keeps
+    the defaults.
     `hosts_options` is the lives of a host's credentials, the window a host
     counts as online, and its claim's lease; None keeps the defaults.
     `relay_options` is the lease a host renews on an `exec` item and the
@@ -1158,16 +1159,20 @@ def build_managers(
         outbox,
         projects_options or ProjectsOptions(),
     )
+    # The work queue's operator plane: a requeue, and a tenant's own cap on
+    # a lane, which placement's operator plane writes for a share too.
+    work_operator = WorkOperatorManagerImpl(
+        storage.get_work_storage(),
+        storage.get_tenancy_storage(),
+        storage.get_event_storage(),
+        infra.get_topics(),
+    )
+    placing = placement_options or PlacementOptions()
     managers = Managers(
         tenancy=tenancy,
         tenancy_operator=tenancy_operator,
         work=work,
-        work_operator=WorkOperatorManagerImpl(
-            storage.get_work_storage(),
-            storage.get_tenancy_storage(),
-            storage.get_event_storage(),
-            infra.get_topics(),
-        ),
+        work_operator=work_operator,
         media=media,
         idempotency=idempotency,
         events=events,
@@ -1220,9 +1225,11 @@ def build_managers(
             storage.get_agent_session_storage(),
             storage.get_work_storage(),
             storage.get_hosts_storage(),
+            work_operator,
             PlacementOperatorOptions(
-                default_tier=(placement_options or PlacementOptions()).default_tier,
-                default_concurrency=(placement_options or PlacementOptions()).default_concurrency,
+                default_tier=placing.default_tier,
+                tier_shares=placing.tier_shares,
+                default_share=placing.default_share,
                 online_window=(hosts_options or HostsOptions()).online_window,
             ),
         ),

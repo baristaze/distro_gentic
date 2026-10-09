@@ -60,18 +60,20 @@ class FleetServiceImpl(FleetServiceInterface):
     async def set_share(
         self, admin: OperatorContext, org_id: UUID, body: SetShareRequest
     ) -> ShareView:
-        share = await self._placement.set_share(
+        standing = await self._placement.set_share(
             admin,
             org_id,
             plan_tier=body.plan_tier,
             own_lane=body.own_lane,
             concurrency=body.concurrency,
         )
+        share = standing.share
         return ShareView(
             org_id=org_id,
             plan_tier=share.plan_tier,
             own_lane=share.own_lane,
-            concurrency=share.concurrency,
+            concurrency=standing.concurrency,
+            own_cap=standing.own_cap,
             version=share.version,
             updated_at=share.updated_at,
             updated_by=share.updated_by,
@@ -91,6 +93,7 @@ class FleetServiceImpl(FleetServiceInterface):
             plan_tier=standing.plan_tier,
             own_lane=standing.own_lane,
             concurrency=standing.concurrency,
+            own_cap=standing.own_cap,
             share_set=standing.share_set,
             pool_id=standing.pool_id,
             hosts_online=standing.hosts_online,

@@ -1703,16 +1703,21 @@ class SessionView(BaseModel):
     revoked_at: Annotated[AwareDatetime | None, Field(title='Revoked At')]
 
 
+class Concurrency(RootModel[int]):
+    root: Annotated[int, Field(ge=1, le=10000, title='Concurrency')]
+
+
 class SetShareRequest(BaseModel):
     """
     A tenant's fair share: the plan tier whose lane its loops run in,
     whether they run in a lane of their own instead, and how many of them
-    run at once.
+    run at once there, its own cap, which holds in place of its tier's
+    share. With no `concurrency`, the tier's share holds.
     """
     model_config = ConfigDict(
         extra='forbid',
     )
-    concurrency: Annotated[int, Field(ge=1, le=10000, title='Concurrency')]
+    concurrency: Annotated[Concurrency | None, Field(title='Concurrency')] = None
     own_lane: Annotated[bool | None, Field(title='Own Lane')] = False
     plan_tier: Annotated[str, Field(pattern='^[a-z][a-z0-9-]{0,31}$', title='Plan Tier')]
 
@@ -1742,9 +1747,12 @@ class SettableScope(StrEnum):
 class ShareView(BaseModel):
     """
     A tenant's fair share as the operator wrote it, at its version.
+    `concurrency` is the most of its loops that run at once on its lane:
+    its own cap where `own_cap`, else its tier's share.
     """
     concurrency: Annotated[int, Field(title='Concurrency')]
     org_id: Annotated[UUID, Field(title='Org Id')]
+    own_cap: Annotated[bool, Field(title='Own Cap')]
     own_lane: Annotated[bool, Field(title='Own Lane')]
     plan_tier: Annotated[str, Field(title='Plan Tier')]
     updated_at: Annotated[AwareDatetime, Field(title='Updated At')]
@@ -2914,8 +2922,8 @@ class LoopStandingView(BaseModel):
     """
     The session's loop item made last, and its place in line:
     `ready_ahead` items of any tenant are ready before it on its lane, and
-    `running_ahead` of its tenant's loops run ahead of it, which the claim
-    counts against the share.
+    `running_ahead` of its tenant's loops run ahead of it on that lane,
+    which the claim holds to the tenant's cap there.
     """
     attempts: Annotated[int, Field(title='Attempts')]
     available_at: Annotated[AwareDatetime, Field(title='Available At')]
@@ -3181,13 +3189,17 @@ class SessionRetentionView(BaseModel):
 class SessionStandingView(BaseModel):
     """
     Why a session is or is not moving. `changed_at` is its last change:
-    when it parked, for a parked one. `pool_id` null is the cloud, where
-    `hosts_online` is null; `share_set` false is the default share.
+    when it parked, for a parked one. `concurrency` is the cap the claim
+    holds its tenant to on the lane its loop stands on, or, with no loop,
+    the lane its next goes to: its own where `own_cap`, else the lane's.
+    `pool_id` null is the cloud, where `hosts_online` is null; `share_set`
+    false is the default tier.
     """
     changed_at: Annotated[AwareDatetime, Field(title='Changed At')]
     concurrency: Annotated[int, Field(title='Concurrency')]
     hosts_online: Annotated[int | None, Field(title='Hosts Online')]
     loop: LoopStandingView | None
+    own_cap: Annotated[bool, Field(title='Own Cap')]
     own_lane: Annotated[bool, Field(title='Own Lane')]
     park: ParkView | None
     pending_input: Annotated[bool, Field(title='Pending Input')]

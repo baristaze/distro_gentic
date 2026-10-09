@@ -177,6 +177,7 @@ tenantless = [
     "HostsStorageInterface.read_enrollment_token_by_digest",
     "HostsStorageInterface.read_claimant_by_credential_digest",
     "HostsStorageInterface.count_hosts",
+    "PlacementStorageInterface.read_uncarried",
     "IntakeStorageInterface.read_installation_org",
     "IdempotencyStorageInterface.purge_records",
     "LeasesStorageInterface.purge_settled",

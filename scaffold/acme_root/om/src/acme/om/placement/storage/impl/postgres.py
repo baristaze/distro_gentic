@@ -2,8 +2,9 @@ from uuid import UUID
 
 from sqlalchemy import select, update
 
+from acme.om.base import EMPTY_UUID
 from acme.om.exceptions import PreconditionFailed
-from acme.om.placement.storage import PlacementStorageInterface
+from acme.om.placement.storage import PlacementStorageInterface, ShareToCarry
 from acme.om.placement.storage.tables.fair_shares import FairShares
 from acme.om.placement.types.share import FairShare
 from acme.om.storage.impl.pg_base import PgStorageBase, delete_batch, deleted
@@ -18,7 +19,7 @@ class PlacementStoragePostgresImpl(PgStorageBase, PlacementStorageInterface):
             return None if row is None else to_model(row, FairShare)
 
     async def create_share(self, org_id: UUID, share: FairShare) -> bool:
-        return await self._insert(FairShares, org_id, share)
+        return await self._insert(FairShares, org_id, share, cap_carried=True)
 
     async def write_share(self, org_id: UUID, share: FairShare, expected_version: int) -> None:
         values = {k: v for k, v in to_values(share, FairShares).items() if k != "id"}
@@ -31,7 +32,7 @@ class PlacementStoragePostgresImpl(PgStorageBase, PlacementStorageInterface):
                 FairShares.org_id == org_id,
                 FairShares.version == expected_version,
             )
-            .values(**values)
+            .values(**values, cap_carried=True)
             .returning(FairShares.id)
         )
         async with self._session_for(stmt, org_id=org_id) as session:
@@ -41,6 +42,39 @@ class PlacementStoragePostgresImpl(PgStorageBase, PlacementStorageInterface):
                     f"fair share {share.id} is no longer at version {expected_version}"
                 )
             await session.commit()
+
+    async def read_uncarried(self, limit: int) -> list[ShareToCarry]:
+        stmt = (
+            select(FairShares)
+            .where(FairShares.cap_carried.is_(False))
+            .order_by(FairShares.id)
+            .limit(limit)
+        )
+        # Every tenant's shares, so the system scope, spelled here.
+        async with self._session_for(stmt, org_id=EMPTY_UUID) as session:
+            rows = (await session.execute(stmt)).scalars().all()
+        return [
+            ShareToCarry(
+                org_id=row.org_id, share=to_model(row, FairShare), concurrency=row.concurrency
+            )
+            for row in rows
+        ]
+
+    async def mark_carried(self, org_id: UUID, share_id: UUID) -> bool:
+        stmt = (
+            update(FairShares)
+            .where(
+                FairShares.id == share_id,
+                FairShares.org_id == org_id,
+                FairShares.cap_carried.is_(False),
+            )
+            .values(cap_carried=True)
+            .returning(FairShares.id)
+        )
+        async with self._session_for(stmt, org_id=org_id) as session:
+            marked = (await session.execute(stmt)).scalar_one_or_none() is not None
+            await session.commit()
+            return marked
 
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:
         stmt = delete_batch(FairShares, FairShares.org_id == org_id, limit=limit)
