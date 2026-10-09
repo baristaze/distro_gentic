@@ -51,16 +51,29 @@ Each layer's spec, at the commit the chain names, opens by saying what
 the layer is. Where it says more than the line above, the spec holds,
 and the report quotes it.
 
-A concept's layer is the lowest layer whose own nouns and concepts
-state it whole, borrowing no noun or concept from a layer above it. To
-find it, name the concept's parts, and find each part's word in the
-lowest layer that has it: the lowest whose text uses the word in the
-concept's sense, or, for a word no layer's text uses yet, the lowest
-whose nature holds it. The highest of those layers is the concept's
-layer. A part is named by what it does in the concept, never by the
-thing a layer applies it to: a line in front of one of a product's own
-resources is a line in front of a scarce resource, unless the concept
-needs what only that resource is.
+A concept's layer is the lowest layer that can incorporate it whole,
+borrowing no noun or concept from a layer above it. To find it, name
+the concept's parts, each by what it does in the concept, in any
+words, never by the thing a layer applies it to: a session that waits
+is a record that waits, and one of a product's own resources that one
+holder uses at a time is a scarce resource. Then, for each part, go up
+the chain from the root and find the lowest layer whose own nouns and
+concepts state it. A part that needs a concept only a higher layer
+has (a model, an agent, a session's loop, a fleet, a host, a product's
+domain) cannot be stated below that layer. The highest of those layers
+is the concept's layer. Another word for a part is the same part: a
+line, a queue, or a wait list in front of a scarce resource is one
+part, an ordered wait, and a lease on that resource fenced by a token
+is another. The guideline's work queue states both, and neither needs
+an agent, so that line and its fenced lease are the guideline's,
+whatever word names the line.
+
+A layer's text is the evidence of its nouns and concepts, never the
+test: whether a layer already mentions or holds the concept decides
+nothing. Where a layer's text does not state a part yet, the layer's
+nature, above and in its spec, decides whether its concepts could. A
+word a layer uses only for its own use of a concept places no part
+there, and neither does a noun sunk into it from a layer above.
 
 Whether every instance of a concept's layer needs it decides at most
 whether it is `optional` there, never its layer. Which repositories
@@ -69,13 +82,13 @@ use it today decides neither.
 A concept drifts in one of two directions:
 
 - **Down**: a layer holds a concept whose layer lies beneath it, whether
-  or not that layer holds it yet. An engine concept in the platform or
-  the product, a platform concept grown again in the product, a
-  guideline concept built in any layer above it.
+  or not that layer mentions or holds it yet. An engine concept in the
+  platform or the product, a platform concept grown again in the
+  product, a guideline concept built in any layer above it.
 - **Up**: a layer holds a concept whose layer lies above it: one of its
-  parts is a word only a layer above has. A product's noun in the
-  platform, the engine, or the guideline; a fleet's concept in the
-  engine; an agent's concept in the guideline.
+  parts needs a noun or concept only a layer above can state. A
+  product's noun in the platform, the engine, or the guideline; a
+  fleet's concept in the engine; an agent's concept in the guideline.
 
 These are not drift:
 
@@ -192,19 +205,26 @@ no env file, and calls no API but git's.
    a sign worth reading.
 7. Ask the question of each concept: is the layer it lives in its
    layer, by the test The chain states? Name its parts from its name
-   and its one-line purpose first. Two searches find what a reading
-   alone misses, each over a clone at the chain's commit, whole words in
-   any case, a noun's forms in one search:
-   `git -C <clone> grep -n -w -i -e <noun> -e <its plural>`.
+   and its one-line purpose first, each by what it does. Two searches
+   find what a reading alone misses, each over a clone at the chain's
+   commit, whole words in any case, a noun's forms or a part's words
+   in one search:
+   `git -C <clone> grep -n -w -i -e <word> -e <its plural> -e <another word for it>`.
+   A hit is evidence of a layer's concepts, never the verdict.
    - Up: each noun the product added (its namespaces, its kinds of
      work, its agent kinds, its spec's terms) is searched in every
      layer below it, and each of the platform's own nouns in the engine
      and the guideline. A hit outside an *Example* line and a Next
-     section is a higher layer's noun below it.
-   - Down: each part of each concept a layer added is searched by its
-     word in the layers beneath it. When a lower layer has every part's
-     word, the concept is that layer's, whether or not it holds the
-     mechanism yet; when it holds the same mechanism, the upper layer
+     section is a drift up when the noun, in the sense the hit uses,
+     is one only a layer above the hit's layer can state; a hit in that
+     layer's own sense of the word is none.
+   - Down: each part of each concept a layer added is searched in the
+     layers beneath it. A lower layer has a part when its nouns and
+     concepts state it, in the hit's words or in others; where no hit
+     states a part, the layer's nature, as The chain gives it, decides
+     whether its concepts could. When a lower layer has every part,
+     the concept is that layer's, whether or not its text holds the
+     concept yet; when it holds the same mechanism, the upper layer
      grew it again. Either is a drift down, unless it is a choice on
      top.
 
@@ -215,12 +235,13 @@ no env file, and calls no API but git's.
 8. Write the report, `~/Downloads/acme_ontology_drift_<yyyy-mm-dd>.md`.
    Each drift names the concept and its kind, where it is (the layer
    and the path at its commit), where it belongs (the layer), the
-   direction, and why: its parts, each with the lowest layer that has
-   its word, with the evidence, a line or a search hit. Each drift carries a proposed ticket, in the
-   repository where the move happens: a move down is a ticket in the
-   lower layer's repository to hold it, and one in this checkout to
-   take it from there; a move up is a ticket in the lower layer's
-   repository to take the noun out. The audit proposes; it never fixes.
+   direction, and why: its parts, each with the lowest layer that
+   states it, with the evidence, a line, a search hit, or the layer's
+   nature. Each drift carries a proposed ticket, in the repository
+   where the move happens: a move down is a ticket in the lower
+   layer's repository to hold it, and one in this checkout to take it
+   from there; a move up is a ticket in the lower layer's repository to
+   take the noun out. The audit proposes; it never fixes.
 9. Run `git status --porcelain` here again. It prints what step 1
    printed. When it does not, the report's Not verified names each path
    that changed, and the person decides; the audit undoes nothing.
@@ -261,8 +282,8 @@ no env file, and calls no API but git's.
 
 1. **<concept>** (<kind>), <down or up>. Where it is: <layer>,
    `<path>`. Where it belongs: <layer>. Why: <its parts, each with
-   the lowest layer that has its word>; evidence: <the line or the
-   search hit>.
+   the lowest layer that states it>; evidence: <the line, the search
+   hit, or the layer's nature>.
 
 ## Proposed tickets
 
