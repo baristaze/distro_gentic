@@ -16,6 +16,7 @@ from acme.services.api.services.fleet import FleetServiceInterface
 from acme.services.api.services.hosts import HostsServiceInterface
 from acme.services.api.services.intake import IntakeServiceInterface
 from acme.services.api.services.knowledge import KnowledgeServiceInterface
+from acme.services.api.services.leases import LeasesServiceInterface
 from acme.services.api.services.ledgers import LedgersServiceInterface
 from acme.services.api.services.matrix import MatrixServiceInterface
 from acme.services.api.services.media import MediaServiceInterface
@@ -45,6 +46,7 @@ __all__ = [
     "HostsServiceInterface",
     "IntakeServiceInterface",
     "KnowledgeServiceInterface",
+    "LeasesServiceInterface",
     "LedgersServiceInterface",
     "MatrixServiceInterface",
     "MediaServiceInterface",
@@ -79,6 +81,9 @@ class ServicesInterface(ABC):
 
     @abstractmethod
     def get_flags_service(self) -> FlagsServiceInterface: ...
+
+    @abstractmethod
+    def get_lease_service(self) -> LeasesServiceInterface: ...
 
     @abstractmethod
     def get_realtime_service(self) -> RealtimeServiceInterface: ...

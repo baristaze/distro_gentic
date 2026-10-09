@@ -110,7 +110,7 @@ async def a_member(managers: Managers, slug: str, role: Role) -> TenantContext:
     owner, user, _ = await managers.tenancy.add_member(
         request(APP), slug, f"{role.value}@{slug}.test", role.value.title(), role
     )
-    return await managers.tenancy.member_context(request(APP), owner.org_id, user.id)
+    return await managers.tenancy.delegated_context(request(APP), owner.org_id, user.id)
 
 
 def a_pool(name: str = "build") -> HostPool:
@@ -220,7 +220,7 @@ async def test_a_token_whose_issuer_left_or_was_lowered_enrolls_nothing(
     _, user, _ = await managers.tenancy.add_member(
         request(APP), "ajax", "bea@ajax.test", "Bea", Role.ADMIN
     )
-    lowered = await managers.tenancy.member_context(request(APP), owner.org_id, user.id)
+    lowered = await managers.tenancy.delegated_context(request(APP), owner.org_id, user.id)
     left_token = await hosts.issue_enrollment_token(leaving, pool.id)
     lowered_token = await hosts.issue_enrollment_token(lowered, pool.id)
     kept = await hosts.issue_enrollment_token(owner, pool.id)

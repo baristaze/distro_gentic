@@ -18,6 +18,7 @@ served to it. Exposure is by listing, never by folder.
 - [Idempotency records](om/src/acme/om/idempotency/README.md): the outcome of a request that may arrive twice
 - [Work items](om/src/acme/om/work/README.md): background jobs, the claim, the lease, and the dead letter
 - [Orchestrations](om/src/acme/om/orchestrations/README.md): long-running records, a step at a time, that park or fail
+- [Leases](om/src/acme/om/leases/README.md): a resource one holder uses at a time, its lease under a fencing token, and the line in front of it
 - [Files](om/src/acme/om/media/README.md): files as references, the bounded upload straight to the store, and the sweep
 - [Agent sessions](om/src/acme/om/agent_sessions/README.md): sessions as a series of loops over one history, and the status read off their steps
 - [Steps](om/src/acme/om/steps/README.md): the history, written once and numbered with no gaps, and the epoch that refuses a stale run
@@ -44,7 +45,7 @@ served to it. Exposure is by listing, never by folder.
 - [Notifications](om/src/acme/om/notifications/README.md): a park that needs a person tells exactly the people who can clear it, on their channels, with the link to the one action
 - [The platform's agents](om/src/acme/om/platform_agents/README.md): the engineer, analysis, the planner, and the platform assistant as profiles over the one loop; the assistant's reach and its corpus from this map; the validation session, with no agent
 - [Workspaces](om/src/acme/om/workspaces/README.md): a session's workspace as a cache of durable state: its isolation pinned at creation and refused by a host that cannot give it, its work pushed to a snapshot ref before release, its branch rebuilt only when its fate is known, its egress a project's allowlist of destinations and methods, and its own branch and pull request its work product
-- [Infrastructure](infra/README.md): cache, buckets, topics, queues, secrets, keys, flags, the outage signal, streams, observability, workspaces and the transport; what each promises and which twin runs where
+- [Infrastructure](infra/README.md): cache, buckets, topics, queues, secrets, keys, flags, outages, streams, observability, workspaces and the transport; what each promises and which twin runs where
 - [Integrations](integrations/README.md): the identity provider, its twin, the absent provider, and the webhook check; the model providers, their adapters, and the scripted twin
 - [The API process](services/api/README.md): the routes by area, the gateway's guarantees, the subcommands
 - [The maintenance worker](workers/maintenance/README.md): the work queue's loop, the provider deliveries, and the sweep

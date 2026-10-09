@@ -202,7 +202,7 @@ class PlatformAgentsManagerImpl(PlatformAgentsManagerInterface):
         place in the tenant, the key no longer holds, or the role left them
         no write: such a run never would (ADR 2039)."""
         try:
-            starter = await self._tenancy.member_context(
+            starter = await self._tenancy.delegated_context(
                 ctx, ctx.org_id, session.created_by, session.key_id
             )
             starter.require(Permission.WRITE)

@@ -32,6 +32,7 @@ from acme.om.intake.root import build_intake
 from acme.om.intake.tools import CommentImpl
 from acme.om.knowledge.impl.manager import KnowledgeOptions
 from acme.om.knowledge.root import build_knowledge
+from acme.om.leases.impl.manager import LeasesOptions
 from acme.om.matrix.impl.resolver import MatrixOptions
 from acme.om.matrix.root import MatrixLayer
 from acme.om.media.impl.manager import MediaOptions
@@ -96,6 +97,9 @@ and a settlement through the gate, under its lines' locks."""
 STALLED_SWEEP_BATCH = 100
 """Pending sessions one read of the stalled sweep takes. Each costs a read of
 its tenant and an enqueue."""
+LEASE_SWEEP_BATCH = LeasesOptions().sweep_batch
+"""Leases and requests one org's lease sweep ends; a sweep that ends as many
+or more may have left some due."""
 
 
 def events_options(settings: MaintenanceSettings) -> EventsOptions:
@@ -167,6 +171,7 @@ def worker_managers(
             retention=timedelta(days=settings.work_retention_days), purge_batch=batch
         ),
         orchestrations_options=OrchestrationsOptions(purge_batch=batch),
+        leases_options=LeasesOptions(purge_batch=batch),
         steps_options=StepsOptions(purge_batch=batch),
         agent_sessions_options=AgentSessionsOptions(
             purge_batch=batch,

@@ -30,6 +30,7 @@ from acme.workers.maintenance.accounts import (
 from acme.workers.maintenance.container import (
     AGENT_SESSION_PURGE_BATCH,
     HOLD_SWEEP_BATCH,
+    LEASE_SWEEP_BATCH,
     MEDIA_PURGE_BATCH,
     RETENTION_SWEEP_BATCH,
     STALLED_SWEEP_BATCH,
@@ -48,17 +49,30 @@ from acme.workers.maintenance.orchestrations import (
     OrchestrationHandlerImpl,
     WakeParkedHandlerImpl,
 )
-from acme.workers.maintenance.sessions import WakeSessionHandlerImpl, WakeSessionsHandlerImpl
+from acme.workers.maintenance.providers import ProviderCalls
+from acme.workers.maintenance.sessions import (
+    LeaseNoticeHandlerImpl,
+    WakeSessionHandlerImpl,
+    WakeSessionsHandlerImpl,
+)
 from acme.workers.maintenance.settings import MaintenanceSettings
 from acme.workers.maintenance.validations import ValidationHandlerImpl
 
 log = logging.getLogger(__name__)
+
+IDENTITY = "identity"
+"""The identity provider, by the name its deliveries are queued under."""
+
+IDENTITY_CREDENTIAL = "ACME_WORKOS_API_KEY"
+"""The secret the worker's calls to it are made with: the platform's own, by
+its name."""
 
 
 def loop_options(settings: MaintenanceSettings, lane: str | None = None) -> LoopOptions:
     return LoopOptions(
         worker_id=settings.worker_id,
         lane=lane or settings.worker_lane,
+        tenant_cap=settings.worker_tenant_cap or None,
         capacity=settings.worker_capacity,
         lease=timedelta(seconds=settings.worker_lease_seconds),
         heartbeat_interval=timedelta(seconds=settings.worker_heartbeat_seconds),
@@ -83,6 +97,9 @@ def unstaged(purge: Callable[[], Awaitable[int]]) -> AcrossStep:
 
 def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoop:
     managers = container.managers
+    # Every call to the identity provider reads, marks, and clears its outage
+    # on the signal every worker shares.
+    identity_calls = ProviderCalls(container.infra.get_outages(), IDENTITY, IDENTITY_CREDENTIAL)
     return WorkerLoop(
         work=managers.work,
         outbox=managers.outbox,
@@ -98,6 +115,7 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             "tenancy": managers.tenancy.purge_tenant,
             "events": managers.events.purge_tenant,
             "orchestrations": managers.orchestrations.purge_tenant,
+            "leases": managers.leases.purge_tenant,
             "agent_trees": managers.agents.purge_tenant,
             "session_authorities": managers.attribution.purge_tenant,
             # Its matrix pins and choices of fill, then its fill sets.
@@ -151,6 +169,11 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             # The trim: each tenant's floor moves with its events.
             "events": unstaged(managers.events.purge_across_tenants),
             "orchestrations": unstaged(managers.orchestrations.purge_across_tenants),
+            "leases": unstaged(managers.leases.purge_across_tenants),
+            # Not a purge: the leases past their expiry and the skew margin
+            # end, the requests past their wait expire, and each free
+            # resource is offered to its line, in every org with one due.
+            "lease_sweep": managers.leases.sweep,
             # A session marked deleted past its retention: claimed, then its
             # history, then its row.
             "agent_sessions": unstaged(managers.agent_sessions.purge_across_tenants),
@@ -170,14 +193,23 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             "relay": managers.relay.settle_expired,
         },
         # The media and session purges' batches are their own: a whole one
-        # says there may be more.
+        # says there may be more. So is the lease sweep's: the leases and
+        # requests one org's pass ends.
         across_batches={
             "media": MEDIA_PURGE_BATCH,
+            "lease_sweep": LEASE_SWEEP_BATCH,
             "agent_sessions": AGENT_SESSION_PURGE_BATCH,
             "retention": RETENTION_SWEEP_BATCH,
             "holds": HOLD_SWEEP_BATCH,
             "stalled_sessions": STALLED_SWEEP_BATCH,
         },
+        # Per tenant, and only in the tenants one read across tenants names as
+        # due: the standing chores. The scaffold keeps no record per period,
+        # so it runs none. A copy that keeps one wires here the chore that
+        # opens the next period (its orchestration, started with its `period`)
+        # and the read of the tenants where it is due (ADR 0089).
+        chores={},
+        chore_tenants=None,
         # The platform's size, counted across tenants once an interval and
         # kept as the tally the operator plane reads instead of counting.
         tally=managers.tenancy_operator.tally_size,
@@ -192,15 +224,16 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             ),
             WorkKind.WAKE_PARKED: WakeParkedHandlerImpl(managers.orchestrations),
             WorkKind.DELETE_ACCOUNT: DeleteAccountHandlerImpl(
-                managers.tenancy, container.identity_provider
+                managers.tenancy, container.identity_provider, identity_calls
             ),
             WorkKind.DELETE_ORG: DeleteOrgHandlerImpl(
-                managers.tenancy, container.identity_provider
+                managers.tenancy, container.identity_provider, identity_calls
             ),
             WorkKind.MEMBER_LEFT: MemberLeftHandlerImpl(container.intake),
             WorkKind.WAKE_SESSION: WakeSessionHandlerImpl(managers.agent_sessions),
             WorkKind.WAKE_SESSIONS: WakeSessionsHandlerImpl(managers.agent_sessions),
             WorkKind.VALIDATION: ValidationHandlerImpl(managers.platform_agents),
+            WorkKind.LEASE_NOTICE: LeaseNoticeHandlerImpl(managers.agent_sessions),
         },
         topics=container.infra.get_topics(),
         liveness=container.infra.get_cache(CacheScope.WORKER_LIVENESS),

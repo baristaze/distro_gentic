@@ -11,12 +11,14 @@ kinds of thing [Acme is made of](../../../../README.md).
   who claimed it and until when, its attempts, and its last error.
 - **Kind**: the job's shape, with a fixed payload and the permission a
   person needs to ask for it, held in one registry (`kinds.py`) that the
-  platform's kinds and a product's go through alike. The core has eight: `NOOP`, a step of an
+  platform's kinds and a product's go through alike. The core has nine: `NOOP`, a step of an
   `ORCHESTRATION`, `WAKE_PARKED` for the records a cleared reason
   frees, `DELETE_ACCOUNT` and `DELETE_ORG` for the identity provider's
   side of a deletion, `WAKE_SESSION` and `WAKE_SESSIONS` for the
-  agent sessions a park's time or a raised budget frees, and `LOOP` for
-  a session's loop, which the session runner runs. The platform adds
+  agent sessions a park's time or a raised budget frees,
+  `LEASE_NOTICE` for a session in line whose request was answered or
+  whose lease was revoked, and `LOOP` for a session's loop, which the
+  session runner runs. The platform adds
   `VALIDATION`, a validation session's check, which its own worker runs
   on a fresh executor; `MEMBER_LEFT`, which lets go of what the tenant
   keeps of a person who left it; and two that a host claims through the
@@ -36,7 +38,9 @@ kinds of thing [Acme is made of](../../../../README.md).
 - **Claim.** A worker takes the item on its lane ready longest, in one
   statement, with a claim token and the context the job runs under: the
   org, the service role, and the person who asked. An item of a deleted
-  org fails in the same call.
+  org fails in the same call. On a lane with a cap, the claim passes
+  over an org that already holds that many items claimed and takes the
+  next org's; the passed-over items wait where they are, untouched.
 - **Complete, fail, defer, release, or extend the lease.** A failure is
   retried with a growing delay until the attempts are spent.
 - **Park.** A handler that must wait (a provider out of reach) hands the
@@ -56,6 +60,10 @@ kinds of thing [Acme is made of](../../../../README.md).
 - **The lease.** A claim holds an item for a lease, and the worker
   renews it while the job runs. Every transition is conditional on the
   claim token, so a worker that lost its item changes nothing.
+- **One org cannot hold every worker.** A lane that orgs share can cap
+  how many items one org holds claimed on it. An org at its cap spends
+  no attempt waiting, and its next item runs as soon as one of its
+  running items ends.
 - **Enqueueing twice leaves one item.** The same id or the same producer
   key returns the item as stored.
 - **At least once.** Every handler changes nothing the second time.

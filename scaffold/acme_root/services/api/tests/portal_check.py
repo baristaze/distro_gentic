@@ -345,7 +345,7 @@ async def prepare_scene(root: Path, slug: str) -> None:
         org = await container.storage.get_tenancy_storage().read_org_by_slug(slug)
         if org is None:
             raise SystemExit(f"no org {slug}")
-        owner = await container.managers.tenancy.member_context(
+        owner = await container.managers.tenancy.delegated_context(
             command_request(settings), org.id, org.created_by
         )
         projects = await container.managers.projects.list_projects(owner, None, 10)
@@ -376,7 +376,7 @@ async def record_evidence(slug: str, session_id: UUID) -> None:
         org = await container.storage.get_tenancy_storage().read_org_by_slug(slug)
         if org is None:
             raise SystemExit(f"no org {slug}")
-        owner = await container.managers.tenancy.member_context(
+        owner = await container.managers.tenancy.delegated_context(
             command_request(settings), org.id, org.created_by
         )
         await container.managers.agent_sessions.get_session(owner, session_id)
@@ -449,7 +449,7 @@ async def scene_owner(slug: str) -> tuple[Any, Any]:
     if org is None:
         await container.close()
         raise SystemExit(f"no org {slug}")
-    owner = await container.managers.tenancy.member_context(
+    owner = await container.managers.tenancy.delegated_context(
         command_request(settings), org.id, org.created_by
     )
     return container, owner
@@ -657,7 +657,7 @@ async def stand_in_host(root: Path, slug: str, session_id: UUID, api: str) -> No
         org = await container.storage.get_tenancy_storage().read_org_by_slug(slug)
         if org is None:
             raise SystemExit(f"no org {slug}")
-        owner = await container.managers.tenancy.member_context(
+        owner = await container.managers.tenancy.delegated_context(
             command_request(settings), org.id, org.created_by
         )
         hosts = container.managers.hosts

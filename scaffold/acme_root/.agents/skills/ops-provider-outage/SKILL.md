@@ -82,7 +82,7 @@ read from the line each one writes.
    a `reported` line by its sum, the reports in the window.
 3. Read which provider and credential each report names, from the line
    the runner writes, `outage reported: provider <p>, credential <c>,
-   <kind>, until <retry_at>`. With `--log-file`, search it with `Grep`
+   org <org>, until <retry_at>`. With `--log-file`, search it with `Grep`
    for `outage reported:`. In the cloud, the runner's log group,
    `/acme/<env>/session-runner`, holds the lines once an environment
    runs it; a group that does not exist is written as "not read":

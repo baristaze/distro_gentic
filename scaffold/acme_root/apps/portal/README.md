@@ -86,7 +86,9 @@ conversation only when it is their own
   `flags.ts` reads the session's flags as one snapshot from the API, and a
   view-model reads a flag with `useFlag`. No flag vendor's SDK is in the
   bundle.
-- `src/realtime/`: the socket; a push invalidates the queries of its entity.
+- `src/realtime/`: the socket and its router. A push about a user reads
+  that one member and places it (`hints.ts`); any other push invalidates
+  the queries of its entity.
 - `src/store/`, `src/design/`: client state and the design kit. The kit's
   views (a diff, a log, Markdown, JSON, a sortable table, a lightbox, a
   command palette, a tooltip, a popover, a pane's splitter) each keep their

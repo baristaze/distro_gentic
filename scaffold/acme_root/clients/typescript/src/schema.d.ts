@@ -4,170 +4,6 @@
  */
 
 export interface paths {
-    "/v1/admin/benchmarks": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Trend
-         * @description The scenario's runs, the newest first: each arm's score and cost, and
-         *     whether the candidate regressed.
-         */
-        get: operations["get_trend_v1_admin_benchmarks_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/admin/benchmarks/{benchmark_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Benchmark */
-        get: operations["get_benchmark_v1_admin_benchmarks__benchmark_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/admin/matrix/results": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Record Result
-         * @description What a benchmark run showed of a model for a model role. The latest
-         *     result for the two decides whether a version that serves the role with
-         *     the model may be published.
-         */
-        post: operations["record_result_v1_admin_matrix_results_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/admin/matrix/retirements": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Retire
-         * @description A model its provider retired: no session resolves to it again, each
-         *     session on it switches at its next loop, and no version that names it
-         *     is published. A model retired already answers its first record.
-         */
-        post: operations["retire_v1_admin_matrix_retirements_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/admin/matrix/versions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Stage
-         * @description A new pending version, numbered after the last. Its shape is checked
-         *     here, its fills when it is published.
-         */
-        post: operations["stage_v1_admin_matrix_versions_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/admin/matrix/versions/current": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Current
-         * @description The latest version published: the matrix.
-         */
-        get: operations["get_current_v1_admin_matrix_versions_current_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/admin/matrix/versions/{number}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Version */
-        get: operations["get_version_v1_admin_matrix_versions__number__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/admin/matrix/versions/{number}/publish": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Publish
-         * @description The pending version, published: every session resolved from now on
-         *     is pinned to it, and a running one keeps the version it holds.
-         *     `validation_failed` names every reason it may not be: no row matches
-         *     every question, or a fill is unpriced, unqualified for a model role its
-         *     row serves, or retired.
-         */
-        post: operations["publish_v1_admin_matrix_versions__number__publish_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/admin/me": {
         parameters: {
             query?: never;
@@ -337,49 +173,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/orgs/{org_id}/hosts/{host_id}/standing": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Host Standing
-         * @description Why the host takes no work: what it advertised and the version it
-         *     reads, against the floor and what is ready on its lanes.
-         */
-        get: operations["host_standing_v1_admin_orgs__org_id__hosts__host_id__standing_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/admin/orgs/{org_id}/ledger": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Ledger
-         * @description The tenant's entries, the newest first, narrowed to one kind, one
-         *     hold (its hold, settlement, and charge), or one session (its holds and
-         *     approvals) when named. `has_more` says the read was cut at its limit.
-         */
-        get: operations["get_ledger_v1_admin_orgs__org_id__ledger_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/admin/orgs/{org_id}/members": {
         parameters: {
             query?: never;
@@ -392,70 +185,6 @@ export interface paths {
         put?: never;
         /** Add Member */
         post: operations["add_member_v1_admin_orgs__org_id__members_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/admin/orgs/{org_id}/sessions/{session_id}/content": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Session Content
-         * @description The session's steps past `after_seq`, opened: only under a live
-         *     content grant of the operator in that tenant, and each opening is an
-         *     entry in the tenant's stream.
-         */
-        get: operations["session_content_v1_admin_orgs__org_id__sessions__session_id__content_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/admin/orgs/{org_id}/sessions/{session_id}/shape": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Session Shape
-         * @description The session's steps past `after_seq` as `read` sees them: what each
-         *     is and who wrote it, never what it says.
-         */
-        get: operations["session_shape_v1_admin_orgs__org_id__sessions__session_id__shape_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/admin/orgs/{org_id}/sessions/{session_id}/standing": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Session Standing
-         * @description Why the session is or is not moving: its park, its loop's lease and
-         *     lane, its place in line, its tenant's share, and where it runs.
-         */
-        get: operations["session_standing_v1_admin_orgs__org_id__sessions__session_id__standing_get"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -496,28 +225,6 @@ export interface paths {
          */
         get: operations["get_session_usage_v1_admin_orgs__org_id__sessions__session_id__usage_get"];
         put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/admin/orgs/{org_id}/share": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Set Share
-         * @description Writes the org's fair share, a new version, with an entry in the
-         *     org's stream that names the operator. Its loops enqueued from then on go
-         *     to the lane it names. Requires the write permission.
-         */
-        put: operations["set_share_v1_admin_orgs__org_id__share_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -577,12 +284,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * List Sessions
-         * @description The tenant's sessions in a status, or in any, newest first, a page at
-         *     a time.
-         */
-        get: operations["list_sessions_v1_agent_sessions_get"];
+        get?: never;
         put?: never;
         /**
          * Start Session
@@ -604,72 +306,6 @@ export interface paths {
         };
         /** Get Session */
         get: operations["get_session_v1_agent_sessions__session_id__get"];
-        put?: never;
-        post?: never;
-        /**
-         * Delete Session
-         * @description An idle session marked deleted: it answers as one that never existed
-         *     until it is restored, and its retention ends the chance.
-         */
-        delete: operations["delete_session_v1_agent_sessions__session_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/agent-sessions/{session_id}/approvals": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Approvals
-         * @description The calls the session holds for a person's decision.
-         */
-        get: operations["get_approvals_v1_agent_sessions__session_id__approvals_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/agent-sessions/{session_id}/archive": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Archive Session
-         * @description An idle session archived: it keeps what arrives and wakes for nothing
-         *     until a person's message brings it back.
-         */
-        post: operations["archive_session_v1_agent_sessions__session_id__archive_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/agent-sessions/{session_id}/bounds": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Bounds
-         * @description The loop limits of the session's kind, and its tree's bounds.
-         */
-        get: operations["get_bounds_v1_agent_sessions__session_id__bounds_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -698,111 +334,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/agent-sessions/{session_id}/children": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Children
-         * @description The sessions this one spawned, a page at a time by id.
-         */
-        get: operations["list_children_v1_agent_sessions__session_id__children_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/agent-sessions/{session_id}/control": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Take Control
-         * @description The person takes the session's environment: the agent stands down,
-         *     its loop parked on a hand-over.
-         */
-        post: operations["take_control_v1_agent_sessions__session_id__control_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/agent-sessions/{session_id}/control/commands": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Run Command
-         * @description A command by hand, recorded as the person's run and sent to the host
-         *     that holds the workspace. A retried send is the same run.
-         */
-        post: operations["run_command_v1_agent_sessions__session_id__control_commands_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/agent-sessions/{session_id}/control/commands/{key}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Command
-         * @description How the command stands: its output after `after_seq`, and how it
-         *     ended once it has.
-         */
-        get: operations["command_v1_agent_sessions__session_id__control_commands__key__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/agent-sessions/{session_id}/control/give-back": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Give Back
-         * @description The person gives the environment back: their summary is the message
-         *     the agent reads on resume. A command of theirs still running refuses it,
-         *     unless `stop` asks it stopped first.
-         */
-        post: operations["give_back_v1_agent_sessions__session_id__control_give_back_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/agent-sessions/{session_id}/controls": {
         parameters: {
             query?: never;
@@ -817,69 +348,6 @@ export interface paths {
          * @description The control as stored, out of band: it never waits behind a message.
          */
         post: operations["send_control_v1_agent_sessions__session_id__controls_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/agent-sessions/{session_id}/delivery": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Delivery
-         * @description Its branch, the pull requests and branches bound to it, and the result
-         *     it submitted that the gate accepted.
-         */
-        get: operations["get_delivery_v1_agent_sessions__session_id__delivery_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/agent-sessions/{session_id}/executions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Executions
-         * @description The runs of checks the session recorded or the executor ran for it,
-         *     oldest first, a page at a time.
-         */
-        get: operations["list_executions_v1_agent_sessions__session_id__executions_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/agent-sessions/{session_id}/live": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Open Live
-         * @description A handle to the session's open streams, for a viewer who may read it,
-         *     that lasts minutes.
-         */
-        post: operations["open_live_v1_agent_sessions__session_id__live_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -906,70 +374,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/agent-sessions/{session_id}/placement": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Placement Of
-         * @description Where the session runs; a pinned session with no host online waits.
-         */
-        get: operations["placement_of_v1_agent_sessions__session_id__placement_get"];
-        /**
-         * Place Session
-         * @description A principal pins the session to a pool, or moves it to the cloud.
-         */
-        put: operations["place_session_v1_agent_sessions__session_id__placement_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/agent-sessions/{session_id}/questions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Questions
-         * @description What the session waits on a person for, other than a call's decision.
-         */
-        get: operations["get_questions_v1_agent_sessions__session_id__questions_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/agent-sessions/{session_id}/restore": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Restore Session
-         * @description A deleted session back as it was, with its history.
-         */
-        post: operations["restore_session_v1_agent_sessions__session_id__restore_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/agent-sessions/{session_id}/steps": {
         parameters: {
             query?: never;
@@ -982,64 +386,6 @@ export interface paths {
          * @description The history in order, strictly after `after_seq`.
          */
         get: operations["get_steps_v1_agent_sessions__session_id__steps_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/agent-sessions/{session_id}/tool-calls": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Tool Calls
-         * @description Each tool call with its decision and its answer, strictly after
-         *     `after_seq`.
-         */
-        get: operations["get_tool_calls_v1_agent_sessions__session_id__tool_calls_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/agent-sessions/{session_id}/usage": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Usage
-         * @description The tokens the session's model calls used, per model and in total.
-         */
-        get: operations["get_usage_v1_agent_sessions__session_id__usage_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/agent-sessions/{session_id}/validations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Validations */
-        get: operations["list_validations_v1_agent_sessions__session_id__validations_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1078,23 +424,6 @@ export interface paths {
         post?: never;
         /** Revoke Api Key */
         delete: operations["revoke_api_key_v1_api_keys__api_key_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/approvals": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Approvals */
-        get: operations["list_approvals_v1_approvals_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1253,317 +582,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/automations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Automations
-         * @description The tenant's automations by id, after the id `after` names.
-         */
-        get: operations["list_automations_v1_automations_get"];
-        put?: never;
-        /**
-         * Create Automation
-         * @description An automation that runs as its maker, or as the automation principal.
-         */
-        post: operations["create_automation_v1_automations_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/automations/principal": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Principal */
-        get: operations["get_principal_v1_automations_principal_get"];
-        /**
-         * Grant Principal
-         * @description The principal granted the role; a grant over a standing one keeps it.
-         */
-        put: operations["grant_principal_v1_automations_principal_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/automations/{automation_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Automation */
-        get: operations["get_automation_v1_automations__automation_id__get"];
-        /**
-         * Update Automation
-         * @description The automation as edited. One that runs as its creator is edited by
-         *     its creator alone; one that runs as the automation principal takes its
-         *     editor as its creator.
-         */
-        put: operations["update_automation_v1_automations__automation_id__put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/budgets": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Budgets
-         * @description The tenant's budgets by id, after the id `after` names.
-         */
-        get: operations["list_budgets_v1_budgets_get"];
-        put?: never;
-        /**
-         * Create Budget
-         * @description A budget every model call charged to its scope is held to, from the
-         *     next call on.
-         */
-        post: operations["create_budget_v1_budgets_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/budgets/{budget_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Budget */
-        get: operations["get_budget_v1_budgets__budget_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/budgets/{budget_id}/amount": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Change Amount
-         * @description The budget at its new amount, on the version `If-Match` names.
-         */
-        put: operations["change_amount_v1_budgets__budget_id__amount_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/claimants/enrollments": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Enroll Claimant
-         * @description A claimant enrolls once, with its tenant's enrollment token of its
-         *     kind as its bearer, and gets a credential under its kind's prefix. A
-         *     retry enrolls another claimant, so it takes no Idempotency-Key. A host
-         *     enrolls at `/hosts/enrollments`, with what it probed.
-         */
-        post: operations["enroll_claimant_v1_claimants_enrollments_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/claimants/me/claims": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Claim
-         * @description The next item of the claimant's kind on the lanes its identity names,
-         *     or none. The call names nothing: what it is handed is its credential's
-         *     to say.
-         */
-        post: operations["claim_v1_claimants_me_claims_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/claimants/me/credentials": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Rotate Claimant
-         * @description The claimant's next credential; the one it called with ends after a
-         *     short grace.
-         */
-        post: operations["rotate_claimant_v1_claimants_me_credentials_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/claimants/me/items/{item_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Held
-         * @description The item the claimant holds, under the claim token its claim was
-         *     handed (the `Claim-Token` header). Any other is not found.
-         */
-        get: operations["held_v1_claimants_me_items__item_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/claimants/me/items/{item_id}/lease": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Extend
-         * @description Renews the lease on the item the claimant holds.
-         */
-        post: operations["extend_v1_claimants_me_items__item_id__lease_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/claimants/me/items/{item_id}/report": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Report
-         * @description The claimant's answer for the item it holds: done, or failed with
-         *     why. A failure is retried until its attempts are spent.
-         */
-        post: operations["report_v1_claimants_me_items__item_id__report_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/claimants/me/items/{item_id}/streams/{kind}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Read Streams
-         * @description The item's open streams of a kind the claimant's own kind reads, for
-         *     the item it holds under the claim token its claim was handed (the
-         *     `Claim-Token` header) with a live lease, each after the last entry read
-         *     (`after=<stream>:<last>`, once a stream). Any other item, any other
-         *     kind, and a lapsed lease are not found; each call spends the
-         *     credential's budget of reads.
-         */
-        get: operations["read_streams_v1_claimants_me_items__item_id__streams__kind__get"];
-        put?: never;
-        /**
-         * Append
-         * @description Appends to a stream of a kind the claimant's own kind writes, for
-         *     the item it holds under the body's claim token. Any other item, and
-         *     any other kind, is not found; each call spends the credential's
-         *     budget of writes.
-         */
-        post: operations["append_v1_claimants_me_items__item_id__streams__kind__post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/claimants/{claimant_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /**
-         * Revoke Claimant
-         * @description Ends the claimant and its credentials at once; it is handed no more
-         *     work. An owner's or an admin's.
-         */
-        delete: operations["revoke_claimant_v1_claimants__claimant_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/events": {
         parameters: {
             query?: never;
@@ -1573,27 +591,6 @@ export interface paths {
         };
         /** List Events */
         get: operations["list_events_v1_events_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/events/recent": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Recent Events
-         * @description The newest events below `before_seq`, newest first; from the head
-         *     when it is left out. A page that reaches the floor is short.
-         */
-        get: operations["list_recent_events_v1_events_recent_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1618,377 +615,6 @@ export interface paths {
         get: operations["get_flags_v1_flags_get"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/host-enrollment-tokens/{token_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Revoke Enrollment Token */
-        delete: operations["revoke_enrollment_token_v1_host_enrollment_tokens__token_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/host-pools": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Pools */
-        get: operations["get_pools_v1_host_pools_get"];
-        put?: never;
-        /**
-         * Create Pool
-         * @description A pool hosts enroll into. An owner's or an admin's.
-         */
-        post: operations["create_pool_v1_host_pools_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/host-pools/{pool_id}/claimants": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Claimants
-         * @description The pool's claimants of every kind, a host among them, revoked ones
-         *     included, each with its kind and when it was last seen: the id its
-         *     owner revokes one by.
-         */
-        get: operations["get_claimants_v1_host_pools__pool_id__claimants_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/host-pools/{pool_id}/enrollment-tokens": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Issue Enrollment Token
-         * @description A token that enrolls claimants of a kind into the pool, in the clear
-         *     once: hosts, unless the body names a product's kind. A retry mints
-         *     another, so it takes no Idempotency-Key; the one never read expires on
-         *     its own.
-         */
-        post: operations["issue_enrollment_token_v1_host_pools__pool_id__enrollment_tokens_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/host-pools/{pool_id}/hosts": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Hosts
-         * @description The pool's hosts, each with whether it is online now.
-         */
-        get: operations["get_hosts_v1_host_pools__pool_id__hosts_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/hosts/enrollments": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Enroll
-         * @description A host enrolls once, with its tenant's enrollment token as its bearer,
-         *     and gets a credential of its own. A retry enrolls another host, so it
-         *     takes no Idempotency-Key.
-         */
-        post: operations["enroll_v1_hosts_enrollments_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/hosts/me/claims": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Claim
-         * @description The next item pinned to this host or its pool, or none. The body
-         *     states the version the host reads, and nothing it is handed.
-         */
-        post: operations["claim_v1_hosts_me_claims_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/hosts/me/control": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Control
-         * @description The host's control stream, after the message `after` names.
-         */
-        get: operations["control_v1_hosts_me_control_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/hosts/me/credentials": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Rotate
-         * @description The host's next credential; the one it called with ends after a short
-         *     grace.
-         */
-        post: operations["rotate_v1_hosts_me_credentials_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/hosts/me/exec/{item_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Detail
-         * @description What the host runs for an item it holds: the command or the file
-         *     operation, opened, with its deadline, its writer epoch, and where the
-         *     workspace is.
-         */
-        get: operations["detail_v1_hosts_me_exec__item_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/hosts/me/exec/{item_id}/lease": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Extend
-         * @description Renews the host's lease on the item while it runs.
-         */
-        post: operations["extend_v1_hosts_me_exec__item_id__lease_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/hosts/me/exec/{item_id}/parts": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Push Part
-         * @description One part of the item's output. A part sent again lands once.
-         */
-        post: operations["push_part_v1_hosts_me_exec__item_id__parts_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/hosts/me/exec/{item_id}/result": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Push Result
-         * @description How the item ended, stored under its call's key. The first
-         *     settlement wins: one its lease or a stop settled already is refused.
-         */
-        post: operations["push_result_v1_hosts_me_exec__item_id__result_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/hosts/me/heartbeats": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Heartbeat */
-        post: operations["heartbeat_v1_hosts_me_heartbeats_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/hosts/me/workspaces/{item_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Prepared
-         * @description The host's answer to a prepare it claimed: where the workspace it made
-         *     is, which binds the session to it, or why it made none, which hands the
-         *     work back to its pool after a wait.
-         */
-        post: operations["prepared_v1_hosts_me_workspaces__item_id__post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/hosts/me/workspaces/{item_id}/released": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Released
-         * @description The host's answer to a release or a purge it claimed: the instance is
-         *     gone. A release keeps its files on the host; a purge keeps none.
-         */
-        post: operations["released_v1_hosts_me_workspaces__item_id__released_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/hosts/{host_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /**
-         * Revoke Host
-         * @description Ends the host and its credentials at once; it is handed no more work.
-         */
-        delete: operations["revoke_host_v1_hosts__host_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/integrations/{integration}/installations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Connect Installation
-         * @description The installation the grant names, connected to the tenant; connected
-         *     already, it answers as it stands.
-         */
-        post: operations["connect_installation_v1_integrations__integration__installations_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2047,52 +673,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/knowledge": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Entries
-         * @description The entries in a state by id, after the id `after` names.
-         */
-        get: operations["list_entries_v1_knowledge_get"];
-        put?: never;
-        /**
-         * Write Entry
-         * @description An entry a person writes, reviewed as it is written.
-         */
-        post: operations["write_entry_v1_knowledge_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/knowledge/{entry_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Entry */
-        get: operations["get_entry_v1_knowledge__entry_id__get"];
-        /**
-         * Edit Entry
-         * @description The entry as edited, on the version `If-Match` names.
-         */
-        put: operations["edit_entry_v1_knowledge__entry_id__put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/knowledge/{entry_id}/review": {
+    "/v1/leases/requests": {
         parameters: {
             query?: never;
             header?: never;
@@ -2102,31 +683,27 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Review Entry
-         * @description A suggestion kept, so sessions recall it, or rejected.
+         * Ask
+         * @description Joins the line, last; granted at once only when no one waits in front.
+         *     A replay answers the standing the first call saw: read the request for
+         *     where it stands now.
          */
-        post: operations["review_entry_v1_knowledge__entry_id__review_post"];
+        post: operations["ask_v1_leases_requests_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/live": {
+    "/v1/leases/requests/{request_id}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /**
-         * Read Live
-         * @description The open streams of the handle's session, each after the last part
-         *     read (`after=<step_id>:<last>`, once a stream, the `last` of that part).
-         *     The handle is the authority: one that does not verify, or has expired,
-         *     reads nothing.
-         */
-        get: operations["read_live_v1_live_get"];
+        /** Get Request */
+        get: operations["get_request_v1_leases_requests__request_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2135,46 +712,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/live/items": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Read Item Live
-         * @description The open streams the handle names, each after the last entry read
-         *     (`after=<stream>:<last>`, once a stream). The handle is the authority:
-         *     one that does not verify as an item's, or has expired, reads nothing.
-         */
-        get: operations["read_item_live_v1_live_items_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/matrix/choices": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Choices */
-        get: operations["get_choices_v1_matrix_choices_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/matrix/choices/{role}": {
+    "/v1/leases/requests/{request_id}/cancel": {
         parameters: {
             query?: never;
             header?: never;
@@ -2182,38 +720,126 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
+        put?: never;
         /**
-         * Choose
-         * @description The tenant's fill for `role` from its next session on, one of the
-         *     role's options; it replaces the last. Requires managing the org.
+         * Cancel
+         * @description Its asker's, or a manager's.
          */
-        put: operations["choose_v1_matrix_choices__role__put"];
-        post?: never;
-        /**
-         * Drop Choice
-         * @description The matrix answers `role` again. Requires managing the org.
-         */
-        delete: operations["drop_choice_v1_matrix_choices__role__delete"];
+        post: operations["cancel_v1_leases_requests__request_id__cancel_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/matrix/options": {
+    "/v1/leases/requests/{request_id}/reorder": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
+        get?: never;
+        put?: never;
         /**
-         * Get Options
-         * @description For each model role of the published matrix, the fills the tenant
-         *     may choose: none unless it pays its providers on its own keys.
+         * Reorder
+         * @description A manager's: the request moves in front of `before_id`, or to the end.
          */
-        get: operations["get_options_v1_matrix_options_get"];
+        post: operations["reorder_v1_leases_requests__request_id__reorder_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/leases/resources/{resource_id}/line": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Line */
+        get: operations["line_v1_leases_resources__resource_id__line_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/leases/{lease_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Lease */
+        get: operations["get_lease_v1_leases__lease_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/leases/{lease_id}/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Release
+         * @description Its holder's: the resource goes to its line.
+         */
+        post: operations["release_v1_leases__lease_id__release_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/leases/{lease_id}/renew": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Renew
+         * @description Its holder's: the lease runs its term again from now.
+         */
+        post: operations["renew_v1_leases__lease_id__renew_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/leases/{lease_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke
+         * @description A manager's: the lease ends and the resource goes to its line.
+         */
+        post: operations["revoke_v1_leases__lease_id__revoke_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2441,43 +1067,6 @@ export interface paths {
         patch: operations["update_membership_v1_memberships__user_id__patch"];
         trace?: never;
     };
-    "/v1/notifications": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Notifications */
-        get: operations["list_notifications_v1_notifications_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/notifications/{notification_id}/read": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Mark Read
-         * @description The notification marked read; the first mark holds.
-         */
-        post: operations["mark_read_v1_notifications__notification_id__read_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/orgs": {
         parameters: {
             query?: never;
@@ -2546,157 +1135,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/playbooks": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Publish
-         * @description The next version of the name.
-         */
-        post: operations["publish_v1_playbooks_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/playbooks/{name}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Playbook
-         * @description The latest version of the name.
-         */
-        get: operations["get_playbook_v1_playbooks__name__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/projects": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Projects
-         * @description The tenant's projects by id, after the id `after` names.
-         */
-        get: operations["list_projects_v1_projects_get"];
-        put?: never;
-        /**
-         * Create Project
-         * @description A project bound to its repository, which never moves.
-         */
-        post: operations["create_project_v1_projects_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/projects/{project_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Project */
-        get: operations["get_project_v1_projects__project_id__get"];
-        put?: never;
-        post?: never;
-        /**
-         * Remove Project
-         * @description The project as it stood, with its fetch credential gone. 409
-         *     `project_in_use` while a session belongs to it.
-         */
-        delete: operations["remove_project_v1_projects__project_id__delete"];
-        options?: never;
-        head?: never;
-        /** Rename Project */
-        patch: operations["rename_project_v1_projects__project_id__patch"];
-        trace?: never;
-    };
-    "/v1/projects/{project_id}/credential": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Put Fetch Credential
-         * @description A read-only credential of the project's repository; a later one
-         *     replaces it. The answer says who gave it when, never its value.
-         */
-        put: operations["put_fetch_credential_v1_projects__project_id__credential_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/provider-keys": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Keys
-         * @description The tenant's keys, the newest first, a rotated or refused one among
-         *     them; never a value.
-         */
-        get: operations["get_keys_v1_provider_keys_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/provider-keys/{provider}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Save Key
-         * @description The tenant's live key to `provider`, the one before it rotated out.
-         *     Requires managing the org. `key_refused` when the provider does not take
-         *     it, and 503 when no probe can ask.
-         */
-        put: operations["save_key_v1_provider_keys__provider__put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/realtime/tickets": {
         parameters: {
             query?: never;
@@ -2708,56 +1146,6 @@ export interface paths {
         put?: never;
         /** Mint Ticket */
         post: operations["mint_ticket_v1_realtime_tickets_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/retention/policy": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Policy */
-        get: operations["get_policy_v1_retention_policy_get"];
-        /**
-         * Write Policy
-         * @description The policy as written, on the version `If-Match` names; with no
-         *     `If-Match`, the tenant's first. `412 precondition_failed` when the
-         *     policy moved, or when a first meets one declared. Sessions created from
-         *     now on take it; existing ones take what it tightens at the next sweep,
-         *     and nothing it loosens.
-         */
-        put: operations["write_policy_v1_retention_policy_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/retention/sessions/{session_id}/erase": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Erase Content
-         * @description Erases what the session said, for good: its key is revoked and
-         *     destroyed, and the audit holds the destruction. Its steps keep their
-         *     place, type, and shape, and read as saying nothing; the session takes no
-         *     content again. A session marked deleted is erased too. Once: a second
-         *     call answers as the first left it. `404 not_found` for a session the
-         *     tenant does not hold, which is how another tenant's reads.
-         */
-        post: operations["erase_content_v1_retention_sessions__session_id__erase_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2798,44 +1186,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/tools/policy": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Policy */
-        get: operations["get_policy_v1_tools_policy_get"];
-        /**
-         * Write Policy
-         * @description The layer as written, on the version `If-Match` names.
-         */
-        put: operations["write_policy_v1_tools_policy_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/usage": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Usage */
-        get: operations["get_usage_v1_usage_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/users": {
         parameters: {
             query?: never;
@@ -2853,65 +1203,17 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/validation-sessions": {
+    "/v1/users/{user_id}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
-        /**
-         * Start Validation
-         * @description A session queued for the platform's worker, which runs its check once.
-         *     404 when the tenant holds no validation policy for the project; 422
-         *     when the policy declares no such check.
-         */
-        post: operations["start_validation_v1_validation_sessions_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/validation-sessions/{session_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Validation
-         * @description The session: `queued` while its check waits or runs, `finished` with
-         *     its verdict and its run once the run is recorded, and `refused` with its
-         *     reason when its check cannot run here, for good.
-         */
-        get: operations["get_validation_v1_validation_sessions__session_id__get"];
+        /** Get User */
+        get: operations["get_user_v1_users__user_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/work-items/{item_id}/streams/{kind}/live": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Open Item Live
-         * @description A handle to the item's open streams of a kind a product's claimant
-         *     writes, for a viewer who may read its tenant, that lasts minutes.
-         */
-        post: operations["open_item_live_v1_work_items__item_id__streams__kind__live_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2929,23 +1231,6 @@ export interface paths {
         put?: never;
         /** Identity Delivery */
         post: operations["identity_delivery_webhooks_identity_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/webhooks/integrations/{name}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Integration Delivery */
-        post: operations["integration_delivery_webhooks_integrations__name__post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2971,52 +1256,6 @@ export interface components {
             deleted_at: string;
             /** Provider Logout Url */
             provider_logout_url?: string | null;
-        };
-        /**
-         * ActionBody
-         * @description `start_session`: start a session of `agent_kind` titled `title` in the
-         *     tenant's project `project_id`. `message_session`: send the brief to the
-         *     standing session `session_id`; an enabled one is refused, since nothing
-         *     would hold its run to `run_cap_micros`. The brief is the creator's word. Any
-         *     other kind is one the product declares, which takes its `params` and no
-         *     brief; a kind no product declares is refused.
-         */
-        ActionBody: {
-            /** Agent Kind */
-            agent_kind?: string | null;
-            /** Brief */
-            brief?: string | null;
-            /** Kind */
-            kind: string;
-            /** Params */
-            params?: {
-                [key: string]: components["schemas"]["JsonValue"];
-            };
-            /** Project Id */
-            project_id?: string | null;
-            /** Session Id */
-            session_id?: string | null;
-            /** Title */
-            title?: string | null;
-        };
-        /** ActionView */
-        ActionView: {
-            /** Agent Kind */
-            agent_kind: string | null;
-            /** Brief */
-            brief: string | null;
-            /** Kind */
-            kind: string;
-            /** Params */
-            params: {
-                [key: string]: components["schemas"]["JsonValue"];
-            };
-            /** Project Id */
-            project_id: string | null;
-            /** Session Id */
-            session_id: string | null;
-            /** Title */
-            title: string | null;
         };
         /**
          * Actor
@@ -3046,68 +1285,11 @@ export interface components {
             role: components["schemas"]["Role"];
         };
         /**
-         * AdvertisementBody
-         * @description What a host probed at its startup, and nothing it did not.
-         */
-        AdvertisementBody: {
-            /** Capabilities */
-            capabilities?: string[];
-            /** Isolation Modes */
-            isolation_modes?: components["schemas"]["IsolationMode"][];
-            /** Os */
-            os: string;
-            /**
-             * Shell
-             * @default
-             */
-            shell: string;
-        };
-        /** AdvertisementView */
-        AdvertisementView: {
-            /** Capabilities */
-            capabilities: string[];
-            /** Isolation Modes */
-            isolation_modes: components["schemas"]["IsolationMode"][];
-            /** Os */
-            os: string;
-            /** Shell */
-            shell: string;
-        };
-        /**
-         * AgentRefView
-         * @description The agent that wrote a message: its kind and the session it runs in.
-         *     The session is one of the same tree, which a reader of this session
-         *     reads too: a sub-agent's report names the child, a child's objective
-         *     its parent.
-         */
-        AgentRefView: {
-            /** Kind */
-            kind: string;
-            /**
-             * Session Id
-             * Format: uuid
-             */
-            session_id: string;
-        };
-        /**
-         * AgentSessionPageView
-         * @description One page of sessions, by id. `next_cursor` fetches the next page and
-         *     is null on the last one.
-         */
-        AgentSessionPageView: {
-            /** Items */
-            items: components["schemas"]["AgentSessionView"][];
-            /** Next Cursor */
-            next_cursor: string | null;
-        };
-        /**
          * AgentSessionView
          * @description A session: its kind, its title, and its status, which follows its
          *     steps. `pending` while an input waits for a run, `running` while a run
          *     holds its loop, `parked` while the loop waits, `idle` when no loop is
-         *     open. A sub-agent names the session that spawned it, and every session
-         *     the root of its tree. `deleted_at` is set only on the answer to a
-         *     delete: a deleted session is on no read until it is restored.
+         *     open.
          */
         AgentSessionView: {
             /** Archived At */
@@ -3122,8 +1304,6 @@ export interface components {
              * Format: uuid
              */
             created_by: string;
-            /** Deleted At */
-            deleted_at: string | null;
             /**
              * Id
              * Format: uuid
@@ -3133,28 +1313,10 @@ export interface components {
             kind: string;
             /** Kind Version */
             kind_version: number;
-            /** Parent Id */
-            parent_id: string | null;
             park: components["schemas"]["ParkView"] | null;
-            /**
-             * Root Id
-             * Format: uuid
-             */
-            root_id: string;
             status: components["schemas"]["SessionStatus"];
             /** Title */
             title: string;
-        };
-        /**
-         * AmountRequest
-         * @description A budget's new amount: reference cost in millionths, native tokens, or
-         *     both. A unit left out is not bounded, and an amount bounds one at least.
-         */
-        AmountRequest: {
-            /** Cost Micros */
-            cost_micros?: number | null;
-            /** Tokens */
-            tokens?: number | null;
         };
         /**
          * ApiKeyPageView
@@ -3196,599 +1358,32 @@ export interface components {
             user_id: string;
         };
         /**
-         * ApprovalPageView
-         * @description The calls held across one page of the tenant's parked sessions, by
-         *     session id. `next_cursor` reads the next page of sessions and is null
-         *     on the last one; a page may hold no call and still have a next.
+         * AskRequest
+         * @description An ask for a lease: one resource by its id, or a selector, the labels
+         *     a resource of `kind` must offer. `payload` is in the shape the kind
+         *     fixes; the term is bounded by the resource's, and the ask expires in line
+         *     after `wait_seconds`.
          */
-        ApprovalPageView: {
-            /** Items */
-            items: components["schemas"]["ApprovalView"][];
-            /** Next Cursor */
-            next_cursor: string | null;
-        };
-        /**
-         * ApprovalView
-         * @description A tool call held for a person's decision: its session, the seq it is
-         *     decided at, its tool and the class of power it exercises, and the
-         *     principal it runs under. Its input stays in the history; the request
-         *     names only its hash.
-         */
-        ApprovalView: {
-            /** Authorization Class */
-            authorization_class: string;
-            /**
-             * Principal Id
-             * Format: uuid
-             */
-            principal_id: string;
-            /**
-             * Requested At
-             * Format: date-time
-             */
-            requested_at: string;
-            /** Seq */
-            seq: number;
-            /**
-             * Session Id
-             * Format: uuid
-             */
-            session_id: string;
-            /** Tool */
-            tool: string;
-        };
-        /**
-         * ApproverRuleBody
-         * @description Who may approve a call of one class: people's roles, never a service.
-         */
-        ApproverRuleBody: {
-            /** Authorization Class */
-            authorization_class: string;
-            /** Roles */
-            roles: components["schemas"]["Role"][];
-        };
-        /** ApproverRuleView */
-        ApproverRuleView: {
-            /** Authorization Class */
-            authorization_class: string;
-            /** Roles */
-            roles: components["schemas"]["Role"][];
-        };
-        /**
-         * Arm
-         * @enum {string}
-         */
-        Arm: "candidate" | "baseline";
-        /**
-         * ArmResultView
-         * @description One arm's result: its trials, how many passed, the mean of their
-         *     scores, and the sum of their costs.
-         */
-        ArmResultView: {
-            /** Cost Micros */
-            cost_micros: number;
-            /** Passed */
-            passed: number;
-            /** Score */
-            score: number;
-            /** Trials */
-            trials: number;
-        };
-        /**
-         * AutomationPrincipalView
-         * @description The tenant's automation principal: its id, the role it holds, and who
-         *     granted it.
-         */
-        AutomationPrincipalView: {
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Granted By
-             * Format: uuid
-             */
-            granted_by: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            role: components["schemas"]["Role"];
-        };
-        /**
-         * AutomationRequest
-         * @description An automation whole, as made or as edited.
-         */
-        AutomationRequest: {
-            action: components["schemas"]["ActionBody"];
-            /**
-             * Enabled
-             * @default true
-             */
-            enabled: boolean;
-            limits: components["schemas"]["LimitsBody"];
-            /** Name */
-            name: string;
-            /**
-             * Own Events
-             * @default false
-             */
-            own_events: boolean;
-            runs_as?: components["schemas"]["RunsAs"] | null;
-            trigger: components["schemas"]["TriggerBody"];
-        };
-        /**
-         * AutomationView
-         * @description An automation, whom it runs as, and who made and last edited it.
-         */
-        AutomationView: {
-            action: components["schemas"]["ActionView"];
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Created By
-             * Format: uuid
-             */
-            created_by: string;
-            /** Enabled */
-            enabled: boolean;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            limits: components["schemas"]["LimitsView"];
-            /** Name */
-            name: string;
-            /** Own Events */
-            own_events: boolean;
-            runs_as: components["schemas"]["RunsAs"];
-            trigger: components["schemas"]["TriggerView"];
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-            /**
-             * Updated By
-             * Format: uuid
-             */
-            updated_by: string;
-        };
-        /**
-         * BenchmarkResultRequest
-         * @description What a benchmark run showed of a model for a model role: whether it
-         *     passed, and where its evidence is (`run`, such as the run's id or its
-         *     report's address). The latest result for the model and the role decides
-         *     whether a version that serves the role with the model may be
-         *     published.
-         */
-        BenchmarkResultRequest: {
-            /** Benchmark */
-            benchmark: string;
-            /** Model */
-            model: string;
-            /** Passed */
-            passed: boolean;
-            provider: components["schemas"]["ProviderName"];
-            /** Role */
-            role: string;
-            /** Run */
-            run: string;
-        };
-        /**
-         * BenchmarkResultView
-         * @description A recorded result, written once.
-         */
-        BenchmarkResultView: {
-            /** Benchmark */
-            benchmark: string;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Model */
-            model: string;
-            /** Passed */
-            passed: boolean;
-            provider: components["schemas"]["ProviderName"];
-            /**
-             * Recorded By
-             * Format: uuid
-             */
-            recorded_by: string;
-            /** Role */
-            role: string;
-            /** Run */
-            run: string;
-        };
-        /**
-         * BenchmarkSummaryView
-         * @description One run of a scenario, without its trials: a point of the scenario's
-         *     trend.
-         */
-        BenchmarkSummaryView: {
-            baseline: components["schemas"]["ContenderView"];
-            baseline_result: components["schemas"]["ArmResultView"];
-            candidate: components["schemas"]["ContenderView"];
-            candidate_result: components["schemas"]["ArmResultView"];
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Recorded By
-             * Format: uuid
-             */
-            recorded_by: string;
-            /** Regressed */
-            regressed: boolean;
-            /** Scenario */
-            scenario: string;
-        };
-        /**
-         * BenchmarkView
-         * @description One run of a scenario, with every trial of both arms.
-         */
-        BenchmarkView: {
-            baseline: components["schemas"]["ContenderView"];
-            baseline_result: components["schemas"]["ArmResultView"];
-            candidate: components["schemas"]["ContenderView"];
-            candidate_result: components["schemas"]["ArmResultView"];
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Recorded By
-             * Format: uuid
-             */
-            recorded_by: string;
-            /** Regressed */
-            regressed: boolean;
-            /** Scenario */
-            scenario: string;
-            /** Trials */
-            trials: components["schemas"]["TrialView"][];
-        };
-        /**
-         * BoundsView
-         * @description The bounds a session runs under: its kind's loop limits, the deadline
-         *     its kind gives a tree it roots, and its tree's record.
-         */
-        BoundsView: {
-            /** Kind */
-            kind: string;
-            /** Kind Deadline Seconds */
-            kind_deadline_seconds: number | null;
-            /** Kind Version */
-            kind_version: number;
-            loop: components["schemas"]["LoopLimitsView"];
-            tree: components["schemas"]["TreeBoundsView"];
-        };
-        /**
-         * BudgetScopeKind
-         * @enum {string}
-         */
-        BudgetScopeKind: "session" | "tree" | "person" | "project" | "team" | "tenant";
-        /**
-         * BudgetUsageView
-         * @description A budget and its current window: what open holds reserve and what
-         *     settled calls spent, in reference cost (millionths) and native tokens,
-         *     against the budget's amount.
-         */
-        BudgetUsageView: {
-            budget: components["schemas"]["BudgetView"];
-            /** Held Cost Micros */
-            held_cost_micros: number;
-            /** Held Tokens */
-            held_tokens: number;
-            /** Spent Cost Micros */
-            spent_cost_micros: number;
-            /** Spent Tokens */
-            spent_tokens: number;
-            /**
-             * Window Start
-             * Format: date-time
-             */
-            window_start: string;
-        };
-        /**
-         * BudgetView
-         * @description A budget: its scope, its window, its amount, and the version a change
-         *     of the amount names in `If-Match`.
-         */
-        BudgetView: {
-            /** Cost Micros */
-            cost_micros: number | null;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Scope Key */
-            scope_key: string;
-            scope_kind: components["schemas"]["BudgetScopeKind"];
-            /** Tokens */
-            tokens: number | null;
-            /** Version */
-            version: number;
-            window_kind: components["schemas"]["WindowKind"];
-            /** Window Seconds */
-            window_seconds: number | null;
-        };
-        /** CasesView */
-        CasesView: {
-            /** Failed */
-            failed: number;
-            /** Passed */
-            passed: number;
-            /** Skipped */
-            skipped: number;
-        };
-        /**
-         * ChooseRequest
-         * @description The fill a tenant chooses for a model role: one of that role's
-         *     options.
-         */
-        ChooseRequest: {
-            fill: components["schemas"]["FillBody"];
-        };
-        /**
-         * ClaimRequest
-         * @description The version of `exec` work the host reads, and nothing else: what it
-         *     is handed is its identity's to say.
-         */
-        ClaimRequest: {
-            /** Exec Version */
-            exec_version: number;
-        };
-        /**
-         * ClaimView
-         * @description What a claim answers: the item, or none when nothing is ready.
-         */
-        ClaimView: {
-            item: components["schemas"]["ClaimedWorkView"] | null;
-        };
-        /**
-         * ClaimantAppendRequest
-         * @description What a claimant appends to one stream of its kind for the item it
-         *     holds, under its claim token: the stream it names, and its entries in
-         *     their order, an entry numbered at or below the stream's last landing
-         *     nothing. It is held to its bounds before anything reads it.
-         */
-        ClaimantAppendRequest: {
-            /**
-             * Claim Token
-             * Format: uuid
-             */
-            claim_token: string;
-            /** Entries */
-            entries: components["schemas"]["EntryBody"][];
-            /**
-             * Stream
-             * Format: uuid
-             */
-            stream: string;
-        };
-        /**
-         * ClaimantClaimView
-         * @description What a claim answers: the item, or none when nothing is ready.
-         */
-        ClaimantClaimView: {
-            item: components["schemas"]["ClaimantWorkView"] | null;
-        };
-        /**
-         * ClaimantEnrollRequest
-         * @description A claimant's name, beside its enrollment token. The kind and the pool
-         *     are the token's.
-         */
-        ClaimantEnrollRequest: {
-            /** Name */
-            name: string;
-        };
-        /**
-         * ClaimantReportRequest
-         * @description A claimant's answer for an item it holds: done, or failed with why,
-         *     under its claim token. It is held to the report's shape before anything
-         *     reads it: a failure names its reason, within bounds, and a success
-         *     names none.
-         */
-        ClaimantReportRequest: {
-            /**
-             * Claim Token
-             * Format: uuid
-             */
-            claim_token: string;
-            /** Error */
-            error?: string | null;
-            outcome: components["schemas"]["ReportOutcome"];
-        };
-        /**
-         * ClaimantView
-         * @description A claimant as its owner reads it.
-         */
-        ClaimantView: {
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Kind */
-            kind: string;
-            /**
-             * Last Seen At
-             * Format: date-time
-             */
-            last_seen_at: string;
-            /** Name */
-            name: string;
-            /**
-             * Pool Id
-             * Format: uuid
-             */
-            pool_id: string;
-            /** Revoked At */
-            revoked_at: string | null;
-        };
-        /**
-         * ClaimantWorkView
-         * @description One item a claimant holds, under a lease and the claim token its
-         *     claim was handed, which its read, its renewal, and its report carry;
-         *     none once its report handed it back. `payload` is the item's, as its
-         *     kind fixes it. `org_id` is the tenant whose work it is, the claimant's
-         *     own.
-         */
-        ClaimantWorkView: {
-            /** Attempts */
-            attempts: number;
-            /** Claim Token */
-            claim_token: string | null;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Kind */
-            kind: string;
-            /** Lease Expires At */
-            lease_expires_at: string | null;
-            /**
-             * Org Id
-             * Format: uuid
-             */
-            org_id: string;
+        AskRequest: {
+            kind: components["schemas"]["ResourceKind"];
+            /** Labels */
+            labels?: string[] | null;
             /** Payload */
-            payload: {
+            payload?: {
                 [key: string]: unknown;
             };
-            status: components["schemas"]["WorkStatus"];
+            /** Resource Id */
+            resource_id?: string | null;
             /**
-             * Target Id
-             * Format: uuid
+             * Term Seconds
+             * @default 60
              */
-            target_id: string;
-        };
-        /**
-         * ClaimedWorkView
-         * @description One item a host was handed, under a lease, as `exec` work of
-         *     `wire_version`. `payload` is the item's, as its kind fixes it.
-         *     `org_id` is the tenant whose work it is, the host's own.
-         */
-        ClaimedWorkView: {
-            /** Attempts */
-            attempts: number;
+            term_seconds: number;
             /**
-             * Id
-             * Format: uuid
+             * Wait Seconds
+             * @default 3600
              */
-            id: string;
-            /** Kind */
-            kind: string;
-            /** Lease Expires At */
-            lease_expires_at: string | null;
-            /**
-             * Org Id
-             * Format: uuid
-             */
-            org_id: string;
-            /** Payload */
-            payload: {
-                [key: string]: unknown;
-            };
-            /**
-             * Target Id
-             * Format: uuid
-             */
-            target_id: string;
-            /** Wire Version */
-            wire_version: number;
-        };
-        /** CommandPartView */
-        CommandPartView: {
-            /** Seq */
-            seq: number;
-            /** Stream */
-            stream: string;
-            /** Text */
-            text: string;
-        };
-        /**
-         * CommandProgressView
-         * @description How a command stands: its state, its output after the last part read,
-         *     and how it ended once it has. `refused` names why its host or the relay
-         *     refused it, such as a command a later run fenced.
-         */
-        CommandProgressView: {
-            /** Exit Code */
-            exit_code?: number | null;
-            /** Parts */
-            parts: components["schemas"]["CommandPartView"][];
-            /** Refused */
-            refused?: string | null;
-            state: components["schemas"]["ExecState"];
-            /** Stderr */
-            stderr?: string | null;
-            /** Stdout */
-            stdout?: string | null;
-            stopped?: components["schemas"]["StopKind"] | null;
-            /**
-             * Timed Out
-             * @default false
-             */
-            timed_out: boolean;
-            /**
-             * Truncated
-             * @default false
-             */
-            truncated: boolean;
-        };
-        /**
-         * CommandRequest
-         * @description A command by hand: what it runs, where in the workspace, and how long
-         *     it may take. Its key is the request's idempotency key.
-         */
-        CommandRequest: {
-            /** Argv */
-            argv: string[];
-            /**
-             * Cwd
-             * @default .
-             */
-            cwd: string;
-            /**
-             * Timeout Seconds
-             * @default 300
-             */
-            timeout_seconds: number;
+            wait_seconds: number;
         };
         /**
          * ConfirmTotpRequest
@@ -3799,46 +1394,11 @@ export interface components {
             totp_code: string;
         };
         /**
-         * ConnectInstallationRequest
-         * @description The grant the system handed the person who installed the platform:
-         *     the integration reads the installation from it, never from the caller.
-         */
-        ConnectInstallationRequest: {
-            /** Grant */
-            grant: string;
-        };
-        /**
-         * ContenderView
-         * @description What an arm's sessions ran: the agent kind, its version, and each model
-         *     role's fill.
-         */
-        ContenderView: {
-            /** Fills */
-            fills: components["schemas"]["RoleFillView"][];
-            /** Kind */
-            kind: string;
-            /** Kind Version */
-            kind_version: number;
-        };
-        /**
-         * ContentState
-         * @description Where what a step says is. The state answers, so no caller compares
-         *     strings.
-         * @enum {string}
-         */
-        ContentState: "plain" | "sealed" | "absent";
-        /**
          * ControlCommand
          * @description What a `control` step records: a command that travels out of band.
          * @enum {string}
          */
         ControlCommand: "pause" | "resume" | "cancel" | "interrupt" | "compact" | "approve" | "deny" | "unlock";
-        /**
-         * ControlKind
-         * @description What one line of a host's control stream says.
-         * @enum {string}
-         */
-        ControlKind: "wake" | "ping" | "cancel" | "interrupt" | "deadline" | "revoke";
         /**
          * ControlRequest
          * @description A control. An interrupt names the seq of the tool request it stops,
@@ -3848,37 +1408,6 @@ export interface components {
             command: components["schemas"]["SessionControl"];
             /** Request Seq */
             request_seq?: number | null;
-        };
-        /**
-         * ControlView
-         * @description One line of a host's control stream. `wake` asks it to claim now,
-         *     `ping` keeps the stream open, and the rest end the item named at once.
-         */
-        ControlView: {
-            /** Id */
-            id?: string | null;
-            /** Item Id */
-            item_id?: string | null;
-            kind: components["schemas"]["ControlKind"];
-        };
-        /**
-         * CreateBudgetRequest
-         * @description A budget over a scope and a window, in reference cost (millionths),
-         *     native tokens, or both. A person's and a project's scope is keyed by its
-         *     id; a tenant's is the tenant itself, so its key is left out or names the
-         *     tenant. A span window has a length in seconds, and no other window has.
-         */
-        CreateBudgetRequest: {
-            /** Cost Micros */
-            cost_micros?: number | null;
-            /** Scope Key */
-            scope_key?: string | null;
-            scope_kind: components["schemas"]["SettableScope"];
-            /** Tokens */
-            tokens?: number | null;
-            window_kind: components["schemas"]["WindowKind"];
-            /** Window Seconds */
-            window_seconds?: number | null;
         };
         /**
          * CreateOrgRequest
@@ -3895,24 +1424,6 @@ export interface components {
             owner_name: string;
             /** Slug */
             slug: string;
-        };
-        /** CreatePoolRequest */
-        CreatePoolRequest: {
-            /** Labels */
-            labels?: string[];
-            /** Name */
-            name: string;
-            /** Region */
-            region: string;
-        };
-        /**
-         * CreateProjectRequest
-         * @description A project and the one repository it binds, which never moves.
-         */
-        CreateProjectRequest: {
-            /** Name */
-            name: string;
-            repository: components["schemas"]["RepositoryBody"];
         };
         /**
          * CreateTeamOrgRequest
@@ -3931,29 +1442,6 @@ export interface components {
          * @enum {string}
          */
         CredentialKind: "api_key" | "session_token" | "login" | "socket_ticket" | "operator_token" | "internal";
-        /**
-         * CrossingBody
-         * @description What the sender declares of the bytes it sends: what they are, their
-         *     SHA-256 in hex, and their size.
-         */
-        CrossingBody: {
-            kind: components["schemas"]["CrossingKind"];
-            /** Sha256 */
-            sha256: string;
-            /** Size */
-            size: number;
-        };
-        /**
-         * CrossingKind
-         * @enum {string}
-         */
-        CrossingKind: "enrollment" | "claim" | "stream_part" | "artifact" | "result";
-        /**
-         * Decision
-         * @description From the least strict to the most.
-         * @enum {string}
-         */
-        Decision: "allow" | "approve" | "deny";
         /**
          * DecisionRequest
          * @description A person's decision on the tool call at a seq. A denial's note is what
@@ -3991,33 +1479,11 @@ export interface components {
         };
         /**
          * DeliveryReceivedView
-         * @description The delivery checked out and is queued, or, for the system's check of
-         *     this address, answered with the challenge it sent; the provider stops
-         *     retrying.
+         * @description The delivery checked out and is queued; the provider stops retrying.
          */
         DeliveryReceivedView: {
-            /** Challenge */
-            challenge?: string | null;
             /** Received */
             received: boolean;
-        };
-        /**
-         * DeliveryView
-         * @description What a session delivered: its project, its branch and whether the
-         *     remote has held it, the pull requests and branches bound to it, and its
-         *     latest accepted result. A session that never had a workspace has no
-         *     branch.
-         */
-        DeliveryView: {
-            /** Branch */
-            branch: string | null;
-            /** Branch Seen */
-            branch_seen: boolean;
-            /** Project Id */
-            project_id: string | null;
-            report: components["schemas"]["ReportView"] | null;
-            /** Work */
-            work: components["schemas"]["WorkHandleView"][];
         };
         /**
          * DevSignInRequest
@@ -4070,109 +1536,11 @@ export interface components {
             device_code: string;
         };
         /**
-         * Effect
-         * @description What a repeat of a call may do.
+         * EndReason
+         * @description Why a request left its line without a lease.
          * @enum {string}
          */
-        Effect: "read_only" | "idempotent" | "unsafe";
-        /**
-         * Effort
-         * @description How hard a model works on a call. A provider that has no such level
-         *     for a model leaves it out and names what it dropped.
-         * @enum {string}
-         */
-        Effort: "none" | "low" | "medium" | "high" | "xhigh" | "max";
-        /**
-         * EligibilityBody
-         * @description What a fill offers: zero data retention, a region.
-         */
-        EligibilityBody: {
-            /** Region */
-            region?: string | null;
-            /**
-             * Zero Retention
-             * @default false
-             */
-            zero_retention: boolean;
-        };
-        /** EligibilityView */
-        EligibilityView: {
-            /** Region */
-            region: string | null;
-            /** Zero Retention */
-            zero_retention: boolean;
-        };
-        /**
-         * EnrollRequest
-         * @description A host's name and its report, beside its enrollment token. The pool
-         *     is the token's.
-         */
-        EnrollRequest: {
-            advertisement: components["schemas"]["AdvertisementBody"];
-            /** Exec Version */
-            exec_version: number;
-            /** Name */
-            name: string;
-        };
-        /** EnrollmentTokenView */
-        EnrollmentTokenView: {
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Created By
-             * Format: uuid
-             */
-            created_by: string;
-            /**
-             * Expires At
-             * Format: date-time
-             */
-            expires_at: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Kind */
-            kind: string;
-            /**
-             * Pool Id
-             * Format: uuid
-             */
-            pool_id: string;
-            /** Revoked At */
-            revoked_at: string | null;
-        };
-        /**
-         * EntryBody
-         * @description One numbered entry of a stream: its bytes as they crossed the wall,
-         *     in base64, and the hash its sender declared of them, a `stream_part`.
-         */
-        EntryBody: {
-            crossing: components["schemas"]["CrossingBody"];
-            /** Data */
-            data: string;
-            /** N */
-            n: number;
-        };
-        /**
-         * EntryKind
-         * @enum {string}
-         */
-        EntryKind: "hold" | "settlement" | "charge" | "credit" | "grant" | "raise" | "approval";
-        /**
-         * EntryView
-         * @description One numbered entry of a stream: its bytes in base64.
-         */
-        EntryView: {
-            /** Data */
-            data: string;
-            /** N */
-            n: number;
-        };
+        EndReason: "asked" | "waiter_gone" | "refused" | "retired";
         /** ErrorBody */
         ErrorBody: {
             /** Code */
@@ -4230,178 +1598,6 @@ export interface components {
              * Format: uuid
              */
             org_id: string;
-        };
-        /**
-         * ExecDetailView
-         * @description An item the host holds: the call, the workspace, and the operation.
-         */
-        ExecDetailView: {
-            /**
-             * Call Id
-             * Format: uuid
-             */
-            call_id: string;
-            /**
-             * Deadline
-             * Format: date-time
-             */
-            deadline: string;
-            /** Effect */
-            effect: string;
-            /** Epoch */
-            epoch: number | null;
-            /**
-             * Item Id
-             * Format: uuid
-             */
-            item_id: string;
-            /** Location */
-            location: string;
-            /**
-             * Org Id
-             * Format: uuid
-             */
-            org_id: string;
-            /** Request */
-            request: {
-                [key: string]: unknown;
-            };
-            /**
-             * Session Id
-             * Format: uuid
-             */
-            session_id: string;
-            /** Spec */
-            spec: {
-                [key: string]: unknown;
-            };
-        };
-        /** ExecLeaseView */
-        ExecLeaseView: {
-            /**
-             * Lease Expires At
-             * Format: date-time
-             */
-            lease_expires_at: string;
-        };
-        /**
-         * ExecState
-         * @enum {string}
-         */
-        ExecState: "queued" | "running" | "done" | "interrupted";
-        /**
-         * ExecutionPageView
-         * @description One page of a session's runs, oldest first. `next_cursor` fetches the
-         *     next page and is null on the last one.
-         */
-        ExecutionPageView: {
-            /** Items */
-            items: components["schemas"]["ExecutionView"][];
-            /** Next Cursor */
-            next_cursor: string | null;
-        };
-        /**
-         * ExecutionView
-         * @description One run of one check: why it ran, the version and whether the tree
-         *     was dirty, the image, host, and isolation it ran on, who wrote its
-         *     results, its timing, its outcome and its cases, and the weakest
-         *     provenance of what served it. A `work` run names the agent's tool call;
-         *     a baseline or a validation run names its validation.
-         */
-        ExecutionView: {
-            /** Abort */
-            abort: string | null;
-            cases: components["schemas"]["CasesView"];
-            /** Check */
-            check: string;
-            /** Check Version */
-            check_version: string;
-            /** Dirty */
-            dirty: boolean;
-            /** Executor */
-            executor: string;
-            /**
-             * Finished At
-             * Format: date-time
-             */
-            finished_at: string;
-            /** Host */
-            host: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Image */
-            image: string;
-            /** Isolation */
-            isolation: string;
-            outcome: components["schemas"]["RunOutcome"];
-            /** Project */
-            project: string;
-            provenance: components["schemas"]["Provenance"];
-            purpose: components["schemas"]["RunPurpose"];
-            /**
-             * Started At
-             * Format: date-time
-             */
-            started_at: string;
-            /** Step Id */
-            step_id: string | null;
-            /** Validation Id */
-            validation_id: string | null;
-            /** Version */
-            version: string;
-        };
-        /**
-         * ExtendLeaseRequest
-         * @description The claim token of the item whose lease the claimant renews.
-         */
-        ExtendLeaseRequest: {
-            /**
-             * Claim Token
-             * Format: uuid
-             */
-            claim_token: string;
-        };
-        /**
-         * FetchCredentialRequest
-         * @description A read-only credential of the project's repository, as source control
-         *     takes it over HTTPS. It goes to the tenant's store and is never read
-         *     back.
-         */
-        FetchCredentialRequest: {
-            /**
-             * Password
-             * Format: password
-             */
-            password: string;
-            /** Username */
-            username: string;
-        };
-        /**
-         * FetchCredentialView
-         * @description That the project's repository has a fetch credential, and who gave it
-         *     when. Never its value.
-         */
-        FetchCredentialView: {
-            /**
-             * Project Id
-             * Format: uuid
-             */
-            project_id: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-            /**
-             * Updated By
-             * Format: uuid
-             */
-            updated_by: string;
-            /** Version */
-            version: number;
         };
         /**
          * FilePageView
@@ -4465,110 +1661,6 @@ export interface components {
             subject_id: string | null;
         };
         /**
-         * FillBody
-         * @description A fill: a provider's model, how hard it works, its output bound and
-         *     shape, its context window, and what it offers. The output bound fits
-         *     inside the window, and a schema is named exactly when the output is one.
-         *     An output left out is text, and an eligibility left out offers
-         *     nothing.
-         */
-        FillBody: {
-            /** Context Window */
-            context_window: number;
-            effort?: components["schemas"]["Effort"] | null;
-            eligibility?: components["schemas"]["EligibilityBody"] | null;
-            /** Max Output Tokens */
-            max_output_tokens: number;
-            /** Model */
-            model: string;
-            output?: components["schemas"]["OutputShape"] | null;
-            provider: components["schemas"]["ProviderName"];
-            /** Schema Name */
-            schema_name?: string | null;
-            /** Thinking Budget */
-            thinking_budget?: number | null;
-        };
-        /**
-         * FillChoiceView
-         * @description The tenant's choice for one model role, from its next session on.
-         */
-        FillChoiceView: {
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            fill: components["schemas"]["FillView"];
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Role */
-            role: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-            /**
-             * Updated By
-             * Format: uuid
-             */
-            updated_by: string;
-        };
-        /**
-         * FillOptionsView
-         * @description What a tenant on its own keys may choose for one model role: the fills
-         *     the published matrix qualified for it, from a provider it holds a live
-         *     key for.
-         */
-        FillOptionsView: {
-            /** Fills */
-            fills: components["schemas"]["FillView"][];
-            /** Role */
-            role: string;
-        };
-        /**
-         * FillUsageView
-         * @description What one model, at its provider, used in the session's calls: the
-         *     calls that answered, and their tokens by class, no token counted
-         *     twice.
-         */
-        FillUsageView: {
-            /** Cache Read */
-            cache_read: number;
-            /** Cache Write */
-            cache_write: number;
-            /** Calls */
-            calls: number;
-            /** Fill */
-            fill: string;
-            /** Input */
-            input: number;
-            /** Output */
-            output: number;
-            /** Thinking */
-            thinking: number;
-        };
-        /** FillView */
-        FillView: {
-            /** Context Window */
-            context_window: number;
-            effort: components["schemas"]["Effort"] | null;
-            eligibility: components["schemas"]["EligibilityView"];
-            /** Max Output Tokens */
-            max_output_tokens: number;
-            /** Model */
-            model: string;
-            output: components["schemas"]["OutputShape"];
-            provider: components["schemas"]["ProviderName"];
-            /** Schema Name */
-            schema_name: string | null;
-            /** Thinking Budget */
-            thinking_budget: number | null;
-        };
-        /**
          * FlagsView
          * @description The session's flags that a client may read, evaluated for its org and
          *     its user. A flag read on the server alone is never in it.
@@ -4582,167 +1674,10 @@ export interface components {
                 [key: string]: boolean;
             };
         };
-        /**
-         * GateBody
-         * @description The calls a gate selects, by tool or by class, and what they need: a
-         *     person's approval, or a denial. A gate never allows.
-         */
-        GateBody: {
-            /** Authorization Class */
-            authorization_class?: string | null;
-            decision: components["schemas"]["Decision"];
-            /** Tool */
-            tool?: string | null;
-        };
-        /** GateView */
-        GateView: {
-            /** Authorization Class */
-            authorization_class: string | null;
-            decision: components["schemas"]["Decision"];
-            /** Tool */
-            tool: string | null;
-        };
-        /**
-         * GiveBackRequest
-         * @description What the person did, as the agent reads it on resume.
-         */
-        GiveBackRequest: {
-            /**
-             * Stop
-             * @default false
-             */
-            stop: boolean;
-            /** Summary */
-            summary: string;
-        };
-        /**
-         * GrantRequest
-         * @description The role the automation principal holds: never above the granter's.
-         */
-        GrantRequest: {
-            role: components["schemas"]["Role"];
-        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
-        };
-        /**
-         * HandRunView
-         * @description A command by hand as recorded: the item that holds what ran, the
-         *     person it is attributed to, and the writer epoch it runs under.
-         */
-        HandRunView: {
-            /**
-             * Command Key
-             * Format: uuid
-             */
-            command_key: string;
-            /** Epoch */
-            epoch: number;
-            /**
-             * Item Id
-             * Format: uuid
-             */
-            item_id: string;
-            /**
-             * Session Id
-             * Format: uuid
-             */
-            session_id: string;
-            state: components["schemas"]["ExecState"];
-            /**
-             * User Id
-             * Format: uuid
-             */
-            user_id: string;
-        };
-        /**
-         * HandleKind
-         * @enum {string}
-         */
-        HandleKind: "pull_request" | "branch";
-        /** HeartbeatRequest */
-        HeartbeatRequest: {
-            advertisement: components["schemas"]["AdvertisementBody"];
-            /** Exec Version */
-            exec_version: number;
-        };
-        /**
-         * HostStandingView
-         * @description Why a host takes no work: its state, what it advertised, the version
-         *     of `exec` work it reads against the floor, when it last called, and what
-         *     is ready on its pool's lane and its own.
-         */
-        HostStandingView: {
-            advertisement: components["schemas"]["AdvertisementView"];
-            /** Exec Floor */
-            exec_floor: number;
-            /** Exec Version */
-            exec_version: number;
-            /**
-             * Host Id
-             * Format: uuid
-             */
-            host_id: string;
-            /** Lanes */
-            lanes: components["schemas"]["LaneLoadView"][];
-            /**
-             * Last Seen At
-             * Format: date-time
-             */
-            last_seen_at: string;
-            /**
-             * Pool Id
-             * Format: uuid
-             */
-            pool_id: string;
-            /** Revoked */
-            revoked: boolean;
-            state: components["schemas"]["HostState"];
-        };
-        /**
-         * HostState
-         * @description A host as the platform's gauge counts it: the label is bounded, and a
-         *     host's own view is an operator-plane read.
-         * @enum {string}
-         */
-        HostState: "online" | "offline" | "below_floor";
-        /**
-         * HostView
-         * @description A host as its owner reads it: online while it called within the
-         *     window and reads a version of `exec` work the platform still hands.
-         */
-        HostView: {
-            advertisement: components["schemas"]["AdvertisementView"];
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Exec Version */
-            exec_version: number;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Last Seen At
-             * Format: date-time
-             */
-            last_seen_at: string;
-            /** Name */
-            name: string;
-            /** Online */
-            online: boolean;
-            /**
-             * Pool Id
-             * Format: uuid
-             */
-            pool_id: string;
-            /** Revoked At */
-            revoked_at: string | null;
         };
         /**
          * IdentityView
@@ -4765,32 +1700,6 @@ export interface components {
             operator_role: components["schemas"]["OperatorRole"] | null;
             /** Time Zone */
             time_zone?: string | null;
-        };
-        /**
-         * InstallationView
-         * @description An installation of the platform in a system, connected by the tenant:
-         *     every delivery that names it reaches this tenant alone.
-         */
-        InstallationView: {
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Created By
-             * Format: uuid
-             */
-            created_by: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Installation */
-            installation: string;
-            /** Integration */
-            integration: string;
         };
         /**
          * InvitationPageView
@@ -4851,24 +1760,6 @@ export interface components {
             role: components["schemas"]["Role"];
         };
         /**
-         * IsolationMode
-         * @description The isolation levels a host can run a workspace at, strongest first.
-         * @enum {string}
-         */
-        IsolationMode: "vm" | "container" | "directory";
-        /**
-         * IssueEnrollmentTokenRequest
-         * @description The claimant kind the token enrolls: a host unless it names a kind a
-         *     product registered.
-         */
-        IssueEnrollmentTokenRequest: {
-            /**
-             * Kind
-             * @default host
-             */
-            kind: string;
-        };
-        /**
          * IssuedApiKeyView
          * @description The key in the clear is present on the first response only: the stored
          *     outcome of the create carries no secret, so a replay under the same
@@ -4879,38 +1770,6 @@ export interface components {
             api_key: components["schemas"]["ApiKeyView"];
             /** Key */
             key: string | null;
-        };
-        /**
-         * IssuedClaimantCredentialView
-         * @description The claimant's own credential in the clear, once, under its kind's
-         *     prefix, and the identity it carries. It lives an hour; the claimant
-         *     rotates it before then.
-         */
-        IssuedClaimantCredentialView: {
-            /**
-             * Claimant Id
-             * Format: uuid
-             */
-            claimant_id: string;
-            /**
-             * Credential Id
-             * Format: uuid
-             */
-            credential_id: string;
-            /**
-             * Expires At
-             * Format: date-time
-             */
-            expires_at: string;
-            /** Kind */
-            kind: string;
-            /**
-             * Pool Id
-             * Format: uuid
-             */
-            pool_id: string;
-            /** Token */
-            token: string | null;
         };
         /**
          * IssuedDownloadView
@@ -4926,46 +1785,6 @@ export interface components {
             expires_at: string;
             /** Url */
             url: string | null;
-        };
-        /**
-         * IssuedEnrollmentTokenView
-         * @description The token in the clear, once: it enrolls claimants of its kind into
-         *     its pool until it expires or is revoked. It is minted on every call, so
-         *     a retry mints another, and the one never read expires on its own.
-         */
-        IssuedEnrollmentTokenView: {
-            enrollment: components["schemas"]["EnrollmentTokenView"];
-            /** Token */
-            token: string | null;
-        };
-        /**
-         * IssuedHostCredentialView
-         * @description The host's own credential in the clear, once, and the identity it
-         *     carries. It lives an hour; the host rotates it before then.
-         */
-        IssuedHostCredentialView: {
-            /**
-             * Credential Id
-             * Format: uuid
-             */
-            credential_id: string;
-            /**
-             * Expires At
-             * Format: date-time
-             */
-            expires_at: string;
-            /**
-             * Host Id
-             * Format: uuid
-             */
-            host_id: string;
-            /**
-             * Pool Id
-             * Format: uuid
-             */
-            pool_id: string;
-            /** Token */
-            token: string | null;
         };
         /**
          * IssuedLoginView
@@ -5057,148 +1876,6 @@ export interface components {
             /** Url */
             url: string | null;
         };
-        /** ItemPageView */
-        ItemPageView: {
-            /**
-             * Item Id
-             * Format: uuid
-             */
-            item_id: string;
-            /** Kind */
-            kind: string;
-            /** Streams */
-            streams: components["schemas"]["ItemStreamView"][];
-        };
-        /**
-         * ItemReadView
-         * @description A handle to one item's streams of one kind until `expires_at`. Read
-         *     it at `GET /v1/live/items?handle=`; a viewer asks for a new one when it
-         *     ends.
-         */
-        ItemReadView: {
-            /**
-             * Expires At
-             * Format: date-time
-             */
-            expires_at: string;
-            /** Handle */
-            handle: string;
-            /**
-             * Item Id
-             * Format: uuid
-             */
-            item_id: string;
-            /** Kind */
-            kind: string;
-        };
-        /**
-         * ItemStreamView
-         * @description One open stream of the item: the oldest entry still held, the
-         *     entries after the last one read, and whether entries never read were
-         *     let go.
-         */
-        ItemStreamView: {
-            /** Dropped */
-            dropped: boolean;
-            /** Entries */
-            entries: components["schemas"]["EntryView"][];
-            /** First */
-            first: number;
-            /**
-             * Stream
-             * Format: uuid
-             */
-            stream: string;
-        };
-        JsonValue: unknown;
-        /**
-         * KeyDestructionView
-         * @description A session's key destroyed, as the tenant's key service reported it:
-         *     the service, the key's name in it, when by its clock, and its receipt.
-         *     No key material crosses.
-         */
-        KeyDestructionView: {
-            /**
-             * Destroyed At
-             * Format: date-time
-             */
-            destroyed_at: string;
-            /** Key Name */
-            key_name: string;
-            /** Receipt */
-            receipt: string;
-            /** Service */
-            service: string;
-        };
-        /**
-         * KeyStatus
-         * @enum {string}
-         */
-        KeyStatus: "live" | "rotated" | "refused";
-        /**
-         * KnowledgeRequest
-         * @description An entry: its title, the words that trigger it, all of which must
-         *     appear in what a session is about, and what it says. A trigger word
-         *     with none of a-z, 0-9, `_`, `.` or `-` is refused: recall reads nothing
-         *     in it, so it would match every session.
-         */
-        KnowledgeRequest: {
-            /** Text */
-            text: string;
-            /** Title */
-            title: string;
-            /** Trigger */
-            trigger: string[];
-        };
-        /**
-         * KnowledgeStatus
-         * @enum {string}
-         */
-        KnowledgeStatus: "suggested" | "reviewed" | "rejected";
-        /**
-         * KnowledgeView
-         * @description An entry, its state, who suggested and who reviewed it, and the
-         *     version an edit names in `If-Match`.
-         */
-        KnowledgeView: {
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Reviewed By */
-            reviewed_by: string | null;
-            status: components["schemas"]["KnowledgeStatus"];
-            /** Suggested By */
-            suggested_by: string | null;
-            /** Text */
-            text: string;
-            /** Title */
-            title: string;
-            /** Trigger */
-            trigger: string[];
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-            /** Version */
-            version: number;
-        };
-        /** LaneLoadView */
-        LaneLoadView: {
-            /** Kind */
-            kind: string;
-            /** Lane */
-            lane: string;
-            /** Ready */
-            ready: number;
-        };
         /**
          * LastOwnerDetail
          * @description What a `last_owner` refusal carries: every team org the person is the
@@ -5208,194 +1885,123 @@ export interface components {
             /** Orgs */
             orgs: components["schemas"]["OwnedOrgRef"][];
         };
-        /**
-         * LedgerEntryView
-         * @description One entry, written once. A field a kind does not carry is null:
-         *
-         *     - `hold`: `session_id`, `units` (the worst case, null when no price
-         *       applies), and `cost_micros` (the exposure).
-         *     - `settlement`: `hold_id`, `cost_micros` and `tokens` (what it spent).
-         *     - `charge`: `hold_id`, `units`, and `amount_micros` (what the money
-         *       buckets paid).
-         *     - `credit`: `amount_micros` and `reference` (the payment's).
-         *     - `grant`: `units`, `reason`, and `by` (the operator).
-         *     - `raise`: `budget_id`, `cost_micros`, `tokens`, and `by`.
-         *     - `approval`: `session_id`, `amount_micros` (the cost it allows), and
-         *       `by`.
-         */
-        LedgerEntryView: {
-            /** Amount Micros */
-            amount_micros?: number | null;
-            /** Budget Id */
-            budget_id?: string | null;
-            /** By */
-            by?: string | null;
-            /** Cost Micros */
-            cost_micros?: number | null;
+        /** LeaseRequestView */
+        LeaseRequestView: {
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
-            /** Hold Id */
-            hold_id?: string | null;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            end_reason: components["schemas"]["EndReason"] | null;
             /**
              * Id
              * Format: uuid
              */
             id: string;
-            kind: components["schemas"]["EntryKind"];
-            /** Reason */
-            reason?: string | null;
-            /** Reference */
-            reference?: string | null;
-            /** Session Id */
-            session_id?: string | null;
-            /** Tokens */
-            tokens?: number | null;
-            /** Units */
-            units?: number | null;
+            kind: components["schemas"]["ResourceKind"];
+            /** Labels */
+            labels: string[] | null;
+            /** Lease Id */
+            lease_id: string | null;
+            /** Rank */
+            rank: number;
+            /** Resource Id */
+            resource_id: string | null;
+            status: components["schemas"]["RequestStatus"];
+            /** Term Seconds */
+            term_seconds: number;
+            /** Wait Until */
+            wait_until: string | null;
+            /** Waiter Id */
+            waiter_id: string | null;
+            waiter_kind: components["schemas"]["WaiterKind"] | null;
         };
         /**
-         * LedgerPageView
-         * @description One read of a tenant's ledger, the newest first. `has_more` says the
-         *     read was cut at its limit and older entries match it too: narrow it by
-         *     kind, hold, or session to reach them.
+         * LeaseStatus
+         * @enum {string}
          */
-        LedgerPageView: {
-            /** Has More */
-            has_more: boolean;
-            /** Items */
-            items: components["schemas"]["LedgerEntryView"][];
-        };
+        LeaseStatus: "active" | "released" | "expired" | "revoked";
         /**
-         * LimitsBody
-         * @description The most its runs spend in a period, in millionths at list price, and
-         *     the share one run may take; the most firings a period; the most runs at
-         *     work at once; whether a stopped firing waits, and how many may; and the
-         *     longest chain of automations a firing extends.
+         * LeaseView
+         * @description One grant: the holder acts on the resource under `fencing_token` until
+         *     it has used `expires_in_seconds`, counted from when it asked. The token is
+         *     no secret: it is the number the resource's own side refuses to go below.
          */
-        LimitsBody: {
-            /** Concurrency */
-            concurrency: number;
-            /** Cost Cap Micros */
-            cost_cap_micros: number;
+        LeaseView: {
             /**
-             * Hop Limit
-             * @default 3
+             * Created At
+             * Format: date-time
              */
-            hop_limit: number;
-            /** Period */
-            period?: string | null;
-            /**
-             * Queue
-             * @default false
-             */
-            queue: boolean;
-            /**
-             * Queue Depth
-             * @default 50
-             */
-            queue_depth: number;
-            /** Rate */
-            rate: number;
-            /** Run Cap Micros */
-            run_cap_micros: number;
-        };
-        /** LimitsView */
-        LimitsView: {
-            /** Concurrency */
-            concurrency: number;
-            /** Cost Cap Micros */
-            cost_cap_micros: number;
-            /** Hop Limit */
-            hop_limit: number;
-            /**
-             * Period
-             * Format: duration
-             */
-            period: string;
-            /** Queue */
-            queue: boolean;
-            /** Queue Depth */
-            queue_depth: number;
-            /** Rate */
-            rate: number;
-            /** Run Cap Micros */
-            run_cap_micros: number;
-        };
-        /** LivePageView */
-        LivePageView: {
-            /**
-             * Session Id
-             * Format: uuid
-             */
-            session_id: string;
-            /** Streams */
-            streams: components["schemas"]["LiveStreamView"][];
-        };
-        /**
-         * LivePartView
-         * @description One part of a stream: its kind, its places, and its text. A part may
-         *     join a run of one block's parts: it holds the places from `n` to
-         *     `last`, and a reader resumes after `last`. `index` is the block of a
-         *     model response it belongs to; a tool call's input names the call, and a
-         *     tool's output its channel.
-         */
-        LivePartView: {
-            /** Channel */
-            channel?: string | null;
-            /** Index */
-            index?: number | null;
-            kind: components["schemas"]["PartKind"];
-            /** Last */
-            last: number;
-            /** N */
-            n: number;
-            /** Text */
-            text: string;
-            /** Tool */
-            tool?: string | null;
-            /** Tool Use Id */
-            tool_use_id?: string | null;
-        };
-        /**
-         * LiveReadView
-         * @description A handle to one session's open streams until `expires_at`. Read it
-         *     at `GET /v1/live?handle=`; a viewer asks for a new one when it ends.
-         */
-        LiveReadView: {
+            created_at: string;
+            /** Ended At */
+            ended_at: string | null;
             /**
              * Expires At
              * Format: date-time
              */
             expires_at: string;
-            /** Handle */
-            handle: string;
+            /** Expires In Seconds */
+            expires_in_seconds: number;
+            /** Fencing Token */
+            fencing_token: number;
             /**
-             * Session Id
+             * Holder Id
              * Format: uuid
              */
-            session_id: string;
+            holder_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /**
+             * Resource Id
+             * Format: uuid
+             */
+            resource_id: string;
+            status: components["schemas"]["LeaseStatus"];
+            /** Term Seconds */
+            term_seconds: number;
         };
         /**
-         * LiveStreamView
-         * @description One open stream: the step it adds up to, the oldest part the service
-         *     still holds, the parts after the last one read, and whether parts never
-         *     read were let go. The step holds them once it is stored.
+         * LineParkView
+         * @description The line a loop waits in: the request, what it asked for (a kind,
+         *     and the resource when it named one), its place (1 is next in some line
+         *     it stands in), and the estimate of its wait.
          */
-        LiveStreamView: {
-            /** Dropped */
-            dropped: boolean;
-            /** First */
-            first: number;
-            /** Parts */
-            parts: components["schemas"]["LivePartView"][];
+        LineParkView: {
+            /** Estimate Seconds */
+            estimate_seconds: number | null;
+            /** Kind */
+            kind: string;
+            /** Place */
+            place: number | null;
             /**
-             * Step Id
+             * Request Id
              * Format: uuid
              */
-            step_id: string;
+            request_id: string;
+            /** Resource Id */
+            resource_id: string | null;
+        };
+        /**
+         * LineView
+         * @description A resource and the requests in its line, first first.
+         */
+        LineView: {
+            /** Requests */
+            requests: components["schemas"]["LeaseRequestView"][];
+            resource: components["schemas"]["ResourceView"];
         };
         /**
          * LogoutRequest
@@ -5408,62 +2014,11 @@ export interface components {
             return_to?: string | null;
         };
         /**
-         * LoopLimitsView
-         * @description The bounds of one loop of the session's kind: the model calls before
-         *     the step guard parks it for a person, the tool errors or identical
-         *     calls in a row that end it, the nudges it gives, and how long one run
-         *     drives it before handing it on.
-         */
-        LoopLimitsView: {
-            /** Error Streak */
-            error_streak: number;
-            /** Nudges */
-            nudges: number;
-            /** Run Time Seconds */
-            run_time_seconds: number;
-            /** Step Guard */
-            step_guard: number;
-        };
-        /**
          * LoopOutcome
          * @description The five ways a loop ends. A park is none of them.
          * @enum {string}
          */
         LoopOutcome: "succeeded" | "failed" | "inconclusive" | "cancelled" | "errored";
-        /**
-         * LoopStandingView
-         * @description The session's loop item made last, and its place in line:
-         *     `ready_ahead` items of any tenant are ready before it on its lane, and
-         *     `running_ahead` of its tenant's loops run ahead of it, which the claim
-         *     counts against the share.
-         */
-        LoopStandingView: {
-            /** Attempts */
-            attempts: number;
-            /**
-             * Available At
-             * Format: date-time
-             */
-            available_at: string;
-            /** Claimed By */
-            claimed_by: string | null;
-            /**
-             * Item Id
-             * Format: uuid
-             */
-            item_id: string;
-            /** Lane */
-            lane: string;
-            /** Lease Expires At */
-            lease_expires_at: string | null;
-            /** Max Attempts */
-            max_attempts: number;
-            /** Ready Ahead */
-            ready_ahead: number;
-            /** Running Ahead */
-            running_ahead: number;
-            status: components["schemas"]["WorkStatus"];
-        };
         /** LoopUsageView */
         LoopUsageView: {
             /**
@@ -5472,95 +2027,6 @@ export interface components {
              */
             loop_id: string;
             rollup: components["schemas"]["UsageRollupView"];
-        };
-        /**
-         * MatrixKeyBody
-         * @description What a row answers: each key it names must equal the question's, and a
-         *     key left out matches every value. The row that names none matches every
-         *     question.
-         */
-        MatrixKeyBody: {
-            /** Environment */
-            environment?: string | null;
-            /** Kind */
-            kind?: string | null;
-            /** Plan Tier */
-            plan_tier?: string | null;
-            /** Role */
-            role?: string | null;
-            /** Workload */
-            workload?: string | null;
-        };
-        /** MatrixKeyView */
-        MatrixKeyView: {
-            /** Environment */
-            environment: string | null;
-            /** Kind */
-            kind: string | null;
-            /** Plan Tier */
-            plan_tier: string | null;
-            /** Role */
-            role: string | null;
-            /** Workload */
-            workload: string | null;
-        };
-        /**
-         * MatrixRowBody
-         * @description A row: the questions it matches, and its fills, the first the fill and
-         *     the rest the fallbacks, each named once. A row that names no match
-         *     matches every question.
-         */
-        MatrixRowBody: {
-            /** Fills */
-            fills: components["schemas"]["FillBody"][];
-            matches?: components["schemas"]["MatrixKeyBody"] | null;
-        };
-        /**
-         * MatrixRowView
-         * @description A row: the questions it matches, the row's key, and its fills.
-         */
-        MatrixRowView: {
-            /** Fills */
-            fills: components["schemas"]["FillView"][];
-            matches: components["schemas"]["MatrixKeyView"];
-        };
-        /**
-         * MatrixStatus
-         * @enum {string}
-         */
-        MatrixStatus: "pending" | "published";
-        /**
-         * MatrixVersionView
-         * @description A version: pending until an operator publishes it, and the matrix from
-         *     then until the next is published. Its rows never change.
-         */
-        MatrixVersionView: {
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Created By
-             * Format: uuid
-             */
-            created_by: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Number */
-            number: number;
-            /** Published At */
-            published_at: string | null;
-            /** Published By */
-            published_by: string | null;
-            /** Roles */
-            roles: string[];
-            /** Rows */
-            rows: components["schemas"]["MatrixRowView"][];
-            status: components["schemas"]["MatrixStatus"];
         };
         /** MeView */
         MeView: {
@@ -5636,43 +2102,6 @@ export interface components {
             /** Expires In */
             expires_in?: number | null;
             permission: components["schemas"]["OperatorRole"];
-        };
-        /**
-         * NotificationView
-         * @description What waits on the caller: the session, why it parked, the one action
-         *     that clears it, and that action's route, empty when none serves it yet.
-         *     `read_at` is when the caller marked it read.
-         */
-        NotificationView: {
-            /** Action */
-            action: string;
-            /** Channel */
-            channel: string;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Link */
-            link: string;
-            provenance: components["schemas"]["Provenance"] | null;
-            /** Read At */
-            read_at: string | null;
-            reason: components["schemas"]["ParkReason"];
-            /**
-             * Session Id
-             * Format: uuid
-             */
-            session_id: string;
-            /** Text */
-            text: string;
-            /** Unlock */
-            unlock: string;
         };
         /**
          * OperatorEventView
@@ -5787,8 +2216,7 @@ export interface components {
              * Format: uuid
              */
             id: string;
-            /** Kind */
-            kind: string;
+            kind: components["schemas"]["WorkKind"];
             /** Last Error */
             last_error: string | null;
             /** Max Attempts */
@@ -5870,16 +2298,6 @@ export interface components {
          */
         Origin: "portal" | "cli" | "api" | "integration" | "automation" | "parent" | "engine";
         /**
-         * OutputShape
-         * @enum {string}
-         */
-        OutputShape: "text" | "schema";
-        /**
-         * OutputStream
-         * @enum {string}
-         */
-        OutputStream: "stdout" | "stderr";
-        /**
          * OwnedOrgRef
          * @description An org named in a refusal: enough to find it and to say which.
          */
@@ -5903,9 +2321,11 @@ export interface components {
         /**
          * ParkView
          * @description Why a parked loop waits, what clears it, and when it tries again by
-         *     itself; a park only a person clears has no time.
+         *     itself; a park only a person clears has no time, and neither has a park
+         *     in line, which names where it stands.
          */
         ParkView: {
+            line?: components["schemas"]["LineParkView"] | null;
             reason: components["schemas"]["ParkReason"];
             /** Retry At */
             retry_at: string | null;
@@ -5913,54 +2333,10 @@ export interface components {
             unlock: string;
         };
         /**
-         * PartKind
-         * @enum {string}
-         */
-        PartKind: "text" | "thinking" | "tool_input" | "tool_output";
-        /**
-         * PartRequest
-         * @description One part of an item's output, in the order the host read it.
-         */
-        PartRequest: {
-            crossing: components["schemas"]["CrossingBody"];
-            /** Data */
-            data: string;
-            /** Seq */
-            seq: number;
-            stream: components["schemas"]["OutputStream"];
-        };
-        /**
          * Permission
          * @enum {string}
          */
         Permission: "read" | "write" | "manage_members" | "manage_keys";
-        /**
-         * PlaceSessionRequest
-         * @description One of the tenant's pools, or None for the cloud.
-         */
-        PlaceSessionRequest: {
-            /** Pool Id */
-            pool_id: string | null;
-        };
-        /**
-         * PlacementView
-         * @description Where a session runs. A pinned session with no host of its pool
-         *     online is `waiting`; it never moves to the cloud by itself.
-         */
-        PlacementView: {
-            /** Hosts Online */
-            hosts_online: number;
-            pool: components["schemas"]["PoolView"] | null;
-            /**
-             * Session Id
-             * Format: uuid
-             */
-            session_id: string;
-            /** Version */
-            version: number;
-            /** Waiting */
-            waiting: boolean;
-        };
         /**
          * PlatformSizeView
          * @description How big the platform is, what the first responder to an alarm reads
@@ -5987,217 +2363,6 @@ export interface components {
             /** Users */
             users: number;
         };
-        /** PlaybookView */
-        PlaybookView: {
-            /** Body */
-            body: string;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Description */
-            description: string;
-            /** Gates */
-            gates: components["schemas"]["GateView"][];
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Name */
-            name: string;
-            /**
-             * Published By
-             * Format: uuid
-             */
-            published_by: string;
-            /** Version */
-            version: number;
-        };
-        /**
-         * PolicyRuleBody
-         * @description What a rule matches and what it decides. A selector left unset matches
-         *     any call; every target attribute it names must equal the target's.
-         */
-        PolicyRuleBody: {
-            /** Authorization Class */
-            authorization_class?: string | null;
-            decision: components["schemas"]["Decision"];
-            effect?: components["schemas"]["Effect"] | null;
-            /** Target */
-            target?: {
-                [key: string]: string | number | boolean;
-            };
-            /** Target Kind */
-            target_kind?: string | null;
-            /** Tool */
-            tool?: string | null;
-        };
-        /** PolicyRuleView */
-        PolicyRuleView: {
-            /** Authorization Class */
-            authorization_class: string | null;
-            decision: components["schemas"]["Decision"];
-            effect: components["schemas"]["Effect"] | null;
-            /** Target */
-            target: {
-                [key: string]: unknown;
-            };
-            /** Target Kind */
-            target_kind: string | null;
-            /** Tool */
-            tool: string | null;
-        };
-        /** PoolView */
-        PoolView: {
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Created By
-             * Format: uuid
-             */
-            created_by: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Labels */
-            labels: string[];
-            /** Name */
-            name: string;
-            /** Region */
-            region: string;
-        };
-        /**
-         * PrepareRequest
-         * @description A host's answer to a prepare it claimed: where on it the workspace it
-         *     made is, or why it made none. Exactly one of the two.
-         */
-        PrepareRequest: {
-            /** Location */
-            location?: string | null;
-            /** Refused */
-            refused?: string | null;
-        };
-        /**
-         * PreparedView
-         * @description Whether the session's workspace is now the one this host made. When
-         *     it is not, another host of the pool holds it, and this host lets its
-         *     own go.
-         */
-        PreparedView: {
-            /** Held */
-            held: boolean;
-        };
-        /**
-         * ProjectRetentionBody
-         * @description What one project of the tenant narrows; it never widens the tenant's.
-         */
-        ProjectRetentionBody: {
-            policy: components["schemas"]["RetentionPolicyBody"];
-            /**
-             * Project Id
-             * Format: uuid
-             */
-            project_id: string;
-        };
-        /** ProjectRetentionView */
-        ProjectRetentionView: {
-            policy: components["schemas"]["RetentionPolicyView"];
-            /**
-             * Project Id
-             * Format: uuid
-             */
-            project_id: string;
-        };
-        /** ProjectView */
-        ProjectView: {
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Created By
-             * Format: uuid
-             */
-            created_by: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Name */
-            name: string;
-            repository: components["schemas"]["RepositoryView"];
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-            /**
-             * Updated By
-             * Format: uuid
-             */
-            updated_by: string;
-        };
-        /**
-         * Provenance
-         * @description From the strongest to the weakest.
-         * @enum {string}
-         */
-        Provenance: "real" | "twin" | "double" | "unavailable";
-        /**
-         * ProviderKeyView
-         * @description What the tenant sees of a key: its reference, who added it and when,
-         *     its state, and when it was last used. Never its value.
-         */
-        ProviderKeyView: {
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Created By
-             * Format: uuid
-             */
-            created_by: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Last Used At */
-            last_used_at: string | null;
-            provider: components["schemas"]["ProviderName"];
-            status: components["schemas"]["KeyStatus"];
-        };
-        /**
-         * ProviderName
-         * @enum {string}
-         */
-        ProviderName: "anthropic" | "openai";
-        /**
-         * PublishRequest
-         * @description The next version of a playbook's name: its description, its body, and
-         *     its gates.
-         */
-        PublishRequest: {
-            /** Body */
-            body: string;
-            /** Description */
-            description: string;
-            /** Gates */
-            gates?: components["schemas"]["GateBody"][];
-            /** Name */
-            name: string;
-        };
         /** PurposeUsageView */
         PurposeUsageView: {
             /** Count */
@@ -6211,234 +2376,67 @@ export interface components {
             size_bytes: number;
         };
         /**
-         * QuestionView
-         * @description What a session asks of a person now: a park on a person that is no
-         *     call's decision, such as a step guard to lift, a deadline to move, or a
-         *     principal to name. `unlock` is what clears it, sent as a control; `seq`
-         *     is the step that parked it.
+         * ReorderRequest
+         * @description Moves a waiting request in front of `before_id`, or to the end.
          */
-        QuestionView: {
-            /**
-             * Asked At
-             * Format: date-time
-             */
-            asked_at: string;
-            /** Seq */
-            seq: number;
-            /**
-             * Session Id
-             * Format: uuid
-             */
-            session_id: string;
-            /** Unlock */
-            unlock: string;
-        };
-        /** RenameProjectRequest */
-        RenameProjectRequest: {
-            /** Name */
-            name: string;
+        ReorderRequest: {
+            /** Before Id */
+            before_id?: string | null;
         };
         /**
-         * ReportOutcome
+         * RequestStatus
          * @enum {string}
          */
-        ReportOutcome: "done" | "failed";
+        RequestStatus: "waiting" | "granted" | "cancelled" | "expired";
         /**
-         * ReportView
-         * @description The result the session submitted and the gate accepted: the outcome
-         *     its loop ended with, whether a gate that knows the evidence judged it,
-         *     and the step that answered it.
+         * ResourceKind
+         * @description A product adds its kinds here, each with the shape of what its ask
+         *     carries (`ASK_PAYLOADS`) and its hooks (`ResourceKindInterface`).
+         * @enum {string}
          */
-        ReportView: {
-            /**
-             * Accepted At
-             * Format: date-time
-             */
-            accepted_at: string;
-            outcome: components["schemas"]["LoopOutcome"];
-            /** Seq */
-            seq: number;
-            /** Verified */
-            verified: boolean;
-        };
+        ResourceKind: "noop";
         /**
-         * RepositoryBody
-         * @description A repository by its host's domain and its path there, such as
-         *     `github.com` and `octo/reports`. Both are compared without case.
+         * ResourceView
+         * @description A resource and its anchor: the highest token granted on it, and the
+         *     lease that holds it until when.
          */
-        RepositoryBody: {
-            /** Host */
-            host: string;
-            /** Path */
-            path: string;
-        };
-        /** RepositoryView */
-        RepositoryView: {
-            /** Host */
-            host: string;
-            /** Path */
-            path: string;
-        };
-        /**
-         * ResultRequest
-         * @description How an item ended: the JSON of an exec result, in base64.
-         */
-        ResultRequest: {
-            crossing: components["schemas"]["CrossingBody"];
-            /** Data */
-            data: string;
-        };
-        /**
-         * RetentionPolicyBody
-         * @description How long what a session says is kept, and its shape, each counted
-         *     from the session's creation, none for no end; where its content may
-         *     rest, sealed when left out; whether nothing it says may be kept
-         *     anywhere; and its region. A field left out narrows nothing. A lifetime
-         *     past a century, a content that outlives its shape, and zero retention
-         *     that keeps content at rest are refused.
-         */
-        RetentionPolicyBody: {
-            /** Content Lifetime */
-            content_lifetime?: string | null;
-            /** Region */
-            region?: string | null;
-            /** Shape Lifetime */
-            shape_lifetime?: string | null;
-            storage_mode?: components["schemas"]["StorageMode"] | null;
-            /**
-             * Zero Retention
-             * @default false
-             */
-            zero_retention: boolean;
-        };
-        /** RetentionPolicyView */
-        RetentionPolicyView: {
-            /** Content Lifetime */
-            content_lifetime: string | null;
-            /** Region */
-            region: string | null;
-            /** Shape Lifetime */
-            shape_lifetime: string | null;
-            storage_mode: components["schemas"]["StorageMode"];
-            /** Zero Retention */
-            zero_retention: boolean;
-        };
-        /**
-         * RetentionRequest
-         * @description The tenant's whole policy, written over the version `If-Match` names,
-         *     or, with no `If-Match`, as the tenant's first.
-         */
-        RetentionRequest: {
-            policy?: components["schemas"]["RetentionPolicyBody"];
-            /** Projects */
-            projects?: components["schemas"]["ProjectRetentionBody"][];
-        };
-        /**
-         * RetentionView
-         * @description The tenant's policy; version 0, the loosest, until its first write.
-         */
-        RetentionView: {
-            policy: components["schemas"]["RetentionPolicyView"];
-            /** Projects */
-            projects: components["schemas"]["ProjectRetentionView"][];
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-            /**
-             * Updated By
-             * Format: uuid
-             */
-            updated_by: string;
-            /** Version */
-            version: number;
-        };
-        /**
-         * RetireRequest
-         * @description A model its provider retired, by name, as a fill names it.
-         */
-        RetireRequest: {
-            /** Model */
-            model: string;
-            provider: components["schemas"]["ProviderName"];
-        };
-        /**
-         * RetirementView
-         * @description A retired model: no session resolves to it again, and a version that
-         *     names it is not published. Recorded once a model.
-         */
-        RetirementView: {
+        ResourceView: {
+            /** Available */
+            available: boolean;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
+            /** Fencing Token */
+            fencing_token: number;
+            /** Held Until */
+            held_until: string | null;
             /**
              * Id
              * Format: uuid
              */
             id: string;
-            /** Model */
-            model: string;
-            provider: components["schemas"]["ProviderName"];
+            kind: components["schemas"]["ResourceKind"];
+            /** Labels */
+            labels: string[];
+            /** Lease Id */
+            lease_id: string | null;
+            /** Max Term Seconds */
+            max_term_seconds: number;
             /**
-             * Recorded By
+             * Ref Id
              * Format: uuid
              */
-            recorded_by: string;
-        };
-        /**
-         * ReviewRequest
-         * @description Keep a suggestion, so any session may recall it, or reject it.
-         */
-        ReviewRequest: {
-            /** Keep */
-            keep: boolean;
+            ref_id: string;
+            /** Retired At */
+            retired_at: string | null;
         };
         /**
          * Role
          * @enum {string}
          */
         Role: "owner" | "admin" | "member" | "viewer" | "service";
-        /** RoleFillView */
-        RoleFillView: {
-            /** Fallbacks */
-            fallbacks: components["schemas"]["FillView"][];
-            fill: components["schemas"]["FillView"];
-            /** Role */
-            role: string;
-        };
-        /**
-         * RunOutcome
-         * @enum {string}
-         */
-        RunOutcome: "passed" | "failed" | "errored" | "aborted";
-        /**
-         * RunPurpose
-         * @description Why a run ran. Only the executor writes a `baseline` or a
-         *     `validation` run; the agent's own runs are `work`.
-         * @enum {string}
-         */
-        RunPurpose: "work" | "baseline" | "validation";
-        /**
-         * RunsAs
-         * @description Whose authority an automation's action runs on.
-         * @enum {string}
-         */
-        RunsAs: "creator" | "automation_principal";
-        /**
-         * SaveKeyRequest
-         * @description A key's value. It is written once, under a new reference, and no
-         *     response, log, or error ever carries it.
-         */
-        SaveKeyRequest: {
-            /**
-             * Value
-             * Format: password
-             */
-            value: string;
-        };
         /**
          * SecondFactorRequest
          * @description The code from an authenticator, presented with a sign-in credential.
@@ -6457,88 +2455,6 @@ export interface components {
          * @enum {string}
          */
         SessionControl: "pause" | "resume" | "cancel" | "interrupt" | "compact" | "unlock";
-        /**
-         * SessionModelUsageView
-         * @description What a session's model calls used, as each provider reported it, per
-         *     model and in total.
-         */
-        SessionModelUsageView: {
-            /** Cache Read */
-            cache_read: number;
-            /** Cache Write */
-            cache_write: number;
-            /** Calls */
-            calls: number;
-            /** Fills */
-            fills: components["schemas"]["FillUsageView"][];
-            /** Input */
-            input: number;
-            /** Output */
-            output: number;
-            /** Thinking */
-            thinking: number;
-        };
-        /**
-         * SessionRetentionView
-         * @description One session's snapshot: the policy it took, when its content and its
-         *     shape expire, and when each did. `destruction` is the key service's
-         *     report of the key it destroyed, none when the service holds the tenant's
-         *     key alone and the platform's revocation is the destruction.
-         */
-        SessionRetentionView: {
-            /** Content Expired At */
-            content_expired_at: string | null;
-            /** Content Expires At */
-            content_expires_at: string | null;
-            destruction: components["schemas"]["KeyDestructionView"] | null;
-            policy: components["schemas"]["RetentionPolicyView"];
-            /** Project Id */
-            project_id: string | null;
-            /**
-             * Session Id
-             * Format: uuid
-             */
-            session_id: string;
-            /** Shape Expired At */
-            shape_expired_at: string | null;
-            /** Shape Expires At */
-            shape_expires_at: string | null;
-        };
-        /**
-         * SessionStandingView
-         * @description Why a session is or is not moving. `changed_at` is its last change:
-         *     when it parked, for a parked one. `pool_id` null is the cloud, where
-         *     `hosts_online` is null; `share_set` false is the default share.
-         */
-        SessionStandingView: {
-            /**
-             * Changed At
-             * Format: date-time
-             */
-            changed_at: string;
-            /** Concurrency */
-            concurrency: number;
-            /** Hosts Online */
-            hosts_online: number | null;
-            loop: components["schemas"]["LoopStandingView"] | null;
-            /** Own Lane */
-            own_lane: boolean;
-            park: components["schemas"]["ParkView"] | null;
-            /** Pending Input */
-            pending_input: boolean;
-            /** Plan Tier */
-            plan_tier: string;
-            /** Pool Id */
-            pool_id: string | null;
-            /**
-             * Session Id
-             * Format: uuid
-             */
-            session_id: string;
-            /** Share Set */
-            share_set: boolean;
-            status: components["schemas"]["SessionStatus"];
-        };
         /**
          * SessionStatus
          * @enum {string}
@@ -6591,70 +2507,6 @@ export interface components {
             id: string;
             /** Revoked At */
             revoked_at: string | null;
-        };
-        /**
-         * SetShareRequest
-         * @description A tenant's fair share: the plan tier whose lane its loops run in,
-         *     whether they run in a lane of their own instead, and how many of them
-         *     run at once.
-         */
-        SetShareRequest: {
-            /** Concurrency */
-            concurrency: number;
-            /**
-             * Own Lane
-             * @default false
-             */
-            own_lane: boolean;
-            /** Plan Tier */
-            plan_tier: string;
-        };
-        /**
-         * SettableScope
-         * @description The scopes a person sets a budget over: the ones every model call is
-         *     charged to and that outlive a session. A session's and a tree's budgets
-         *     are its own bounds, and no call is charged to a team.
-         * @enum {string}
-         */
-        SettableScope: "person" | "project" | "tenant";
-        /**
-         * ShapePageView
-         * @description One page of a session's shape, after the seq the request named.
-         */
-        ShapePageView: {
-            /** Has More */
-            has_more: boolean;
-            /** Items */
-            items: components["schemas"]["StepShapeView"][];
-        };
-        /**
-         * ShareView
-         * @description A tenant's fair share as the operator wrote it, at its version.
-         */
-        ShareView: {
-            /** Concurrency */
-            concurrency: number;
-            /**
-             * Org Id
-             * Format: uuid
-             */
-            org_id: string;
-            /** Own Lane */
-            own_lane: boolean;
-            /** Plan Tier */
-            plan_tier: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-            /**
-             * Updated By
-             * Format: uuid
-             */
-            updated_by: string;
-            /** Version */
-            version: number;
         };
         /**
          * SignInCallbackRequest
@@ -6763,27 +2615,26 @@ export interface components {
             url: string;
         };
         /**
-         * StageRequest
-         * @description A new version of the matrix: the model roles it serves and its rows,
-         *     one a key. It is checked whole when it is published.
+         * StandingView
+         * @description Where a request stands: its lease once granted, or its place (1 is
+         *     next in some line it stands in) and an estimate of its wait in seconds,
+         *     while it waits.
          */
-        StageRequest: {
-            /** Roles */
-            roles: string[];
-            /** Rows */
-            rows: components["schemas"]["MatrixRowBody"][];
+        StandingView: {
+            /** Estimate Seconds */
+            estimate_seconds: number | null;
+            lease: components["schemas"]["LeaseView"] | null;
+            /** Place */
+            place: number | null;
+            request: components["schemas"]["LeaseRequestView"];
         };
         /**
          * StartSessionRequest
-         * @description A session to start on the latest version of a kind the product runs,
-         *     in a project of the caller's tenant. Outside a local stack a session
-         *     starts in a project or not at all.
+         * @description A session to start on the latest version of a kind the product runs.
          */
         StartSessionRequest: {
             /** Kind */
             kind: string;
-            /** Project Id */
-            project_id?: string | null;
             /** Title */
             title: string;
         };
@@ -6802,25 +2653,6 @@ export interface components {
             size_bytes: number;
         };
         /**
-         * StartValidationRequest
-         * @description A check the project's policy declares, to run at `head`, the delivered
-         *     commit, with the checks, fixtures, and runner taken from `base`. Each is
-         *     a commit's full id, never a name that moves.
-         */
-        StartValidationRequest: {
-            /** Base */
-            base: string;
-            /** Check */
-            check: string;
-            /** Head */
-            head: string;
-            /**
-             * Project Id
-             * Format: uuid
-             */
-            project_id: string;
-        };
-        /**
          * StepPageView
          * @description One page of a session's history, after the seq the request named.
          *     With `has_more`, the next page starts after the last step's seq.
@@ -6830,43 +2662,6 @@ export interface components {
             has_more: boolean;
             /** Items */
             items: components["schemas"]["StepView"][];
-        };
-        /**
-         * StepShapeView
-         * @description One step as an operator's `read` sees it: what it is, who wrote it,
-         *     and the fields of its header a reader acts on, never what it says.
-         *     `content` says whether what it says is kept.
-         */
-        StepShapeView: {
-            actor: components["schemas"]["Actor"];
-            command: components["schemas"]["ControlCommand"] | null;
-            content: components["schemas"]["ContentState"];
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            failure: components["schemas"]["ToolFailure"] | null;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Loop Id
-             * Format: uuid
-             */
-            loop_id: string;
-            origin: components["schemas"]["Origin"];
-            outcome: components["schemas"]["LoopOutcome"] | null;
-            park: components["schemas"]["ParkView"] | null;
-            /** Responds To */
-            responds_to: string | null;
-            /** Seq */
-            seq: number;
-            /** Tool */
-            tool: string | null;
-            type: components["schemas"]["StepType"];
         };
         /**
          * StepType
@@ -6895,20 +2690,13 @@ export interface components {
         /**
          * StepView
          * @description One step of a session's history, in its order. `text` is what it
-         *     says: a message's words, a model's answer, a tool's result. A model
-         *     response also says what it thought (`thinking`) and the calls it made
-         *     (`tool_uses`); a tool response names the call it answers
-         *     (`tool_use_id`). Each of these is the step's content: where it is gone,
-         *     its session's key revoked or its content never kept here, each is empty
-         *     as `text` is. The rest is its header's, by type: the agent that wrote a
-         *     message, on a message an agent wrote (`agent`); the tools a model
-         *     response called, why it stopped, and what it used; a tool call's tool,
-         *     the id of the call it runs, and the class of its failure; a control's
-         *     command; a park; a loop's outcome.
+         *     says: a message's words, a model's answer, a tool's result. The rest is
+         *     its header's, by type: the tools a model response called, why it
+         *     stopped, and what it used; a tool call's tool and the class of its
+         *     failure; a control's command; a park; a loop's outcome.
          */
         StepView: {
             actor: components["schemas"]["Actor"];
-            agent: components["schemas"]["AgentRefView"] | null;
             command: components["schemas"]["ControlCommand"] | null;
             /**
              * Created At
@@ -6938,26 +2726,13 @@ export interface components {
             stop_reason: components["schemas"]["StopReason"] | null;
             /** Text */
             text: string;
-            /** Thinking */
-            thinking: string;
             /** Tool */
             tool: string | null;
-            /** Tool Use Id */
-            tool_use_id: string | null;
-            /** Tool Uses */
-            tool_uses: components["schemas"]["ToolUseView"][];
             /** Tools */
             tools: string[];
             type: components["schemas"]["StepType"];
             usage: components["schemas"]["StepUsageView"] | null;
         };
-        /**
-         * StopKind
-         * @description What the control stream tells a host about one item it holds. Each
-         *     ends the command at once.
-         * @enum {string}
-         */
-        StopKind: "cancel" | "interrupt" | "deadline" | "revoke";
         /**
          * StopReason
          * @description Why a response stopped. A model's refusal is a response its agent kind
@@ -6965,12 +2740,6 @@ export interface components {
          * @enum {string}
          */
         StopReason: "end_turn" | "tool_use" | "output_limit" | "refusal" | "content_filter" | "pause";
-        /**
-         * StorageMode
-         * @description Where a session's content lives.
-         * @enum {string}
-         */
-        StorageMode: "sealed" | "memory_only";
         /**
          * StorageUsageView
          * @description What the org keeps in the store, counted from its files: the stored ones
@@ -7000,109 +2769,12 @@ export interface components {
             head: number;
         };
         /**
-         * ToolCallPageView
-         * @description One page of a session's tool calls, in order, after the seq the
-         *     request named. With `has_more`, the next page starts after the last
-         *     call's seq.
-         */
-        ToolCallPageView: {
-            /** Has More */
-            has_more: boolean;
-            /** Items */
-            items: components["schemas"]["ToolCallView"][];
-        };
-        /**
-         * ToolCallView
-         * @description One tool call of a session: its request, a person's decision on it
-         *     when one was asked, and its response once it answered. A call with no
-         *     response is open: held for a decision, or running.
-         */
-        ToolCallView: {
-            /** Authorization Class */
-            authorization_class: string;
-            /** Decided By */
-            decided_by: string | null;
-            decision: components["schemas"]["Verdict"] | null;
-            failure: components["schemas"]["ToolFailure"] | null;
-            /**
-             * Loop Id
-             * Format: uuid
-             */
-            loop_id: string;
-            /**
-             * Principal Id
-             * Format: uuid
-             */
-            principal_id: string;
-            /**
-             * Requested At
-             * Format: date-time
-             */
-            requested_at: string;
-            /** Responded At */
-            responded_at: string | null;
-            /** Response Seq */
-            response_seq: number | null;
-            /** Seq */
-            seq: number;
-            /** Tool */
-            tool: string;
-        };
-        /**
          * ToolFailure
          * @description The class of a tool failure, decided where the failure happens. The
          *     model reads it with advice on what to do next.
          * @enum {string}
          */
         ToolFailure: "invalid_input" | "transient" | "timeout" | "denied" | "interrupted" | "permanent";
-        /**
-         * ToolPolicyRequest
-         * @description The tenant's whole layer, written over the version `If-Match` names.
-         */
-        ToolPolicyRequest: {
-            /** Approvers */
-            approvers?: components["schemas"]["ApproverRuleBody"][];
-            /** Rules */
-            rules?: components["schemas"]["PolicyRuleBody"][];
-        };
-        /**
-         * ToolPolicyView
-         * @description The tenant's layer; version 1 and empty until its first write.
-         */
-        ToolPolicyView: {
-            /** Approvers */
-            approvers: components["schemas"]["ApproverRuleView"][];
-            /** Rules */
-            rules: components["schemas"]["PolicyRuleView"][];
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-            /**
-             * Updated By
-             * Format: uuid
-             */
-            updated_by: string;
-            /** Version */
-            version: number;
-        };
-        /**
-         * ToolUseView
-         * @description One call a model response made: its id, which the call's request and
-         *     response name, the tool, and what the tool was asked, each string cut
-         *     at `MAX_SHOWN`.
-         */
-        ToolUseView: {
-            /** Id */
-            id: string;
-            /** Input */
-            input: {
-                [key: string]: components["schemas"]["JsonValue"];
-            };
-            /** Name */
-            name: string;
-        };
         /**
          * TotpConfirmedView
          * @description The second factor is enrolled: from now on the operator plane admits
@@ -7120,95 +2792,6 @@ export interface components {
              * Format: uuid
              */
             identity_id: string;
-        };
-        /**
-         * TreeBoundsView
-         * @description What the session's tree shares: how deep and how many sub-agents it
-         *     may have, how many run at once, the one deadline, and how many were
-         *     spawned so far.
-         */
-        TreeBoundsView: {
-            /** Concurrency */
-            concurrency: number | null;
-            /** Count */
-            count: number;
-            /** Deadline */
-            deadline: string | null;
-            /** Height */
-            height: number;
-            /**
-             * Root Id
-             * Format: uuid
-             */
-            root_id: string;
-            /** Size */
-            size: number;
-        };
-        /**
-         * TrialView
-         * @description One trial: its arm, its session, where and when it ran, its cost, and
-         *     what its acceptance verdict found.
-         */
-        TrialView: {
-            arm: components["schemas"]["Arm"];
-            /** Broken */
-            broken: string[];
-            /** Cost Micros */
-            cost_micros: number;
-            /** Executor */
-            executor: string;
-            /** Passed */
-            passed: boolean;
-            /** Score */
-            score: number;
-            /**
-             * Session Id
-             * Format: uuid
-             */
-            session_id: string;
-            /**
-             * Started At
-             * Format: date-time
-             */
-            started_at: string;
-            /**
-             * Verdict Id
-             * Format: uuid
-             */
-            verdict_id: string;
-        };
-        /**
-         * TriggerBody
-         * @description An event that passes every filter set (one left empty matches any),
-         *     or a schedule, every `every` seconds, a minute at least.
-         */
-        TriggerBody: {
-            /** Arrivals */
-            arrivals?: string[];
-            /** Effects */
-            effects?: string[];
-            /** Every */
-            every?: string | null;
-            /** Integrations */
-            integrations?: string[];
-            kind: components["schemas"]["TriggerKind"];
-        };
-        /**
-         * TriggerKind
-         * @enum {string}
-         */
-        TriggerKind: "event" | "schedule";
-        /** TriggerView */
-        TriggerView: {
-            /** Arrivals */
-            arrivals: string[];
-            /** Effects */
-            effects: string[];
-            /** Every */
-            every: string | null;
-            /** Integrations */
-            integrations: string[];
-            kind: components["schemas"]["TriggerKind"];
         };
         /**
          * UpdateIdentityRequest
@@ -7236,17 +2819,6 @@ export interface components {
             name: string;
             /** Value */
             value: string;
-        };
-        /**
-         * UsagePageView
-         * @description One page of the tenant's budgets with their usage, by budget id.
-         *     `next_cursor` fetches the next page and is null on the last one.
-         */
-        UsagePageView: {
-            /** Items */
-            items: components["schemas"]["BudgetUsageView"][];
-            /** Next Cursor */
-            next_cursor: string | null;
         };
         /**
          * UsageRecordView
@@ -7395,118 +2967,17 @@ export interface components {
             type: string;
         };
         /**
-         * ValidationSessionView
-         * @description A validation session: what it runs, at which commit and from which,
-         *     and where it stands. Once its run is recorded, `passed` is the verdict
-         *     and `run` is that run; both are null while it waits. The run passes
-         *     when it passed, at least one of its cases did, and what served it meets
-         *     the strictest grade the project's policy asks of the check, a twin when
-         *     no requirement names it: a run on a double, or with a dependency that
-         *     was not there, never passes. A check a requirement rates runs its
-         *     declared trials and passes only as that requirement judges them
-         *     together, so one lucky trial never passes it; `run` is its last trial.
-         *     `reason` says why it did not pass, and is null otherwise. A session
-         *     whose check cannot run here, for good, is `refused`: it never passes,
-         *     `reason` says why it could not run, and `run` is null.
-         */
-        ValidationSessionView: {
-            /** Base */
-            base: string;
-            /** Check */
-            check: string;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Created By
-             * Format: uuid
-             */
-            created_by: string;
-            /** Finished At */
-            finished_at: string | null;
-            /** Head */
-            head: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Passed */
-            passed: boolean | null;
-            /**
-             * Project Id
-             * Format: uuid
-             */
-            project_id: string;
-            /** Reason */
-            reason: string | null;
-            run: components["schemas"]["ExecutionView"] | null;
-            status: components["schemas"]["ValidationStatus"];
-        };
-        /**
-         * ValidationStatus
+         * WaiterKind
+         * @description What waits on a request, so a grant wakes it. A product adds its own,
+         *     each with a `WaiterInterface`.
          * @enum {string}
          */
-        ValidationStatus: "queued" | "finished" | "refused";
+        WaiterKind: "orchestration" | "session";
         /**
-         * ValidationView
-         * @description One pass of the policy's checks on a fresh executor: the version it
-         *     ran at and the version its checks came from, who ran it, the hash of
-         *     the results it wrote, and its runs.
-         */
-        ValidationView: {
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Executor */
-            executor: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Project */
-            project: string;
-            purpose: components["schemas"]["RunPurpose"];
-            /** Records */
-            records: string[];
-            /** Results Sha256 */
-            results_sha256: string;
-            /** Source */
-            source: string;
-            /** Version */
-            version: string;
-        };
-        /**
-         * Verdict
-         * @description A person's decision on one exact call, as the history holds it.
+         * WorkKind
          * @enum {string}
          */
-        Verdict: "approved" | "denied" | "expired" | "pending";
-        /**
-         * WindowKind
-         * @enum {string}
-         */
-        WindowKind: "life" | "hour" | "day" | "week" | "month" | "span";
-        /**
-         * WorkHandleView
-         * @description A pull request or a branch the session opened as its work, by the
-         *     name source control gives it.
-         */
-        WorkHandleView: {
-            /**
-             * Bound At
-             * Format: date-time
-             */
-            bound_at: string;
-            /** Handle */
-            handle: string;
-            kind: components["schemas"]["HandleKind"];
-        };
+        WorkKind: "NOOP" | "ORCHESTRATION" | "WAKE_PARKED" | "DELETE_ACCOUNT" | "DELETE_ORG" | "WAKE_SESSION" | "WAKE_SESSIONS" | "LOOP" | "LEASE_NOTICE";
         /**
          * WorkStatus
          * @enum {string}
@@ -7521,294 +2992,6 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    get_trend_v1_admin_benchmarks_get: {
-        parameters: {
-            query: {
-                scenario: string;
-                limit?: number;
-            };
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BenchmarkSummaryView"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_benchmark_v1_admin_benchmarks__benchmark_id__get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                benchmark_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BenchmarkView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    record_result_v1_admin_matrix_results_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                "idempotency-key"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BenchmarkResultRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BenchmarkResultView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    retire_v1_admin_matrix_retirements_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                "idempotency-key"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RetireRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RetirementView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    stage_v1_admin_matrix_versions_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                "idempotency-key"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["StageRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MatrixVersionView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_current_v1_admin_matrix_versions_current_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MatrixVersionView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_version_v1_admin_matrix_versions__number__get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                number: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MatrixVersionView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    publish_v1_admin_matrix_versions__number__publish_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                number: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MatrixVersionView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     operator_me_v1_admin_me_get: {
         parameters: {
             query?: never;
@@ -8202,82 +3385,6 @@ export interface operations {
             };
         };
     };
-    host_standing_v1_admin_orgs__org_id__hosts__host_id__standing_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                org_id: string;
-                host_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HostStandingView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_ledger_v1_admin_orgs__org_id__ledger_get: {
-        parameters: {
-            query?: {
-                kind?: components["schemas"]["EntryKind"] | null;
-                hold_id?: string | null;
-                session_id?: string | null;
-                limit?: number;
-            };
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                org_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LedgerPageView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     list_members_v1_admin_orgs__org_id__members_get: {
         parameters: {
             query?: {
@@ -8356,120 +3463,6 @@ export interface operations {
             };
         };
     };
-    session_content_v1_admin_orgs__org_id__sessions__session_id__content_get: {
-        parameters: {
-            query?: {
-                after_seq?: number;
-                limit?: number;
-            };
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                org_id: string;
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["StepPageView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    session_shape_v1_admin_orgs__org_id__sessions__session_id__shape_get: {
-        parameters: {
-            query?: {
-                after_seq?: number;
-                limit?: number;
-            };
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                org_id: string;
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ShapePageView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    session_standing_v1_admin_orgs__org_id__sessions__session_id__standing_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                org_id: string;
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SessionStandingView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_session_usage_v1_admin_orgs__org_id__sessions__session_id__usage_get: {
         parameters: {
             query?: {
@@ -8496,45 +3489,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionUsageView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    set_share_v1_admin_orgs__org_id__share_put: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                org_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SetShareRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ShareView"];
                 };
             };
             /** @description Validation Error */
@@ -8604,43 +3558,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlatformSizeView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_sessions_v1_agent_sessions_get: {
-        parameters: {
-            query?: {
-                status?: components["schemas"]["SessionStatus"] | null;
-                cursor?: string | null;
-                limit?: number;
-            };
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentSessionPageView"];
                 };
             };
             /** @description Validation Error */
@@ -8727,146 +3644,6 @@ export interface operations {
             };
         };
     };
-    delete_session_v1_agent_sessions__session_id__delete: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentSessionView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_approvals_v1_agent_sessions__session_id__approvals_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApprovalView"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    archive_session_v1_agent_sessions__session_id__archive_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentSessionView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_bounds_v1_agent_sessions__session_id__bounds_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BoundsView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     decide_call_v1_agent_sessions__session_id__calls__request_seq__decision_post: {
         parameters: {
             query?: never;
@@ -8895,196 +3672,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StepView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_children_v1_agent_sessions__session_id__children_get: {
-        parameters: {
-            query?: {
-                cursor?: string | null;
-                limit?: number;
-            };
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentSessionPageView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    take_control_v1_agent_sessions__session_id__control_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentSessionView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    run_command_v1_agent_sessions__session_id__control_commands_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                "idempotency-key"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CommandRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HandRunView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    command_v1_agent_sessions__session_id__control_commands__key__get: {
-        parameters: {
-            query?: {
-                after_seq?: number;
-            };
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                session_id: string;
-                key: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CommandProgressView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    give_back_v1_agent_sessions__session_id__control_give_back_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["GiveBackRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentSessionView"];
                 };
             };
             /** @description Validation Error */
@@ -9138,114 +3725,6 @@ export interface operations {
             };
         };
     };
-    get_delivery_v1_agent_sessions__session_id__delivery_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DeliveryView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_executions_v1_agent_sessions__session_id__executions_get: {
-        parameters: {
-            query?: {
-                cursor?: string | null;
-                limit?: number;
-            };
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ExecutionPageView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    open_live_v1_agent_sessions__session_id__live_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LiveReadView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     send_message_v1_agent_sessions__session_id__messages_post: {
         parameters: {
             query?: never;
@@ -9286,150 +3765,6 @@ export interface operations {
             };
         };
     };
-    placement_of_v1_agent_sessions__session_id__placement_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PlacementView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    place_session_v1_agent_sessions__session_id__placement_put: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PlaceSessionRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PlacementView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_questions_v1_agent_sessions__session_id__questions_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["QuestionView"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    restore_session_v1_agent_sessions__session_id__restore_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentSessionView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_steps_v1_agent_sessions__session_id__steps_get: {
         parameters: {
             query?: {
@@ -9455,116 +3790,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StepPageView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_tool_calls_v1_agent_sessions__session_id__tool_calls_get: {
-        parameters: {
-            query?: {
-                after_seq?: number;
-                limit?: number;
-            };
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ToolCallPageView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_usage_v1_agent_sessions__session_id__usage_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SessionModelUsageView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_validations_v1_agent_sessions__session_id__validations_get: {
-        parameters: {
-            query?: {
-                limit?: number;
-            };
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationView"][];
                 };
             };
             /** @description Validation Error */
@@ -9674,42 +3899,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiKeyView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_approvals_v1_approvals_get: {
-        parameters: {
-            query?: {
-                cursor?: string | null;
-                limit?: number;
-            };
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApprovalPageView"];
                 };
             };
             /** @description Validation Error */
@@ -10046,743 +4235,10 @@ export interface operations {
             };
         };
     };
-    list_automations_v1_automations_get: {
-        parameters: {
-            query?: {
-                after?: string | null;
-                limit?: number;
-            };
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AutomationView"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_automation_v1_automations_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                "idempotency-key"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AutomationRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AutomationView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_principal_v1_automations_principal_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AutomationPrincipalView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    grant_principal_v1_automations_principal_put: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["GrantRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AutomationPrincipalView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_automation_v1_automations__automation_id__get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                automation_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AutomationView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_automation_v1_automations__automation_id__put: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                automation_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AutomationRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AutomationView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_budgets_v1_budgets_get: {
-        parameters: {
-            query?: {
-                after?: string | null;
-                limit?: number;
-            };
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BudgetView"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_budget_v1_budgets_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                "idempotency-key"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateBudgetRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BudgetView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_budget_v1_budgets__budget_id__get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                budget_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BudgetView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    change_amount_v1_budgets__budget_id__amount_put: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                /** @description The version the caller read, as an entity tag: `"3"`. 412 `precondition_failed` when the record changed since. */
-                "If-Match"?: string | null;
-            };
-            path: {
-                budget_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AmountRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BudgetView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    enroll_claimant_v1_claimants_enrollments_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                authorization?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ClaimantEnrollRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["IssuedClaimantCredentialView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    claim_v1_claimants_me_claims_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                authorization?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ClaimantClaimView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    rotate_claimant_v1_claimants_me_credentials_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                authorization?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["IssuedClaimantCredentialView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    held_v1_claimants_me_items__item_id__get: {
-        parameters: {
-            query?: never;
-            header: {
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                authorization?: string | null;
-                "claim-token": string;
-            };
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ClaimantWorkView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    extend_v1_claimants_me_items__item_id__lease_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                authorization?: string | null;
-            };
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ExtendLeaseRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ClaimantWorkView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    report_v1_claimants_me_items__item_id__report_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                authorization?: string | null;
-            };
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ClaimantReportRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ClaimantWorkView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    read_streams_v1_claimants_me_items__item_id__streams__kind__get: {
-        parameters: {
-            query?: {
-                after?: string[] | null;
-            };
-            header: {
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                authorization?: string | null;
-                "claim-token": string;
-            };
-            path: {
-                item_id: string;
-                kind: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ItemPageView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    append_v1_claimants_me_items__item_id__streams__kind__post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                authorization?: string | null;
-            };
-            path: {
-                item_id: string;
-                kind: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ClaimantAppendRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    revoke_claimant_v1_claimants__claimant_id__delete: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                claimant_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ClaimantView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     list_events_v1_events_get: {
         parameters: {
             query?: {
                 after_seq?: number;
-                limit?: number;
-            };
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EventView"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_recent_events_v1_events_recent_get: {
-        parameters: {
-            query?: {
-                before_seq?: number | null;
                 limit?: number;
             };
             header?: {
@@ -10845,701 +4301,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    revoke_enrollment_token_v1_host_enrollment_tokens__token_id__delete: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                token_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EnrollmentTokenView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_pools_v1_host_pools_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PoolView"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_pool_v1_host_pools_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                "idempotency-key"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreatePoolRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PoolView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_claimants_v1_host_pools__pool_id__claimants_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                pool_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ClaimantView"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    issue_enrollment_token_v1_host_pools__pool_id__enrollment_tokens_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                pool_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": components["schemas"]["IssueEnrollmentTokenRequest"] | null;
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["IssuedEnrollmentTokenView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_hosts_v1_host_pools__pool_id__hosts_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                pool_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HostView"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    enroll_v1_hosts_enrollments_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                authorization?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["EnrollRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["IssuedHostCredentialView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    claim_v1_hosts_me_claims_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                authorization?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ClaimRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ClaimView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    control_v1_hosts_me_control_get: {
-        parameters: {
-            query?: {
-                after?: string | null;
-            };
-            header?: {
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                authorization?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ControlView"];
-                    "application/x-ndjson": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    rotate_v1_hosts_me_credentials_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                authorization?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["IssuedHostCredentialView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    detail_v1_hosts_me_exec__item_id__get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                authorization?: string | null;
-            };
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ExecDetailView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    extend_v1_hosts_me_exec__item_id__lease_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                authorization?: string | null;
-            };
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ExecLeaseView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    push_part_v1_hosts_me_exec__item_id__parts_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                authorization?: string | null;
-            };
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PartRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    push_result_v1_hosts_me_exec__item_id__result_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                authorization?: string | null;
-            };
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ResultRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    heartbeat_v1_hosts_me_heartbeats_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                authorization?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["HeartbeatRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HostView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    prepared_v1_hosts_me_workspaces__item_id__post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                authorization?: string | null;
-            };
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PrepareRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PreparedView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    released_v1_hosts_me_workspaces__item_id__released_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                authorization?: string | null;
-            };
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    revoke_host_v1_hosts__host_id__delete: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                host_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HostView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    connect_installation_v1_integrations__integration__installations_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                "idempotency-key"?: string | null;
-            };
-            path: {
-                integration: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ConnectInstallationRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["InstallationView"];
-                };
-            };
-            /** @description another tenant connected it */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
             };
             /** @description Validation Error */
             422: {
@@ -11696,44 +4457,7 @@ export interface operations {
             };
         };
     };
-    list_entries_v1_knowledge_get: {
-        parameters: {
-            query?: {
-                status?: components["schemas"]["KnowledgeStatus"];
-                after?: string | null;
-                limit?: number;
-            };
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["KnowledgeView"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    write_entry_v1_knowledge_post: {
+    ask_v1_leases_requests_post: {
         parameters: {
             query?: never;
             header?: {
@@ -11747,7 +4471,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["KnowledgeRequest"];
+                "application/json": components["schemas"]["AskRequest"];
             };
         };
         responses: {
@@ -11757,7 +4481,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["KnowledgeView"];
+                    "application/json": components["schemas"]["StandingView"];
                 };
             };
             /** @description Validation Error */
@@ -11771,7 +4495,7 @@ export interface operations {
             };
         };
     };
-    get_entry_v1_knowledge__entry_id__get: {
+    get_request_v1_leases_requests__request_id__get: {
         parameters: {
             query?: never;
             header?: {
@@ -11780,7 +4504,7 @@ export interface operations {
                 "x-app-version"?: string | null;
             };
             path: {
-                entry_id: string;
+                request_id: string;
             };
             cookie?: never;
         };
@@ -11792,7 +4516,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["KnowledgeView"];
+                    "application/json": components["schemas"]["StandingView"];
                 };
             };
             /** @description Validation Error */
@@ -11806,24 +4530,57 @@ export interface operations {
             };
         };
     };
-    edit_entry_v1_knowledge__entry_id__put: {
+    cancel_v1_leases_requests__request_id__cancel_post: {
         parameters: {
             query?: never;
             header?: {
                 authorization?: string | null;
                 "x-app"?: string | null;
                 "x-app-version"?: string | null;
-                /** @description The version the caller read, as an entity tag: `"3"`. 412 `precondition_failed` when the record changed since. */
-                "If-Match"?: string | null;
             };
             path: {
-                entry_id: string;
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaseRequestView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reorder_v1_leases_requests__request_id__reorder_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                request_id: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["KnowledgeRequest"];
+                "application/json": components["schemas"]["ReorderRequest"];
             };
         };
         responses: {
@@ -11833,7 +4590,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["KnowledgeView"];
+                    "application/json": components["schemas"]["LeaseRequestView"];
                 };
             };
             /** @description Validation Error */
@@ -11847,7 +4604,7 @@ export interface operations {
             };
         };
     };
-    review_entry_v1_knowledge__entry_id__review_post: {
+    line_v1_leases_resources__resource_id__line_get: {
         parameters: {
             query?: never;
             header?: {
@@ -11856,47 +4613,8 @@ export interface operations {
                 "x-app-version"?: string | null;
             };
             path: {
-                entry_id: string;
+                resource_id: string;
             };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ReviewRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["KnowledgeView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    read_live_v1_live_get: {
-        parameters: {
-            query: {
-                handle: string;
-                after?: string[] | null;
-            };
-            header?: {
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -11907,7 +4625,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LivePageView"];
+                    "application/json": components["schemas"]["LineView"];
                 };
             };
             /** @description Validation Error */
@@ -11921,75 +4639,7 @@ export interface operations {
             };
         };
     };
-    read_item_live_v1_live_items_get: {
-        parameters: {
-            query: {
-                handle: string;
-                after?: string[] | null;
-            };
-            header?: {
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ItemPageView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_choices_v1_matrix_choices_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FillChoiceView"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    choose_v1_matrix_choices__role__put: {
+    get_lease_v1_leases__lease_id__get: {
         parameters: {
             query?: never;
             header?: {
@@ -11998,15 +4648,11 @@ export interface operations {
                 "x-app-version"?: string | null;
             };
             path: {
-                role: string;
+                lease_id: string;
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ChooseRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -12014,7 +4660,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["FillChoiceView"];
+                    "application/json": components["schemas"]["LeaseView"];
                 };
             };
             /** @description Validation Error */
@@ -12028,7 +4674,7 @@ export interface operations {
             };
         };
     };
-    drop_choice_v1_matrix_choices__role__delete: {
+    release_v1_leases__lease_id__release_post: {
         parameters: {
             query?: never;
             header?: {
@@ -12037,18 +4683,29 @@ export interface operations {
                 "x-app-version"?: string | null;
             };
             path: {
-                role: string;
+                lease_id: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-            204: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["LeaseView"];
+                };
+            };
+            /** @description lease_ended: the lease no longer runs */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -12061,7 +4718,7 @@ export interface operations {
             };
         };
     };
-    get_options_v1_matrix_options_get: {
+    renew_v1_leases__lease_id__renew_post: {
         parameters: {
             query?: never;
             header?: {
@@ -12069,7 +4726,9 @@ export interface operations {
                 "x-app"?: string | null;
                 "x-app-version"?: string | null;
             };
-            path?: never;
+            path: {
+                lease_id: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -12080,7 +4739,60 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["FillOptionsView"][];
+                    "application/json": components["schemas"]["LeaseView"];
+                };
+            };
+            /** @description lease_ended: the lease no longer runs */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_v1_leases__lease_id__revoke_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                lease_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaseView"];
+                };
+            };
+            /** @description lease_ended: the lease no longer runs */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Validation Error */
@@ -12768,76 +5480,6 @@ export interface operations {
             };
         };
     };
-    list_notifications_v1_notifications_get: {
-        parameters: {
-            query?: {
-                limit?: number;
-            };
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NotificationView"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    mark_read_v1_notifications__notification_id__read_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                notification_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NotificationView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     create_org_v1_orgs_post: {
         parameters: {
             query?: never;
@@ -13001,375 +5643,6 @@ export interface operations {
             };
         };
     };
-    publish_v1_playbooks_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                "idempotency-key"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PublishRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PlaybookView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_playbook_v1_playbooks__name__get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PlaybookView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_projects_v1_projects_get: {
-        parameters: {
-            query?: {
-                after?: string | null;
-                limit?: number;
-            };
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProjectView"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_project_v1_projects_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                "idempotency-key"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateProjectRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProjectView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_project_v1_projects__project_id__get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProjectView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    remove_project_v1_projects__project_id__delete: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProjectView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    rename_project_v1_projects__project_id__patch: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RenameProjectRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProjectView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    put_fetch_credential_v1_projects__project_id__credential_put: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                project_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["FetchCredentialRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FetchCredentialView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_keys_v1_provider_keys_get: {
-        parameters: {
-            query?: {
-                limit?: number;
-            };
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProviderKeyView"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    save_key_v1_provider_keys__provider__put: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                provider: components["schemas"]["ProviderName"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SaveKeyRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProviderKeyView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     mint_ticket_v1_realtime_tickets_post: {
         parameters: {
             query?: never;
@@ -13390,113 +5663,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IssuedTicketView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_policy_v1_retention_policy_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RetentionView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    write_policy_v1_retention_policy_put: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                /** @description The version the caller read, as an entity tag: `"3"`. 412 `precondition_failed` when the record changed since. */
-                "If-Match"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RetentionRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RetentionView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    erase_content_v1_retention_sessions__session_id__erase_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SessionRetentionView"];
                 };
             };
             /** @description Validation Error */
@@ -13580,114 +5746,6 @@ export interface operations {
             };
         };
     };
-    get_policy_v1_tools_policy_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ToolPolicyView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    write_policy_v1_tools_policy_put: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                /** @description The version the caller read, as an entity tag: `"3"`. 412 `precondition_failed` when the record changed since. */
-                "If-Match"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ToolPolicyRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ToolPolicyView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_usage_v1_usage_get: {
-        parameters: {
-            query?: {
-                cursor?: string | null;
-                limit?: number;
-            };
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UsagePageView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     list_users_v1_users_get: {
         parameters: {
             query?: {
@@ -13724,45 +5782,7 @@ export interface operations {
             };
         };
     };
-    start_validation_v1_validation_sessions_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-                "idempotency-key"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["StartValidationRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationSessionView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_validation_v1_validation_sessions__session_id__get: {
+    get_user_v1_users__user_id__get: {
         parameters: {
             query?: never;
             header?: {
@@ -13771,7 +5791,7 @@ export interface operations {
                 "x-app-version"?: string | null;
             };
             path: {
-                session_id: string;
+                user_id: string;
             };
             cookie?: never;
         };
@@ -13783,43 +5803,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ValidationSessionView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    open_item_live_v1_work_items__item_id__streams__kind__live_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                item_id: string;
-                kind: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ItemReadView"];
+                    "application/json": components["schemas"]["UserView"];
                 };
             };
             /** @description Validation Error */
@@ -13842,40 +5826,6 @@ export interface operations {
                 "WorkOS-Signature"?: string | null;
             };
             path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DeliveryReceivedView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    integration_delivery_webhooks_integrations__name__post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-app"?: string | null;
-                "x-app-version"?: string | null;
-            };
-            path: {
-                name: string;
-            };
             cookie?: never;
         };
         requestBody?: never;

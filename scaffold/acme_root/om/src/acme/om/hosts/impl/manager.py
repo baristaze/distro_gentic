@@ -495,7 +495,7 @@ class HostsManagerImpl(HostsManagerInterface):
         if enrollment_token.revoked_at is not None or enrollment_token.expires_at <= self._clock():
             raise CredentialExpired("enrollment token expired or revoked")
         try:
-            issuer = await self._tenancy.member_context(rctx, org_id, enrollment_token.created_by)
+            issuer = await self._tenancy.delegated_context(rctx, org_id, enrollment_token.created_by)
         except NotAuthorized:
             raise CredentialExpired("enrollment token's issuer left the tenant") from None
         if not issuer.has(Permission.MANAGE_MEMBERS):

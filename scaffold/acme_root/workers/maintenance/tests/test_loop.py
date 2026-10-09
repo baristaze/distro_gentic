@@ -138,8 +138,9 @@ class LeaseLosingWork(WorkManagerInterface):
         kinds: Sequence[str],
         worker_id: str,
         lease: timedelta,
+        tenant_cap: int | None = None,
     ) -> tuple[TenantContext, WorkItem] | None:
-        return await self._inner.claim(rctx, lane, kinds, worker_id, lease)
+        return await self._inner.claim(rctx, lane, kinds, worker_id, lease, tenant_cap)
 
     async def complete(self, ctx: TenantContext, item: WorkItem) -> WorkItem:
         return await self._inner.complete(ctx, item)
@@ -278,8 +279,9 @@ class StopOnClaimWork(LeaseLosingWork):
         kinds: Sequence[str],
         worker_id: str,
         lease: timedelta,
+        tenant_cap: int | None = None,
     ) -> tuple[TenantContext, WorkItem] | None:
-        claimed = await self._inner.claim(rctx, lane, kinds, worker_id, lease)
+        claimed = await self._inner.claim(rctx, lane, kinds, worker_id, lease, tenant_cap)
         if claimed is not None:
             self.stop()
         return claimed
@@ -305,8 +307,9 @@ class EnqueueDuringClaimWork(LeaseLosingWork):
         kinds: Sequence[str],
         worker_id: str,
         lease: timedelta,
+        tenant_cap: int | None = None,
     ) -> tuple[TenantContext, WorkItem] | None:
-        claimed = await self._inner.claim(rctx, lane, kinds, worker_id, lease)
+        claimed = await self._inner.claim(rctx, lane, kinds, worker_id, lease, tenant_cap)
         if claimed is None and self._pending:
             await self._inner.enqueue(self._ctx, self._pending.pop())
         return claimed
@@ -331,8 +334,9 @@ class EmptyClaimCountingWork(LeaseLosingWork):
         kinds: Sequence[str],
         worker_id: str,
         lease: timedelta,
+        tenant_cap: int | None = None,
     ) -> tuple[TenantContext, WorkItem] | None:
-        claimed = await self._inner.claim(rctx, lane, kinds, worker_id, lease)
+        claimed = await self._inner.claim(rctx, lane, kinds, worker_id, lease, tenant_cap)
         if claimed is None:
             self.empty_claims += 1
         return claimed

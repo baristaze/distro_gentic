@@ -35,6 +35,7 @@ class WorkKind(StrEnum):
     # claimed by a host through the gateway.
     EXEC = "EXEC"  # a command or a file operation, for the host that holds the workspace
     WORKSPACE = "WORKSPACE"  # a workspace to prepare, release, or purge
+    LEASE_NOTICE = "LEASE_NOTICE"  # a session's lease request answered, or its lease revoked
 
 
 WORK_ROW_PREFIX = "work."
@@ -130,9 +131,17 @@ class OrchestrationPayload(ScheduledPayload):
 class WakeParkedPayload(Platform):
     """The reason the org's parked records waited for is gone (a provider
     that answers again clears `provider_unavailable`); the item's target is
-    the org. Every record parked for it is resumed when the item runs."""
+    the org. Every record parked for it is resumed when the item runs, or
+    the one `record_id` names, when the reason was that record's alone (a
+    grant, or its request's end without one, clears `resource` for the
+    record it was for). A park that knows when its reason may clear (a
+    provider marked out until a retry time) asks for the org's wake then:
+    the item waits in the queue until `not_before`, and the parks that name
+    one time land one item, so the records it wakes resume staggered."""
 
     reason: ParkReason
+    record_id: UUID | None = None
+    not_before: datetime | None = None
 
 
 class WakeSessionPayload(ScheduledPayload):
@@ -158,6 +167,16 @@ class LoopPayload(Platform):
     loop is from its history, so the item carries nothing else. Each time the
     session turns pending asks for one, and a run that finds nothing to do
     writes nothing."""
+
+
+class LeaseNoticePayload(Platform):
+    """A lease request a session waits on was answered, by a grant or by its
+    end without a lease, or the lease it was granted was revoked. The item's
+    target is the session: one parked in line is unlocked, and its next run
+    reads the request and tells the model. Any other session is left as it
+    is: a running loop reads its requests before its next model call."""
+
+    request_id: UUID
 
 
 class DeleteAccountPayload(Platform):

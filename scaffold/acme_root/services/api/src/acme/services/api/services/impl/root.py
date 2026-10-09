@@ -23,6 +23,7 @@ from acme.services.api.services import (
     FlagsServiceInterface,
     FleetServiceInterface,
     HostsServiceInterface,
+    LeasesServiceInterface,
     MediaServiceInterface,
     RealtimeServiceInterface,
     RelayServiceInterface,
@@ -46,6 +47,7 @@ from acme.services.api.services.impl.fleet import FleetServiceImpl
 from acme.services.api.services.impl.hosts import HostsServiceImpl
 from acme.services.api.services.impl.intake import IntakeServiceImpl
 from acme.services.api.services.impl.knowledge import KnowledgeServiceImpl
+from acme.services.api.services.impl.leases import LeasesServiceImpl
 from acme.services.api.services.impl.ledgers import LedgersServiceImpl
 from acme.services.api.services.impl.matrix import MatrixServiceImpl
 from acme.services.api.services.impl.media import MediaServiceImpl
@@ -84,6 +86,7 @@ class ServicesImpl(ServicesInterface):
         flags: FlagsServiceInterface,
         realtime: RealtimeServiceInterface,
         webhooks: WebhooksServiceInterface,
+        leases: LeasesServiceInterface,
         agent_sessions: AgentSessionsServiceInterface,
         hosts: HostsServiceInterface,
         fleet: FleetServiceInterface,
@@ -112,6 +115,7 @@ class ServicesImpl(ServicesInterface):
         self._flags = flags
         self._realtime = realtime
         self._webhooks = webhooks
+        self._leases = leases
         self._agent_sessions = agent_sessions
         self._hosts = hosts
         self._fleet = fleet
@@ -153,6 +157,9 @@ class ServicesImpl(ServicesInterface):
 
     def get_webhooks_service(self) -> WebhooksServiceInterface:
         return self._webhooks
+
+    def get_lease_service(self) -> LeasesServiceInterface:
+        return self._leases
 
     def get_agent_sessions_service(self) -> AgentSessionsServiceInterface:
         return self._agent_sessions
@@ -252,6 +259,7 @@ def build_services(
             integrations.get_integration,
             intake,
         ),
+        leases=LeasesServiceImpl(managers.leases),
         agent_sessions=AgentSessionsServiceImpl(
             managers.agent_sessions,
             managers.agents,

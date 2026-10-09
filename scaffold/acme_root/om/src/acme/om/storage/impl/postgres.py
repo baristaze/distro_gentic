@@ -42,6 +42,8 @@ from acme.om.intake.storage import IntakeStorageInterface
 from acme.om.intake.storage.impl.postgres import IntakeStoragePostgresImpl
 from acme.om.knowledge.storage import KnowledgeStorageInterface
 from acme.om.knowledge.storage.impl.postgres import KnowledgeStoragePostgresImpl
+from acme.om.leases.storage import LeasesStorageInterface
+from acme.om.leases.storage.impl.postgres import LeasesStoragePostgresImpl
 from acme.om.matrix.storage import MatrixStorageInterface, MatrixTenantStorageInterface
 from acme.om.matrix.storage.impl.postgres import (
     MatrixStoragePostgresImpl,
@@ -220,6 +222,7 @@ class StoragePostgresImpl(StorageInterface):
         self._events = EventStoragePostgresImpl(sessions)
         self._outbox = OutboxStoragePostgresImpl(sessions)
         self._orchestrations = OrchestrationsStoragePostgresImpl(sessions)
+        self._leases = LeasesStoragePostgresImpl(sessions)
         self._steps = StepStoragePostgresImpl(sessions)
         self._agent_sessions = AgentSessionStoragePostgresImpl(sessions)
         self._agents = AgentStoragePostgresImpl(sessions)
@@ -270,6 +273,9 @@ class StoragePostgresImpl(StorageInterface):
 
     def get_orchestrations_storage(self) -> OrchestrationsStorageInterface:
         return self._orchestrations
+
+    def get_lease_storage(self) -> LeasesStorageInterface:
+        return self._leases
 
     def get_step_storage(self) -> StepStorageInterface:
         return self._steps
