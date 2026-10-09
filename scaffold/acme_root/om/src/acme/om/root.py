@@ -74,7 +74,8 @@ from acme.om.knowledge import KnowledgeManagerInterface
 from acme.om.leases import LeasesManagerInterface
 from acme.om.leases.impl.kinds import NoopResourceKindImpl, OrchestrationWaiterImpl
 from acme.om.leases.impl.manager import LeasesManagerImpl, LeasesOptions
-from acme.om.leases.types.request import WaiterKind
+from acme.om.leases.kinds import ResourceKinds, ResourceKindSpec
+from acme.om.leases.types.request import ASK_PAYLOADS, WaiterKind
 from acme.om.leases.types.resource import ResourceKind
 from acme.om.media import MediaManagerInterface
 from acme.om.media.impl.manager import MediaManagerImpl, MediaOptions
@@ -262,6 +263,17 @@ def no_actions(managers: Callable[[], Managers]) -> tuple[AutomationActionInterf
     return ()
 
 
+ProductResources = Callable[[Callable[[], Managers]], tuple[ResourceKindSpec, ...]]
+"""A product's own resource kinds, each with the shape of its ask, its
+hooks, and its check of an ask if it has one, built over the managers as
+the root answers them, as a product's tools are."""
+
+
+def no_resources(managers: Callable[[], Managers]) -> tuple[ResourceKindSpec, ...]:
+    """A product with no resource kind of its own."""
+    return ()
+
+
 @dataclass(frozen=True)
 class ProductKinds:
     """What a product adds to the platform's kinds: its agent kinds, every
@@ -274,8 +286,11 @@ class ProductKinds:
     claimant kinds of its own that write and read it, if any; its executors, by
     the validation environment each runs; and its kinds of automation
     action, each acting in a firing, saying when the run it started
-    ended, and checking the person who writes one (`automations.actions`). Its agent kinds join the platform's
-    catalog, which refuses a version declared twice, and its tools the
+    ended, and checking the person who writes one (`automations.actions`);
+    and its resource kinds, each with the shape of its ask, the hooks a
+    grant asks, and its check of an ask if it has one (`leases.kinds`).
+    Its agent kinds join the platform's catalog, which refuses a version
+    declared twice, and its tools the
     platform's, where a registry refuses two of one name. Every other kind
     registers beside the platform's own, which go through the same registries,
     and a name the platform holds is refused, so a product adds kinds and
@@ -296,6 +311,7 @@ class ProductKinds:
     executors: Mapping[str, ExecutorInterface] = field(default_factory=lambda: {})
     actions: ProductActions = no_actions
     assistant_tools: tuple[str, ...] = ()
+    resources: ProductResources = no_resources
 
     def __post_init__(self) -> None:
         for spec in self.work:
@@ -634,8 +650,9 @@ def build_managers(
     and the tools' ceilings, each tool
     reading the managers built here at call time; its work kinds and
     claimant kinds, which the work queue and placement read beside the
-    platform's; and its executors, which run a check that names their
-    environment. A name the platform holds is refused at boot. None adds
+    platform's; its executors, which run a check that names their
+    environment; and its resource kinds, which the leases manager reads
+    beside `noop`. A name the platform holds is refused at boot. None adds
     nothing.
 
     `placement_options` is the plan tier of a tenant no operator gave one,
@@ -785,15 +802,27 @@ def build_managers(
         outbox,
         orchestrations_options or OrchestrationsOptions(),
     )
-    # A product registers its resource kinds and its waiter kinds here, each
-    # with its hooks, as a work kind's handler is registered in the worker,
-    # and, for a kind that refuses some asks, its check (`asks`).
+    # The resource kinds the leases read through: the mechanism's own, and
+    # the product's beside it, each with its ask's shape, its hooks, and its
+    # check of an ask if it has one; a name registered twice is refused. A
+    # product's kinds read the managers built below, so each edge is bound
+    # at call time.
+    resource_kinds = ResourceKinds(
+        (
+            ResourceKindSpec(
+                ResourceKind.NOOP, ASK_PAYLOADS[ResourceKind.NOOP], NoopResourceKindImpl()
+            ),
+            *product.resources(lambda: managers),
+        )
+    )
     leases = LeasesManagerImpl(
         storage.get_lease_storage(),
         tenancy,
         outbox,
         leases_options or LeasesOptions(),
-        kinds={ResourceKind.NOOP: NoopResourceKindImpl()},
+        kinds=resource_kinds.hooks(),
+        asks=resource_kinds.checks(),
+        payloads=resource_kinds.asks(),
         # A session waits in line too: its sessions manager is built below,
         # so that edge is bound at call time.
         waiters={

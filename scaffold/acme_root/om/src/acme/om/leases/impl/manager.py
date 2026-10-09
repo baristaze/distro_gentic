@@ -47,7 +47,7 @@ from acme.om.leases.types.request import (
     Standing,
     WaiterKind,
 )
-from acme.om.leases.types.resource import Resource, ResourceKind, ResourceUpdate
+from acme.om.leases.types.resource import Resource, ResourceUpdate
 from acme.om.orchestrations.steps import step_rows
 from acme.om.orchestrations.types.orchestration import Step
 from acme.om.outbox import OutboxRelayInterface
@@ -90,10 +90,11 @@ class LeasesManagerImpl(LeasesManagerInterface):
         relay: OutboxRelayInterface,
         options: LeasesOptions,
         *,
-        kinds: Mapping[ResourceKind, ResourceKindInterface],
+        kinds: Mapping[str, ResourceKindInterface],
         waiters: Mapping[WaiterKind, WaiterInterface],
         work: WorkManagerInterface,
-        asks: Mapping[ResourceKind, AskCheckInterface] | None = None,
+        asks: Mapping[str, AskCheckInterface] | None = None,
+        payloads: Mapping[str, type[Platform]] = ASK_PAYLOADS,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._storage = storage
@@ -101,6 +102,9 @@ class LeasesManagerImpl(LeasesManagerInterface):
         self._relay = relay
         self._options = options
         self._kinds = kinds
+        # The shape of each kind's ask, by its name: the root's registry
+        # (`leases.kinds`) hands it beside the kind's hooks.
+        self._payloads = payloads
         self._waiters = waiters
         # The kinds that refuse some asks, each with its check; any other
         # kind accepts every ask.
@@ -200,17 +204,20 @@ class LeasesManagerImpl(LeasesManagerInterface):
     ) -> Standing:
         ctx.require(Permission.WRITE)
         self._kind(request.kind)
+        shape = self._payloads.get(request.kind)
+        if shape is None:
+            raise ValidationFailed(f"no ask of resource kind {request.kind} is registered")
         try:
-            ASK_PAYLOADS[request.kind].model_validate(dict(request.payload))
+            shape.model_validate(dict(request.payload))
         except ValidationError as error:
-            raise ValidationFailed(f"a {request.kind.value} ask is not {error}") from None
+            raise ValidationFailed(f"a {request.kind} ask is not {error}") from None
         if request.waiter_kind is not None and request.waiter_kind not in self._waiters:
             raise ValidationFailed(f"no waiter of kind {request.waiter_kind.value} is registered")
         named: Resource | None = None
         if request.resource_id is not None:
             named = await self._resource(ctx, request.resource_id)
-            if named.retired_at is not None or named.kind is not request.kind:
-                raise NotFound(f"no live {request.kind.value} resource {request.resource_id}")
+            if named.retired_at is not None or named.kind != request.kind:
+                raise NotFound(f"no live {request.kind} resource {request.resource_id}")
         now = self._clock()
         asked = request.model_copy(
             update={
@@ -516,7 +523,7 @@ class LeasesManagerImpl(LeasesManagerInterface):
         # that item acts for the holder.
         jobs = [row.id for row in started if asks_for_work(row.kind)]
         if len(jobs) > 1:
-            raise ValueError(f"a {resource.kind.value} grant starts {len(jobs)} jobs; one at most")
+            raise ValueError(f"a {resource.kind} grant starts {len(jobs)} jobs; one at most")
         if jobs:
             lease = lease.model_copy(update={"job_key": jobs[0]})
         rows: tuple[OutboxRow, ...] = (
@@ -536,7 +543,7 @@ class LeasesManagerImpl(LeasesManagerInterface):
         await self._relay.relay_all(ctx.org_id, rows)
         log.info(
             "granted %s %s to request %s under token %d in org %s",
-            resource.kind.value,
+            resource.kind,
             resource.id,
             request.id,
             lease.token,
@@ -651,7 +658,7 @@ class LeasesManagerImpl(LeasesManagerInterface):
                 ended += 1
         ended += await self._cancel_stranded(ctx)
         free = await self._storage.read_free(ctx.org_id, self._options.resource_limit)
-        lines: dict[ResourceKind, list[LeaseRequest]] = {}
+        lines: dict[str, list[LeaseRequest]] = {}
         for resource in free:
             if resource.kind not in lines:
                 lines[resource.kind] = await self._storage.read_waiting(
@@ -701,10 +708,10 @@ class LeasesManagerImpl(LeasesManagerInterface):
         waiter = self._waiters.get(request.waiter_kind)
         return waiter is not None and await waiter.still_waits(ctx, request.waiter_id)
 
-    def _kind(self, kind: ResourceKind) -> ResourceKindInterface:
+    def _kind(self, kind: str) -> ResourceKindInterface:
         hooks = self._kinds.get(kind)
         if hooks is None:
-            raise ValidationFailed(f"no resource kind {kind.value} is registered")
+            raise ValidationFailed(f"no resource kind {kind} is registered")
         return hooks
 
     async def _held(self, ctx: TenantContext, lease_id: UUID, job: JobClaim | None) -> Lease:

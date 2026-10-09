@@ -1,7 +1,7 @@
 """A product adds its own kind of work at its root: a work kind with its
 payload, its claimant kind, and its lane; a secret owner kind with the
-placement that reaches it; a stream kind with its bounds; and an executor
-for a validation's environment. Each registers beside the platform's own,
+placement that reaches it; a stream kind with its bounds; an executor
+for a validation's environment; and a resource kind. Each registers beside the platform's own,
 which go through the same registries, and each is held as the platform's
 is. A product's own class takes its ceiling beside the platform's. The
 example is a `render` job on a `batch` pool."""
@@ -45,6 +45,10 @@ from acme.om.exceptions import (
     PreconditionFailed,
     ValidationFailed,
 )
+from acme.om.leases.impl.kinds import NoopResourceKindImpl
+from acme.om.leases.kinds import ResourceKindSpec
+from acme.om.leases.types.request import NoopAsk
+from acme.om.leases.types.resource import ResourceKind
 from acme.om.outbox.types.row import outbox_row
 from acme.om.placement.impl.manager import PlacementManagerImpl
 from acme.om.placement.kinds import (
@@ -718,3 +722,18 @@ async def test_a_check_runs_only_in_an_environment_an_executor_is_registered_for
     )
     assert validation.executor == "batch-1" and platform.requests == []
     assert [check.environment for check in product.requests[0].checks] == [BATCH]
+
+
+def test_a_products_resource_kind_never_takes_the_platforms_name(tmp_path: Path) -> None:
+    """A product's resource kind named as the mechanism's own is refused at
+    boot, so a product adds kinds and never changes `noop`; a name off the
+    kinds' shape is refused where it is declared."""
+    taken = ProductKinds(
+        resources=lambda _managers: (
+            ResourceKindSpec(ResourceKind.NOOP, NoopAsk, NoopResourceKindImpl()),
+        )
+    )
+    with pytest.raises(ValueError, match="resource kind noop is registered twice"):
+        build_managers(StorageMemoryImpl(), InfraLocalImpl(tmp_path), product_kinds=taken)
+    with pytest.raises(ValueError, match="lower case"):
+        ResourceKindSpec("Dock", NoopAsk, NoopResourceKindImpl())

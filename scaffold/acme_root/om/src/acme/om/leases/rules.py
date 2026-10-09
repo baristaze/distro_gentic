@@ -22,7 +22,7 @@ hold counts a fifth, and the measure before it the rest."""
 def stands_in(request: LeaseRequest, resource: Resource) -> bool:
     """Whether a waiting request is in the resource's line: it names the
     resource, or its selector's labels are all among the resource's."""
-    if request.status is not RequestStatus.WAITING or request.kind is not resource.kind:
+    if request.status is not RequestStatus.WAITING or request.kind != resource.kind:
         return False
     if request.resource_id is not None:
         return request.resource_id == resource.id

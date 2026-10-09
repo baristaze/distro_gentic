@@ -234,7 +234,7 @@ def _line(standing: Standing) -> LinePark:
     request = standing.request
     return LinePark(
         request_id=request.id,
-        kind=request.kind.value,
+        kind=request.kind,
         resource_id=request.resource_id,
         place=standing.place,
         estimate_seconds=standing.estimate_seconds,

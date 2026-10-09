@@ -18,6 +18,7 @@ from acme.om.leases.types.resource import (
     Label,
     Resource,
     ResourceKind,
+    ResourceKindName,
 )
 
 
@@ -64,11 +65,11 @@ class LeaseRequest(Identifiable, Trackable):
 
     # The ask's own key: an ask asked again by it answers this request.
     idempotency_key: UUID
-    kind: ResourceKind
+    kind: ResourceKindName
     # One resource, or a selector: the labels a resource of the kind offers.
     resource_id: UUID | None = None
     labels: tuple[Label, ...] | None = Field(default=None, max_length=MAX_LABELS)
-    # The dump of ASK_PAYLOADS[kind]: what the grant starts, in the kind's shape.
+    # The dump of its kind's ask: what the grant starts, in the kind's shape.
     payload: FrozenMapping = Field(default_factory=dict, validate_default=True)
     # What waits on it, by a registered kind and an id; none for a caller
     # that follows its request itself.
@@ -100,10 +101,11 @@ class NoopAsk(Platform):
     """The `noop` kind's ask carries nothing."""
 
 
-ASK_PAYLOADS: dict[ResourceKind, type[Platform]] = {
+ASK_PAYLOADS: dict[str, type[Platform]] = {
     ResourceKind.NOOP: NoopAsk,
 }
-"""The shape of what each kind's ask carries; the ask validates it."""
+"""The shape of what each of the mechanism's own kinds' asks carries, which
+its spec reads (`leases.kinds`); the ask validates it."""
 
 
 class Standing(Platform):

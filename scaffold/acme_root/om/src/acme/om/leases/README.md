@@ -16,7 +16,7 @@ kinds of thing [Acme is made of](../../../../README.md).
   carries and its hooks: what a grant starts, whether a request may
   still be granted, and, when it needs one, a check at the ask. What a grant starts holds one job at most: a work
   item that lands in the grant's commit. The core has one kind, `noop`,
-  whose grant starts nothing. A product replaces it with its own kinds.
+  whose grant starts nothing. A product registers its own beside it.
 - **Lease**: one grant of one resource to one principal, under a token
   one above every earlier grant of that resource. When its grant starts
   a job, it names the job's work item, and when the job started. It is
@@ -93,10 +93,15 @@ kinds of thing [Acme is made of](../../../../README.md).
 
 ## How another namespace composes it
 
-A product adds a kind to `ResourceKind` and the shape of its ask to
-`ASK_PAYLOADS`, and registers a `ResourceKindInterface` impl for it at
-the root, and an `AskCheckInterface` impl when the kind refuses some
-asks. Its owner
+A product registers its own kind in `PRODUCT_KINDS`, never in
+`ResourceKind`: a `ResourceKindSpec` (`kinds.py`) with its name, the
+shape of its ask, its `ResourceKindInterface` impl, and an
+`AskCheckInterface` impl when the kind refuses some asks, built over the
+managers as its tools are (`ProductKinds.resources`). The root hands
+every kind to the manager beside `noop`, and refuses a name registered
+twice
+([ADR 2049](../../../../../docs/adr/2049-a-product-registers-its-own-resource-kinds.md)).
+Its owner
 writes the resource with its own row through `register_statement` (or
 `land_resource` in memory), updates it through `update_statement` (or
 `land_update`) and offers it after the commit (`offer`), and retires it
