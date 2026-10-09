@@ -26,9 +26,18 @@ MAX_TERM_SECONDS = 604_800
 """The longest bound a resource may set on one lease: seven days."""
 
 
+KIND_NAME = r"^[a-z][a-z0-9_]{0,63}$"
+"""A resource kind's name: the `kind` of a resource's row and of a request's."""
+
+ResourceKindName = Annotated[str, StringConstraints(pattern=KIND_NAME)]
+"""A registered kind, by its name: one of the mechanism's own
+(`ResourceKind`) or one a product registers (`leases.kinds`)."""
+
+
 class ResourceKind(StrEnum):
-    """A product adds its kinds here, each with the shape of what its ask
-    carries (`ASK_PAYLOADS`) and its hooks (`ResourceKindInterface`)."""
+    """The mechanism's own kinds. A product registers its own beside them by
+    name, each with the shape of what its ask carries, its hooks, and its
+    check of an ask (`leases.kinds.ResourceKindSpec`), never here."""
 
     NOOP = "noop"  # the mechanism's own: a grant starts nothing, and every request may be granted
 
@@ -47,7 +56,7 @@ class Resource(Identifiable, Trackable):
     (`ResourceUpdate`), which may name its availability too; the rest moves
     only through the manager's transitions."""
 
-    kind: ResourceKind
+    kind: ResourceKindName
     # The row it stands for, in the namespace that owns the kind. One
     # resource per org, kind, and row.
     ref_id: UUID

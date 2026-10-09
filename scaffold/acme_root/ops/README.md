@@ -72,7 +72,6 @@ an investigator reads counts by bounded labels, never a tenant's rows.
 |-------|-------|---------|
 | `ops-session-stuck` | Supporter | Why one session is not moving: its park, its loop's lease and lane, its place in line, its share, and where it runs. |
 | `ops-host-idle` | Supporter | Why one host takes no work: what it advertised and the version it reads, against what waits on its lanes. |
-| `ops-integration-silent` | Investigator | Why an integration's events stopped: what its route answered, what the worker made of them, and the dead letters. |
 | `ops-provider-outage` | Investigator | Which provider and credential fail, and how many sessions park on a provider, for how long. |
 
 The audits read and never fix. The database ones build a database of

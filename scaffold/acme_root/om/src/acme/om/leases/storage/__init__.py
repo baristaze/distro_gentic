@@ -16,7 +16,7 @@ from acme.om.leases.types.request import (
     RequestStatus,
     WaiterKind,
 )
-from acme.om.leases.types.resource import Resource, ResourceKind, ResourceUpdate
+from acme.om.leases.types.resource import Resource, ResourceUpdate
 from acme.om.orchestrations.types.orchestration import Step
 from acme.om.outbox.types.row import OutboxRow
 
@@ -37,7 +37,7 @@ class ResourceLandingInterface(ABC):
     def land_update(
         self,
         org_id: UUID,
-        kind: ResourceKind,
+        kind: str,
         ref_id: UUID,
         change: ResourceUpdate,
         at: datetime,
@@ -51,7 +51,7 @@ class ResourceLandingInterface(ABC):
 
     @abstractmethod
     def land_retirement(
-        self, org_id: UUID, kind: ResourceKind, ref_id: UUID, at: datetime, actor: UUID
+        self, org_id: UUID, kind: str, ref_id: UUID, at: datetime, actor: UUID
     ) -> None:
         """Retires the kind's resource for the row. The requests that name it
         wait on until the manager takes them out of line (`read_stranded`),
@@ -76,11 +76,11 @@ class LeasesStorageInterface(ABC):
 
     @abstractmethod
     async def read_resource_by_ref(
-        self, org_id: UUID, kind: ResourceKind, ref_id: UUID
+        self, org_id: UUID, kind: str, ref_id: UUID
     ) -> Resource | None: ...
 
     @abstractmethod
-    async def read_resources(self, org_id: UUID, kind: ResourceKind, limit: int) -> list[Resource]:
+    async def read_resources(self, org_id: UUID, kind: str, limit: int) -> list[Resource]:
         """The org's live resources of a kind, by id."""
         ...
 
@@ -149,9 +149,7 @@ class LeasesStorageInterface(ABC):
     async def read_request(self, org_id: UUID, request_id: UUID) -> LeaseRequest | None: ...
 
     @abstractmethod
-    async def read_waiting(
-        self, org_id: UUID, kind: ResourceKind, limit: int
-    ) -> list[LeaseRequest]:
+    async def read_waiting(self, org_id: UUID, kind: str, limit: int) -> list[LeaseRequest]:
         """The org's waiting requests of a kind in rank order: by rank, then id."""
         ...
 

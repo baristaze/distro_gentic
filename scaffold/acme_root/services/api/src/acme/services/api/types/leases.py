@@ -12,7 +12,12 @@ from pydantic import Field
 
 from acme.om.leases.types.lease import LeaseStatus
 from acme.om.leases.types.request import EndReason, RequestStatus, WaiterKind
-from acme.om.leases.types.resource import MAX_LABELS, MAX_TERM_SECONDS, Label, ResourceKind
+from acme.om.leases.types.resource import (
+    MAX_LABELS,
+    MAX_TERM_SECONDS,
+    Label,
+    ResourceKindName,
+)
 from acme.services.api.types.common import RequestBody, View
 
 
@@ -21,7 +26,7 @@ class ResourceView(View):
     lease that holds it until when."""
 
     id: UUID
-    kind: ResourceKind
+    kind: ResourceKindName
     ref_id: UUID
     labels: list[str]
     max_term_seconds: int
@@ -56,7 +61,7 @@ class LeaseView(View):
 
 class LeaseRequestView(View):
     id: UUID
-    kind: ResourceKind
+    kind: ResourceKindName
     resource_id: UUID | None
     labels: list[str] | None
     waiter_kind: WaiterKind | None
@@ -125,7 +130,7 @@ class AskRequest(RequestBody):
     window the job has to start in, bounded the same way; none gives it the
     term."""
 
-    kind: ResourceKind
+    kind: ResourceKindName
     resource_id: UUID | None = None
     labels: list[Label] | None = Field(default=None, max_length=MAX_LABELS)
     payload: dict[str, Any] = Field(default_factory=dict)

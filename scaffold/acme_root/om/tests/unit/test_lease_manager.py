@@ -826,7 +826,7 @@ class Staffed(AskCheckInterface):
     ) -> None:
         self.asked.append((ctx.user_id, request, resource))
         if ctx.role not in (Role.OWNER, Role.ADMIN):
-            raise NotAuthorized(f"a {ctx.role.value} asks for no {request.kind.value} resource")
+            raise NotAuthorized(f"a {ctx.role.value} asks for no {request.kind} resource")
         offers = resource.labels if resource is not None else request.labels or ()
         if "staffed" not in offers:
             raise ValidationFailed("a resource is asked for only where it is staffed")

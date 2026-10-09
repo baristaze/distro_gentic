@@ -13,7 +13,7 @@ from acme.om.leases.types.request import (
     RequestStatus,
     WaiterKind,
 )
-from acme.om.leases.types.resource import Resource, ResourceKind, ResourceUpdate
+from acme.om.leases.types.resource import Resource, ResourceUpdate
 from acme.om.orchestrations.storage import StepLandingInterface
 from acme.om.orchestrations.types.orchestration import Step
 from acme.om.outbox.storage import OutboxLandingInterface
@@ -51,16 +51,14 @@ class LeasesStorageMemoryImpl(MemoryStorageBase, LeasesStorageInterface, Resourc
     async def read_resource(self, org_id: UUID, resource_id: UUID) -> Resource | None:
         return self._get(self._resources, org_id, resource_id)
 
-    async def read_resource_by_ref(
-        self, org_id: UUID, kind: ResourceKind, ref_id: UUID
-    ) -> Resource | None:
+    async def read_resource_by_ref(self, org_id: UUID, kind: str, ref_id: UUID) -> Resource | None:
         return self._by_ref(org_id, kind, ref_id)
 
-    async def read_resources(self, org_id: UUID, kind: ResourceKind, limit: int) -> list[Resource]:
+    async def read_resources(self, org_id: UUID, kind: str, limit: int) -> list[Resource]:
         return [
             r
             for r in self._rows(self._resources, org_id)
-            if r.kind is kind and r.retired_at is None
+            if r.kind == kind and r.retired_at is None
         ][:limit]
 
     async def read_free(self, org_id: UUID, limit: int) -> list[Resource]:
@@ -148,10 +146,8 @@ class LeasesStorageMemoryImpl(MemoryStorageBase, LeasesStorageInterface, Resourc
     async def read_request(self, org_id: UUID, request_id: UUID) -> LeaseRequest | None:
         return self._get(self._requests, org_id, request_id)
 
-    async def read_waiting(
-        self, org_id: UUID, kind: ResourceKind, limit: int
-    ) -> list[LeaseRequest]:
-        found = [r for r in self._waiting_in(org_id) if r.kind is kind]
+    async def read_waiting(self, org_id: UUID, kind: str, limit: int) -> list[LeaseRequest]:
+        found = [r for r in self._waiting_in(org_id) if r.kind == kind]
         return sorted(found, key=lambda r: (r.rank, r.id))[:limit]
 
     async def read_overdue(self, org_id: UUID, now: datetime, limit: int) -> list[LeaseRequest]:
@@ -493,7 +489,7 @@ class LeasesStorageMemoryImpl(MemoryStorageBase, LeasesStorageInterface, Resourc
     def land_update(
         self,
         org_id: UUID,
-        kind: ResourceKind,
+        kind: str,
         ref_id: UUID,
         change: ResourceUpdate,
         at: datetime,
@@ -506,7 +502,7 @@ class LeasesStorageMemoryImpl(MemoryStorageBase, LeasesStorageInterface, Resourc
         self._resources[resource.id] = (org_id, resource.model_copy(update=fields))
 
     def land_retirement(
-        self, org_id: UUID, kind: ResourceKind, ref_id: UUID, at: datetime, actor: UUID
+        self, org_id: UUID, kind: str, ref_id: UUID, at: datetime, actor: UUID
     ) -> None:
         resource = self._by_ref(org_id, kind, ref_id)
         if resource is None or resource.retired_at is not None:
@@ -525,12 +521,12 @@ class LeasesStorageMemoryImpl(MemoryStorageBase, LeasesStorageInterface, Resourc
 
     # The shared steps.
 
-    def _by_ref(self, org_id: UUID, kind: ResourceKind, ref_id: UUID) -> Resource | None:
+    def _by_ref(self, org_id: UUID, kind: str, ref_id: UUID) -> Resource | None:
         return next(
             (
                 r
                 for r in self._rows(self._resources, org_id)
-                if r.kind is kind and r.ref_id == ref_id
+                if r.kind == kind and r.ref_id == ref_id
             ),
             None,
         )
