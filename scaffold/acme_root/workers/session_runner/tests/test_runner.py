@@ -41,7 +41,7 @@ from acme.om.context import (
 from acme.om.exceptions import NotFound, UnknownAgentKind
 from acme.om.matrix.types.matrix import MatrixStatus
 from acme.om.placement.kinds import platform_work_kinds
-from acme.om.placement.rules import DEFAULT_TIER
+from acme.om.placement.rules import DEFAULT_TIER, tier_lane
 from acme.om.root import PlatformPorts, ProductKinds
 from acme.om.steps.rules import message_step
 from acme.om.steps.types.content import Attachment, Children, DocumentBlock
@@ -290,7 +290,7 @@ async def test_a_tenants_running_loop_leaves_its_wake_to_the_capped_maintenance_
     running = await work.claim(rctx, runner.lane, [WorkKind.LOOP], runner.worker_id, runner.lease)
 
     assert running is not None and running[1].target_id == session.id, "a runner holds the loop"
-    assert running[1].lane == "loop", "the relay lands a loop on the loop's own lane"
+    assert running[1].lane == tier_lane(DEFAULT_TIER), "placement lands a loop on its tier's lane"
     park = Park(reason=ParkReason.PROVIDER, unlock="anthropic", retry_at=utcnow())
     await work.enqueue_relayed(owner.org_id, wake_row(owner, session, park))
     capped = maintenance_options(
