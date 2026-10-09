@@ -10,7 +10,8 @@ workspace host is one; a product's claimant is another (ADR 2046).
   start after, rotated at half its life, and never used once refused.
 - `backoff.py`: the wait after a failure it outlasts.
 - `journal.py`: the reports not yet sent, kept on its disk first.
-- `lease.py`: a lease timed on its own monotonic clock.
+- `lease.py`: a hold timed on the client's lease clock, with the item's
+  claim beside it.
 - `claimant.py`: a product's claimant on the `/claimants/...` calls:
   claim, renew, and report, with all of the above, and its credential
   kept live while a work runs (`keeping_alive`).

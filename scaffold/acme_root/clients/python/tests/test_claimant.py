@@ -24,9 +24,11 @@ from acme.client.claimant.credential import (
     save_credential,
 )
 from acme.client.claimant.journal import Entry, Journal
-from acme.client.claimant.lease import RETRY_FLOOR_SECONDS, LeaseClock
+from acme.client.claimant.lease import LeaseClock
 from acme.client.claimant.settings import ClaimantSettings, claimant_env
 from acme.client.client import ApiClient
+from acme.client.leases import MIN_RENEW_SECONDS
+from acme.client.leases import LeaseClock as HoldClock
 from acme.client.types import ClaimantWorkView, ReportOutcome
 
 NOW = datetime(2026, 10, 7, 12, 0, tzinfo=UTC)
@@ -147,18 +149,32 @@ def test_the_journal_keeps_a_report_until_it_is_sent_and_sets_aside_what_waits(
 
 
 def test_the_lease_clock_renews_at_half_the_shorter_and_asks_again_sooner_unanswered() -> None:
+    """The hold is the client's lease clock, and the claim beside it
+    brings the renewal forward when it is the shorter of the two."""
     lease = LeaseClock.started(100.0, 300.0, 60.0)
+    assert isinstance(lease.hold, HoldClock)
     assert (lease.deadline, lease.claim_deadline, lease.renew_at) == (400.0, 160.0, 130.0)
     lease.unanswered(130.0)
     assert lease.renew_at == 145.0 and lease.deadline == 400.0
     lease.unanswered(145.0, wait=30.0)
-    assert lease.renew_at == 145.0 + 15.0 - RETRY_FLOOR_SECONDS
+    assert lease.renew_at == 145.0 + 15.0 - MIN_RENEW_SECONDS
     lease.renewed(150.0, 300.0, 60.0)
     assert (lease.deadline, lease.renew_at) == (450.0, 180.0)
+    # Past the claim, the hold alone times the next ask.
+    lease.unanswered(215.0)
+    assert lease.renew_at == 215.0 + (450.0 - 215.0) / 2
+    # A hold shorter than the claim times the renewal by itself.
+    short = LeaseClock.started(100.0, 60.0, 300.0)
+    assert (short.deadline, short.claim_deadline, short.renew_at) == (160.0, 400.0, 130.0)
+    short.unanswered(130.0)
+    assert short.renew_at == 145.0
     alone = LeaseClock.started(0.0, 1.0)
-    assert alone.renew_at == RETRY_FLOOR_SECONDS and not alone.out(0.5) and alone.out(1.0)
+    assert alone.renew_at == MIN_RENEW_SECONDS and not alone.out(0.5) and alone.out(1.0)
     alone.refused = True
-    assert alone.out(0.0)
+    assert alone.out(0.0) and alone.hold.lost(0.0)
+    ended = LeaseClock.started(0.0, 60.0)
+    ended.ended = "revoked"
+    assert ended.out(0.0) and not ended.hold.lost(0.0)
 
 
 async def test_a_work_longer_than_the_rotation_keeps_its_credential_live(tmp_path: Path) -> None:
