@@ -23,7 +23,7 @@ only what the engine's layer and the platform's add.
 
 `<pin>` is the guideline release this plugin's scaffold pins: `pinned
 at release` in `../../scaffold/acme_root/specs/architecture.md`, which
-already holds the `v` (`v0.55.0`). Read the guideline's skill at that
+already holds the `v` (`v0.57.0`). Read the guideline's skill at that
 release,
 `curl -fsSL https://raw.githubusercontent.com/baristaze/swe_guidelines/<pin>/skills/arch-upgrade-scaffold/SKILL.md`,
 and follow it, with the differences below. Its `<base.py>` is the

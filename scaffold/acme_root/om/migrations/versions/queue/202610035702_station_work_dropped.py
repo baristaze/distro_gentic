@@ -1,14 +1,14 @@
 """Station work leaves the queue: no claimant takes an item of its kind.
 
 Revision ID: 202610035702
-Revises: 202609280002
+Revises: 202609280003
 """
 
 from acme.om.storage.migrate import run_sql
 from acme.om.storage.roles import DatabaseRole
 
 revision = "202610035702"
-down_revision = "202609280002"
+down_revision = "202609280003"
 branch_labels = None
 depends_on = None
 

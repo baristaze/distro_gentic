@@ -336,6 +336,7 @@ COMPUTED = {
     "agents/impl/loop.py: refused.unlock": "`<provider>:key`",
     "agents/impl/loop.py: unlock": "`<provider>:billing`",
     "agents/impl/loop.py: str(started.key)": "a job's key",
+    "agents/impl/loop.py: str(job.key)": "a job's key",
     "budgets/rules.py: unlock": "a budget's id",
 }
 """Each unlock the engine computes rather than names, by the module and the
