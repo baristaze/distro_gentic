@@ -304,7 +304,7 @@ async def test_a_workspaces_notices_move_to_the_one_notice_and_back_for_every_te
         held[org] = workspace.id
     core = migrated[DatabaseRole.CORE]
 
-    await downgrade(DatabaseRole.CORE, core, "202610035400")
+    await downgrade(DatabaseRole.CORE, core, "202610091922")
     await upgrade(DatabaseRole.CORE, core)
 
     for org, session_id in held.items():
@@ -312,7 +312,7 @@ async def test_a_workspaces_notices_move_to_the_one_notice_and_back_for_every_te
     assert await check(DatabaseRole.CORE, core) == []
 
 
-V0_2_0_HEAD = "202610036100"
+V0_2_0_HEAD = "202610091928"
 """The core head of the release before the one notice left the table."""
 
 
@@ -520,7 +520,7 @@ async def test_the_station_columns_come_back_null_and_the_sessions_stay(
         assert await storage.read_validation(org, session.id) == session
 
 
-BEFORE_REFUSAL = "202610041904"
+BEFORE_REFUSAL = "202610091933"
 """A core head before a validation session held why it was refused."""
 
 
@@ -603,7 +603,7 @@ async def test_a_platform_automation_reads_as_the_previous_releases_after_a_down
     finally:
         await engine.dispose()
 
-    await downgrade(DatabaseRole.CORE, core, "202610036300")
+    await downgrade(DatabaseRole.CORE, core, "202610091930")
     previous = await actions_of(core, org)
     await upgrade(DatabaseRole.CORE, core)
 
