@@ -3531,7 +3531,8 @@ export interface components {
          *     term.
          */
         AskRequest: {
-            kind: components["schemas"]["ResourceKind"];
+            /** Kind */
+            kind: string;
             /** Labels */
             labels?: string[] | null;
             /** Payload */
@@ -5531,7 +5532,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
-            kind: components["schemas"]["ResourceKind"];
+            /** Kind */
+            kind: string;
             /** Labels */
             labels: string[] | null;
             /** Lease Id */
@@ -6752,13 +6754,6 @@ export interface components {
          */
         RequestStatus: "waiting" | "granted" | "cancelled" | "expired";
         /**
-         * ResourceKind
-         * @description A product adds its kinds here, each with the shape of what its ask
-         *     carries (`ASK_PAYLOADS`) and its hooks (`ResourceKindInterface`).
-         * @enum {string}
-         */
-        ResourceKind: "noop";
-        /**
          * ResourceView
          * @description A resource and its anchor: the highest token granted on it, and the
          *     lease that holds it until when.
@@ -6780,7 +6775,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
-            kind: components["schemas"]["ResourceKind"];
+            /** Kind */
+            kind: string;
             /** Labels */
             labels: string[];
             /** Lease Id */
