@@ -248,9 +248,12 @@ no env file, and calls no API but git's.
    states it, with the evidence, a line, a search hit, or the layer's
    nature. Each drift carries a proposed ticket, in the repository
    where the move happens: a move down is a ticket in the lower
-   layer's repository to hold it, and one in this checkout to take it
-   from there; a move up is a ticket in the lower layer's repository to
-   take the noun out. The audit proposes; it never fixes.
+   layer's repository to hold it, and one in the repository that holds
+   it now to take it from there; a move up is a ticket in the lower
+   layer's repository to take the noun out. A drift between two layers
+   below the product is proposed in those layers' repositories, and in
+   this checkout only when it carries the concept. The audit proposes;
+   it never fixes.
 9. Run `git status --porcelain` here again. It prints what step 1
    printed. When it does not, the report's Not verified names each path
    that changed, and the person decides; the audit undoes nothing.
