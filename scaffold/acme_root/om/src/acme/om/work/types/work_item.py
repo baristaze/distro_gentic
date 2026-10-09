@@ -197,3 +197,23 @@ class DeleteOrgPayload(Platform):
     last."""
 
     provider_org_id: str | None = None
+
+
+WORK_LANES: dict[str, str] = {
+    # A session's loop runs for minutes off the maintenance worker's lane, so
+    # a cap there counts none of a tenant's loops. Placement splits this lane
+    # by plan tier (`placement.rules.tier_lane`).
+    WorkKind.LOOP: "loop",
+}
+"""The lane of each kind that runs on a lane of its own, such as a long-held
+kind kept off the lane of short items and that lane's tenant cap. A kind it
+does not name runs on the default lane. A layer above adds its own kinds
+here and leaves the relay as it is."""
+
+
+def relayed_lane(kind: str) -> str:
+    """The lane the relay lands an item of this kind on: its own in
+    `WORK_LANES`, else the default one. A worker of the kind's own reads its
+    lane here too, so the two cannot disagree; a replica of a worker that
+    serves many kinds is deployed on the lane this returns."""
+    return WORK_LANES.get(kind, "default")

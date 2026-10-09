@@ -8,11 +8,14 @@ from datetime import timedelta
 from uuid import UUID
 
 from acme.om.placement.types.share import FairShare
+from acme.om.work.types.work_item import WorkKind, relayed_lane
 
 DEFAULT_TIER = "standard"
 """The plan tier of a tenant no operator has given one."""
 
-LOOP_LANE_PREFIX = "loop:"
+LOOP_LANE_PREFIX = f"{relayed_lane(WorkKind.LOOP)}:"
+"""The stem of every loop lane: the loop's own lane in the work registry
+(`WORK_LANES`), split by plan tier, or by tenant for one moved apart."""
 
 
 def tier_lane(plan_tier: str) -> str:
