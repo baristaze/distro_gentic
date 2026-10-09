@@ -125,7 +125,7 @@ read from the line each one writes.
 
 ## Outages
 
-- <provider>, credential <platform | key id>, <kind>, until <retry_at>
+- <provider>, credential <platform | key id>, org <org>, until <retry_at>
 - or "not read: <why>" for the log leg
 
 ## Reach
