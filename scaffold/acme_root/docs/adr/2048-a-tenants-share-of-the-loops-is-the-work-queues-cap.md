@@ -40,10 +40,10 @@ a lane of its own, and the share route an operator writes.
   off the lane the tenant leaves. The cap lands before the share, so a
   failure between leaves a cap on a lane the tenant's loops do not reach
   yet, which the operator's retry writes again.
-- **The platform holds no guard of its own.** The runner's guard and its
-  delay go, in place of ADR 2002's guard; its lanes, placed at every
-  enqueue, stay. Its count of a tenant's loops ahead of an item stays, for
-  the standings, which say why a loop waits.
+- **The platform holds no guard of its own.** ADR 2002's guard goes, and
+  with it the runner's guard and its delay. The lanes ADR 2002 places at
+  every enqueue stay. So does its count of a tenant's loops ahead of an
+  item, for the standings, which say why a loop waits.
 - **A share the release before wrote is carried once.** Its concurrency
   lives in `core` and the caps in `queue`, and nothing crosses a role, so
   no migration can carry it. The release before still reads the column,
