@@ -152,4 +152,3 @@ def a_loop(ctx: TenantContext) -> WorkItem:
         lane="default",
         available_at=now,
     )
-

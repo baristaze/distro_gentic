@@ -40,26 +40,31 @@ database credential, which is PLC-16.)
 
 **Check.** review
 
-## PLC-02 Loops share by plan tier, and a tenant's limit guards the claim
+## PLC-02 Loops share by plan tier, and the claim holds each tenant to its cap
 
 **Principle.** Loops are long and expensive, so the platform shares them
 by the guideline's means. Loop work runs in a lane per plan tier, and a
 tenant whose bulk work still crowds its neighbours gets a lane of its
-own. Each tenant has a concurrency limit, enforced as a guard at the
-claim: a claimed loop over its tenant's limit goes back to its lane with
-a delay and spends no attempt. The claim order within a lane stays the
-guideline's.
+own. Each tier's share is its lane's cap, the most loops one tenant
+holds claimed there, with the platform's default for a tier that names
+none. An operator can give one tenant a cap of its own on its lane, in
+place of its tier's share. The guideline's claim holds both: a tenant at
+its cap is passed over, and its loops wait unwritten and spend no
+attempt. The claim order within a lane stays the guideline's.
 
 **Source.** Sessions Are Work, Fair Share.
 
 **Look for.** The loop lanes and how a session's plan tier picks one;
-where a tenant's concurrency limit is checked; what a claimed loop over
-the limit does; the claim order within a lane.
+the cap a runner's lane passes to the claim, and where each tier's share
+is set; where an operator sets a tenant's own cap; what a loop of a
+tenant at its cap does; the claim order within a lane.
 
-**Violation.** One loop lane for every tier; a concurrency limit checked
-when a session is created or a loop is enqueued, instead of at the
-claim; a loop over its limit that fails, spends an attempt, or returns
-with no delay; a claim order of the platform's own within a lane.
+**Violation.** One loop lane for every tier; a limit of the platform's
+own beside the guideline's caps, or one checked when a session is
+created or a loop is enqueued instead of at the claim; a claimed loop
+handed back over its tenant's share, which spends a claim and a write;
+a tenant's own cap kept anywhere but the work queue's; a claim order of
+the platform's own within a lane.
 
 **Severity.** medium
 

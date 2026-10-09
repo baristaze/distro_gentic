@@ -178,8 +178,9 @@ on the platform's runners, and a command on the machine that holds its
 workspace. A **lane** is where an item waits for that place.
 
 An org's **fair share** says which lane its loops wait in, its plan's or
-one of its own, and how many of them run at once. The platform's
-operators set it. A loop over it waits its turn and never fails.
+one of its own. How many of them run at once is its plan's share of
+that lane, or a cap of its own there. The platform's operators set
+both. A loop over it waits its turn and never fails.
 
 A **host** is a machine inside an org's own wall that runs its work. It
 joins a **host pool** once, with an **enrollment token** an owner or an

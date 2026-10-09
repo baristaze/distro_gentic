@@ -199,10 +199,13 @@ kinds are registered the same way, and a claimant takes only its own.
 Loops are long and expensive, so the platform shares them by the
 guideline's means. Loop work runs in a lane per plan tier, and a tenant
 whose bulk work still crowds its neighbours gets a lane of its own
-([Scalability by Design][g-scale]). Each tenant also has a concurrency
-limit, enforced as a guard at the claim: a claimed loop over its
-tenant's limit goes back to its lane with a delay and spends no attempt.
-The claim order within a lane stays the guideline's.
+([Scalability by Design][g-scale]). Each tier's share is its lane's
+cap: the most loops one tenant holds claimed there. A tier that names
+no share takes the platform's default. An operator can give one tenant
+a cap of its own on its lane, in place of its tier's share. The claim
+holds both, as the guideline's [work queue][g-workq] holds every cap: a
+tenant at its cap is passed over, and its loops wait unwritten and
+spend no attempt. The claim order within a lane stays the guideline's.
 
 ## Session Runners
 

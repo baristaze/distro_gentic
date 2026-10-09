@@ -12,10 +12,10 @@ from pydantic import Field
 from acme.om.agent_sessions.types.agent_session import SessionStatus
 from acme.om.hosts.rules import HostState
 from acme.om.placement.types.share import PlanTier
-from acme.om.work.types.tenant_cap import MAX_CAP
 from acme.om.steps.types.content import ContentState
 from acme.om.steps.types.header import ControlCommand, LoopOutcome, ToolFailure
 from acme.om.steps.types.step import Actor, Origin, StepType
+from acme.om.work.types.tenant_cap import MAX_CAP
 from acme.om.work.types.work_item import WorkStatus
 from acme.services.api.types.agent_sessions import ParkView
 from acme.services.api.types.common import RequestBody, View

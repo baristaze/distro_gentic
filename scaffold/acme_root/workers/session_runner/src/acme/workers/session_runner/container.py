@@ -22,7 +22,6 @@ from acme.om.base import new_id
 from acme.om.billing.root import build_money_gate, refuse_open_money
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
 from acme.om.hosts.impl.placement import PlacementHostsImpl
-from acme.om.placement.impl.manager import PlacementOptions
 from acme.om.intake import IntakeManagerInterface
 from acme.om.intake.root import build_intake
 from acme.om.intake.tools import CommentImpl
@@ -31,6 +30,7 @@ from acme.om.matrix.impl.resolver import MatrixOptions
 from acme.om.matrix.root import MatrixLayer
 from acme.om.notifications.manager import NotificationsManagerInterface
 from acme.om.notifications.root import build_notifications
+from acme.om.placement.impl.manager import PlacementOptions
 from acme.om.platform_agents.catalog import PlatformAgents
 from acme.om.platform_agents.settings import shipped_agents
 from acme.om.playbooks.root import PlaybooksLayer

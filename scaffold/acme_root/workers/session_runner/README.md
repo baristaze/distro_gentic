@@ -21,10 +21,11 @@ inside the API ([ADR 1011](../../docs/adr/1011-a-sessions-loop-runs-in-a-worker-
   ([placement](../../om/src/acme/om/placement/README.md)), so a cap on the
   maintenance worker's lane counts none of a tenant's running loops. A
   runner set to a lane that is no loop lane refuses to start, and names it.
-- **The fair share** is the guard a claimed loop meets first: one over
-  its tenant's share goes back to its lane for a delay, with no attempt
-  spent, and never runs
-  ([ADR 2002](../../docs/adr/2002-a-tenants-loops-are-held-at-the-claim-in-the-claim-order.md)).
+- **The fair share** is the cap the runner's lane passes to its claim:
+  its tier's share, which placement names. A tenant at its cap, or at
+  its own cap on the lane, is passed over, and its loop waits where it
+  is, unwritten, with no attempt spent
+  ([ADR 2048](../../docs/adr/2048-a-tenants-share-of-the-loops-is-the-work-queues-cap.md)).
 - **The run** takes the session's next writer epoch before it reads the
   history. A run that lost its claim, to a lease that ran out or to a
   person who took the environment over, can append no step and send no

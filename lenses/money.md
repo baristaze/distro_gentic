@@ -149,12 +149,13 @@ reports one as the other.
 
 ## MNY-08 The outage signal is shared, per provider and credential
 
-**Principle.** The platform shares the engine's outage signal across its
-runners, one per provider and credential, in the shared cache, so a
-session meets a known outage in a second. An unreachable cache is a
-declared degraded answer: calls proceed, and each session's own retries
-and its park on the provider hold. A tenant on its own key has a signal
-of its own, and a billing or credential error on that key parks only its
+**Principle.** The platform shares the guideline's outage signal across
+its runners, one per provider and credential, in the shared cache. A
+session that reads it parks on the provider, the engine's park, so it
+meets a known outage in a second. An unreachable cache is a declared
+degraded answer: calls proceed, and each session's own retries and its
+park on the provider hold. A tenant on its own key has a signal of its
+own, and a billing or credential error on that key parks only its
 sessions.
 
 **Source.** Money, Outages and Anomalies.

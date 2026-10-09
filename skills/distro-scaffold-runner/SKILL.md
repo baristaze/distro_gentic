@@ -47,9 +47,9 @@ None.
 
 ## Procedure
 
-1. A runner is the platform's worker, whole: the claim, the fair share,
-   the writer epoch, and the transport chosen by placement are in
-   `main.py`, `fair_share.py`, `runs.py`, and `container.py`, and this
+1. A runner is the platform's worker, whole: the claim and the cap its
+   lane passes to it, the writer epoch, and the transport chosen by
+   placement are in `main.py`, `runs.py`, and `container.py`, and this
    skill changes none of them. A product adds the lanes it runs; its
    catalog is the one declaration of step 2.
 2. The catalog: the kinds the platform ships come from `SHIPPED` in
@@ -69,7 +69,9 @@ None.
    tenant's loops in its tier's lane, or in its own when its share says
    so, read from the tenant's fair share, never from the item. A lane no
    share names is idle: say so when no share in the seed or the
-   product's plans names `<tier>`.
+   product's plans names `<tier>`. A tier's lane passes its tier's share
+   to the claim, `tier_shares` in placement's `PlacementOptions`, or the
+   default where it names none.
 4. A runner never runs inside the sandbox it drives, and holds no host
    credential: a loop placed in a customer's wall reaches its host
    through the relay, from any runner of its lane.

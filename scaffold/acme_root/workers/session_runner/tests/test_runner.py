@@ -40,8 +40,8 @@ from acme.om.context import (
 )
 from acme.om.exceptions import NotFound, UnknownAgentKind
 from acme.om.matrix.types.matrix import MatrixStatus
-from acme.om.placement.kinds import platform_work_kinds
 from acme.om.placement.impl.manager import PlacementOptions
+from acme.om.placement.kinds import platform_work_kinds
 from acme.om.placement.rules import DEFAULT_TIER, tier_lane
 from acme.om.root import PlatformPorts, ProductKinds
 from acme.om.steps.rules import message_step

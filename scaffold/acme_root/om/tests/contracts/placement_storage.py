@@ -164,4 +164,3 @@ class PlacementStorageContract:
         await written_before(org_a, before, 3)
         assert not await storage.mark_carried(org_b, before.id)
         assert [row.share.id for row in await storage.read_uncarried(10)] == [before.id]
-

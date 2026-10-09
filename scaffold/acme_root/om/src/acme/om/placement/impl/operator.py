@@ -335,7 +335,8 @@ class PlacementOperatorManagerImpl(PlacementOperatorManagerInterface):
         self, admin: OperatorContext, org_id: UUID, share: FairShare, concurrency: int | None
     ) -> None:
         """The event that names the write and who made it, with the terms it
-        set: `concurrency` is the org's own cap, null where its lane's holds. The share lands first and the stream after, as the queue's
+        set: `concurrency` is the org's own cap, null where its lane's
+        holds. The share lands first and the stream after, as the queue's
         operator requeue does: a crash between the two loses the entry,
         never the share."""
         (event,) = await self._events.append_events(
