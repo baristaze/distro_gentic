@@ -49,7 +49,7 @@ The nature of each layer, which the audit holds every concept to:
 
 Each layer's spec, at the commit the chain names, opens by saying what
 the layer is. Where it says more than the line above, the spec holds,
-and the report quotes it.
+and the report quotes it under The chain.
 
 A concept's layer is the lowest layer that can incorporate it whole,
 borrowing no noun or concept from a layer above it. To find it, name
@@ -242,8 +242,10 @@ no env file, and calls no API but git's.
    and parts together. Search at most 40 nouns and parts: a noun with
    its plural is one, and so is a concept's part in its words, each
    searched once in each layer below it. Read a suspect in full before
-   it is reported: at most 30 files read in full in a run. A suspect
-   past either count is listed under Not verified.
+   it is reported: at most 30 files read in full in a run. In full is
+   the file that defines the concept, or its section where a spec
+   defines it, which counts as one file. A suspect past either count is
+   listed under Not verified.
 8. Write the report, `~/Downloads/acme_ontology_drift_<yyyy-mm-dd>.md`.
    Each drift names the concept and its kind, where it is (the layer
    and the path at its commit), where it belongs (the layer), the
@@ -292,6 +294,8 @@ no env file, and calls no API but git's.
 | platform | A Spec for a Closed-loop, Cloud-first, Distributed Agentic Platform | distro_gentic | <release> | <commit> | <render>, the engine at <release> |
 | engine | An Engine for Long-Running Agents | agentic_core | <release> | <commit> | <render>, the guideline at <release> |
 | guideline | Software Design and Architecture Guidelines | swe_guidelines | <release> | <commit> | none: the root |
+
+- <layer>, where its spec says more than its nature: "<the spec's words>" (`<spec>`)
 
 ## Drifts, by impact
 
