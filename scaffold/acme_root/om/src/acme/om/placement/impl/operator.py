@@ -140,7 +140,9 @@ class PlacementOperatorManagerImpl(PlacementOperatorManagerInterface):
         lane = loop_lane(org_id, share)
         # The cap lands before the share: a failure between leaves a cap on
         # a lane the org's loops do not reach yet, and the operator's retry
-        # writes both.
+        # writes both. Only the lane the share names is written: a cap on a
+        # lane the org leaves stays, since its loops queued there stay too,
+        # and a move back writes it again.
         if concurrency is None:
             await self._clear_cap(admin, org_id, lane)
         else:
@@ -154,9 +156,6 @@ class PlacementOperatorManagerImpl(PlacementOperatorManagerInterface):
                 raise PreconditionFailed(f"fair share {share.id} is written already")
         else:
             await self._storage.write_share(org_id, share, stored.version)
-            left = loop_lane(org_id, stored)
-            if left != lane:
-                await self._clear_cap(admin, org_id, left)
         log.info(
             "operator %s set the share of org %s: tier %s, own lane %s, its own cap %s",
             admin.identity_id,
@@ -184,7 +183,13 @@ class PlacementOperatorManagerImpl(PlacementOperatorManagerInterface):
         stored = await self._storage.read_share(org_id)
         tier = self._options.default_tier if stored is None else stored.plan_tier
         moved = stored is not None and stored.own_lane
-        lane = own_lane(org_id) if moved else tier_lane(tier)
+        item = await self._work.read_latest_for_target(org_id, WorkKind.LOOP, session_id)
+        # The cap of the lane the loop stands on, which a move leaves where
+        # it is; with no loop, of the lane its next one goes to.
+        if item is not None:
+            lane = item.lane
+        else:
+            lane = own_lane(org_id) if moved else tier_lane(tier)
         own = await self._work.read_tenant_cap(org_id, lane)
         placement = await self._hosts.read_placement(org_id, session_id)
         pool_id = None if placement is None else placement.pool_id
@@ -194,7 +199,6 @@ class PlacementOperatorManagerImpl(PlacementOperatorManagerInterface):
             hosts_online = sum(
                 1 for host in hosts if online(host, now, self._options.online_window)
             )
-        item = await self._work.read_latest_for_target(org_id, WorkKind.LOOP, session_id)
         loop = None
         if item is not None:
             loop = LoopStanding(

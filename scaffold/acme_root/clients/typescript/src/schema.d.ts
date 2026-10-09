@@ -5821,8 +5821,8 @@ export interface components {
          * LoopStandingView
          * @description The session's loop item made last, and its place in line:
          *     `ready_ahead` items of any tenant are ready before it on its lane, and
-         *     `running_ahead` of its tenant's loops run ahead of it, which the claim
-         *     holds to the tenant's cap.
+         *     `running_ahead` of its tenant's loops run ahead of it on that lane,
+         *     which the claim holds to the tenant's cap there.
          */
         LoopStandingView: {
             /** Attempts */
@@ -6963,9 +6963,10 @@ export interface components {
          * SessionStandingView
          * @description Why a session is or is not moving. `changed_at` is its last change:
          *     when it parked, for a parked one. `concurrency` is the cap the claim
-         *     holds its tenant to on its lane: its own where `own_cap`, else its
-         *     tier's share. `pool_id` null is the cloud, where `hosts_online` is null;
-         *     `share_set` false is the default tier.
+         *     holds its tenant to on the lane its loop stands on, or, with no loop,
+         *     the lane its next goes to: its own where `own_cap`, else the lane's.
+         *     `pool_id` null is the cloud, where `hosts_online` is null; `share_set`
+         *     false is the default tier.
          */
         SessionStandingView: {
             /**

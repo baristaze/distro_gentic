@@ -278,12 +278,15 @@ async def test_a_sessions_standing_names_its_park_its_loop_and_its_share(
     standing = (await client.get(path, headers=reader)).json()
     assert standing["status"] == "parked"
     assert (standing["park"]["reason"], standing["park"]["unlock"]) == ("budget", "raise")
+    # Its loop stays queued where it was: the cap is that lane's, not the
+    # cap set on the lane its next loop goes to.
     assert (
         standing["plan_tier"],
         standing["own_lane"],
+        standing["loop"]["lane"],
         standing["concurrency"],
         standing["own_cap"],
-    ) == ("pro", True, 2, True)
+    ) == ("pro", True, "loop:standard", 8, False)
 
     elsewhere = await client.get(
         f"/v1/admin/orgs/{new_id()}/sessions/{session_id}/standing", headers=reader

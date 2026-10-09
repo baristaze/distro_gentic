@@ -347,16 +347,17 @@ async def test_a_tenant_at_its_tiers_share_is_passed_over_and_its_own_cap_holds_
     assert await claim() is None, "two of Ajax's loops run, its own cap"
 
 
-async def test_a_move_takes_the_tenants_own_cap_to_its_new_lane_and_none_clears_it(
+async def test_a_tenant_moved_to_another_lane_keeps_its_own_cap_on_the_lane_it_left(
     managers: Managers,
 ) -> None:
     owner = await an_owner(managers)
     admin = operator()
     work = managers.work_operator
+    tier, own = tier_lane("pro"), own_lane(owner.org_id)
 
     async def caps() -> dict[str, int]:
         found: dict[str, int] = {}
-        for lane in (tier_lane("pro"), own_lane(owner.org_id)):
+        for lane in (tier, own):
             try:
                 found[lane] = (await work.read_tenant_cap(admin, owner.org_id, lane)).cap
             except NotFound:
@@ -364,19 +365,70 @@ async def test_a_move_takes_the_tenants_own_cap_to_its_new_lane_and_none_clears_
         return found
 
     set_at = await managers.placement_operator.set_share(
-        admin, owner.org_id, plan_tier="pro", own_lane=False, concurrency=3
+        admin, owner.org_id, plan_tier="pro", own_lane=False, concurrency=1
     )
-    assert (set_at.concurrency, set_at.own_cap) == (3, True)
-    assert await caps() == {tier_lane("pro"): 3}
+    assert (set_at.concurrency, set_at.own_cap) == (1, True)
+    for _ in range(3):
+        await managers.work.enqueue(owner, an_item(owner, WorkKind.LOOP, {}))
     await managers.placement_operator.set_share(
-        admin, owner.org_id, plan_tier="pro", own_lane=True, concurrency=3
+        admin, owner.org_id, plan_tier="pro", own_lane=True, concurrency=2
     )
-    assert await caps() == {own_lane(owner.org_id): 3}, "the cap moves with the loops"
+    assert await caps() == {tier: 1, own: 2}, "the cap on the lane it left stays"
+
+    # Its backlog stays on the tier's lane, held to its own cap there, not
+    # to the tier's share.
+    async def claim() -> tuple[TenantContext, WorkItem] | None:
+        return await managers.work.claim(
+            request(), tier, [WorkKind.LOOP], "runner", LEASE, PlacementOptions().lane_cap(tier)
+        )
+
+    assert await claim() is not None
+    assert await claim() is None, "one of its loops runs on the lane it left, its cap there"
+
     cleared = await managers.placement_operator.set_share(
         admin, owner.org_id, plan_tier="pro", own_lane=True
     )
-    assert await caps() == {}
+    assert await caps() == {tier: 1}, "none clears the cap on the lane it names alone"
     assert (cleared.concurrency, cleared.own_cap) == (PlacementOptions().default_share, False)
+    await managers.placement_operator.set_share(
+        admin, owner.org_id, plan_tier="pro", own_lane=False, concurrency=3
+    )
+    assert await caps() == {tier: 3}, "a move back writes the cap it left"
+
+
+async def test_after_a_move_the_standing_reads_the_cap_and_the_claims_of_its_loops_lane(
+    managers: Managers,
+) -> None:
+    owner = await an_owner(managers)
+    admin = operator()
+    tier, own = tier_lane("pro"), own_lane(owner.org_id)
+    await managers.placement_operator.set_share(
+        admin, owner.org_id, plan_tier="pro", own_lane=False, concurrency=1
+    )
+    await managers.work.enqueue(owner, an_item(owner, WorkKind.LOOP, {}))
+    running = await managers.work.claim(
+        request(), tier, [WorkKind.LOOP], "runner", LEASE, PlacementOptions().lane_cap(tier)
+    )
+    assert running is not None
+    before = await managers.agent_sessions.create_session(owner, make_session())
+    await managers.work.enqueue(
+        owner, an_item(owner, WorkKind.LOOP, {}).model_copy(update={"target_id": before.id})
+    )
+    await managers.placement_operator.set_share(
+        admin, owner.org_id, plan_tier="pro", own_lane=True, concurrency=2
+    )
+    after = await managers.agent_sessions.create_session(owner, make_session())
+    await managers.work.enqueue(
+        owner, an_item(owner, WorkKind.LOOP, {}).model_copy(update={"target_id": after.id})
+    )
+
+    async def standing(session: UUID) -> tuple[object, ...]:
+        found = await managers.placement_operator.get_session_standing(admin, owner.org_id, session)
+        assert found.loop is not None
+        return (found.loop.lane, found.concurrency, found.own_cap, found.loop.running_ahead)
+
+    assert await standing(before.id) == (tier, 1, True, 1), "queued where it was, at its cap"
+    assert await standing(after.id) == (own, 2, True, 0), "none of its claims on its own lane"
 
 
 # A share the release before wrote is carried into the tenant's own cap.

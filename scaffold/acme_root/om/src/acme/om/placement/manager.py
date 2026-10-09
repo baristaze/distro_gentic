@@ -122,10 +122,10 @@ class PlacementOperatorManagerInterface(ABC):
         already queued stays in its lane. `concurrency` is the org's own cap
         on that lane, written through the work queue's operator plane, which
         holds it at the claim in place of the lane's; None clears it, so the
-        lane's holds. A move to another lane takes the org's own cap off the
-        lane it leaves. Requires the write permission. NotFound when the org
-        is not there or is deleted; ValidationFailed when a field is out of
-        its bounds."""
+        lane's holds. Only that lane's cap is written: on a move, the org's
+        own cap on the lane it leaves stays, with its loops queued there.
+        Requires the write permission. NotFound when the org is not there or
+        is deleted; ValidationFailed when a field is out of its bounds."""
         ...
 
     @abstractmethod

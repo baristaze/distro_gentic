@@ -122,10 +122,11 @@ class WorkStorageInterface(ABC):
 
     @abstractmethod
     async def count_claimed_ahead(self, org_id: UUID, item: WorkItem, now: datetime) -> int:
-        """The tenant's items of `item`'s kind, other than it, claimed under a
-        lease live at `now`: every one on another lane, and on its own lane
-        those before it in the claim order (`available_at`, then id). One
-        read of the claimed items, of which the index of leases holds few."""
+        """The tenant's items of `item`'s kind on `item`'s lane, other than
+        it, claimed under a lease live at `now` and before it in the claim
+        order (`available_at`, then id): the lane's cap counts the tenant's
+        claims there alone. One read of the claimed items, of which the
+        index of leases holds few."""
         ...
 
     @abstractmethod

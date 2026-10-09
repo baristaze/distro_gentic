@@ -63,8 +63,8 @@ environment is.
   each time, and the tenant's stream names the operator. Its
   `concurrency` is the tenant's own cap on its loop lane, which the
   share writes through the work queue's operator plane, and none clears
-  it; a move to another lane takes the cap off the lane it leaves. A
-  tenant never writes its own.
+  it. A move to another lane leaves the cap on the lane it leaves, where
+  its loops already queued stay. A tenant never writes its own.
 - **Carry a share.** A share the release before wrote holds a
   concurrency of its own. The sweep writes it as the tenant's own cap
   on its loop lane, unless the tenant holds one there already, and

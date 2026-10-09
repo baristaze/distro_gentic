@@ -113,10 +113,10 @@ class WorkManagerInterface(ABC):
     @abstractmethod
     async def claimed_ahead(self, ctx: TenantContext, item: WorkItem) -> int:
         """How many of the tenant's other items of the item's kind are claimed
-        under a live lease ahead of it: before it in the claim order on its
-        lane, and every one on another lane, where the claim order says
-        nothing. A standing reads it beside the tenant's cap, to say why a
-        queued item waits."""
+        under a live lease ahead of it: on its lane, before it in the claim
+        order. A standing reads it beside the tenant's cap on that lane, which
+        counts the tenant's claims there alone, to say why a queued item
+        waits."""
         ...
 
     @abstractmethod

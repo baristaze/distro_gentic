@@ -5568,7 +5568,7 @@
         "type": "string"
       },
       "LoopStandingView": {
-        "description": "The session's loop item made last, and its place in line:\n`ready_ahead` items of any tenant are ready before it on its lane, and\n`running_ahead` of its tenant's loops run ahead of it, which the claim\nholds to the tenant's cap.",
+        "description": "The session's loop item made last, and its place in line:\n`ready_ahead` items of any tenant are ready before it on its lane, and\n`running_ahead` of its tenant's loops run ahead of it on that lane,\nwhich the claim holds to the tenant's cap there.",
         "properties": {
           "attempts": {
             "title": "Attempts",
@@ -8103,7 +8103,7 @@
         "type": "object"
       },
       "SessionStandingView": {
-        "description": "Why a session is or is not moving. `changed_at` is its last change:\nwhen it parked, for a parked one. `concurrency` is the cap the claim\nholds its tenant to on its lane: its own where `own_cap`, else its\ntier's share. `pool_id` null is the cloud, where `hosts_online` is null;\n`share_set` false is the default tier.",
+        "description": "Why a session is or is not moving. `changed_at` is its last change:\nwhen it parked, for a parked one. `concurrency` is the cap the claim\nholds its tenant to on the lane its loop stands on, or, with no loop,\nthe lane its next goes to: its own where `own_cap`, else the lane's.\n`pool_id` null is the cloud, where `hosts_online` is null; `share_set`\nfalse is the default tier.",
         "properties": {
           "changed_at": {
             "format": "date-time",

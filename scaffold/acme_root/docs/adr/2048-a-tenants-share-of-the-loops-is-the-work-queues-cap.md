@@ -36,8 +36,10 @@ a lane of its own, and the share route an operator writes.
   own-lane move to its share, and its `concurrency` as the tenant's own
   cap on its loop lane, through the work queue's operator plane, which
   leaves the cap's trail. Without `concurrency`, the route clears that
-  cap, so the tier's share holds. A move to another lane takes the cap
-  off the lane the tenant leaves. The cap lands before the share, so a
+  cap, so the tier's share holds. The route writes the lane the share
+  names alone: on a move to another lane, the cap on the lane the tenant
+  leaves stays, since its loops already queued there stay too, and a
+  move back writes it again. The cap lands before the share, so a
   failure between leaves a cap on a lane the tenant's loops do not reach
   yet, which the operator's retry writes again.
 - **The platform holds no guard of its own.** ADR 2002's guard goes, and

@@ -180,9 +180,9 @@ class WorkStoragePostgresImpl(PgStorageBase, WorkStorageInterface):
             WorkItems.lease_expires_at > now,
             WorkItems.kind == item.kind,
             WorkItems.id != item.id,
-            # Another lane, or before it in the claim order on its own.
+            # Its own lane alone, before it in the claim order.
+            WorkItems.lane == item.lane,
             or_(
-                WorkItems.lane != item.lane,
                 WorkItems.available_at < item.available_at,
                 and_(WorkItems.available_at == item.available_at, WorkItems.id < item.id),
             ),
