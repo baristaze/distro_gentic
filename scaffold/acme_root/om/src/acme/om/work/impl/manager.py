@@ -94,7 +94,7 @@ def relayed_key(kind: str, row: OutboxRow, now: datetime) -> UUID:
         return row.id  # `_land` refuses it with the reason
     if wake.record_id is not None or wake.not_before is None or wake.not_before <= now:
         return row.id
-    return derived_id(row.org_id, wake.not_before, f"{kind.value}:{wake.reason.value}")
+    return derived_id(row.org_id, wake.not_before, f"{kind}:{wake.reason.value}")
 
 
 class WorkManagerImpl(WorkManagerInterface):

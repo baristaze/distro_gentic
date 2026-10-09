@@ -345,6 +345,7 @@ def wired(
         LoopOptions(control_poll=timedelta(milliseconds=1)),
         clock,
         sleep,
+        leases=managers.leases,
     )
     intake = build_intake(storage, managers, principal_context=members, clock=clock)
     return Wired(

@@ -30,6 +30,7 @@ from contracts.matrix import (
 from prometheus_client import REGISTRY
 from pydantic import SecretStr
 
+from acme.infra.base import SYSTEM_SCOPE
 from acme.integrations.model_providers.calls import ModelCall, StreamPart
 from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl, ScriptedFailure
 from acme.integrations.model_providers.types import ErrorKind, ProviderName
@@ -749,11 +750,10 @@ async def test_an_own_key_tenants_outage_signal_is_its_own(tmp_path: Path) -> No
     await fleet.loop.say(theirs, "What is the total?", platform)
     assert (await fleet.loop.loops.run(platform, theirs)).end is RunEnd.ENDED
 
-    outages = fleet.loop.infra.get_outages()
-    now = fleet.loop.clock()
+    outages = fleet.loop.outages
     key = str(saved["sk-anthropic"])
-    assert await outages.current("anthropic", key, now) is not None
-    assert await outages.current("anthropic", "platform", now) is None
+    assert await outages.current(fleet.owner.org_id, "anthropic", key) is not None
+    assert await outages.current(SYSTEM_SCOPE, "anthropic", "platform") is None
     assert len(fleet.on_key("sk-anthropic", ProviderName.ANTHROPIC).calls) == 3, (
         "the second parked on the signal"
     )

@@ -193,7 +193,7 @@ async def test_a_key_its_provider_refuses_is_marked_refused_and_no_outage_is_rep
 async def test_a_tenant_keys_outage_is_marked_under_its_org_and_parks_that_org_alone(
     tmp_path: Path,
 ) -> None:
-    loop = loop_over(tmp_path, models_layer=ModelsLayer(credentials=OwnKey().over))
+    loop = loop_over(tmp_path, models_layer=keyed(OwnKey().over))
     learner = await loop.start()
     await loop.say(learner, "What is the total?")
     overloaded = ScriptedFailure(kind=ErrorKind.OVERLOADED, retry_after=2)

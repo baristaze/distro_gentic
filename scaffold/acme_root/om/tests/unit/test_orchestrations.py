@@ -34,6 +34,7 @@ from acme.om.outbox.types.row import OutboxRow
 from acme.om.root import Managers, build_managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.work.impl.manager import not_before, relayed_key
+from acme.om.work.kinds import WORK_KINDS, WorkKinds
 from acme.om.work.types.work_item import (
     OrchestrationPayload,
     WakeParkedPayload,
@@ -263,7 +264,9 @@ async def test_the_parks_on_one_mark_land_one_wake_that_resumes_them_staggered(
     # none runs at once.
     assert len(step_rows(ctx, parks[0])) == 1
     at_once = WakeParkedPayload(reason=ParkReason.PROVIDER_UNAVAILABLE)
-    assert not_before(WorkKind.WAKE_PARKED, at_once.model_dump(mode="json")) is None
+    wake_parked = WorkKinds(WORK_KINDS).get(WorkKind.WAKE_PARKED)
+    assert wake_parked is not None
+    assert not_before(wake_parked, at_once.model_dump(mode="json")) is None
 
 
 async def test_a_wake_resumes_every_record_parked_for_its_reason_a_batch_at_a_time(
