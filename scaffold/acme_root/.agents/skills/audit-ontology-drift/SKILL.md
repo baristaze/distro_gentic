@@ -230,12 +230,11 @@ no env file, and calls no API but git's.
 
    Search the concepts step 6 grouped from the product's additions
    first, then the platform's, then the engine's, each concept's nouns
-   and parts together. Search at most 40 nouns
-   and parts: a noun with its plural is one, and so is a concept's
-   part in its words, each searched once in each layer below it. Read
-   a suspect in full before it is reported: at most 30 files read in
-   full in a run. A suspect past either count is listed under Not
-   verified.
+   and parts together. Search at most 40 nouns and parts: a noun with
+   its plural is one, and so is a concept's part in its words, each
+   searched once in each layer below it. Read a suspect in full before
+   it is reported: at most 30 files read in full in a run. A suspect
+   past either count is listed under Not verified.
 8. Write the report, `~/Downloads/acme_ontology_drift_<yyyy-mm-dd>.md`.
    Each drift names the concept and its kind, where it is (the layer
    and the path at its commit), where it belongs (the layer), the
