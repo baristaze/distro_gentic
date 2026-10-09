@@ -10,7 +10,7 @@
       "name": "distro-gentic",
       "source": "./",
       "description": "Lens-based review skills and scaffolding skills for a closed-loop agentic platform, backed by its spec",
-      "version": "0.12.1",
+      "version": "0.13.0",
       "category": "development",
       "tags": ["agents", "platform", "review", "scaffold", "python"]
     }
