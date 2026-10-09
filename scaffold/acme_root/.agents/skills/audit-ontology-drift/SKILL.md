@@ -1,6 +1,6 @@
 ---
 name: audit-ontology-drift
-description: "Audit, from the product's checkout, which concepts sit in a layer their nature contradicts. The product is an instance of the platform, which adopts the engine, which follows the guideline. The audit reads each layer at the release the product's base holds, down the scaffold branches' renders, and asks of each namespace, table, agent kind, ADR, skill, lens, checker, and section of a spec or a README whether its layer is the one it belongs to, in either direction: a lower layer's concept grown again above it, or a higher layer's noun sunk below. Then a report: each drift, where it is, where it belongs, and why, with proposed tickets. The gates hold the layers consistent; this asks whether each concept is in the right one. Never changes anything."
+description: "Audit, from the product's checkout, which concepts sit in a layer their nature contradicts. The product is an instance of the platform, which adopts the engine, which follows the guideline. The audit reads each layer at the release the product's base holds, down the scaffold branches' renders, and asks of each namespace, table, agent kind, ADR, skill, lens, checker, and section of a spec or a README whether its layer is the one it belongs to: the lowest layer whose own nouns and concepts state it whole. A drift goes either way: a concept above that layer, or a higher layer's noun sunk below it. Then a report: each drift, where it is, where it belongs, and why, with proposed tickets. The gates hold the layers consistent; this asks whether each concept is in the right one. Never changes anything."
 allowed-tools: Read, Grep, Glob, Write, Bash(git:*), Bash(mkdir:*)
 ---
 
@@ -49,16 +49,44 @@ The nature of each layer, which the audit holds every concept to:
 
 Each layer's spec, at the commit the chain names, opens by saying what
 the layer is. Where it says more than the line above, the spec holds,
-and the report quotes it.
+and the report quotes it under The chain.
+
+A concept's layer is the lowest layer that can incorporate it whole,
+borrowing no noun or concept from a layer above it. To find it, name
+the concept's parts, each by what it does in the concept, in any
+words, never by the thing a layer applies it to: a session that waits
+is a record that waits, and one of a product's own resources that one
+holder uses at a time is a scarce resource. Then, for each part, go up
+the chain from the root and find the lowest layer whose own nouns and
+concepts state it. A part that needs a concept only a higher layer
+has (a model, an agent, a session's loop, a fleet, a host, a product's
+domain) cannot be stated below that layer. The highest of those layers
+is the concept's layer. Another word for a part is the same part: a
+line, a queue, or a wait list in front of a scarce resource is one
+part, an ordered wait, and a lease on that resource fenced by a token
+is another. The guideline's work queue states both, and neither needs
+an agent, so that line and its fenced lease are the guideline's,
+whatever word names the line.
+
+A layer's text is the evidence of its nouns and concepts, never the
+test: whether a layer already mentions or holds the concept decides
+nothing. Where a layer's text does not state a part yet, the layer's
+nature, above and in its spec, decides whether its concepts could. A
+word a layer uses only for its own use of a concept places no part
+there, and neither does a noun sunk into it from a layer above.
+
+Whether every instance of a concept's layer needs it decides at most
+whether it is `optional` there, never its layer. Which repositories
+use it today decides neither.
 
 A concept drifts in one of two directions:
 
-- **Down**: a layer holds a concept that a layer beneath it holds, or
-  should: a mechanism every instance of the lower layer would need,
-  whatever its domain. An engine concept in the platform or the
-  product, a platform concept grown again in the product, a guideline
-  concept rebuilt in any layer above it.
-- **Up**: a layer holds a concept only a layer above it should know. A
+- **Down**: a layer holds a concept whose layer lies beneath it, whether
+  or not that layer mentions or holds it yet. An engine concept in the
+  platform or the product, a platform concept grown again in the
+  product, a guideline concept built in any layer above it.
+- **Up**: a layer holds a concept whose layer lies above it: one of its
+  parts needs a noun or concept only a layer above can state. A
   product's noun in the platform, the engine, or the guideline; a
   fleet's concept in the engine; an agent's concept in the guideline.
 
@@ -80,6 +108,11 @@ These are not drift:
   no concept of its domain, so an agent there is not an agent's concept
   in the guideline. Its rules, its spec and its `lenses/`, and its
   scaffold are judged.
+- A benchmark's runs and its harness, a layer's `benchmark/`, and a
+  lock file: they hold no concept, and are never listed or searched. A
+  test's words are read, but a test that names a word only to refuse
+  it, as a leak checker does, is not drift. A hit in a migration is
+  history, as above.
 
 ## Input
 
@@ -157,10 +190,11 @@ no env file, and calls no API but git's.
    - A layer with a base:
      `git -C <clone> diff --name-status --find-renames <render> <Scaffold-Commit> -- scaffold/`,
      where `<render>` is the render step 4 found in that clone.
-     Beside it, the texts that never reach a product: the headings of
-     its spec and its `lenses/`. Its `skills/` and `agents/` are its
-     tooling, never listed.
-   - The root: its whole `scaffold/` folder and the same texts.
+     After it, in the same list, the texts that never reach a product:
+     the headings of its spec and its `lenses/`. Its `skills/` and
+     `agents/` are its tooling, never listed.
+   - The root: its whole `scaffold/` folder, as
+     `git -C <clone> ls-files scaffold/` lists it, and the same texts.
 
    A layer's scaffold is the one folder under its `scaffold/` whose
    name ends in `_root`, and the word before `_root` is the placeholder
@@ -172,37 +206,59 @@ no env file, and calls no API but git's.
    its decision), a skill (`.agents/skills/<name>/`, its description),
    a checker (`checkers/`) or a lens, an app, a service, a worker, or
    an integration, and a section of a spec or a README (its heading). A
-   concept is judged once, at the layer that added it. An ADR whose
+   concept is judged once, at the layer that added it. A folder of the
+   product's that its own instructions say nothing builds is still the
+   product's: it is judged from its docstrings and READMEs, and what of
+   it is not read is listed under Not verified. An ADR whose
    number lies in another layer's range than the layer that added it is
    a sign worth reading.
-7. Ask the question of each concept: does the layer it lives in
-   contradict its nature, as The chain states it? Judge by its name and
-   its one-line purpose first. Two searches find what a reading alone
-   misses, each over a clone at the chain's commit, whole words in any
-   case, a noun's forms in one search:
-   `git -C <clone> grep -n -w -i -e <noun> -e <its plural>`.
+7. Ask the question of each concept: is the layer it lives in its
+   layer, by the test The chain states? Name its parts from its name
+   and its one-line purpose first, each by what it does. Two searches
+   find what a reading alone misses, each over a clone at the chain's
+   commit, whole words in any case, a noun's forms or a part's words
+   in one search:
+   `git -C <clone> grep -n -w -i -e <word> -e <its plural> -e <another word for it>`.
+   A hit is evidence of a layer's concepts, never the verdict.
    - Up: each noun the product added (its namespaces, its kinds of
      work, its agent kinds, its spec's terms) is searched in every
      layer below it, and each of the platform's own nouns in the engine
      and the guideline. A hit outside an *Example* line and a Next
-     section is a higher layer's noun below it.
-   - Down: each concept a layer added is searched by its noun in the
-     layers beneath it. A lower layer that holds the same mechanism
-     means the upper one grew it again, unless it is a choice on top.
+     section is a drift up when the noun, in the sense the hit uses,
+     is one only a layer above the hit's layer can state; a hit in that
+     layer's own sense of the word is none.
+   - Down: each part of each concept a layer added is searched in the
+     layers beneath it. A lower layer has a part when its nouns and
+     concepts state it, in the hit's words or in others; where no hit
+     states a part, the layer's nature, as The chain gives it, decides
+     whether its concepts could. When a lower layer has every part,
+     the concept is that layer's, whether or not its text holds the
+     concept yet; when it holds the same mechanism, the upper layer
+     grew it again. Either is a drift down, unless it is a choice on
+     top.
 
-   Search at most 40 nouns, a noun and its plural one, each once in
-   each layer below it. Read a suspect in full before it is reported:
-   at most 30 files read in full in a run. A suspect past either count
-   is listed under Not verified.
+   Search the concepts step 6 grouped from the product's additions
+   first, then the platform's, then the engine's, each concept's nouns
+   and parts together. Search at most 40 nouns and parts: a noun with
+   its plural is one, and so is a concept's part in its words, each
+   searched once in each layer below it. Read a suspect in full before
+   it is reported: at most 30 files read in full in a run. In full is
+   the file that defines the concept, or its section where a spec
+   defines it, which counts as one file. A suspect past either count is
+   listed under Not verified.
 8. Write the report, `~/Downloads/acme_ontology_drift_<yyyy-mm-dd>.md`.
    Each drift names the concept and its kind, where it is (the layer
    and the path at its commit), where it belongs (the layer), the
-   direction, and why: the nature it contradicts, with the evidence, a
-   line or a search hit. Each drift carries a proposed ticket, in the
-   repository where the move happens: a move down is a ticket in the
-   lower layer's repository to hold it, and one in this checkout to
-   take it from there; a move up is a ticket in the lower layer's
-   repository to take the noun out. The audit proposes; it never fixes.
+   direction, and why: its parts, each with the lowest layer that
+   states it, with the evidence, a line, a search hit, or the layer's
+   nature. Each drift carries a proposed ticket, in the repository
+   where the move happens: a move down is a ticket in the lower
+   layer's repository to hold it, and one in the repository that holds
+   it now to take it from there; a move up is a ticket in the lower
+   layer's repository to take the noun out. A drift between two layers
+   below the product is proposed in those layers' repositories, and in
+   this checkout only when it carries the concept. The audit proposes;
+   it never fixes.
 9. Run `git status --porcelain` here again. It prints what step 1
    printed. When it does not, the report's Not verified names each path
    that changed, and the person decides; the audit undoes nothing.
@@ -219,7 +275,7 @@ no env file, and calls no API but git's.
 - Never files a ticket, and never pushes to or opens anything on a
   layer's repository: a proposed ticket is the person's to file.
 - Never reads more than three layers below the product, searches more
-  than 40 nouns, or reads more than 30 files in full.
+  than 40 nouns and parts, or reads more than 30 files in full.
 
 ## Output
 
@@ -239,11 +295,14 @@ no env file, and calls no API but git's.
 | engine | An Engine for Long-Running Agents | agentic_core | <release> | <commit> | <render>, the guideline at <release> |
 | guideline | Software Design and Architecture Guidelines | swe_guidelines | <release> | <commit> | none: the root |
 
+- <layer>, where its spec says more than its nature: "<the spec's words>" (`<spec>`)
+
 ## Drifts, by impact
 
 1. **<concept>** (<kind>), <down or up>. Where it is: <layer>,
-   `<path>`. Where it belongs: <layer>. Why: <the nature it
-   contradicts>; evidence: <the line or the search hit>.
+   `<path>`. Where it belongs: <layer>. Why: <its parts, each with
+   the lowest layer that states it>; evidence: <the line, the search
+   hit, or the layer's nature>.
 
 ## Proposed tickets
 

@@ -749,11 +749,12 @@ COUNT_BOUNDS = {
     "audit-ontology-drift": [
         "at most three layers below the product",
         "A fourth layer below the product is never read",
-        "Search at most 40 nouns, a noun and its plural one, each once in each layer below it.",
+        "Search at most 40 nouns and parts: a noun with its plural is one, and so is a concept's "
+        "part in its words, each searched once in each layer below it.",
         "at most 30 files read in full in a run",
         "A suspect past either count is listed under Not verified.",
-        "Never reads more than three layers below the product, searches more than 40 nouns, "
-        "or reads more than 30 files in full.",
+        "Never reads more than three layers below the product, searches more than 40 nouns "
+        "and parts, or reads more than 30 files in full.",
     ],
     "docs-compact": [
         "One pass: each document is rewritten once in a run.",
