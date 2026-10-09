@@ -37,7 +37,6 @@ REFERENCE = "../_shared/ops-preamble.md"
 PLATFORM = {
     "ops-session-stuck": "supporter",
     "ops-host-idle": "supporter",
-    "ops-integration-silent": "investigator",
     "ops-provider-outage": "investigator",
     "audit-matrix-spend": "investigator",
 }
@@ -50,6 +49,7 @@ READERS = sorted(
         "ops-cloud-deployment-create",
         "ops-cloud-deployment-nuke",
         "ops-infra-as-code",
+        "ops-integration-silent",
         "ops-investigate",
         "ops-root-cause",
         "ops-simulate-traffic",
