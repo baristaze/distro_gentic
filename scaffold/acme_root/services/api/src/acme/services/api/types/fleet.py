@@ -12,6 +12,7 @@ from pydantic import Field
 from acme.om.agent_sessions.types.agent_session import SessionStatus
 from acme.om.hosts.rules import HostState
 from acme.om.placement.types.share import PlanTier
+from acme.om.work.types.tenant_cap import MAX_CAP
 from acme.om.steps.types.content import ContentState
 from acme.om.steps.types.header import ControlCommand, LoopOutcome, ToolFailure
 from acme.om.steps.types.step import Actor, Origin, StepType
@@ -24,20 +25,24 @@ from acme.services.api.types.hosts import AdvertisementView
 class SetShareRequest(RequestBody):
     """A tenant's fair share: the plan tier whose lane its loops run in,
     whether they run in a lane of their own instead, and how many of them
-    run at once."""
+    run at once there, its own cap, which holds in place of its tier's
+    share. With no `concurrency`, the tier's share holds."""
 
     plan_tier: PlanTier
     own_lane: bool = False
-    concurrency: int = Field(ge=1, le=10_000)
+    concurrency: int | None = Field(default=None, ge=1, le=MAX_CAP)
 
 
 class ShareView(View):
-    """A tenant's fair share as the operator wrote it, at its version."""
+    """A tenant's fair share as the operator wrote it, at its version.
+    `concurrency` is the most of its loops that run at once on its lane:
+    its own cap where `own_cap`, else its tier's share."""
 
     org_id: UUID
     plan_tier: str
     own_lane: bool
     concurrency: int
+    own_cap: bool
     version: int
     updated_at: datetime
     updated_by: UUID
@@ -47,7 +52,7 @@ class LoopStandingView(View):
     """The session's loop item made last, and its place in line:
     `ready_ahead` items of any tenant are ready before it on its lane, and
     `running_ahead` of its tenant's loops run ahead of it, which the claim
-    counts against the share."""
+    holds to the tenant's cap."""
 
     item_id: UUID
     status: WorkStatus
@@ -63,8 +68,10 @@ class LoopStandingView(View):
 
 class SessionStandingView(View):
     """Why a session is or is not moving. `changed_at` is its last change:
-    when it parked, for a parked one. `pool_id` null is the cloud, where
-    `hosts_online` is null; `share_set` false is the default share."""
+    when it parked, for a parked one. `concurrency` is the cap the claim
+    holds its tenant to on its lane: its own where `own_cap`, else its
+    tier's share. `pool_id` null is the cloud, where `hosts_online` is null;
+    `share_set` false is the default tier."""
 
     session_id: UUID
     status: SessionStatus
@@ -74,6 +81,7 @@ class SessionStandingView(View):
     plan_tier: str
     own_lane: bool
     concurrency: int
+    own_cap: bool
     share_set: bool
     pool_id: UUID | None
     hosts_online: int | None

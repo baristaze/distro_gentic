@@ -17,8 +17,8 @@ from acme.om.work.types.work_item import WorkStatus
 class LoopStanding(Platform):
     """The session's loop item made last, as the queue holds it, and its
     place in line: the ready items before it on its lane, any tenant's, and
-    the tenant's loops running ahead of it, which the claim's guard counts
-    against the share."""
+    the tenant's loops running ahead of it, which the claim holds to the
+    tenant's cap."""
 
     item_id: UUID
     status: WorkStatus
@@ -35,8 +35,10 @@ class LoopStanding(Platform):
 class SessionStanding(Platform):
     """Why one session is or is not moving: its status and its park, its
     last change (when it parked, for a parked one), its tenant's share,
-    where it runs, and its loop. `pool_id` None is the cloud, where
-    `hosts_online` is None; `share_set` False is the default share."""
+    where it runs, and its loop. `concurrency` is the cap the claim holds
+    the tenant to on its lane: its own where `own_cap`, else the lane's.
+    `pool_id` None is the cloud, where `hosts_online` is None; `share_set`
+    False is the default tier."""
 
     session_id: UUID
     status: SessionStatus
@@ -46,6 +48,7 @@ class SessionStanding(Platform):
     plan_tier: str
     own_lane: bool
     concurrency: int
+    own_cap: bool
     share_set: bool
     pool_id: UUID | None
     hosts_online: int | None

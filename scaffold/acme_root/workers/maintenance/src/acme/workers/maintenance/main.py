@@ -33,6 +33,7 @@ from acme.workers.maintenance.container import (
     LEASE_SWEEP_BATCH,
     MEDIA_PURGE_BATCH,
     RETENTION_SWEEP_BATCH,
+    SHARE_CARRY_BATCH,
     STALLED_SWEEP_BATCH,
     WorkerContainer,
 )
@@ -192,6 +193,11 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             # Each exec item whose host's lease ran out: an unsafe one ends
             # `interrupted`, a repeatable one waits for its host again.
             "relay": managers.relay.settle_expired,
+            # Each share the release before wrote: the number of its loops
+            # at once, carried as the tenant's own cap on its loop lane, once.
+            "share_caps": unstaged(
+                lambda: managers.placement_operator.carry_caps(SHARE_CARRY_BATCH)
+            ),
         },
         # The media and session purges' batches are their own: a whole one
         # says there may be more. So is the lease sweep's: the leases and
@@ -203,6 +209,7 @@ def build_loop(container: WorkerContainer, lane: str | None = None) -> WorkerLoo
             "retention": RETENTION_SWEEP_BATCH,
             "holds": HOLD_SWEEP_BATCH,
             "stalled_sessions": STALLED_SWEEP_BATCH,
+            "share_caps": SHARE_CARRY_BATCH,
         },
         # Per tenant, and only in the tenants one read across tenants names as
         # due: the standing chores. The scaffold keeps no record per period,

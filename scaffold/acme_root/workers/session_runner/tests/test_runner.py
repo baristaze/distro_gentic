@@ -41,6 +41,7 @@ from acme.om.context import (
 from acme.om.exceptions import NotFound, UnknownAgentKind
 from acme.om.matrix.types.matrix import MatrixStatus
 from acme.om.placement.kinds import platform_work_kinds
+from acme.om.placement.impl.manager import PlacementOptions
 from acme.om.placement.rules import DEFAULT_TIER, tier_lane
 from acme.om.root import PlatformPorts, ProductKinds
 from acme.om.steps.rules import message_step
@@ -69,7 +70,6 @@ from acme.workers.maintenance.settings import MaintenanceSettings
 from acme.workers.session_runner import container as runner_container
 from acme.workers.session_runner import main as runner_main
 from acme.workers.session_runner.container import RunnerContainer
-from acme.workers.session_runner.fair_share import FairShareGuardImpl
 from acme.workers.session_runner.main import build_runner, loop_options
 from acme.workers.session_runner.runs import LoopHandlerImpl
 from acme.workers.session_runner.settings import SessionRunnerSettings
@@ -255,7 +255,7 @@ def test_every_kind_is_claimed_by_one_worker_and_asked_for_as_widely_as_it_runs(
     loop = kinds.get(WorkKind.LOOP)
     assert loop is not None
     asking = loop.permission
-    requires = (*LoopHandlerImpl.REQUIRES, *FairShareGuardImpl.REQUIRES)
+    requires = LoopHandlerImpl.REQUIRES
     for role, permissions in ROLE_PERMISSIONS.items():
         if asking in permissions:
             missing = [p for p in requires if p not in permissions]
@@ -316,6 +316,15 @@ def test_the_runner_sweeps_recovery_alone_on_knobs_of_its_own() -> None:
         "runner-test",
     )
     assert loop_options(settings()).lane == "loop:standard", "the default tier's lane"
+
+
+def test_the_runner_passes_its_lanes_share_to_the_claim(tmp_path: Path) -> None:
+    """The cap its claim holds each tenant to on the lane is the one
+    placement names for it: the tier's share, else the default."""
+    runner = build_runner(runner_over(tmp_path), "loop:standard")
+    options = runner._options  # pyright: ignore[reportPrivateUsage]
+    assert options.tenant_cap == PlacementOptions().default_share
+    assert loop_options(settings(), "loop:pro", 3).tenant_cap == 3
 
 
 def test_the_runners_sweep_lets_go_of_what_its_host_holds(tmp_path: Path) -> None:

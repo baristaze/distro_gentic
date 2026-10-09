@@ -1,7 +1,10 @@
 import logging
 from collections.abc import Callable
 from datetime import datetime, timedelta
+from typing import Annotated
 from uuid import UUID
+
+from pydantic import Field
 
 from acme.infra.observability import OUTCOMES
 from acme.om.base import EMPTY_UUID, Platform, derived_id, utcnow
@@ -9,13 +12,14 @@ from acme.om.context import Permission, RequestContext, TenantContext
 from acme.om.exceptions import LeaseLost, NotFound
 from acme.om.placement.kinds import HOST, ClaimantKinds, claims_of, held_to, placed_lane
 from acme.om.placement.manager import PlacementManagerInterface
-from acme.om.placement.rules import DEFAULT_TIER, admits, loop_lane
+from acme.om.placement.rules import DEFAULT_TIER, lane_cap, loop_lane
 from acme.om.placement.storage import PlacementStorageInterface
 from acme.om.placement.types.claimant import Claimant, ClaimantReport, ReportOutcome
-from acme.om.placement.types.share import FairShare
+from acme.om.placement.types.share import FairShare, PlanTier
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.work import WorkManagerInterface
 from acme.om.work.kinds import WorkKinds
+from acme.om.work.types.tenant_cap import MAX_CAP
 from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
 
 log = logging.getLogger(__name__)
@@ -23,11 +27,11 @@ log = logging.getLogger(__name__)
 
 class PlacementOptions(Platform):
     default_tier: str = DEFAULT_TIER  # the plan tier of a tenant with no share
-    default_concurrency: int = 8  # the loops at once of a tenant with no share
-    # How long a claimed loop over its tenant's share waits in its lane
-    # before it is claimed again: long enough that a full tenant's queue is
-    # not claimed over and over, short enough that a freed slot is taken.
-    over_share_delay: timedelta = timedelta(seconds=15)
+    # Each plan tier's share: the most loops one tenant holds claimed on the
+    # tier's lane, the cap its runners pass to the claim. A tier it does not
+    # name, and a tenant's own lane, take the default share.
+    tier_shares: dict[PlanTier, Annotated[int, Field(ge=1, le=MAX_CAP)]] = {}
+    default_share: int = Field(default=8, ge=1, le=MAX_CAP)
     purge_batch: int = 1000
 
 
@@ -56,22 +60,8 @@ class PlacementManagerImpl(PlacementManagerInterface):
             return loop_lane(org_id, await self._share(org_id))
         return placed_lane(self._kinds.get(item.kind), item.payload) or item.lane
 
-    async def admit(self, ctx: TenantContext, item: WorkItem) -> timedelta | None:
-        if item.kind != WorkKind.LOOP:
-            return None
-        share = await self._share(ctx.org_id)
-        ahead = await self._work.claimed_ahead(ctx, item)
-        if admits(ahead, share.concurrency):
-            return None
-        OUTCOMES.labels(subsystem="placement", outcome="over_share").inc()
-        log.info(
-            "loop %s of org %s waits: %d of its loops run ahead of it, and its share is %d",
-            item.id,
-            ctx.org_id,
-            ahead,
-            share.concurrency,
-        )
-        return self._options.over_share_delay
+    def lane_cap(self, lane: str) -> int:
+        return lane_cap(lane, self._options.tier_shares, self._options.default_share)
 
     async def claim_for(
         self, rctx: RequestContext, claimant: Claimant, lease: timedelta
@@ -184,5 +174,4 @@ class PlacementManagerImpl(PlacementManagerInterface):
             created_by=EMPTY_UUID,  # the platform's default, which nobody wrote
             updated_by=EMPTY_UUID,
             plan_tier=self._options.default_tier,
-            concurrency=self._options.default_concurrency,
         )

@@ -1,5 +1,6 @@
 import logging
 from collections.abc import Callable
+from contextlib import suppress
 from datetime import datetime, timedelta
 from uuid import UUID
 
@@ -19,12 +20,16 @@ from acme.om.placement.rules import (
     LOOP_LANE_PREFIX,
     PARK_AGES,
     host_lane,
+    lane_cap,
+    loop_lane,
+    own_lane,
     park_age_label,
     pool_lane,
     tier_label,
+    tier_lane,
 )
 from acme.om.placement.storage import PlacementStorageInterface
-from acme.om.placement.types.share import FairShare
+from acme.om.placement.types.share import FairShare, ShareStanding
 from acme.om.placement.types.standing import (
     Count,
     FleetCounts,
@@ -35,7 +40,9 @@ from acme.om.placement.types.standing import (
 )
 from acme.om.steps.types.header import ParkReason
 from acme.om.tenancy.storage import TenancyStorageInterface
+from acme.om.work.manager import WorkOperatorManagerInterface
 from acme.om.work.storage import WorkStorageInterface
+from acme.om.work.types.tenant_cap import MAX_CAP, TenantCap
 from acme.om.work.types.work_item import WorkKind
 
 log = logging.getLogger(__name__)
@@ -45,21 +52,23 @@ SHARE_SET_KIND = "placement.share.set"
 
 
 class PlacementOperatorOptions(Platform):
-    """What a standing reads beside the rows: the share of a tenant no
-    operator gave one, as placement's options set it, and how long a host
-    counts as online, as the hosts' options set it. The root builds it from
-    both, so neither is said twice."""
+    """What a standing reads beside the rows: the tier of a tenant no
+    operator gave a share, and each tier's share, as placement's options
+    set them, and how long a host counts as online, as the hosts' options
+    set it. The root builds it from both, so neither is said twice."""
 
     default_tier: str
-    default_concurrency: int
+    tier_shares: dict[str, int]
+    default_share: int
     online_window: timedelta
 
 
 class PlacementOperatorManagerImpl(PlacementOperatorManagerInterface):
-    """Writes one named org's share through the placement storage, and reads
-    the org, its sessions, its work, and its hosts through their storages,
-    as the other operator planes do: no `TenantContext` exists on this
-    plane, so no tenant manager is asked."""
+    """Writes one named org's share through the placement storage, and its
+    own cap through the work queue's operator plane, which holds the cap
+    and its trail. It reads the org, its sessions, its work, and its hosts
+    through their storages, as the other operator planes do: no
+    `TenantContext` exists on this plane, so no tenant manager is asked."""
 
     def __init__(
         self,
@@ -70,6 +79,7 @@ class PlacementOperatorManagerImpl(PlacementOperatorManagerInterface):
         sessions: AgentSessionStorageInterface,
         work: WorkStorageInterface,
         hosts: HostsStorageInterface,
+        work_operator: WorkOperatorManagerInterface,
         options: PlacementOperatorOptions,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
@@ -80,6 +90,7 @@ class PlacementOperatorManagerImpl(PlacementOperatorManagerInterface):
         self._sessions = sessions
         self._work = work
         self._hosts = hosts
+        self._work_operator = work_operator
         self._options = options
         self._clock = clock
 
@@ -90,15 +101,15 @@ class PlacementOperatorManagerImpl(PlacementOperatorManagerInterface):
         *,
         plan_tier: str,
         own_lane: bool,
-        concurrency: int,
-    ) -> FairShare:
+        concurrency: int | None = None,
+    ) -> ShareStanding:
         admin.require(OperatorPermission.WRITE)
         org = await self._tenancy.read_org(org_id)
         if org is None or org.deleted_at is not None:
             raise NotFound(f"org {org_id} not found")
         stored = await self._storage.read_share(org_id)
         now = self._clock()
-        terms = {"plan_tier": plan_tier, "own_lane": own_lane, "concurrency": concurrency}
+        terms = {"plan_tier": plan_tier, "own_lane": own_lane}
         # An operator has no user in the tenant: the identity is the actor.
         try:
             if stored is None:
@@ -124,6 +135,16 @@ class PlacementOperatorManagerImpl(PlacementOperatorManagerInterface):
                 )
         except ValidationError as error:
             raise ValidationFailed(f"fair share of org {org_id}: {error}"[:500]) from None
+        if concurrency is not None and not 1 <= concurrency <= MAX_CAP:
+            raise ValidationFailed(f"fair share of org {org_id}: a cap is 1 to {MAX_CAP}")
+        lane = loop_lane(org_id, share)
+        # The cap lands before the share: a failure between leaves a cap on
+        # a lane the org's loops do not reach yet, and the operator's retry
+        # writes both.
+        if concurrency is None:
+            await self._clear_cap(admin, org_id, lane)
+        else:
+            await self._work_operator.set_tenant_cap(admin, org_id, lane, concurrency)
         if stored is None:
             try:
                 landed = await self._storage.create_share(org_id, share)
@@ -133,16 +154,23 @@ class PlacementOperatorManagerImpl(PlacementOperatorManagerInterface):
                 raise PreconditionFailed(f"fair share {share.id} is written already")
         else:
             await self._storage.write_share(org_id, share, stored.version)
+            left = loop_lane(org_id, stored)
+            if left != lane:
+                await self._clear_cap(admin, org_id, left)
         log.info(
-            "operator %s set the share of org %s: tier %s, own lane %s, %d at once",
+            "operator %s set the share of org %s: tier %s, own lane %s, its own cap %s",
             admin.identity_id,
             org_id,
             share.plan_tier,
             share.own_lane,
-            share.concurrency,
+            concurrency,
         )
-        await self._audit(admin, org_id, share)
-        return share
+        await self._audit(admin, org_id, share, concurrency)
+        return ShareStanding(
+            share=share,
+            concurrency=self._lane_cap(lane) if concurrency is None else concurrency,
+            own_cap=concurrency is not None,
+        )
 
     async def get_session_standing(
         self, admin: OperatorContext, org_id: UUID, session_id: UUID
@@ -155,6 +183,9 @@ class PlacementOperatorManagerImpl(PlacementOperatorManagerInterface):
         now = self._clock()
         stored = await self._storage.read_share(org_id)
         tier = self._options.default_tier if stored is None else stored.plan_tier
+        moved = stored is not None and stored.own_lane
+        lane = own_lane(org_id) if moved else tier_lane(tier)
+        own = await self._work.read_tenant_cap(org_id, lane)
         placement = await self._hosts.read_placement(org_id, session_id)
         pool_id = None if placement is None else placement.pool_id
         hosts_online = None
@@ -185,10 +216,9 @@ class PlacementOperatorManagerImpl(PlacementOperatorManagerInterface):
             changed_at=session.updated_at,
             pending_input=session.pending_input is not None,
             plan_tier=tier,
-            own_lane=False if stored is None else stored.own_lane,
-            concurrency=(
-                self._options.default_concurrency if stored is None else stored.concurrency
-            ),
+            own_lane=moved,
+            concurrency=self._lane_cap(lane) if own is None else own.cap,
+            own_cap=own is not None,
             share_set=stored is not None,
             pool_id=pool_id,
             hosts_online=hosts_online,
@@ -256,6 +286,42 @@ class PlacementOperatorManagerImpl(PlacementOperatorManagerInterface):
             hosts=tuple(Count(labels=(state.value,), value=n) for state, n in hosts.items()),
         )
 
+    async def carry_caps(self, limit: int) -> int:
+        carried = 0
+        for row in await self._storage.read_uncarried(limit):
+            lane = loop_lane(row.org_id, row.share)
+            if await self._work.read_tenant_cap(row.org_id, lane) is None:
+                now = self._clock()
+                cap = TenantCap(
+                    id=new_id(),
+                    created_at=now,
+                    updated_at=now,
+                    # The operator who wrote the share set the number.
+                    created_by=row.share.updated_by,
+                    updated_by=row.share.updated_by,
+                    lane=lane,
+                    cap=max(1, min(row.concurrency, MAX_CAP)),
+                )
+                await self._work.write_tenant_cap(row.org_id, cap)
+                log.info(
+                    "carried the share of org %s as its own cap on lane %s: %d",
+                    row.org_id,
+                    lane,
+                    cap.cap,
+                )
+            if await self._storage.mark_carried(row.org_id, row.share.id):
+                carried += 1
+        return carried
+
+    def _lane_cap(self, lane: str) -> int:
+        return lane_cap(lane, self._options.tier_shares, self._options.default_share)
+
+    async def _clear_cap(self, admin: OperatorContext, org_id: UUID, lane: str) -> None:
+        """The org's own cap off the lane, so the lane's holds; none there
+        is already so."""
+        with suppress(NotFound):
+            await self._work_operator.clear_tenant_cap(admin, org_id, lane)
+
     @staticmethod
     def _trail(admin: OperatorContext, org_id: UUID, what: str) -> None:
         """Every operator read of a tenant's rows is recorded, naming both."""
@@ -265,9 +331,11 @@ class PlacementOperatorManagerImpl(PlacementOperatorManagerInterface):
             extra={"org_id": str(org_id), "operator": str(admin.identity_id)},
         )
 
-    async def _audit(self, admin: OperatorContext, org_id: UUID, share: FairShare) -> None:
+    async def _audit(
+        self, admin: OperatorContext, org_id: UUID, share: FairShare, concurrency: int | None
+    ) -> None:
         """The event that names the write and who made it, with the terms it
-        set. The share lands first and the stream after, as the queue's
+        set: `concurrency` is the org's own cap, null where its lane's holds. The share lands first and the stream after, as the queue's
         operator requeue does: a crash between the two loses the entry,
         never the share."""
         (event,) = await self._events.append_events(
@@ -281,7 +349,7 @@ class PlacementOperatorManagerImpl(PlacementOperatorManagerInterface):
                     payload={
                         "plan_tier": share.plan_tier,
                         "own_lane": share.own_lane,
-                        "concurrency": share.concurrency,
+                        "concurrency": concurrency,
                         "version": share.version,
                     },
                     produced_at=self._clock(),

@@ -37,7 +37,9 @@ async def set_share(
 ) -> ShareView:
     """Writes the org's fair share, a new version, with an entry in the
     org's stream that names the operator. Its loops enqueued from then on go
-    to the lane it names. Requires the write permission."""
+    to the lane it names. `concurrency` is the org's own cap on that lane,
+    which the claim holds in place of its tier's share; with none, the
+    tier's share holds. Requires the write permission."""
     return await service.set_share(admin, org_id, body)
 
 

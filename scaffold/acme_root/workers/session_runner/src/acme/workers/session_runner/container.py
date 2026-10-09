@@ -22,6 +22,7 @@ from acme.om.base import new_id
 from acme.om.billing.root import build_money_gate, refuse_open_money
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
 from acme.om.hosts.impl.placement import PlacementHostsImpl
+from acme.om.placement.impl.manager import PlacementOptions
 from acme.om.intake import IntakeManagerInterface
 from acme.om.intake.root import build_intake
 from acme.om.intake.tools import CommentImpl
@@ -125,6 +126,7 @@ class RunnerContainer:
         attachment_reader: AttachmentReaderInterface | None = None,
         ports: PlatformPorts | None = None,
         platform_agents: PlatformAgents | None = None,
+        placement_options: PlacementOptions | None = None,
     ) -> RunnerContainer:
         """The managers over whichever roots the caller chose, every tool call
         held to the trust swimlane's rules: audited with its four answers,
@@ -145,7 +147,9 @@ class RunnerContainer:
         that is not the money gate, is refused at boot. `platform_agents`
         ships the platform's agents beside the product's kinds, as the API
         does: a deployed runner reads them from its corpus root, and refuses
-        to boot with none."""
+        to boot with none. `placement_options` names each plan tier's share,
+        the cap the runner's lane passes to the claim; None keeps the
+        root's."""
         ports = ports or PlatformPorts()
         runner = Executor(kind=ExecutorKind.CLOUD, credential_id=new_id(), label=settings.runner_id)
         placement = PlacementRelayedImpl(
@@ -228,6 +232,7 @@ class RunnerContainer:
             models_layer=matrix.layer,
             tools_layer=layers,
             transport_layer=placed,
+            placement_options=placement_options,
             # A call of a session the tenant's automation principal started
             # runs on that principal's grant; every other on a member's place.
             principal_context=automation_principals(storage.get_automation_storage(), members),

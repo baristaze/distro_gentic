@@ -5,6 +5,7 @@ grant the grant job writes and ends, each on the tenant's record too; and
 where a session's work and a host stand, by the tenant named."""
 
 import argparse
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
@@ -16,11 +17,13 @@ from contracts.agent_session_storage import parked
 
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
 from acme.om.attribution.types.authority import AuthorityMode
-from acme.om.base import new_id
-from acme.om.context import OperatorRole
+from acme.om.base import new_id, utcnow
+from acme.om.context import AppContext, AppType, OperatorRole, RequestContext
 from acme.om.exceptions import NotFound
 from acme.om.placement.impl.operator import SHARE_SET_KIND
+from acme.om.placement.rules import tier_lane
 from acme.om.trust.impl.operator import CONTENT_OPENED, GRANTED, REVOKED
+from acme.om.work.types.work_item import WorkItem, WorkKind
 from acme.services.api.container import AppContainer
 from acme.services.api.main import granted
 
@@ -32,6 +35,8 @@ ASSISTANT = AgentKind(
     tree=TreeLimits(height=1, count=0),
 )
 SAID = "checkout drops the order at the payment step"
+APP = AppContext(type=AppType.WORKER, version="worker@test")
+LEASE = timedelta(seconds=60)
 READER = "sup@example.test"
 
 
@@ -124,6 +129,62 @@ async def test_an_operator_who_writes_sets_a_tenants_share_on_the_tenants_record
     assert [e["actor_id"] for e in written] == [me["identity_id"]] * 2
 
 
+async def test_a_tenants_own_cap_set_on_its_share_holds_at_the_claim_in_place_of_its_tiers(
+    client: httpx.AsyncClient, container: AppContainer, writer: dict[str, str]
+) -> None:
+    """The tier's share is the lane's cap, eight by default. Ajax's
+    operator gives it a cap of its own, one, through the share route; Beta
+    takes the tier alone. Ajax's second loop waits, unwritten, while
+    Beta's is claimed."""
+    managers = container.managers
+    rctx = RequestContext(request_id=new_id(), app=APP)
+    owners = []
+    for name in ("ajax", "beta"):
+        slug = f"{name}-{new_id().hex[-8:]}"
+        owner, _ = await managers.tenancy.bootstrap(rctx, name, slug, f"ann@{slug}.test", "Ann")
+        owners.append(owner)
+    ajax, beta = owners
+    capped = await client.put(
+        f"/v1/admin/orgs/{ajax.org_id}/share",
+        headers=writer,
+        json={"plan_tier": "pro", "concurrency": 1},
+    )
+    assert capped.status_code == 200, capped.text
+    assert (capped.json()["concurrency"], capped.json()["own_cap"]) == (1, True)
+    tiered = await client.put(
+        f"/v1/admin/orgs/{beta.org_id}/share", headers=writer, json={"plan_tier": "pro"}
+    )
+    assert (tiered.json()["concurrency"], tiered.json()["own_cap"]) == (8, False)
+
+    lane = tier_lane("pro")
+    for owner in (ajax, ajax, beta):
+        now = utcnow()
+        await managers.work.enqueue(
+            owner,
+            WorkItem(
+                id=new_id(),
+                created_at=now,
+                updated_at=now,
+                created_by=owner.user_id,
+                updated_by=owner.user_id,
+                kind=WorkKind.LOOP,
+                target_id=new_id(),
+                idempotency_key=new_id(),
+                request_id=new_id(),
+                payload={},
+                lane="default",
+                available_at=now,
+            ),
+        )
+    claimed = []
+    for _ in range(3):
+        found = await managers.work.claim(
+            rctx, lane, [WorkKind.LOOP], "runner", LEASE, managers.placement.lane_cap(lane)
+        )
+        claimed.append(None if found is None else found[0].org_id)
+    assert claimed == [ajax.org_id, beta.org_id, None], "Ajax waits at its own cap of one"
+
+
 async def test_content_opens_only_under_a_grant_the_grant_job_writes_and_ends(
     client: httpx.AsyncClient,
     container: AppContainer,
@@ -192,6 +253,7 @@ async def test_a_sessions_standing_names_its_park_its_loop_and_its_share(
     body = waiting.json()
     assert (body["status"], body["park"], body["pending_input"]) == ("pending", None, True)
     assert (body["plan_tier"], body["share_set"], body["pool_id"]) == ("standard", False, None)
+    assert (body["concurrency"], body["own_cap"]) == (8, False), "the default tier's share"
     loop = body["loop"]
     assert (loop["status"], loop["lane"], loop["ready_ahead"], loop["running_ahead"]) == (
         "queued",
@@ -215,11 +277,12 @@ async def test_a_sessions_standing_names_its_park_its_loop_and_its_share(
     standing = (await client.get(path, headers=reader)).json()
     assert standing["status"] == "parked"
     assert (standing["park"]["reason"], standing["park"]["unlock"]) == ("budget", "raise")
-    assert (standing["plan_tier"], standing["own_lane"], standing["concurrency"]) == (
-        "pro",
-        True,
-        2,
-    )
+    assert (
+        standing["plan_tier"],
+        standing["own_lane"],
+        standing["concurrency"],
+        standing["own_cap"],
+    ) == ("pro", True, 2, True)
 
     elsewhere = await client.get(
         f"/v1/admin/orgs/{new_id()}/sessions/{session_id}/standing", headers=reader
