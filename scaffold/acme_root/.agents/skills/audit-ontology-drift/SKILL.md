@@ -108,6 +108,11 @@ These are not drift:
   no concept of its domain, so an agent there is not an agent's concept
   in the guideline. Its rules, its spec and its `lenses/`, and its
   scaffold are judged.
+- A benchmark's runs and its harness, a layer's `benchmark/`, and a
+  lock file: they hold no concept, and are never listed or searched. A
+  test's words are read, but a test that names a word only to refuse
+  it, as a leak checker does, is not drift. A hit in a migration is
+  history, as above.
 
 ## Input
 
