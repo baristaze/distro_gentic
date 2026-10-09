@@ -28,6 +28,7 @@ from acme.infra.observability import (
     name_process,
 )
 from acme.infra.trust import install_trust_store
+from acme.om.placement.rules import LOOP_LANE_PREFIX, tier_label
 from acme.om.root import PlatformPorts
 from acme.om.tools.attachments import AttachmentReaderInterface
 from acme.om.work.types.work_item import WorkKind
@@ -42,10 +43,24 @@ from acme.workers.session_runner.workspaces import HeldOptions, HeldWorkspacesSw
 log = logging.getLogger(__name__)
 
 
+def claimed_lane(settings: SessionRunnerSettings, lane: str | None = None) -> str:
+    """The lane the runner claims from: `--lane`, else `ACME_RUNNER_LANE`. A
+    lane that is no loop lane is refused, naming it: placement lands every
+    `LOOP` item on a loop lane, a plan tier's or a tenant's own, so a runner
+    anywhere else claims nothing while every session waits."""
+    claimed = lane or settings.runner_lane
+    if not tier_label(claimed):
+        raise ValueError(
+            f"the runner claims from lane {claimed!r} (--lane or ACME_RUNNER_LANE), "
+            + f"and placement lands every LOOP item on a lane under {LOOP_LANE_PREFIX!r}"
+        )
+    return claimed
+
+
 def loop_options(settings: SessionRunnerSettings, lane: str | None = None) -> LoopOptions:
     return LoopOptions(
         worker_id=settings.runner_id,
-        lane=lane or settings.runner_lane,
+        lane=claimed_lane(settings, lane),
         capacity=settings.runner_capacity,
         lease=timedelta(seconds=settings.runner_lease_seconds),
         heartbeat_interval=timedelta(seconds=settings.runner_heartbeat_seconds),
@@ -111,6 +126,7 @@ async def serve(
 ) -> int:
     settings = SessionRunnerSettings()
     boot(settings)
+    lane = claimed_lane(settings, lane)  # refused before anything opens
     container = RunnerContainer.build(settings, attachment_reader=attachment_reader, ports=ports)
     await container.start()
     runner = build_runner(container, lane)

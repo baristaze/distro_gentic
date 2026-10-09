@@ -15,6 +15,7 @@ from acme.om.hosts.storage import HostsStorageInterface
 from acme.om.idempotency.storage import IdempotencyStorageInterface
 from acme.om.intake.storage import IntakeStorageInterface
 from acme.om.knowledge.storage import KnowledgeStorageInterface
+from acme.om.leases.storage import LeasesStorageInterface
 from acme.om.matrix.storage import MatrixStorageInterface, MatrixTenantStorageInterface
 from acme.om.media.storage import MediaStorageInterface
 from acme.om.models.storage import FillSetStorageInterface
@@ -58,6 +59,9 @@ class StorageInterface(ABC):
 
     @abstractmethod
     def get_orchestrations_storage(self) -> OrchestrationsStorageInterface: ...
+
+    @abstractmethod
+    def get_lease_storage(self) -> LeasesStorageInterface: ...
 
     @abstractmethod
     def get_step_storage(self) -> StepStorageInterface: ...

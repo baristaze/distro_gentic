@@ -25,6 +25,7 @@ from acme.services.api.routers import (
     hosts,
     intake,
     knowledge,
+    leases,
     ledgers,
     matrix,
     matrix_operator,
@@ -50,6 +51,7 @@ HOSTED: dict[str, tuple[APIRouter, ...]] = {
     # The realtime channel is the events stream pushed; its replay is `/events`.
     "events": (events.router, socket.router),
     "media": (media.router,),
+    "leases": (leases.router,),
     # Sessions with an agent; their loops run in the session runner. What
     # waits on a person across them reads the same sessions.
     "agent_sessions": (agent_sessions.router, approvals.router),

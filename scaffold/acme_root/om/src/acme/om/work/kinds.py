@@ -17,6 +17,7 @@ from acme.om.context import Permission
 from acme.om.work.types.work_item import (
     DeleteAccountPayload,
     DeleteOrgPayload,
+    LeaseNoticePayload,
     LoopPayload,
     MemberLeftPayload,
     NoopPayload,
@@ -101,6 +102,7 @@ WORK_PAYLOADS: dict[str, type[Platform]] = {
     WorkKind.WAKE_SESSION: WakeSessionPayload,
     WorkKind.WAKE_SESSIONS: WakeSessionsPayload,
     WorkKind.LOOP: LoopPayload,
+    WorkKind.LEASE_NOTICE: LeaseNoticePayload,
     WorkKind.VALIDATION: ValidationPayload,
 }
 """The payload shape of each of the work namespace's own kinds, which its
@@ -136,6 +138,9 @@ WORK_KINDS: tuple[WorkKindSpec, ...] = (
     # each tool call asks its principal's own permissions again. Its lane is
     # its tenant's fair share, which placement answers.
     _own(WorkKind.LOOP, Permission.WRITE),
+    # A grant, a request's end, or a revocation asks for it, relayed from its
+    # own commit; the handler unlocks a park, which WRITE covers.
+    _own(WorkKind.LEASE_NOTICE, Permission.WRITE),
     # A validation session's start asks for it, relayed from its own commit;
     # the run writes the session's validation and finishes the session,
     # which WRITE covers.

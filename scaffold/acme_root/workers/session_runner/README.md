@@ -18,7 +18,9 @@ inside the API ([ADR 1011](../../docs/adr/1011-a-sessions-loop-runs-in-a-worker-
   while the loop runs. It is the maintenance worker's claim loop, taken
   whole: capacity, the renewal and its fence, liveness, and the drain on
   stop. A runner serves one loop lane, a plan tier's or a tenant's own
-  ([placement](../../om/src/acme/om/placement/README.md)).
+  ([placement](../../om/src/acme/om/placement/README.md)), so a cap on the
+  maintenance worker's lane counts none of a tenant's running loops. A
+  runner set to a lane that is no loop lane refuses to start, and names it.
 - **The fair share** is the guard a claimed loop meets first: one over
   its tenant's share goes back to its lane for a delay, with no attempt
   spent, and never runs

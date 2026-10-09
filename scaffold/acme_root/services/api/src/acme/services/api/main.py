@@ -267,7 +267,7 @@ def seed_platform_of(args: argparse.Namespace) -> int:
             if org is None:
                 print(f"no org {args.slug}; bootstrap it first", file=sys.stderr)
                 return 1
-            owner = await container.managers.tenancy.member_context(rctx, org.id, org.created_by)
+            owner = await container.managers.tenancy.delegated_context(rctx, org.id, org.created_by)
             seeded = await seed_platform(
                 container.storage,
                 container.managers,

@@ -37,12 +37,6 @@ class InfraInterface(ABC):
     def get_keys(self) -> KeyServiceInterface: ...
 
     @abstractmethod
-    def get_outages(self) -> OutageSignalInterface:
-        """The outage signal, on the shared cache: in one process over the
-        memory cache, shared by a fleet over Valkey."""
-        ...
-
-    @abstractmethod
     def get_streams(self) -> StreamsInterface:
         """The streams read live while they are written, on the shared cache:
         one process's own over the memory cache, shared by a fleet over
@@ -65,6 +59,12 @@ class InfraInterface(ABC):
 
     @abstractmethod
     def get_flags(self) -> FlagsInterface: ...
+
+    @abstractmethod
+    def get_outages(self) -> OutageSignalInterface:
+        """The outage signal: on the shared cache where processes share one,
+        and the null impl in a process that keeps its cache to itself."""
+        ...
 
     @abstractmethod
     def describe(self) -> list[str]:

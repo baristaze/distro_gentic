@@ -29,6 +29,8 @@ from acme.om.intake.storage import IntakeStorageInterface
 from acme.om.intake.storage.impl.memory import IntakeStorageMemoryImpl
 from acme.om.knowledge.storage import KnowledgeStorageInterface
 from acme.om.knowledge.storage.impl.memory import KnowledgeStorageMemoryImpl
+from acme.om.leases.storage import LeasesStorageInterface
+from acme.om.leases.storage.impl.memory import LeasesStorageMemoryImpl
 from acme.om.matrix.storage import MatrixStorageInterface, MatrixTenantStorageInterface
 from acme.om.matrix.storage.impl.memory import (
     MatrixStorageMemoryImpl,
@@ -85,6 +87,9 @@ class StorageMemoryImpl(StorageInterface):
         self._tenancy = TenancyStorageMemoryImpl(self._outbox, self._idempotency)
         self._work = WorkStorageMemoryImpl()
         self._orchestrations = OrchestrationsStorageMemoryImpl(self._outbox)
+        # The leases land an orchestration's park beside a request, as the
+        # Postgres impl runs its statement in the request's transaction.
+        self._leases = LeasesStorageMemoryImpl(self._outbox, self._orchestrations)
         self._media = MediaStorageMemoryImpl(self._outbox)
         self._events = EventStorageMemoryImpl()
         self._steps = StepStorageMemoryImpl()
@@ -137,6 +142,9 @@ class StorageMemoryImpl(StorageInterface):
 
     def get_orchestrations_storage(self) -> OrchestrationsStorageInterface:
         return self._orchestrations
+
+    def get_lease_storage(self) -> LeasesStorageInterface:
+        return self._leases
 
     def get_step_storage(self) -> StepStorageInterface:
         return self._steps

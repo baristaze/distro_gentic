@@ -514,7 +514,12 @@ async def test_one_session_in_a_project_meets_every_gate_on_its_way_to_a_success
     # The command's output marks the session, and a validation from a
     # workspace with open egress acts outward: it waits for a person.
     parked = await settled(stack, person, session_id)
-    assert parked["park"] == {"reason": "person", "unlock": "approval", "retry_at": None}
+    assert parked["park"] == {
+        "reason": "person",
+        "unlock": "approval",
+        "retry_at": None,
+        "line": None,
+    }
     asked = of_type(await history(stack, person, session_id), "tool_request")[-1]
     assert asked["tool"] == "validate"
     approved = await stack.client.post(

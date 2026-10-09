@@ -277,6 +277,7 @@ def trusted(
         LoopOptions(control_poll=timedelta(milliseconds=1)),
         clock,
         sleep,
+        leases=managers.leases,
     )
     return Trusted(
         infra=infra,

@@ -15,6 +15,7 @@ from sqlalchemy import (
     select,
     update,
 )
+from sqlalchemy.orm import aliased
 from sqlalchemy.sql import ColumnElement, Select
 
 from acme.om.base import EMPTY_UUID, new_id, utcnow
@@ -102,20 +103,41 @@ class WorkStoragePostgresImpl(PgStorageBase, WorkStorageInterface):
             return written
 
     async def claim_next(
-        self, lane: str, kinds: Sequence[str], worker_id: str, lease: timedelta
+        self,
+        lane: str,
+        kinds: Sequence[str],
+        worker_id: str,
+        lease: timedelta,
+        tenant_cap: int | None = None,
     ) -> tuple[UUID, WorkItem] | None:
         now = utcnow()
-        candidate = (
-            select(WorkItems.id)
-            .where(
-                WorkItems.lane == lane,
-                WorkItems.status == WorkStatus.QUEUED.value,
-                WorkItems.kind.in_([str(kind) for kind in kinds]),
-                WorkItems.available_at <= now,
+        ready = select(WorkItems.id).where(
+            WorkItems.lane == lane,
+            WorkItems.status == WorkStatus.QUEUED.value,
+            WorkItems.kind.in_([str(kind) for kind in kinds]),
+            WorkItems.available_at <= now,
+        )
+        if tenant_cap is not None:
+            # rules.is_at_cap, in SQL: the tenants that already hold the cap
+            # on the lane under a live lease, counted once per statement over
+            # the claim's index (a lane holds as many claimed items as its
+            # workers run). Their items are passed over, never written.
+            held = aliased(WorkItems)
+            at_cap = (
+                select(held.org_id)
+                .where(
+                    held.lane == lane,
+                    held.status == WorkStatus.CLAIMED.value,
+                    held.lease_expires_at > now,
+                )
+                .group_by(held.org_id)
+                .having(func.count() >= tenant_cap)
             )
+            ready = ready.where(WorkItems.org_id.not_in(at_cap))
+        candidate = (
             # The item ready longest goes first, by the claim's index, so a
             # claim reads the first free row and not the whole ready backlog.
-            .order_by(WorkItems.available_at, WorkItems.id)
+            ready.order_by(WorkItems.available_at, WorkItems.id)
             .limit(1)
             .with_for_update(skip_locked=True)
             .scalar_subquery()
