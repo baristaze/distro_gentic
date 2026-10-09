@@ -127,6 +127,8 @@ tenantless = [
     "EventStorageInterface.count_since",
     "EventStorageInterface.trim",
     "IdempotencyStorageInterface.purge_records",
+    "LeasesStorageInterface.purge_settled",
+    "LeasesStorageInterface.read_due_orgs",
     "MediaStorageInterface.purge_files_across_tenants",
     "MediaStorageInterface.read_purgeable",
     "OrchestrationsStorageInterface.purge_settled",
@@ -183,7 +185,8 @@ sites = [
     "om/src/acme/om/tenancy/impl/manager.py::TenancyManagerImpl.admit_operator",
     "om/src/acme/om/tenancy/impl/manager.py::TenancyManagerImpl.resume",
     "om/src/acme/om/tenancy/impl/manager.py::TenancyManagerImpl.service_context",
-    "om/src/acme/om/tenancy/impl/manager.py::TenancyManagerImpl.service_contexts",
     "om/src/acme/om/tenancy/impl/manager.py::TenancyManagerImpl.member_context",
+    "om/src/acme/om/tenancy/impl/manager.py::TenancyManagerImpl.service_contexts",
+    "om/src/acme/om/tenancy/impl/manager.py::TenancyManagerImpl.delegated_context",
 ]
 builders = ["build_context"]

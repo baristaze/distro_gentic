@@ -4,8 +4,8 @@ Acme is the domain-agnostic core of a multi-tenant system, in the shape
 the Software Design and Architecture Guidelines prescribe
 ([the pin](specs/architecture.md)). It holds what every product needs
 before its first domain screen: tenancy with an operator plane, events
-and audit, the outbox, idempotency, the work queue, orchestrations, and
-files. A product renames it and builds its domain on top.
+and audit, the outbox, idempotency, the work queue, orchestrations,
+leases on a scarce resource, and files. A product renames it and builds its domain on top.
 
 ## Quick start
 
@@ -74,7 +74,7 @@ follows by hand.
 ## Layout
 
 - [om/](om/README.md): the object model: namespaces, storage, migrations.
-- [infra/](infra/README.md): cache, buckets, topics, queues, secrets, keys, flags, the outage signal, observability, workspaces, and the transport.
+- [infra/](infra/README.md): cache, buckets, topics, queues, secrets, keys, flags, outages, observability, workspaces, and the transport.
 - [integrations/](integrations/README.md): the identity provider, its twin, and the webhook check.
 - [services/api/](services/api/README.md): the API, its gateway, and the realtime socket.
 - [workers/maintenance/](workers/maintenance/README.md): the work queue's worker and the sweep.

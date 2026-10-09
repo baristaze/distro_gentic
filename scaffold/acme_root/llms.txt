@@ -17,6 +17,7 @@ served to it. Exposure is by listing, never by folder.
 - [Idempotency records](om/src/acme/om/idempotency/README.md): the outcome of a request that may arrive twice
 - [Work items](om/src/acme/om/work/README.md): background jobs, the claim, the lease, and the dead letter
 - [Orchestrations](om/src/acme/om/orchestrations/README.md): long-running records, a step at a time, that park or fail
+- [Leases](om/src/acme/om/leases/README.md): a resource one holder uses at a time, its lease under a fencing token, and the line in front of it
 - [Files](om/src/acme/om/media/README.md): files as references, the bounded upload straight to the store, and the sweep
 - [Agent sessions](om/src/acme/om/agent_sessions/README.md): sessions as a series of loops over one history, and the status read off their steps
 - [Steps](om/src/acme/om/steps/README.md): the history, written once and numbered with no gaps, and the epoch that refuses a stale run
@@ -27,7 +28,7 @@ served to it. Exposure is by listing, never by folder.
 - [Models](om/src/acme/om/models/README.md): model roles, fills, fill sets and their switches, the resolver, and prices
 - [Windows](om/src/acme/om/windows/README.md): what a model reads: the request rendered from the history, the window sized for its model, the pinned zone, compaction into summaries, and artifacts
 - [Tools](om/src/acme/om/tools/README.md): the tool contract, the registry, policy by class and target, approvals bound to one call, failures, recovery by effect, jobs
-- [Infrastructure](infra/README.md): cache, buckets, topics, queues, secrets, keys, flags, the outage signal, observability, workspaces and the transport; what each promises and which twin runs where
+- [Infrastructure](infra/README.md): cache, buckets, topics, queues, secrets, keys, flags, outages, observability, workspaces and the transport; what each promises and which twin runs where
 - [Integrations](integrations/README.md): the identity provider, its twin, the absent provider, and the webhook check; the model providers, their adapters, and the scripted twin
 - [The API process](services/api/README.md): the routes by area, the gateway's guarantees, the subcommands
 - [The maintenance worker](workers/maintenance/README.md): the work queue's loop, the provider deliveries, and the sweep

@@ -28,6 +28,7 @@ from contracts import (
     event_storage,
     fill_set_storage,
     idempotency_storage,
+    lease_storage,
     ledger_storage,
     media_storage,
     orchestration_storage,
@@ -100,6 +101,11 @@ STORAGE_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         ("AgentSessionStorageInterface", "read_purgeable"),
         ("EventStorageInterface", "trim"),
         ("OrchestrationsStorageInterface", "purge_settled"),
+        ("LeasesStorageInterface", "purge_settled"),
+        # The leases' sweep finds the orgs with a lease lapsed, a request past
+        # its wait, or a free resource with a line, and sweeps each under its
+        # service context.
+        ("LeasesStorageInterface", "read_due_orgs"),
         # The sweep's gauges: one read each across every tenant's rows.
         ("WorkStorageInterface", "oldest_ready_at"),
         ("WorkStorageInterface", "count_failed_since"),
@@ -119,6 +125,7 @@ CROSS_TENANT_CASES: dict[str, frozenset[str]] = {
     "EventStorageInterface": event_storage.CROSS_TENANT_CASES,
     "FillSetStorageInterface": fill_set_storage.CROSS_TENANT_CASES,
     "IdempotencyStorageInterface": idempotency_storage.CROSS_TENANT_CASES,
+    "LeasesStorageInterface": lease_storage.CROSS_TENANT_CASES,
     "LedgerStorageInterface": ledger_storage.CROSS_TENANT_CASES,
     "MediaStorageInterface": media_storage.CROSS_TENANT_CASES,
     "OrchestrationsStorageInterface": orchestration_storage.CROSS_TENANT_CASES,
@@ -159,6 +166,7 @@ MANAGER_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         ("IdempotencyManagerInterface", "purge_across_tenants"),
         ("EventsManagerInterface", "purge_across_tenants"),
         ("OrchestrationsManagerInterface", "purge_across_tenants"),
+        ("LeasesManagerInterface", "purge_across_tenants"),
         ("AgentSessionsManagerInterface", "purge_across_tenants"),
         # And the history of each session that purge has claimed, named with
         # its tenant: bookkeeping of the same step, for no principal.
@@ -196,8 +204,10 @@ REQUEST_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
         ("TenancyManagerInterface", "resume"),
         ("TenancyManagerInterface", "redeem_ticket"),
         ("TenancyManagerInterface", "service_context"),
-        ("TenancyManagerInterface", "service_contexts"),
+        # An integration acting for the member its provider vouches for.
         ("TenancyManagerInterface", "member_context"),
+        ("TenancyManagerInterface", "service_contexts"),
+        ("TenancyManagerInterface", "delegated_context"),
         ("TenancyManagerInterface", "grant_operator"),
         ("TenancyManagerInterface", "disable_operator"),
         ("TenancyManagerInterface", "grant_operator_token"),
@@ -209,6 +219,8 @@ REQUEST_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
         ("WorkManagerInterface", "maintenance_contexts"),
         # The service context a purge across tenants works a tenant's rows
         # under, minted from this stage, as the requeue's dead letter is.
+        # The leases' sweep works each due org's leases and lines so.
+        ("LeasesManagerInterface", "sweep"),
     }
 )
 

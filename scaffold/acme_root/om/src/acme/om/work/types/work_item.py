@@ -25,6 +25,7 @@ class WorkKind(StrEnum):
     WAKE_SESSION = "WAKE_SESSION"  # a parked session's retry time has come
     WAKE_SESSIONS = "WAKE_SESSIONS"  # the reason an org's sessions parked for is gone
     LOOP = "LOOP"  # a session's loop, for the session runner to run
+    LEASE_NOTICE = "LEASE_NOTICE"  # a session's lease request answered, or its lease revoked
 
 
 WORK_ROW_PREFIX = "work."
@@ -32,6 +33,21 @@ WORK_ROW_PREFIX = "work."
 that also starts work lands such a row beside the one that announces the entity
 change, in the same statement, and the relay enqueues the item it names: the
 queue is a database role of its own, so no statement reaches both."""
+
+
+LOOP_LANE = "loop"
+"""The lane a session's loop runs on, its own: the session runner claims
+from it, and a cap on the maintenance worker's lane counts none of a
+tenant's running loops."""
+
+WORK_LANES: dict[WorkKind, str] = {WorkKind.LOOP: LOOP_LANE}
+"""The lane the relay lands a kind on when it is not the default one."""
+
+
+def relayed_lane(kind: WorkKind) -> str:
+    """The lane the relay lands a kind on: its own in `WORK_LANES`, else the
+    default one."""
+    return WORK_LANES.get(kind, "default")
 
 
 def work_row_kind(kind: WorkKind) -> str:
@@ -109,9 +125,17 @@ class OrchestrationPayload(ScheduledPayload):
 class WakeParkedPayload(Platform):
     """The reason the org's parked records waited for is gone (a provider
     that answers again clears `provider_unavailable`); the item's target is
-    the org. Every record parked for it is resumed when the item runs."""
+    the org. Every record parked for it is resumed when the item runs, or
+    the one `record_id` names, when the reason was that record's alone (a
+    grant, or its request's end without one, clears `resource` for the
+    record it was for). A park that knows when its reason may clear (a
+    provider marked out until a retry time) asks for the org's wake then:
+    the item waits in the queue until `not_before`, and the parks that name
+    one time land one item, so the records it wakes resume staggered."""
 
     reason: ParkReason
+    record_id: UUID | None = None
+    not_before: datetime | None = None
 
 
 class WakeSessionPayload(ScheduledPayload):
@@ -137,6 +161,16 @@ class LoopPayload(Platform):
     loop is from its history, so the item carries nothing else. Each time the
     session turns pending asks for one, and a run that finds nothing to do
     writes nothing."""
+
+
+class LeaseNoticePayload(Platform):
+    """A lease request a session waits on was answered, by a grant or by its
+    end without a lease, or the lease it was granted was revoked. The item's
+    target is the session: one parked in line is unlocked, and its next run
+    reads the request and tells the model. Any other session is left as it
+    is: a running loop reads its requests before its next model call."""
+
+    request_id: UUID
 
 
 class DeleteAccountPayload(Platform):
@@ -168,6 +202,7 @@ WORK_PAYLOADS: dict[WorkKind, type[Platform]] = {
     WorkKind.WAKE_SESSION: WakeSessionPayload,
     WorkKind.WAKE_SESSIONS: WakeSessionsPayload,
     WorkKind.LOOP: LoopPayload,
+    WorkKind.LEASE_NOTICE: LeaseNoticePayload,
 }
 """The payload shape of every kind; enqueue validates the item's payload against it."""
 
@@ -191,6 +226,9 @@ WORK_ENQUEUE_PERMISSIONS: dict[WorkKind, Permission] = {
     # the run appends steps and projects the status, which WRITE covers, and
     # each tool call asks its principal's own permissions again.
     WorkKind.LOOP: Permission.WRITE,
+    # A grant, a request's end, or a revocation asks for it, relayed from its
+    # own commit; the handler unlocks a park, which WRITE covers.
+    WorkKind.LEASE_NOTICE: Permission.WRITE,
 }
 """The permission that asks for each kind. The person who asks authorizes
 the whole run once, so the permission has to be as wide as the run: every
