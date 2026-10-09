@@ -905,7 +905,6 @@ provider calls and credentials:
 |---|---|---|
 | `ops-session-stuck` | supporter | Why one session is not moving: its park, its lease, its host, and its place in line, read from the operator plane's aggregates |
 | `ops-host-idle` | supporter | Why a host takes no work: what it advertises against what its lane needs |
-| `ops-integration-silent` | investigator | Why an integration's events stopped: deliveries, signatures, dead letters |
 | `ops-provider-outage` | investigator | Which provider and credential fails, its outage signal, and how many sessions park on it |
 | `audit-matrix-spend` | investigator | Spend by matrix version and plan tier, cache hits and misses, the cost of rebuilt caches |
 | `audit-ontology-drift` | none | Which concept sits in a layer its nature contradicts, read from the product down to the guideline |
