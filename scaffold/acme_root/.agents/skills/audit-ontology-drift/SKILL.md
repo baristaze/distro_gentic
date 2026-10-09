@@ -185,10 +185,11 @@ no env file, and calls no API but git's.
    - A layer with a base:
      `git -C <clone> diff --name-status --find-renames <render> <Scaffold-Commit> -- scaffold/`,
      where `<render>` is the render step 4 found in that clone.
-     Beside it, the texts that never reach a product: the headings of
-     its spec and its `lenses/`. Its `skills/` and `agents/` are its
-     tooling, never listed.
-   - The root: its whole `scaffold/` folder and the same texts.
+     After it, in the same list, the texts that never reach a product:
+     the headings of its spec and its `lenses/`. Its `skills/` and
+     `agents/` are its tooling, never listed.
+   - The root: its whole `scaffold/` folder, as
+     `git -C <clone> ls-files scaffold/` lists it, and the same texts.
 
    A layer's scaffold is the one folder under its `scaffold/` whose
    name ends in `_root`, and the word before `_root` is the placeholder
