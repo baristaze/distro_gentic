@@ -70,8 +70,11 @@ async def test_files_present_with_no_failing_baseline_fail() -> None:
     await run.finding(await run.hypothesis(), reproduced)
     validation = await run.change("src/export.py", *REPORT_FILES)
     verdict = await run.judge(Result(claim=Claim.SUCCEEDED, evidence=(validation.id,)))
-    assert verdict.broken() == {Link.BASELINE}
-    assert "no baseline ran at the base base0" in verdict.breaks[0].reason
+    # The gate holds the same baseline rule, and refuses the success by it.
+    assert verdict.broken() == {Link.BASELINE, Link.VALIDATION}
+    reasons = {found.link: found.reason for found in verdict.breaks}
+    assert "no baseline ran at the base base0" in reasons[Link.BASELINE]
+    assert "no baseline ran at the base base0" in reasons[Link.VALIDATION]
 
     # A baseline that ran but showed nothing: the defect was never reproduced.
     passing = await scripted(DefectExecutor(broken=frozenset()))
@@ -162,8 +165,10 @@ async def test_a_baseline_taken_after_an_earlier_head_was_validated_breaks_the_c
     await run.baseline()
     validation = await run.change()
     verdict = await run.judge(Result(claim=Claim.SUCCEEDED, evidence=(validation.id,)))
-    assert verdict.broken() == {Link.BASELINE}
-    assert "every baseline ran after the change was validated" in verdict.breaks[0].reason
+    assert verdict.broken() == {Link.BASELINE, Link.VALIDATION}
+    reasons = {found.link: found.reason for found in verdict.breaks}
+    assert "every baseline ran after the change was validated" in reasons[Link.BASELINE]
+    assert "every baseline ran after the change was validated" in reasons[Link.VALIDATION]
 
 
 async def test_any_valid_fix_passes_and_a_hidden_failure_does_not() -> None:

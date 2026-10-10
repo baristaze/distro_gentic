@@ -15,7 +15,7 @@ from acme.om.projects.policies import SessionProjectsInterface
 
 class ResultGateOptions(Platform):
     max_cited: int = 500  # ids one result may cite
-    max_validations: int = 100  # validations at one head the gate reads
+    max_validations: int = 100  # validations at one head, and the session's first, the gate reads
     max_runs: int = 100_000  # runs of those validations the gate reads
 
 
@@ -23,9 +23,11 @@ class ResultGateEvidenceImpl(ResultGateInterface):
     """The gate that knows what evidence is. It reads the runs a result
     cites, the session's work product from the system that keeps it, the
     policy of the project `projects` answers for the session, never one the
-    work product names, and every validation at the delivered head with
-    every run it lists, and judges them (`rules.judge`). What it cannot read
-    in full it does not judge: it refuses."""
+    work product names, every validation at the delivered head with every
+    run it lists, and the session's oldest validations, and judges them
+    (`rules.judge`). A baseline comes first, so the one that counts is
+    among the oldest; one taken past them counts for nothing. What it
+    cannot read in full it does not judge: it refuses."""
 
     def __init__(
         self,
@@ -81,6 +83,8 @@ class ResultGateEvidenceImpl(ResultGateInterface):
             for validation in found
             if validation.purpose is RunPurpose.VALIDATION and validation.project == key
         )
+        oldest = await self._storage.read_validations(ctx.org_id, session_id, None, bound)
+        earliest = tuple(validation for validation in oldest if validation.project == key)
         records = await self._storage.read_validation_records(
             ctx.org_id,
             session_id,
@@ -98,4 +102,5 @@ class ResultGateEvidenceImpl(ResultGateInterface):
             policy=policy,
             validations=validations,
             records=tuple(records),
+            earliest=earliest,
         )

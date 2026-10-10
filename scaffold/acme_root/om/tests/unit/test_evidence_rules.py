@@ -1,7 +1,9 @@
 """The pure rules of evidence: protected paths, what a change asks for, the
-results contract and its one collector, and the acceptance scanner."""
+baseline that came first, the results contract and its one collector,
+and the acceptance scanner."""
 
 import json
+from datetime import timedelta
 from typing import Any
 
 import pytest
@@ -11,6 +13,7 @@ from contracts.evidence_storage import make_policy
 from acme.om.base import new_id, utcnow
 from acme.om.evidence.collector import Collector, collect
 from acme.om.evidence.rules import (
+    baseline,
     compatibility_refusal,
     execution_request,
     protected_paths,
@@ -23,7 +26,7 @@ from acme.om.evidence.types.contract import CheckDeclaration, Offer
 from acme.om.evidence.types.policy import Requirement, ValidationPolicy
 from acme.om.evidence.types.provenance import Provenance
 from acme.om.evidence.types.record import RunOutcome, RunPurpose
-from acme.om.evidence.types.validation import ExecutionRequest
+from acme.om.evidence.types.validation import ExecutionRequest, Validation
 from acme.om.exceptions import ValidationFailed
 
 # Protected paths.
@@ -126,6 +129,52 @@ def test_a_check_the_executor_cannot_run_is_refused_before_anything_runs() -> No
             check, Offer(capabilities=frozenset({"browser"}), schemas=frozenset({1}))
         )
         is None
+    )
+
+
+def a_validation(
+    purpose: RunPurpose, version: str, minute: int, source: str = "base0", runs: int = 1
+) -> Validation:
+    return Validation(
+        id=new_id(),
+        created_at=utcnow().replace(hour=0, minute=0) + timedelta(minutes=minute),
+        session_id=new_id(),
+        project="checkout",
+        purpose=purpose,
+        version=version,
+        source=source,
+        executor="executor-1",
+        results_sha256="0" * 64,
+        records=tuple(new_id() for _ in range(runs)),
+    )
+
+
+def test_a_baseline_counts_when_it_ran_first_at_the_base_and_lists_its_runs() -> None:
+    first = a_validation(RunPurpose.BASELINE, "base0", 1)
+    change = a_validation(RunPurpose.VALIDATION, "c0ffee", 2)
+    assert baseline((first, change), "base0") == (first,)
+    assert baseline((first,), "base0") == (first,), "nothing validated yet"
+    none = "no baseline ran at the base base0"
+    assert baseline((change,), "base0") == none
+    assert baseline((a_validation(RunPurpose.BASELINE, "other", 1), change), "base0") == none
+    assert (
+        baseline((a_validation(RunPurpose.BASELINE, "base0", 1, runs=0), change), "base0") == none
+    )
+    late = a_validation(RunPurpose.BASELINE, "base0", 3)
+    assert baseline((change, late), "base0") == "every baseline ran after the change was validated"
+
+
+def test_a_change_from_another_base_leaves_a_baseline_first_at_this_one() -> None:
+    # The branch took the default branch in, so its base moved: a change
+    # validated from the old base does not make the new base's baseline late.
+    old = a_validation(RunPurpose.VALIDATION, "c0ffee", 1, source="base0")
+    moved = a_validation(RunPurpose.BASELINE, "base1", 2, source="base1")
+    change = a_validation(RunPurpose.VALIDATION, "d00d", 3, source="base1")
+    assert baseline((old, moved, change), "base1") == (moved,)
+    late = a_validation(RunPurpose.BASELINE, "base1", 4, source="base1")
+    assert (
+        baseline((old, change, late), "base1")
+        == "every baseline ran after the change was validated"
     )
 
 

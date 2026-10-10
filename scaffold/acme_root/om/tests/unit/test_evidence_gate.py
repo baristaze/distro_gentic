@@ -1,6 +1,7 @@
 """The result gate refuses a success that changed the work product unless
-the validation policy passed at the committed head, on a clean tree, on
-results its executor wrote; a run that validated nothing is inconclusive.
+a baseline came first and the validation policy passed at the committed
+head, on a clean tree, on results its executor wrote at the check versions
+the policy declares now; a run that validated nothing is inconclusive.
 A double's run is never validation, and a twin's never stands for real.
 A change that touches a protected path voids validation."""
 
@@ -35,6 +36,7 @@ from acme.om.evidence.types.policy import Grade, Requirement
 from acme.om.evidence.types.provenance import Dependency, Provenance
 from acme.om.evidence.types.rate import AbortRule, Bound, RateRule
 from acme.om.evidence.types.record import RunPurpose
+from acme.om.evidence.types.validation import ExecutionRequest
 from acme.om.exceptions import PreconditionFailed, UnsafeConfiguration
 from acme.om.root import build_managers
 from acme.om.steps.types.header import LoopOutcome
@@ -43,31 +45,56 @@ from acme.om.storage.impl.memory import StorageMemoryImpl
 
 class Case:
     """One session of the `checkout` project: its policy written, a work run of
-    the agent's to cite, and its work product as the case delivers it."""
+    the agent's to cite, its work product as the case delivers it, and,
+    unless the case says otherwise, a baseline taken before any change is
+    validated."""
 
-    def __init__(self, evidence: Evidence, ctx: TenantContext) -> None:
+    def __init__(self, evidence: Evidence, ctx: TenantContext, owner: TenantContext) -> None:
         self.evidence = evidence
         self.ctx = ctx
+        self.owner = owner
         self.session = new_id()
         self.run = make_record(self.session, step_id=new_id())
 
     @classmethod
     async def start(
-        cls, executor: ScriptedExecutor | None = None, *requirements: Requirement
+        cls,
+        executor: ScriptedExecutor | None = None,
+        *requirements: Requirement,
+        baseline: bool = True,
     ) -> Case:
         org = make_org()
-        case = cls(evidence_over(executor), context(Role.MEMBER, org))
-        owner = context(Role.OWNER, org)
-        await case.evidence.manager.write_policy(owner, checkout_policy(*requirements))
+        case = cls(evidence_over(executor), context(Role.MEMBER, org), context(Role.OWNER, org))
+        await case.evidence.manager.write_policy(case.owner, checkout_policy(*requirements))
         await case.evidence.manager.record_run(case.ctx, case.run)
         case.deliver()
+        if baseline:
+            await case.baseline()
         return case
 
     def deliver(self, **changes: object) -> None:
         self.evidence.work.deliver(self.ctx.org_id, self.session, delivered(**changes))  # type: ignore[arg-type]
 
+    async def baseline(self) -> None:
+        await self.evidence.manager.validate(self.ctx, self.session, RunPurpose.BASELINE)
+
     async def validate(self) -> None:
         await self.evidence.manager.validate(self.ctx, self.session, RunPurpose.VALIDATION)
+
+    def validated(self) -> list[ExecutionRequest]:
+        """What the executor was asked at the head: every request but the
+        baseline's."""
+        return [
+            request
+            for request in self.evidence.executor.requests
+            if request.purpose is RunPurpose.VALIDATION
+        ]
+
+    async def trials_run(self) -> int:
+        runs = (await self.evidence.manager.get_runs(self.ctx, self.session, None, 500)).items
+        return len(
+            [run for run in runs if run.check == "trials" and run.purpose is RunPurpose.VALIDATION]
+        )
 
     async def submit(self, claim: Claim = Claim.SUCCEEDED, *cited: UUID) -> Verdict:
         result = Result(claim=claim, evidence=cited or (self.run.id,))
@@ -111,10 +138,12 @@ async def test_a_delivery_is_judged_by_its_sessions_project_whatever_it_names() 
         result = Result(claim=Claim.SUCCEEDED, evidence=(runs[session_id].id,))
         return await evidence.gate.check(ctx, session_id, result)
 
+    assert refused(await submit(ours), "no baseline ran at the base base0")
+    await evidence.manager.validate(ctx, ours, RunPurpose.BASELINE)
     assert refused(await submit(ours), "no validation ran at the head c0ffee")
     (validation,) = await evidence.manager.validate(ctx, ours, RunPurpose.VALIDATION)
     assert validation.project == CHECKOUT_KEY, "validated under the session's project"
-    assert [check.name for check in evidence.executor.requests[0].checks] == ["unit"]
+    assert [check.name for check in evidence.executor.requests[-1].checks] == ["unit"]
     assert succeeded(await submit(ours))
 
     verdict = await submit(theirs)
@@ -136,6 +165,62 @@ async def test_a_success_with_no_validation_at_its_head_is_refused() -> None:
     # A commit after the validation is a head nobody validated.
     case.deliver(head="d00d")
     assert refused(await case.submit(), "no validation ran at the head d00d")
+
+
+async def test_a_success_with_no_baseline_first_is_refused() -> None:
+    bare = await Case.start(baseline=False)
+    await bare.validate()
+    # The validation passed at the head, and no baseline ran at the base:
+    # the agent reads why, and how a baseline is taken.
+    verdict = await bare.submit()
+    assert refused(verdict, "no baseline ran at the base base0", "validate, baseline set")
+    # The same submission, from a session that took its baseline first.
+    first = await Case.start()
+    await first.validate()
+    assert succeeded(await first.submit())
+    # A baseline taken once the change was validated came too late.
+    await bare.baseline()
+    assert refused(await bare.submit(), "every baseline ran after the change was validated")
+
+
+async def test_a_validation_counts_only_at_the_check_versions_the_policy_declares_now() -> None:
+    case = await Case.start()
+    await case.validate()
+    assert succeeded(await case.submit())
+    # A person moves the project's checks to version 2: the runs at version
+    # 1 measured checks that no longer govern.
+    policy = await case.evidence.manager.get_policy(case.owner, CHECKOUT_KEY)
+    assert {check.version for check in policy.checks} == {"1"}
+    moved = tuple(check.model_copy(update={"version": "2"}) for check in policy.checks)
+    await case.evidence.manager.write_policy(
+        case.owner, policy.model_copy(update={"checks": moved})
+    )
+    verdict = await case.submit()
+    assert refused(
+        verdict,
+        "the checks changed since the head c0ffee was validated",
+        "unit ran at check version 1, and the policy declares 2",
+        "Validate the head again",
+    )
+    await case.validate()
+    assert [check.version for check in case.validated()[-1].checks] == ["2"]
+    assert succeeded(await case.submit())
+
+
+async def test_a_run_at_a_check_version_that_no_longer_governs_counts_for_nothing() -> None:
+    # A failed run at version 1 does not hold back a pass at version 2.
+    failing = ScriptedExecutor(outcome=lambda check, trial: "failed")
+    case = await Case.start(failing)
+    await case.validate()
+    assert refused(await case.submit(), "unit did not pass in 1 of 1 runs")
+    policy = await case.evidence.manager.get_policy(case.owner, CHECKOUT_KEY)
+    moved = tuple(check.model_copy(update={"version": "2"}) for check in policy.checks)
+    await case.evidence.manager.write_policy(
+        case.owner, policy.model_copy(update={"checks": moved})
+    )
+    failing.outcome = lambda check, trial: "passed"
+    await case.validate()
+    assert succeeded(await case.submit())
 
 
 async def test_a_success_on_a_dirty_tree_is_refused_and_validation_too() -> None:
@@ -162,7 +247,7 @@ async def test_a_success_on_runs_the_validation_does_not_list_is_refused() -> No
     case = await Case.start()
     await case.validate()
     storage, org = case.evidence.storage, case.ctx.org_id
-    (validation,) = await storage.read_validations(org, case.session, None, 10)
+    (validation,) = await storage.read_validations(org, case.session, "c0ffee", 10)
     stray = make_record(
         case.session,
         purpose=RunPurpose.VALIDATION,
@@ -330,7 +415,7 @@ async def test_a_rate_requirement_counts_every_trial_and_bounds_the_rate() -> No
     case = await Case.start(ScriptedExecutor(), trials(300))
     await case.validate()
     assert succeeded(await case.submit())
-    (request,) = case.evidence.executor.requests
+    (request,) = case.validated()
     assert request.trials == (300,) and [check.name for check in request.checks] == ["trials"]
 
 
@@ -386,12 +471,11 @@ def sequential(most: int = 200) -> Requirement:
 async def test_a_sequential_test_stops_at_its_boundary_and_its_claim_counts() -> None:
     case = await Case.start(ScriptedExecutor(), sequential())
     await case.validate()
-    (request,) = case.evidence.executor.requests
+    (request,) = case.validated()
     assert request.trials == (200,) and request.rates == (sequential().rate,)
-    runs = (await case.evidence.manager.get_runs(case.ctx, case.session, None, 200)).items
     # Clean trials bound the rate under 10% at the 36th, and the executor
     # stopped there.
-    assert len([run for run in runs if run.check == "trials"]) == 36
+    assert await case.trials_run() == 36
     assert succeeded(await case.submit())
 
 
@@ -411,18 +495,16 @@ async def test_a_sequential_test_that_cannot_bound_the_rate_stops_and_is_refused
     flaky = ScriptedExecutor(outcome=lambda check, trial: "failed" if trial == 0 else "passed")
     case = await Case.start(flaky, sequential(most=40))
     await case.validate()
-    runs = (await case.evidence.manager.get_runs(case.ctx, case.session, None, 200)).items
     # One failure first: no 39 clean trials could bound it, so it stops.
-    assert len([run for run in runs if run.check == "trials"]) == 1
+    assert await case.trials_run() == 1
     assert refused(await case.submit(), "1 failures in 1 trials", "sequential bound")
 
 
 async def test_a_fixed_count_claim_runs_every_trial_and_refuses_to_stop_early() -> None:
     case = await Case.start(ScriptedExecutor(), trials(50, max_rate=0.1))
     await case.validate()
-    runs = (await case.evidence.manager.get_runs(case.ctx, case.session, None, 200)).items
     # Where a sequential test would have stopped at 36, the count runs on.
-    assert len([run for run in runs if run.check == "trials"]) == 50
+    assert await case.trials_run() == 50
     assert succeeded(await case.submit())
     stopped = await Case.start(ScriptedExecutor(), trials(50, max_rate=0.1))
     validation, early = make_validation(stopped.session, 36, project=CHECKOUT_KEY)

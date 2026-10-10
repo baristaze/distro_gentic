@@ -1,6 +1,6 @@
 # ADR 2018: Acceptance judges records, and a sequential test stops only at its boundary
 
-**Status**: accepted (2026-10-02)
+**Status**: accepted (2026-10-02), amended by [ADR 2053](2053-the-gate-counts-a-success-after-a-baseline-and-a-run-at-the-check-version-that-governs.md)
 
 ## Context
 
