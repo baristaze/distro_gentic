@@ -58,7 +58,10 @@ refusal that clears, and is asked again. One build serves the project on
 a host, and the hosts of a pool that share a store share it. A workspace
 on it runs the environment's image in place of the host's own, as a
 cloud workspace on a base runs the base's image in place of its
-provider's.
+provider's. Each command in it prepares it again on the base the host
+keeps, so an instance that stopped starts anew from that base. A command
+never builds one, since its ceilings hold no setup's egress: a host that
+keeps none refuses the command.
 
 **A host's build holds to its owner's ceilings.** A prepare that may
 build a base whose setup has open egress asks its host for open egress,

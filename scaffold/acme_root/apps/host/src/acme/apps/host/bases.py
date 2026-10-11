@@ -138,6 +138,11 @@ class HostBases:
             raise IsolationRefused("this host did not keep the workspace's base", clears=True)
         return kept
 
+    async def kept(self, org_id: UUID, spec: IsolationSpec) -> bytes | None:
+        """The snapshot of the base `spec` names when this host's store keeps
+        it, or None; never built here."""
+        return await self._store.load_base(org_id, base_key(spec))
+
     async def drop(self, org_id: UUID, spec: IsolationSpec) -> None:
         """The base `spec` names goes from the store, and what its provider
         keeps of it, so the next prepare builds it again."""
