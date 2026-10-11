@@ -12,7 +12,7 @@ of](../../../../README.md).
   carries a slug, its title's words and the end of its id, that an agent
   reads it by, and what the [lever checks](../levers/README.md) found in
   its words at its version.
-- **Recall**: an entry's version a session recalled.
+- **Recall**: an entry's version a session recalled, or read by its slug.
 
 ## What can happen
 
@@ -34,7 +34,8 @@ of](../../../../README.md).
   is about, and its first model call reads what they trigger.
 - **Search and read.** An agent searches the entries its session reaches
   by the words they share with a query, and reads one by its slug, when
-  it needs to (the [agents' tools](../platform_agents/README.md)).
+  it needs to (the [agents' tools](../platform_agents/README.md)); the
+  version it reads is recorded, as a recall's is.
 
 ## The rules
 

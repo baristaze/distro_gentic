@@ -190,19 +190,8 @@ class KnowledgeManagerImpl(KnowledgeManagerInterface):
             now = self._clock()
             # Which version each recall brought in, kept before the session
             # reads it, so a reading of the sessions that stalled names it.
-            # Its id is the recall's own, so a recall again writes none.
             await self._storage.create_recalls(
-                ctx.org_id,
-                tuple(
-                    KnowledgeRecall(
-                        id=derived_id(entry.id, entry.created_at, f"recalled:{session_id}"),
-                        created_at=now,
-                        session_id=session_id,
-                        entry_id=entry.id,
-                        version=entry.version,
-                    )
-                    for entry in found
-                ),
+                ctx.org_id, tuple(self._recall(entry, session_id) for entry in found)
             )
             steps = [recalled_step(entry, session_id, principal, now) for entry in found]
             await self._sessions.receive(ctx, session_id, steps)
@@ -236,6 +225,9 @@ class KnowledgeManagerImpl(KnowledgeManagerInterface):
         entry = await self._storage.read_by_slug(ctx.org_id, project_id, slug)
         if entry is None or not reaches(entry, project_id):
             raise NotFound(f"no knowledge {slug!r} this session reaches")
+        # An entry read on demand is reached as a recalled one is: its
+        # version is kept for the reading of the sessions that stalled.
+        await self._storage.create_recalls(ctx.org_id, (self._recall(entry, session_id),))
         return entry
 
     async def purge_tenant(self, ctx: TenantContext) -> int:
@@ -287,6 +279,18 @@ class KnowledgeManagerImpl(KnowledgeManagerInterface):
         its sessions start on. A recalled entry is read before any summary
         and read again on demand, so it has no bound of a session's to meet."""
         return checked(f"{title}\n{text}", self._reach)
+
+    def _recall(self, entry: Knowledge, session_id: UUID) -> KnowledgeRecall:
+        """The record that a session reached an entry's version. Its id is
+        the entry's in the session, so a recall or a read again writes
+        none."""
+        return KnowledgeRecall(
+            id=derived_id(entry.id, entry.created_at, f"recalled:{session_id}"),
+            created_at=self._clock(),
+            session_id=session_id,
+            entry_id=entry.id,
+            version=entry.version,
+        )
 
     async def _entry(self, ctx: TenantContext, entry_id: UUID) -> Knowledge:
         entry = await self._storage.read_entry(ctx.org_id, entry_id)
