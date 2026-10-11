@@ -119,13 +119,13 @@ def an_item(ctx: TenantContext, kind: WorkKind, payload: Mapping[str, object]) -
     )
 
 
-def exec_on(host: UUID) -> dict[str, object]:
+def exec_on(host: UUID, session_id: UUID | None = None) -> dict[str, object]:
     """An `exec` item's payload as the relay writes one, for `host`."""
     spec = IsolationSpec(mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode=EgressMode.NONE))
     payload = ExecPayload(
         host_id=host,
         item_id=new_id(),
-        session_id=new_id(),
+        session_id=session_id or new_id(),
         key=new_id(),
         operation=ExecOperation.RUN,
         effect="unsafe",
@@ -301,6 +301,34 @@ async def test_work_routed_into_another_tenants_wall_is_never_handed_over(
     claimed = await managers.placement.claim_for(request(), cloud, LEASE)
     assert claimed is not None and claimed[1].id == served.id
     assert claimed[0].org_id == beta.org_id
+
+
+async def test_a_machine_of_the_cloud_pool_is_never_handed_another_sessions_work(
+    managers: Managers,
+) -> None:
+    """A machine the cloud pool started for one session claims that session's
+    work and no other, even routed to its own lane: the stray item fails for
+    good, a dead letter, and is never claimed again, while its own
+    session's item is handed over."""
+    ajax = await an_owner(managers)
+    machine_id, pool, mine, other = new_id(), new_id(), new_id(), new_id()
+    machine = Claimant(
+        kind=HOST, id=machine_id, org_id=ajax.org_id, pool_id=pool, session_id=mine
+    )
+    stray = await managers.work.enqueue(
+        ajax, an_item(ajax, WorkKind.EXEC, exec_on(machine_id, other))
+    )
+
+    assert await managers.placement.claim_for(request(), machine, LEASE) is None
+    failed = await managers.work.claim(request(), stray.lane, list(WorkKind), "x", LEASE)
+    assert failed is None, "never claimed again"
+    events = await managers.events.get_events(ajax, after_seq=0, limit=10)
+    (dead,) = [e for e in events if e.kind == DEAD_LETTER_KIND]
+    assert dead.target_id == stray.id and "another session" in str(dead.payload["last_error"])
+
+    own = await managers.work.enqueue(ajax, an_item(ajax, WorkKind.EXEC, exec_on(machine_id, mine)))
+    claimed = await managers.placement.claim_for(request(), machine, LEASE)
+    assert claimed is not None and claimed[1].id == own.id
 
 
 # A tenant's share is held at the claim, as the work queue's cap.

@@ -30,6 +30,8 @@ from acme.om.budgets.storage.impl.postgres import (
     BudgetStoragePostgresImpl,
     LedgerStoragePostgresImpl,
 )
+from acme.om.cloud_pool.storage import CloudPoolStorageInterface
+from acme.om.cloud_pool.storage.impl.postgres import CloudPoolStoragePostgresImpl
 from acme.om.events.storage import EventStorageInterface
 from acme.om.events.storage.impl.postgres import EventStoragePostgresImpl
 from acme.om.evidence.storage import EvidenceStorageInterface
@@ -241,6 +243,7 @@ class StoragePostgresImpl(StorageInterface):
         self._placement = PlacementStoragePostgresImpl(sessions)
         self._trust = TrustStoragePostgresImpl(sessions)
         self._hosts = HostsStoragePostgresImpl(sessions)
+        self._cloud_pool = CloudPoolStoragePostgresImpl(sessions)
         self._intake = IntakeStoragePostgresImpl(sessions)
         self._automation = AutomationStoragePostgresImpl(sessions)
         self._playbook = PlaybookStoragePostgresImpl(sessions)
@@ -330,6 +333,9 @@ class StoragePostgresImpl(StorageInterface):
 
     def get_hosts_storage(self) -> HostsStorageInterface:
         return self._hosts
+
+    def get_cloud_pool_storage(self) -> CloudPoolStorageInterface:
+        return self._cloud_pool
 
     def get_intake_storage(self) -> IntakeStorageInterface:
         return self._intake

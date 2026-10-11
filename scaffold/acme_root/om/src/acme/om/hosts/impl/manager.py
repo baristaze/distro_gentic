@@ -2,7 +2,7 @@ import logging
 import secrets
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
-from uuid import UUID
+from uuid import UUID, uuid5
 
 from acme.infra.observability import OUTCOMES
 from acme.om.agent_sessions import AgentSessionsManagerInterface
@@ -113,12 +113,32 @@ def mint(prefix: str) -> tuple[str, str]:
     return secret, hash_token(secret)
 
 
+def session_pool_id(org_id: UUID, session_id: UUID) -> UUID:
+    """The id of a session's pool in the cloud pool: one per session, the same
+    whichever process makes it first."""
+    return uuid5(org_id, f"cloud-pool:{session_id}")
+
+
+def _the_tenants(pool: HostPool) -> HostPool:
+    """A pool a person places a session on or enrolls a host into: the
+    tenant's own, never a session's pool of the platform's cloud."""
+    if pool.session_id is not None:
+        raise ValidationFailed(
+            f"pool {pool.id} is the platform's, for session {pool.session_id} alone"
+        )
+    return pool
+
+
 def claimant_of(identity: ClaimantIdentity) -> Claimant:
     """The claimant placement claims for: the identity the credential
     resolved to, its kind, its id, the tenant whose wall it sits in, and the
     pool its enrollment named."""
     return Claimant(
-        kind=identity.kind, id=identity.id, org_id=identity.org_id, pool_id=identity.pool_id
+        kind=identity.kind,
+        id=identity.id,
+        org_id=identity.org_id,
+        pool_id=identity.pool_id,
+        session_id=identity.session_id,
     )
 
 
@@ -160,6 +180,7 @@ class HostsManagerImpl(HostsManagerInterface):
 
     async def create_pool(self, ctx: TenantContext, pool: HostPool) -> HostPool:
         ctx.require(Permission.MANAGE_MEMBERS)
+        _the_tenants(pool)
         now = self._clock()
         created = pool.model_copy(
             update={
@@ -216,7 +237,7 @@ class HostsManagerImpl(HostsManagerInterface):
         ctx.require(Permission.MANAGE_MEMBERS)
         if kind not in self._claimants:
             raise ValidationFailed(f"claimant kind {kind} is not registered")
-        await self._pool(ctx, pool_id)
+        _the_tenants(await self._pool(ctx, pool_id))
         secret, digest = mint(ENROLLMENT_PREFIX)
         now = self._clock()
         token = EnrollmentToken(
@@ -281,7 +302,7 @@ class HostsManagerImpl(HostsManagerInterface):
                 f"{session.root_id} runs, so place its root"
             )
         if pool_id is not None:
-            await self._pool(ctx, pool_id)
+            _the_tenants(await self._pool(ctx, pool_id))
         stored = await self._storage.read_placement(ctx.org_id, session_id)
         now = self._clock()
         if stored is None:
@@ -323,13 +344,97 @@ class HostsManagerImpl(HostsManagerInterface):
             # A pinned session whose pool is gone stays pinned to it: it waits,
             # and never falls back to the cloud.
             raise NotFound(f"pool {placed.pool_id} of session {session_id} not found")
-        now = self._clock()
-        window = self._options.online_window
-        hosts = await self._storage.read_hosts(ctx.org_id, pool.id, self._options.max_hosts)
         return PlacementState(
             session_id=session_id,
             pool=pool,
-            hosts_online=sum(1 for host in hosts if online(host, now, window)),
+            hosts_online=await self._online(ctx.org_id, pool.id),
+            version=placed.version,
+        )
+
+    # The cloud pool's side: a pool of one per session, and its machine's host.
+
+    async def session_pool(self, ctx: TenantContext, session_id: UUID, region: str) -> HostPool:
+        ctx.require(Permission.WRITE)
+        now = self._clock()
+        pool = HostPool(
+            id=session_pool_id(ctx.org_id, session_id),
+            created_at=now,
+            updated_at=now,
+            created_by=ctx.user_id,
+            updated_by=ctx.user_id,
+            name=f"cloud-{session_id}",
+            region=region,
+            session_id=session_id,
+        )
+        rows = (outbox_row(ctx, POOL_CREATED_KIND, pool.id, {"session_id": str(session_id)}),)
+        if await self._storage.create_pool(ctx.org_id, pool, rows):
+            await self._relay.relay_all(ctx.org_id, rows)
+            return pool
+        stored = await self._storage.read_pool(ctx.org_id, pool.id)
+        if stored is None or stored.session_id != session_id:
+            raise NotFound(f"the cloud pool of session {session_id} not found")
+        return stored
+
+    async def admit_machine(
+        self,
+        rctx: RequestContext,
+        org_id: UUID,
+        pool_id: UUID,
+        created_by: UUID,
+        enrolled_with: UUID,
+        enrollment: Enrollment,
+    ) -> IssuedCredential:
+        pool = await self._storage.read_pool(org_id, pool_id)
+        if pool is None or pool.session_id is None:
+            raise InvalidCredential("a machine enrolls only into its session's cloud pool")
+        self._at_or_above_floor(enrollment.exec_version)
+        now = self._clock()
+        host = Host(
+            id=new_id(),
+            created_at=now,
+            updated_at=now,
+            created_by=created_by,
+            updated_by=created_by,
+            kind=HOST,
+            pool_id=pool.id,
+            name=enrollment.name,
+            enrolled_with=enrolled_with,
+            advertisement=enrollment.advertisement,
+            exec_version=enrollment.exec_version,
+            last_seen_at=now,
+            session_id=pool.session_id,
+        )
+        return await self._admit(rctx, org_id, host)
+
+    async def retire_host(
+        self, rctx: RequestContext, org_id: UUID, host_id: UUID, by: UUID
+    ) -> None:
+        rows = (
+            outbox_row(
+                provenance(rctx, org_id, by),
+                HOST_REVOKED_KIND,
+                host_id,
+                {"reason": "machine_let_go"},
+            ),
+        )
+        now = self._clock()
+        revoked = await self._storage.revoke_claimant(org_id, host_id, now, by, rows)
+        if revoked is None or revoked.revoked_at != now:
+            return  # none such, or revoked already: nothing more ends
+        await self._relay.relay_all(org_id, rows)
+        await self._revoked(rctx, org_id, host_id)
+
+    async def work_placement(self, ctx: TenantContext, session_id: UUID) -> PlacementState:
+        placed = await self.placement_of(ctx, session_id)
+        if placed.pool is not None:
+            return placed
+        pool = await self._storage.read_pool(ctx.org_id, session_pool_id(ctx.org_id, session_id))
+        if pool is None or pool.session_id != session_id:
+            return placed
+        return PlacementState(
+            session_id=session_id,
+            pool=pool,
+            hosts_online=await self._online(ctx.org_id, pool.id),
             version=placed.version,
         )
 
@@ -475,6 +580,13 @@ class HostsManagerImpl(HostsManagerInterface):
 
     # Helpers.
 
+    async def _online(self, org_id: UUID, pool_id: UUID) -> int:
+        """How many of the pool's hosts are online now."""
+        now = self._clock()
+        window = self._options.online_window
+        hosts = await self._storage.read_hosts(org_id, pool_id, self._options.max_hosts)
+        return sum(1 for host in hosts if online(host, now, window))
+
     async def _pool(self, ctx: TenantContext, pool_id: UUID) -> HostPool:
         pool = await self._storage.read_pool(ctx.org_id, pool_id)
         if pool is None:
@@ -562,6 +674,7 @@ class HostsManagerImpl(HostsManagerInterface):
             pool_id=claimant.pool_id,
             credential_id=held.id,
             expires_at=held.expires_at,
+            session_id=claimant.session_id,
         )
 
     async def _live(self, claimant: ClaimantIdentity) -> EnrolledClaimant:

@@ -123,10 +123,28 @@ class InfraSettings(BaseSettings):
     # snapshot is its disk, kept in the backend's store;
     # `machine_store_encrypted` declares that store encrypted at rest, and
     # without it a VM workspace keeps no snapshot.
-    machines_backend: Literal["none", "lima"] = "none"
+    # `ec2` runs each machine as an instance in the platform's cloud
+    # account, from the cloud pool's launch template
+    # (`machine_launch_template`), in the security group of its egress:
+    # `machine_closed_group` reaches the gateway alone, and
+    # `machine_open_group` adds open egress. Its image is an AMI, and its
+    # snapshots are the cloud's own, under the template's key. A process on
+    # `ec2` never calls into a machine, so no VM workspace runs on it.
+    machines_backend: Literal["none", "lima", "ec2"] = "none"
     machine_image: str = "template:_images/ubuntu-lts"
     machine_prefix: str = Field(default="acme-vm-", pattern=r"^[a-z][a-z0-9-]*-$", max_length=21)
     machine_store_encrypted: bool = False
+    machine_launch_template: str = ""
+    machine_closed_group: str = ""
+    machine_open_group: str = ""
+    # The cloud pool: a machine per session of the cloud whose workspace is a
+    # VM, each running the host program, which reaches the platform at
+    # `cloud_pool_api_url`. Every machine starts from `cloud_pool_image`, a
+    # snapshot of the machines that holds the host program; empty runs no
+    # pool. `cloud_pool_warm` machines stand started ahead of demand.
+    cloud_pool_image: str = ""
+    cloud_pool_api_url: str = ""
+    cloud_pool_warm: int = Field(default=0, ge=0)
 
     # Where the flags' rules come from: the memory impl over a rules file
     # (local only, refused at boot anywhere else), LaunchDarkly through

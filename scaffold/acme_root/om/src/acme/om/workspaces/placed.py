@@ -15,6 +15,7 @@ from uuid import UUID
 from acme.infra.transports import TransportInterface
 from acme.infra.workspaces import IsolationSpec, Workspace
 from acme.om.context import TenantContext
+from acme.om.hosts.types.placement import PlacementState
 from acme.om.workspaces.types.snapshot import HostSnapshot
 
 
@@ -32,10 +33,15 @@ class PlacedWorkspacesInterface(ABC):
         session_id: UUID,
         spec: IsolationSpec,
         restore: HostSnapshot | None = None,
+        *,
+        pooled: PlacementState | None = None,
     ) -> Workspace | None:
         """The session's workspace, at its pinned `spec`, on the host of its
         pool that holds it; None for a session of the cloud, which this
-        process prepares itself. `IsolationRefused` while no live host of
+        process prepares itself. With `pooled`, the session's pool of one in
+        the cloud pool, it is the workspace the host of the session's
+        machine holds: the pool keeps the machine's snapshots, never its
+        host, so no host of it is asked to advertise any. `IsolationRefused` while no live host of
         its pool holds it: a host of the pool is asked to prepare it, and
         the loop waits on the resource with no call spent. A workspace kept
         by snapshots waits, with the reason, while no live host of its pool

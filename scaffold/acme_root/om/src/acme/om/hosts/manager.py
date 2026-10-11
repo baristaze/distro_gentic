@@ -43,7 +43,8 @@ class HostsManagerInterface(ABC):
 
     @abstractmethod
     async def get_pools(self, ctx: TenantContext) -> tuple[HostPool, ...]:
-        """The tenant's pools, in the order they were made."""
+        """The tenant's own pools, in the order they were made: never a
+        session's pool of the cloud pool."""
         ...
 
     @abstractmethod
@@ -116,6 +117,56 @@ class HostsManagerInterface(ABC):
         a pinned session with none online waits, and reads so here. A
         sub-agent reads its root's. NotFound when the tenant holds no such
         session."""
+        ...
+
+    # The cloud pool's side: the pool of one each session that runs on a
+    # machine of the platform's cloud gets, and its machine's host.
+
+    @abstractmethod
+    async def work_placement(self, ctx: TenantContext, session_id: UUID) -> PlacementState:
+        """Where the session's work runs, as the relay routes it: the pool a
+        principal pinned it to, as `placement_of` reads it, or, for a session
+        of the cloud, its pool of one in the cloud pool once it has one, or
+        the cloud."""
+        ...
+
+    @abstractmethod
+    async def session_pool(self, ctx: TenantContext, session_id: UUID, region: str) -> HostPool:
+        """The session's pool in the cloud pool, made the first time it is
+        asked for, under an id read off the tenant and the session, so every
+        process asks for the same one. It is the platform's: hidden from the
+        tenant's pools, and no session is placed on it, and no token issued
+        for it. Requires the write permission the service role holds."""
+        ...
+
+    @abstractmethod
+    async def admit_machine(
+        self,
+        rctx: RequestContext,
+        org_id: UUID,
+        pool_id: UUID,
+        created_by: UUID,
+        enrolled_with: UUID,
+        enrollment: Enrollment,
+    ) -> IssuedCredential:
+        """Enrolls the host of a machine the cloud pool started for a
+        session, into the session's pool of one, and gives it its first
+        credential: its tenant, its pool, and its session are the
+        platform's, never the host's to name. A pool that is the tenant's
+        own is refused. The
+        machine handed its key over once (`enrolled_with`), and the person
+        its session's work is for answers for it (`created_by`). Its claims
+        are its session's work alone."""
+        ...
+
+    @abstractmethod
+    async def retire_host(
+        self, rctx: RequestContext, org_id: UUID, host_id: UUID, by: UUID
+    ) -> None:
+        """Ends a cloud pool machine's host and every credential it holds, as
+        the pool lets its machine go: a disk kept after this holds no
+        credential that answers. One gone or ended already ends nothing
+        more."""
         ...
 
     @abstractmethod

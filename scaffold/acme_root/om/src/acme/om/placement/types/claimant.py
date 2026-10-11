@@ -16,12 +16,15 @@ class Claimant(Platform):
     """A claimant's identity, as its credential says it: its kind, a name
     the claimant kinds' registry knows (`placement.kinds`), its id, the
     tenant whose wall it sits in, and the pool it serves. `org_id` None is
-    a claimant of the platform's own pool, which serves every tenant."""
+    a claimant of the platform's own pool, which serves every tenant.
+    `session_id` names the one session a machine of the cloud pool serves:
+    it is handed that session's work and no other."""
 
     kind: str = Field(pattern=r"^[a-z][a-z0-9_]{0,31}$")
     id: UUID
     org_id: UUID | None = None
     pool_id: UUID
+    session_id: UUID | None = None
 
     @property
     def worker_id(self) -> str:

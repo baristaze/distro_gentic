@@ -24,3 +24,4 @@ class WorkspaceSnapshots(IdentifiableMixin, TrackableMixin, Base):
     host_id: Mapped[UUID | None]
     reference: Mapped[str]
     digest: Mapped[str | None]
+    machine: Mapped[bool]

@@ -268,7 +268,7 @@ def build_services(
             managers.projects,
             project_required=project_required,
         ),
-        hosts=HostsServiceImpl(managers.hosts),
+        hosts=HostsServiceImpl(managers.hosts, managers.cloud_pool),
         fleet=FleetServiceImpl(managers.placement_operator, trust_operator),
         relay=RelayServiceImpl(managers.relay, infra.get_topics()),
         intake=IntakeServiceImpl(intake),

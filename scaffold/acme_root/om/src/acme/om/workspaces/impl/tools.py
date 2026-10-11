@@ -27,7 +27,12 @@ The host is this process: what it offers and how many directory sessions it
 holds live are its own, never the control plane's. A session that runs
 inside its tenant's wall is the exception: its workspace is the one the host
 of its pool holds (`PlacedWorkspacesInterface`), which this process neither
-makes nor lets go, and its checkout runs there through the relay."""
+makes nor lets go, and its checkout runs there through the relay. So is a
+session of the cloud whose workspace is a VM, when the cloud pool runs
+machines here (`CloudPoolManagerInterface`): its workspace is the one the
+host of its own machine holds, through the relay as well. Its snapshot is
+the machine's whole disk, which the pool keeps once what the workspace
+holds is pushed, and the machine goes when the run's release comes."""
 
 import asyncio
 import logging
@@ -50,6 +55,7 @@ from acme.infra.workspaces import (
     WorkspaceLost,
 )
 from acme.om.base import Platform, new_id, utcnow
+from acme.om.cloud_pool import CloudPoolManagerInterface
 from acme.om.context import TenantContext
 from acme.om.steps import StepsManagerInterface
 from acme.om.steps.types.header import HASH_SCHEME, WorkspaceSnapshot
@@ -142,6 +148,7 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         keyed_hash: KeyedHash | None = None,
         erase_on_host: EraseOnHost | None = None,
         erase_purged: ErasePurged | None = None,
+        cloud: CloudPoolManagerInterface | None = None,
         options: PinnedToolsOptions | None = None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         clock: Callable[[], datetime] = utcnow,
@@ -151,6 +158,7 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         self._keyed_hash = keyed_hash
         self._erase_on_host = erase_on_host
         self._erase_purged = erase_purged
+        self._cloud = cloud
         self._snapshot_wait = (options or PinnedToolsOptions()).snapshot_wait
         self._sleep = sleep
         self._clock = clock
@@ -163,6 +171,8 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         # The directory workspaces live here, each under its run's epoch.
         self._directories: dict[UUID, int] = {}
         self._hosted: set[UUID] = set()  # the workspaces a host of the tenant's holds
+        self._pooled: set[UUID] = set()  # the workspaces a machine of the cloud pool holds
+        self._kept_whole: set[UUID] = set()  # pooled ones whose machine a snapshot kept, stopped
         self._preparing: dict[UUID, int] = {}  # the prepares under way here, by session
 
     # The workspace.
@@ -198,6 +208,8 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         # host holds for the session is held under it.
         epoch = (await self._steps.get_cursor(ctx, session_id)).epoch
         pool = None if self._placed is None else await self._placed.pool_of(ctx, session_id)
+        if pool is None and self._cloud is not None and self._cloud.runs(pinned):
+            return await self._on_machine(ctx, session_id, pinned, restore, epoch)
         if self._placed is not None and pool is not None:
             # A restore is decided before any host is asked, and travels
             # with the ask: its host starts the workspace from it.
@@ -259,7 +271,10 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         # The run that releases it holds it until here: a later run's
         # prepare cannot land before its first await.
         epoch = self._held.epoch_of(workspace.id)
-        if workspace.spec.mode is not IsolationMode.NONE:
+        # A machine the snapshot kept whole had its work pushed before it
+        # stopped, and nothing reaches it now.
+        kept_whole = workspace.id in self._kept_whole
+        if workspace.spec.mode is not IsolationMode.NONE and not kept_whole:
             # Kept first: a push that does not land raises, and the instance
             # and its work stay. Its commands carry the epoch of the run that
             # holds it, or, for one this process never held, the epoch read
@@ -272,10 +287,19 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
             # The session resumed here while its work was kept: the instance
             # is the later run's, to let go when it ends.
             log.info("session %s: a later run holds its workspace, which stays", workspace.id)
-        elif workspace.id in self._hosted:
+        elif kept_whole:
+            # Its machine's disk is the snapshot the run's end kept: the
+            # stopped machine goes, and the next loop starts one from it.
+            assert self._cloud is not None
+            self._kept_whole.discard(workspace.id)
+            self._pooled.discard(workspace.id)
+            await self._cloud.release(ctx, ctx.org_id, workspace.id)
+        elif workspace.id in self._hosted or workspace.id in self._pooled:
             # Its host holds it, warm for the next loop: nothing of this
-            # process's goes.
+            # process's goes. A machine of the cloud pool is let go past the
+            # grace, by the sweep.
             self._hosted.discard(workspace.id)
+            self._pooled.discard(workspace.id)
         else:
             await self._inner.release_workspace(ctx, workspace)
         if epoch is not None:
@@ -297,6 +321,11 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
             # Its host holds it: the host takes the snapshot, and its bytes
             # stay in the host's store, inside the wall.
             return await self._snapshot_on_host(
+                ctx, session_id, workspace, epoch=epoch, loop_id=loop_id
+            )
+        if session_id in self._pooled:
+            # Its machine is the workspace: the pool keeps its whole disk.
+            return await self._snapshot_on_machine(
                 ctx, session_id, workspace, epoch=epoch, loop_id=loop_id
             )
         step = await self._inner.snapshot_workspace(
@@ -338,11 +367,16 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         elif self._erase_purged is not None:
             for host_id in sorted(hosts):
                 await self._erase_purged(org_id, session_id, host_id)
+        if self._cloud is not None:
+            # Its machine, and every disk the pool kept of it.
+            await self._cloud.purge(org_id, session_id)
         await self._workspaces.forget_snapshots(org_id, session_id)
         await self._workspaces.purge_session(org_id, session_id)
         self._held.let_go(session_id)
         self._directories.pop(session_id, None)
         self._hosted.discard(session_id)
+        self._pooled.discard(session_id)
+        self._kept_whole.discard(session_id)
 
     async def erase_snapshots(self, ctx: TenantContext, session_id: UUID) -> None:
         # The session's key is gone, so its archives are noise: they leave
@@ -353,6 +387,9 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         await self._inner.erase_snapshots(ctx, session_id)
         if self._snapshots is not None:
             await self._snapshots.purge(ctx.org_id, session_id)
+        if self._cloud is not None:
+            # The disks the pool kept of the session's machines.
+            await self._cloud.erase(ctx.org_id, session_id)
         kept = await self._workspaces.kept_snapshots(ctx, session_id)
         hosts = {record.host_id for record in kept if record.host_id is not None}
         if hosts and self._erase_on_host is None:
@@ -434,6 +471,90 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         (stored,) = await self._steps.append_steps(ctx, session_id, epoch, [step])
         return stored
 
+    async def _on_machine(
+        self,
+        ctx: TenantContext,
+        session_id: UUID,
+        pinned: IsolationSpec,
+        restore: WorkspaceSnapshot | None,
+        epoch: int,
+    ) -> Workspace:
+        """The session's workspace on its machine of the cloud pool, which
+        the pool starts and the machine's host holds; the checkout is
+        brought up to the session's branch there, unless a snapshot started
+        the machine."""
+        assert self._cloud is not None
+        kept = None if restore is None else await self._on_machines(ctx, session_id, restore)
+        held = await self._cloud.prepare(ctx, session_id, pinned, kept)
+        attached = await self._workspaces.attach(ctx, held, epoch, restored=restore is not None)
+        self._pooled.add(session_id)
+        self._kept_whole.discard(session_id)
+        self._held.hold(attached, epoch)
+        return attached
+
+    async def _snapshot_on_machine(
+        self,
+        ctx: TenantContext,
+        session_id: UUID,
+        workspace: Workspace,
+        *,
+        epoch: int,
+        loop_id: UUID,
+    ) -> Step:
+        """The machine's whole disk, kept by the pool once what the workspace
+        holds is pushed, while its host still runs, and the step that names
+        it. The record holds the snapshot's name and its digest, never the
+        disk; the step names the digest's hash keyed by the session, so once
+        its key is revoked nothing confirms what it held."""
+        assert self._cloud is not None
+        if self._keyed_hash is None:
+            raise SnapshotRefused("this process keys no hash, so it records no machine's snapshot")
+        await self._workspaces.detach(ctx, workspace, epoch)
+        taken = await self._cloud.snapshot(ctx, session_id)
+        # From here the machine is stopped: the release lets it go.
+        self._kept_whole.add(session_id)
+        keyed = await self._keyed_hash(ctx, session_id, taken.digest.encode())
+        now = self._clock()
+        record = KeptSnapshot(
+            id=new_id(),
+            created_at=now,
+            updated_at=now,
+            created_by=ctx.user_id,
+            updated_by=ctx.user_id,
+            session_id=session_id,
+            hash=HASH_SCHEME + keyed,
+            size=0,
+            reference=taken.reference,
+            digest=taken.digest,
+            machine=True,
+        )
+        await self._workspaces.keep_snapshot(ctx, record)
+        named = WorkspaceSnapshot(
+            id=record.id, hash=record.hash, size=record.size, workspace_id=workspace.id
+        )
+        step = snapshotted_step(new_id(), now, session_id, loop_id, named)
+        (stored,) = await self._steps.append_steps(ctx, session_id, epoch, [step])
+        return stored
+
+    async def _on_machines(
+        self, ctx: TenantContext, session_id: UUID, restore: WorkspaceSnapshot
+    ) -> KeptSnapshot:
+        """The snapshot a restore of a session of the cloud pool starts its
+        machine from, as the pool recorded it. One the pool did not take,
+        and one whose record does not match the step that names it, loses
+        the workspace (`WorkspaceLost`)."""
+        record = await self._workspaces.kept_snapshot(ctx, restore.id)
+        what = f"snapshot {restore.id} of session {session_id}"
+        if record is None or not record.on_machines:
+            raise WorkspaceLost(f"{what} was not taken of a machine of the cloud pool")
+        if (record.session_id, record.hash, record.size) != (
+            session_id,
+            restore.hash,
+            restore.size,
+        ):
+            raise WorkspaceLost(f"{what} is not the one its record names")
+        return record
+
     async def _recorded(
         self, ctx: TenantContext, session_id: UUID, taken: WorkspaceSnapshot
     ) -> None:
@@ -501,6 +622,11 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
             raise WorkspaceLost(
                 f"snapshot {restore.id} is kept inside the wall of pool {record.pool_id}, "
                 f"which session {session_id}'s workspace does not run in"
+            )
+        if record is not None and record.on_machines:
+            raise WorkspaceLost(
+                f"snapshot {restore.id} is a disk the cloud pool's machines keep, which "
+                f"session {session_id}'s workspace does not run on"
             )
 
     # The engine's, unchanged.
@@ -631,4 +757,7 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         )
 
     async def purge_tenant(self, ctx: TenantContext) -> int:
-        return await self._inner.purge_tenant(ctx)
+        # A deleted tenant's machines, and every disk the pool kept of them,
+        # go with it.
+        machines = 0 if self._cloud is None else await self._cloud.purge_tenant(ctx)
+        return machines + await self._inner.purge_tenant(ctx)

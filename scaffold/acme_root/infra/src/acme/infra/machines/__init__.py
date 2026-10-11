@@ -15,7 +15,10 @@ A snapshot is a stopped machine's disk, kept in the backend's own store
 under a name, and held to a digest: a disk is gigabytes, so it never passes
 through memory or a bucket whole. A snapshot starts machines, makes further
 snapshots, and is read back as a stream (`read`), so what it holds can be
-scanned. A machine and a snapshot are destroyed alike, by name."""
+scanned. A machine and a snapshot are destroyed alike, by name.
+
+A machine of the platform's cloud pool is handed one file as it starts,
+its seed, and nothing else enters it from outside (`SeedsInterface`)."""
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Mapping, Sequence
@@ -34,6 +37,7 @@ __all__ = [
     "MachineSpec",
     "MachineState",
     "MachinesInterface",
+    "SeedsInterface",
     "SnapshotNotFound",
 ]
 
@@ -200,4 +204,32 @@ class MachinesInterface(ABC):
     @abstractmethod
     async def close(self) -> None:
         """Closed at shutdown."""
+        ...
+
+
+SEED_FOLDER = "run/acme-machine"
+"""Where the seed lives, from the machine's root: the guest's `/run`."""
+
+SEED_FILE = f"{SEED_FOLDER}/seed.json"
+
+SEED_OWNER = "acme-host"
+"""The guest's user the host program runs as, which alone reads the seed."""
+
+
+class SeedsInterface(ABC):
+    @abstractmethod
+    async def launch_seeded(
+        self, name: str, spec: MachineSpec, snapshot: str | None, seed: bytes
+    ) -> None:
+        """The machine under `name` running to `spec`, as the machines'
+        `launch` makes or starts it, with `seed` at `SEED_FILE` for its host
+        alone, a seed handed before replaced. A start that fails part way
+        leaves no machine it made."""
+        ...
+
+    @abstractmethod
+    async def seal(self, name: str) -> None:
+        """Nothing reads the seed from outside the guest any more: a cloud's
+        first-boot data, once its host has read it, is closed. One with
+        nothing to close does nothing."""
         ...

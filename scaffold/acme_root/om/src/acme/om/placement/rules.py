@@ -7,8 +7,9 @@ the lanes and kinds a claimant's identity claims, are the kinds' registry's
 from datetime import timedelta
 from uuid import UUID
 
+from acme.om.placement.types.claimant import Claimant
 from acme.om.placement.types.share import FairShare, TierShare
-from acme.om.work.types.work_item import WorkKind, relayed_lane
+from acme.om.work.types.work_item import WorkItem, WorkKind, relayed_lane
 
 DEFAULT_TIER = "standard"
 """The plan tier of a tenant no operator has given one."""
@@ -81,3 +82,14 @@ def host_lane(host_id: UUID) -> str:
 def pool_lane(pool_id: UUID) -> str:
     """A pool's lane: a workspace any host of the pool may prepare."""
     return f"pool:{pool_id}"
+
+
+def another_session(claimant: Claimant, item: WorkItem) -> bool:
+    """Whether an item is another session's than the one session its
+    claimant serves: a machine of the cloud pool runs its own session's
+    work and nothing else, whatever lane the item reached it on, so an item
+    that names no session is not its session's either. A claimant that
+    serves no one session takes any."""
+    if claimant.session_id is None:
+        return False
+    return str(item.payload.get("session_id")) != str(claimant.session_id)

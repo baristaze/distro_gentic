@@ -24,8 +24,10 @@ from acme.infra.impl.valkey import ValkeyConnection
 from acme.infra.keys import KeyServiceInterface
 from acme.infra.keys.kms import KeyServiceKmsImpl
 from acme.infra.keys.memory import KeyServiceMemoryImpl, root_key
-from acme.infra.machines import MachinesInterface
+from acme.infra.machines import MachinesInterface, SeedsInterface
+from acme.infra.machines.ec2 import MachinesEc2Impl
 from acme.infra.machines.lima import MachinesLimaImpl
+from acme.infra.machines.seeded import SeedsChannelImpl, SeedsNullImpl
 from acme.infra.machines.twin import MachinesNullImpl
 from acme.infra.outages import OutageSignalInterface
 from acme.infra.outages.cache import OutageSignalCacheImpl
@@ -99,6 +101,11 @@ def refuse_unsafe(settings: InfraSettings) -> None:
     if settings.flags_backend == "launchdarkly" and settings.launchdarkly_sdk_key is None:
         raise UnsafeConfiguration(
             "ACME_FLAGS_BACKEND=launchdarkly is refused without ACME_LAUNCHDARKLY_SDK_KEY"
+        )
+    if settings.workspace_backend == "vm" and settings.machines_backend == "ec2":
+        raise UnsafeConfiguration(
+            "ACME_WORKSPACE_BACKEND=vm is refused with ACME_MACHINES_BACKEND=ec2: a machine of "
+            "the cloud takes no command from outside, and its host pulls"
         )
     if not settings.is_cloud_environment:
         return
@@ -222,6 +229,7 @@ class InfraConfiguredImpl(InfraInterface):
         # rather than injected.
         self._broker: CredentialBrokerInterface = BrokerNullImpl()
         self._machines = self._build_machines(settings)
+        self._seeds = self._build_seeds(settings)
         self._workspaces, self._transport = self._build_runtime(settings)
         self._flags = self._build_flags()
 
@@ -274,15 +282,38 @@ class InfraConfiguredImpl(InfraInterface):
         )
 
     def _build_machines(self, settings: InfraSettings) -> MachinesInterface:
-        """The machines a VM workspace runs on; none runs no machine, and its
-        probe refuses every VM workspace."""
+        """The machines a VM workspace, or the cloud pool, runs on; none runs
+        no machine, and its probe refuses every VM workspace."""
         if settings.machines_backend == "lima":
             return MachinesLimaImpl(
                 timedelta(seconds=settings.machine_timeout_seconds),
                 timedelta(seconds=settings.machine_boot_timeout_seconds),
                 encrypted=settings.machine_store_encrypted,
             )
+        if settings.machines_backend == "ec2":
+            return MachinesEc2Impl(
+                self._aws,
+                region=settings.aws_region,
+                timeout=timedelta(seconds=settings.aws_timeout_seconds),
+                boot=timedelta(seconds=settings.machine_boot_timeout_seconds),
+                template=settings.machine_launch_template,
+                closed=settings.machine_closed_group,
+                open_=settings.machine_open_group,
+                encrypted=settings.machine_store_encrypted,
+            )
         return MachinesNullImpl()
+
+    def _build_seeds(self, settings: InfraSettings) -> SeedsInterface:
+        """How a machine of the cloud pool is handed its seed: at its start,
+        on the cloud's machines; through the hypervisor's channel, on
+        Lima's."""
+        if isinstance(self._machines, MachinesEc2Impl):
+            return self._machines
+        if settings.machines_backend == "lima":
+            return SeedsChannelImpl(
+                self._machines, timedelta(seconds=settings.machine_timeout_seconds)
+            )
+        return SeedsNullImpl()
 
     def _build_flags(self) -> FlagsInterface:
         """Built now and connected at start: the vendor's client blocks while
@@ -334,6 +365,9 @@ class InfraConfiguredImpl(InfraInterface):
 
     def get_machines(self) -> MachinesInterface:
         return self._machines
+
+    def get_seeds(self) -> SeedsInterface:
+        return self._seeds
 
     def get_transport(self) -> TransportInterface:
         return self._transport

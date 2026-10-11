@@ -11,7 +11,7 @@ from acme.om.context import Permission, RequestContext, TenantContext
 from acme.om.exceptions import LeaseLost, NotFound
 from acme.om.placement.kinds import HOST, ClaimantKinds, claims_of, held_to, placed_lane
 from acme.om.placement.manager import PlacementManagerInterface
-from acme.om.placement.rules import DEFAULT_TIER, lane_cap, loop_lane
+from acme.om.placement.rules import DEFAULT_TIER, another_session, lane_cap, loop_lane
 from acme.om.placement.storage import PlacementStorageInterface
 from acme.om.placement.types.claimant import Claimant, ClaimantReport, ReportOutcome
 from acme.om.placement.types.share import FairShare, TierShare
@@ -76,21 +76,25 @@ class PlacementManagerImpl(PlacementManagerInterface):
                 if claimed is None:
                     break
                 ctx, item = claimed
-                if claimant.org_id is None or ctx.org_id == claimant.org_id:
+                foreign = claimant.org_id is not None and ctx.org_id != claimant.org_id
+                if not foreign and not another_session(claimant, item):
                     return claimed
-                # Routed into another tenant's wall: never handed over, and
-                # never claimed again, since no claimant of that lane may
-                # run it.
+                # Routed into another tenant's wall, or to a machine that
+                # serves another session: never handed over, and never
+                # claimed again, since no claimant of that lane may run it.
                 OUTCOMES.labels(subsystem="placement", outcome="foreign_claim").inc()
                 log.error(
-                    "work item %s of org %s reached %s of org %s and is failed",
+                    "work item %s of org %s reached %s of org %s, serving session %s, "
+                    "and is failed",
                     item.id,
                     ctx.org_id,
                     claimant.worker_id,
                     claimant.org_id,
+                    claimant.session_id,
                 )
+                whose = "another tenant" if foreign else "another session"
                 await self._work.fail_for_good(
-                    ctx, item, f"routed to {claimant.worker_id} of another tenant"
+                    ctx, item, f"routed to {claimant.worker_id} of {whose}"
                 )
         return None
 

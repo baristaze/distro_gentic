@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from sqlalchemy.orm import Mapped
 
 from acme.om.storage.tables.base import Base, IdentifiableMixin, TrackableMixin
@@ -10,3 +12,4 @@ class HostPools(IdentifiableMixin, TrackableMixin, Base):
     name: Mapped[str]
     region: Mapped[str]
     labels: Mapped[list[str]]
+    session_id: Mapped[UUID | None]

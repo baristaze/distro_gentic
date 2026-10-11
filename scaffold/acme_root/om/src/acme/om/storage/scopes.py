@@ -101,6 +101,9 @@ TABLE_SCOPES: dict[str, TableScope] = {
     # What the benchmark job showed of a candidate against its baseline: the
     # platform's own record, no tenant's.
     "benchmarks": TableScope(ScopeKind.SYSTEM),
+    # The machines the cloud pool started: the platform's own record, since a
+    # warm machine serves no tenant until a session claims it.
+    "pool_machines": TableScope(ScopeKind.SYSTEM),
     # A tenant's own rows. An org's `org_id` is its own id.
     "orgs": TableScope(ScopeKind.ORG),
     "invitations": TableScope(ScopeKind.ORG),
