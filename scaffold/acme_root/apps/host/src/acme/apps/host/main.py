@@ -115,11 +115,10 @@ def run() -> None:
             workspaces,
             snapshots=store,
             broker=broker,
-            snapshot_modes=(lambda: KEPT_WHOLE)
-            if settings.machine
-            else lambda: frozenset(
+            snapshot_modes=lambda: frozenset(
                 ENGINE_MODES[mode] for mode in snapshot_modes(agents[0].probed.advertisement)
             ),
+            kept_whole=KEPT_WHOLE if settings.machine else frozenset(),
         )
         agent = HostAgent(
             settings,

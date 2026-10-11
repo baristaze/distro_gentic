@@ -7,19 +7,27 @@ and its commands run there as its own user."""
 
 import json
 import re
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import UUID
 
 import pytest
+from api_support import seed_request
+from contracts.agent_session_storage import make_session
+from host_support import Stack, probes
 
-from acme.apps.host.agent import RoutesHostImpl
+from acme.apps.host.agent import HostAgent, RoutesHostImpl
+from acme.apps.host.ceilings import Ceilings
 from acme.apps.host.config import settings_from_env
 from acme.apps.host.machine import TransportMachineImpl, WorkspaceMachineImpl
+from acme.apps.host.main import KEPT_WHOLE, host_transports, host_workspaces
+from acme.apps.host.relay import ExecutorRelayImpl
 from acme.apps.host.seed import forget_key, read_seed
 from acme.client.claimant.credential import BadSetting
 from acme.client.client import ApiError
 from acme.client.types import AdvertisementBody, IssuedHostCredentialView
+from acme.client.types import IsolationMode as HostMode
 from acme.infra.machines.seeded import GUEST_WRITE
 from acme.infra.secrets.local import SecretsLocalImpl
 from acme.infra.transports import CommandSpec
@@ -35,6 +43,10 @@ from acme.infra.workspaces import (
     SnapshotRefused,
     WorkspaceBase,
 )
+from acme.om.base import new_id, utcnow
+from acme.om.cloud_pool.rules import new_key
+from acme.om.cloud_pool.types.machine import PoolMachine
+from acme.om.tenancy.rules import hash_token
 
 ROOT = Path(__file__).resolve().parents[3]
 MACHINES = ROOT / "deployment" / "machines"
@@ -208,3 +220,72 @@ async def test_a_machines_command_runs_in_its_workspace_as_the_host(tmp_path: Pa
     assert ran.exit_code == 0, ran.stderr
     assert ran.stdout.strip() == str(resolved(workspace.location))
     assert made_under(str(resolved(workspace.location) / "made-here"), tmp_path / "workspace")
+
+
+async def test_a_machines_host_enrolls_with_its_key_and_holds_its_sessions_workspace(
+    api: Stack, tmp_path: Path
+) -> None:
+    """Against the live app in process: the host of a machine the pool
+    started for a session trades its key, once, for a credential of the
+    session's pool of one, and prepares the session's workspace, kept by
+    snapshots, which its pool keeps whole."""
+    managers = api.container.managers
+    session = await managers.agent_sessions.create_session(api.owner, make_session())
+    service = await managers.tenancy.service_context(
+        seed_request(), api.owner.org_id, api.owner.user_id
+    )
+    pool = await managers.hosts.session_pool(service, session.id, "cloud")
+    key = new_key()
+    now = utcnow()
+    await api.container.storage.get_cloud_pool_storage().create_machine(
+        PoolMachine(
+            id=new_id(),
+            created_at=now,
+            name="acme-vm-ptest0000000000",
+            egress_open=True,
+            tenant_id=api.owner.org_id,
+            session_id=session.id,
+            pool_id=pool.id,
+            bound_by=api.owner.user_id,
+            key_digest=hash_token(key),
+            started_at=now,
+        )
+    )
+    settings = replace(
+        api.settings(tmp_path / "home", key),
+        machine_seed=tmp_path / "seed.json",
+        machine_workspace=tmp_path / "workspace",
+    )
+    agents: list[HostAgent] = []
+    executor = ExecutorRelayImpl(
+        lambda: agents[0].client(),
+        host_transports(settings),
+        host_workspaces(settings),
+        kept_whole=KEPT_WHOLE,
+        flush_seconds=0.0,
+        renew_seconds=0.2,
+    )
+    host = HostAgent(
+        settings,
+        Ceilings(projects=None, min_isolation=HostMode.vm, egress=None, readable=("/",)),
+        probes(HostMode.vm),
+        api.client,
+        executor,
+    )
+    agents.append(host)
+    await host.start()
+    assert UUID(host.credential.pool_id) == pool.id
+    identity = await managers.hosts.authenticate(seed_request(), host.credential.token)
+    assert identity.session_id == session.id
+
+    kept = KEPT.model_copy(update={"egress": EgressPolicy(mode=EgressMode.OPEN)})
+    assert await managers.relay.ask_prepare(api.owner, session.id, kept)
+    assert await host.claim_once() is not None
+    await host.idle()
+    binding = await managers.relay.binding_of(api.owner, session.id)
+    assert binding is not None and binding.host_id == identity.id
+    assert made_under(binding.location, tmp_path / "workspace")
+
+    with pytest.raises(ApiError) as spent:
+        await api.client(None).enroll_machine(key, "again", AdvertisementBody(os="Linux"), 1)
+    assert spent.value.status == 401
