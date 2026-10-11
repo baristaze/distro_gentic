@@ -13,6 +13,7 @@ product's kind, and a refused validation session goes back to queued, kept,
 when its reason's column leaves."""
 
 import asyncio
+import json
 import time
 from pathlib import Path
 from uuid import UUID
@@ -354,15 +355,62 @@ async def seed_notices(
     return held
 
 
+async def seed_notices_before(
+    url: str, *notices: tuple[str, ...]
+) -> dict[UUID, tuple[UUID, tuple[str, ...]]]:
+    """One workspace a tenant, each holding its notices, written as the
+    release before writes a row: its columns alone, as the migration login,
+    inside the tenant's fence. A row of this release's mapping carries
+    columns the release before has not."""
+    held: dict[UUID, tuple[UUID, tuple[str, ...]]] = {}
+    engine = create_async_engine(url)
+    try:
+        for listed in notices:
+            org = new_id()
+            workspace = make_workspace()
+            async with engine.begin() as connection:
+                await connection.exec_driver_sql(f"SET LOCAL app.org_id = '{org}'")
+                await connection.execute(
+                    text(
+                        "INSERT INTO core.session_workspaces (id, org_id, created_at,"
+                        " updated_at, created_by, updated_by, project_id, level, limits,"
+                        " egress, rules, egress_source, branch, branch_seen, notices, version)"
+                        " VALUES (:id, :org, :at, :at, :by, :by, :project, :level,"
+                        " CAST(:limits AS jsonb), :egress, CAST(:rules AS jsonb), :source,"
+                        " :branch, false, CAST(:notices AS jsonb), 1)"
+                    ),
+                    {
+                        "id": workspace.id,
+                        "org": org,
+                        "at": workspace.created_at,
+                        "by": workspace.created_by,
+                        "project": workspace.project_id,
+                        "level": workspace.level.value,
+                        "limits": workspace.limits.model_dump_json(),
+                        "egress": workspace.egress.value,
+                        "rules": json.dumps(
+                            [rule.model_dump(mode="json") for rule in workspace.rules]
+                        ),
+                        "source": workspace.egress_source,
+                        "branch": workspace.branch,
+                        "notices": json.dumps(list(listed)),
+                    },
+                )
+            held[org] = (workspace.id, listed)
+    finally:
+        await engine.dispose()
+    return held
+
+
 async def test_the_one_notice_leaves_the_table_and_every_notice_stays_in_the_list(
-    pg_sessions: LoginSessions, migrated: dict[DatabaseRole, str]
+    migrated: dict[DatabaseRole, str],
 ) -> None:
     """Rows written at the release before, the one notice beside each list,
     migrate forward with the column and the list's default gone and every
     entry of every tenant's list kept."""
     core = migrated[DatabaseRole.CORE]
     await downgrade(DatabaseRole.CORE, core, V0_2_0_HEAD)
-    held = await seed_notices(pg_sessions, ("older", "newer"), ("only",), ())
+    held = await seed_notices_before(core, ("older", "newer"), ("only",), ())
     for org, (session_id, _) in held.items():
         await told_before(core, org, session_id)
     assert await notice_shape(core) == [("notice", None), ("notices", "'[]'::jsonb")]
