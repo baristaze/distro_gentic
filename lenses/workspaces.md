@@ -4,8 +4,9 @@ Group id: `workspaces`. Covers Workspaces and Isolation of
 `distro_gentic_spec.md`.
 
 This group judges the workspace a session's tools work on: its life as a
-cache, what happens to its work before it goes, its isolation level and
-how that level is pinned, probed, and refused, and its egress. It leaves
+cache, what happens to its work before it goes, its snapshots where it
+is kept by them, its isolation level and how that level is pinned,
+probed, and refused, and its egress. It leaves
 the isolation modes a host advertises and the ceilings its owner sets to
 `placement`, a person's commands in a workspace to `watch`, the
 untrusted mark and the rule of two to `wall`, and the sweep that purges
@@ -238,6 +239,59 @@ an image or a link.
 
 **Violation.** A Markdown image, a link preview, an unfurl, or a proxy
 that fetches a URL the agent wrote.
+
+**Severity.** high
+
+**Check.** review
+
+## WSP-12 A snapshot lives on its workspace's side of the wall
+
+**Principle.** A workspace in the platform's cloud keeps its snapshots in
+the platform's object store, sealed under the session's key. A workspace
+on a customer's host keeps them in that host's own store, inside the
+wall. Their bytes never cross: the platform records the reference and
+the hash alone, and a host of the same pool whose store holds one
+restores it. A snapshot is content: when a session's content expires,
+or its key is revoked, its snapshots go from every store that keeps one,
+and their records with them.
+
+**Source.** Workspaces and Isolation, A Snapshot Is Durable State.
+
+**Look for.** Where a snapshot of a workspace a host holds is taken,
+kept, and read back; what the platform's records and the step that names
+a snapshot carry; the restore of a snapshot kept on the other side of
+the wall; what the content's expiry and a key's revocation remove.
+
+**Violation.** A host's snapshot whose bytes reach the platform, or a
+cloud snapshot whose bytes reach a host; a record or a step that holds a
+snapshot's bytes; a restore from the other side of the wall; a session
+past its content's life whose snapshots, or their records, remain.
+
+**Severity.** high
+
+**Check.** review
+
+## WSP-13 A session kept by snapshots gets one, or waits, never a cache
+
+**Principle.** An agent kind says `cache`, the default, or `snapshot`,
+and a project narrows it to a cache on purpose. A session that keeps no
+content at rest is refused a kind kept by snapshots when it is created.
+A host advertises snapshots at a level only when its probe showed it can
+keep one there; a session kept by snapshots and pinned to a pool with no
+such host waits on the resource, and says why. The next loop starts from
+the latest snapshot, and the restored tree stands.
+
+**Source.** Workspaces and Isolation, A Snapshot Is Durable State.
+
+**Look for.** Where durability is chosen and pinned; the check of a
+pool's hosts before a prepare; a host's probe and what it advertises;
+what a prepare that restored does with the session's branch.
+
+**Violation.** A session kept by snapshots prepared as a cache, run
+with no snapshot, or created where no content is kept at rest; a host
+that advertises snapshots it never probed; a refusal that can never
+clear left waiting; a restored tree that the branch's sync or cut
+replaces.
 
 **Severity.** high
 

@@ -282,7 +282,9 @@ in.
   misconfigured host fails at startup, never mid-session. It advertises
   its operating system and shell, its capabilities, and only the
   isolation modes it probed, because an overclaimed mode silently
-  weakens the sandbox of every session that trusts it.
+  weakens the sandbox of every session that trusts it. It advertises
+  snapshots only at the levels it probed them, for the same reason
+  ([A Snapshot Is Durable State](#a-snapshot-is-durable-state)).
 - **Pinned claims.** A host is handed only the work pinned to its pool,
   filtered by its identity, never by what it asks for.
 - **Owner's ceilings.** A host enforces limits its owner sets and the
@@ -348,6 +350,50 @@ session's branch has vanished, the platform rebuilds it only when it
 knows why (a merged or closed pull request). Anything else fails loudly;
 nothing restarts silently from the default branch.
 
+### A Snapshot Is Durable State
+
+`optional`
+
+Some sessions must resume on their whole machine: the tools they
+installed, a local database, the files they generated. For them, a
+**snapshot** of the workspace is durable state, like the branch and the
+artifacts ([`agentic_core` Workspace Snapshots][e-snapshots]). The
+workspace itself stays a cache.
+
+- **Who chooses.** An agent kind says `cache`, the default, or
+  `snapshot`. A project narrows it: one that keeps its sessions'
+  workspaces as caches makes each of them a cache. A session that keeps
+  no content at rest keeps no snapshot, so a kind kept by snapshots is
+  refused for it when it is created.
+- **What it holds.** Everything the workspace's commands could write at
+  its level: the whole disk of a VM, the whole filesystem of a
+  container, and on a bare host the directory alone, where its host's
+  provider takes one. No process is held; each starts again. No
+  credential is held: what the broker attached is taken back first, and
+  a snapshot that holds a secret's value is refused.
+- **When.** The run that holds the workspace snapshots it at its end,
+  before its instance goes, and its release pushes uncommitted work to a
+  snapshot ref as any release does. The next loop starts from the latest
+  snapshot, and the restored tree stands: the session's branch is not
+  brought over it. A person who takes control gets that tree too.
+- **Where it lives follows the wall.** A workspace in the platform's
+  cloud keeps its snapshots in the platform's object store, sealed under
+  the session's key. A workspace on a customer's host keeps them in that
+  host's own store, inside the wall. Their bytes never cross: the
+  platform records the reference and the hash alone, and a host of the
+  same pool whose store holds one restores it. A snapshot kept on one
+  side of the wall never restores on the other.
+- **Probed, or it waits.** A host advertises snapshots at a level only
+  when its probe showed it can keep one there. A session kept by
+  snapshots and pinned to a pool with no such host waits on the
+  resource, and says why. It is never prepared as a cache in its stead.
+  A provider that can never keep one refuses the workspace for good,
+  with the reason.
+- **For how long.** A snapshot is content. When a session's content
+  expires, or its key is revoked, its snapshots go from the object store
+  and from each host's store that keeps one, and their records go with
+  them.
+
 ### Isolation Levels
 
 `default`
@@ -389,9 +435,10 @@ platform's internal network or a cloud metadata endpoint. No surface
 renders a URL from agent output as a fetch, such as an image in a
 comment or a mirror.
 
-> **Principle:** A workspace is a cache of durable state. Isolation is
-> pinned, probed, and refused; never weakened. Egress is an allowlist of
-> destinations and methods.
+> **Principle:** A workspace is a cache of durable state, and its
+> snapshot is durable state, kept on the side of the wall where it
+> lives. Isolation is pinned, probed, and refused; never weakened.
+> Egress is an allowlist of destinations and methods.
 
 ## Watching and Steering
 
@@ -1027,5 +1074,6 @@ threat model each deployment writes.
 [e-roles]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#roles-and-fills
 [e-kinds]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#agent-kinds
 [e-history]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#history
+[e-snapshots]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#workspace-snapshots
 [e-deviations]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#deviations-from-the-guideline
 [e-adopted]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#being-adopted

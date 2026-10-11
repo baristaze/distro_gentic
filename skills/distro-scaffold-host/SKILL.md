@@ -80,7 +80,12 @@ from `infra/src/<name>/infra/transports/container.py`.
    transport cannot then run is an overclaim: every session that trusts
    the mode runs weaker than it asked. A `directory` runs only as the
    dedicated user `ACME_HOST_WORKSPACE_USER` names, never root and never
-   the host's own user, as the `directory` probe holds.
+   the host's own user, as the `directory` probe holds. Snapshots of the
+   mode are advertised (`snapshot.<mode>`) only when its provider takes a
+   workspace whole and the host's store takes one (`host_snapshots` and
+   `SNAPSHOTTING` in `main.py`); a provider that writes outside what it
+   would keep, as a directory's, takes none (A Snapshot Is Durable
+   State).
 4. The transport holds the engine's contract: one command a call, its
    output streamed in parts, its end recorded under the host's
    `records/`, and a stop that ends it at once. Secrets reach a command

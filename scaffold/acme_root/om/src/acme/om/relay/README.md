@@ -36,6 +36,13 @@ platform's cloud. Each call crosses the wall as `exec`
   project the host's owner holds its work to.
 - **A purge**: `workspace` work on the lane of the host that holds an
   instance, asking it to destroy the instance and its files.
+- **A snapshot**: `workspace` work on the lane of the host that holds a
+  workspace kept by snapshots, asking it to keep a snapshot of it in its
+  own store; and **an erase**, asking a host whose store keeps a
+  session's snapshots to let them go.
+- **A restore**: a prepare that names a snapshot a host's store keeps, by
+  its reference, its digest, and its size, on the lane of the host that
+  holds the workspace, or the pool's when none does.
 
 ## What can happen
 
@@ -54,6 +61,21 @@ platform's cloud. Each call crosses the wall as `exec`
   waits at a time. Only that host answers it, and its answer completes
   the work. A release that waits when a prepare is asked is ended, since
   no live host is left holding the workspace.
+- **Snapshot.** A run that ends with a workspace kept by snapshots asks
+  the host that holds it for one, and waits for the answer a while. The
+  host keeps the bytes and answers the reference, the digest, and the
+  size; the platform records them (`kept`), never the bytes, and the
+  run's step names it. A refusal fails the work for good, with the
+  reason.
+- **Restore.** A loop that starts from a snapshot a host keeps asks for
+  it before anything else, and waits for it a while. The host that holds
+  the workspace replaces it whole; with none, a host of the pool whose
+  store keeps it makes it. A restore of the same snapshot that waits is
+  asked once. A host that lost the bytes answers it lost, and the work
+  fails for good. A session kept by snapshots waits, with the reason,
+  while no live host of its pool advertises snapshots at its level.
+- **Erase.** A revoked key asks each host whose store keeps the session's
+  snapshots to let them go.
 - **Make an instance.** A run that validates a pinned session's delivery
   asks the session's pool for a new instance, as a prepare, and waits for
   a host's answer to bind it. Its checks run there as `exec` work. When
@@ -122,4 +144,8 @@ transport, and ends it with `ask_purge` and `purge_session`; the host
 answers a purge as it answers a release (`released`). The runner's sweep
 reads the bindings (`bindings`), reaches a holding host through `holder`,
 and asks it to let an instance go with `ask_release`; the host answers
-with `released`.
+with `released`. The platform's tools ask a host's snapshot with
+`ask_snapshot`, a restore with `ask_restore`, and an erase with
+`ask_erase`, and read their work with `workspace_work`; the host answers
+a snapshot with `snapshotted`, which records it through the root's
+`kept`, a restore as a prepare, and an erase as a release.
