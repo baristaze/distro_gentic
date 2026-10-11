@@ -7,6 +7,7 @@ from collections.abc import Callable
 from datetime import timedelta
 
 from acme.infra.impl.configured import InfraConfiguredImpl
+from acme.infra.impl.settings import InfraSettings
 from acme.infra.root import InfraInterface
 from acme.integrations.identity import IdentityProviderInterface
 from acme.integrations.identity.twin import IdentityProviderTwinImpl
@@ -23,6 +24,7 @@ from acme.om.billing.impl.sweep import HoldSweepImpl, HoldSweepOptions
 from acme.om.billing.root import build_billing_purge, build_money_gate, refuse_open_money
 from acme.om.billing.sweep import ProviderBillsUnknownImpl
 from acme.om.budgets.impl.manager import BudgetsOptions
+from acme.om.cloud_pool.impl.manager import CloudPoolOptions
 from acme.om.events.impl.manager import EventsOptions
 from acme.om.hosts.impl.manager import HostsOptions
 from acme.om.idempotency.impl.manager import IdempotencyOptions
@@ -104,6 +106,19 @@ of it where there is none, and the share's mark."""
 LEASE_SWEEP_BATCH = LeasesOptions().sweep_batch
 """Leases and requests one org's lease sweep ends; a sweep that ends as many
 or more may have left some due."""
+
+
+def cloud_pool_options(settings: InfraSettings) -> CloudPoolOptions:
+    """The cloud pool as the settings name it, on the machines infra chose:
+    the runner starts its machines, and the sweep lets them go."""
+    return CloudPoolOptions(
+        prefix=settings.machine_prefix,
+        image=settings.cloud_pool_image,
+        machine_image=settings.machine_image,
+        warm=settings.cloud_pool_warm,
+        api_url=settings.cloud_pool_api_url,
+        boot=timedelta(seconds=settings.machine_boot_timeout_seconds),
+    )
 
 
 def events_options(settings: MaintenanceSettings) -> EventsOptions:
@@ -194,6 +209,7 @@ def worker_managers(
         projects_options=ProjectsOptions(purge_batch=batch),
         relay_options=RelayOptions(purge_batch=batch),
         workspaces_options=WorkspacesOptions(purge_batch=batch),
+        cloud_pool_options=cloud_pool_options(settings),
         budget_gate=ports.budget_gate or build_money_gate(storage),
         result_gate=ports.result_gate,
         executor=ports.executor,

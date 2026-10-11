@@ -28,10 +28,12 @@ GUEST_WRITE = (
     f"sudo -n install -d -m 0700 -o {SEED_OWNER} -g {SEED_OWNER} /{SEED_FOLDER}; "
     f"sudo -n tee /{SEED_FILE}.partial >/dev/null; "
     f"sudo -n chown {SEED_OWNER}:{SEED_OWNER} /{SEED_FILE}.partial; "
-    f"sudo -n mv /{SEED_FILE}.partial /{SEED_FILE}"
+    f"sudo -n mv /{SEED_FILE}.partial /{SEED_FILE}; "
+    f"sudo -n systemctl restart {SEED_OWNER}.service"
 )
 """Writes the seed from standard input as the guest's own user, owned by the
-host's user alone, whole or not at all."""
+host's user alone, whole or not at all, then starts the host again on it:
+its unit, of the same name as its user, starts only once a seed stands."""
 
 PLAIN_WRITE = (
     f"set -eu; umask 077; mkdir -p {SEED_FOLDER}; "

@@ -59,7 +59,7 @@ ARCH_CHECK ?= uvx --python "$(shell cat .python-version)" --from "git+https://gi
 # until npm installs it; a pnpm already on PATH runs the version named.
 PNPM_SPEC := $(or $(shell sed -n 's/^ *"packageManager": *"\(pnpm@[^"+]*\).*/\1/p' package.json 2>/dev/null),pnpm)
 
-.PHONY: help setup pnpm up down stop start reset urls infra-up buckets devx-up stack-up infra-down infra-reset collector-scrape migrate seed migrate-check release-before benchmark-boot check lint format-check typecheck arch-check agentic-check distro-check test-unit test-integration test-telemetry host-check test-live benchmark traffic openapi
+.PHONY: help setup pnpm up down stop start reset urls infra-up buckets devx-up stack-up infra-down infra-reset collector-scrape migrate seed migrate-check release-before benchmark-boot check lint format-check typecheck arch-check agentic-check distro-check test-unit test-integration test-telemetry host-check machine-image test-live benchmark traffic openapi
 
 # This Makefile alone, never $(MAKEFILE_LIST): the includes above put
 # .env.example and .env in that list, and grep prefixes every match with the
@@ -298,6 +298,9 @@ test-telemetry: ## The telemetry round trip over the devx profile
 # the host starts under its unit as its own user, and the unit's exposure holds.
 host-check: ## Install and start the workspace host under its unit in a container
 	deployment/host/check/check.sh
+
+machine-image: ## Build the cloud pool's image on Lima, NAME=<name>, from this checkout
+	uv run python deployment/machines/lima_image.py $(NAME)
 
 # The gate's sanity run: the light profile for thirty seconds over the seeded
 # org, against the API on ACME_PORT. Proves the wiring, says nothing about capacity.

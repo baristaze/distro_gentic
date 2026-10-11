@@ -21,7 +21,8 @@ class CloudPoolManagerInterface(ABC):
     @abstractmethod
     def runs(self, spec: IsolationSpec) -> bool:
         """Whether a session of the cloud at this spec runs on a machine of
-        the pool: the pool runs machines here, and the spec asks for a VM."""
+        the pool, which the transport asks of the spec alone: the pool runs
+        machines here, and the spec asks for a VM."""
         ...
 
     @abstractmethod
@@ -55,21 +56,28 @@ class CloudPoolManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def release(self, rctx: RequestContext, org_id: UUID, session_id: UUID) -> None:
+    async def holds(self, ctx: TenantContext, session_id: UUID) -> bool:
+        """Whether a machine of the pool serves the session."""
+        ...
+
+    @abstractmethod
+    async def release(self, ctx: TenantContext, session_id: UUID) -> None:
         """Lets go of the machine that serves the session: its host's
         credential ends and the machine goes, its disk with it."""
         ...
 
     @abstractmethod
     async def purge(self, org_id: UUID, session_id: UUID) -> None:
-        """The session's purge: its machine and every snapshot kept under its
-        names go."""
+        """Platform-internal: the session's purge, which runs for no
+        principal: its machine and every snapshot kept under its names
+        go."""
         ...
 
     @abstractmethod
     async def erase(self, org_id: UUID, session_id: UUID) -> None:
-        """The revocation of the session's key: every snapshot kept under its
-        names goes. Its machine, a cache, stays."""
+        """Platform-internal: the revocation of the session's key, named with
+        its tenant: every snapshot kept under its names goes. Its machine, a
+        cache, stays."""
         ...
 
     @abstractmethod
@@ -84,21 +92,25 @@ class CloudPoolManagerInterface(ABC):
     async def enroll(
         self, rctx: RequestContext, key: str, enrollment: Enrollment
     ) -> IssuedCredential:
-        """A machine's host trades its key, once, for a credential of its
-        session's pool of one. `MachineUnbound` while the machine is warm,
-        and serves no session yet; `InvalidCredential` for a key never
-        handed, or spent."""
+        """Platform-internal: a machine's host trades its key, once, for a
+        credential of its session's pool of one; the host is no person, so
+        it calls from the request stage. `MachineUnbound` while the machine
+        is warm, and serves no session yet; `InvalidCredential` for a key
+        never handed, or spent."""
         ...
 
     @abstractmethod
     async def sweep(self, rctx: RequestContext) -> int:
-        """One pass: lets go of a machine whose start died with the process
-        that started it, of one whose host never came, and of one under the
-        pool's names that no row holds; then starts warm machines until the
-        pool's warm count stands. Answers how many it let go."""
+        """Platform-internal: one pass of the sweep, across tenants and for
+        none: lets go of a machine whose start died with the process that
+        started it, of one whose host never came, of one whose session is
+        gone, and of one under the pool's names that no row holds; then
+        starts warm machines until the pool's warm count stands. Answers how
+        many it let go."""
         ...
 
     @abstractmethod
     async def close(self) -> None:
-        """Waits out the warm starts this process began."""
+        """Platform-internal: at shutdown, waits out the warm starts this
+        process began."""
         ...

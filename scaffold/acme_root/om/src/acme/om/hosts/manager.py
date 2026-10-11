@@ -149,8 +149,9 @@ class HostsManagerInterface(ABC):
         enrolled_with: UUID,
         enrollment: Enrollment,
     ) -> IssuedCredential:
-        """Enrolls the host of a machine the cloud pool started for a
-        session, into the session's pool of one, and gives it its first
+        """Platform-internal: the cloud pool enrolls the host of a machine it
+        started for a session, which calls from the request stage as every
+        host does, into the session's pool of one, and gives it its first
         credential: its tenant, its pool, and its session are the
         platform's, never the host's to name. A pool that is the tenant's
         own is refused. The
@@ -163,10 +164,10 @@ class HostsManagerInterface(ABC):
     async def retire_host(
         self, rctx: RequestContext, org_id: UUID, host_id: UUID, by: UUID
     ) -> None:
-        """Ends a cloud pool machine's host and every credential it holds, as
-        the pool lets its machine go: a disk kept after this holds no
-        credential that answers. One gone or ended already ends nothing
-        more."""
+        """Platform-internal: the cloud pool ends its machine's host and every
+        credential it holds as it lets the machine go, from its sweep and
+        its purge as from a run: a disk kept after this holds no credential
+        that answers. One gone or ended already ends nothing more."""
         ...
 
     @abstractmethod

@@ -1,8 +1,12 @@
 """The contract every cloud pool storage meets: a machine is found by its
 key until the key is spent, by the session it serves, and by its tenant; a
 warm machine is claimed once, and only once it started, at the egress
-asked; and the warm machines a sweep writes never pass the count."""
+asked; and the warm machines a sweep writes never pass the count. Its rows
+are the platform's, so it takes no tenant first and names no cross-tenant
+case; the two reads by tenant hold to it by their predicate, and another
+tenant's finds nothing."""
 
+import secrets
 from datetime import timedelta
 from uuid import UUID
 
@@ -12,6 +16,10 @@ from acme.om.base import new_id, utcnow
 from acme.om.cloud_pool.storage import CloudPoolStorageInterface
 from acme.om.cloud_pool.types.machine import PoolMachine
 from acme.om.exceptions import UniqueKeyTaken
+
+CROSS_TENANT_CASES: frozenset[str] = frozenset()
+"""`CloudPoolStorageInterface` takes no tenant first: its rows are the
+platform's."""
 
 
 def make_machine(
@@ -25,7 +33,7 @@ def make_machine(
     return PoolMachine(
         id=new_id(),
         created_at=now,
-        name=f"acme-vm-p{new_id().hex[:16]}",
+        name=f"acme-vm-p{secrets.token_hex(8)}",
         egress_open=egress_open,
         tenant_id=tenant_id,
         session_id=session_id,
@@ -101,9 +109,10 @@ class CloudPoolStorageContract:
         await storage.create_machine(make_machine())
         await storage.create_machine(make_machine(tenant_id=new_id(), session_id=new_id()))
         made = [make_machine(started=False) for _ in range(3)]
-        written = await storage.reserve_warm(2, made)
-        assert written == made[:1], "one stands warm already"
-        assert await storage.reserve_warm(2, [make_machine(started=False)]) == []
+        assert await storage.reserve_warm(2, made) == 1, "one stands warm already"
+        assert await storage.read_machine(made[0].id) == made[0]
+        assert await storage.read_machine(made[1].id) is None
+        assert await storage.reserve_warm(2, [make_machine(started=False)]) == 0
         assert len(await storage.read_machines(10)) == 3
 
     async def test_a_machine_started_again_takes_a_new_key_and_its_host_anew(
@@ -128,6 +137,15 @@ class CloudPoolStorageContract:
         started = await storage.read_machine(machine.id)
         assert started is not None and started.started_at is not None
         assert await storage.rekey(new_id(), "none", None) is None
+
+    async def test_another_tenant_finds_no_machine(
+        self, storage: CloudPoolStorageInterface
+    ) -> None:
+        tenant, session = new_id(), new_id()
+        await storage.create_machine(make_machine(tenant_id=tenant, session_id=session))
+        assert await storage.read_of_session(new_id(), session) is None
+        assert await storage.read_of_tenant(new_id(), 10) == []
+        assert len(await storage.read_of_tenant(tenant, 10)) == 1
 
     async def test_a_deleted_machine_is_gone_and_the_oldest_comes_first(
         self, storage: CloudPoolStorageInterface

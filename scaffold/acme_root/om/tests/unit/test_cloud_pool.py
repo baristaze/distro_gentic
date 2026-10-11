@@ -47,6 +47,7 @@ from acme.om.context import AppContext, AppType, RequestContext, Role, TenantCon
 from acme.om.exceptions import InvalidCredential
 from acme.om.hosts.types.credential import IssuedCredential
 from acme.om.hosts.types.host import Advertisement, Enrollment, HostStatus
+from acme.om.hosts.types.host import IsolationMode as HostMode
 from acme.om.hosts.types.placement import PlacementState
 from acme.om.hosts.types.pool import HostPool
 from acme.om.workspaces.types.snapshot import KeptSnapshot
@@ -57,7 +58,7 @@ OPEN = IsolationSpec(mode=IsolationMode.VM, egress=EgressPolicy(mode=EgressMode.
 KEPT = OPEN.model_copy(update={"durability": Durability.SNAPSHOT})
 ENROLLMENT = Enrollment(
     name="machine",
-    advertisement=Advertisement(os="Linux", isolation_modes=("vm",)),
+    advertisement=Advertisement(os="Linux", isolation_modes=(HostMode.VM,)),
     exec_version=1,
 )
 
@@ -107,7 +108,9 @@ class Hosts:
             expires_at=utcnow() + timedelta(hours=1),
         )
 
-    async def retire_host(self, rctx: RequestContext, org_id: UUID, host_id: UUID, by: UUID) -> None:
+    async def retire_host(
+        self, rctx: RequestContext, org_id: UUID, host_id: UUID, by: UUID
+    ) -> None:
         self.retired.append(host_id)
 
     async def get_hosts(self, ctx: TenantContext, pool_id: UUID) -> tuple[HostStatus, ...]:
@@ -319,7 +322,7 @@ async def test_a_snapshot_ends_the_host_and_keeps_the_stopped_disk_which_a_resto
     assert taken.reference.startswith(snapshots_of(PREFIX, ctx.org_id, session_id))
     assert pool.hosts.retired == [row.host_id], "its credential ended before the disk was kept"
     assert await pool.machines.state(row.name) is MachineState.STOPPED, "kept until released"
-    await pool.manager.release(stage(), ctx.org_id, session_id)
+    await pool.manager.release(ctx, session_id)
     assert await pool.machines.state(row.name) is MachineState.ABSENT
     assert await pool.rows() == []
 
@@ -341,7 +344,7 @@ async def test_a_restore_from_a_disk_gone_or_altered_loses_the_workspace(
     session_id = new_id()
     await pool.prepare(ctx, session_id, KEPT)
     taken = await pool.manager.snapshot(ctx, session_id)
-    await pool.manager.release(stage(), ctx.org_id, session_id)
+    await pool.manager.release(ctx, session_id)
 
     altered = kept_record(session_id, taken.reference, "sha256:" + "1" * 64)
     with pytest.raises(WorkspaceLost, match="does not match its digest"):
@@ -484,4 +487,3 @@ async def test_a_tenants_purge_waits_for_its_expiry_then_takes_every_machine_and
     assert {row.tenant_id for row in await pool.rows()} == {other.org_id}
     left = await pool.machines.names(PREFIX + "p")
     assert len(left) == 3, "the other tenant's two machines and its disk"
-

@@ -436,6 +436,81 @@ async def test_a_host_is_handed_only_the_work_pinned_to_its_pool(
     assert from_another_tenant.id not in handed
 
 
+# A session of the cloud pool runs on a machine of its own, whose host
+# enrolls into the session's pool of one and claims that session's work.
+
+
+async def test_a_sessions_pool_of_one_is_the_platforms_and_no_person_uses_it(
+    managers: Managers, hosts: HostsManagerImpl
+) -> None:
+    owner = await an_owner(managers)
+    session = await managers.agent_sessions.create_session(owner, make_session())
+    service = await managers.tenancy.service_context(request(), owner.org_id, owner.user_id)
+    pool = await hosts.session_pool(service, session.id, "cloud")
+    assert pool.session_id == session.id
+    assert await hosts.session_pool(service, session.id, "cloud") == pool, "the same one"
+    assert await hosts.get_pools(owner) == (), "hidden from the tenant's pools"
+    with pytest.raises(ValidationFailed, match="platform's"):
+        await hosts.place_session(owner, session.id, pool.id)
+    with pytest.raises(ValidationFailed, match="platform's"):
+        await hosts.issue_enrollment_token(owner, pool.id)
+    with pytest.raises(ValidationFailed, match="platform's"):
+        await hosts.create_pool(owner, a_pool().model_copy(update={"session_id": session.id}))
+    # Its work runs there once it has one; its placement stays the cloud.
+    state = await hosts.work_placement(owner, session.id)
+    assert state.pool == pool
+    assert (await hosts.placement_of(owner, session.id)).pool is None
+
+
+async def test_a_machines_host_names_its_session_and_is_handed_no_other_sessions_work(
+    managers: Managers, hosts: HostsManagerImpl
+) -> None:
+    owner = await an_owner(managers)
+    mine, other = (
+        await managers.agent_sessions.create_session(owner, make_session()),
+        await managers.agent_sessions.create_session(owner, make_session()),
+    )
+    service = await managers.tenancy.service_context(request(), owner.org_id, owner.user_id)
+    pool = await hosts.session_pool(service, mine.id, "cloud")
+    tenants = await hosts.create_pool(owner, a_pool())
+    with pytest.raises(InvalidCredential):
+        await hosts.admit_machine(
+            request(),
+            owner.org_id,
+            tenants.id,
+            owner.user_id,
+            new_id(),
+            Enrollment(name="machine", advertisement=PROBED, exec_version=1),
+        )
+    issued = await hosts.admit_machine(
+        request(),
+        owner.org_id,
+        pool.id,
+        owner.user_id,
+        new_id(),
+        Enrollment(name="machine", advertisement=PROBED, exec_version=1),
+    )
+    identity = await hosts.authenticate(request(), issued.credential)
+    assert (identity.pool_id, identity.session_id) == (pool.id, mine.id)
+
+    host_id = issued.claimant_id
+    stray = await managers.work.enqueue(
+        owner, an_item(owner, WorkKind.EXEC, exec_on(host_id, other.id))
+    )
+    assert await hosts.claim(request(), identity, 1) is None
+    assert stray.lane == host_lane(host_id)
+    own = await managers.work.enqueue(
+        owner, an_item(owner, WorkKind.EXEC, exec_on(host_id, mine.id))
+    )
+    claimed = await hosts.claim(request(), identity, 1)
+    assert claimed is not None and claimed[1].id == own.id
+
+    await hosts.retire_host(request(), owner.org_id, host_id, owner.user_id)
+    with pytest.raises(CredentialExpired):
+        await hosts.authenticate(request(), issued.credential)
+    await hosts.retire_host(request(), owner.org_id, host_id, owner.user_id)  # once is all
+
+
 async def test_a_claim_below_the_floor_is_refused_before_anything_is_claimed(
     managers: Managers, hosts: HostsManagerImpl, monkeypatch: pytest.MonkeyPatch
 ) -> None:

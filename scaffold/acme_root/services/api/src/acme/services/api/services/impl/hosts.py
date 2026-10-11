@@ -1,8 +1,8 @@
 from uuid import UUID
 
 from acme.om.base import thaw_mapping, utcnow
-from acme.om.context import RequestContext, TenantContext
 from acme.om.cloud_pool import CloudPoolManagerInterface
+from acme.om.context import RequestContext, TenantContext
 from acme.om.hosts import HostsManagerInterface
 from acme.om.hosts.rules import WIRE_VERSION, WireType, at_or_above_floor
 from acme.om.hosts.types.credential import EnrollmentToken, IssuedCredential

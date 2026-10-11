@@ -1,0 +1,32 @@
+# The host program in a machine of the cloud pool. It starts once the pool's
+# seed is on /run (acme-machine-seed.service reads it from the cloud's
+# first-boot data; on Lima the pool writes it and restarts this unit), runs
+# as its own user in Docker's group, so its session's commands build and run
+# containers, and keeps its home on /run, so no credential reaches the disk.
+[Unit]
+Description=Acme host of a machine of the cloud pool
+After=network-online.target docker.service acme-machine-seed.service
+Wants=network-online.target
+ConditionPathExists=/run/acme-machine/seed.json
+
+[Service]
+Type=simple
+User=acme-host
+Group=acme-host
+SupplementaryGroups=docker
+EnvironmentFile=/etc/acme-host/host.env
+RuntimeDirectory=acme-host
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=yes
+ExecStartPre=+/usr/bin/install -o acme-host -g acme-host -m 0400 /etc/acme-host/ceilings.toml /run/acme-host/ceilings.toml
+ExecStart=/opt/acme-host/venv/bin/acme-host run
+# 1 refused, 2 a setting is wrong, 3 not enrolled, 5 a probe a person must
+# fix: the pool hands the machine a new seed and starts it again. Anything
+# else passes with time.
+Restart=on-failure
+RestartSec=5
+RestartPreventExitStatus=1 2 3 5
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target

@@ -297,6 +297,7 @@ class InfraConfiguredImpl(InfraInterface):
                 timeout=timedelta(seconds=settings.aws_timeout_seconds),
                 boot=timedelta(seconds=settings.machine_boot_timeout_seconds),
                 template=settings.machine_launch_template,
+                subnets=tuple(s for s in settings.machine_subnets.split(",") if s),
                 closed=settings.machine_closed_group,
                 open_=settings.machine_open_group,
                 encrypted=settings.machine_store_encrypted,

@@ -1,0 +1,210 @@
+"""The host as a machine of the cloud pool runs it: its settings come from
+the seed the pool handed the machine, and from a file that names nothing
+secret; it trades the seed's key once, asking again while its machine is
+warm, and forgets the key once traded; its workspace is a folder of the
+machine at the VM's level, which it neither snapshots nor starts from one,
+and its commands run there as its own user."""
+
+import json
+import re
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from uuid import UUID
+
+import pytest
+
+from acme.apps.host.agent import RoutesHostImpl
+from acme.apps.host.config import settings_from_env
+from acme.apps.host.machine import TransportMachineImpl, WorkspaceMachineImpl
+from acme.apps.host.seed import forget_key, read_seed
+from acme.client.claimant.credential import BadSetting
+from acme.client.client import ApiError
+from acme.client.types import AdvertisementBody, IssuedHostCredentialView
+from acme.infra.machines.seeded import GUEST_WRITE
+from acme.infra.secrets.local import SecretsLocalImpl
+from acme.infra.transports import CommandSpec
+from acme.infra.transports.broker import BrokerNullImpl
+from acme.infra.transports.twin import RecordSealTwin
+from acme.infra.workspaces import (
+    Durability,
+    EgressMode,
+    EgressPolicy,
+    IsolationMode,
+    IsolationRefused,
+    IsolationSpec,
+    SnapshotRefused,
+    WorkspaceBase,
+)
+
+ROOT = Path(__file__).resolve().parents[3]
+MACHINES = ROOT / "deployment" / "machines"
+KEPT = IsolationSpec(
+    mode=IsolationMode.VM,
+    egress=EgressPolicy(mode=EgressMode.NONE),
+    durability=Durability.SNAPSHOT,
+)
+ORG, SESSION = UUID(int=1), UUID(int=2)
+
+NOTHING_OF_THE_PLATFORMS = re.compile(
+    r"DATABASE|POSTGRES|VALKEY|REDIS|S3_|AWS_|KMS|SECRET|PASSWORD|ANTHROPIC|OPENAI|GEMINI|"
+    r"MODEL|PROVIDER|LAUNCHDARKLY|SENTRY|ENROLLMENT_TOKEN|_KEY\b",
+)
+"""What the platform holds that a machine never does: a database's or a
+cache's login, a cloud credential, a model's key, a vendor's key, or a
+tenant's enrollment token."""
+
+
+def test_a_machine_names_nothing_secret_in_its_settings_and_its_seed_holds_two_things() -> None:
+    names = [
+        line.split("=", 1)[0]
+        for line in (MACHINES / "host.env").read_text().splitlines()
+        if line and not line.startswith("#")
+    ]
+    assert names == ["ACME_HOST_MACHINE_SEED", "ACME_HOST_HOME", "ACME_HOST_MACHINE_WORKSPACE"]
+    assert not [name for name in names if NOTHING_OF_THE_PLATFORMS.search(name)]
+    unit = (MACHINES / "acme-host.service").read_text()
+    assert re.findall(r"^Environment\w*=(.*)$", unit, flags=re.MULTILINE) == [
+        "/etc/acme-host/host.env"
+    ], "the unit reads that file and sets nothing more"
+    assert "/run/acme-host" in (MACHINES / "host.env").read_text(), "its home is in memory"
+    assert "seed.json" in GUEST_WRITE and "systemctl restart acme-host" in GUEST_WRITE
+
+
+def resolved(location: str) -> Path:
+    return Path(location).resolve()
+
+
+def made_under(location: str, root: Path) -> bool:
+    """Whether what a location names stands, under `root`."""
+    return Path(location).exists() and resolved(location).is_relative_to(root.resolve())
+
+
+def write_seed(path: Path, *, key: str | None = "hmk_the-key") -> Path:
+    path.write_text(json.dumps({"api_url": "http://gateway.test/", "key": key}))
+    return path
+
+
+def test_the_seed_says_where_to_call_and_its_key_goes_once_traded(tmp_path: Path) -> None:
+    seed = write_seed(tmp_path / "seed.json")
+    assert read_seed(seed) == ("http://gateway.test", "hmk_the-key")
+    forget_key(seed)
+    assert read_seed(seed) == ("http://gateway.test", None)
+    assert json.loads(seed.read_text()) == {"api_url": "http://gateway.test"}
+    assert read_seed(tmp_path / "none.json") is None
+    (tmp_path / "bad.json").write_text("{")
+    with pytest.raises(BadSetting):
+        read_seed(tmp_path / "bad.json")
+
+
+def test_a_machines_settings_take_the_seed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    seed = write_seed(tmp_path / "seed.json")
+    monkeypatch.setenv("ACME_HOST_MACHINE_SEED", str(seed))
+    monkeypatch.setenv("ACME_HOST_MACHINE_WORKSPACE", str(tmp_path / "workspace"))
+    monkeypatch.delenv("ACME_ENROLLMENT_TOKEN", raising=False)
+    settings = settings_from_env()
+    assert settings.machine and settings.api_url == "http://gateway.test"
+    assert settings.enrollment_token == "hmk_the-key"
+    assert settings.machine_workspace == tmp_path / "workspace"
+    forget_key(seed)
+    assert settings_from_env().enrollment_token is None
+    monkeypatch.delenv("ACME_HOST_MACHINE_SEED")
+    assert not settings_from_env().machine
+
+
+class Client:
+    """The gateway's answers to a machine's key: unbound twice, then a
+    credential."""
+
+    def __init__(self, unbound: int) -> None:
+        self.unbound = unbound
+        self.asked: list[str] = []
+
+    async def enroll_machine(
+        self, key: str, name: str, advertisement: AdvertisementBody, exec_version: int
+    ) -> IssuedHostCredentialView:
+        self.asked.append(key)
+        if len(self.asked) <= self.unbound:
+            raise ApiError(409, "machine_unbound", "serves no session yet", None)
+        return IssuedHostCredentialView.model_validate(
+            {
+                "token": "hst_the-credential",
+                "credential_id": str(UUID(int=3)),
+                "host_id": str(UUID(int=4)),
+                "pool_id": str(UUID(int=5)),
+                "expires_at": (datetime.now(UTC) + timedelta(hours=1)).isoformat(),
+            }
+        )
+
+
+async def test_a_machines_host_asks_again_while_its_machine_is_warm(tmp_path: Path) -> None:
+    waits: list[float] = []
+
+    async def sleep(seconds: float) -> None:
+        waits.append(seconds)
+
+    routes = RoutesHostImpl(lambda: AdvertisementBody(os="Linux"), sleep=sleep, most_wait=1.5)
+    client = Client(unbound=3)
+    issued = await routes.enroll(client, "hmk_the-key", "machine")  # type: ignore[arg-type]
+    assert issued.claimant_id == UUID(int=4)
+    assert client.asked == ["hmk_the-key"] * 4
+    assert waits == [1.0, 1.5, 1.5], "a wait that grows to its most"
+
+
+async def test_a_machines_host_gives_up_on_any_other_refusal() -> None:
+    class Refusing(Client):
+        async def enroll_machine(self, *args: object, **kwargs: object) -> IssuedHostCredentialView:
+            raise ApiError(401, "invalid_credential", "spent", None)
+
+    routes = RoutesHostImpl(lambda: AdvertisementBody(os="Linux"))
+    with pytest.raises(ApiError):
+        await routes.enroll(Refusing(0), "hmk_spent", "machine")  # type: ignore[arg-type]
+
+
+async def test_a_machines_workspace_is_a_folder_at_the_vms_level_kept_by_its_pool(
+    tmp_path: Path,
+) -> None:
+    provider = WorkspaceMachineImpl(tmp_path / "workspace")
+    workspace = await provider.prepare(ORG, SESSION, KEPT)
+    assert made_under(workspace.location, tmp_path / "workspace")
+    opened = KEPT.model_copy(update={"egress": EgressPolicy(mode=EgressMode.OPEN)})
+    assert (await provider.prepare(ORG, SESSION, opened)).location == workspace.location
+    assert [held.id for held in await provider.held_instances()] == [SESSION]
+
+    with pytest.raises(SnapshotRefused, match="pool keeps"):
+        await provider.snapshot(workspace)
+    with pytest.raises(IsolationRefused, match="as its pool started it"):
+        await provider.prepare(ORG, SESSION, KEPT, snapshot=b"a snapshot")
+    based = KEPT.model_copy(
+        update={"base": WorkspaceBase(image="ubuntu", egress=EgressPolicy(mode=EgressMode.NONE))}
+    )
+    with pytest.raises(IsolationRefused, match="as its pool started it"):
+        await provider.prepare(ORG, SESSION, based)
+    listed = KEPT.model_copy(
+        update={"egress": EgressPolicy(mode=EgressMode.ALLOWLIST, hosts=("pypi.org",))}
+    )
+    with pytest.raises(IsolationRefused, match="allowlist"):
+        await provider.prepare(ORG, SESSION, listed)
+    container = KEPT.model_copy(update={"mode": IsolationMode.CONTAINER})
+    with pytest.raises(IsolationRefused):
+        await provider.prepare(ORG, SESSION, container)
+
+    await provider.release(workspace)
+    assert await provider.held_instances() == []
+
+
+async def test_a_machines_command_runs_in_its_workspace_as_the_host(tmp_path: Path) -> None:
+    provider = WorkspaceMachineImpl(tmp_path / "workspace")
+    workspace = await provider.prepare(ORG, SESSION, KEPT)
+    transport = TransportMachineImpl(
+        tmp_path / "records", SecretsLocalImpl(tmp_path / "secrets"), BrokerNullImpl()
+    )
+    command = CommandSpec(
+        argv=("sh", "-c", "pwd && touch made-here"),
+        key=UUID(int=9),
+        epoch=1,
+        deadline=datetime.now(UTC) + timedelta(seconds=30),
+    )
+    ran = await transport.run(workspace, command, seal=RecordSealTwin().seal)
+    assert ran.exit_code == 0, ran.stderr
+    assert ran.stdout.strip() == str(resolved(workspace.location))
+    assert made_under(str(resolved(workspace.location) / "made-here"), tmp_path / "workspace")

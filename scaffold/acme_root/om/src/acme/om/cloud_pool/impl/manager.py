@@ -172,13 +172,18 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         log.info("session %s: machine %s kept as %s", session_id, machine.name, to)
         return MachineSnapshot(reference=to, digest=digest)
 
-    async def release(self, rctx: RequestContext, org_id: UUID, session_id: UUID) -> None:
-        machine = await self._storage.read_of_session(org_id, session_id)
+    async def holds(self, ctx: TenantContext, session_id: UUID) -> bool:
+        return await self._storage.read_of_session(ctx.org_id, session_id) is not None
+
+    async def release(self, ctx: TenantContext, session_id: UUID) -> None:
+        machine = await self._storage.read_of_session(ctx.org_id, session_id)
         if machine is not None:
-            await self._let_go(rctx, machine)
+            await self._let_go(ctx, machine)
 
     async def purge(self, org_id: UUID, session_id: UUID) -> None:
-        await self.release(self._stage(), org_id, session_id)
+        machine = await self._storage.read_of_session(org_id, session_id)
+        if machine is not None:
+            await self._let_go(self._stage(), machine)
         await self.erase(org_id, session_id)
 
     async def erase(self, org_id: UUID, session_id: UUID) -> None:
@@ -496,11 +501,10 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         written = await self._storage.reserve_warm(wanted, made)
         if not written:
             return
-        by_id = {machine.id: key for machine, key in zip(made, keys, strict=True)}
         spec = MachineSpec(image=self._options.machine_image, egress_open=egress_open)
-        for machine in written:
-            self._spawn(self._warm(machine, spec, by_id[machine.id]))
-        log.info("the cloud pool starts %d warm machines", len(written))
+        for machine, key in zip(made[:written], keys[:written], strict=True):
+            self._spawn(self._warm(machine, spec, key))
+        log.info("the cloud pool starts %d warm machines", written)
 
     async def _warm(self, machine: PoolMachine, spec: MachineSpec, key: str) -> None:
         try:

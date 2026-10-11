@@ -18,8 +18,8 @@ from uuid import UUID
 
 from acme.apps.host.probe import Probe, Probes, container
 from acme.client.types import IsolationMode as HostIsolation
-from acme.infra.transports.local import TransportLocalImpl
 from acme.infra.transports import require_mode
+from acme.infra.transports.local import TransportLocalImpl
 from acme.infra.workspaces import (
     EgressMode,
     IsolationMode,
@@ -104,4 +104,3 @@ class TransportMachineImpl(TransportLocalImpl):
 
     def describe(self) -> str:
         return "transport=machine"
-

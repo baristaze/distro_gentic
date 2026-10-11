@@ -125,7 +125,8 @@ class InfraSettings(BaseSettings):
     # without it a VM workspace keeps no snapshot.
     # `ec2` runs each machine as an instance in the platform's cloud
     # account, from the cloud pool's launch template
-    # (`machine_launch_template`), in the security group of its egress:
+    # (`machine_launch_template`), in one of `machine_subnets` (comma
+    # separated), and in the security group of its egress:
     # `machine_closed_group` reaches the gateway alone, and
     # `machine_open_group` adds open egress. Its image is an AMI, and its
     # snapshots are the cloud's own, under the template's key. A process on
@@ -135,6 +136,7 @@ class InfraSettings(BaseSettings):
     machine_prefix: str = Field(default="acme-vm-", pattern=r"^[a-z][a-z0-9-]*-$", max_length=21)
     machine_store_encrypted: bool = False
     machine_launch_template: str = ""
+    machine_subnets: str = ""
     machine_closed_group: str = ""
     machine_open_group: str = ""
     # The cloud pool: a machine per session of the cloud whose workspace is a

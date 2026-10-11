@@ -28,6 +28,7 @@ from contracts import (
     automation_storage,
     benchmark_storage,
     budget_storage,
+    cloud_pool_storage,
     event_storage,
     evidence_storage,
     fill_set_storage,
@@ -177,6 +178,23 @@ STORAGE_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         ("BenchmarkStorageInterface", "create_benchmark"),
         ("BenchmarkStorageInterface", "read_benchmark"),
         ("BenchmarkStorageInterface", "read_history"),
+        # The machines the cloud pool started: the platform's own rows of the
+        # system scope, since a warm machine serves no tenant until a
+        # session claims it, and the sweep reads them all.
+        ("CloudPoolStorageInterface", "create_machine"),
+        ("CloudPoolStorageInterface", "reserve_warm"),
+        ("CloudPoolStorageInterface", "read_machine"),
+        ("CloudPoolStorageInterface", "read_by_key"),
+        ("CloudPoolStorageInterface", "read_machines"),
+        ("CloudPoolStorageInterface", "read_of_session"),
+        ("CloudPoolStorageInterface", "read_of_tenant"),
+        ("CloudPoolStorageInterface", "claim_warm"),
+        ("CloudPoolStorageInterface", "mark_started"),
+        ("CloudPoolStorageInterface", "spend_key"),
+        ("CloudPoolStorageInterface", "mark_enrolled"),
+        ("CloudPoolStorageInterface", "mark_sealed"),
+        ("CloudPoolStorageInterface", "rekey"),
+        ("CloudPoolStorageInterface", "delete_machine"),
     }
 )
 
@@ -186,6 +204,7 @@ CROSS_TENANT_CASES: dict[str, frozenset[str]] = {
     "AgentStorageInterface": agent_storage.CROSS_TENANT_CASES,
     "AttributionStorageInterface": attribution_storage.CROSS_TENANT_CASES,
     "BenchmarkStorageInterface": benchmark_storage.CROSS_TENANT_CASES,
+    "CloudPoolStorageInterface": cloud_pool_storage.CROSS_TENANT_CASES,
     "BudgetStorageInterface": budget_storage.CROSS_TENANT_CASES,
     "EventStorageInterface": event_storage.CROSS_TENANT_CASES,
     "EvidenceStorageInterface": evidence_storage.CROSS_TENANT_CASES,
@@ -225,6 +244,12 @@ fence, so the mapping is checked against the interfaces themselves."""
 
 MANAGER_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
     {
+        # The cloud pool's purge of a session and its erase of the session's
+        # disks, named with the tenant, which run for no principal; and its
+        # close at shutdown.
+        ("CloudPoolManagerInterface", "purge"),
+        ("CloudPoolManagerInterface", "erase"),
+        ("CloudPoolManagerInterface", "close"),
         # The outbox relay is the documented exception: it runs after a core write
         # or in the sweep, under the tenant the row names, and takes no stage.
         ("OutboxRelayInterface", "relay"),
@@ -347,6 +372,14 @@ REQUEST_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
         # credential, its claim, and its answers run from the request stage,
         # and placement rebuilds the tenant's context from the item.
         ("HostsManagerInterface", "enroll_claimant"),
+        # The cloud pool's machine host, which enrolls through the pool with
+        # the key the pool handed its machine, and is ended as the pool lets
+        # the machine go, from its sweep and its purge too.
+        ("HostsManagerInterface", "admit_machine"),
+        ("HostsManagerInterface", "retire_host"),
+        ("CloudPoolManagerInterface", "enroll"),
+        # And the pool's sweep, across tenants and for none.
+        ("CloudPoolManagerInterface", "sweep"),
         ("HostsManagerInterface", "authenticate_claimant"),
         ("HostsManagerInterface", "claim_as"),
         ("HostsManagerInterface", "held_as"),

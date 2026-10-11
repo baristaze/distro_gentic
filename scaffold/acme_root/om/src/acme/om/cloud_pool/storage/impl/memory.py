@@ -21,13 +21,13 @@ class CloudPoolStorageMemoryImpl(CloudPoolStorageInterface):
         async with self._lock:
             self._add(machine)
 
-    async def reserve_warm(self, wanted: int, made: Sequence[PoolMachine]) -> list[PoolMachine]:
+    async def reserve_warm(self, wanted: int, made: Sequence[PoolMachine]) -> int:
         async with self._lock:
             warm = sum(1 for machine in self._machines.values() if machine.warm)
             written = list(made[: warm_to_start(wanted, warm)])
             for machine in written:
                 self._add(machine)
-            return written
+            return len(written)
 
     async def read_machine(self, machine_id: UUID) -> PoolMachine | None:
         return self._machines.get(machine_id)
@@ -38,25 +38,25 @@ class CloudPoolStorageMemoryImpl(CloudPoolStorageInterface):
             None,
         )
 
-    async def read_of_session(self, org_id: UUID, session_id: UUID) -> PoolMachine | None:
+    async def read_of_session(self, tenant_id: UUID, session_id: UUID) -> PoolMachine | None:
         return next(
             (
                 m
                 for m in self._oldest_first()
-                if m.tenant_id == org_id and m.session_id == session_id
+                if m.tenant_id == tenant_id and m.session_id == session_id
             ),
             None,
         )
 
-    async def read_of_tenant(self, org_id: UUID, limit: int) -> list[PoolMachine]:
-        return [m for m in self._oldest_first() if m.tenant_id == org_id][:limit]
+    async def read_of_tenant(self, tenant_id: UUID, limit: int) -> list[PoolMachine]:
+        return [m for m in self._oldest_first() if m.tenant_id == tenant_id][:limit]
 
     async def read_machines(self, limit: int) -> list[PoolMachine]:
         return self._oldest_first()[:limit]
 
     async def claim_warm(
         self,
-        org_id: UUID,
+        tenant_id: UUID,
         session_id: UUID,
         pool_id: UUID,
         bound_by: UUID,
@@ -71,7 +71,7 @@ class CloudPoolStorageMemoryImpl(CloudPoolStorageInterface):
                 ):
                     claimed = machine.model_copy(
                         update={
-                            "tenant_id": org_id,
+                            "tenant_id": tenant_id,
                             "session_id": session_id,
                             "pool_id": pool_id,
                             "bound_by": bound_by,

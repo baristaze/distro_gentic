@@ -16,6 +16,7 @@ there, its host pulls, so `run` and `channel` refuse."""
 import asyncio
 import base64
 import hashlib
+import random
 from collections.abc import AsyncIterator, Callable, Sequence
 from datetime import timedelta
 from typing import Any
@@ -48,10 +49,10 @@ class MachinesEc2Impl(MachinesInterface, SeedsInterface):
     """Machines through the EC2 API, each call bounded by the client's
     timeout, and each wait for a state by `boot`. `template` is the launch
     template the cloud pool's module makes: the instance's size, its
-    subnet, its encrypted disk under the pool's key, and no instance role.
-    `closed` and `open` are the security groups a machine starts in by its
-    egress. `encrypted` declares the template's disks encrypted, which the
-    module holds."""
+    encrypted disk under the pool's key, and no instance role. A machine
+    starts in one of `subnets`, picked at each start, and in `closed` or
+    `open`, the security group of its egress. `encrypted` declares the
+    template's disks encrypted, which the module holds."""
 
     def __init__(
         self,
@@ -61,6 +62,7 @@ class MachinesEc2Impl(MachinesInterface, SeedsInterface):
         timeout: timedelta,
         boot: timedelta,
         template: str,
+        subnets: tuple[str, ...],
         closed: str,
         open_: str,
         encrypted: bool,
@@ -77,6 +79,7 @@ class MachinesEc2Impl(MachinesInterface, SeedsInterface):
         self._region = region
         self._boot = boot
         self._template = template
+        self._subnets = subnets
         self._closed = closed
         self._open = open_
         self._encrypted = encrypted
@@ -84,8 +87,11 @@ class MachinesEc2Impl(MachinesInterface, SeedsInterface):
         self._sleep = sleep
 
     async def probe(self, longest: str) -> str | None:
-        if not (self._template and self._closed and self._open):
-            return "the cloud's machines name no launch template and no security groups"
+        if not (self._template and self._subnets and self._closed and self._open):
+            return (
+                "the cloud's machines name no launch template, subnets, and security groups "
+                "of the cloud pool's module"
+            )
         try:
             with translated("ec2", "probe"):
                 await self._ec2.client().describe_launch_templates(
@@ -303,6 +309,7 @@ class MachinesEc2Impl(MachinesInterface, SeedsInterface):
             "ImageId": image_id,
             "MinCount": 1,
             "MaxCount": 1,
+            "SubnetId": random.choice(self._subnets),
             "SecurityGroupIds": [group],
             "MetadataOptions": {
                 "HttpEndpoint": "enabled",

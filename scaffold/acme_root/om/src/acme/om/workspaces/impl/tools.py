@@ -293,7 +293,7 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
             assert self._cloud is not None
             self._kept_whole.discard(workspace.id)
             self._pooled.discard(workspace.id)
-            await self._cloud.release(ctx, ctx.org_id, workspace.id)
+            await self._cloud.release(ctx, workspace.id)
         elif workspace.id in self._hosted or workspace.id in self._pooled:
             # Its host holds it, warm for the next loop: nothing of this
             # process's goes. A machine of the cloud pool is let go past the

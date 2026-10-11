@@ -312,9 +312,7 @@ async def test_a_machine_of_the_cloud_pool_is_never_handed_another_sessions_work
     session's item is handed over."""
     ajax = await an_owner(managers)
     machine_id, pool, mine, other = new_id(), new_id(), new_id(), new_id()
-    machine = Claimant(
-        kind=HOST, id=machine_id, org_id=ajax.org_id, pool_id=pool, session_id=mine
-    )
+    machine = Claimant(kind=HOST, id=machine_id, org_id=ajax.org_id, pool_id=pool, session_id=mine)
     stray = await managers.work.enqueue(
         ajax, an_item(ajax, WorkKind.EXEC, exec_on(machine_id, other))
     )
