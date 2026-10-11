@@ -461,3 +461,43 @@ async def test_a_take_whose_restore_outlasts_its_wait_hands_nothing_over_and_a_h
     assert not await managers.work.has_open(api.owner, WorkKind.WORKSPACE, session_id)
     assert await host.claim_once() is None
     assert twin.files[session_id] == b"the person's work by hand"
+
+
+async def test_the_sweep_keeps_a_kept_sessions_hosted_instance_that_no_snapshot_holds(
+    api: Stack, tmp_path: Path
+) -> None:
+    managers = api.container.managers
+    pool = await api.pool()
+    session_id = await a_pinned_session(api, pool.id)
+    await managers.workspaces.pinned(api.owner, session_id, KEPT)
+    host, twin, _ = await a_host(api, pool.id, tmp_path)
+    await prepared(api, host, session_id)
+    record = await kept_on(api, host, twin, session_id, b"the snapshot")
+    epoch = await with_snapshot_step(api, session_id, record)
+    # The next run changed the workspace and died before its end's snapshot.
+    step = changed_step(new_id(), utcnow(), session_id, new_id())
+    await managers.steps.append_steps(api.owner, session_id, epoch, [step])
+    twin.files[session_id] = b"the snapshot, and what the run installed since"
+    now = [utcnow()]
+    sweep = HeldWorkspacesSweep(
+        api.container.infra.get_workspaces(),
+        managers.tools,
+        managers.workspaces,
+        managers.agent_sessions,
+        managers.steps,
+        managers.work,
+        managers.tenancy,
+        HeldOptions(grace=timedelta(minutes=5)),
+        clock=lambda: now[0],
+        relay=managers.relay,
+    )
+    stage = RequestContext(request_id=new_id(), app=AppContext(type=AppType.WORKER, version="t"))
+
+    assert await sweep(stage) == 0, "the grace begins"
+    now[0] += timedelta(minutes=10)
+    assert await sweep(stage) == 0, "no snapshot holds it: it stays"
+    assert await sweep(stage) == 0
+    asked = await managers.work.latest_for_target(api.owner, WorkKind.WORKSPACE, session_id)
+    assert asked is not None and asked.payload["operation"] == "snapshot", "no release is asked"
+    assert session_id in twin.live
+    assert twin.files[session_id] == b"the snapshot, and what the run installed since"
