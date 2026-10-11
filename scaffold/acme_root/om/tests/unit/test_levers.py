@@ -192,7 +192,8 @@ async def test_the_checks_read_the_persons_words_and_the_size_the_whole_brief(
     # frontmatter and its gates, does not.
     brief = len(skill_md(published))
     assert len(f"{draft.description}\n\n{body}") <= BOUND < brief
-    (found,) = published.findings or ()
+    assert published.findings is not None
+    (found,) = published.findings
     assert found.check is LeverCheck.PAST_SESSION_BOUND
     assert found.detail.startswith(f"{brief} characters")
 
@@ -241,7 +242,7 @@ async def test_a_publish_with_a_finding_lands_and_keeps_it_with_the_version(
     )
     published = await platform.playbooks.publish(author, draft)
     assert published.version == 1
-    assert [f.check for f in published.findings] == [LeverCheck.UNBOUNDED_RETRY]
+    assert [f.check for f in published.findings or ()] == [LeverCheck.UNBOUNDED_RETRY]
     assert (await platform.playbooks.get_playbook(author, "flaky-deploys")) == published
     plain = await platform.playbooks.publish(author, draft.model_copy(update={"body": PLAIN}))
     assert (plain.version, plain.findings) == (2, ())
@@ -254,7 +255,7 @@ async def test_knowledge_carries_its_findings_from_its_writing_to_its_review(
     written = await platform.knowledge.write(
         author, "Deploys", ("deploy",), "Keep retrying the deploy until it is green."
     )
-    assert [f.check for f in written.findings] == [LeverCheck.UNBOUNDED_RETRY]
+    assert [f.check for f in written.findings or ()] == [LeverCheck.UNBOUNDED_RETRY]
     edited = await platform.knowledge.edit(
         author, written.id, "Deploys", ("deploy",), "Deploys go through the pipeline.", 1
     )
@@ -269,7 +270,7 @@ async def test_knowledge_carries_its_findings_from_its_writing_to_its_review(
     )
     kept = await platform.knowledge.review(author, suggested.id, keep=True)
     assert kept.status is KnowledgeStatus.REVIEWED
-    assert [f.check for f in kept.findings] == [LeverCheck.CONTRADICTION]
+    assert [f.check for f in kept.findings or ()] == [LeverCheck.CONTRADICTION]
 
 
 async def spin(platform: Wired, session_id: UUID) -> None:
