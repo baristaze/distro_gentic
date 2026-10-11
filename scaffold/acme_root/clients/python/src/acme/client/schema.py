@@ -975,23 +975,6 @@ class KnowledgeStatus(StrEnum):
     rejected = 'rejected'
 
 
-class KnowledgeView(BaseModel):
-    """
-    An entry, its state, who suggested and who reviewed it, and the
-    version an edit names in `If-Match`.
-    """
-    created_at: Annotated[AwareDatetime, Field(title='Created At')]
-    id: Annotated[UUID, Field(title='Id')]
-    reviewed_by: Annotated[UUID | None, Field(title='Reviewed By')]
-    status: KnowledgeStatus
-    suggested_by: Annotated[UUID | None, Field(title='Suggested By')]
-    text: Annotated[str, Field(title='Text')]
-    title: Annotated[str, Field(title='Title')]
-    trigger: Annotated[list[str], Field(title='Trigger')]
-    updated_at: Annotated[AwareDatetime, Field(title='Updated At')]
-    version: Annotated[int, Field(title='Version')]
-
-
 class LaneLoadView(BaseModel):
     kind: Annotated[str, Field(title='Kind')]
     lane: Annotated[str, Field(title='Lane')]
@@ -1065,6 +1048,33 @@ class LedgerPageView(BaseModel):
     """
     has_more: Annotated[bool, Field(title='Has More')]
     items: Annotated[list[LedgerEntryView], Field(title='Items')]
+
+
+class LeverCheck(StrEnum):
+    """
+    What a check found in a lever's text.
+    """
+    repeated_phrase = 'repeated_phrase'
+    contradiction = 'contradiction'
+    unknown_name = 'unknown_name'
+    unbounded_retry = 'unbounded_retry'
+    past_session_bound = 'past_session_bound'
+
+
+class LeverKind(StrEnum):
+    playbook = 'playbook'
+    knowledge = 'knowledge'
+
+
+class LeverView(BaseModel):
+    """
+    One version of a lever as a session reached it: a playbook by its
+    name, a knowledge entry by its slug.
+    """
+    id: Annotated[UUID, Field(title='Id')]
+    kind: LeverKind
+    name: Annotated[str, Field(title='Name')]
+    version: Annotated[int, Field(title='Version')]
 
 
 class LimitsBody(BaseModel):
@@ -1397,17 +1407,6 @@ class PlatformSizeView(BaseModel):
     since: Annotated[AwareDatetime, Field(title='Since')]
     tenants: Annotated[int, Field(title='Tenants')]
     users: Annotated[int, Field(title='Users')]
-
-
-class PlaybookView(BaseModel):
-    body: Annotated[str, Field(title='Body')]
-    created_at: Annotated[AwareDatetime, Field(title='Created At')]
-    description: Annotated[str, Field(title='Description')]
-    gates: Annotated[list[GateView], Field(title='Gates')]
-    id: Annotated[UUID, Field(title='Id')]
-    name: Annotated[str, Field(title='Name')]
-    published_by: Annotated[UUID, Field(title='Published By')]
-    version: Annotated[int, Field(title='Version')]
 
 
 class TargetKind(RootModel[str]):
@@ -2796,6 +2795,16 @@ class FillView(BaseModel):
     thinking_budget: Annotated[int | None, Field(title='Thinking Budget')]
 
 
+class FindingView(BaseModel):
+    """
+    What one check found: advice for the person who published the
+    lever, never a refusal. `excerpt` is the words it stands on.
+    """
+    check: LeverCheck
+    detail: Annotated[str, Field(title='Detail')]
+    excerpt: Annotated[str | None, Field(title='Excerpt')]
+
+
 class GrantRequest(BaseModel):
     """
     The role the automation principal holds: never above the granter's.
@@ -2942,6 +2951,25 @@ class ItemPageView(BaseModel):
     streams: Annotated[list[ItemStreamView], Field(title='Streams')]
 
 
+class KnowledgeView(BaseModel):
+    """
+    An entry, its state, who suggested and who reviewed it, the version
+    an edit names in `If-Match`, and what the lever checks found in its
+    words at that version: advice, never a refusal.
+    """
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    findings: Annotated[list[FindingView], Field(title='Findings')]
+    id: Annotated[UUID, Field(title='Id')]
+    reviewed_by: Annotated[UUID | None, Field(title='Reviewed By')]
+    status: KnowledgeStatus
+    suggested_by: Annotated[UUID | None, Field(title='Suggested By')]
+    text: Annotated[str, Field(title='Text')]
+    title: Annotated[str, Field(title='Title')]
+    trigger: Annotated[list[str], Field(title='Trigger')]
+    updated_at: Annotated[AwareDatetime, Field(title='Updated At')]
+    version: Annotated[int, Field(title='Version')]
+
+
 class LastOwnerDetail(BaseModel):
     """
     What a `last_owner` refusal carries: every team org the person is the
@@ -2966,6 +2994,22 @@ class LeaseRequestView(BaseModel):
     wait_until: Annotated[AwareDatetime | None, Field(title='Wait Until')]
     waiter_id: Annotated[UUID | None, Field(title='Waiter Id')]
     waiter_kind: WaiterKind | None
+
+
+class LeverStandingView(BaseModel):
+    """
+    A lever against the window: of the sessions that reached it, how
+    many stalled, against the sessions that did not; `lift` is the first
+    rate less the second; and the sessions that stalled with it, the first
+    of them.
+    """
+    lever: LeverView
+    lift: Annotated[float, Field(title='Lift')]
+    sessions: Annotated[int, Field(title='Sessions')]
+    sessions_without: Annotated[int, Field(title='Sessions Without')]
+    spun: Annotated[int, Field(title='Spun')]
+    spun_sessions: Annotated[list[UUID], Field(title='Spun Sessions')]
+    spun_without: Annotated[int, Field(title='Spun Without')]
 
 
 class LineView(BaseModel):
@@ -3190,6 +3234,22 @@ class PlacementView(BaseModel):
     session_id: Annotated[UUID, Field(title='Session Id')]
     version: Annotated[int, Field(title='Version')]
     waiting: Annotated[bool, Field(title='Waiting')]
+
+
+class PlaybookView(BaseModel):
+    """
+    A version as published, with what the lever checks found in it as it
+    was: advice, which never refused the publish.
+    """
+    body: Annotated[str, Field(title='Body')]
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    description: Annotated[str, Field(title='Description')]
+    findings: Annotated[list[FindingView], Field(title='Findings')]
+    gates: Annotated[list[GateView], Field(title='Gates')]
+    id: Annotated[UUID, Field(title='Id')]
+    name: Annotated[str, Field(title='Name')]
+    published_by: Annotated[UUID, Field(title='Published By')]
+    version: Annotated[int, Field(title='Version')]
 
 
 class ProjectView(BaseModel):
@@ -3667,6 +3727,20 @@ class LeasePageView(BaseModel):
     """
     items: Annotated[list[LeaseEntryView], Field(title='Items')]
     next_cursor: Annotated[str | None, Field(title='Next Cursor')]
+
+
+class LeverReadingView(BaseModel):
+    """
+    The levers of one tenant's sessions created in `[since, until)`, best
+    first. `complete` is false when the window held more sessions, or a
+    session more steps, than one reading reads.
+    """
+    complete: Annotated[bool, Field(title='Complete')]
+    sessions: Annotated[int, Field(title='Sessions')]
+    since: Annotated[AwareDatetime, Field(title='Since')]
+    spun: Annotated[int, Field(title='Spun')]
+    standings: Annotated[list[LeverStandingView], Field(title='Standings')]
+    until: Annotated[AwareDatetime, Field(title='Until')]
 
 
 class LivePageView(BaseModel):

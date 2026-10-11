@@ -8,13 +8,16 @@ kinds of thing [Acme is made of](../../../../README.md).
 - **Playbook**: one version of a brief in the [Agent
   Skills](https://agentskills.io/specification) format: its name, its
   description, its body (what is needed, the steps, the safety
-  requirements, the success measures, what is forbidden), and its
-  approval gates, which travel in a namespaced metadata extension.
+  requirements, the success measures, what is forbidden), its approval
+  gates, which travel in a namespaced metadata extension, and what the
+  [lever checks](../levers/README.md) found in it as it was published.
 - **Invocation**: a version a principal brought into one session.
 
 ## What can happen
 
-- **Publish** the next version of a name, by a person in person.
+- **Publish** the next version of a name, by a person in person. The
+  checks read it first, and what they find is kept with the version and
+  answered beside the publish; a finding never refuses one.
 - **Invoke** a version in a session, by a principal in person who may
   instruct it. Its brief arrives as that principal's message, and its
   gates hold there, and in every sub-agent below it, from then on, a

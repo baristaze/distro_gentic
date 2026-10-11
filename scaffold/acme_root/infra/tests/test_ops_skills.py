@@ -61,6 +61,9 @@ READERS = sorted(
 # The skills that read model spend from the usage records, through the
 # operator plane with the read token alone: no cloud profile.
 SPEND_READERS = ["audit-model-spend", "ops-loop-spend", "ops-session-spend"]
+# The skills that read which levers came before a tenant's sessions stalled,
+# through the operator plane with the read token alone: no cloud profile.
+LEVER_READERS = ["audit-agent-levers"]
 # The skills that reach the env file's tokens.
 TOKEN_HOLDERS = [
     "ops-investigate",
@@ -70,6 +73,7 @@ TOKEN_HOLDERS = [
     "stress-test-run",
     *PLATFORM,
     *SPEND_READERS,
+    *LEVER_READERS,
 ]
 # The two that drive traffic, whose `acme-ops` command reads the provisioner's
 # file; every other token holder reads, and holds the read token alone.
@@ -85,7 +89,7 @@ SOURCED = re.compile(
 )
 # The skills that read an environment under the investigate profile.
 INVESTIGATORS = [
-    *(name for name in TOKEN_HOLDERS if name not in SPEND_READERS),
+    *(name for name in TOKEN_HOLDERS if name not in (*SPEND_READERS, *LEVER_READERS)),
     "ops-infra-as-code",
     "ops-integration-silent",
     "audit-deploy-time",
@@ -95,6 +99,7 @@ INVESTIGATORS = [
 ADMINISTRATORS = ["ops-cloud-deployment-create", "ops-cloud-deployment-nuke"]
 # The audits: read-only analyses that write a report and propose tickets.
 AUDITS = [
+    "audit-agent-levers",
     "audit-credential-lifetimes",
     "audit-database-calls",
     "audit-deploy-time",
@@ -182,9 +187,9 @@ def test_a_skill_that_reads_names_no_write_token(name: str) -> None:
     assert "ACME_PROVISIONER_TOKEN" not in text
 
 
-# The `acme-ops` commands a skill that reads may run: neither loads the
+# The `acme-ops` commands a skill that reads may run: none loads the
 # provisioner's token, which `traffic` and `stress` do.
-READ_COMMANDS = {"size", "signals"}
+READ_COMMANDS = {"size", "signals", "levers"}
 
 
 @pytest.mark.parametrize("name", READS)

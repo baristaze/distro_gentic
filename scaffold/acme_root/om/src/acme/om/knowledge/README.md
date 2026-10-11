@@ -10,7 +10,9 @@ of](../../../../README.md).
   its state: suggested by an agent, reviewed by a person, or rejected. It
   belongs to one project of its tenant, or to the whole tenant, and
   carries a slug, its title's words and the end of its id, that an agent
-  reads it by.
+  reads it by, and what the [lever checks](../levers/README.md) found in
+  its words at its version.
+- **Recall**: an entry's version a session recalled.
 
 ## What can happen
 
@@ -27,7 +29,7 @@ of](../../../../README.md).
   is written again instead.
 - **Recall.** The reviewed entries whose every trigger word appears in
   what a session is about arrive in it, once each, at its next model
-  call. A session recalls as it starts: when its first loop prepares the
+  call, and the version of each is recorded. A session recalls as it starts: when its first loop prepares the
   workspace, its title and what its principals said so far are what it
   is about, and its first model call reads what they trigger.
 - **Search and read.** An agent searches the entries its session reaches

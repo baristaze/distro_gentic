@@ -10,6 +10,7 @@ from acme.om.playbooks.types.playbook import MAX_BODY, MAX_DESCRIPTION, MAX_SKIL
 from acme.om.tools.types.policy import Decision
 from acme.om.tools.types.tool import CLASS_NAME, TOOL_NAME
 from acme.services.api.types.common import RequestBody, View
+from acme.services.api.types.levers import FindingView
 
 MAX_GATES = 50
 
@@ -40,6 +41,9 @@ class PublishRequest(RequestBody):
 
 
 class PlaybookView(View):
+    """A version as published, with what the lever checks found in it as it
+    was: advice, which never refused the publish."""
+
     id: UUID
     name: str
     version: int
@@ -48,3 +52,4 @@ class PlaybookView(View):
     gates: list[GateView]
     published_by: UUID
     created_at: datetime
+    findings: list[FindingView]

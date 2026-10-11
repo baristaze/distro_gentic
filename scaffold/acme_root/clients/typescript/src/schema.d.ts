@@ -380,6 +380,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/orgs/{org_id}/levers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Levers
+         * @description The playbooks and knowledge the org's sessions created in `[since,
+         *     until)` reached, ranked by how much more often the sessions that
+         *     reached them stalled, with the sessions behind each figure. A stall is
+         *     read from the steps' headers, never from what a step says. A window
+         *     that does not end after it starts is `422`.
+         */
+        get: operations["read_levers_v1_admin_orgs__org_id__levers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/orgs/{org_id}/members": {
         parameters: {
             query?: never;
@@ -4968,6 +4992,18 @@ export interface components {
             thinking_budget: number | null;
         };
         /**
+         * FindingView
+         * @description What one check found: advice for the person who published the
+         *     lever, never a refusal. `excerpt` is the words it stands on.
+         */
+        FindingView: {
+            check: components["schemas"]["LeverCheck"];
+            /** Detail */
+            detail: string;
+            /** Excerpt */
+            excerpt: string | null;
+        };
+        /**
          * FlagsView
          * @description The session's flags that a client may read, evaluated for its org and
          *     its user. A flag read on the server alone is never in it.
@@ -5556,8 +5592,9 @@ export interface components {
         KnowledgeStatus: "suggested" | "reviewed" | "rejected";
         /**
          * KnowledgeView
-         * @description An entry, its state, who suggested and who reviewed it, and the
-         *     version an edit names in `If-Match`.
+         * @description An entry, its state, who suggested and who reviewed it, the version
+         *     an edit names in `If-Match`, and what the lever checks found in its
+         *     words at that version: advice, never a refusal.
          */
         KnowledgeView: {
             /**
@@ -5565,6 +5602,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Findings */
+            findings: components["schemas"]["FindingView"][];
             /**
              * Id
              * Format: uuid
@@ -5781,6 +5820,82 @@ export interface components {
             has_more: boolean;
             /** Items */
             items: components["schemas"]["LedgerEntryView"][];
+        };
+        /**
+         * LeverCheck
+         * @description What a check found in a lever's text.
+         * @enum {string}
+         */
+        LeverCheck: "repeated_phrase" | "contradiction" | "unknown_name" | "unbounded_retry" | "past_session_bound";
+        /**
+         * LeverKind
+         * @enum {string}
+         */
+        LeverKind: "playbook" | "knowledge";
+        /**
+         * LeverReadingView
+         * @description The levers of one tenant's sessions created in `[since, until)`, best
+         *     first. `complete` is false when the window held more sessions, or a
+         *     session more steps, than one reading reads.
+         */
+        LeverReadingView: {
+            /** Complete */
+            complete: boolean;
+            /** Sessions */
+            sessions: number;
+            /**
+             * Since
+             * Format: date-time
+             */
+            since: string;
+            /** Spun */
+            spun: number;
+            /** Standings */
+            standings: components["schemas"]["LeverStandingView"][];
+            /**
+             * Until
+             * Format: date-time
+             */
+            until: string;
+        };
+        /**
+         * LeverStandingView
+         * @description A lever against the window: of the sessions that reached it, how
+         *     many stalled, against the sessions that did not; `lift` is the first
+         *     rate less the second; and the sessions that stalled with it, the first
+         *     of them.
+         */
+        LeverStandingView: {
+            lever: components["schemas"]["LeverView"];
+            /** Lift */
+            lift: number;
+            /** Sessions */
+            sessions: number;
+            /** Sessions Without */
+            sessions_without: number;
+            /** Spun */
+            spun: number;
+            /** Spun Sessions */
+            spun_sessions: string[];
+            /** Spun Without */
+            spun_without: number;
+        };
+        /**
+         * LeverView
+         * @description One version of a lever as a session reached it: a playbook by its
+         *     name, a knowledge entry by its slug.
+         */
+        LeverView: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            kind: components["schemas"]["LeverKind"];
+            /** Name */
+            name: string;
+            /** Version */
+            version: number;
         };
         /**
          * LimitsBody
@@ -6552,7 +6667,11 @@ export interface components {
             /** Users */
             users: number;
         };
-        /** PlaybookView */
+        /**
+         * PlaybookView
+         * @description A version as published, with what the lever checks found in it as it
+         *     was: advice, which never refused the publish.
+         */
         PlaybookView: {
             /** Body */
             body: string;
@@ -6563,6 +6682,8 @@ export interface components {
             created_at: string;
             /** Description */
             description: string;
+            /** Findings */
+            findings: components["schemas"]["FindingView"][];
             /** Gates */
             gates: components["schemas"]["GateView"][];
             /**
@@ -9007,6 +9128,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LedgerPageView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_levers_v1_admin_orgs__org_id__levers_get: {
+        parameters: {
+            query: {
+                since: string;
+                until: string;
+            };
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeverReadingView"];
                 };
             };
             /** @description Validation Error */

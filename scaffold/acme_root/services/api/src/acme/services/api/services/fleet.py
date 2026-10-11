@@ -1,10 +1,12 @@
 """The fleet service: the platform's operator routes, in views. An operator
 writes a tenant's fair share, reads where one of its sessions' work stands
-and what one of its hosts is handed, and reads a session's shape; opening
-its content takes a grant of its own in that tenant. Every call takes
+and what one of its hosts is handed, reads a session's shape, and reads which
+levers its sessions reached before they stalled; opening a session's
+content takes a grant of its own in that tenant. Every call takes
 `OperatorContext` and names the tenant."""
 
 from abc import ABC, abstractmethod
+from datetime import datetime
 from uuid import UUID
 
 from acme.om.context import OperatorContext
@@ -16,6 +18,7 @@ from acme.services.api.types.fleet import (
     ShapePageView,
     ShareView,
 )
+from acme.services.api.types.levers import LeverReadingView
 
 
 class FleetServiceInterface(ABC):
@@ -43,3 +46,8 @@ class FleetServiceInterface(ABC):
     async def get_session_content(
         self, admin: OperatorContext, org_id: UUID, session_id: UUID, after_seq: int, limit: int
     ) -> StepPageView: ...
+
+    @abstractmethod
+    async def read_levers(
+        self, admin: OperatorContext, org_id: UUID, since: datetime, until: datetime
+    ) -> LeverReadingView: ...
