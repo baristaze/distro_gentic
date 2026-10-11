@@ -74,7 +74,9 @@ macOS.
   environment's image in place of the host's own. A prepare that finds the
   build running waits a while, then is refused until it is done. A
   setup command that fails keeps nothing, and the prepare is answered
-  `unbuilt` with the command and its exit code. A prepare whose setup
+  `unbuilt` with the command, its text cut to fit the answer, and its
+  exit code. A command in a workspace on a base starts a stopped
+  instance anew from the base the host keeps. A prepare whose setup
   reaches a registry asks for open egress, so an owner who closed it
   refuses that prepare.
 - **Shares its proxy and its CA, under open egress alone.** A command in

@@ -17,8 +17,8 @@ a prepare on a base with setup starts the workspace from the base this
 host built and keeps in its own store (`acme.apps.host.bases`), and one
 whose base failed to build is answered `unbuilt`, with the reason. An `exec` item
 runs through its own local transport, in the workspace it holds,
-prepared again first, so an instance that stopped since starts anew over
-its files. The output streams back a part
+prepared again first, on its base when it has one, so an instance that
+stopped since starts anew over its files. The output streams back a part
 at a time and the result is pushed once, each with the hash the host
 declares of the bytes it sends. While the item runs the host renews its
 lease, and a stop from the control stream ends the command at once: the
@@ -291,14 +291,25 @@ class ExecutorRelayImpl(ExecutorInterface):
         """The workspace an item runs in, as this host holds it. One its own
         provider makes is prepared again first: a look while its instance
         runs, and a new instance over its files when it stopped, as after a
-        reboot or a Docker restart, as a cloud loop's prepare does. One this
-        host would make elsewhere than the platform says it is is refused."""
+        reboot or a Docker restart, as a cloud loop's prepare does. One on a
+        base with setup is prepared on the base this host keeps, so a new
+        instance starts from it; none is built here, since an item's
+        ceilings hold no setup's egress. One this host would make elsewhere
+        than the platform says it is is refused."""
         provider = self._workspaces.get(spec.mode)
         if provider is None:
             return Workspace(
                 id=detail.session_id, org_id=detail.org_id, spec=spec, location=detail.location
             )
-        workspace = await provider.prepare(detail.org_id, detail.session_id, spec)
+        base = None
+        if spec.base is not None and spec.base.setup:
+            if self._bases is not None:
+                base = await self._bases.kept(detail.org_id, spec)
+            if base is None:
+                raise IsolationRefused(
+                    f"this host keeps no base for session {detail.session_id}'s workspace"
+                )
+        workspace = await provider.prepare(detail.org_id, detail.session_id, spec, base=base)
         if workspace.location != detail.location:
             raise IsolationRefused(
                 f"this host holds session {detail.session_id}'s workspace at "

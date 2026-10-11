@@ -4,20 +4,26 @@ its own, and keeps it in its own store: the next workspace on it starts from
 the store's copy with no setup run, and nothing of it reaches the
 platform's bucket. A setup command that fails keeps nothing, and the host
 answers the prepare unbuilt, so the run that waits says which command
-failed and how. The setup is given no secret and no credential of the
+failed and how, one too long for the answer cut to fit it. A command in a
+workspace on a base, and what a checkout's attach sends it, runs on the
+base the host keeps. The setup is given no secret and no credential of the
 host's, and a base that holds the value of a secret the host keeps is not
 kept. A prepare that may build its base asks for its setup's egress, and an
 owner who closed egress refuses it before anything runs."""
 
+import asyncio
 import hashlib
+import re
 from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
+from typing import get_args
 from uuid import UUID
 
 import pytest
 from contracts.agent_session_storage import make_session
 from host_support import Stack, probes
+from test_relay import claims, command, runner_of
 
 from acme.apps.host.agent import HostAgent
 from acme.apps.host.bases import base_key
@@ -41,9 +47,11 @@ from acme.infra.workspaces import (
     WorkspaceBase,
 )
 from acme.infra.workspaces.twin import WorkspaceTwinImpl
+from acme.om.projects.types.project import SetupCommand
 from acme.om.relay.impl.workspaces import PlacedWorkspacesRelayedImpl
 from acme.om.tools.impl.bases import PREFIX
 from acme.om.work.types.work_item import WorkKind, WorkStatus
+from acme.om.workspaces.impl.git import INCOMING
 
 SETUP = ("pip install acme-tools", "echo built >> /opt/count")
 BASE = WorkspaceBase(
@@ -53,6 +61,15 @@ ON_BASE = IsolationSpec(
     mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode=EgressMode.NONE), base=BASE
 )
 SECRET = "tok-0123456789abcdef"
+LONGEST = get_args(SetupCommand)[1].max_length
+"""The longest setup command a project's environment allows."""
+
+
+async def _unsealed(data: bytes) -> None:
+    return None
+
+
+NO_SEAL = RecordSeal(seal=_unsealed, open=_unsealed)
 
 
 class Setup:
@@ -83,9 +100,15 @@ class ContainerTransportTwin(TransportTwinImpl):
         *,
         seal: RecordSeal,
     ) -> CommandResult:
-        twin = workspace.spec.model_copy(update={"mode": IsolationMode.TWIN})
-        inside = workspace.model_copy(update={"spec": twin})
-        return await super().run(inside, command, on_output, seal=seal)
+        return await super().run(_inside(workspace), command, on_output, seal=seal)
+
+    async def write_file(self, workspace: Workspace, path: str, data: bytes, epoch: int) -> None:
+        await super().write_file(_inside(workspace), path, data, epoch)
+
+
+def _inside(workspace: Workspace) -> Workspace:
+    twin = workspace.spec.model_copy(update={"mode": IsolationMode.TWIN})
+    return workspace.model_copy(update={"spec": twin})
 
 
 class BuiltContainerTwin(WorkspaceTwinImpl):
@@ -237,6 +260,63 @@ async def test_a_failed_setup_keeps_nothing_and_the_run_waits_with_its_command_a
     with pytest.raises(IsolationRefused, match=failed) as waits:
         await placed.held_on_host(api.owner, session_id, ON_BASE)
     assert waits.value.clears
+
+
+async def test_a_setup_command_at_the_longest_a_project_allows_fails_and_the_wait_names_it(
+    api: Stack, tmp_path: Path
+) -> None:
+    managers = api.container.managers
+    pool = await api.pool()
+    session_id = await a_pinned_session(api, pool.id)
+    host = await a_host(api, pool.id, tmp_path)
+    longest = "pip install " + "x" * (LONGEST - len("pip install "))
+    spec = ON_BASE.model_copy(update={"base": BASE.model_copy(update={"setup": (longest,)})})
+    host.setup.exits[longest] = 2
+    placed = PlacedWorkspacesRelayedImpl(lambda: managers.relay, lambda: managers.hosts)
+
+    with pytest.raises(IsolationRefused):
+        await placed.held_on_host(api.owner, session_id, spec)
+    await host.claimed()
+
+    row = await managers.work.latest_for_target(api.owner, WorkKind.WORKSPACE, session_id)
+    assert row is not None and row.last_error is not None, "the platform took the answer"
+    cut = r"the base's setup command 1, 'pip install x+…\[\d+ more characters\]', exited 2"
+    assert re.search(cut, row.last_error)
+    with pytest.raises(IsolationRefused, match=cut) as waits:
+        await placed.held_on_host(api.owner, session_id, spec)
+    assert waits.value.clears
+
+
+async def test_a_command_in_a_workspace_on_a_base_runs_on_the_base_the_host_keeps(
+    api: Stack, tmp_path: Path
+) -> None:
+    managers = api.container.managers
+    pool = await api.pool()
+    session_id = await a_pinned_session(api, pool.id)
+    host = await a_host(api, pool.id, tmp_path)
+    assert await managers.relay.ask_prepare(api.owner, session_id, ON_BASE)
+    await host.claimed()
+    assert await managers.relay.binding_of(api.owner, session_id) is not None
+    host.twin.started_from.clear()
+
+    epoch = await managers.steps.begin_run(api.owner, session_id)
+    workspace = Workspace(id=session_id, org_id=api.owner.org_id, spec=ON_BASE, location="")
+    runner = runner_of(api)
+    # A checkout's attach brings its bundle in, then runs git over it.
+    written = asyncio.ensure_future(runner.write_file(workspace, INCOMING, b"bundle", epoch))
+    while not written.done():
+        if await host.agent.tick() is None:
+            await asyncio.sleep(0.01)
+    await written
+    fetched = asyncio.ensure_future(
+        runner.run(workspace, command(epoch, "git", "fetch", INCOMING), seal=NO_SEAL)
+    )
+    await claims(host.agent, fetched)
+
+    assert (await fetched).exit_code == 0
+    assert host.setup.ran == [*SETUP, INCOMING], "the setup ran once, at the build"
+    kept = kept_base(host, api).read_bytes()
+    assert host.twin.started_from[session_id] == hashlib.sha256(kept).hexdigest()
 
 
 async def test_the_setup_on_a_host_is_given_no_secret_and_no_credential_of_the_hosts(
