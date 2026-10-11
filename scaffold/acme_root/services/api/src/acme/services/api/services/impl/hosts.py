@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from acme.om.base import thaw_mapping, utcnow
+from acme.om.cloud_pool import CloudPoolManagerInterface
 from acme.om.context import RequestContext, TenantContext
 from acme.om.hosts import HostsManagerInterface
 from acme.om.hosts.rules import WIRE_VERSION, WireType, at_or_above_floor
@@ -137,8 +138,9 @@ def work_view(org_id: UUID, item: WorkItem) -> ClaimantWorkView:
 
 
 class HostsServiceImpl(HostsServiceInterface):
-    def __init__(self, hosts: HostsManagerInterface) -> None:
+    def __init__(self, hosts: HostsManagerInterface, cloud_pool: CloudPoolManagerInterface) -> None:
         self._hosts = hosts
+        self._cloud_pool = cloud_pool
 
     async def create_pool(
         self, ctx: TenantContext, body: CreatePoolRequest, pool_id: UUID
@@ -210,6 +212,16 @@ class HostsServiceImpl(HostsServiceInterface):
             exec_version=body.exec_version,
         )
         return credential_view(await self._hosts.enroll(rctx, token, enrollment))
+
+    async def enroll_machine(
+        self, rctx: RequestContext, key: str, body: EnrollRequest
+    ) -> IssuedHostCredentialView:
+        enrollment = Enrollment(
+            name=body.name,
+            advertisement=advertisement(body.advertisement),
+            exec_version=body.exec_version,
+        )
+        return credential_view(await self._cloud_pool.enroll(rctx, key, enrollment))
 
     async def rotate(self, rctx: RequestContext, host: HostIdentity) -> IssuedHostCredentialView:
         return credential_view(await self._hosts.rotate(rctx, host))

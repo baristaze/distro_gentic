@@ -183,7 +183,7 @@ class RelayManagerImpl(RelayManagerInterface):
         is held to that session's pool."""
         ctx.require(Permission.WRITE)
         owner = instance_of or session_id
-        placed = await self._hosts.placement_of(ctx, owner)
+        placed = await self._hosts.work_placement(ctx, owner)
         if placed.pool is None:
             raise ValidationFailed(f"session {owner} runs in the cloud; no host holds it")
         status = await self._hosts.get_host(ctx, placed.pool.id, host_id)
@@ -228,7 +228,7 @@ class RelayManagerImpl(RelayManagerInterface):
 
     async def ask_prepare(self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec) -> bool:
         ctx.require(Permission.WRITE)
-        placed = await self._hosts.placement_of(ctx, session_id)
+        placed = await self._hosts.work_placement(ctx, session_id)
         if placed.pool is None:
             raise ValidationFailed(f"session {session_id} runs in the cloud; no host prepares it")
         if await self._asked_of(ctx, session_id, placed.pool.id):
@@ -254,7 +254,7 @@ class RelayManagerImpl(RelayManagerInterface):
         self, ctx: TenantContext, session_id: UUID, instance_id: UUID, spec: IsolationSpec
     ) -> None:
         ctx.require(Permission.WRITE)
-        placed = await self._hosts.placement_of(ctx, session_id)
+        placed = await self._hosts.work_placement(ctx, session_id)
         if placed.pool is None:
             raise ValidationFailed(f"session {session_id} runs in the cloud; no host makes it")
         await self._ask_prepare(ctx, instance_id, placed.pool.id, spec, session_id)
@@ -283,7 +283,7 @@ class RelayManagerImpl(RelayManagerInterface):
         binding = await self._storage.read_binding(ctx.org_id, session_id)
         if binding is None:
             return None
-        placed = await self._hosts.placement_of(ctx, binding.instance_of or session_id)
+        placed = await self._hosts.work_placement(ctx, binding.instance_of or session_id)
         if placed.pool is None:
             return None
         status = await self._hosts.get_host(ctx, placed.pool.id, binding.host_id)
@@ -318,7 +318,7 @@ class RelayManagerImpl(RelayManagerInterface):
         self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec, snapshot: HostSnapshot
     ) -> UUID:
         ctx.require(Permission.WRITE)
-        placed = await self._hosts.placement_of(ctx, session_id)
+        placed = await self._hosts.work_placement(ctx, session_id)
         if placed.pool is None:
             raise ValidationFailed(f"session {session_id} runs in the cloud; no host restores it")
         latest = await self._work.latest_for_target(ctx, WorkKind.WORKSPACE, session_id)
@@ -1054,7 +1054,7 @@ class RelayManagerImpl(RelayManagerInterface):
         """Whether the host is a live host of the session's pool: one that was
         neither revoked nor moved holds what it prepared, for the session or
         for an instance made for it."""
-        placed = await self._hosts.placement_of(ctx, session_id)
+        placed = await self._hosts.work_placement(ctx, session_id)
         if placed.pool is None:
             return False
         status = await self._hosts.get_host(ctx, placed.pool.id, host_id)

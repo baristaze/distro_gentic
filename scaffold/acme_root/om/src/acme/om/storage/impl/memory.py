@@ -17,6 +17,8 @@ from acme.om.billing.storage.impl.memory import (
 )
 from acme.om.budgets.storage import BudgetStorageInterface, LedgerStorageInterface
 from acme.om.budgets.storage.impl.memory import BudgetStorageMemoryImpl, LedgerStorageMemoryImpl
+from acme.om.cloud_pool.storage import CloudPoolStorageInterface
+from acme.om.cloud_pool.storage.impl.memory import CloudPoolStorageMemoryImpl
 from acme.om.events.storage import EventStorageInterface
 from acme.om.events.storage.impl.memory import EventStorageMemoryImpl
 from acme.om.evidence.storage import EvidenceStorageInterface
@@ -110,6 +112,7 @@ class StorageMemoryImpl(StorageInterface):
         self._placement = PlacementStorageMemoryImpl()
         self._trust = TrustStorageMemoryImpl(self._outbox)
         self._hosts = HostsStorageMemoryImpl(self._outbox)
+        self._cloud_pool = CloudPoolStorageMemoryImpl()
         self._intake = IntakeStorageMemoryImpl()
         self._automation = AutomationStorageMemoryImpl(self._outbox)
         self._playbook = PlaybookStorageMemoryImpl(self._outbox)
@@ -199,6 +202,9 @@ class StorageMemoryImpl(StorageInterface):
 
     def get_hosts_storage(self) -> HostsStorageInterface:
         return self._hosts
+
+    def get_cloud_pool_storage(self) -> CloudPoolStorageInterface:
+        return self._cloud_pool
 
     def get_intake_storage(self) -> IntakeStorageInterface:
         return self._intake

@@ -155,7 +155,9 @@ class Running:
 class ExecutorRelayImpl(ExecutorInterface):
     """`transports` names the transport that runs each isolation mode this
     host gives; an item at any other mode is refused, with nothing run.
-    Output gathers for `flush_seconds`, or up to `part_bytes`, before it is
+    `kept_whole` names the modes a workspace kept by snapshots is held at
+    with no snapshot of the host's: a machine of the cloud pool, whose pool
+    keeps the machine's whole disk. Output gathers for `flush_seconds`, or up to `part_bytes`, before it is
     sent as a part, and the lease is renewed every `renew_seconds`, a
     third of the lease a renewal holds. A renewal or a result the platform
     fails to take is tried again within the lease, after a wait that starts
@@ -169,6 +171,7 @@ class ExecutorRelayImpl(ExecutorInterface):
         *,
         snapshots: HostSnapshots | None = None,
         snapshot_modes: Callable[[], frozenset[IsolationMode]] = frozenset,
+        kept_whole: frozenset[IsolationMode] = frozenset(),
         broker: CredentialBrokerInterface | None = None,
         base_options: Mapping[str, Any] | None = None,
         flush_seconds: float = 0.25,
@@ -186,6 +189,7 @@ class ExecutorRelayImpl(ExecutorInterface):
             else HostBases(snapshots, self._workspaces, self._transports, **(base_options or {}))
         )
         self._probed_snapshots = snapshot_modes
+        self._kept_whole = kept_whole
         self._broker = broker
         self._flush_seconds = flush_seconds
         self._part_bytes = part_bytes
@@ -361,7 +365,10 @@ class ExecutorRelayImpl(ExecutorInterface):
         if provider is None:
             await self._answer(item.id, refused=f"this host makes no {spec.mode.value} workspace")
             return
-        if spec.durability is Durability.SNAPSHOT and spec.mode not in self._snapshot_modes():
+        if (
+            spec.durability is Durability.SNAPSHOT
+            and spec.mode not in self._snapshot_modes() | self._kept_whole
+        ):
             # Never made as a cache in its stead: another host may keep it.
             why = f"this host has not probed snapshots of a {spec.mode.value} workspace"
             await self._answer(item.id, refused=why)

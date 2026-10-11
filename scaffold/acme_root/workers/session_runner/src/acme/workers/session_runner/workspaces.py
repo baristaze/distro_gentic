@@ -60,6 +60,7 @@ from acme.infra.workspaces import (
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agents.loop_rules import kept_snapshot
 from acme.om.base import EMPTY_UUID, Platform, utcnow
+from acme.om.cloud_pool import CloudPoolManagerInterface
 from acme.om.context import RequestContext, TenantContext
 from acme.om.exceptions import NotAuthorized, NotFound, ValidationFailed
 from acme.om.placement.types.work import WorkspaceOperation, WorkspacePayload
@@ -94,9 +95,10 @@ class HeldOptions(Platform):
 class HeldWorkspacesSweep:
     """Lets go of each instance this host holds that no run accounts for,
     once a pass finds it so past the grace, and of each such instance a
-    tenant's host holds when `relay` is given. When a pass first found each
-    one so is held in memory: a runner that restarts counts the grace
-    again, so it lets go later, never sooner."""
+    tenant's host holds when `relay` is given, or a machine of the cloud
+    pool holds when `cloud` is. When a pass first found each one so is held
+    in memory: a runner that restarts counts the grace again, so it lets go
+    later, never sooner."""
 
     def __init__(
         self,
@@ -110,6 +112,7 @@ class HeldWorkspacesSweep:
         options: HeldOptions,
         clock: Callable[[], datetime] = utcnow,
         relay: RelayManagerInterface | None = None,
+        cloud: CloudPoolManagerInterface | None = None,
     ) -> None:
         self._provider = provider
         self._tools = tools
@@ -121,6 +124,7 @@ class HeldWorkspacesSweep:
         self._options = options
         self._clock = clock
         self._relay = relay
+        self._cloud = cloud
         # Each instance no run accounted for at a pass, and when a pass first
         # found it so.
         self._unaccounted: dict[UUID, datetime] = {}
@@ -293,7 +297,12 @@ class HeldWorkspacesSweep:
             except REFUSED as refused:
                 self._refuse(ctx, session_id, cursor.head, refused)
                 return False
-        await self._relay.ask_release(ctx, session_id, workspace.spec)
+        if self._cloud is not None and await self._cloud.holds(ctx, session_id):
+            # A machine of the cloud pool is the instance: it goes, its disk
+            # with it, and the session's next loop starts another.
+            await self._cloud.release(ctx, session_id)
+        else:
+            await self._relay.ask_release(ctx, session_id, workspace.spec)
         log.info(
             "session %s of org %s: host %s is asked to let go of its instance no run held",
             session_id,

@@ -198,6 +198,15 @@ A call the agent may not repeat runs once, whatever crashes. The host
 holds one **control stream** open to the platform, which stops a command
 at once.
 
+A session of the cloud whose agent works in a VM runs on a machine of
+the **cloud pool**: a virtual machine of its own, which the platform
+starts and runs the same host program in. The machine's host joins the
+session's **pool of one** with a one-use **machine key** the pool handed
+the machine, and claims that session's work alone. At the loop's end its
+whole disk is kept as the session's snapshot, and the next loop starts a
+machine from it. A few machines may stand **warm**, started ahead of the
+session that claims one.
+
 ## The agents the platform ships
 
 The platform ships four kinds of agent. The **engineer** takes an
@@ -307,7 +316,11 @@ arrive twice, so the second copy gets the first one's answer.
   org asks for is read off it.
 - A pool, its tokens, its hosts, their credentials, and a session's
   placement name their org. A host is handed only the work of its own
-  pool, whatever it asks for.
+  pool, whatever it asks for. A session's pool of one, and its machine's
+  host, name its session too, and that host is handed no other session's
+  work.
+- A machine of the cloud pool is the platform's, no org's, while it is
+  warm, and names its org and its session once a session claims it.
 - An exec item, its output, its control messages, and a session's
   workspace binding name their org. A host reads and answers only the
   items it holds.
@@ -342,6 +355,7 @@ arrive twice, so the second copy gets the first one's answer.
 - [Trust](src/acme/om/trust/README.md)
 - [Hosts](src/acme/om/hosts/README.md)
 - [Relay](src/acme/om/relay/README.md)
+- [The cloud pool](src/acme/om/cloud_pool/README.md)
 - [Intake](src/acme/om/intake/README.md)
 - [Automations](src/acme/om/automations/README.md)
 - [Playbooks](src/acme/om/playbooks/README.md)

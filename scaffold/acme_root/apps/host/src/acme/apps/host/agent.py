@@ -17,7 +17,7 @@ import asyncio
 import logging
 import random
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
@@ -66,18 +66,52 @@ def host_issued(view: IssuedHostCredentialView) -> Issued:
     )
 
 
+MACHINE_KEY = "hmk_"
+"""The prefix of the key the cloud pool hands a machine of its own."""
+
+UNBOUND = 409
+"""What a warm machine's key is answered with until a session claims the
+machine: its host asks again."""
+
+
 class RoutesHostImpl(RoutesInterface):
     """The host's own enrollment, with what it probed and the version of
-    `exec` work it reads, at `/hosts/...`."""
+    `exec` work it reads, at `/hosts/...`. A machine of the cloud pool trades
+    its key instead of an enrollment token, and asks again, after a wait
+    that grows to `most_wait` seconds, while its machine serves no session
+    yet."""
 
-    def __init__(self, advertisement: Callable[[], AdvertisementBody]) -> None:
+    def __init__(
+        self,
+        advertisement: Callable[[], AdvertisementBody],
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        most_wait: float = 10.0,
+    ) -> None:
         self._advertisement = advertisement
+        self._sleep = sleep
+        self._most_wait = most_wait
 
     async def enroll(self, client: ApiClient, enrollment_token: str, name: str) -> Issued:
+        if enrollment_token.startswith(MACHINE_KEY):
+            return await self._machine(client, enrollment_token, name)
         issued = await client.enroll_host(
             enrollment_token, name, self._advertisement(), EXEC_VERSION
         )
         return host_issued(issued)
+
+    async def _machine(self, client: ApiClient, key: str, name: str) -> Issued:
+        wait = 1.0
+        while True:
+            try:
+                issued = await client.enroll_machine(key, name, self._advertisement(), EXEC_VERSION)
+            except ApiError as error:
+                if error.status != UNBOUND:
+                    raise
+                log.info("this machine serves no session yet; it asks again")
+                await self._sleep(wait)
+                wait = min(wait * 2, self._most_wait)
+                continue
+            return host_issued(issued)
 
     async def rotate(self, client: ApiClient) -> Issued:
         return host_issued(await client.rotate_host_credential())

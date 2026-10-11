@@ -49,7 +49,9 @@ from acme.om.budgets.impl.manager import BudgetsManagerImpl, BudgetsOptions
 from acme.om.budgets.impl.operator import BudgetsOperatorManagerImpl, BudgetsOperatorOptions
 from acme.om.budgets.impl.pricing import PricingTableImpl
 from acme.om.budgets.pricing import PricingInterface
-from acme.om.context import TenantContext
+from acme.om.cloud_pool import CloudPoolManagerInterface
+from acme.om.cloud_pool.impl.manager import CloudPoolManagerImpl, CloudPoolOptions
+from acme.om.context import RequestContext, TenantContext
 from acme.om.events import EventsManagerInterface
 from acme.om.events.impl.manager import EventsManagerImpl, EventsOptions
 from acme.om.evidence import (
@@ -241,6 +243,7 @@ class Managers:
     workspaces: WorkspacesManagerInterface
     hosts: HostsManagerInterface
     relay: RelayManagerInterface
+    cloud_pool: CloudPoolManagerInterface
     platform_agents: PlatformAgentsManagerInterface
     projects: ProjectsManagerInterface
     benchmarks: BenchmarksManagerInterface
@@ -559,6 +562,8 @@ def build_managers(
     workspace_reader: RepositoryReaderInterface | None = None,
     hosts_options: HostsOptions | None = None,
     relay_options: RelayOptions | None = None,
+    cloud_pool_options: CloudPoolOptions | None = None,
+    cloud_pool_stage: Callable[[], RequestContext] | None = None,
     transport_layer: Callable[[TransportInterface], TransportInterface] | None = None,
     platform_agents_options: PlatformAgentsOptions | None = None,
     platform_agents: PlatformAgents | None = None,
@@ -1106,6 +1111,38 @@ def build_managers(
             utcnow,
         ),
     )
+    # A session inside its tenant's wall finds its workspace on its host,
+    # where only the relayed transport reaches. The relay and the hosts are
+    # built below, so the edges are bound at call time.
+    placed_workspaces = PlacedWorkspacesRelayedImpl(lambda: managers.relay, lambda: managers.hosts)
+    # The cloud pool: a machine per session of the cloud whose workspace is
+    # a VM, its host reached through the relay as any host is. Every process
+    # builds it: the gateway trades a machine's key, the sweep lets its
+    # machines go, and the runner starts them, on the machines infra chose.
+    sessions_rows = storage.get_agent_session_storage()
+    orgs_rows = storage.get_tenancy_storage()
+
+    async def session_gone(org_id: UUID, session_id: UUID) -> bool:
+        # A deleted tenant's machines go at the next sweep, never at its
+        # purge alone: a machine bills while it runs.
+        org = await orgs_rows.read_org(org_id)
+        if org is None or org.deleted_at is not None:
+            return True
+        session = await sessions_rows.read_session(org_id, session_id)
+        return session is None or session.deleted_at is not None
+
+    cloud_pool = CloudPoolManagerImpl(
+        storage.get_cloud_pool_storage(),
+        infra.get_machines(),
+        infra.get_seeds(),
+        lambda: managers.hosts,
+        lambda: placed_workspaces,
+        lambda: managers.relay,
+        cloud_pool_options or CloudPoolOptions(),
+        session_gone=session_gone,
+        expired=tenancy.tenant_expired,
+        stage=cloud_pool_stage,
+    )
     # Each workspace is held to its session's pin, refused by this host where
     # it cannot give it, brought up to the session's branch, kept before it
     # goes, and let go by the run that holds it alone.
@@ -1116,12 +1153,7 @@ def build_managers(
         workspace_host or HostOffer(),
         local=environment == LOCAL,
         held=held,
-        # A session inside its tenant's wall finds its workspace on its
-        # host, where only the relayed transport reaches. The relay and the
-        # hosts are built below, so the edges are bound at call time.
-        placed=None
-        if transport_layer is None
-        else PlacedWorkspacesRelayedImpl(lambda: managers.relay, lambda: managers.hosts),
+        placed=None if transport_layer is None else placed_workspaces,
         snapshots=snapshots,
         # A snapshot a host keeps is named by the digest it declared, keyed
         # by the session; its revoked key asks the host to let it go.
@@ -1133,6 +1165,7 @@ def build_managers(
         erase_purged=lambda org_id, session_id, host_id: managers.relay.erase_purged(
             org_id, session_id, host_id
         ),
+        cloud=cloud_pool,
     )
     tools: ToolsManagerInterface = held_to_pins
     # What makes a result: the runs, the policies, and validation on the
@@ -1317,6 +1350,7 @@ def build_managers(
         ),
         workspaces=workspaces,
         hosts=hosts,
+        cloud_pool=cloud_pool,
         # A tool call into a customer's wall as keyed exec work: its items,
         # their output sealed under the session's key as its commands' records
         # are, and the control messages that stop them.

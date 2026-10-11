@@ -20909,6 +20909,98 @@
         ]
       }
     },
+    "/v1/hosts/machine-enrollments": {
+      "post": {
+        "description": "The host of a machine the platform's cloud pool started trades the key\nthe pool handed the machine, once, as its bearer, for a credential of\nits own. A 409 while the machine is warm and serves no session yet: it\nasks again. A retry after the trade is refused, so it takes no\nIdempotency-Key.",
+        "operationId": "enroll_machine_v1_hosts_machine_enrollments_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrollRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedHostCredentialView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enroll Machine",
+        "tags": [
+          "hosts"
+        ]
+      }
+    },
     "/v1/hosts/me/claims": {
       "post": {
         "description": "The next item pinned to this host or its pool, or none. The body\nstates the version the host reads, and nothing it is handed.",

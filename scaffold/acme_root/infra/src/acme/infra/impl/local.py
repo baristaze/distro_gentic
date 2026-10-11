@@ -1,6 +1,7 @@
 """The all-local infra root: every capability in-process or on disk under
 one folder, for tests and the fast gate."""
 
+from datetime import timedelta
 from pathlib import Path
 
 from acme.infra.buckets import BucketsInterface
@@ -11,7 +12,8 @@ from acme.infra.flags import FlagsInterface
 from acme.infra.flags.memory import FlagsMemoryImpl
 from acme.infra.keys import KeyServiceInterface
 from acme.infra.keys.memory import KeyServiceMemoryImpl
-from acme.infra.machines import MachinesInterface
+from acme.infra.machines import MachinesInterface, SeedsInterface
+from acme.infra.machines.seeded import PLAIN_WRITE, SeedsChannelImpl
 from acme.infra.machines.twin import MachinesTwinImpl
 from acme.infra.outages import OutageSignalInterface
 from acme.infra.outages.null import OutageSignalNullImpl
@@ -46,6 +48,7 @@ class InfraLocalImpl(InfraInterface):
         self._keys = KeyServiceMemoryImpl()
         self._streams = StreamsMemoryImpl()
         self._machines = MachinesTwinImpl(root / "machines")
+        self._seeds = SeedsChannelImpl(self._machines, timedelta(seconds=30), PLAIN_WRITE)
         self._workspaces = WorkspaceTwinImpl()
         self._broker = BrokerTwinImpl()
         self._transport = TransportTwinImpl(self._secrets, self._broker)
@@ -77,6 +80,9 @@ class InfraLocalImpl(InfraInterface):
 
     def get_machines(self) -> MachinesInterface:
         return self._machines
+
+    def get_seeds(self) -> SeedsInterface:
+        return self._seeds
 
     def get_transport(self) -> TransportInterface:
         return self._transport

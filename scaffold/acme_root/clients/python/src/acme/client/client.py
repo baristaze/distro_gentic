@@ -1108,6 +1108,29 @@ class ApiClient:
         )
         return IssuedHostCredentialView.model_validate(answer)
 
+    async def enroll_machine(
+        self,
+        key: str,
+        name: str,
+        advertisement: AdvertisementBody,
+        exec_version: int,
+    ) -> IssuedHostCredentialView:
+        """The credential of a host that runs in a machine of the platform's
+        cloud pool, traded once for the key the pool handed the machine. Its
+        tenant, its pool, and its session are the platform's to say. A 409
+        while the machine serves no session yet."""
+        answer = await self.request(
+            "POST",
+            "/v1/hosts/machine-enrollments",
+            json={
+                "name": name,
+                "advertisement": advertisement.model_dump(mode="json", exclude_none=True),
+                "exec_version": exec_version,
+            },
+            token=key,
+        )
+        return IssuedHostCredentialView.model_validate(answer)
+
     async def rotate_host_credential(self) -> IssuedHostCredentialView:
         """The host's next credential; the one this client holds ends after
         a short grace."""

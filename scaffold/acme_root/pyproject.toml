@@ -168,6 +168,15 @@ path = "deployment/host/check/check.Dockerfile"
 adr = "docs/adr/2026-the-runner-is-a-cloud-service-with-no-workspace-and-a-host-installs-as-a-user-of-its-own.md"
 reason = "a test machine with systemd first, run as root to install the host; never an image a deployment ships"
 
+# A session's pool of one in the cloud pool has an id read off its tenant
+# and its session, so every process that asks for it asks for the same one
+# and two never make two (ADR 2052).
+[[tool.arch-check.exception]]
+rule = "OM-12"
+path = "om/src/acme/om/hosts/impl/manager.py"
+adr = "docs/adr/2052-the-cloud-pool-runs-a-machine-per-session-whose-host-pulls-its-work.md"
+reason = "a session's pool of one is named by its session, so concurrent prepares converge on one pool"
+
 # The storage methods that take no tenant, the same list
 # om/tests/unit/test_storage_exceptions.py holds.
 [tool.arch-check.options.CTX-12]
@@ -178,6 +187,24 @@ tenantless = [
     "BenchmarkStorageInterface.create_benchmark",
     "BenchmarkStorageInterface.read_benchmark",
     "BenchmarkStorageInterface.read_history",
+    "CloudPoolStorageInterface.ask_erase",
+    "CloudPoolStorageInterface.claim_warm",
+    "CloudPoolStorageInterface.create_machine",
+    "CloudPoolStorageInterface.delete_erasure",
+    "CloudPoolStorageInterface.delete_machine",
+    "CloudPoolStorageInterface.mark_enrolled",
+    "CloudPoolStorageInterface.mark_sealed",
+    "CloudPoolStorageInterface.mark_started",
+    "CloudPoolStorageInterface.read_by_key",
+    "CloudPoolStorageInterface.read_by_name",
+    "CloudPoolStorageInterface.read_erasures",
+    "CloudPoolStorageInterface.read_machine",
+    "CloudPoolStorageInterface.read_machines",
+    "CloudPoolStorageInterface.read_of_session",
+    "CloudPoolStorageInterface.read_of_tenant",
+    "CloudPoolStorageInterface.rekey",
+    "CloudPoolStorageInterface.reserve_warm",
+    "CloudPoolStorageInterface.spend_key",
     "EventStorageInterface.count_since",
     "EventStorageInterface.trim",
     "HostsStorageInterface.read_enrollment_token_by_digest",

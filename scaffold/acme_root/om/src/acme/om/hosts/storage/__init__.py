@@ -28,7 +28,8 @@ class HostsStorageInterface(ABC):
 
     @abstractmethod
     async def read_pools(self, org_id: UUID, limit: int) -> list[HostPool]:
-        """The tenant's pools in id order, at most `limit`."""
+        """The tenant's own pools in id order, at most `limit`: never a
+        session's pool of the cloud pool, which is the platform's."""
         ...
 
     @abstractmethod

@@ -9,6 +9,7 @@ from acme.om.automations.storage import AutomationStorageInterface
 from acme.om.benchmarks.storage import BenchmarkStorageInterface
 from acme.om.billing.storage import AccountStorageInterface, MoneyLedgerStorageInterface
 from acme.om.budgets.storage import BudgetStorageInterface, LedgerStorageInterface
+from acme.om.cloud_pool.storage import CloudPoolStorageInterface
 from acme.om.events.storage import EventStorageInterface
 from acme.om.evidence.storage import EvidenceStorageInterface
 from acme.om.hosts.storage import HostsStorageInterface
@@ -116,6 +117,9 @@ class StorageInterface(ABC):
 
     @abstractmethod
     def get_hosts_storage(self) -> HostsStorageInterface: ...
+
+    @abstractmethod
+    def get_cloud_pool_storage(self) -> CloudPoolStorageInterface: ...
 
     @abstractmethod
     def get_intake_storage(self) -> IntakeStorageInterface: ...

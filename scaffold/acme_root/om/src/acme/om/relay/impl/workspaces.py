@@ -81,11 +81,13 @@ class PlacedWorkspacesRelayedImpl(PlacedWorkspacesInterface):
         session_id: UUID,
         spec: IsolationSpec,
         restore: HostSnapshot | None = None,
+        *,
+        pooled: PlacementState | None = None,
     ) -> Workspace | None:
-        placed = await self._hosts().placement_of(ctx, session_id)
+        placed = pooled or await self._hosts().placement_of(ctx, session_id)
         if placed.pool is None:
             return None
-        if spec.durability is Durability.SNAPSHOT:
+        if spec.durability is Durability.SNAPSHOT and pooled is None:
             await self._snapshots_offered(ctx, placed, session_id, spec)
         if restore is not None:
             return await self._restored(ctx, placed, session_id, spec, restore)

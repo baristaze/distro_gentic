@@ -26,7 +26,7 @@ from acme.infra.transports import (
     TransportInterface,
     file_offset,
 )
-from acme.infra.workspaces import IsolationMode, Workspace
+from acme.infra.workspaces import IsolationMode, IsolationSpec, Workspace
 from acme.om.base import new_id, utcnow
 from acme.om.context import RequestContext
 from acme.om.exceptions import PlatformException, ToolFailed, Unavailable
@@ -356,7 +356,8 @@ class TransportRelayImpl(TransportInterface):
 
 class TransportPlacedImpl(TransportInterface):
     """The runner's one transport: per session, the relay when its placement
-    is inside its tenant's wall, and the direct transport otherwise. The
+    is inside its tenant's wall, or when its workspace runs on a machine of
+    the cloud pool (`pooled`), and the direct transport otherwise. The
     engine and its tools see this alone, and never what is behind it."""
 
     def __init__(
@@ -364,10 +365,12 @@ class TransportPlacedImpl(TransportInterface):
         direct: TransportInterface,
         relayed: TransportInterface,
         placement: PlacementInterface,
+        pooled: Callable[[IsolationSpec], Awaitable[bool]] | None = None,
     ) -> None:
         self._direct = direct
         self._relayed = relayed
         self._placement = placement
+        self._pooled = pooled
 
     async def run(
         self,
@@ -417,6 +420,8 @@ class TransportPlacedImpl(TransportInterface):
         workspace goes to the direct transport, which refuses it loudly."""
         if workspace.spec.mode is IsolationMode.NONE:
             return self._direct
+        if self._pooled is not None and await self._pooled(workspace.spec):
+            return self._relayed
         if await self._placement.inside_wall(workspace.org_id, workspace.id):
             return self._relayed
         return self._direct

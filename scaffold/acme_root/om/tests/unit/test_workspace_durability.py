@@ -43,6 +43,7 @@ from acme.om.agents.types.request import Start
 from acme.om.base import Platform, new_id, utcnow
 from acme.om.context import RequestContext, TenantContext
 from acme.om.exceptions import NotFound, ValidationFailed
+from acme.om.hosts.types.placement import PlacementState
 from acme.om.privacy.types.session_privacy import StorageMode
 from acme.om.projects.impl.retention import SessionProjectBoundImpl
 from acme.om.retention.impl.keys import TenantKeysImpl
@@ -376,6 +377,8 @@ class Placed(PlacedWorkspacesInterface):
         session_id: UUID,
         spec: IsolationSpec,
         restore: HostSnapshot | None = None,
+        *,
+        pooled: PlacementState | None = None,
     ) -> Workspace | None:
         self.restores.append(restore)
         return Workspace(id=session_id, org_id=ctx.org_id, spec=spec, location="host:1")

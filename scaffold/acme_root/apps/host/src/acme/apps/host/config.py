@@ -9,12 +9,17 @@ are `ACME_HOST_WORKSPACE_USER`, the dedicated user a bare-directory
 workspace runs as, the image a container workspace runs, how long a pull of
 it may take, and `ACME_HOST_SNAPSHOTS`, the store its workspaces' snapshots
 and its tenants' bases are kept in (default `snapshots` under its home),
-which hosts of a pool may share. Nothing the platform answers changes any of them."""
+which hosts of a pool may share. `ACME_HOST_MACHINE_SEED` names the seed of
+a machine of the platform's cloud pool: set, the host runs as that machine's
+(`machine.py`), takes where the platform answers and its one-use key from
+the seed, and makes its workspace under `ACME_HOST_MACHINE_WORKSPACE`
+(default `/workspace`). Nothing the platform answers changes any of them."""
 
 import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from acme.apps.host.seed import read_seed
 from acme.apps.host.snapshots import STORE_FOLDER
 from acme.client.claimant.credential import BadSetting
 from acme.client.claimant.settings import ClaimantSettings, claimant_env
@@ -36,6 +41,13 @@ class Settings(ClaimantSettings):
     pull_timeout_seconds: float = 900.0
     max_clock_skew_seconds: float = 60.0
     snapshot_store: Path | None = None  # None: `snapshots` under its home
+    machine_seed: Path | None = None  # set: a machine of the cloud pool
+    machine_workspace: Path = Path("/workspace")
+
+    @property
+    def machine(self) -> bool:
+        """Whether the host runs in a machine the cloud pool started."""
+        return self.machine_seed is not None
 
     @property
     def snapshots_path(self) -> Path:
@@ -73,12 +85,22 @@ def _seconds(name: str, default: float) -> float:
 
 
 def settings_from_env() -> Settings:
+    claimant = claimant_env(ENV_PREFIX, KIND)
+    seed = os.environ.get("ACME_HOST_MACHINE_SEED") or None
+    if seed is not None:
+        # A machine's seed says where the platform answers, and holds the
+        # key its host trades once.
+        seeded = read_seed(Path(seed))
+        if seeded is not None:
+            claimant["api_url"], claimant["enrollment_token"] = seeded
     return Settings(
-        **claimant_env(ENV_PREFIX, KIND),
+        **claimant,
         workspace_user=os.environ.get("ACME_HOST_WORKSPACE_USER") or None,
         workspace_image=os.environ.get("ACME_HOST_WORKSPACE_IMAGE") or DEFAULT_IMAGE,
         pull_timeout_seconds=_seconds("ACME_HOST_PULL_TIMEOUT_SECONDS", 900.0),
         snapshot_store=Path(os.environ["ACME_HOST_SNAPSHOTS"])
         if os.environ.get("ACME_HOST_SNAPSHOTS")
         else None,
+        machine_seed=None if seed is None else Path(seed),
+        machine_workspace=Path(os.environ.get("ACME_HOST_MACHINE_WORKSPACE") or "/workspace"),
     )

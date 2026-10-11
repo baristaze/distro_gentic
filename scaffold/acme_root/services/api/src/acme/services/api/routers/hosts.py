@@ -1,6 +1,8 @@
 """Host routes. A tenant's: its pools, the tokens that enroll hosts into
 them, its hosts, and where its sessions run. A host's own: enroll once with
-an enrollment token, then rotate its credential, beat, and claim with it.
+an enrollment token, or, for a machine of the platform's cloud pool, with
+the key the pool handed it, then rotate its credential, beat, and claim
+with it.
 Each function is one call into the hosts service."""
 
 from uuid import UUID
@@ -103,6 +105,22 @@ async def enroll(
     and gets a credential of its own. A retry enrolls another host, so it
     takes no Idempotency-Key."""
     return await hosts.enroll(rctx, token, body)
+
+
+@router.post(
+    "/hosts/machine-enrollments",
+    response_model=IssuedHostCredentialView,
+    dependencies=[rate_limited("login")],
+)
+async def enroll_machine(
+    rctx: Rctx, hosts: HostsService, key: EnrollmentBearer, body: EnrollRequest
+) -> IssuedHostCredentialView:
+    """The host of a machine the platform's cloud pool started trades the key
+    the pool handed the machine, once, as its bearer, for a credential of
+    its own. A 409 while the machine is warm and serves no session yet: it
+    asks again. A retry after the trade is refused, so it takes no
+    Idempotency-Key."""
+    return await hosts.enroll_machine(rctx, key, body)
 
 
 @router.post("/hosts/me/credentials", response_model=IssuedHostCredentialView)

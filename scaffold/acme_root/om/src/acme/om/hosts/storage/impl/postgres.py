@@ -40,7 +40,10 @@ class HostsStoragePostgresImpl(PgStorageBase, HostsStorageInterface):
 
     async def read_pools(self, org_id: UUID, limit: int) -> list[HostPool]:
         stmt = (
-            select(HostPools).where(HostPools.org_id == org_id).order_by(HostPools.id).limit(limit)
+            select(HostPools)
+            .where(HostPools.org_id == org_id, HostPools.session_id.is_(None))
+            .order_by(HostPools.id)
+            .limit(limit)
         )
         async with self._session_for(stmt, org_id=org_id) as session:
             rows = (await session.execute(stmt)).scalars().all()

@@ -1,6 +1,7 @@
 """Where a snapshot a session keeps lives: the platform's bucket, for a
-workspace of the platform's cloud, or the store of the host inside its
-tenant's wall that took it, for a workspace a host holds. The platform
+workspace of the platform's cloud, the store of the host inside its
+tenant's wall that took it, for a workspace a host holds, or the store of
+the machines' backend, for a machine of the cloud pool. The platform
 records the reference and the hash, never the bytes; the history's
 `snapshotted` step names the snapshot by its id and its hash."""
 
@@ -21,8 +22,10 @@ REFERENCE = r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,511}$"
 
 class KeptSnapshot(Identifiable, Trackable):
     """One snapshot a session keeps, under the snapshot's id. In the
-    platform's bucket when it names no pool; else in the store of the host
-    `host_id` of the pool `pool_id`, which knows it by `reference` and
+    platform's bucket when it names no pool and is no machine's; in the
+    store of the machines' backend when `machine` says so, which knows it
+    by `reference` and holds its disk to `digest`; else in the store of the
+    host `host_id` of the pool `pool_id`, which knows it by `reference` and
     declared `digest` of its bytes. `hash` is the one the step names."""
 
     MANAGER_OWNED_FIELDS: ClassVar[tuple[str, ...]] = ()
@@ -34,9 +37,14 @@ class KeptSnapshot(Identifiable, Trackable):
     host_id: UUID | None = None
     reference: str = Field(pattern=REFERENCE)
     digest: str | None = Field(default=None, pattern=DIGEST)
+    machine: bool = False
 
     @model_validator(mode="after")
     def _a_host_names_its_place(self) -> KeptSnapshot:
+        if self.machine:
+            if self.pool_id is not None or self.host_id is not None or self.digest is None:
+                raise ValueError("a machine's snapshot names its digest, and no pool or host")
+            return self
         hosted = (self.pool_id, self.host_id, self.digest)
         if any(part is None for part in hosted) and any(part is not None for part in hosted):
             raise ValueError("a snapshot a host keeps names its pool, its host, and its digest")
@@ -46,6 +54,12 @@ class KeptSnapshot(Identifiable, Trackable):
     def on_host(self) -> bool:
         """Whether a host inside the tenant's wall keeps it."""
         return self.pool_id is not None
+
+    @property
+    def on_machines(self) -> bool:
+        """Whether the machines' backend keeps it: a machine of the cloud
+        pool's whole disk."""
+        return self.machine
 
 
 class HostSnapshot(Platform):

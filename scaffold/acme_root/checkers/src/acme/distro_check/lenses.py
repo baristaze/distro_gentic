@@ -45,6 +45,7 @@ LENSES: dict[str, Severity] = {
     "PLC-18": "high",
     "PLC-19": "medium",
     "PLC-20": "high",
+    "PLC-21": "high",
     "WSP-01": "medium",
     "WSP-02": "medium",
     "WSP-03": "high",

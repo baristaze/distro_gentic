@@ -48,6 +48,7 @@ from acme.om.trust.types.identities import Executor, ExecutorKind
 from acme.om.watch.root import build_stream
 from acme.om.watch.stream import StreamServiceInterface
 from acme.om.workspaces.impl.executor import ExecutorOptions
+from acme.workers.maintenance.container import cloud_pool_options
 from acme.workers.session_runner.settings import SessionRunnerSettings
 
 log = logging.getLogger(__name__)
@@ -209,7 +210,11 @@ class RunnerContainer:
             # The relay is the managers', built below on this transport, so
             # the edge is bound at call time.
             relayed = TransportRelayImpl(lambda: built[0].relay, stage)
-            return TransportPlacedImpl(direct, relayed, placement)
+            # A session on a machine of the cloud pool runs its calls on that
+            # machine's host, through the relay too.
+            return TransportPlacedImpl(
+                direct, relayed, placement, lambda spec: built[0].cloud_pool.runs(spec)
+            )
 
         # Every part the loop streams goes to the shared cache, where the API
         # reads it live; a stream's opening and its completion are recorded,
@@ -238,6 +243,8 @@ class RunnerContainer:
             tools_layer=layers,
             transport_layer=placed,
             placement_options=placing,
+            cloud_pool_options=cloud_pool_options(settings),
+            cloud_pool_stage=stage,
             # A call of a session the tenant's automation principal started
             # runs on that principal's grant; every other on a member's place.
             principal_context=automation_principals(storage.get_automation_storage(), members),

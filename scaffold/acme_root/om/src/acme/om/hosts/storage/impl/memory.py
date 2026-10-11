@@ -43,7 +43,7 @@ class HostsStorageMemoryImpl(MemoryStorageBase, HostsStorageInterface):
         return self._get(self._pools, org_id, pool_id)
 
     async def read_pools(self, org_id: UUID, limit: int) -> list[HostPool]:
-        return self._rows(self._pools, org_id)[:limit]
+        return [pool for pool in self._rows(self._pools, org_id) if pool.session_id is None][:limit]
 
     async def create_enrollment_token(
         self, org_id: UUID, token: EnrollmentToken, outbox_rows: tuple[OutboxRow, ...]

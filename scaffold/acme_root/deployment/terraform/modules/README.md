@@ -37,6 +37,7 @@ folder:
 | `service` | One process: task definition with a collector sidecar, service, autoscaling, and the migration before a rollout (`pre_rollout.sh`) |
 | `task` | One one-off task (migrate, grant), run by `aws ecs run-task` |
 | `alarms` | The default alarm set, to one SNS topic |
+| `cloud_pool` | The cloud pool's machines: their launch template with no instance role, the closed and the open security groups, the key their disks and snapshots are encrypted under, and the policy the runner and the sweep hold them by. No environment calls it until the platform's cloud account exists (ADR 2052) |
 | `dashboard` | The CloudWatch dashboard, the twin of the local Grafana one by panel title |
 
 ## How a change reaches an environment
@@ -114,8 +115,9 @@ The serving tasks may create, replace, and delete there and nowhere else.
 ## Checks
 
 CI runs `terraform fmt -check -recursive` over this folder, `init
--backend=false` and `validate` in every root, and `terraform test` in
-`modules/static_site`, `modules/service`, `modules/dashboard`,
-`modules/alarms`, and `environments/staging`, all offline under mock
+-backend=false` and `validate` in every root and in `modules/cloud_pool`,
+which no root calls yet, and `terraform test` in `modules/static_site`,
+`modules/service`, `modules/dashboard`, `modules/alarms`,
+`modules/cloud_pool`, and `environments/staging`, all offline under mock
 providers. `infra/tests/test_dashboard_parity.py` holds the cloud
 dashboard's titles equal to the local Grafana dashboard's.

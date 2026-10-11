@@ -88,6 +88,13 @@ class HostsServiceInterface(ABC):
     ) -> IssuedHostCredentialView: ...
 
     @abstractmethod
+    async def enroll_machine(
+        self, rctx: RequestContext, key: str, body: EnrollRequest
+    ) -> IssuedHostCredentialView:
+        """The host of a machine of the cloud pool trades its key, once."""
+        ...
+
+    @abstractmethod
     async def rotate(
         self, rctx: RequestContext, host: HostIdentity
     ) -> IssuedHostCredentialView: ...

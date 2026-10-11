@@ -218,3 +218,11 @@ jobs:
         run: terraform -chdir=deployment/terraform/modules/alarms init -backend=false -input=false
       - if: matrix.root == 'environments/staging'
         run: terraform -chdir=deployment/terraform/modules/alarms test
+      # The cloud pool's module, which no environment calls yet: it validates
+      # and tests on its own.
+      - if: matrix.root == 'environments/staging'
+        run: terraform -chdir=deployment/terraform/modules/cloud_pool init -backend=false -input=false
+      - if: matrix.root == 'environments/staging'
+        run: terraform -chdir=deployment/terraform/modules/cloud_pool validate
+      - if: matrix.root == 'environments/staging'
+        run: terraform -chdir=deployment/terraform/modules/cloud_pool test

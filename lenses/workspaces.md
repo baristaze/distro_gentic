@@ -247,13 +247,15 @@ that fetches a URL the agent wrote.
 ## WSP-12 A snapshot lives on its workspace's side of the wall
 
 **Principle.** A workspace in the platform's cloud keeps its snapshots in
-the platform's object store, sealed under the session's key. A workspace
-on a customer's host keeps them in that host's own store, inside the
-wall. Their bytes never cross: the platform records the reference and
-the hash alone, and a host of the same pool whose store holds one
-restores it. A snapshot is content: when a session's content expires,
-its key is revoked, or the session is purged, its snapshots go from
-every store that keeps one, and their records with them.
+the platform's own stores: the object store, sealed under the session's
+key, or, for a machine of the cloud pool, the cloud's disk snapshots,
+encrypted at rest. A workspace on a customer's host keeps them in that
+host's own store, inside the wall. Their bytes never cross: the platform
+records the reference and the hash alone, and a host of the same pool
+whose store holds one restores it. A snapshot is content: when a
+session's content expires, its key is revoked, or the session is purged,
+its snapshots go from every store that keeps one, and their records with
+them.
 
 **Source.** Workspaces and Isolation, A Snapshot Is Durable State.
 
