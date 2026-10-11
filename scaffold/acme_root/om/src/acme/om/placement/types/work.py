@@ -11,6 +11,7 @@ from pydantic import model_validator
 
 from acme.infra.workspaces import IsolationSpec
 from acme.om.base import Platform
+from acme.om.workspaces.types.snapshot import HostSnapshot
 
 ExecEffect = Literal["read_only", "idempotent", "unsafe"]
 """What a repeat of an `exec` item may do: its tool's effect, as the engine
@@ -61,13 +62,20 @@ class WorkspaceOperation(StrEnum):
     PREPARE = "prepare"  # a host in the session's placement makes the workspace
     RELEASE = "release"  # the holding host lets it go
     PURGE = "purge"  # the holding host destroys it
+    SNAPSHOT = "snapshot"  # the holding host keeps a snapshot of it in its own store
+    ERASE = "erase"  # a host's store lets the session's snapshots go
 
 
 class WorkspacePayload(Platform):
-    """A workspace to prepare, release, or purge. Preparing goes to the lane
-    of the session's placement, since any host of the pool may make it;
-    releasing and purging go to the lane of the host that holds it, since
-    a workspace lives where it was prepared.
+    """A workspace to prepare, release, purge, or snapshot, or a session's
+    snapshots to erase. Preparing goes to the lane of the session's
+    placement, since any host of the pool may make it; releasing, purging,
+    and snapshotting go to the lane of the host that holds it, since a
+    workspace lives where it was prepared, and erasing to the host whose
+    store keeps the snapshots. A prepare that starts the workspace from a
+    snapshot names it (`snapshot`: its reference, digest, and size), and
+    goes to the lane of the host that holds the workspace when one does, so
+    that host replaces it; a snapshot names the id it is kept under.
 
     The work's target is the session. A prepare names the spec it is held
     to and, after it, what it asks of its host, which the host holds to its
@@ -87,10 +95,25 @@ class WorkspacePayload(Platform):
     by_person: bool = False
     project_id: UUID | None = None
     instance_of: UUID | None = None
+    snapshot: HostSnapshot | None = None
 
     @model_validator(mode="after")
     def _names_where_it_runs(self) -> WorkspacePayload:
-        preparing = self.operation is WorkspaceOperation.PREPARE
-        if preparing != (self.pool_id is not None) or preparing == (self.host_id is not None):
-            raise ValueError("a prepare names its pool alone, and a release or a purge its host")
+        if self.operation is WorkspaceOperation.PREPARE:
+            if self.pool_id is None or (self.host_id is not None and self.snapshot is None):
+                raise ValueError(
+                    "a prepare names its pool, and the host that holds the workspace only "
+                    "when it starts it from a snapshot"
+                )
+        elif self.pool_id is not None or self.host_id is None:
+            raise ValueError("a release, a purge, a snapshot, or an erase names its host alone")
+        named = self.snapshot
+        if self.operation is WorkspaceOperation.SNAPSHOT:
+            if named is None or named.reference is not None:
+                raise ValueError("a snapshot names the id it is kept under, and nothing more")
+        elif self.operation is WorkspaceOperation.PREPARE:
+            if named is not None and None in (named.reference, named.digest, named.size):
+                raise ValueError("a restore names its snapshot's reference, digest, and size")
+        elif named is not None:
+            raise ValueError("a release, a purge, or an erase names no snapshot")
         return self

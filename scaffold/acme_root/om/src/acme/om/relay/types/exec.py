@@ -14,6 +14,7 @@ from acme.infra.transports import FileEntry, SecretUse
 from acme.infra.workspaces import IsolationSpec
 from acme.om.base import Created, FrozenMapping, Identifiable, Platform, Trackable
 from acme.om.placement.types.work import ExecEffect, ExecOperation
+from acme.om.workspaces.types.snapshot import DIGEST, REFERENCE
 
 Stream = Literal["stdout", "stderr"]
 
@@ -241,13 +242,40 @@ class WorkspaceBinding(Identifiable, Trackable):
 
 class PrepareAnswer(Platform):
     """A host's answer to a prepare it claimed: where on it the workspace
-    it made is, or why it made none. Exactly one of the two."""
+    it made is, or why it made none. Exactly one of the two. A refusal is
+    `lost` when the snapshot the host that holds the workspace was asked to
+    start it from is gone from its store, or altered there: no host is asked
+    again."""
 
     location: str | None = Field(default=None, min_length=1, max_length=1024)
     refused: str | None = Field(default=None, min_length=1, max_length=2000)
+    lost: bool = False
 
     @model_validator(mode="after")
     def _one_of_the_two(self) -> PrepareAnswer:
         if (self.location is None) == (self.refused is None):
             raise ValueError("a prepare is answered with its location or its refusal")
+        if self.lost and self.refused is None:
+            raise ValueError("only a refusal is lost")
+        return self
+
+
+class SnapshotAnswer(Platform):
+    """A host's answer to a snapshot it claimed: kept in its own store, under
+    the reference the store knows it by, with the digest of its bytes and
+    their size, never the bytes; or why it kept none. Exactly one of the
+    two."""
+
+    reference: str | None = Field(default=None, pattern=REFERENCE)
+    digest: str | None = Field(default=None, pattern=DIGEST)
+    size: int | None = Field(default=None, ge=0)
+    refused: str | None = Field(default=None, min_length=1, max_length=2000)
+
+    @model_validator(mode="after")
+    def _one_of_the_two(self) -> SnapshotAnswer:
+        kept = (self.reference, self.digest, self.size)
+        if self.refused is None and None in kept:
+            raise ValueError("a kept snapshot names its reference, its digest, and its size")
+        if self.refused is not None and kept != (None, None, None):
+            raise ValueError("a snapshot is answered as kept or as refused")
         return self

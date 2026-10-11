@@ -1429,12 +1429,15 @@ class Refused(RootModel[str]):
 class PrepareRequest(BaseModel):
     """
     A host's answer to a prepare it claimed: where on it the workspace it
-    made is, or why it made none. Exactly one of the two.
+    made is, or why it made none. Exactly one of the two. A refusal is
+    `lost` when the snapshot the host that holds the workspace was asked to
+    start it from is gone from its store, or altered there.
     """
     model_config = ConfigDict(
         extra='forbid',
     )
     location: Annotated[Location | None, Field(title='Location')] = None
+    lost: Annotated[bool | None, Field(title='Lost')] = False
     refused: Annotated[Refused | None, Field(title='Refused')] = None
 
 
@@ -1850,6 +1853,34 @@ class SignedOutView(BaseModel):
     id: Annotated[UUID, Field(title='Id')]
     provider_logout_url: Annotated[str | None, Field(title='Provider Logout Url')] = None
     revoked_at: Annotated[AwareDatetime | None, Field(title='Revoked At')]
+
+
+class Digest(RootModel[str]):
+    root: Annotated[str, Field(pattern='^sha256:[0-9a-f]{64}$', title='Digest')]
+
+
+class Reference(RootModel[str]):
+    root: Annotated[str, Field(pattern='^[A-Za-z0-9][A-Za-z0-9._/-]{0,511}$', title='Reference')]
+
+
+class Size(RootModel[int]):
+    root: Annotated[int, Field(ge=0, title='Size')]
+
+
+class SnapshotRequest(BaseModel):
+    """
+    A host's answer to a snapshot it claimed: kept in its own store, under
+    the reference the store knows it by, with the SHA-256 of its bytes and
+    their size, never the bytes; or why it kept none. Exactly one of the
+    two.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    digest: Annotated[Digest | None, Field(title='Digest')] = None
+    reference: Annotated[Reference | None, Field(title='Reference')] = None
+    refused: Annotated[Refused | None, Field(title='Refused')] = None
+    size: Annotated[Size | None, Field(title='Size')] = None
 
 
 class SnapshotView(BaseModel):
@@ -2594,13 +2625,16 @@ class CreateBudgetRequest(BaseModel):
 
 class CreateProjectRequest(BaseModel):
     """
-    A project and the one repository it binds, which never moves.
+    A project and the one repository it binds, which never moves, and
+    whether a kind that keeps its workspace by snapshots keeps it so here:
+    False keeps each of its sessions' workspaces a cache.
     """
     model_config = ConfigDict(
         extra='forbid',
     )
     name: Annotated[str, Field(max_length=200, min_length=1, title='Name')]
     repository: RepositoryBody
+    workspace_snapshots: Annotated[bool | None, Field(title='Workspace Snapshots')] = True
 
 
 class CrossingBody(BaseModel):
@@ -3132,6 +3166,7 @@ class ProjectView(BaseModel):
     repository: RepositoryView
     updated_at: Annotated[AwareDatetime, Field(title='Updated At')]
     updated_by: Annotated[UUID, Field(title='Updated By')]
+    workspace_snapshots: Annotated[bool, Field(title='Workspace Snapshots')]
 
 
 class ProviderKeyView(BaseModel):

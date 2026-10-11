@@ -1170,19 +1170,47 @@ class ApiClient:
         )
 
     async def answer_prepare(
-        self, item_id: UUID, *, location: str | None = None, refused: str | None = None
+        self,
+        item_id: UUID,
+        *,
+        location: str | None = None,
+        refused: str | None = None,
+        lost: bool = False,
     ) -> PreparedView:
         """A prepare this host claimed: where the workspace it made is, or why
-        it made none. `held` False says another host of the pool holds the
-        session's workspace, and this host lets its own go."""
-        body = {"location": location} if refused is None else {"refused": refused}
+        it made none, `lost` when the snapshot it was to start from is gone
+        from its store or altered there. `held` False says another host of
+        the pool holds the session's workspace, and this host lets its own
+        go."""
+        body: dict[str, object] = (
+            {"location": location} if refused is None else {"refused": refused, "lost": lost}
+        )
         answer = await self.request("POST", f"/v1/hosts/me/workspaces/{item_id}", json=body)
         return PreparedView.model_validate(answer)
 
     async def answer_release(self, item_id: UUID) -> None:
-        """A release or a purge this host claimed: the instance is gone. A
-        release keeps its files; a purge keeps none."""
+        """A release, a purge, or an erase this host claimed: what it names is
+        gone. A release keeps the workspace's files; a purge keeps none."""
         await self.request("POST", f"/v1/hosts/me/workspaces/{item_id}/released")
+
+    async def answer_snapshot(
+        self,
+        item_id: UUID,
+        *,
+        reference: str | None = None,
+        digest: str | None = None,
+        size: int | None = None,
+        refused: str | None = None,
+    ) -> None:
+        """A snapshot this host claimed: kept in its own store, by the
+        reference the store knows it by, the SHA-256 of its bytes, and their
+        size, never the bytes; or why it kept none."""
+        body: dict[str, object] = (
+            {"reference": reference, "digest": digest, "size": size}
+            if refused is None
+            else {"refused": refused}
+        )
+        await self.request("POST", f"/v1/hosts/me/workspaces/{item_id}/snapshot", json=body)
 
     async def extend_exec_lease(self, item_id: UUID) -> ExecLeaseView:
         answer = await self.request("POST", f"/v1/hosts/me/exec/{item_id}/lease")

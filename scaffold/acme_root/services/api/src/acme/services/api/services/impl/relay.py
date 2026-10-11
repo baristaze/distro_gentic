@@ -20,7 +20,7 @@ from acme.om.hosts.types.host import HostIdentity
 from acme.om.placement.rules import host_lane, pool_lane
 from acme.om.relay import RelayManagerInterface
 from acme.om.relay.rules import CONTROL_KIND
-from acme.om.relay.types.exec import REQUESTS, PrepareAnswer
+from acme.om.relay.types.exec import REQUESTS, PrepareAnswer, SnapshotAnswer
 from acme.om.retention.crossing import Crossing
 from acme.services.api.services.relay import RelayServiceInterface
 from acme.services.api.types.relay import (
@@ -33,6 +33,7 @@ from acme.services.api.types.relay import (
     PreparedView,
     PrepareRequest,
     ResultRequest,
+    SnapshotRequest,
 )
 
 log = logging.getLogger(__name__)
@@ -112,16 +113,30 @@ class RelayServiceImpl(RelayServiceInterface):
         self, rctx: RequestContext, host: HostIdentity, item_id: UUID, body: PrepareRequest
     ) -> PreparedView:
         try:
-            answer = PrepareAnswer(location=body.location, refused=body.refused)
+            answer = PrepareAnswer(location=body.location, refused=body.refused, lost=body.lost)
         except ValueError as error:
             raise ValidationFailed(
-                "a prepare is answered with its location or its refusal"
+                "a prepare is answered with its location or its refusal, and only a refusal is lost"
             ) from error
         binding = await self._relay.prepared(rctx, host, item_id, answer)
         return PreparedView(held=binding is not None and binding.host_id == host.host_id)
 
     async def released(self, rctx: RequestContext, host: HostIdentity, item_id: UUID) -> None:
         await self._relay.released(rctx, host, item_id)
+
+    async def snapshotted(
+        self, rctx: RequestContext, host: HostIdentity, item_id: UUID, body: SnapshotRequest
+    ) -> None:
+        try:
+            answer = SnapshotAnswer(
+                reference=body.reference, digest=body.digest, size=body.size, refused=body.refused
+            )
+        except ValueError as error:
+            raise ValidationFailed(
+                "a snapshot is answered as kept, with its reference, digest, and size, or as "
+                "refused"
+            ) from error
+        await self._relay.snapshotted(rctx, host, item_id, answer)
 
     async def extend(
         self, rctx: RequestContext, host: HostIdentity, item_id: UUID

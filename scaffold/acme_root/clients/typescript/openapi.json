@@ -2184,7 +2184,7 @@
       },
       "CreateProjectRequest": {
         "additionalProperties": false,
-        "description": "A project and the one repository it binds, which never moves.",
+        "description": "A project and the one repository it binds, which never moves, and\nwhether a kind that keeps its workspace by snapshots keeps it so here:\nFalse keeps each of its sessions' workspaces a cache.",
         "properties": {
           "name": {
             "maxLength": 200,
@@ -2194,6 +2194,11 @@
           },
           "repository": {
             "$ref": "#/components/schemas/RepositoryBody"
+          },
+          "workspace_snapshots": {
+            "default": true,
+            "title": "Workspace Snapshots",
+            "type": "boolean"
           }
         },
         "required": [
@@ -7152,7 +7157,7 @@
       },
       "PrepareRequest": {
         "additionalProperties": false,
-        "description": "A host's answer to a prepare it claimed: where on it the workspace it\nmade is, or why it made none. Exactly one of the two.",
+        "description": "A host's answer to a prepare it claimed: where on it the workspace it\nmade is, or why it made none. Exactly one of the two. A refusal is\n`lost` when the snapshot the host that holds the workspace was asked to\nstart it from is gone from its store, or altered there.",
         "properties": {
           "location": {
             "anyOf": [
@@ -7166,6 +7171,11 @@
               }
             ],
             "title": "Location"
+          },
+          "lost": {
+            "default": false,
+            "title": "Lost",
+            "type": "boolean"
           },
           "refused": {
             "anyOf": [
@@ -7269,12 +7279,17 @@
             "format": "uuid",
             "title": "Updated By",
             "type": "string"
+          },
+          "workspace_snapshots": {
+            "title": "Workspace Snapshots",
+            "type": "boolean"
           }
         },
         "required": [
           "id",
           "name",
           "repository",
+          "workspace_snapshots",
           "created_at",
           "created_by",
           "updated_at",
@@ -8706,6 +8721,63 @@
           "revoked_at"
         ],
         "title": "SignedOutView",
+        "type": "object"
+      },
+      "SnapshotRequest": {
+        "additionalProperties": false,
+        "description": "A host's answer to a snapshot it claimed: kept in its own store, under\nthe reference the store knows it by, with the SHA-256 of its bytes and\ntheir size, never the bytes; or why it kept none. Exactly one of the\ntwo.",
+        "properties": {
+          "digest": {
+            "anyOf": [
+              {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Digest"
+          },
+          "reference": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]{0,511}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference"
+          },
+          "refused": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refused"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          }
+        },
+        "title": "SnapshotRequest",
         "type": "object"
       },
       "SnapshotView": {
@@ -21587,7 +21659,7 @@
     },
     "/v1/hosts/me/workspaces/{item_id}/released": {
       "post": {
-        "description": "The host's answer to a release or a purge it claimed: the instance is\ngone. A release keeps its files on the host; a purge keeps none.",
+        "description": "The host's answer to a release, a purge, or an erase it claimed: what\nit names is gone. A release keeps the workspace's files on the host; a\npurge keeps none, and an erase lets the session's snapshots go from the\nhost's store.",
         "operationId": "released_v1_hosts_me_workspaces__item_id__released_post",
         "parameters": [
           {
@@ -21665,6 +21737,101 @@
           }
         },
         "summary": "Released",
+        "tags": [
+          "relay"
+        ]
+      }
+    },
+    "/v1/hosts/me/workspaces/{item_id}/snapshot": {
+      "post": {
+        "description": "The host's answer to a snapshot it claimed: kept in its own store, by\nthe reference the store knows it by and the digest of its bytes, which\nthe platform records, never the bytes; or why it kept none.",
+        "operationId": "snapshotted_v1_hosts_me_workspaces__item_id__snapshot_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SnapshotRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Snapshotted",
         "tags": [
           "relay"
         ]

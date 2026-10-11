@@ -6,13 +6,16 @@ the prefix `ACME` and the kind `host`: `ACME_API_URL`, `ACME_HOST_HOME`
 and the owner's `ceilings.toml`, `ACME_HOST_NAME`, the name it enrolls
 under, and `ACME_ENROLLMENT_TOKEN`, read once at its first start. Its own
 are `ACME_HOST_WORKSPACE_USER`, the dedicated user a bare-directory
-workspace runs as, the image a container workspace runs, and how long a
-pull of it may take. Nothing the platform answers changes any of them."""
+workspace runs as, the image a container workspace runs, how long a pull of
+it may take, and `ACME_HOST_SNAPSHOTS`, the store its workspaces' snapshots
+are kept in (default `snapshots` under its home), which hosts of a pool may
+share. Nothing the platform answers changes any of them."""
 
 import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from acme.apps.host.snapshots import STORE_FOLDER
 from acme.client.claimant.credential import BadSetting
 from acme.client.claimant.settings import ClaimantSettings, claimant_env
 
@@ -32,6 +35,13 @@ class Settings(ClaimantSettings):
     workspace_image: str = DEFAULT_IMAGE
     pull_timeout_seconds: float = 900.0
     max_clock_skew_seconds: float = 60.0
+    snapshot_store: Path | None = None  # None: `snapshots` under its home
+
+    @property
+    def snapshots_path(self) -> Path:
+        """The store its workspaces' snapshots are kept in, inside its
+        owner's wall: owner-only, never sent to the platform."""
+        return self.snapshot_store or self.home / STORE_FOLDER
 
     @property
     def ceilings_path(self) -> Path:
@@ -68,4 +78,7 @@ def settings_from_env() -> Settings:
         workspace_user=os.environ.get("ACME_HOST_WORKSPACE_USER") or None,
         workspace_image=os.environ.get("ACME_HOST_WORKSPACE_IMAGE") or DEFAULT_IMAGE,
         pull_timeout_seconds=_seconds("ACME_HOST_PULL_TIMEOUT_SECONDS", 900.0),
+        snapshot_store=Path(os.environ["ACME_HOST_SNAPSHOTS"])
+        if os.environ.get("ACME_HOST_SNAPSHOTS")
+        else None,
     )

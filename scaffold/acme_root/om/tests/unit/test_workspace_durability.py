@@ -6,7 +6,9 @@ takes no snapshot, and its next loop starts from its branch. A workspace a
 snapshot restores keeps the tree it holds: no branch is brought over it. A
 provider that refuses for good what a prepare asks beyond its isolation
 ends the loop with its reason. Past a session's content's life, the sweep
-takes its snapshots from the bucket and their records."""
+takes its snapshots from the bucket and their records. A workspace a host
+holds inside its tenant's wall is snapshotted by that host, and restored
+there from a snapshot decided before any host is asked."""
 
 import logging
 from dataclasses import dataclass, field, replace
@@ -31,7 +33,9 @@ from acme.infra.workspaces import (
     IsolationMode,
     IsolationRefused,
     IsolationSpec,
+    SnapshotRefused,
     Workspace,
+    WorkspaceLost,
 )
 from acme.infra.workspaces.twin import WorkspaceTwinImpl
 from acme.om.agents.types.kind import AgentKind
@@ -44,12 +48,16 @@ from acme.om.projects.impl.retention import SessionProjectBoundImpl
 from acme.om.retention.impl.keys import TenantKeysImpl
 from acme.om.retention.impl.manager import RetentionManagerImpl, RetentionOptions
 from acme.om.retention.types.policy import RetentionPolicy
-from acme.om.steps.types.header import LoopOutcome, ParkReason
+from acme.om.steps.types.header import LoopOutcome, ParkReason, WorkspaceSnapshot
 from acme.om.steps.types.step import Step, StepType
 from acme.om.tools.impl.snapshots import session_prefix
 from acme.om.tools.tool import ToolRuntime
 from acme.om.tools.types.tool import Effect, ToolClass, ToolInput
+from acme.om.workspaces.impl.tools import ToolsManagerWorkspacesImpl
+from acme.om.workspaces.placed import PlacedWorkspacesInterface
 from acme.om.workspaces.rules import session_branch
+from acme.om.workspaces.types.host import HostOffer
+from acme.om.workspaces.types.snapshot import HostSnapshot
 
 KEPT = IsolationSpec(
     mode=IsolationMode.TWIN,
@@ -109,7 +117,7 @@ def kept_loop(tmp_path: Path, **roots: Any) -> tuple[Loop, WorkspaceTwinImpl]:
     return loop, twin
 
 
-async def wrote(loop: Loop, session_id: UUID, files: str) -> LoopOutcome:
+async def wrote(loop: Loop, session_id: UUID, files: str) -> LoopOutcome | None:
     await loop.say(session_id, "Write it.")
     loop.anthropic.add(reply(call("scribble", q=files)), reply(said("Written.")))
     return (await loop.loops.run(loop.owner, session_id)).outcome
@@ -342,3 +350,141 @@ async def test_the_sweep_takes_a_sessions_snapshots_past_its_contents_life(
     assert len(await workspaces.kept_snapshots(loop.owner, staying)) == 1
     with pytest.raises(NotFound):
         await loop.managers.tools.find_snapshot(loop.owner, expiring, new_id())
+
+
+# A workspace a host holds inside its tenant's wall.
+
+
+class Placed(PlacedWorkspacesInterface):
+    """A pool of one host, as the relay answers for it: the restore each
+    prepare carried, the snapshots asked, and the host's answer to each,
+    recorded as the relay records it."""
+
+    def __init__(self, tools: list[ToolsManagerWorkspacesImpl], pool_id: UUID) -> None:
+        self._tools = tools
+        self.pool_id, self.host_id = pool_id, new_id()
+        self.restores: list[HostSnapshot | None] = []
+        self.asked: list[UUID] = []
+        self.refuses: str | None = None
+
+    async def pool_of(self, ctx: TenantContext, session_id: UUID) -> UUID | None:
+        return self.pool_id
+
+    async def held_on_host(
+        self,
+        ctx: TenantContext,
+        session_id: UUID,
+        spec: IsolationSpec,
+        restore: HostSnapshot | None = None,
+    ) -> Workspace | None:
+        self.restores.append(restore)
+        return Workspace(id=session_id, org_id=ctx.org_id, spec=spec, location="host:1")
+
+    async def snapshot_on_host(
+        self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec, snapshot_id: UUID
+    ) -> UUID:
+        self.asked.append(snapshot_id)
+        if self.refuses is None:
+            kept = HostSnapshot(
+                id=snapshot_id,
+                reference=f"{ctx.org_id}/{session_id}/{snapshot_id}",
+                digest="sha256:" + "ab" * 32,
+                size=7,
+            )
+            await self._tools[0].keep_on_host(ctx, session_id, kept, self.pool_id, self.host_id)
+        return snapshot_id
+
+    async def refusal_of(self, ctx: TenantContext, item_id: UUID) -> str | None:
+        return self.refuses
+
+    async def erase_on_host(self, ctx: TenantContext, session_id: UUID, host_id: UUID) -> None:
+        return None
+
+
+def on_host(loop: Loop, placed: Placed, tools: list[ToolsManagerWorkspacesImpl]) -> None:
+    """The platform's tools over the loop's, with a pool of one host; the
+    inner tools never take a hosted workspace's snapshot."""
+
+    async def never(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("the platform's own provider snapshotted a host's workspace")
+
+    inner = loop.managers.tools
+    inner.snapshot_workspace = never  # type: ignore[method-assign]
+    tools.append(
+        ToolsManagerWorkspacesImpl(
+            inner,
+            loop.managers.workspaces,
+            loop.managers.steps,
+            HostOffer(),
+            local=True,
+            placed=placed,
+            keyed_hash=loop.managers.privacy.keyed_hash,
+            snapshot_wait=timedelta(seconds=1),
+        )
+    )
+
+
+async def test_a_hosted_workspace_is_snapshotted_by_its_host_and_restored_there_from_it(
+    tmp_path: Path,
+) -> None:
+    """The run's end asks the host that holds the workspace for its
+    snapshot, and the step names the hash keyed from the digest the host
+    declared. The next prepare decides its restore first: it travels with
+    the ask, by the reference and the digest the record holds."""
+    loop, _ = kept_loop(tmp_path)
+    tools: list[ToolsManagerWorkspacesImpl] = []
+    placed = Placed(tools, new_id())
+    on_host(loop, placed, tools)
+    session_id = await loop.start(KEEPER.name)
+    epoch = await loop.managers.steps.begin_run(loop.owner, session_id)
+    workspace = await tools[0].prepare_workspace(loop.owner, session_id, KEPT)
+    assert placed.restores == [None]
+
+    step = await tools[0].snapshot_workspace(
+        loop.owner, session_id, workspace, epoch=epoch, loop_id=new_id()
+    )
+
+    assert step.type is StepType.SNAPSHOTTED and step.header is not None
+    named: WorkspaceSnapshot = step.header.snapshot  # type: ignore[union-attr]
+    record = await loop.managers.workspaces.kept_snapshot(loop.owner, named.id)
+    assert record is not None and record.on_host and placed.asked == [named.id]
+    assert (named.hash, named.size) == (record.hash, record.size)
+
+    await tools[0].prepare_workspace(loop.owner, session_id, KEPT, restore=named)
+
+    restore = placed.restores[-1]
+    assert restore is not None
+    assert (restore.id, restore.reference, restore.digest) == (
+        record.id,
+        record.reference,
+        record.digest,
+    )
+
+
+async def test_a_hosts_refusal_keeps_no_snapshot_and_a_bucket_snapshot_never_reaches_a_host(
+    tmp_path: Path,
+) -> None:
+    """A host that keeps none answers why, and no step names one. A restore
+    of a snapshot the platform's bucket keeps is lost before any host of
+    the pool is asked: its bytes never cross into the wall."""
+    loop, _ = kept_loop(tmp_path)
+    session_id = await loop.start(KEEPER.name)
+    assert await wrote(loop, session_id, "kept in the bucket") is LoopOutcome.SUCCEEDED
+    (taken,) = of_type(await loop.history(session_id), StepType.SNAPSHOTTED)
+    in_the_bucket: WorkspaceSnapshot = taken.header.snapshot  # type: ignore[union-attr]
+    tools: list[ToolsManagerWorkspacesImpl] = []
+    placed = Placed(tools, new_id())
+    on_host(loop, placed, tools)
+    epoch = await loop.managers.steps.begin_run(loop.owner, session_id)
+
+    with pytest.raises(WorkspaceLost, match="never crosses into the wall"):
+        await tools[0].prepare_workspace(loop.owner, session_id, KEPT, restore=in_the_bucket)
+    assert placed.restores == [], "no host was asked"
+
+    workspace = await tools[0].prepare_workspace(loop.owner, session_id, KEPT)
+    placed.refuses = "the workspace holds the secret 'SERVICE_TOKEN', so it is not kept"
+    with pytest.raises(SnapshotRefused, match="SERVICE_TOKEN"):
+        await tools[0].snapshot_workspace(
+            loop.owner, session_id, workspace, epoch=epoch, loop_id=new_id()
+        )
+    assert len(of_type(await loop.history(session_id), StepType.SNAPSHOTTED)) == 1

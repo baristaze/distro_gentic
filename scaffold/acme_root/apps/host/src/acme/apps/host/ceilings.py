@@ -43,9 +43,11 @@ OPEN = "open"
 ALL = "all"
 MOST_AT_ONCE = 64
 """The most items a host runs at once, whatever its owner writes."""
-WITHIN_A_WORKSPACE = frozenset({"release", "purge"})
-"""Workspace operations that only let go of what the host already holds:
-they run nothing and read nothing, so only the tenant fence applies."""
+WITHIN_A_WORKSPACE = frozenset({"release", "purge", "snapshot", "erase"})
+"""Workspace operations on what the host already holds: letting a workspace
+go, keeping a snapshot of it in the host's own store, and letting its
+snapshots go. They run no command, and nothing of the workspace leaves the
+host, so only the tenant fence applies."""
 
 
 @dataclass(frozen=True)

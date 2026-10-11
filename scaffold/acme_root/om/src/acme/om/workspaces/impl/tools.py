@@ -29,9 +29,10 @@ inside its tenant's wall is the exception: its workspace is the one the host
 of its pool holds (`PlacedWorkspacesInterface`), which this process neither
 makes nor lets go, and its checkout runs there through the relay."""
 
+import asyncio
 import logging
-from collections.abc import Callable, Mapping, Sequence
-from datetime import datetime
+from collections.abc import Awaitable, Callable, Mapping, Sequence
+from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -42,18 +43,19 @@ from acme.infra.workspaces import (
     IsolationMode,
     IsolationRefused,
     IsolationSpec,
+    SnapshotRefused,
     Workspace,
     WorkspaceLost,
 )
-from acme.om.base import utcnow
+from acme.om.base import new_id, utcnow
 from acme.om.context import TenantContext
 from acme.om.steps import StepsManagerInterface
-from acme.om.steps.types.header import WorkspaceSnapshot
+from acme.om.steps.types.header import HASH_SCHEME, WorkspaceSnapshot
 from acme.om.steps.types.step import Step
 from acme.om.tools.impl.snapshots import SnapshotStore, snapshot_key
-from acme.om.tools.manager import ToolsManagerInterface
+from acme.om.tools.manager import KeyedHash, ToolsManagerInterface
 from acme.om.tools.registry import ToolRegistry
-from acme.om.tools.rules import named_snapshot
+from acme.om.tools.rules import named_snapshot, snapshotted_step
 from acme.om.tools.tool import TakenSnapshot
 from acme.om.tools.types.call import Gate, JobHandle, JobNotStarted
 from acme.om.tools.types.policy import PolicyLayer, ToolPolicy
@@ -61,9 +63,19 @@ from acme.om.workspaces.manager import WorkspacesManagerInterface
 from acme.om.workspaces.placed import PlacedWorkspacesInterface
 from acme.om.workspaces.rules import host_refusal
 from acme.om.workspaces.types.host import HostOffer
-from acme.om.workspaces.types.snapshot import KeptSnapshot
+from acme.om.workspaces.types.snapshot import HostSnapshot, KeptSnapshot
 
 log = logging.getLogger(__name__)
+
+
+EraseOnHost = Callable[[TenantContext, UUID, UUID], Awaitable[None]]
+"""Asks the host given, by its id, to let the session's snapshots go from its
+store."""
+
+FIRST_POLL = timedelta(milliseconds=50)
+LAST_POLL = timedelta(seconds=1)
+"""How often a host's snapshot is looked for: a wait that doubles from the
+first to the last."""
 
 
 def _beyond_isolation(spec: IsolationSpec, restore: WorkspaceSnapshot | None) -> bool:
@@ -115,10 +127,18 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         held: HeldWorkspaces | None = None,
         placed: PlacedWorkspacesInterface | None = None,
         snapshots: SnapshotStore | None = None,
+        keyed_hash: KeyedHash | None = None,
+        erase_on_host: EraseOnHost | None = None,
+        snapshot_wait: timedelta = timedelta(minutes=10),
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._inner = inner
         self._snapshots = snapshots
+        self._keyed_hash = keyed_hash
+        self._erase_on_host = erase_on_host
+        self._snapshot_wait = snapshot_wait
+        self._sleep = sleep
         self._clock = clock
         self._workspaces = workspaces
         self._steps = steps
@@ -163,18 +183,19 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         # The run that prepares it took its epoch just before: what this
         # host holds for the session is held under it.
         epoch = (await self._steps.get_cursor(ctx, session_id)).epoch
-        if self._placed is not None:
-            hosted = await self._placed.held_on_host(ctx, session_id, pinned)
-            if hosted is not None and restore is not None:
-                # Its host made it, and no snapshot reaches the host: the
-                # restore is lost, never met by the host's workspace instead.
-                raise WorkspaceLost(
-                    f"snapshot {restore.id} cannot reach the host that holds the workspace"
-                )
+        pool = None if self._placed is None else await self._placed.pool_of(ctx, session_id)
+        if self._placed is not None and pool is not None:
+            # A restore is decided before any host is asked, and travels
+            # with the ask: its host starts the workspace from it.
+            kept = None if restore is None else await self._in_store(ctx, session_id, pool, restore)
+            hosted = await self._placed.held_on_host(ctx, session_id, pinned, kept)
             if hosted is not None:
                 # Its host made it to the pin and holds it; the checkout is
-                # brought up to the session's branch there.
-                attached = await self._workspaces.attach(ctx, hosted, epoch)
+                # brought up to the session's branch there, unless a
+                # snapshot started it.
+                attached = await self._workspaces.attach(
+                    ctx, hosted, epoch, restored=restore is not None
+                )
                 self._hosted.add(session_id)
                 self._held.hold(attached, epoch)
                 return attached
@@ -258,6 +279,12 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         epoch: int,
         loop_id: UUID,
     ) -> Step:
+        if session_id in self._hosted:
+            # Its host holds it: the host takes the snapshot, and its bytes
+            # stay in the host's store, inside the wall.
+            return await self._snapshot_on_host(
+                ctx, session_id, workspace, epoch=epoch, loop_id=loop_id
+            )
         step = await self._inner.snapshot_workspace(
             ctx, session_id, workspace, epoch=epoch, loop_id=loop_id
         )
@@ -300,10 +327,91 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         # The session's key is gone, so its archives are noise: they leave
         # the bucket, and what its provider keeps outside them goes with
         # them. A copy kept for another session, a fork's, is that one's.
+        # A host's store keeps its bytes unsealed inside the wall: each host
+        # that keeps one is asked to let them go.
         await self._inner.erase_snapshots(ctx, session_id)
         if self._snapshots is not None:
             await self._snapshots.purge(ctx.org_id, session_id)
+        kept = await self._workspaces.kept_snapshots(ctx, session_id)
+        hosts = {record.host_id for record in kept if record.host_id is not None}
+        if hosts and self._erase_on_host is None:
+            log.error("session %s: no host is asked to erase its snapshots", session_id)
+        elif self._erase_on_host is not None:
+            for host_id in sorted(hosts):
+                await self._erase_on_host(ctx, session_id, host_id)
         await self._workspaces.forget_snapshots(ctx.org_id, session_id)
+
+    async def keep_on_host(
+        self,
+        ctx: TenantContext,
+        session_id: UUID,
+        snapshot: HostSnapshot,
+        pool_id: UUID,
+        host_id: UUID,
+    ) -> None:
+        """Records a snapshot a host kept in its own store, by the reference
+        and the digest it answered, never its bytes. The hash the history
+        names is the digest's, keyed by the session, so once its key is
+        revoked nothing confirms what it held."""
+        assert snapshot.reference is not None and snapshot.digest is not None
+        assert snapshot.size is not None  # a kept snapshot's answer names all three
+        if self._keyed_hash is None:
+            raise SnapshotRefused("this process keys no hash, so it records no host's snapshot")
+        keyed = await self._keyed_hash(ctx, session_id, snapshot.digest.encode())
+        now = self._clock()
+        await self._workspaces.keep_snapshot(
+            ctx,
+            KeptSnapshot(
+                id=snapshot.id,
+                created_at=now,
+                updated_at=now,
+                created_by=ctx.user_id,
+                updated_by=ctx.user_id,
+                session_id=session_id,
+                hash=HASH_SCHEME + keyed,
+                size=snapshot.size,
+                pool_id=pool_id,
+                host_id=host_id,
+                reference=snapshot.reference,
+                digest=snapshot.digest,
+            ),
+        )
+
+    async def _snapshot_on_host(
+        self,
+        ctx: TenantContext,
+        session_id: UUID,
+        workspace: Workspace,
+        *,
+        epoch: int,
+        loop_id: UUID,
+    ) -> Step:
+        """The snapshot the host that holds the workspace keeps in its own
+        store, once it is recorded, and the step that names it. The host
+        takes back what its broker attached, scans for its secrets' values,
+        and keeps nothing that holds one."""
+        assert self._placed is not None
+        snapshot_id = new_id()
+        item_id = await self._placed.snapshot_on_host(ctx, session_id, workspace.spec, snapshot_id)
+        by = self._clock() + self._snapshot_wait
+        wait = FIRST_POLL
+        while (record := await self._workspaces.kept_snapshot(ctx, snapshot_id)) is None:
+            refused = await self._placed.refusal_of(ctx, item_id)
+            if refused is not None:
+                raise SnapshotRefused(f"the host kept no snapshot of the workspace: {refused}")
+            left = (by - self._clock()).total_seconds()
+            if left <= 0:
+                raise SnapshotRefused(
+                    f"the host that holds session {session_id}'s workspace kept no snapshot in time"
+                )
+            await self._sleep(min(wait.total_seconds(), left))
+            wait = min(wait * 2, LAST_POLL)
+        taken = WorkspaceSnapshot(
+            id=snapshot_id, hash=record.hash, size=record.size, workspace_id=workspace.id
+        )
+        step = snapshotted_step(new_id(), self._clock(), session_id, loop_id, taken)
+        (stored,) = await self._steps.append_steps(ctx, session_id, epoch, [step])
+        return stored
 
     async def _recorded(
         self, ctx: TenantContext, session_id: UUID, taken: WorkspaceSnapshot
@@ -330,6 +438,32 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
             log.exception(
                 "session %s: where snapshot %s lives was not recorded", session_id, taken.id
             )
+
+    async def _in_store(
+        self, ctx: TenantContext, session_id: UUID, pool_id: UUID, restore: WorkspaceSnapshot
+    ) -> HostSnapshot:
+        """The snapshot a restore of a session inside its tenant's wall starts
+        from, as the store of a host of its pool keeps it. One the platform's
+        bucket keeps never crosses into the wall, one another pool keeps is
+        out of reach, and one whose record does not match the step that names
+        it is not trusted: each loses the workspace (`WorkspaceLost`)."""
+        record = await self._workspaces.kept_snapshot(ctx, restore.id)
+        what = f"snapshot {restore.id} of session {session_id}"
+        if record is None or not record.on_host:
+            raise WorkspaceLost(
+                f"{what} is kept in the platform's bucket, which never crosses into the wall"
+            )
+        if record.pool_id != pool_id:
+            raise WorkspaceLost(f"{what} is kept inside another pool's wall, out of reach")
+        if (record.session_id, record.hash, record.size) != (
+            session_id,
+            restore.hash,
+            restore.size,
+        ):
+            raise WorkspaceLost(f"{what} is not the one its record names")
+        return HostSnapshot(
+            id=record.id, reference=record.reference, digest=record.digest, size=record.size
+        )
 
     async def _in_bucket(
         self, ctx: TenantContext, session_id: UUID, restore: WorkspaceSnapshot
