@@ -8,8 +8,8 @@ under, and `ACME_ENROLLMENT_TOKEN`, read once at its first start. Its own
 are `ACME_HOST_WORKSPACE_USER`, the dedicated user a bare-directory
 workspace runs as, the image a container workspace runs, how long a pull of
 it may take, and `ACME_HOST_SNAPSHOTS`, the store its workspaces' snapshots
-are kept in (default `snapshots` under its home), which hosts of a pool may
-share. Nothing the platform answers changes any of them."""
+and its tenants' bases are kept in (default `snapshots` under its home),
+which hosts of a pool may share. Nothing the platform answers changes any of them."""
 
 import os
 from dataclasses import dataclass

@@ -296,3 +296,35 @@ replaces.
 **Severity.** high
 
 **Check.** review
+
+## WSP-14 A project's environment is built once, where it runs, and sealed
+
+**Principle.** A project names its environment: an image, the commands
+that set it up, and the package registries the setup reaches. A kind
+that takes it pins it when its session is created, and the session
+keeps it: a changed environment is built again for the sessions after
+it. It is built once where its workspaces run, by the runner's provider
+into the platform's object store, or by the customer's host into its
+own store, inside the wall. Its setup runs the project's commands alone,
+with no model, no secret, no platform credential, and nothing of the
+tenant's records; a workspace on it keeps its kind's egress. A setup
+that fails keeps nothing and says which command failed and how.
+
+**Source.** Workspaces and Isolation, A Project's Environment.
+
+**Look for.** Where a session's pin reads its project's environment and
+which kinds take it; the setup's environment, its egress, and the
+owner's ceilings it is held to on a host; where a built environment is
+kept and read back; what a failed setup leaves and what the run that
+waits on it says.
+
+**Violation.** A session whose environment changes under it; a setup
+given a secret, a platform credential, a tenant's record, or a model's
+words; a workspace on an environment with its setup's egress; an
+environment built on one side of the wall and served on the other; a
+half-built environment served; a failed setup that waits or ends with
+no command named.
+
+**Severity.** high
+
+**Check.** review

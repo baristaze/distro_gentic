@@ -7,8 +7,14 @@ one of the kinds of thing [Acme is made of](../../../../README.md).
 
 - **Project**: a tenant's unit of work. It has a name and binds one
   repository. Several policies are set per project: what validates a
-  change, where a workspace may reach, which secrets a command sees, and
-  how long a session's content is kept.
+  change, where a workspace may reach, which secrets a command sees, how
+  long a session's content is kept, and the environment its sessions'
+  workspaces start from.
+- **Environment**: what a project's sessions work in, if it names one:
+  an image, the commands that set it up, and the package registries the
+  setup reaches. It is built once and kept, and a session of a kind that
+  takes it starts from it with no network of its own
+  ([workspaces](../workspaces/README.md)).
 - **Repository**: where a project's code lives, named by its host and
   its path, such as `github.com` and `octo/reports`. Names are compared
   without case, as the hosts compare them.
@@ -20,6 +26,9 @@ one of the kinds of thing [Acme is made of](../../../../README.md).
 
 - **Create a project.** The tenant's owners and admins create it, with
   its repository. The repository never moves.
+- **Set a project's environment.** The owners and the admins set it,
+  replace it, or take it away. It reaches the sessions created after
+  it; a session keeps the one it started on.
 - **Rename or remove a project.** The owners and the admins rename it,
   and remove it while no session belongs to it. A project with sessions
   stays: they read their policies and their work product through it.

@@ -52,8 +52,11 @@ platform's cloud. Each call crosses the wall as `exec`
   workspace and answers where it is, which binds the session to it. A
   host that answers second, while the first holds it, lets its own go.
   One that cannot make it hands the ask back to the pool after a wait.
-  A session whose host is offline waits for it; one whose host was
-  revoked asks the pool again.
+  One whose base failed to build there answers it `unbuilt`: the work
+  spends an attempt, waits longer, and keeps the reason, which the loop
+  that waits says. A prepare that may build its base asks the host for
+  its setup's egress. A session whose host is offline waits for it; one
+  whose host was revoked asks the pool again.
 - **Release.** The runner's sweep finds a workspace a host holds that no
   run accounts for past its grace, among the bindings. It pushes the
   checkout's work through the relay first, then asks the holding host,

@@ -65,6 +65,17 @@ macOS.
   bytes match their digest; bytes gone or altered are answered lost. An
   erase lets a session's snapshots go. It refuses a workspace kept by
   snapshots at a mode whose snapshots it did not probe.
+- **Builds a project's environment in its own store.** A workspace on a
+  base with setup starts from the base this host keeps, built here once
+  in a workspace of its own: its setup runs the project's commands with
+  no secret and no variable of the host's, its snapshot is refused when
+  it holds a value of the host's secrets, and it is kept in the store
+  beside the snapshots, never sent anywhere. A prepare that finds the
+  build running waits a while, then is refused until it is done. A
+  setup command that fails keeps nothing, and the prepare is answered
+  `unbuilt` with the command and its exit code. A prepare whose setup
+  reaches a registry asks for open egress, so an owner who closed it
+  refuses that prepare.
 - **Shares its proxy and its CA, under open egress alone.** A command in
   a workspace with open egress goes through the proxy the host's
   environment names, without any credential in its URL, and trusts the
@@ -158,8 +169,9 @@ refused. What the item runs it reads from the gateway while it holds it
   and a pull cut short leaves nothing.
   `ACME_HOST_WORKSPACE_USER` is the user a bare-directory workspace runs
   as. `ACME_HOST_SNAPSHOTS` (default `snapshots` in its home) is the store
-  its workspaces' snapshots are kept in; hosts of a pool that share it
-  restore one another's.
+  its workspaces' snapshots and its tenants' bases are kept in; hosts of a
+  pool that share it restore one another's snapshots and start from one
+  another's bases.
 
 ## Test
 

@@ -394,6 +394,46 @@ workspace itself stays a cache.
   and from each host's store that keeps one, and their records go with
   them.
 
+### A Project's Environment
+
+`optional`
+
+An engineer works with no network, so it cannot install what its work
+needs, and open egress would make every command after its first tool
+result wait for a person. A project names its **environment** instead:
+an image, the commands that set it up, and the package registries the
+setup reaches. The platform builds it once and keeps it as a snapshot,
+and each session of the project starts from it, sealed. The engine
+calls it a base ([`agentic_core` Workspace Snapshots][e-snapshots]).
+
+- **Who chooses.** The project, set by whoever writes the tenant's
+  configuration. An agent kind takes its project's environment only
+  from a version that says so, as the platform's engineer does. A kind
+  that takes none, and a project that names none, work as before.
+- **Pinned with the session.** A session pins the environment its
+  project names when it is created, and keeps it. A changed environment
+  is another one, built again for the sessions created after it. A
+  session already running keeps the one it started on.
+- **Built where its workspaces run.** In the cloud, the runner's
+  provider builds it and keeps it in the platform's object store, under
+  the tenant. On a customer's host, that host builds it and keeps it in
+  its own store, inside the wall, as it keeps a snapshot. One build
+  serves the project on each side, and the hosts of a pool share one
+  when they share a store.
+- **The setup reaches registries, the workspace nothing.** A setup that
+  names a registry runs with open egress, the project's recorded
+  choice, and one that names none reaches nothing. A workspace on the
+  environment keeps its kind's egress; the engineer's is none. A host
+  whose owner closed egress refuses a setup that reaches out.
+- **No agent, no secret.** The setup runs the project's commands alone:
+  no model, no secret, no platform credential, and nothing of the
+  tenant's records. An environment whose snapshot holds a secret's
+  value is not kept.
+- **A failed setup keeps nothing.** In the cloud, the loop ends with the
+  failing command and its exit code. On a host, it waits on the
+  resource with them, since another host may build it. The next build
+  starts again.
+
 ### Isolation Levels
 
 `default`
@@ -868,6 +908,8 @@ Kinds][e-kinds]). A platform ships a few, each a
 profile with its own powers:
 
 - The **engineer** takes an objective to a validated, reviewable change.
+  Its workspace has no network and starts from its project's
+  environment ([A Project's Environment](#a-projects-environment)).
 - **Analysis** agents read what a run produced (telemetry, logs, video)
   and turn it into findings.
 - A **planner** turns findings into tasks and decides whether an
