@@ -21,6 +21,7 @@ const project = (org: "a" | "b", name: string): ProjectView => ({
   id: `p${org}`,
   name,
   repository: { host: "forge.example.com", path: `${org}/docs` },
+  workspace_snapshots: true,
   created_at: "2026-10-03T10:00:00Z",
   created_by: PEOPLE[org].id,
   updated_at: "2026-10-03T10:00:00Z",
@@ -61,7 +62,7 @@ describe("the projects list", () => {
     await enter("Name", "Docs");
     await enter("Repository", "https://forge.example.com/a/docs.git");
     await press("Make the project");
-    expect(writes(net)).toEqual([{ method: "POST", path: "/v1/projects", body: { name: "Docs", repository: { host: "forge.example.com", path: "a/docs" } } }]);
+    expect(writes(net)).toEqual([{ method: "POST", path: "/v1/projects", body: { name: "Docs", repository: { host: "forge.example.com", path: "a/docs" }, workspace_snapshots: true } }]);
     expect(router.state.location.pathname).toBe("/settings/projects/pnew");
   });
 

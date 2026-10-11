@@ -20,7 +20,6 @@ from acme.om.hosts.types.host import ClaimantIdentity
 from acme.om.intake.rules import in_person
 from acme.om.relay import RelayManagerInterface
 from acme.om.relay.exceptions import NoWorkspaceHost
-from acme.om.relay.impl.workspaces import PlacedWorkspacesRelayedImpl
 from acme.om.relay.rules import exec_id, key_time, stale
 from acme.om.relay.types.exec import REQUESTS, ExecCall, ExecProgress, RunRequest
 from acme.om.retention.crossing import CrossingKind, CrossingRefused
@@ -51,6 +50,7 @@ from acme.om.watch.types.live import (
 )
 from acme.om.work import WorkManagerInterface
 from acme.om.workspaces import WorkspacesManagerInterface
+from acme.om.workspaces.placed import PlacedWorkspacesInterface
 from acme.om.workspaces.types.snapshot import HostSnapshot
 
 TAKEN = "watch.control.taken"
@@ -64,9 +64,6 @@ class WatchOptions(Platform):
     live_read_key: SecretStr | None = None
     # How long a handle reads before its viewer asks for a new one.
     live_read_life: timedelta = Field(default=timedelta(minutes=5), gt=timedelta(0))
-    # How long a take of control waits for the host that holds a workspace
-    # kept by snapshots to restore it from its latest one.
-    restore_wait: timedelta = Field(default=timedelta(seconds=30), gt=timedelta(0))
 
 
 class WatchManagerImpl(WatchManagerInterface):
@@ -86,6 +83,7 @@ class WatchManagerImpl(WatchManagerInterface):
         hosts: HostsManagerInterface,
         work: WorkManagerInterface,
         kind_streams: KindStreamsInterface | None = None,
+        placed: PlacedWorkspacesInterface | None = None,
     ) -> None:
         self._sessions = sessions
         self._agents = agents
@@ -100,9 +98,7 @@ class WatchManagerImpl(WatchManagerInterface):
         self._hosts = hosts
         self._work = work
         self._kind_streams = kind_streams
-        self._placed = PlacedWorkspacesRelayedImpl(
-            lambda: relay, lambda: hosts, restore_wait=options.restore_wait
-        )
+        self._placed = placed
 
     # The live read.
 
@@ -229,7 +225,9 @@ class WatchManagerImpl(WatchManagerInterface):
         if named is None:
             return
         record = await self._workspaces.kept_snapshot(ctx, named.id)
-        if record is None or not record.on_host or record.hash != named.hash:
+        if self._placed is None or record is None or not record.on_host:
+            return
+        if record.hash != named.hash:
             return
         restore = HostSnapshot(
             id=record.id, reference=record.reference, digest=record.digest, size=record.size

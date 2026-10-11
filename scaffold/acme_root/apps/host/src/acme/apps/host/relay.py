@@ -50,8 +50,8 @@ from acme.infra.transports import (
     CredentialBrokerInterface,
     RecordSeal,
     TransportInterface,
+    secret_held,
 )
-from acme.infra.transports.broker import BrokerNullImpl
 from acme.infra.workspaces import (
     Durability,
     EgressMode,
@@ -169,7 +169,7 @@ class ExecutorRelayImpl(ExecutorInterface):
         self._workspaces = dict(workspaces or {})
         self._snapshots = snapshots
         self._probed_snapshots = snapshot_modes
-        self._broker = broker or BrokerNullImpl()
+        self._broker = broker
         self._flush_seconds = flush_seconds
         self._part_bytes = part_bytes
         self._renew_seconds = renew_seconds
@@ -464,11 +464,18 @@ class ExecutorRelayImpl(ExecutorInterface):
             id=session_id, org_id=item.org_id, spec=spec, location=held[0].location
         )
         try:
-            await self._broker.detach_all(workspace)
+            if self._broker is not None:
+                await self._broker.detach_all(workspace)
             archive = await provider.snapshot(workspace)
             try:
+                values = await self._snapshots.values(item.org_id)
+                found = await secret_held(provider.held(archive), values)
+                if found is not None:
+                    raise SnapshotHeldSecret(
+                        f"the workspace holds the secret {found!r}, so it is not kept"
+                    )
                 reference, digest, size = await self._snapshots.keep(
-                    item.org_id, session_id, snapshot_id, archive, provider.held(archive)
+                    item.org_id, session_id, snapshot_id, archive
                 )
             except BaseException:
                 await provider.discard(archive)

@@ -18,7 +18,7 @@ describe("repositoryOf", () => {
 describe("createRequest", () => {
   it("is a name and its repository", () => {
     expect(createRequest({ name: " Docs ", repository: "github.com/octo/docs" })).toEqual({
-      request: { name: "Docs", repository: { host: "github.com", path: "octo/docs" } },
+      request: { name: "Docs", repository: { host: "github.com", path: "octo/docs" }, workspace_snapshots: true },
     });
   });
   it("asks for a name first", () => {

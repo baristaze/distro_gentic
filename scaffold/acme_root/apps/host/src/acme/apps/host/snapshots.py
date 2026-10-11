@@ -5,7 +5,8 @@ knows it by, the SHA-256 of its bytes, and their size, never the bytes.
 A snapshot is kept under `<root>/<org_id>/<session_id>/<snapshot_id>`, owner
 only, written whole before it is named, so a reader never finds half of
 one. One that holds the value of a secret this host keeps for the tenant, in
-any form redaction matches, is refused before anything of it is kept. A load
+any form redaction matches, is refused before anything of it is kept: the
+host scans it against `values` first. A load
 holds the bytes to the digest and the size the platform recorded: bytes gone
 or altered are lost, never started from. An erase lets every snapshot of a
 session go, when its content goes. Hosts of a pool that share a store's root
@@ -17,12 +18,8 @@ import hashlib
 import os
 import shutil
 import stat
-from collections.abc import AsyncIterable
 from pathlib import Path
 from uuid import UUID
-
-from acme.infra.secrets import scoped_name
-from acme.infra.transports import secret_held
 
 DIGEST_SCHEME = "sha256:"
 
@@ -61,20 +58,11 @@ class HostSnapshots:
         return kept
 
     async def keep(
-        self,
-        org_id: UUID,
-        session_id: UUID,
-        snapshot_id: UUID,
-        archive: bytes,
-        held: AsyncIterable[bytes],
+        self, org_id: UUID, session_id: UUID, snapshot_id: UUID, archive: bytes
     ) -> tuple[str, str, int]:
-        """`archive` kept as the session's snapshot under `snapshot_id`: the
-        reference, the digest, and the size. `held` is what the archive
-        holds, as its provider reads it. `SnapshotHeldSecret` before
-        anything is written when it holds a secret's value."""
-        found = await secret_held(held, await asyncio.to_thread(self._values, org_id))
-        if found is not None:
-            raise SnapshotHeldSecret(f"the workspace holds the secret {found!r}, so it is not kept")
+        """`archive` kept as the session's snapshot under `snapshot_id`, once
+        it is scanned for the host's secrets' values (`values`): the
+        reference, the digest, and the size."""
         reference = f"{org_id}/{session_id}/{snapshot_id}"
         await asyncio.to_thread(self._write, reference, archive)
         return reference, DIGEST_SCHEME + hashlib.sha256(archive).hexdigest(), len(archive)
@@ -116,14 +104,19 @@ class HostSnapshots:
             os.fsync(out.fileno())
         partial.replace(path)
 
+    async def values(self, org_id: UUID) -> dict[str, str]:
+        """The values of the secrets this host keeps for the tenant, by name,
+        which a snapshot must not hold. `SnapshotHeldSecret` when the store
+        is not owner-only."""
+        return await asyncio.to_thread(self._values, org_id)
+
     def _values(self, org_id: UUID) -> dict[str, str]:
-        """The values of the secrets this host keeps for the tenant, by name:
-        the `org/<org_id>/<name>=value` lines of its owner-only store."""
+        """The `org/<org_id>/<name>=value` lines of its owner-only store."""
         if not self._secrets.exists():
             return {}
         if stat.S_IMODE(self._secrets.stat().st_mode) & 0o077:
             raise SnapshotHeldSecret(f"{self._secrets} is not owner-only, so nothing is kept")
-        prefix = scoped_name(org_id, "_")[:-1]
+        prefix = f"org/{org_id}/"
         values: dict[str, str] = {}
         for line in self._secrets.read_text().splitlines():
             key, _, value = line.strip().partition("=")

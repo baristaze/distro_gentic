@@ -30,6 +30,7 @@ const PROJECT: ProjectView = {
   id: "p1",
   name: "Storefront",
   repository: { host: "github.com", path: "your-org/storefront" },
+  workspace_snapshots: true,
   created_at: at,
   created_by: user.id,
   updated_at: at,

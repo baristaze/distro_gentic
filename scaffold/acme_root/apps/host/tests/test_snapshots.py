@@ -166,9 +166,10 @@ async def test_a_hosts_snapshot_stays_in_its_store_and_the_platform_records_its_
     assert record is not None and record.on_host
     assert (record.pool_id, record.host_id) == (pool.id, UUID(host.credential.claimant_id))
     kept = twin.files[session_id]
-    assert record.digest == "sha256:" + hashlib.sha256(kept).hexdigest()
+    kept_digest = "sha256:" + hashlib.sha256(kept).hexdigest()
+    assert record.digest == kept_digest
     assert record.size == len(kept) and record.hash.startswith(HASH_SCHEME)
-    assert record.hash.removeprefix(HASH_SCHEME) != record.digest.removeprefix("sha256:")
+    assert record.hash.removeprefix(HASH_SCHEME) != kept_digest.removeprefix("sha256:")
     assert (store / record.reference).read_bytes() == kept, "its bytes are in the host's store"
     assert kept not in record.model_dump_json().encode(), "the record holds no bytes"
     buckets = api.container.infra.get_buckets()

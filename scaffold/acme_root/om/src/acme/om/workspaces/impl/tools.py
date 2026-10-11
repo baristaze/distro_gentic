@@ -36,6 +36,8 @@ from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
 
+from pydantic import Field
+
 from acme.infra.exceptions import InfraException
 from acme.infra.transports import OutputSink
 from acme.infra.workspaces import (
@@ -47,7 +49,7 @@ from acme.infra.workspaces import (
     Workspace,
     WorkspaceLost,
 )
-from acme.om.base import new_id, utcnow
+from acme.om.base import Platform, new_id, utcnow
 from acme.om.context import TenantContext
 from acme.om.steps import StepsManagerInterface
 from acme.om.steps.types.header import HASH_SCHEME, WorkspaceSnapshot
@@ -66,6 +68,12 @@ from acme.om.workspaces.types.host import HostOffer
 from acme.om.workspaces.types.snapshot import HostSnapshot, KeptSnapshot
 
 log = logging.getLogger(__name__)
+
+
+class PinnedToolsOptions(Platform):
+    # How long a run's end waits for the host that holds its workspace to
+    # keep a snapshot of it.
+    snapshot_wait: timedelta = Field(default=timedelta(minutes=10), gt=timedelta(0))
 
 
 EraseOnHost = Callable[[TenantContext, UUID, UUID], Awaitable[None]]
@@ -129,7 +137,7 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         snapshots: SnapshotStore | None = None,
         keyed_hash: KeyedHash | None = None,
         erase_on_host: EraseOnHost | None = None,
-        snapshot_wait: timedelta = timedelta(minutes=10),
+        options: PinnedToolsOptions | None = None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
@@ -137,7 +145,7 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         self._snapshots = snapshots
         self._keyed_hash = keyed_hash
         self._erase_on_host = erase_on_host
-        self._snapshot_wait = snapshot_wait
+        self._snapshot_wait = (options or PinnedToolsOptions()).snapshot_wait
         self._sleep = sleep
         self._clock = clock
         self._workspaces = workspaces

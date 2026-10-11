@@ -53,7 +53,7 @@ from acme.om.steps.types.step import Step, StepType
 from acme.om.tools.impl.snapshots import session_prefix
 from acme.om.tools.tool import ToolRuntime
 from acme.om.tools.types.tool import Effect, ToolClass, ToolInput
-from acme.om.workspaces.impl.tools import ToolsManagerWorkspacesImpl
+from acme.om.workspaces.impl.tools import PinnedToolsOptions, ToolsManagerWorkspacesImpl
 from acme.om.workspaces.placed import PlacedWorkspacesInterface
 from acme.om.workspaces.rules import session_branch
 from acme.om.workspaces.types.host import HostOffer
@@ -419,7 +419,7 @@ def on_host(loop: Loop, placed: Placed, tools: list[ToolsManagerWorkspacesImpl])
             local=True,
             placed=placed,
             keyed_hash=loop.managers.privacy.keyed_hash,
-            snapshot_wait=timedelta(seconds=1),
+            options=PinnedToolsOptions(snapshot_wait=timedelta(seconds=1)),
         )
     )
 

@@ -31,7 +31,7 @@ from acme.client.client import WIRE_FAILURES, ApiClient, ApiError
 from acme.client.types import IsolationMode as HostIsolation
 from acme.infra.exceptions import InfraException
 from acme.infra.secrets.local import SecretsLocalImpl
-from acme.infra.transports import TransportInterface
+from acme.infra.transports import CredentialBrokerInterface, TransportInterface
 from acme.infra.transports.broker import BrokerNullImpl
 from acme.infra.transports.container import TransportContainerImpl
 from acme.infra.workspaces import IsolationMode, WorkspaceProviderInterface
@@ -100,11 +100,14 @@ def run() -> None:
         agents: list[HostAgent] = []
         workspaces = host_workspaces(settings)
         store = HostSnapshots(settings.snapshots_path, settings.secrets_path)
+        # One broker: what the transport attaches, a snapshot takes back.
+        broker = BrokerNullImpl()
         executor = ExecutorRelayImpl(
             lambda: agents[0].client(),
-            host_transports(settings),
+            host_transports(settings, broker),
             workspaces,
             snapshots=store,
+            broker=broker,
             snapshot_modes=lambda: frozenset(
                 ENGINE_MODES[mode] for mode in snapshot_modes(agents[0].probed.advertisement)
             ),
@@ -133,7 +136,9 @@ def host_network() -> HostNetwork:
         raise Misconfigured([Probe("trust_store", False, str(error))]) from error
 
 
-def host_transports(settings: Settings) -> dict[IsolationMode, TransportInterface]:
+def host_transports(
+    settings: Settings, broker: CredentialBrokerInterface | None = None
+) -> dict[IsolationMode, TransportInterface]:
     """The transports this host runs work through: a container per session,
     on its local Docker. A bare directory runs only as the host's dedicated
     user, which no transport here does yet, so an item at that mode is
@@ -143,7 +148,7 @@ def host_transports(settings: Settings) -> dict[IsolationMode, TransportInterfac
     container = TransportContainerImpl(
         settings.records_path,
         secrets,
-        BrokerNullImpl(),
+        broker or BrokerNullImpl(),
         timedelta(seconds=30),
         host_network(),
     )
