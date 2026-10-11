@@ -86,12 +86,15 @@ class PlaybooksManagerImpl(PlaybooksManagerInterface):
             gates=draft.gates,
             published_by=ctx.user_id,
         )
-        # The checks read the brief as a session receives it, and advise:
+        # The checks read the words the person wrote, its description and
+        # its steps, never the frontmatter the platform writes around them;
+        # the size is the brief's as a session receives it. They advise:
         # what they find is kept with the version, and the publish stands.
         findings = checked(
-            skill_md(playbook),
+            f"{playbook.description}\n\n{playbook.body}",
             self._reach,
             bound=self._options.session_bound,
+            size=len(skill_md(playbook)),
             tools=(gate.tool for gate in draft.gates if gate.tool is not None),
         )
         playbook = playbook.model_copy(update={"findings": findings})

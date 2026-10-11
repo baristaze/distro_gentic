@@ -89,7 +89,10 @@ RETRY = re.compile(
     + r"|(?:retry|try again|repeat|loop|poll|rerun|re-run) until"
     + r"|always (?:retry|try again|rerun|re-run)"
     + r"|retry (?:forever|indefinitely|endlessly)"
+    # Not to stop at all, never not to stop something: "do not stop the
+    # database" names what to leave running.
     + r"|(?:do not|don't|never) (?:stop|give up|quit)"
+    + r"(?=\s*(?:$|[.,;:!?)]|until\b|till\b|trying\b|retrying\b|going\b|working\b))"
     + r"|as many times as (?:it takes|needed|necessary|you need|required)"
     + r"|no matter how many (?:times|tries|attempts))\b"
 )
@@ -125,23 +128,29 @@ def reach_of(catalog: AgentKindCatalog) -> LeverReach:
 
 
 def checked(
-    text: str, reach: LeverReach, *, bound: int | None = None, tools: Iterable[str] = ()
+    text: str,
+    reach: LeverReach,
+    *,
+    bound: int | None = None,
+    size: int | None = None,
+    tools: Iterable[str] = (),
 ) -> tuple[LeverFinding, ...]:
-    """What the checks find in a lever's text: a phrase repeated past the
-    bound, a must and a must-not on one subject, a tool or a kind no kind it
-    reaches holds (among them each of `tools`, the tools it names outside
-    its text, such as a playbook's gates), an instruction to retry with no
-    stopping condition, and, where the lever has one, a text past `bound`,
-    the characters a session holds of it whole."""
+    """What the checks find in a lever's text, the words a person wrote: a
+    phrase repeated past the bound, a must and a must-not on one subject, a
+    tool or a kind no kind it reaches holds (among them each of `tools`,
+    the tools it names outside its text, such as a playbook's gates), an
+    instruction to retry with no stopping condition, and, where the lever
+    has one, a size past `bound`, the characters a session holds of it
+    whole. `size` is the characters a session receives, the text's own
+    when it is None."""
     plain = text.replace("\N{RIGHT SINGLE QUOTATION MARK}", "'")
-    lowered = plain.lower()
     sentences = [s for s in SENTENCE_END.split(plain) if s.strip()]
     return (
-        *repeated_phrases(WORD.findall(lowered)),
+        *repeated_phrases(WORD.findall(plain.lower())),
         *contradictions(sentences),
-        *unknown_names(lowered, reach, tools),
+        *unknown_names(plain, reach, tools),
         *unbounded_retries(sentences),
-        *past_bound(plain, bound),
+        *past_bound(len(plain) if size is None else size, bound),
     )
 
 
@@ -211,11 +220,11 @@ def contradictions(sentences: Sequence[str]) -> list[LeverFinding]:
     return found[:MOST_PER_CHECK]
 
 
-def _named(lowered: str, start: int, end: int) -> str | None:
+def _named(text: str, start: int, end: int) -> str | None:
     """What the words beside a name in backticks say it is: a tool, a kind,
     or neither."""
-    before = LAST_WORD.search(lowered[max(0, start - 24) : start])
-    after = FIRST_WORD.match(lowered[end : end + 24])
+    before = LAST_WORD.search(text[max(0, start - 24) : start].lower())
+    after = FIRST_WORD.match(text[end : end + 24].lower())
     beside = {match.group(1) for match in (before, after) if match is not None}
     if beside & TOOL_WORDS:
         return "tool"
@@ -224,28 +233,27 @@ def _named(lowered: str, start: int, end: int) -> str | None:
     return None
 
 
-def unknown_names(lowered: str, reach: LeverReach, tools: Iterable[str]) -> list[LeverFinding]:
-    """A name in backticks that its words call a tool or a kind, or that is
-    spelled as a tool is, with an underscore, and that no kind the lever
-    reaches holds; and each of `tools` none of them holds. A lever that
-    reaches no kind, in a process that registers none, has nothing to be
-    read against, and this check says nothing of it."""
+def unknown_names(text: str, reach: LeverReach, tools: Iterable[str]) -> list[LeverFinding]:
+    """A name in backticks, spelled as a tool is, that the words beside it
+    call a tool or a kind, and that no kind the lever reaches holds; and
+    each of `tools` none of them holds. A name in backticks the words
+    beside it do not call either, such as `DATABASE_URL` or `max_retries`,
+    is a word the person quotes, never a tool. A lever that reaches no
+    kind, in a process that registers none, has nothing to be read
+    against, and this check says nothing of it."""
     if not reach.kinds:
         return []
     unknown: dict[str, str] = {}
-    held = reach.tools | reach.kinds
     for tool in tools:
         if tool not in reach.tools:
             unknown.setdefault(tool, "tool")
-    for match in TICKED.finditer(lowered):
+    for match in TICKED.finditer(text):
         name = match.group(1)
-        said = _named(lowered, match.start(), match.end())
+        said = _named(text, match.start(), match.end())
         if said == "tool" and name not in reach.tools:
             unknown.setdefault(name, "tool")
         elif said == "kind" and name not in reach.kinds:
             unknown.setdefault(name, "kind")
-        elif said is None and "_" in name and name not in held:
-            unknown.setdefault(name, "tool")
     return [
         LeverFinding(
             check=LeverCheck.UNKNOWN_NAME,
@@ -281,14 +289,14 @@ def unbounded_retries(sentences: Sequence[str]) -> list[LeverFinding]:
     return found[:MOST_PER_CHECK]
 
 
-def past_bound(text: str, bound: int | None) -> list[LeverFinding]:
-    if bound is None or len(text) <= bound:
+def past_bound(size: int, bound: int | None) -> list[LeverFinding]:
+    if bound is None or size <= bound:
         return []
     return [
         LeverFinding(
             check=LeverCheck.PAST_SESSION_BOUND,
             detail=cut(
-                f"{len(text)} characters, past the {bound} a session holds whole: "
+                f"{size} characters, past the {bound} a session holds whole: "
                 + "once it summarizes, it keeps only an excerpt of the rest"
             ),
         )
@@ -402,7 +410,7 @@ def standings(sessions: Sequence[SessionLevers], most: int) -> tuple[LeverStandi
             -standing.lift,
             -standing.spun,
             standing.lever.kind.value,
-            standing.lever.name,
+            str(standing.lever.id),
             standing.lever.version,
         )
     )
