@@ -128,6 +128,13 @@ person moves it. A **workspace** lives on the host that prepared it, so
 the session runs there: while that host is offline, the session waits
 for it, even with other hosts of the pool online.
 
+A session of the cloud whose agent works in a VM runs on a **machine of
+the cloud pool**: a virtual machine of its own, which runs the host
+program and serves that session alone. Its first loop waits while the
+machine starts; when it is kept by snapshots, each loop's end keeps the
+machine's whole disk, and the next loop waits while a machine starts
+from it.
+
 Reader: `read_wait` (the loop's item: queued or running, its lane, since
 when, its attempts, and the org's loops running ahead of it; where the
 session runs, which of the pool's hosts are online, and the host that

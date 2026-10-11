@@ -244,6 +244,7 @@ class RunnerContainer:
             transport_layer=placed,
             placement_options=placing,
             cloud_pool_options=cloud_pool_options(settings),
+            cloud_pool_stage=stage,
             # A call of a session the tenant's automation principal started
             # runs on that principal's grant; every other on a member's place.
             principal_context=automation_principals(storage.get_automation_storage(), members),

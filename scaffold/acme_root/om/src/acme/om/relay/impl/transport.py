@@ -365,7 +365,7 @@ class TransportPlacedImpl(TransportInterface):
         direct: TransportInterface,
         relayed: TransportInterface,
         placement: PlacementInterface,
-        pooled: Callable[[IsolationSpec], bool] = lambda _: False,
+        pooled: Callable[[IsolationSpec], Awaitable[bool]] | None = None,
     ) -> None:
         self._direct = direct
         self._relayed = relayed
@@ -420,7 +420,7 @@ class TransportPlacedImpl(TransportInterface):
         workspace goes to the direct transport, which refuses it loudly."""
         if workspace.spec.mode is IsolationMode.NONE:
             return self._direct
-        if self._pooled(workspace.spec):
+        if self._pooled is not None and await self._pooled(workspace.spec):
             return self._relayed
         if await self._placement.inside_wall(workspace.org_id, workspace.id):
             return self._relayed

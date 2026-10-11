@@ -10,6 +10,7 @@ from uuid import UUID
 
 from acme.infra.workspaces import EgressMode, IsolationMode, IsolationSpec
 from acme.infra.workspaces import refusal as infra_refusal
+from acme.om.base import EMPTY_UUID
 
 KEY_PREFIX = "hmk_"
 """A machine key's prefix. The pool hands each machine one at its start,
@@ -65,7 +66,7 @@ def is_snapshot(prefix: str, name: str) -> bool:
 def longest_name(prefix: str) -> str:
     """The longest name the pool gives, which the machines' probe holds to
     what they can keep."""
-    return snapshots_of(prefix, UUID(int=0), UUID(int=0)) + "0" * TAG
+    return snapshots_of(prefix, EMPTY_UUID, EMPTY_UUID) + "0" * TAG
 
 
 def _hashed(id_: UUID) -> str:

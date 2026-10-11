@@ -19,10 +19,11 @@ from acme.om.workspaces.types.snapshot import KeptSnapshot
 
 class CloudPoolManagerInterface(ABC):
     @abstractmethod
-    def runs(self, spec: IsolationSpec) -> bool:
-        """Whether a session of the cloud at this spec runs on a machine of
-        the pool, which the transport asks of the spec alone: the pool runs
-        machines here, and the spec asks for a VM."""
+    async def runs(self, spec: IsolationSpec) -> bool:
+        """Platform-internal: whether a session of the cloud at this spec
+        runs on a machine of the pool, which the transport asks of the spec
+        alone, before any stage: the pool runs machines here, and the spec
+        asks for a VM."""
         ...
 
     @abstractmethod

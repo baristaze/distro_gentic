@@ -20,7 +20,6 @@ from host_support import Stack, probes
 from acme.apps.host.agent import HostAgent, RoutesHostImpl
 from acme.apps.host.ceilings import Ceilings
 from acme.apps.host.config import settings_from_env
-from acme.apps.host.machine import TransportMachineImpl, WorkspaceMachineImpl
 from acme.apps.host.main import KEPT_WHOLE, host_transports, host_workspaces
 from acme.apps.host.relay import ExecutorRelayImpl
 from acme.apps.host.seed import forget_key, read_seed
@@ -32,6 +31,7 @@ from acme.infra.machines.seeded import GUEST_WRITE
 from acme.infra.secrets.local import SecretsLocalImpl
 from acme.infra.transports import CommandSpec
 from acme.infra.transports.broker import BrokerNullImpl
+from acme.infra.transports.machine import TransportMachineImpl
 from acme.infra.transports.twin import RecordSealTwin
 from acme.infra.workspaces import (
     Durability,
@@ -43,6 +43,7 @@ from acme.infra.workspaces import (
     SnapshotRefused,
     WorkspaceBase,
 )
+from acme.infra.workspaces.machine import WorkspaceMachineImpl
 from acme.om.base import new_id, utcnow
 from acme.om.cloud_pool.rules import new_key
 from acme.om.cloud_pool.types.machine import PoolMachine

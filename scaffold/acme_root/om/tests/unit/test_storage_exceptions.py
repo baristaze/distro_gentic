@@ -244,9 +244,11 @@ fence, so the mapping is checked against the interfaces themselves."""
 
 MANAGER_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
     {
-        # The cloud pool's purge of a session and its erase of the session's
-        # disks, named with the tenant, which run for no principal; and its
-        # close at shutdown.
+        # The cloud pool's question of a spec alone, which the transport asks
+        # before any stage; its purge of a session and its erase of the
+        # session's disks, named with the tenant, which run for no
+        # principal; and its close at shutdown.
+        ("CloudPoolManagerInterface", "runs"),
         ("CloudPoolManagerInterface", "purge"),
         ("CloudPoolManagerInterface", "erase"),
         ("CloudPoolManagerInterface", "close"),

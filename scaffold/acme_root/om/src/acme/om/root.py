@@ -33,7 +33,7 @@ from acme.om.attribution.impl.manager import (
 )
 from acme.om.automations import AutomationsManagerInterface
 from acme.om.automations.actions import AutomationActionInterface
-from acme.om.base import new_id, utcnow
+from acme.om.base import utcnow
 from acme.om.benchmarks import BenchmarksManagerInterface
 from acme.om.benchmarks.impl.manager import BenchmarksManagerImpl
 from acme.om.billing.gate import MoneyGateInterface
@@ -51,7 +51,7 @@ from acme.om.budgets.impl.pricing import PricingTableImpl
 from acme.om.budgets.pricing import PricingInterface
 from acme.om.cloud_pool import CloudPoolManagerInterface
 from acme.om.cloud_pool.impl.manager import CloudPoolManagerImpl, CloudPoolOptions
-from acme.om.context import AppContext, AppType, RequestContext, TenantContext
+from acme.om.context import RequestContext, TenantContext
 from acme.om.events import EventsManagerInterface
 from acme.om.events.impl.manager import EventsManagerImpl, EventsOptions
 from acme.om.evidence import (
@@ -563,6 +563,7 @@ def build_managers(
     hosts_options: HostsOptions | None = None,
     relay_options: RelayOptions | None = None,
     cloud_pool_options: CloudPoolOptions | None = None,
+    cloud_pool_stage: Callable[[], RequestContext] | None = None,
     transport_layer: Callable[[TransportInterface], TransportInterface] | None = None,
     platform_agents_options: PlatformAgentsOptions | None = None,
     platform_agents: PlatformAgents | None = None,
@@ -1134,9 +1135,7 @@ def build_managers(
         cloud_pool_options or CloudPoolOptions(),
         session_gone=session_gone,
         expired=tenancy.tenant_expired,
-        stage=lambda: RequestContext(
-            request_id=new_id(), app=AppContext(type=AppType.WORKER, version="cloud-pool")
-        ),
+        stage=cloud_pool_stage,
     )
     # Each workspace is held to its session's pin, refused by this host where
     # it cannot give it, brought up to the session's branch, kept before it

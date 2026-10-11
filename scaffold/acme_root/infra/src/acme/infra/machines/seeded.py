@@ -75,6 +75,9 @@ class SeedsChannelImpl(SeedsInterface):
         # seed but from the file.
         return None
 
+    def describe(self) -> str:
+        return "seeds=channel"
+
 
 class SeedsNullImpl(SeedsInterface):
     """A process that starts no machine."""
@@ -86,3 +89,6 @@ class SeedsNullImpl(SeedsInterface):
 
     async def seal(self, name: str) -> None:
         return None
+
+    def describe(self) -> str:
+        return "seeds=none"

@@ -25,6 +25,7 @@ from acme.om.billing.root import build_billing_purge, build_money_gate, refuse_o
 from acme.om.billing.sweep import ProviderBillsUnknownImpl
 from acme.om.budgets.impl.manager import BudgetsOptions
 from acme.om.cloud_pool.impl.manager import CloudPoolOptions
+from acme.om.context import AppContext, AppType, RequestContext
 from acme.om.events.impl.manager import EventsOptions
 from acme.om.hosts.impl.manager import HostsOptions
 from acme.om.idempotency.impl.manager import IdempotencyOptions
@@ -164,6 +165,13 @@ def worker_managers(
         options=MatrixOptions(environment=settings.environment, purge_batch=batch),
         kinds=ports.kinds.agents,
     )
+    app = AppContext(type=AppType.WORKER, version=f"{settings.service_name}@{settings.version}")
+
+    def stage() -> RequestContext:
+        """The request stage a purge of the cloud pool's machines runs under,
+        minted here at the worker's edge."""
+        return RequestContext(request_id=new_id(), app=app)
+
     managers = build_managers(
         storage,
         infra,
@@ -210,6 +218,7 @@ def worker_managers(
         relay_options=RelayOptions(purge_batch=batch),
         workspaces_options=WorkspacesOptions(purge_batch=batch),
         cloud_pool_options=cloud_pool_options(settings),
+        cloud_pool_stage=stage,
         budget_gate=ports.budget_gate or build_money_gate(storage),
         result_gate=ports.result_gate,
         executor=ports.executor,

@@ -233,3 +233,6 @@ class SeedsInterface(ABC):
         first-boot data, once its host has read it, is closed. One with
         nothing to close does nothing."""
         ...
+
+    @abstractmethod
+    def describe(self) -> str: ...

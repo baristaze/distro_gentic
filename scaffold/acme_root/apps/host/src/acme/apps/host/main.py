@@ -23,7 +23,7 @@ import typer
 from acme.apps.host import ceilings
 from acme.apps.host.agent import HostAgent
 from acme.apps.host.config import BadSetting, Settings, settings_from_env
-from acme.apps.host.machine import TransportMachineImpl, WorkspaceMachineImpl, machine_probes
+from acme.apps.host.machine import machine_probes
 from acme.apps.host.probe import Misconfigured, Probe, real_probes, snapshot_modes, startup
 from acme.apps.host.relay import HOST_MODES, ExecutorRelayImpl
 from acme.apps.host.seed import forget_key
@@ -36,8 +36,10 @@ from acme.infra.secrets.local import SecretsLocalImpl
 from acme.infra.transports import CredentialBrokerInterface, TransportInterface
 from acme.infra.transports.broker import BrokerNullImpl
 from acme.infra.transports.container import TransportContainerImpl
+from acme.infra.transports.machine import TransportMachineImpl
 from acme.infra.workspaces import IsolationMode, WorkspaceProviderInterface
 from acme.infra.workspaces.container import WorkspaceContainerImpl
+from acme.infra.workspaces.machine import WorkspaceMachineImpl
 from acme.infra.workspaces.network import HostNetwork
 
 log = logging.getLogger(__name__)

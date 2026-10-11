@@ -18,6 +18,7 @@ from uuid import UUID
 
 from pydantic import Field
 
+from acme.infra.exceptions import InfraException
 from acme.infra.machines import MachinesInterface, MachineSpec, MachineState, SeedsInterface
 from acme.infra.workspaces import (
     EgressMode,
@@ -108,7 +109,7 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         *,
         session_gone: SessionGone,
         expired: Callable[[TenantContext], Awaitable[bool]],
-        stage: Callable[[], RequestContext],
+        stage: Callable[[], RequestContext] | None = None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
@@ -126,7 +127,7 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         self._clock = clock
         self._starting: set[asyncio.Task[None]] = set()
 
-    def runs(self, spec: IsolationSpec) -> bool:
+    async def runs(self, spec: IsolationSpec) -> bool:
         return bool(self._options.image) and spec.mode is IsolationMode.VM
 
     # A session's machine.
@@ -183,7 +184,7 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
     async def purge(self, org_id: UUID, session_id: UUID) -> None:
         machine = await self._storage.read_of_session(org_id, session_id)
         if machine is not None:
-            await self._let_go(self._stage(), machine)
+            await self._let_go(self._edge(), machine)
         await self.erase(org_id, session_id)
 
     async def erase(self, org_id: UUID, session_id: UUID) -> None:
@@ -422,8 +423,9 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
             )
             try:
                 held = await self._placed().held_on_host(ctx, session_id, spec, pooled=placed)
-            except IsolationRefused as refused:
-                if not refused.clears or self._clock() >= by:
+            except InfraException as refused:
+                waits = isinstance(refused, IsolationRefused) and refused.clears
+                if not waits or self._clock() >= by:
                     raise
             else:
                 assert held is not None  # a pool of one is given
@@ -511,6 +513,13 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
             await self._launch(machine, spec, self._options.image, key)
         except Exception:
             log.exception("warm machine %s did not start, and is let go", machine.name)
+
+    def _edge(self) -> RequestContext:
+        """The request stage a purge runs under, which runs for no request:
+        minted by the process's edge."""
+        if self._stage is None:
+            raise RuntimeError("this process mints no request stage for the cloud pool's purge")
+        return self._stage()
 
     def _spawn(self, work: Awaitable[None]) -> None:
         task = asyncio.ensure_future(work)

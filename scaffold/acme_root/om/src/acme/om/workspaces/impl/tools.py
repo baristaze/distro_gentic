@@ -208,7 +208,7 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         # host holds for the session is held under it.
         epoch = (await self._steps.get_cursor(ctx, session_id)).epoch
         pool = None if self._placed is None else await self._placed.pool_of(ctx, session_id)
-        if pool is None and self._cloud is not None and self._cloud.runs(pinned):
+        if pool is None and self._cloud is not None and await self._cloud.runs(pinned):
             return await self._on_machine(ctx, session_id, pinned, restore, epoch)
         if self._placed is not None and pool is not None:
             # A restore is decided before any host is asked, and travels
