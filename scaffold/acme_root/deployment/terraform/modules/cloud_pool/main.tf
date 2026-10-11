@@ -19,6 +19,16 @@ data "aws_caller_identity" "current" {}
 data "aws_partition" "current" {}
 data "aws_region" "current" {}
 
+# The pool's image, read for the device its root disk boots from: the
+# template maps that device, so the root disk itself is the one encrypted
+# under the pool's key, whatever device the image names.
+data "aws_ami" "image" {
+  filter {
+    name   = "image-id"
+    values = [var.image_id]
+  }
+}
+
 resource "aws_kms_key" "disks" {
   description         = "The cloud pool's machine disks and the snapshots kept of them"
   enable_key_rotation = true
@@ -82,7 +92,7 @@ resource "aws_launch_template" "machine" {
   }
 
   block_device_mappings {
-    device_name = "/dev/xvda"
+    device_name = data.aws_ami.image.root_device_name
     ebs {
       volume_size           = var.disk_gb
       volume_type           = "gp3"

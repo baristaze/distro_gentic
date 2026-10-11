@@ -1,7 +1,8 @@
 # A machine of the cloud pool reaches nothing but the gateway, and what its
 # session's policy opened; nothing reaches in; it holds no role; its disk is
 # encrypted under the pool's key; and the platform's hold on the machines
-# starts them from the template alone and passes no role.
+# starts them from the template alone and passes no role. The mock image
+# boots from /dev/sda1, as many Linux images do.
 # Runs offline: `terraform test` in this folder.
 
 mock_provider "aws" {
@@ -16,6 +17,9 @@ mock_provider "aws" {
   }
   mock_data "aws_region" {
     defaults = { region = "us-west-2" }
+  }
+  mock_data "aws_ami" {
+    defaults = { root_device_name = "/dev/sda1" }
   }
   mock_resource "aws_kms_key" {
     defaults = { arn = "arn:aws:kms:us-west-2:123456789012:key/disks" }
@@ -80,6 +84,11 @@ run "a_machine_holds_no_role_and_its_disk_is_sealed_under_the_pools_key" {
   assert {
     condition     = aws_launch_template.machine.block_device_mappings[0].ebs[0].encrypted == "true" && aws_launch_template.machine.block_device_mappings[0].ebs[0].kms_key_id == "arn:aws:kms:us-west-2:123456789012:key/disks"
     error_message = "the disk, and every snapshot of it, is encrypted under the pool's key"
+  }
+
+  assert {
+    condition     = length(aws_launch_template.machine.block_device_mappings) == 1 && aws_launch_template.machine.block_device_mappings[0].device_name == "/dev/sda1"
+    error_message = "the one disk mapped is the image's own root, so no second disk is added and the root is the one encrypted"
   }
 
   assert {
