@@ -6,11 +6,12 @@ At a Glance states for every connection that crosses a customer's wall.
 
 This group judges where each part of a session runs and how its work
 reaches it: the kinds of work and their lanes, the session runner that
-hosts the brain, placement, the workspace host and what it holds, and
-the relay transport that carries a tool call into a customer's wall. It
-leaves a workspace's isolation and egress to `workspaces`, a person's
-commands on a workspace to `watch`, the four identities and how a secret
-is resolved to `wall`, and the sweep's duties to `fleet`.
+hosts the brain, placement, the workspace host and what it holds, the
+relay transport that carries a tool call into a customer's wall, and the
+cloud pool's machine per session. It leaves a workspace's isolation and
+egress to `workspaces`, a person's commands on a workspace to `watch`,
+the four identities and how a secret is resolved to `wall`, and the
+sweep's duties to `fleet`.
 
 ## PLC-01 A session becomes work of a kind, claimed where it can run
 
@@ -470,6 +471,37 @@ exists; what happens to an item whose lease expires, by its effect.
 **Violation.** A resume that makes a second item or runs the command
 again; an `unsafe` item requeued or retried; a requeued item sent to a
 host other than the one that holds its workspace.
+
+**Severity.** high
+
+**Check.** review
+
+## PLC-21 A cloud machine is its session's alone, holds nothing, and goes
+
+**Principle.** A cloud session whose workspace is a VM runs on a machine
+of its own, which runs the host program and pulls its work through the
+relay. Its host trades a one-use key for a credential of the session's
+own pool, and is handed that session's work alone. It holds no database
+credential, no model key, no history, and no cloud role, and its key and
+its credential never reach its disk. Its egress is closed outside its
+guest, to the gateway and what its session's egress allows. Its whole
+disk is the session's snapshot, kept once its host's credential ended.
+Every path that starts a machine has the one that lets it go.
+
+**Source.** Placement and Workspace Hosts, The Cloud Pool.
+
+**Look for.** How a machine's host gets its credential and what its
+claims are held to; what a machine's image, its settings, its seed, and
+its role hold; the network rules a machine starts in; what ends before a
+machine's disk is kept; each path that starts a machine and the one that
+lets it go, the sweep's among them.
+
+**Violation.** A machine's host enrolled with a tenant's token, or handed
+another session's work; a database credential, a model key, a platform
+secret, or a cloud role in a machine; a key or a live credential on a
+disk the pool keeps; egress closed by a rule inside the guest, or open
+to more than the gateway and the session's egress; the platform calling
+into a machine; a machine that nothing lets go, warm or bound.
 
 **Severity.** high
 

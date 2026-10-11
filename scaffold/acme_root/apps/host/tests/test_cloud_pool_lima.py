@@ -65,12 +65,24 @@ TIMEOUT = timedelta(minutes=2)
 BOOT = timedelta(minutes=15)
 
 BUILD = (
-    "mkdir -p ctx && head -c 1024 /dev/urandom | sha256sum > ctx/state.txt && "
+    "mkdir -p ctx && "
+    "echo state-$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \\n') > ctx/state.txt && "
     "printf 'FROM busybox:1.37\\nCOPY state.txt /state.txt\\n' > ctx/Dockerfile && "
     "docker build -q -t acme-pool-kept ctx >/dev/null && "
-    "docker run --rm acme-pool-kept cat /state.txt"
+    "cat ctx/state.txt && docker run --rm acme-pool-kept cat /state.txt"
 )
-FOUND = "cat ctx/state.txt && docker run --rm acme-pool-kept cat /state.txt"
+"""What the first loop's command does: a file, a Docker image built on it,
+and a container run of it, which prints the file's line twice."""
+
+FOUND = (
+    "cat ctx/state.txt && docker run --rm acme-pool-kept cat /state.txt && "
+    "echo @ENVIRONMENT@ && "
+    "tr '\\0' '\\n' < /proc/$(systemctl show -p MainPID --value acme-host)/environ "
+    "| cut -d= -f1 && echo @SEED@ && cat /run/acme-machine/seed.json && echo @END@"
+)
+"""What the next loop's command reads: the file and the image the first one
+made, the names in the host program's environment, as its process holds
+them, and the machine's seed, which its commands can read too."""
 
 NOTHING_OF_THE_PLATFORMS = re.compile(
     r"DATABASE|POSTGRES|VALKEY|S3_|AWS_|KMS|SECRET|PASSWORD|ANTHROPIC|OPENAI|GEMINI|"
@@ -174,24 +186,6 @@ def printed(model: ModelProviderScriptedImpl, call: int) -> str:
     return repr(model.calls[call])
 
 
-async def host_environment(machines: MachinesLimaImpl, name: str) -> list[str]:
-    """The names in the environment of the host program running in the
-    machine, as its process holds them."""
-    reply = await machines.run(
-        name,
-        (
-            "sudo",
-            "-n",
-            "sh",
-            "-c",
-            "tr '\\0' '\\n' < /proc/$(systemctl show -p MainPID --value acme-host)/environ",
-        ),
-        bound=TIMEOUT,
-    )
-    assert reply.ok, reply.stderr
-    return [line.split("=", 1)[0] for line in reply.stdout.decode().splitlines() if line]
-
-
 async def test_a_session_of_the_cloud_pool_keeps_its_whole_machine_across_loops(
     api: Stack, runner: RunnerContainer, machines: MachinesLimaImpl
 ) -> None:
@@ -214,7 +208,7 @@ async def test_a_session_of_the_cloud_pool_keeps_its_whole_machine_across_loops(
         first = await managers.loop.run(owner, session.id)
         assert first.outcome is LoopOutcome.SUCCEEDED, first
         state = printed(model, 1)
-        digest = re.search(r"([0-9a-f]{64})", state)
+        digest = re.search(r"(state-[0-9a-f]{32})", state)
         assert digest is not None, state
         assert state.count(digest.group(1)) >= 2, "the file, and the container's copy of it"
 
@@ -236,22 +230,26 @@ async def test_a_session_of_the_cloud_pool_keeps_its_whole_machine_across_loops(
         model.add(runs("sh", "-c", FOUND))
         model.add(answers("It is."))
         second = await managers.loop.run(owner, session.id)
+        if second.park is not None and second.park.unlock == "approval":
+            # The session read what its first command printed, and its
+            # egress is open: a person approves the call, and the loop goes
+            # on, on a machine started from the snapshot its park kept.
+            page = await managers.steps.get_steps(owner, session.id, 0, 200)
+            requests = [s for s in page.items if s.type is StepType.TOOL_REQUEST]
+            await managers.tools.decide_call(owner, session.id, requests[-1].seq, approve=True)
+            second = await managers.loop.run(owner, session.id)
         assert second.outcome is LoopOutcome.SUCCEEDED, second
-        found = printed(model, 3)
+        found = printed(model, len(model.calls) - 1)
         assert found.count(digest.group(1)) >= 2, found
 
-        # The machine's host holds nothing of the platform's.
-        (pool_machine,) = [
-            n for n in await machines.names(PREFIX + "p") if "-" not in n[len(PREFIX) :]
-        ]
-        assert await machines.state(pool_machine) is MachineState.RUNNING
-        names = await host_environment(machines, pool_machine)
-        assert names, "the host runs"
-        assert [n for n in names if NOTHING_OF_THE_PLATFORMS.search(n)] == []
-        seed = await machines.run(
-            pool_machine, ("sudo", "-n", "cat", "/run/acme-machine/seed.json"), bound=TIMEOUT
-        )
-        assert b"hmk_" not in seed.stdout, "its key was spent and forgotten"
+        # The machine's host holds nothing of the platform's, and its key is
+        # spent and gone from the seed.
+        # What it printed follows the command's own text in the call.
+        environment = found.rsplit("@ENVIRONMENT@", 1)[1].split("@SEED@", 1)[0]
+        seed = found.rsplit("@SEED@", 1)[1].split("@END@", 1)[0]
+        assert "ACME_HOST_MACHINE_SEED" in environment, environment
+        assert not NOTHING_OF_THE_PLATFORMS.search(environment), environment
+        assert "api_url" in seed and "hmk_" not in seed, seed
     finally:
         await pool.purge(owner.org_id, session.id)
     assert await machines.names(PREFIX + "p") == [], "every machine and disk of the session"
