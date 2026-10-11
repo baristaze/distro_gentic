@@ -470,7 +470,11 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         ):
             raise WorkspaceLost(f"{what} is not the one its record names")
         return HostSnapshot(
-            id=record.id, reference=record.reference, digest=record.digest, size=record.size
+            id=record.id,
+            reference=record.reference,
+            digest=record.digest,
+            size=record.size,
+            kept_by=record.host_id,
         )
 
     async def _in_bucket(

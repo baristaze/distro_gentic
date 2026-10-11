@@ -234,7 +234,11 @@ class WatchManagerImpl(WatchManagerInterface):
         if record.hash != named.hash:
             return
         restore = HostSnapshot(
-            id=record.id, reference=record.reference, digest=record.digest, size=record.size
+            id=record.id,
+            reference=record.reference,
+            digest=record.digest,
+            size=record.size,
+            kept_by=record.host_id,
         )
         await self._placed.held_on_host(ctx, session_id, pin.spec(), restore)
 

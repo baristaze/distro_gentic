@@ -6564,8 +6564,8 @@ export interface components {
          * PrepareRequest
          * @description A host's answer to a prepare it claimed: where on it the workspace it
          *     made is, or why it made none. Exactly one of the two. A refusal is
-         *     `lost` when the snapshot the host that holds the workspace was asked to
-         *     start it from is gone from its store, or altered there.
+         *     `lost` when the snapshot the host was asked to start it from is not in
+         *     its store, or is altered there.
          */
         PrepareRequest: {
             /** Location */

@@ -51,9 +51,11 @@ class KeptSnapshot(Identifiable, Trackable):
 class HostSnapshot(Platform):
     """A snapshot as a host is asked to keep it, or to start a workspace from
     it: its id, and, once kept, the reference its store knows it by, the
-    digest of its bytes, and their size. Nothing of its content."""
+    digest of its bytes, their size, and the host that kept it
+    (`kept_by`). Nothing of its content."""
 
     id: UUID
     reference: str | None = Field(default=None, pattern=REFERENCE)
     digest: str | None = Field(default=None, pattern=DIGEST)
     size: int | None = Field(default=None, ge=0)
+    kept_by: UUID | None = None

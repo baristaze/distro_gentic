@@ -412,9 +412,16 @@ class RelayManagerImpl(RelayManagerInterface):
         row, payload = await self._prepare_held(ctx, host, item_id)
         assert payload.session_id is not None  # `_prepare_held` holds it
         session_id = payload.session_id
-        if answer.refused is not None and answer.lost and payload.snapshot is not None:
-            # What it was to start from is gone from the store that kept it:
-            # no other host is asked, and the run that waits loses it.
+        owner = payload.instance_of or session_id
+        if (
+            answer.refused is not None
+            and answer.lost
+            and payload.snapshot is not None
+            and not await self._kept_elsewhere(ctx, owner, payload, host)
+        ):
+            # What it was to start from is gone from the store that kept it,
+            # or no live host keeps it: no other host is asked, and the run
+            # that waits loses it.
             log.warning("host %s lost a snapshot it kept: %s", host.host_id, answer.refused)
             await self._work.fail_for_good(ctx, row, answer.refused)
             OUTCOMES.labels(subsystem="relay", outcome="restore_lost").inc()
@@ -971,6 +978,22 @@ class RelayManagerImpl(RelayManagerInterface):
         if not held or row is None:
             raise ItemNotHeld(f"workspace item {item_id} is not held by this host")
         return row
+
+    async def _kept_elsewhere(
+        self, ctx: TenantContext, owner: UUID, payload: WorkspacePayload, host: HostIdentity
+    ) -> bool:
+        """Whether a restore this host could not make may still be made by
+        another: it waits on the pool's lane, and the host that kept its
+        snapshot is another live host of the pool, which, or a host that
+        shares its store, may. On the lane of the host that holds the
+        workspace, no other host is asked."""
+        kept_by = None if payload.snapshot is None else payload.snapshot.kept_by
+        return (
+            payload.host_id is None
+            and kept_by is not None
+            and kept_by != host.host_id
+            and await self._holds(ctx, owner, kept_by)
+        )
 
     async def _holds(self, ctx: TenantContext, session_id: UUID, host_id: UUID) -> bool:
         """Whether the host is a live host of the session's pool: one that was

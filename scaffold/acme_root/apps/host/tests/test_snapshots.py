@@ -527,3 +527,43 @@ async def test_a_hosted_workspace_on_a_base_is_refused_for_good_and_a_host_runs_
     await claimed(host)
     assert await managers.relay.binding_of(api.owner, session_id) is None
     assert twin.live == set()
+
+
+async def test_a_restore_whose_snapshot_no_live_host_keeps_is_lost_never_waited_on(
+    api: Stack, tmp_path: Path
+) -> None:
+    managers = api.container.managers
+    pool = await api.pool()
+    session_id = await a_pinned_session(api, pool.id)
+    keeper, keeper_twin, _ = await a_host(api, pool.id, tmp_path / "a")
+    await prepared(api, keeper, session_id)
+    record = await kept_on(api, keeper, keeper_twin, session_id, b"kept on the first host")
+    other, other_twin, _ = await a_host(api, pool.id, tmp_path / "b")
+
+    # While the host that kept it is live, one whose store lacks it hands
+    # the restore back for another host.
+    fork = await a_pinned_session(api, pool.id)
+    waiting = await managers.relay.ask_restore(api.owner, fork, KEPT, restore_of(record))
+    await claimed(other)
+    row = await managers.relay.workspace_work(api.owner, waiting)
+    assert row.status is WorkStatus.QUEUED, "another host may still restore it"
+
+    # Once that host is revoked, no live host keeps it: the restore is lost,
+    # and the run that waits parks for a person.
+    await managers.hosts.revoke_host(api.owner, UUID(keeper.credential.claimant_id))
+    placed = PlacedWorkspacesRelayedImpl(
+        lambda: managers.relay, lambda: managers.hosts, restore_wait=timedelta(seconds=5)
+    )
+    restoring = asyncio.ensure_future(
+        placed.held_on_host(api.owner, session_id, KEPT, restore_of(record))
+    )
+    for _ in range(100):
+        if await other.claim_once() is not None:
+            break
+        await asyncio.sleep(0.01)
+    await other.idle()
+    with pytest.raises(WorkspaceLost):
+        await restoring
+    asked = await managers.work.latest_for_target(api.owner, WorkKind.WORKSPACE, session_id)
+    assert asked is not None and asked.status is WorkStatus.FAILED
+    assert session_id not in other_twin.live

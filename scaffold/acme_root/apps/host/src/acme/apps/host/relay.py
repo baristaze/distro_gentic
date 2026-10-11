@@ -345,10 +345,9 @@ class ExecutorRelayImpl(ExecutorInterface):
         try:
             restore = await self._restore(item, spec)
         except SnapshotLost as lost:
-            # The host that holds the workspace lost what it kept; a host of
-            # the pool whose store never held it passes it on.
-            holder = payload.get("host_id") is not None
-            await self._answer(item.id, refused=str(lost), lost=holder)
+            # This store does not hold it. The platform knows which host kept
+            # it, so it decides whether another host may still restore it.
+            await self._answer(item.id, refused=str(lost), lost=True)
             return
         try:
             workspace = await provider.prepare(org_id, session_id, spec, snapshot=restore)
