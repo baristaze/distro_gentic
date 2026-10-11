@@ -48,12 +48,16 @@ each machine as an instance of the pool's launch template
 (`deployment/terraform/modules/cloud_pool`), in a security group by its
 egress: the closed group reaches the gateway alone, and the open group
 adds the open egress a session's policy chose; neither admits anything
-in. Its seed is its first-boot data, which the image reads at each boot,
-and its metadata endpoint is closed once its host has traded the key. A
-snapshot is an image of the stopped instance under the pool's disk key,
-held to a digest of the ids that name its bytes, and read back through
-the block API for the scan. `run` and `channel` refuse. Lima stays the
-local backend, its seed written through the hypervisor's channel.
+in. A new machine boots the pool's image, named by its AMI id, the
+module's `image_id`; the template maps that image's own root device, so
+the root disk itself is encrypted under the pool's key. Its seed is its
+first-boot data, which the image reads at each boot, and its metadata
+endpoint is closed once its host has traded the key. A snapshot is an
+image of the stopped instance under the pool's disk key, held to a
+digest of the ids that name its bytes, and read back through the block
+API for the scan. `run` and `channel` refuse. Lima stays the local
+backend, its image a stopped machine's name, and its seed written
+through the hypervisor's channel.
 
 **A machine starts from the session's snapshot, a warm machine, or the
 image.** A prepare finds the machine that serves the session, or a
@@ -72,22 +76,37 @@ stopped, and its disk kept under the tenant's and the session's names.
 The record names the snapshot and its digest, never the disk, and the
 step names the digest's hash keyed by the session. The run's release
 lets the stopped machine go. The session's purge, its key's revocation,
-and its tenant's purge take the disks by those names, in the sweep's
-process, whose machines settings are the runner's.
+and its tenant's purge take the disks by those names, in a process whose
+machines settings are the runner's. A revocation is a person's call to
+the API, whose process reaches no machine: the pool records the erasure
+it owes first, and the sweep destroys the disks; a process that reaches
+the machines destroys them at once.
 
 **Every path that starts a machine has the one that lets it go.** A
 cache session's machine stays warm through the grace, then the runner's
-sweep lets it go, its disk with it. The pool's own sweep lets go of a
-start that died with its process, a machine whose host never enrolled,
-one whose session or tenant is gone, and one under the pool's names that
-no row holds; then it starts warm machines until the pool's warm count
-(`ACME_CLOUD_POOL_WARM`) stands. A new session claims a started warm
-machine, and the pool starts another in its place.
+sweep lets it go, its disk with it. The pool's own sweep reads every
+machine, a page at a time. It lets go of a first start that died with
+its process, one whose session or tenant is gone, and one under the
+pool's names that no row holds; then it starts warm machines until the
+pool's warm count (`ACME_CLOUD_POOL_WARM`) stands. A new session claims a
+started warm machine, and the pool starts another in its place.
+
+**A machine that ran keeps its disk while its session lives.** The disk
+may hold work no snapshot has kept yet, so no timer destroys it. A
+machine started again keeps its row and its disk, under a new key, and
+its host enrolls within the boot bound and the wait after it, counted
+from that start, as a claimed warm machine's counts from its claim. A
+machine that runs with no host to work for, one that never enrolled in
+that time, was ended, or has not called within the silence bound, is
+stopped by the sweep, its credential ended first: it bills no compute,
+and its session's next prepare starts it again on its disk under a new
+key, its host program with it. No person revokes such a host: it ends
+with its machine.
 
 ## Consequences
 
-- One migration: the pool's machines, a pool's and a host's session, and
-  a snapshot kept by the machines.
+- One migration: the pool's machines, the erasures it owes, a pool's and
+  a host's session, and a snapshot kept by the machines.
 - A session kept by snapshots holds no machine between loops: its next
   loop waits for one to start from its disk, seconds on Lima, about a
   minute in the cloud.
@@ -111,6 +130,9 @@ machine, and the pool starts another in its place.
   that declares one.
 - A machine of a session kept by snapshots whose run died before its end
   keeps running until a run's end snapshots it, or the session is purged.
+- A machine the sweep stopped keeps its disk until its session's next
+  loop or its end, as a snapshot would be kept.
+- An erasure asked in the API waits for the sweep's next pass.
 - A session's pool of one stays with its tenant until the tenant's purge.
 - A machine's size is the pool's: a spec that asks for more is refused,
   never met with less.

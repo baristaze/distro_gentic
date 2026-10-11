@@ -142,8 +142,9 @@ class InfraSettings(BaseSettings):
     # The cloud pool: a machine per session of the cloud whose workspace is a
     # VM, each running the host program, which reaches the platform at
     # `cloud_pool_api_url`. Every machine starts from `cloud_pool_image`, a
-    # snapshot of the machines that holds the host program; empty runs no
-    # pool. `cloud_pool_warm` machines stand started ahead of demand.
+    # snapshot of the machines that holds the host program: a stopped
+    # machine's name on Lima, the AMI id on ec2; empty runs no pool.
+    # `cloud_pool_warm` machines stand started ahead of demand.
     cloud_pool_image: str = ""
     cloud_pool_api_url: str = ""
     cloud_pool_warm: int = Field(default=0, ge=0)

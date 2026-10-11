@@ -310,7 +310,8 @@ in.
 
 A session of the platform's cloud whose workspace is a VM runs on a
 machine of its own, from the **cloud pool**: one virtual machine per
-session, which runs the same host program a customer installs, with a
+session, which boots the pool's image, named by the id its cloud gives
+it, and runs the same host program a customer installs, with a
 container engine inside. The runner reaches it through the relay, as it
 reaches any host: the machine pulls, and the platform never calls in.
 
@@ -330,11 +331,17 @@ reaches any host: the machine pulls, and the platform never calls in.
   credential, stops the machine, and keeps its disk. The next loop starts
   a machine from that disk: its files, its packages, and its images
   stand, and its processes start again.
+- **No host, no compute; its disk stays.** A machine whose host never
+  enrolled, was ended, or went silent is stopped, its disk kept, and the
+  session's next loop starts it again under a new key, its host with it.
+  The sweep destroys no disk a live session's machine ran on: the
+  session's release, its purge, or its end does.
 - **Warm, and always let go.** A few machines may stand started ahead of
   demand, and a new session claims one. Every path that starts a machine
   has the one that lets it go: the run's release, the sweep past the
   grace, a session or a tenant that is gone, a purge, and a key's
-  revocation, since a machine left running is money.
+  revocation, since a machine left running is money. A revocation the
+  API takes reaches no machine, so the sweep destroys its disks.
 
 ### The Relay Transport
 

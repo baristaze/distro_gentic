@@ -485,8 +485,9 @@ own pool, and is handed that session's work alone. It holds no database
 credential, no model key, no history, and no cloud role, and its key and
 its credential never reach its disk. Its egress is closed outside its
 guest, to the gateway and what its session's egress allows. Its whole
-disk is the session's snapshot, kept once its host's credential ended.
-Every path that starts a machine has the one that lets it go.
+disk is the session's snapshot, kept while the session lives; a machine
+with no host stops. Every path that starts a machine has the one that
+lets it go.
 
 **Source.** Placement and Workspace Hosts, The Cloud Pool.
 
@@ -494,14 +495,18 @@ Every path that starts a machine has the one that lets it go.
 claims are held to; what a machine's image, its settings, its seed, and
 its role hold; the network rules a machine starts in; what ends before a
 machine's disk is kept; each path that starts a machine and the one that
-lets it go, the sweep's among them.
+lets it go, the sweep's among them; what a machine with no host to work
+for comes to; where a revocation's erasure runs.
 
 **Violation.** A machine's host enrolled with a tenant's token, or handed
 another session's work; a database credential, a model key, a platform
 secret, or a cloud role in a machine; a key or a live credential on a
 disk the pool keeps; egress closed by a rule inside the guest, or open
 to more than the gateway and the session's egress; the platform calling
-into a machine; a machine that nothing lets go, warm or bound.
+into a machine; a machine that nothing lets go, warm or bound; a machine
+that runs with no host; a disk a live session's machine ran on destroyed
+by the sweep; an erasure asked where no machine is reached and never
+finished.
 
 **Severity.** high
 

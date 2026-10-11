@@ -21,8 +21,9 @@ RuntimeDirectoryPreserve=yes
 ExecStartPre=+/usr/bin/install -o acme-host -g acme-host -m 0400 /etc/acme-host/ceilings.toml /run/acme-host/ceilings.toml
 ExecStart=/opt/acme-host/venv/bin/acme-host run
 # 1 refused, 2 a setting is wrong, 3 not enrolled, 5 a probe a person must
-# fix: the pool hands the machine a new seed and starts it again. Anything
-# else passes with time.
+# fix: the pool's sweep stops the machine once its host is silent, and its
+# session's next loop starts it again with a new seed. Anything else passes
+# with time.
 Restart=on-failure
 RestartSec=5
 RestartPreventExitStatus=1 2 3 5

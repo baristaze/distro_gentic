@@ -46,4 +46,6 @@ the pool's own machines.
 In the cloud, the image is an AMI made the same way: an instance of a
 Linux whose packages hold Docker, `install.sh` run in it, then an image
 made of it. The [cloud pool's module](../terraform/modules/cloud_pool/)
-takes its id.
+takes its id as `image_id`, and maps its root device in the launch
+template, encrypted under the pool's key. Set `ACME_CLOUD_POOL_IMAGE` to
+the same id, `ami-` and its hex: a new machine boots the image by it.
