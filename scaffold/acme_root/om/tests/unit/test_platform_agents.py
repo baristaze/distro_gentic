@@ -94,8 +94,10 @@ from acme.om.platform_agents.catalog import (
 from acme.om.platform_agents.kinds import (
     ANALYSIS_KIND,
     ANALYSIS_SHARE,
+    ANALYSIS_V3,
     ENGINEER_KIND,
     ENGINEER_SHARE,
+    ENGINEER_V6,
     PLATFORM_ASSISTANT_KIND,
     SHIPPED,
 )
@@ -116,6 +118,7 @@ from acme.om.tools.native.wait_for_sub_agents import WAIT_FOR_SUB_AGENTS
 from acme.om.tools.tool import ToolInterface, ToolRuntime
 from acme.om.tools.types.policy import Decision, PolicyRule, ToolPolicy
 from acme.om.tools.types.tool import ToolClass, ToolInput
+from acme.om.windows.rules import READ_ARTIFACT
 from acme.om.work.storage.impl.memory import WorkStorageMemoryImpl
 from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
 
@@ -208,9 +211,11 @@ def test_every_shipped_agent_is_a_profile_that_sets_its_powers() -> None:
         ("engineer", 4),
         ("engineer", 5),
         ("engineer", 6),
+        ("engineer", 7),
         ("analysis", 1),
         ("analysis", 2),
         ("analysis", 3),
+        ("analysis", 4),
         ("planner", 1),
         ("platform_assistant", 1),
         ("platform_assistant", 2),
@@ -285,6 +290,25 @@ def test_the_engineer_takes_a_baseline_again_when_its_base_moves() -> None:
     layers = " ".join(ENGINEER_KIND.prompts)
     assert "Take a baseline with validate before you change anything" in layers
     assert "Take a baseline again whenever your base moves" in layers
+
+
+@pytest.mark.parametrize(
+    ("latest", "before"),
+    [(ENGINEER_KIND, ENGINEER_V6), (ANALYSIS_KIND, ANALYSIS_V3)],
+    ids=["engineer", "analysis"],
+)
+def test_the_engineer_and_analysis_read_back_a_kept_result_in_a_version_of_their_own(
+    latest: AgentKind, before: AgentKind
+) -> None:
+    """A result too large for the window, or one compaction elided, is read
+    back with read_artifact. Each kind names it in a version of its own,
+    which changes nothing else, and the version before it stays shipped
+    for the sessions pinned to it."""
+    assert READ_ARTIFACT in latest.tools and READ_ARTIFACT not in before.tools
+    assert latest.version == before.version + 1
+    assert latest.model_copy(update={"version": before.version, "tools": before.tools}) == before
+    assert latest in SHIPPED and before in SHIPPED
+    assert READ_ARTIFACT in {tool.spec.name for tool in shipped_catalog()}
 
 
 def test_analysis_waits_for_every_report_before_it_answers() -> None:

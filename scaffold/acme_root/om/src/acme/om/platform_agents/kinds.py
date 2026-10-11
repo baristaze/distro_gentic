@@ -38,6 +38,7 @@ from acme.om.tools.native.spawn_sub_agent import SPAWN_SUB_AGENT
 from acme.om.tools.native.wait_for_sub_agents import WAIT_FOR_SUB_AGENTS
 from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule
 from acme.om.tools.types.tool import ToolClass
+from acme.om.windows.rules import READ_ARTIFACT
 
 ENGINEER = "engineer"
 ANALYSIS = "analysis"
@@ -256,12 +257,19 @@ BASE_MOVES = (
 """The engineer's layer on a base that moves, so feedback after its pull
 request merged, on a branch cut again, can still end in a success."""
 
-ENGINEER_KIND = ENGINEER_V5.model_copy(
+ENGINEER_V6 = ENGINEER_V5.model_copy(
     update={"version": 6, "prompts": (*ENGINEER_V5.prompts, BASE_MOVES)}
+)
+"""The engineer before it read back a result kept outside its window:
+kept while a session may still run it."""
+
+ENGINEER_KIND = ENGINEER_V6.model_copy(
+    update={"version": 7, "tools": (*ENGINEER_V6.tools, READ_ARTIFACT)}
 )
 """The engineer. It starts sub-agents and waits on them, and since it
 delivers through its result tool, a product's kind may spawn it too, under
-its share."""
+its share. A result too large for its window, or one compaction elided, it
+reads back with `read_artifact`, by the handle the notice names."""
 
 ANALYSIS_V1 = AgentKind(
     name=ANALYSIS,
@@ -317,7 +325,7 @@ ANALYSIS_WAITS = (
 """Analysis's layer on its sub-agents: it answers with a turn that calls no
 tool, so it waits for every report before that turn."""
 
-ANALYSIS_KIND = ANALYSIS_V2.model_copy(
+ANALYSIS_V3 = ANALYSIS_V2.model_copy(
     update={
         "version": 3,
         "tools": (*ANALYSIS_V2.tools, SPAWN_SUB_AGENT, WAIT_FOR_SUB_AGENTS),
@@ -326,8 +334,16 @@ ANALYSIS_KIND = ANALYSIS_V2.model_copy(
         "share": ANALYSIS_SHARE,
     }
 )
+"""Analysis before it read back a result kept outside its window: kept
+while a session may still run it."""
+
+ANALYSIS_KIND = ANALYSIS_V3.model_copy(
+    update={"version": 4, "tools": (*ANALYSIS_V3.tools, READ_ARTIFACT)}
+)
 """Analysis. It starts sub-agents of its own, and a spawn may start it, the
-way an engineer splits a question, so it names a share."""
+way an engineer splits a question, so it names a share. A result too large
+for its window, or one compaction elided, it reads back with
+`read_artifact`, by the handle the notice names."""
 
 PLANNER_KIND = AgentKind(
     name=PLANNER,
@@ -422,9 +438,11 @@ SHIPPED: tuple[AgentKind, ...] = (
     ENGINEER_V3,
     ENGINEER_V4,
     ENGINEER_V5,
+    ENGINEER_V6,
     ENGINEER_KIND,
     ANALYSIS_V1,
     ANALYSIS_V2,
+    ANALYSIS_V3,
     ANALYSIS_KIND,
     PLANNER_KIND,
     PLATFORM_ASSISTANT_V1,
