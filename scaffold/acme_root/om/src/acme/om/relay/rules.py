@@ -107,6 +107,15 @@ def asks(
     return isolation, egress, reads
 
 
+def setup_reaches(spec: IsolationSpec) -> bool:
+    """Whether a prepare of `spec` may build its base on its host first, with
+    a setup whose egress is open. Such a prepare asks its host's ceilings
+    for open egress, so an owner who closed egress refuses it, whatever the
+    workspace's own egress."""
+    base = spec.base
+    return base is not None and bool(base.setup) and base.egress.mode is EgressMode.OPEN
+
+
 def held_by(item: ExecItem, worker_id: str) -> bool:
     """Whether the item is running under the claim `worker_id` made."""
     return (

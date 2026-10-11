@@ -561,6 +561,36 @@ class EntryView(BaseModel):
     n: Annotated[int, Field(title='N')]
 
 
+class Registry(RootModel[str]):
+    root: Annotated[str, Field(max_length=253, pattern='^(\\*\\.)?([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$')]
+
+
+class SetupItem(RootModel[str]):
+    root: Annotated[str, Field(max_length=4000, min_length=1)]
+
+
+class EnvironmentBody(BaseModel):
+    """
+    The environment a project's sessions' workspaces start from: the
+    image, the commands that set it up, run once in order, and the package
+    registries the setup reaches. A setup that names a registry runs with
+    open egress; one that names none reaches nothing. Registries serve a
+    setup, so they come with one.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    image: Annotated[str, Field(max_length=255, min_length=1, pattern='^[A-Za-z0-9][A-Za-z0-9._/:@-]*$', title='Image')]
+    registries: Annotated[list[Registry] | None, Field(max_length=20, title='Registries')] = None
+    setup: Annotated[list[SetupItem] | None, Field(max_length=50, title='Setup')] = None
+
+
+class EnvironmentView(BaseModel):
+    image: Annotated[str, Field(title='Image')]
+    registries: Annotated[list[str], Field(title='Registries')]
+    setup: Annotated[list[str], Field(title='Setup')]
+
+
 class EventView(BaseModel):
     """
     One record of the tenant's append-only stream, paged by `after_seq`.
@@ -1431,7 +1461,8 @@ class PrepareRequest(BaseModel):
     A host's answer to a prepare it claimed: where on it the workspace it
     made is, or why it made none. Exactly one of the two. A refusal is
     `lost` when the snapshot the host that holds the workspace was asked to
-    start it from is gone from its store, or altered there.
+    start it from is gone from its store, or altered there, and `unbuilt`
+    when the base the workspace starts from failed to build on the host.
     """
     model_config = ConfigDict(
         extra='forbid',
@@ -1439,6 +1470,7 @@ class PrepareRequest(BaseModel):
     location: Annotated[Location | None, Field(title='Location')] = None
     lost: Annotated[bool | None, Field(title='Lost')] = False
     refused: Annotated[Refused | None, Field(title='Refused')] = None
+    unbuilt: Annotated[bool | None, Field(title='Unbuilt')] = False
 
 
 class PreparedView(BaseModel):
@@ -2625,13 +2657,15 @@ class CreateBudgetRequest(BaseModel):
 
 class CreateProjectRequest(BaseModel):
     """
-    A project and the one repository it binds, which never moves, and
-    whether a kind that keeps its workspace by snapshots keeps it so here:
-    False keeps each of its sessions' workspaces a cache.
+    A project and the one repository it binds, which never moves; whether
+    a kind that keeps its workspace by snapshots keeps it so here, False
+    keeping each of its sessions' workspaces a cache; and the environment
+    its sessions' workspaces start from, if it names one.
     """
     model_config = ConfigDict(
         extra='forbid',
     )
+    environment: EnvironmentBody | None = None
     name: Annotated[str, Field(max_length=200, min_length=1, title='Name')]
     repository: RepositoryBody
     workspace_snapshots: Annotated[bool | None, Field(title='Workspace Snapshots')] = True
@@ -3161,6 +3195,7 @@ class PlacementView(BaseModel):
 class ProjectView(BaseModel):
     created_at: Annotated[AwareDatetime, Field(title='Created At')]
     created_by: Annotated[UUID, Field(title='Created By')]
+    environment: EnvironmentView | None
     id: Annotated[UUID, Field(title='Id')]
     name: Annotated[str, Field(title='Name')]
     repository: RepositoryView

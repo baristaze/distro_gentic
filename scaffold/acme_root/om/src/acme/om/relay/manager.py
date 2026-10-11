@@ -126,6 +126,13 @@ class RelayManagerInterface(ABC):
         ...
 
     @abstractmethod
+    async def prepare_refusal(self, ctx: TenantContext, session_id: UUID) -> str | None:
+        """Why a host refused the session's latest prepare, as its work keeps
+        it while it waits or once it failed: a base the host failed to
+        build. None when it was not refused so, or there is none."""
+        ...
+
+    @abstractmethod
     async def workspace_work(self, ctx: TenantContext, item_id: UUID) -> WorkItem:
         """The `workspace` work under `item_id` as the queue holds it: whether
         it waits, runs, is done, or failed, and why. `NotFound` for none."""
@@ -152,8 +159,10 @@ class RelayManagerInterface(ABC):
         unless a live host of the pool holds the session's workspace
         already, and the binding is answered; a refusal hands the work back
         to the pool's lane after a wait, for a host that can give it, and
-        None is answered. A restore the host that holds the workspace answers
-        as lost fails for good, with the reason, and no host is asked again.
+        None is answered. A base the host failed to build spends an attempt
+        and keeps its reason with the work, which waits longer each time. A
+        restore the host that holds the workspace answers as lost fails for
+        good, with the reason, and no host is asked again.
         `ItemNotHeld` for a prepare the host does not hold under a live
         claim."""
         ...

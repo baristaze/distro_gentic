@@ -1176,14 +1176,18 @@ class ApiClient:
         location: str | None = None,
         refused: str | None = None,
         lost: bool = False,
+        unbuilt: bool = False,
     ) -> PreparedView:
         """A prepare this host claimed: where the workspace it made is, or why
         it made none, `lost` when the snapshot it was to start from is gone
-        from its store or altered there. `held` False says another host of
-        the pool holds the session's workspace, and this host lets its own
-        go."""
+        from its store or altered there, and `unbuilt` when the base it was
+        to start from failed to build here. `held` False says another host
+        of the pool holds the session's workspace, and this host lets its
+        own go."""
         body: dict[str, object] = (
-            {"location": location} if refused is None else {"refused": refused, "lost": lost}
+            {"location": location}
+            if refused is None
+            else {"refused": refused, "lost": lost, "unbuilt": unbuilt}
         )
         answer = await self.request("POST", f"/v1/hosts/me/workspaces/{item_id}", json=body)
         return PreparedView.model_validate(answer)

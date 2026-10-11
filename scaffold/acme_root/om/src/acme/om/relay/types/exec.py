@@ -245,18 +245,23 @@ class PrepareAnswer(Platform):
     it made is, or why it made none. Exactly one of the two. A refusal is
     `lost` when the snapshot the host that holds the workspace was asked to
     start it from is gone from its store, or altered there: no host is asked
-    again."""
+    again. It is `unbuilt` when the base the workspace starts from failed to
+    build on the host, as when a setup command failed: its reason is kept
+    with the work, so the run that waits says why."""
 
     location: str | None = Field(default=None, min_length=1, max_length=1024)
     refused: str | None = Field(default=None, min_length=1, max_length=2000)
     lost: bool = False
+    unbuilt: bool = False
 
     @model_validator(mode="after")
     def _one_of_the_two(self) -> PrepareAnswer:
         if (self.location is None) == (self.refused is None):
             raise ValueError("a prepare is answered with its location or its refusal")
-        if self.lost and self.refused is None:
-            raise ValueError("only a refusal is lost")
+        if (self.lost or self.unbuilt) and self.refused is None:
+            raise ValueError("only a refusal is lost or unbuilt")
+        if self.lost and self.unbuilt:
+            raise ValueError("a refusal is lost or unbuilt, never both")
         return self
 
 

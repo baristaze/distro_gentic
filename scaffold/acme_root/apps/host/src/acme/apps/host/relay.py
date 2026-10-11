@@ -12,7 +12,10 @@ value of the host's secrets, and is answered by its reference, its digest,
 and its size, never its bytes; a prepare that names one starts the
 workspace from it, replaced whole, once its bytes match their digest; an
 erase lets a session's go. A level whose snapshots the host's probe did not
-show is refused for a workspace kept by snapshots. An `exec` item
+show is refused for a workspace kept by snapshots, and for one on a base:
+a prepare on a base with setup starts the workspace from the base this
+host built and keeps in its own store (`acme.apps.host.bases`), and one
+whose base failed to build is answered `unbuilt`, with the reason. An `exec` item
 runs through its own local transport, in the workspace it holds,
 prepared again first, so an instance that stopped since starts anew over
 its files. The output streams back a part
@@ -39,6 +42,7 @@ from uuid import UUID
 from pydantic import ValidationError
 
 from acme.apps.host.agent import ExecutorInterface
+from acme.apps.host.bases import BaseUnbuilt, HostBases
 from acme.apps.host.ceilings import Ask
 from acme.apps.host.snapshots import HostSnapshots, SnapshotHeldSecret, SnapshotLost
 from acme.client.client import WIRE_FAILURES, ApiClient, ApiError
@@ -81,13 +85,17 @@ HOST_MODES: dict[IsolationMode, HostIsolation] = {
 them. Any other mode names none."""
 
 
-def unlike(ask: Ask, spec: IsolationSpec, reads: tuple[str, ...]) -> str | None:
+def unlike(
+    ask: Ask, spec: IsolationSpec, reads: tuple[str, ...], *, building: bool = False
+) -> str | None:
     """Why the workspace the host would build differs from what its item
     asked, or None when it does not. The owner's ceilings held the item's
     fields; the host builds from its spec. So the spec is read as an ask, as
     the platform writes the fields from it: its isolation, its egress, and
-    `reads`, the paths on the host its result reads. A spec that differs is
-    refused, so no payload widens what the host does past its ceilings."""
+    `reads`, the paths on the host its result reads. A prepare that may
+    build its base first (`building`) asks for open egress when its setup
+    has it. A spec that differs is refused, so no payload widens what the
+    host does past its ceilings."""
     match spec.egress.mode:
         case EgressMode.NONE:
             egress: frozenset[str] | None = frozenset()
@@ -95,6 +103,9 @@ def unlike(ask: Ask, spec: IsolationSpec, reads: tuple[str, ...]) -> str | None:
             egress = frozenset(spec.egress.hosts)
         case EgressMode.OPEN:
             egress = None
+    base = spec.base
+    if building and base is not None and base.setup and base.egress.mode is EgressMode.OPEN:
+        egress = None
     differs = [
         name
         for name, same in (
@@ -159,6 +170,7 @@ class ExecutorRelayImpl(ExecutorInterface):
         snapshots: HostSnapshots | None = None,
         snapshot_modes: Callable[[], frozenset[IsolationMode]] = frozenset,
         broker: CredentialBrokerInterface | None = None,
+        base_options: Mapping[str, Any] | None = None,
         flush_seconds: float = 0.25,
         part_bytes: int = 32_000,
         renew_seconds: float = 20.0,
@@ -168,6 +180,11 @@ class ExecutorRelayImpl(ExecutorInterface):
         self._transports = dict(transports)
         self._workspaces = dict(workspaces or {})
         self._snapshots = snapshots
+        self._bases = (
+            None
+            if snapshots is None
+            else HostBases(snapshots, self._workspaces, self._transports, **(base_options or {}))
+        )
         self._probed_snapshots = snapshot_modes
         self._broker = broker
         self._flush_seconds = flush_seconds
@@ -322,7 +339,8 @@ class ExecutorRelayImpl(ExecutorInterface):
         except KeyError, ValueError, ValidationError:
             await self._answer(item.id, refused="the prepare names no session or spec")
             return
-        differs = unlike(ask, spec, ())
+        # A prepare that restores no snapshot may build its base here first.
+        differs = unlike(ask, spec, (), building=payload.get("snapshot") is None)
         if differs is not None:
             await self._answer(item.id, refused="this host refused it: " + differs)
             return
@@ -344,10 +362,29 @@ class ExecutorRelayImpl(ExecutorInterface):
             holder = payload.get("host_id") is not None
             await self._answer(item.id, refused=str(lost), lost=holder)
             return
+        base = None
+        if restore is None and spec.base is not None and spec.base.setup:
+            # A snapshot holds its base already; without one, the base is
+            # read from this host's store, or built here.
+            try:
+                base = await self._base(org_id, spec)
+            except BaseUnbuilt as unbuilt:
+                await self._answer(item.id, refused=str(unbuilt), unbuilt=True)
+                return
+            except InfraException as error:
+                await self._answer(item.id, refused=error.message)
+                return
         try:
-            workspace = await provider.prepare(org_id, session_id, spec, snapshot=restore)
+            workspace = await provider.prepare(
+                org_id, session_id, spec, snapshot=restore, base=base
+            )
         except InfraException as error:
             lost_here = restore is not None and error.code == WorkspaceLost.code
+            if base is not None and error.code == WorkspaceLost.code and self._bases is not None:
+                # A base this host cannot bring in, such as one on an image
+                # it no longer holds, holds nothing of the session's: it is
+                # built again.
+                await self._bases.drop(org_id, spec)
             await self._answer(item.id, refused=error.message, lost=lost_here)
             return
         held = await self._answer(item.id, location=workspace.location)
@@ -409,6 +446,17 @@ class ExecutorRelayImpl(ExecutorInterface):
                 await client.answer_release(item.id)
         except (ApiError, *WIRE_FAILURES) as error:
             log.warning("item %s: its answer was not taken: %s", item.id, error)
+
+    async def _base(self, org_id: UUID, spec: IsolationSpec) -> bytes:
+        """The base the workspace starts from, from this host's store or built
+        here; a base is kept as a snapshot, so only at a level whose
+        snapshots the probe showed."""
+        if self._bases is None or spec.mode not in self._snapshot_modes():
+            raise IsolationRefused(
+                f"this host has not probed snapshots of a {spec.mode.value} workspace, "
+                "which its base is kept by"
+            )
+        return await self._bases.archive(org_id, spec)
 
     def _snapshot_modes(self) -> frozenset[IsolationMode]:
         """The levels whose snapshots its probe showed; none without a
@@ -529,6 +577,7 @@ class ExecutorRelayImpl(ExecutorInterface):
         location: str | None = None,
         refused: str | None = None,
         lost: bool = False,
+        unbuilt: bool = False,
     ) -> bool | None:
         """A prepare's answer; whether the session's workspace is this host's,
         or None when the platform took no answer, and the work's lease is
@@ -536,7 +585,7 @@ class ExecutorRelayImpl(ExecutorInterface):
         try:
             async with self._client() as client:
                 answered = await client.answer_prepare(
-                    item_id, location=location, refused=refused, lost=lost
+                    item_id, location=location, refused=refused, lost=lost, unbuilt=unbuilt
                 )
         except (ApiError, *WIRE_FAILURES) as error:
             log.warning("item %s: its answer was not taken: %s", item_id, error)

@@ -10,7 +10,10 @@ tenant's wall, never in the platform's: it waits, with the reason, while no
 live host of its pool advertises snapshots at its level. A restore is
 decided before any host is asked, and travels with the ask: the host that
 holds the workspace replaces it from its store, or, with none, a host of the
-pool whose store keeps the snapshot makes it. The run waits for it a while,
+pool whose store keeps the snapshot makes it. A workspace on a base starts
+from the base its host builds and keeps in its own store; one whose base
+failed to build there waits with the host's reason, its failing command
+and that command's exit code among it. The run waits for it a while,
 then the loop waits on the resource; a host that lost the snapshot loses
 the workspace, with the reason. A snapshot is asked of the host that holds
 the workspace, which keeps its bytes and answers its reference and its
@@ -100,10 +103,14 @@ class PlacedWorkspacesRelayedImpl(PlacedWorkspacesInterface):
                 return _held(ctx, session_id, spec, binding)
             # Its host was revoked or moved, and took the workspace with it:
             # another host of the pool prepares one.
+        # Read before the ask: a prepare that failed is followed by a new
+        # one, and the run still says why the last was refused.
+        refused = await self._relay().prepare_refusal(ctx, session_id)
         await self._relay().ask_prepare(ctx, session_id, spec)
+        why = "" if refused is None else f"; a host refused it: {refused}"
         raise IsolationRefused(
             f"no host of pool {placed.pool.name} holds session {session_id}'s workspace yet "
-            f"({placed.hosts_online} online); one prepares it when it claims the work",
+            f"({placed.hosts_online} online); one prepares it when it claims the work{why}",
             clears=True,
         )
 

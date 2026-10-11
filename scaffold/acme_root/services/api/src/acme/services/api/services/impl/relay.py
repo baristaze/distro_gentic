@@ -113,10 +113,16 @@ class RelayServiceImpl(RelayServiceInterface):
         self, rctx: RequestContext, host: HostIdentity, item_id: UUID, body: PrepareRequest
     ) -> PreparedView:
         try:
-            answer = PrepareAnswer(location=body.location, refused=body.refused, lost=body.lost)
+            answer = PrepareAnswer(
+                location=body.location,
+                refused=body.refused,
+                lost=body.lost,
+                unbuilt=body.unbuilt,
+            )
         except ValueError as error:
             raise ValidationFailed(
-                "a prepare is answered with its location or its refusal, and only a refusal is lost"
+                "a prepare is answered with its location or its refusal, and only a refusal is "
+                "lost or unbuilt, never both"
             ) from error
         binding = await self._relay.prepared(rctx, host, item_id, answer)
         return PreparedView(held=binding is not None and binding.host_id == host.host_id)

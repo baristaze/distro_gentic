@@ -11,7 +11,12 @@ holds the bytes to the digest and the size the platform recorded: bytes gone
 or altered are lost, never started from. An erase lets every snapshot of a
 session go, when its content goes. Hosts of a pool that share a store's root
 reach one another's snapshots; a restore runs on any host whose store holds
-the reference."""
+the reference.
+
+The store keeps the tenant's workspace bases too, under
+`<root>/<org_id>/bases/<key>`, owner only and written whole, as a
+snapshot is. A base is the tenant's, not a session's, so no session's
+erase reaches it (`acme.apps.host.bases`)."""
 
 import asyncio
 import hashlib
@@ -22,6 +27,10 @@ from pathlib import Path
 from uuid import UUID
 
 DIGEST_SCHEME = "sha256:"
+
+BASES = "bases"
+"""The folder of a tenant's bases, beside its sessions' folders, each named
+by a session's id, so no session's erase reaches it."""
 
 STORE_FOLDER = "snapshots"
 
@@ -78,6 +87,23 @@ class HostSnapshots:
         if len(archive) != size or DIGEST_SCHEME + hashlib.sha256(archive).hexdigest() != digest:
             raise SnapshotLost(f"snapshot {reference} does not match the digest it was kept by")
         return archive
+
+    async def keep_base(self, org_id: UUID, key: str, archive: bytes) -> None:
+        """`archive` kept as the tenant's base under `key`."""
+        await asyncio.to_thread(self._write, f"{org_id}/{BASES}/{key}", archive)
+
+    async def load_base(self, org_id: UUID, key: str) -> bytes | None:
+        """The tenant's base under `key`, or None when the store keeps none."""
+        path = self._path(f"{org_id}/{BASES}/{key}")
+        try:
+            return await asyncio.to_thread(path.read_bytes)
+        except FileNotFoundError:
+            return None
+
+    async def drop_base(self, org_id: UUID, key: str) -> None:
+        """The tenant's base under `key` goes; one gone already is gone."""
+        path = self._path(f"{org_id}/{BASES}/{key}")
+        await asyncio.to_thread(path.unlink, True)
 
     def holds(self, reference: str) -> bool:
         return self._path(reference).is_file()
