@@ -252,20 +252,22 @@ on a customer's host keeps them in that host's own store, inside the
 wall. Their bytes never cross: the platform records the reference and
 the hash alone, and a host of the same pool whose store holds one
 restores it. A snapshot is content: when a session's content expires,
-or its key is revoked, its snapshots go from every store that keeps one,
-and their records with them.
+its key is revoked, or the session is purged, its snapshots go from
+every store that keeps one, and their records with them.
 
 **Source.** Workspaces and Isolation, A Snapshot Is Durable State.
 
 **Look for.** Where a snapshot of a workspace a host holds is taken,
 kept, and read back; what the platform's records and the step that names
 a snapshot carry; the restore of a snapshot kept on the other side of
-the wall; what the content's expiry and a key's revocation remove.
+the wall; what the content's expiry, a key's revocation, and a
+session's purge remove.
 
 **Violation.** A host's snapshot whose bytes reach the platform, or a
 cloud snapshot whose bytes reach a host; a record or a step that holds a
 snapshot's bytes; a restore from the other side of the wall; a session
-past its content's life whose snapshots, or their records, remain.
+past its content's life, or purged, whose snapshots, or their records,
+remain.
 
 **Severity.** high
 
@@ -279,7 +281,8 @@ content at rest is refused a kind kept by snapshots when it is created.
 A host advertises snapshots at a level only when its probe showed it can
 keep one there; a session kept by snapshots and pinned to a pool with no
 such host waits on the resource, and says why. The next loop starts from
-the latest snapshot, and the restored tree stands.
+the latest snapshot, and the restored tree stands. An instance no
+snapshot holds as it stands is never let go.
 
 **Source.** Workspaces and Isolation, A Snapshot Is Durable State.
 
@@ -291,7 +294,7 @@ what a prepare that restored does with the session's branch.
 with no snapshot, or created where no content is kept at rest; a host
 that advertises snapshots it never probed; a refusal that can never
 clear left waiting; a restored tree that the branch's sync or cut
-replaces.
+replaces; an instance no snapshot holds let go.
 
 **Severity.** high
 
