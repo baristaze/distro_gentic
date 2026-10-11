@@ -612,6 +612,10 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
             await self._storage.read_snapshots(ctx.org_id, session_id, self._options.snapshots_read)
         )
 
+    async def snapshot_hosts(self, org_id: UUID, session_id: UUID) -> frozenset[UUID]:
+        kept = await self._storage.read_snapshots(org_id, session_id, self._options.snapshots_read)
+        return frozenset(record.host_id for record in kept if record.host_id is not None)
+
     async def forget_snapshots(self, org_id: UUID, session_id: UUID) -> int:
         return await self._storage.purge_snapshots(org_id, session_id)
 

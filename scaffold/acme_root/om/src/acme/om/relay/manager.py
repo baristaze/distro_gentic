@@ -127,6 +127,13 @@ class RelayManagerInterface(ABC):
         ...
 
     @abstractmethod
+    async def erase_purged(self, org_id: UUID, session_id: UUID, host_id: UUID) -> None:
+        """Platform-internal: a session's purge asks the host whose store keeps
+        snapshots of it to let every one go, as `workspace` work on that
+        host's lane; for no principal."""
+        ...
+
+    @abstractmethod
     async def workspace_work(self, ctx: TenantContext, item_id: UUID) -> WorkItem:
         """The `workspace` work under `item_id` as the queue holds it: whether
         it waits, runs, is done, or failed, and why. `NotFound` for none."""

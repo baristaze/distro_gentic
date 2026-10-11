@@ -128,7 +128,8 @@ rebuilt from.
   bucket, asks each host that keeps one to erase it, and forgets their
   records.
 - **Purge.** A session the sweep purges loses its workspace row with its
-  files, and the records of its snapshots. A tenant deleted past its retention loses its workspaces, its
+  files, and its snapshots: each host that keeps one is asked to erase
+  it before their records go. A tenant deleted past its retention loses its workspaces, its
   allowlists, and its fetch credentials, each value out of the store
   before its record.
 

@@ -243,6 +243,13 @@ class WorkspacesManagerInterface(ABC):
         ...
 
     @abstractmethod
+    async def snapshot_hosts(self, org_id: UUID, session_id: UUID) -> frozenset[UUID]:
+        """Platform-internal: each host whose store keeps a snapshot of the
+        session, by the records, at most the options' `snapshots_read` of
+        them read; for no principal."""
+        ...
+
+    @abstractmethod
     async def forget_snapshots(self, org_id: UUID, session_id: UUID) -> int:
         """Platform-internal: the records of the session's snapshots go, once
         their bytes went with its content or its purge; for no principal.

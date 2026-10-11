@@ -265,6 +265,10 @@ MANAGER_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         ("ToolsManagerInterface", "purge_workspace"),
         ("WorkspacesManagerInterface", "purge_session"),
         ("WorkspacesManagerInterface", "forget_snapshots"),
+        # And the hosts whose stores keep its snapshots, which that purge asks
+        # to erase them before their records go.
+        ("WorkspacesManagerInterface", "snapshot_hosts"),
+        ("RelayManagerInterface", "erase_purged"),
         ("EvidenceManagerInterface", "purge_session"),
         ("ProjectsManagerInterface", "purge_session"),
         ("RelayManagerInterface", "purge_session"),

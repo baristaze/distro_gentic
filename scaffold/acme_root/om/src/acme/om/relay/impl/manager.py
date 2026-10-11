@@ -9,7 +9,7 @@ from pydantic import ValidationError
 from acme.infra.observability import OUTCOMES
 from acme.infra.workspaces import IsolationSpec
 from acme.om.base import EMPTY_UUID, Platform, new_id, utcnow
-from acme.om.context import Permission, RequestContext, TenantContext
+from acme.om.context import AppType, Permission, RequestContext, TenantContext
 from acme.om.exceptions import (
     InvalidCredential,
     LeaseLost,
@@ -20,7 +20,7 @@ from acme.om.exceptions import (
 from acme.om.hosts import HostsManagerInterface
 from acme.om.hosts.types.host import HostIdentity
 from acme.om.outbox import OutboxRelayInterface
-from acme.om.outbox.types.row import outbox_row, versioned_row
+from acme.om.outbox.types.row import OutboxRow, outbox_row, versioned_row
 from acme.om.placement.kinds import HOST
 from acme.om.placement.rules import host_lane
 from acme.om.placement.types.claimant import Claimant
@@ -70,7 +70,7 @@ from acme.om.steps import StepsManagerInterface
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tools.seal import RecordSealInterface
 from acme.om.work import WorkManagerInterface
-from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
+from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus, work_row_kind
 from acme.om.workspaces.types.snapshot import HostSnapshot
 
 log = logging.getLogger(__name__)
@@ -369,6 +369,27 @@ class RelayManagerImpl(RelayManagerInterface):
             operation=WorkspaceOperation.ERASE, host_id=host_id, session_id=session_id
         )
         await self._enqueue_workspace(ctx, session_id, payload)
+        OUTCOMES.labels(subsystem="relay", outcome="erase_asked").inc()
+
+    async def erase_purged(self, org_id: UUID, session_id: UUID, host_id: UUID) -> None:
+        # A purge runs below any principal, so the ask lands as the
+        # machinery's, from a row of its own, on the lane of the host its
+        # payload names.
+        payload = WorkspacePayload(
+            operation=WorkspaceOperation.ERASE, host_id=host_id, session_id=session_id
+        )
+        row = OutboxRow(
+            id=new_id(),
+            created_at=self._clock(),
+            org_id=org_id,
+            kind=work_row_kind(WorkKind.WORKSPACE),
+            target_id=session_id,
+            payload=payload.model_dump(mode="json"),
+            actor_id=EMPTY_UUID,
+            request_id=new_id(),
+            app=AppType.WORKER.value,
+        )
+        await self._work.enqueue_relayed(org_id, row)
         OUTCOMES.labels(subsystem="relay", outcome="erase_asked").inc()
 
     async def workspace_work(self, ctx: TenantContext, item_id: UUID) -> WorkItem:

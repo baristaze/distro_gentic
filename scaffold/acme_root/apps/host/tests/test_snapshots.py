@@ -612,3 +612,25 @@ async def test_a_restore_waits_for_its_offline_holder_and_the_host_that_restores
     binding = await managers.relay.binding_of(api.owner, fork)
     assert binding is not None and binding.host_id == other_id
     assert fork in other_twin.live and other_twin.files[fork] == b"the snapshot"
+
+
+async def test_a_sessions_purge_asks_each_host_that_keeps_its_snapshots_to_erase_them(
+    api: Stack, tmp_path: Path
+) -> None:
+    managers = api.container.managers
+    pool = await api.pool()
+    session_id = await a_pinned_session(api, pool.id)
+    host, twin, store = await a_host(api, pool.id, tmp_path)
+    await prepared(api, host, session_id)
+    await kept_on(api, host, twin, session_id, b"a day's work")
+    kept = store / str(api.owner.org_id) / str(session_id)
+    assert kept.is_dir()
+
+    await managers.tools.purge_workspace(api.owner.org_id, session_id)
+    assert await managers.workspaces.kept_snapshots(api.owner, session_id) == ()
+    await claimed(host)
+
+    assert not kept.exists(), "erased on the host, with no key revoked"
+    asked = await managers.work.latest_for_target(api.owner, WorkKind.WORKSPACE, session_id)
+    assert asked is not None and asked.payload["operation"] == "erase"
+    assert asked.status is WorkStatus.DONE
