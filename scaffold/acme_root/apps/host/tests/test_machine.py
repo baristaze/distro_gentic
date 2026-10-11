@@ -8,19 +8,18 @@ and its commands run there as its own user."""
 import base64
 import json
 import re
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs
 from uuid import UUID
 
 import botocore.session
 import pytest
 from api_support import seed_request
-from botocore.awsrequest import AWSRequest, AWSResponse
+from botocore import serialize
 from contracts.agent_session_storage import make_session
 from host_support import Stack, probes
 
@@ -119,27 +118,32 @@ def test_the_seed_says_where_to_call_and_its_key_goes_once_traded(tmp_path: Path
 
 
 class Ec2Wire:
-    """The cloud as a new machine's start reaches it: each call built by
-    botocore's own handlers and serializer, and the user data the machine
-    reads as EC2 decodes it from the wire."""
+    """The cloud as a new machine's start reaches it: each call's parameters
+    through botocore's own parameter-build handlers and its serializer, as
+    a client runs them before it sends, and the user data the machine reads
+    as EC2 decodes it from the query."""
 
     def __init__(self) -> None:
         self.user_data: bytes | None = None
         self.instances: list[dict[str, Any]] = []
-        self._client: Any = botocore.session.get_session().create_client(
-            "ec2", region_name="eu-west-1", aws_access_key_id="test", aws_secret_access_key="test"
-        )
-        self._client.meta.events.register("before-send", self._sent)
+        self._session = botocore.session.get_session()
+        self._model = self._session.get_service_model("ec2")
 
-    def _sent(self, request: AWSRequest, **_: Any) -> AWSResponse:
-        body = request.body
-        query = parse_qs(body.decode() if isinstance(body, bytes) else str(body))
-        if "UserData" in query:
-            self.user_data = base64.b64decode(query["UserData"][0])
-        return AWSResponse(request.url, 200, {}, _Answer())
+    def _sent(self, operation: str, request: dict[str, Any]) -> dict[str, Any]:
+        model = self._model.operation_model(operation)
+        params = dict(request)
+        self._session.emit(
+            f"before-parameter-build.ec2.{operation}", params=params, model=model, context={}
+        )
+        query: dict[str, Any] = serialize.create_serializer("ec2").serialize_to_request(
+            params, model
+        )["body"]
+        return query
 
     async def run_instances(self, **request: Any) -> dict[str, Any]:
-        self._client.run_instances(**request)
+        query = self._sent("RunInstances", request)
+        if "UserData" in query:
+            self.user_data = base64.b64decode(query["UserData"])
         self.instances.append(
             {
                 "InstanceId": "i-0001",
@@ -151,11 +155,6 @@ class Ec2Wire:
 
     async def describe_instances(self, **_: Any) -> dict[str, Any]:
         return {"Reservations": [{"Instances": self.instances}] if self.instances else []}
-
-
-class _Answer:
-    def stream(self, **_: Any) -> Iterator[bytes]:
-        yield b"<Response/>"
 
 
 class _Cloud:
