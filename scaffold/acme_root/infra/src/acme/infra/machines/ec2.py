@@ -2,7 +2,8 @@
 started from the cloud pool's launch template, each snapshot an image of a
 stopped instance, its disk kept by the cloud's own snapshots under the
 template's key. A machine and a snapshot are found by the tag that carries
-the name their caller chose.
+the name their caller chose; the image the pool's new machines boot is
+named by its AMI id, as the module's `image_id` is.
 
 Nothing here reaches into a machine. The cloud closes its egress at its
 network, by the security group a start names: the closed group reaches the
@@ -14,9 +15,9 @@ has read it (`seal`). The platform never calls into a machine: what runs
 there, its host pulls, so `run` and `channel` refuse."""
 
 import asyncio
-import base64
 import hashlib
 import random
+import re
 from collections.abc import AsyncIterator, Callable, Sequence
 from datetime import timedelta
 from typing import Any
@@ -24,7 +25,7 @@ from typing import Any
 import aioboto3
 
 from acme.infra.aws_clients import AwsClientHolder, client_config
-from acme.infra.aws_errors import translated
+from acme.infra.aws_errors import ClientError, error_code, translated
 from acme.infra.exceptions import BackendFailed, InfraValidationFailed
 from acme.infra.machines import (
     Channel,
@@ -43,6 +44,10 @@ LIVE = ("pending", "running", "stopping", "stopped")
 """An instance in any other state is gone, or going."""
 
 REFUSED = "a machine of the cloud takes no command from outside: what runs there, its host pulls"
+
+AMI_ID = re.compile(r"ami-[0-9a-f]{8,17}")
+"""An image named by its id, as the pool's own image is, rather than by its
+name's tag, as a snapshot is."""
 
 
 class MachinesEc2Impl(MachinesInterface, SeedsInterface):
@@ -298,7 +303,7 @@ class MachinesEc2Impl(MachinesInterface, SeedsInterface):
         group: str,
     ) -> None:
         if snapshot is not None:
-            image = await self._image(snapshot)
+            image = await self._source(snapshot)
             if image is None or image.get("State") != "available":
                 raise SnapshotNotFound(f"no snapshot stands under {snapshot}")
             image_id = image["ImageId"]
@@ -319,7 +324,9 @@ class MachinesEc2Impl(MachinesInterface, SeedsInterface):
             "TagSpecifications": _tagged(name, "instance", "volume"),
         }
         if seed is not None:
-            asked["UserData"] = base64.b64encode(seed).decode()
+            # As it stands: botocore encodes a start's user data to base64
+            # itself, so the machine reads the seed back whole.
+            asked["UserData"] = seed
         try:
             with translated("ec2", "launch"):
                 await self._ec2.client().run_instances(**asked)
@@ -354,6 +361,21 @@ class MachinesEc2Impl(MachinesInterface, SeedsInterface):
                 raise BackendFailed("ec2", "snapshot", f"{name} not available in time")
             await self._sleep(self._poll.total_seconds())
             waited += self._poll.total_seconds()
+
+    async def _source(self, snapshot: str) -> dict[str, Any] | None:
+        """The image a new machine boots: the pool's own image by its AMI id,
+        or a session's snapshot by its name's tag. None when none stands."""
+        if not AMI_ID.fullmatch(snapshot):
+            return await self._image(snapshot)
+        with translated("ec2", "describe"):
+            try:
+                page = await self._ec2.client().describe_images(ImageIds=[snapshot])
+            except ClientError as error:
+                if error_code(error).startswith("InvalidAMIID"):
+                    return None
+                raise
+        found = page.get("Images", [])
+        return found[0] if found else None
 
     async def _instance(self, name: str) -> dict[str, Any] | None:
         found = await self._instances(name)

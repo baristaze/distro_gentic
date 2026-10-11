@@ -6,13 +6,13 @@ the stopped instance, held to a digest of the ids that name its bytes, and
 read back block by block. Nothing calls into a machine: `run` and `channel`
 refuse."""
 
-import base64
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from typing import Any
 
 import pytest
+from botocore.exceptions import ClientError
 
 from acme.infra.exceptions import InfraValidationFailed
 from acme.infra.machines import MachineSpec, MachineState, SnapshotNotFound
@@ -65,6 +65,12 @@ class Ec2:
         return {"Reservations": [{"Instances": found}] if found else []}
 
     async def describe_images(self, **request: Any) -> dict[str, Any]:
+        if "ImageIds" in request:
+            found = [i for i in self.images.values() if i["ImageId"] in request["ImageIds"]]
+            if not found:
+                error = {"Error": {"Code": "InvalidAMIID.NotFound", "Message": "no such image"}}
+                raise ClientError(error, "DescribeImages")  # type: ignore[arg-type]
+            return {"Images": found}
         named, _ = _filters(request)
         return {"Images": [i for i in self.images.values() if _matches(i, named)]}
 
@@ -153,7 +159,9 @@ def _filters(request: dict[str, Any]) -> tuple[str, tuple[str, ...]]:
 
 
 def _matches(resource: dict[str, Any], named: str) -> bool:
-    value = next(t["Value"] for t in resource["Tags"] if t["Key"] == TAG)
+    value = next((t["Value"] for t in resource["Tags"] if t["Key"] == TAG), None)
+    if value is None:
+        return False  # an image of the account's own, such as the pool's
     return value.startswith(named[:-1]) if named.endswith("*") else value == named
 
 
@@ -210,7 +218,7 @@ async def test_a_machine_starts_from_the_pools_template_in_its_egress_group_with
     assert closed["LaunchTemplate"] == {"LaunchTemplateId": TEMPLATE}
     assert closed["SecurityGroupIds"] == [CLOSED] and opened["SecurityGroupIds"] == [OPEN]
     assert {closed["SubnetId"], opened["SubnetId"]} <= {"subnet-0a", "subnet-0b"}
-    assert base64.b64decode(closed["UserData"]) == b'{"key":"hmk_x"}'
+    assert closed["UserData"] == b'{"key":"hmk_x"}', "as it stands: botocore encodes it once"
     assert "UserData" not in opened
     assert closed["MetadataOptions"]["HttpTokens"] == "required"
     assert "IamInstanceProfile" not in closed, "a machine holds no role to hand out"
@@ -220,6 +228,21 @@ async def test_a_machine_starts_from_the_pools_template_in_its_egress_group_with
     await machines.seal("acme-vm-pclosed")
     (instance,) = [i for i in ec2.instances.values() if i["SecurityGroups"][0]["GroupId"] == CLOSED]
     assert instance["MetadataOptions"]["HttpEndpoint"] == "disabled"
+
+
+async def test_a_new_machine_boots_the_pools_image_named_by_its_ami_id(
+    cloud: tuple[MachinesEc2Impl, Ec2],
+) -> None:
+    machines, ec2 = cloud
+    pools = "ami-0123456789abcdef0"
+    ec2.images[pools] = {"ImageId": pools, "State": "available", "Tags": []}
+    await machines.launch_seeded("acme-vm-pa", spec(), pools, b"seed")
+    (run,) = [request for name, request in ec2.calls if name == "run_instances"]
+    assert run["ImageId"] == pools, "the module's image_id, as the operator gives it"
+    assert await machines.names("acme-vm-p") == ["acme-vm-pa"], "the image is no name of the pool's"
+    with pytest.raises(SnapshotNotFound):
+        await machines.launch_seeded("acme-vm-pb", spec(), "ami-0fffffffffffffff0", b"seed")
+    assert await machines.state("acme-vm-pb") is MachineState.ABSENT
 
 
 async def test_a_running_machine_handed_a_new_seed_is_stopped_reseeded_and_started(

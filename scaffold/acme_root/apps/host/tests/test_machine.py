@@ -5,15 +5,22 @@ warm, and forgets the key once traded; its workspace is a folder of the
 machine at the VM's level, which it neither snapshots nor starts from one,
 and its commands run there as its own user."""
 
+import base64
 import json
 import re
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
+from urllib.parse import parse_qs
 from uuid import UUID
 
+import botocore.session
 import pytest
 from api_support import seed_request
+from botocore.awsrequest import AWSRequest, AWSResponse
 from contracts.agent_session_storage import make_session
 from host_support import Stack, probes
 
@@ -27,6 +34,8 @@ from acme.client.claimant.credential import BadSetting
 from acme.client.client import ApiError
 from acme.client.types import AdvertisementBody, IssuedHostCredentialView
 from acme.client.types import IsolationMode as HostMode
+from acme.infra.machines import MachineSpec
+from acme.infra.machines.ec2 import MachinesEc2Impl
 from acme.infra.machines.seeded import GUEST_WRITE
 from acme.infra.secrets.local import SecretsLocalImpl
 from acme.infra.transports import CommandSpec
@@ -45,7 +54,7 @@ from acme.infra.workspaces import (
 )
 from acme.infra.workspaces.machine import WorkspaceMachineImpl
 from acme.om.base import new_id, utcnow
-from acme.om.cloud_pool.rules import new_key
+from acme.om.cloud_pool.rules import new_key, seed
 from acme.om.cloud_pool.types.machine import PoolMachine
 from acme.om.tenancy.rules import hash_token
 
@@ -107,6 +116,92 @@ def test_the_seed_says_where_to_call_and_its_key_goes_once_traded(tmp_path: Path
     (tmp_path / "bad.json").write_text("{")
     with pytest.raises(BadSetting):
         read_seed(tmp_path / "bad.json")
+
+
+class Ec2Wire:
+    """The cloud as a new machine's start reaches it: each call built by
+    botocore's own handlers and serializer, and the user data the machine
+    reads as EC2 decodes it from the wire."""
+
+    def __init__(self) -> None:
+        self.user_data: bytes | None = None
+        self.instances: list[dict[str, Any]] = []
+        self._client: Any = botocore.session.get_session().create_client(
+            "ec2", region_name="eu-west-1", aws_access_key_id="test", aws_secret_access_key="test"
+        )
+        self._client.meta.events.register("before-send", self._sent)
+
+    def _sent(self, request: AWSRequest, **_: Any) -> AWSResponse:
+        body = request.body
+        query = parse_qs(body.decode() if isinstance(body, bytes) else str(body))
+        if "UserData" in query:
+            self.user_data = base64.b64decode(query["UserData"][0])
+        return AWSResponse(request.url, 200, {}, _Answer())
+
+    async def run_instances(self, **request: Any) -> dict[str, Any]:
+        self._client.run_instances(**request)
+        self.instances.append(
+            {
+                "InstanceId": "i-0001",
+                "State": {"Name": "running"},
+                "Tags": request["TagSpecifications"][0]["Tags"],
+            }
+        )
+        return {}
+
+    async def describe_instances(self, **_: Any) -> dict[str, Any]:
+        return {"Reservations": [{"Instances": self.instances}] if self.instances else []}
+
+
+class _Answer:
+    def stream(self, **_: Any) -> Iterator[bytes]:
+        yield b"<Response/>"
+
+
+class _Cloud:
+    def __init__(self, ec2: Ec2Wire) -> None:
+        self._ec2 = ec2
+
+    def client(self, service: str, **_: Any) -> Any:
+        @asynccontextmanager
+        async def opened() -> AsyncIterator[Ec2Wire]:
+            yield self._ec2
+
+        return opened()
+
+
+async def _no_wait(_: float) -> None:
+    return None
+
+
+async def test_a_new_ec2_machine_reads_its_seed_whole_from_its_first_boot_data(
+    tmp_path: Path,
+) -> None:
+    ec2 = Ec2Wire()
+    machines = MachinesEc2Impl(
+        _Cloud(ec2),  # type: ignore[arg-type]
+        region="eu-west-1",
+        timeout=timedelta(seconds=10),
+        boot=timedelta(seconds=30),
+        template="lt-0pool",
+        subnets=("subnet-0a",),
+        closed="sg-closed",
+        open_="sg-open",
+        encrypted=True,
+        sleep=_no_wait,
+    )
+    key = new_key()
+    await machines.start()
+    try:
+        spec = MachineSpec(image="ami-0123456789abcdef0", egress_open=False)
+        await machines.launch_seeded("acme-vm-p0", spec, None, seed("http://gateway.test", key))
+    finally:
+        await machines.close()
+    assert ec2.user_data is not None
+    # The machine's seed unit writes the endpoint's user data as it stands.
+    written = tmp_path / "seed.json"
+    written.write_bytes(ec2.user_data)
+    assert read_seed(written) == ("http://gateway.test", key)
 
 
 def test_a_machines_settings_take_the_seed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
