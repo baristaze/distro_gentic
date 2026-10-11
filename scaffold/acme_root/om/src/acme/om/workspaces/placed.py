@@ -39,14 +39,16 @@ class PlacedWorkspacesInterface(ABC):
         its pool holds it: a host of the pool is asked to prepare it, and
         the loop waits on the resource with no call spent. A workspace kept
         by snapshots waits, with the reason, while no live host of its pool
-        advertises snapshots at its level, and never runs as a cache.
+        advertises snapshots at its level, and never runs as a cache. One
+        that names a base is refused for good, since no host builds one.
 
         With `restore`, a snapshot a host's store keeps, the workspace is
-        started from it, replaced whole: by the host that holds it, or by a
-        host of the pool whose store keeps it. The restore is asked before
-        anything else and travels with the ask; the call waits for it a
-        while, then the loop waits on the resource. `WorkspaceLost` when the
-        host that keeps it lost it."""
+        started from it, replaced whole: by the host that holds it while it
+        is not revoked, or, with none, by a host of the pool whose store
+        keeps it, which then holds it. The restore is asked before anything
+        else and travels with the ask; the call waits for it a while, then
+        the loop waits on the resource. `WorkspaceLost` when the host that
+        holds the workspace lost it, or when no live host keeps it."""
         ...
 
     @abstractmethod

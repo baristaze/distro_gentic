@@ -12,9 +12,10 @@ A workspace kept by snapshots keeps them in the store of a host inside its
 tenant's wall, never in the platform's: it waits, with the reason, while no
 live host of its pool advertises snapshots at its level. A restore is
 decided before any host is asked, and travels with the ask: the host that
-holds the workspace replaces it from its store, or, with none, a host of the
+holds the workspace, while it is not revoked, replaces it from its store,
+and the session waits for it while it is offline; with none, a host of the
 pool whose store keeps the snapshot makes it. The run waits for it a while,
-then the loop waits on the resource; a host that lost the snapshot loses
+then the loop waits on the resource; a snapshot no live host keeps loses
 the workspace, with the reason. A snapshot is asked of the host that holds
 the workspace, which keeps its bytes and answers its reference and its
 digest."""

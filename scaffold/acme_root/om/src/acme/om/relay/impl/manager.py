@@ -321,15 +321,19 @@ class RelayManagerImpl(RelayManagerInterface):
             if latest.status is WorkStatus.QUEUED:
                 await self._work.end_queued(ctx, latest, f"a restore of snapshot {snapshot.id}")
         # The host that holds the workspace replaces it, so no second one is
-        # made beside it; with none, any host of the pool whose store keeps
-        # the snapshot makes it.
-        holder = await self.holder(ctx, session_id)
+        # made beside it: while it is not revoked, the restore waits on its
+        # lane, offline or not, as the workspace does. With none, any host of
+        # the pool whose store keeps the snapshot makes it.
+        binding = await self._storage.read_binding(ctx.org_id, session_id)
+        held_by = None
+        if binding is not None and await self._holds(ctx, session_id, binding.host_id):
+            held_by = binding.host_id
         isolation, egress, _ = asks(spec, "")
         project = await self._projects.project_of(ctx, session_id)
         payload = WorkspacePayload(
             operation=WorkspaceOperation.PREPARE,
             pool_id=placed.pool.id,
-            host_id=None if holder is None else holder.host_id,
+            host_id=held_by,
             session_id=session_id,
             spec=spec,
             isolation=isolation,
@@ -435,9 +439,11 @@ class RelayManagerImpl(RelayManagerInterface):
             return None
         assert answer.location is not None  # the answer's own rule
         binding = await self._storage.read_binding(host.org_id, session_id)
-        owner = payload.instance_of or session_id
         if (
-            binding is None
+            # A restore replaced the workspace whole: the host that made it
+            # holds it, so no run is told of a restore another host's lacks.
+            payload.snapshot is not None
+            or binding is None
             or binding.host_id == host.host_id
             or not await self._holds(ctx, owner, binding.host_id)
         ):

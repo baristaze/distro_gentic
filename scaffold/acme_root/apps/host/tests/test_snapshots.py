@@ -567,3 +567,48 @@ async def test_a_restore_whose_snapshot_no_live_host_keeps_is_lost_never_waited_
     asked = await managers.work.latest_for_target(api.owner, WorkKind.WORKSPACE, session_id)
     assert asked is not None and asked.status is WorkStatus.FAILED
     assert session_id not in other_twin.live
+
+
+async def test_a_restore_waits_for_its_offline_holder_and_the_host_that_restores_holds_it(
+    api: Stack, tmp_path: Path
+) -> None:
+    managers = api.container.managers
+    pool = await api.pool()
+    shared = tmp_path / "shared"
+    session_id = await a_pinned_session(api, pool.id)
+    holder, holder_twin, _ = await a_host(api, pool.id, tmp_path / "a", store=shared)
+    await prepared(api, holder, session_id)
+    record = await kept_on(api, holder, holder_twin, session_id, b"the snapshot")
+    other, other_twin, _ = await a_host(api, pool.id, tmp_path / "b", store=shared)
+    holder_id, other_id = (UUID(h.credential.claimant_id) for h in (holder, other))
+
+    # Its holder is offline: the restore waits on its lane, and no other host
+    # restores a workspace that would stay bound to it.
+    await offline(api, holder)
+    holder_twin.files[session_id] = b"written since"
+    placed = PlacedWorkspacesRelayedImpl(
+        lambda: managers.relay, lambda: managers.hosts, restore_wait=timedelta(milliseconds=200)
+    )
+    restoring = asyncio.ensure_future(
+        placed.held_on_host(api.owner, session_id, KEPT, restore_of(record))
+    )
+    assert await other.claim_once() is None
+    with pytest.raises(IsolationRefused) as waits:
+        await restoring
+    assert waits.value.clears, "the run is not told it restored"
+    assert session_id not in other_twin.live
+    await claimed(holder)  # back online, it restores its own
+    assert holder_twin.files[session_id] == b"the snapshot"
+    binding = await managers.relay.binding_of(api.owner, session_id)
+    assert binding is not None and binding.host_id == holder_id
+
+    # A restore another host makes binds the workspace to it, whatever host
+    # was bound meanwhile.
+    fork = await a_pinned_session(api, pool.id)
+    asked = await managers.relay.ask_restore(api.owner, fork, KEPT, restore_of(record))
+    await managers.relay.bind_workspace(api.owner, fork, holder_id, "elsewhere")
+    await claimed(other)
+    assert (await managers.relay.workspace_work(api.owner, asked)).status is WorkStatus.DONE
+    binding = await managers.relay.binding_of(api.owner, fork)
+    assert binding is not None and binding.host_id == other_id
+    assert fork in other_twin.live and other_twin.files[fork] == b"the snapshot"
