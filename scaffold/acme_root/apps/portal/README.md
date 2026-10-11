@@ -132,10 +132,10 @@ from the API. The credential's password and the provider key come back in
 no reply and on no screen, and the API key shows once, then on no screen.
 Their screenshots land in `e2e/screenshots/`, which git ignores.
 
-The timeline check plays the engineer's scene: it thinks, plans, starts
-two analysis sub-agents and waits for their reports, runs a failing test,
-edits, runs it again, opens a pull request, asks its person, validates,
-and submits its result. Its API and runner are `portal_stack.py`'s, which
+The timeline check plays the engineer's scene: it thinks, takes its
+baseline, plans, starts two analysis sub-agents and waits for their
+reports, runs a failing test, edits, runs it again, opens a pull
+request, asks its person, validates, and submits its result. Its API and runner are `portal_stack.py`'s, which
 register a scene engineer and analysis that work in a directory on this
 host and clone the org's repository from a folder of bare ones; the forge
 is its twin, seeded with it. The runner runs one loop at a time, since

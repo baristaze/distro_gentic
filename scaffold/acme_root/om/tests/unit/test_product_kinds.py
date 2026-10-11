@@ -16,12 +16,13 @@ import pytest
 from contracts.doubles import SessionProjectsMemory, context
 from contracts.evidence import (
     CHECKOUT,
+    CHECKOUT_KEY,
     ScriptedExecutor,
     checkout_policy,
     delivered,
     evidence_over,
 )
-from contracts.evidence_storage import make_record
+from contracts.evidence_storage import make_record, make_validation
 from contracts.factories import make_org
 from contracts.tools import INJECTED_TOKEN
 from contracts.trust import trusted
@@ -628,10 +629,15 @@ async def gate_reads(environment: str, script: dict[str, Any]) -> str:
     work = make_record(session, step_id=new_id())
     await evidence.manager.record_run(ctx, work)
     evidence.work.deliver(org.id, session, delivered())
+    # A baseline came first, written apart from the executors the case compares.
+    first, runs_at_base = make_validation(
+        session, version="base0", project=CHECKOUT_KEY, purpose=RunPurpose.BASELINE
+    )
+    assert await evidence.storage.create_validation(org.id, first, runs_at_base)
     try:
         await evidence.manager.validate(ctx, session, RunPurpose.VALIDATION)
     except ValidationFailed as error:
-        kept = await evidence.storage.read_validations(org.id, session, None, 10)
+        kept = await evidence.storage.read_validations(org.id, session, "c0ffee", 10)
         return f"not kept ({len(kept)}): {error}"
     finally:
         assert idle.requests == [], "only the check's own environment ran it"
@@ -681,10 +687,15 @@ async def test_a_change_needing_checks_of_two_environments_validates_in_each() -
     work = make_record(session, step_id=new_id())
     await evidence.manager.record_run(ctx, work)
     evidence.work.deliver(org.id, session, delivered())
+    await evidence.manager.validate(ctx, session, RunPurpose.BASELINE)
     kept = await evidence.manager.validate(ctx, session, RunPurpose.VALIDATION)
     assert [validation.executor for validation in kept] == ["batch-1", "executor-1"]
-    assert [check.name for request in product.requests for check in request.checks] == ["frames"]
-    assert [check.name for request in platform.requests for check in request.checks] == ["unit"]
+    for executor, names in ((product, ["frames"]), (platform, ["unit"])):
+        assert [request.purpose for request in executor.requests] == [
+            RunPurpose.BASELINE,
+            RunPurpose.VALIDATION,
+        ]
+        assert [check.name for check in executor.requests[-1].checks] == names
     result = Result(claim=Claim.SUCCEEDED, evidence=(work.id,))
     verdict = await evidence.gate.check(ctx, session, result)
     assert verdict.accepted and verdict.verified and verdict.outcome is LoopOutcome.SUCCEEDED

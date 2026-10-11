@@ -96,8 +96,9 @@ async def test_a_loop_ends_succeeded_only_once_its_head_is_validated(
     run = make_record(session_id, step_id=new_id())
     await evidence.record_run(owner, run)
     work.deliver(owner.org_id, session_id, delivered())
+    await evidence.validate(owner, session_id, RunPurpose.BASELINE)
 
-    # No validation at the head: the success goes back refused, and the
+    # A baseline, and no validation at the head: the success goes back refused, and the
     # model concludes it cannot show it.
     await loop.say(session_id, "Fix the cart.")
     loop.anthropic.add(

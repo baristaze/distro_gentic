@@ -383,11 +383,12 @@ async def test_the_engineers_success_needs_a_passing_validation_at_its_head(
     policy = make_policy(policy_key(project_id))
     await platform.managers.evidence.write_policy(platform.owner, policy)
 
-    # No validation at its head, then a failing one: no success counts, and
-    # a failure explained by the runs is an accepted end.
+    # A baseline first, then no validation at its head, then a failing one:
+    # no success counts, and a failure explained by the runs is an accepted end.
     executor.outcome = all_fail
     failing = await an_engineer(platform, work, project_id)
     platform.anthropic.add(
+        reply(calls(kinds.VALIDATE, "use_baseline", baseline=True)),
         reply(calls(kinds.SUBMIT_RESULT, "use_bare", claim="succeeded", evidence=[])),
         reply(calls(kinds.VALIDATE, "use_validate")),
         citing(Claim.SUCCEEDED),
@@ -403,12 +404,16 @@ async def test_the_engineers_success_needs_a_passing_validation_at_its_head(
     # A passing validation at its head: the success is accepted, verified.
     executor.outcome = lambda check, trial: "passed"
     passing = await an_engineer(platform, work, project_id)
-    platform.anthropic.add(reply(calls(kinds.VALIDATE, "use_validate")), citing(Claim.SUCCEEDED))
+    platform.anthropic.add(
+        reply(calls(kinds.VALIDATE, "use_baseline", baseline=True)),
+        reply(calls(kinds.VALIDATE, "use_validate")),
+        citing(Claim.SUCCEEDED),
+    )
     run = await platform.managers.loop.run(platform.owner, passing)
     assert run.outcome is LoopOutcome.SUCCEEDED
     failure, text = await platform.answer(passing, "use_succeeded")
     assert failure is None and "verified" in text and "unverified" not in text
-    assert [request.version for request in executor.requests] == ["c2", "c2"]
+    assert [request.version for request in executor.requests] == ["b1", "c2"] * 2
 
 
 async def test_analysis_the_planner_and_the_assistant_end_by_their_answer(

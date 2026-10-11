@@ -10,17 +10,19 @@ itself and by no gate:
 `script` writes the scripted provider's script: one turn that answers in
 Markdown and calls nothing, so a session runs its loop offline and the
 same way every time. With `--scene engineer` it is the engineer's scene
-instead: it thinks and plans, starts two analysis sub-agents in one
-answer and waits on them, the first reading the parser and the second
-searching for its callers, each then reporting; woken, it runs a failing
+instead: it thinks, takes its baseline, and plans; it starts two
+analysis sub-agents in one answer and waits on them, the first reading
+the parser and the second searching for its callers, each then
+reporting; woken, it runs a failing
 test, reads, edits, runs the test again, opens a pull request on the
 forge's twin, asks its person, validates, and submits its result. The
 runner runs one loop at a time, so the sub-agents take their turns after
 their parent parks, in the order it started them. A message after that, such as a
 person's giving back, gets a reply that validates the head again and
 submits the result again, since an engineer's loop ends only on its
-result. Each command and each validation wait for a decision, since its
-plan's answer, a tool's output, marks it. With `--scene support` it is
+result. Its baseline runs before anything marks the session. Each
+command and each later validation wait for a decision, since a tool's
+output, such as its plan's answer, marks it. With `--scene support` it is
 the platform assistant answering in the support dock: it searches its
 corpus, then answers with a link to a page of the portal and a link to
 another site.
@@ -198,7 +200,14 @@ def engineer_scene() -> list[Any]:
         )
 
     return [
-        turn(ThinkingBlock(text=THOUGHT), TextBlock(text=OPENING), use("write_plan", plan=PLAN)),
+        # The baseline before anything changes, in the first turn: a turn of
+        # its own would park the session's pause before its plan.
+        turn(
+            ThinkingBlock(text=THOUGHT),
+            TextBlock(text=OPENING),
+            use("validate", baseline=True),
+            use("write_plan", plan=PLAN),
+        ),
         turn(
             TextBlock(text=SPLIT),
             *(

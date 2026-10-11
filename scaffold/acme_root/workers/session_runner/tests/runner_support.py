@@ -136,9 +136,11 @@ def answers(text: str) -> ModelReply:
     )
 
 
-def validates() -> ModelReply:
-    """A turn that asks for a validation of the committed head."""
-    use = ToolUseBlock(id=f"use_{uuid4().hex[:12]}", name=kinds.VALIDATE, input={})
+def validates(*, baseline: bool = False) -> ModelReply:
+    """A turn that asks for a validation of the committed head, or, with
+    `baseline`, for the baseline at the base."""
+    asked = {"baseline": True} if baseline else {}
+    use = ToolUseBlock(id=f"use_{uuid4().hex[:12]}", name=kinds.VALIDATE, input=asked)
     return ModelReply(
         blocks=(use,),
         stop_reason=StopReason.TOOL_USE,

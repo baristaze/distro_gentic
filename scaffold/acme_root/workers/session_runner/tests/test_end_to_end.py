@@ -506,13 +506,15 @@ async def test_one_session_in_a_project_meets_every_gate_on_its_way_to_a_success
     project = policy_key(person.project_id)
     await stack.container.managers.evidence.write_policy(person.ctx, make_policy(project))
     runner = stack.runner(
-        "runner-gates", [runs(*FIXES_THE_REPORT), validates(), submits("succeeded")]
+        "runner-gates",
+        [validates(baseline=True), runs(*FIXES_THE_REPORT), validates(), submits("succeeded")],
     )
     session_id = await started(stack, person, "engineer")
 
     await say(stack, person, session_id, "The weekly report misses its total. Fix it.")
-    # The command's output marks the session, and a validation from a
-    # workspace with open egress acts outward: it waits for a person.
+    # The baseline runs before anything marks the session. The command's
+    # output marks it, and a validation from a workspace with open egress
+    # acts outward: it waits for a person.
     parked = await settled(stack, person, session_id)
     assert parked["park"] == {
         "reason": "person",
@@ -549,14 +551,14 @@ async def test_one_session_in_a_project_meets_every_gate_on_its_way_to_a_success
     # Each model call was held and settled through the money gate.
     ledger = storage.get_money_ledger_storage()
     holds = await ledger.read_entries(org_id, session_id=sid, kind=EntryKind.HOLD, limit=10)
-    assert len(holds) == 3, "one hold for each of the three model calls"
+    assert len(holds) == 4, "one hold for each of the four model calls"
     bills: list[str] = []
     for held in holds:
         assert isinstance(held, FundedHold) and held.funding.mode is FundingMode.PLATFORM
         entries = await ledger.read_entries(org_id, hold_id=held.hold.id, limit=5)
         (settlement,) = [entry for entry in entries if isinstance(entry, Settlement)]
         bills.append(settlement.bill.kind)
-    assert bills == ["billed"] * 3
+    assert bills == ["billed"] * 4
     plans = {held.funding.plan.id for held in holds if isinstance(held, FundedHold)}
     found["money"] = f"{len(holds)} holds on plan {sorted(plans)}, settled {bills}"
 

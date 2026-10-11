@@ -6,7 +6,7 @@
 // their step lands; its calls fold into work blocks whose lines say what
 // ran; its edit opens as a diff; each command it holds waits on an action
 // card whose Approve resumes it; its question turns the composer to an answer;
-// its plan, pull request, validation, and result read as cards. Each moment
+// its plan, pull request, baseline and validation, and result read as cards. Each moment
 // is shot light and dark under e2e/screenshots/.
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -130,7 +130,9 @@ test("the engineer's session reads as a live chat: thoughts, work blocks, a diff
 
   const result = chat.getByRole("region", { name: "Result" });
   await expect(result).toContainText("claims succeeded", { timeout: 90_000 });
-  await expect(chat.getByRole("region", { name: "Validation" })).toBeVisible();
+  // The baseline's validation card, then the head's.
+  await expect(chat.getByRole("region", { name: "Validation" })).toHaveCount(2);
+  await expect(chat.getByRole("region", { name: "Validation" }).last()).toBeVisible();
   await expect(chat.getByRole("status")).toHaveText("Done", { timeout: 60_000 });
   await expect(owner.locator(".acme-pr-badge")).toHaveText(/^#\d+$/);
   console.log(`cards: ${(await chat.locator(".acme-tcard").evaluateAll((cards) => cards.map((card) => card.getAttribute("data-card")))).join(", ")}`);
@@ -138,7 +140,7 @@ test("the engineer's session reads as a live chat: thoughts, work blocks, a diff
   await shoot(owner, "cards");
   // Each card on its own, in view.
   for (const card of ["plan", "pull_request", "validation", "result"]) {
-    await chat.locator(`.acme-tcard[data-card="${card}"]`).first().scrollIntoViewIfNeeded();
+    await chat.locator(`.acme-tcard[data-card="${card}"]`).last().scrollIntoViewIfNeeded();
     await shoot(owner, `card-${card.replace("_", "-")}`);
   }
 });
