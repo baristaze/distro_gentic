@@ -21,8 +21,8 @@ from acme.om.steps.types.header import ToolFailure, ToolRequestHeader, Workspace
 from acme.om.steps.types.step import Step
 from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.tools.registry import ToolRegistry
-from acme.om.tools.tool import TakenSnapshot
 from acme.om.tools.rules import approver_roles, response, strictest, verdict
+from acme.om.tools.tool import TakenSnapshot
 from acme.om.tools.types.call import Gate, GateOutcome, JobHandle, JobNotStarted, Verdict
 from acme.om.tools.types.policy import Decision, PolicyLayer, ToolPolicy
 

@@ -71,7 +71,7 @@ async def test_the_container_provider_refuses_what_it_cannot_hold_before_docker(
         return DockerReply(0, b"", b"")
 
     monkeypatch.setattr("acme.infra.workspaces.container.docker", recorded)
-    provider = WorkspaceContainerImpl(IMAGE, timedelta(seconds=5))
+    provider = WorkspaceContainerImpl(IMAGE, timedelta(seconds=5), "acme-test")
     listed = BASE.model_copy(
         update={"egress": EgressPolicy(mode=EgressMode.ALLOWLIST, hosts=("pypi.org",))}
     )
@@ -101,7 +101,7 @@ async def test_a_container_on_a_base_starts_on_its_setup_and_keeps_its_own_files
     """The setup's layer is in every container on the base, and its files
     seed a new volume alone: a workspace found again after a release keeps
     what it wrote, and gets the setup's layer back."""
-    provider = WorkspaceContainerImpl(IMAGE, timedelta(seconds=300))
+    provider = WorkspaceContainerImpl(IMAGE, timedelta(seconds=300), "acme-test")
     org, build_id, workspace_id = new_id(), new_id(), new_id()
     build = await provider.prepare(
         org, build_id, on(IsolationMode.CONTAINER, WorkspaceBase(image=IMAGE), NONE)

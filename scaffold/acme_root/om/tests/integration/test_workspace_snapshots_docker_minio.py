@@ -139,7 +139,7 @@ class InfraOnDocker(InfraLocalImpl):
 
     def __init__(self, root: Path, buckets: BucketsInterface | None = None) -> None:
         super().__init__(root)
-        self.workspaces = WorkspaceContainerImpl(IMAGE, timedelta(seconds=300))
+        self.workspaces = WorkspaceContainerImpl(IMAGE, timedelta(seconds=300), "acme-test")
         self.broker = FileBroker()
         self.transport = TransportContainerImpl(
             root / "records", self.get_secrets(), self.broker, timedelta(seconds=120)

@@ -627,7 +627,9 @@ async def test_the_twin_holds_what_it_prepared_until_it_is_let_go() -> None:
         await twin.prepare(org, new_id(), spec(IsolationMode.TWIN, NONE)) for _ in range(2)
     ]
     await twin.release(let_go)
-    assert await twin.held_instances() == [HeldInstance(id=kept.id, org_id=org, location=kept.location)]
+    assert await twin.held_instances() == [
+        HeldInstance(id=kept.id, org_id=org, location=kept.location)
+    ]
     assert await WorkspaceNullImpl().held_instances() == []
 
 

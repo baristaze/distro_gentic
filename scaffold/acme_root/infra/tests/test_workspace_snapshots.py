@@ -188,7 +188,7 @@ async def test_a_snapshot_the_container_provider_did_not_write_loses_the_workspa
         return DockerReply(0, b"29.0.0\n", b"")
 
     monkeypatch.setattr("acme.infra.workspaces.container.docker", recorded)
-    provider = WorkspaceContainerImpl(IMAGE, timedelta(seconds=5))
+    provider = WorkspaceContainerImpl(IMAGE, timedelta(seconds=5), "acme-test")
     with pytest.raises(WorkspaceLost, match=says):
         await provider.prepare(new_id(), new_id(), kept(IsolationMode.CONTAINER), snapshot=snapshot)
     assert [call[0] for call in calls] == ["version"]
@@ -224,7 +224,7 @@ async def test_a_restore_whose_image_cannot_be_had_is_refused_with_its_reason_an
         return DockerReply(1, b"", b"Error: No such image\n")
 
     monkeypatch.setattr("acme.infra.workspaces.container.docker", replied)
-    provider = WorkspaceContainerImpl(IMAGE, timedelta(seconds=5))
+    provider = WorkspaceContainerImpl(IMAGE, timedelta(seconds=5), "acme-test")
     snapshot = _archive(Kept(image=IMAGE_ID, pull=pull, deleted=(), layer=b"", files=b""))
     with pytest.raises(WorkspaceLost, match=says):
         await provider.prepare(new_id(), new_id(), kept(IsolationMode.CONTAINER), snapshot=snapshot)
@@ -297,7 +297,7 @@ async def test_a_container_restored_from_its_snapshot_holds_the_whole_tree_it_ke
     image's site-packages, and a file removed from the image: snapshotted,
     purged, and prepared from the snapshot, the tree hashes the same,
     `/proc`, `/sys`, and `/dev` aside."""
-    provider = WorkspaceContainerImpl(IMAGE, timedelta(seconds=300))
+    provider = WorkspaceContainerImpl(IMAGE, timedelta(seconds=300), "acme-test")
     org, workspace_id = new_id(), new_id()
     spec = kept(IsolationMode.CONTAINER, NONE)
     workspace = await provider.prepare(org, workspace_id, spec)
@@ -347,7 +347,7 @@ async def test_a_snapshot_is_taken_from_a_live_workspace_and_leaves_it_running()
     is refused, never taken from its volume alone. A live one keeps running
     once its snapshot is taken, and a restore of another workspace from it
     leaves the first untouched."""
-    provider = WorkspaceContainerImpl(IMAGE, timedelta(seconds=300))
+    provider = WorkspaceContainerImpl(IMAGE, timedelta(seconds=300), "acme-test")
     org, first, second = new_id(), new_id(), new_id()
     spec = kept(IsolationMode.CONTAINER, NONE)
     workspace = await provider.prepare(org, first, spec)
@@ -390,7 +390,7 @@ async def test_a_restore_on_a_host_without_the_image_pulls_it_by_the_digest_the_
     image is pulled by that digest, and the workspace comes back whole."""
     if not (await docker("pull", PULLED, bound=timedelta(seconds=300))).ok:
         pytest.skip("needs the registry that serves the image")
-    provider = WorkspaceContainerImpl(PULLED, timedelta(seconds=300))
+    provider = WorkspaceContainerImpl(PULLED, timedelta(seconds=300), "acme-test")
     org, workspace_id = new_id(), new_id()
     spec = kept(IsolationMode.CONTAINER, NONE)
     workspace = await provider.prepare(org, workspace_id, spec)

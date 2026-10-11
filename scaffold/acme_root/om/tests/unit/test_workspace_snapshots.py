@@ -47,12 +47,14 @@ from acme.infra.workspaces import (
     IsolationSpec,
     SnapshotRefused,
     Workspace,
+    WorkspaceBase,
     WorkspaceLost,
 )
 from acme.infra.workspaces.host import UNKEPT, WorkspaceHostImpl
 from acme.infra.workspaces.twin import WorkspaceTwinImpl
 from acme.om.agent_sessions.rules import QUESTION
 from acme.om.agents.loop_rules import FORKED, LOST, REWOUND, pending_restore
+from acme.om.agents.types.kind import AgentKind
 from acme.om.agents.types.request import Spawn
 from acme.om.agents.types.run import RunEnd
 from acme.om.base import Platform, new_id, utcnow
@@ -78,6 +80,7 @@ from acme.om.tools.native.spawn_sub_agent import SPAWN_SUB_AGENT
 from acme.om.tools.native.wait_for_sub_agents import WAIT_FOR_SUB_AGENTS
 from acme.om.tools.tool import TakenSnapshot, ToolRuntime
 from acme.om.tools.types.tool import Effect, ToolClass, ToolInput
+from acme.om.workspaces.impl.tools import UNPINNED
 
 KEPT = IsolationSpec(
     mode=IsolationMode.TWIN,
@@ -330,7 +333,20 @@ CACHE_FORKER = FORKER.model_copy(
         "isolation": KEPT.model_copy(update={"durability": Durability.CACHE}),
     }
 )
+BASED = ASSISTANT.model_copy(
+    update={
+        "name": "based",
+        "isolation": KEPT.model_copy(
+            update={"durability": Durability.CACHE, "base": WorkspaceBase(image="python:3.14")}
+        ),
+    }
+)
 TOKEN = "SERVICE_TOKEN"
+
+PINNED = pytest.mark.skip(
+    reason="the platform's pin holds no durability, so a kind that keeps its workspace "
+    "by snapshots is refused (test_a_kept_or_based_kind_is_refused_never_run_as_a_cache)"
+)
 
 
 def kept_loop(tmp_path: Path) -> tuple[Loop, WorkspaceTwinImpl]:
@@ -343,7 +359,7 @@ def kept_loop(tmp_path: Path) -> tuple[Loop, WorkspaceTwinImpl]:
     injected = SecretUse(name=TOKEN, via=SecretVia.INJECTED, env=TOKEN)
     loop = loop_over(
         tmp_path,
-        kinds=(ASSISTANT, DELIVERY, KEEPER, FORKER, CACHE_FORKER),
+        kinds=(ASSISTANT, DELIVERY, KEEPER, FORKER, CACHE_FORKER, BASED),
         infra=infra,
         extra=(Scribble(twin), Command("run_command", secrets=(injected,))),
     )
@@ -373,6 +389,29 @@ async def rewind(loop: Loop, session_id: UUID, snapshot_id: UUID) -> Step:
     return stored
 
 
+@pytest.mark.parametrize("kind", [KEEPER, BASED], ids=["kept by snapshots", "on a base"])
+async def test_a_kept_or_based_kind_is_refused_never_run_as_a_cache(
+    tmp_path: Path, kind: AgentKind, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The platform holds each prepare to the session's pin, which holds no
+    durability and no base. A kind that asks for either ends its loop
+    before any model call, with no workspace prepared, never on a cache or
+    the provider's own image in its stead."""
+    loop, twin = kept_loop(tmp_path)
+    session_id = await loop.start(kind.name)
+    await loop.say(session_id, "Install the tool.")
+
+    ran = await loop.loops.run(loop.owner, session_id)
+
+    assert ran.outcome is LoopOutcome.ERRORED
+    assert session_id not in twin.live, "no workspace was prepared"
+    history = await loop.history(session_id)
+    assert not [step for step in history if step.type is StepType.MODEL_REQUEST]
+    assert not snapshots(history)
+    assert any(UNPINNED in record.getMessage() for record in caplog.records)
+
+
+@PINNED
 async def test_a_kept_workspace_is_snapshotted_at_each_runs_end_and_the_next_run_starts_from_it(
     tmp_path: Path,
 ) -> None:
@@ -404,6 +443,7 @@ async def test_a_kept_workspace_is_snapshotted_at_each_runs_end_and_the_next_run
     assert len(snapshots(await loop.history(session_id))) == 3, "one at each run's end"
 
 
+@PINNED
 async def test_a_run_whose_snapshot_fails_keeps_its_instance_and_the_next_starts_as_it_stands(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -431,6 +471,7 @@ async def test_a_run_whose_snapshot_fails_keeps_its_instance_and_the_next_starts
     assert twin.files[session_id] == b"written since"
 
 
+@PINNED
 async def test_a_workspace_a_person_worked_in_by_hand_is_never_replaced_by_an_older_snapshot(
     tmp_path: Path,
 ) -> None:
@@ -449,6 +490,7 @@ async def test_a_workspace_a_person_worked_in_by_hand_is_never_replaced_by_an_ol
     assert latest.size == len(b"as the person fixed it"), "the run kept what the person left"
 
 
+@PINNED
 async def test_a_rewind_starts_the_next_loop_from_the_earlier_snapshot_and_keeps_all_before_it(
     tmp_path: Path,
 ) -> None:
@@ -490,6 +532,7 @@ async def test_a_rewind_starts_the_next_loop_from_the_earlier_snapshot_and_keeps
     assert notices == [done]
 
 
+@PINNED
 @pytest.mark.parametrize("asked", ["a rewind", "the next run"])
 async def test_a_restore_whose_bytes_are_gone_parks_once_and_the_unlock_goes_on_without_it(
     tmp_path: Path, asked: str
@@ -571,6 +614,7 @@ async def forked_in_its_first_run(loop: Loop, kind: str) -> tuple[UUID, Step, St
     return parent, request, answer
 
 
+@PINNED
 async def test_a_fork_in_the_parents_first_run_starts_from_its_workspace_at_the_spawn(
     tmp_path: Path,
 ) -> None:
@@ -662,7 +706,8 @@ async def test_a_fork_whose_snapshot_is_refused_spends_nothing_of_the_tree(
     org_id = loop.owner.org_id
     await loop.infra.get_secrets().put(org_id, TOKEN, "tok-0123456789abcdef")
     leaked = await loop.start(CACHE_FORKER.name)
-    unkept = await loop.start(FORKER.name)
+    # A cache parent: the platform refuses a kind kept by snapshots whole.
+    unkept = await loop.start(CACHE_FORKER.name)
     memory_only = StoragePolicy(mode=StorageMode.MEMORY_ONLY, keep_shape=False)
     await loop.managers.privacy.set_policy(loop.owner, unkept, memory_only)
     cases = ((leaked, "token=tok-0123456789abcdef", TOKEN), (unkept, "clean", "no content at rest"))

@@ -8,8 +8,10 @@ the loop asks again and never ends for one. A prepared workspace is brought
 up to the session's branch; a release first pushes what the workspace
 holds, then lets go only of what its own run holds. A restore, a rewind or a
 fork's, starts the workspace this process prepares, and is lost for one a
-host of the tenant's holds, which no snapshot reaches. Every other
-operation is the engine's, unchanged.
+host of the tenant's holds, which no snapshot reaches. A pin holds no
+durability and no base, so a spec that asks for a workspace kept by
+snapshots, or started from a base, is refused (`UNPINNED`), never prepared
+as a cache in its stead. Every other operation is the engine's, unchanged.
 
 A run is named by its epoch, read from storage as it prepares: a session
 that resumes on this host while the run before it is still being released
@@ -32,6 +34,7 @@ from uuid import UUID
 from acme.infra.exceptions import InfraException
 from acme.infra.transports import OutputSink
 from acme.infra.workspaces import (
+    Durability,
     IsolationMode,
     IsolationRefused,
     IsolationSpec,
@@ -53,6 +56,13 @@ from acme.om.workspaces.rules import host_refusal
 from acme.om.workspaces.types.host import HostOffer
 
 log = logging.getLogger(__name__)
+
+UNPINNED = (
+    "a session's pin holds no durability and no base: a workspace kept by"
+    " snapshots, or started from a base, is refused"
+)
+"""Why a spec that asks for either is refused here: its pin, which every
+prepare of the session is held to, would drop what it asks."""
 
 
 class HeldWorkspaces:
@@ -133,6 +143,11 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         spec: IsolationSpec,
         restore: WorkspaceSnapshot | None,
     ) -> Workspace:
+        if spec.durability is Durability.SNAPSHOT or spec.base is not None:
+            # The pin holds the isolation alone: what a snapshot or a base
+            # asks is refused whole, never met by a cache on the provider's
+            # own image in its stead.
+            raise IsolationRefused(UNPINNED)
         pinned = await self._workspaces.pinned(ctx, session_id, spec)
         if pinned.mode is IsolationMode.NONE:
             return await self._inner.prepare_workspace(ctx, session_id, pinned, restore)

@@ -17,8 +17,8 @@ from acme.om.steps.types.header import ToolFailure, ToolRequestHeader, Workspace
 from acme.om.steps.types.step import Step
 from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.tools.registry import ToolRegistry
-from acme.om.tools.tool import TakenSnapshot
 from acme.om.tools.rules import response
+from acme.om.tools.tool import TakenSnapshot
 from acme.om.tools.types.call import Gate, GateOutcome, JobHandle, JobNotStarted
 from acme.om.tools.types.policy import PolicyLayer, ToolPolicy
 from acme.om.trust.exceptions import SecretCrossesWall

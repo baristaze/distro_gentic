@@ -143,7 +143,7 @@ class Spied(WorkspaceContainerImpl):
     started from."""
 
     def __init__(self) -> None:
-        super().__init__(IMAGE, timedelta(seconds=300))
+        super().__init__(IMAGE, timedelta(seconds=300), "acme-test")
         self.started_from: dict[UUID, str] = {}
 
     async def prepare(
