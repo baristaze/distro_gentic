@@ -188,7 +188,7 @@ class Host:
         return await self.sweep(request())
 
     async def held(self) -> set[UUID]:
-        return {instance.id for instance in await self.provider.held()}
+        return {instance.id for instance in await self.provider.held_instances()}
 
 
 @pytest.fixture

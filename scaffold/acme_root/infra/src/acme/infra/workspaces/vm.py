@@ -11,6 +11,7 @@ from acme.infra.exceptions import BackendFailed, InfraException
 from acme.infra.machines import MachinesInterface, MachineSpec, MachineState
 from acme.infra.workspaces import (
     EgressMode,
+    HeldInstance,
     IsolationMode,
     IsolationRefused,
     IsolationSpec,
@@ -194,6 +195,13 @@ class WorkspaceVmImpl(WorkspaceProviderInterface):
         for found in await self._machines.names(name):
             if found == name or found.startswith(f"{name}-"):
                 await self._machines.destroy(found)
+
+    async def held_instances(self) -> list[HeldInstance]:
+        """None: a machine is named by a hash of its workspace's id, so no
+        name says which workspace, or which tenant, it holds. A machine
+        whose run died before its release runs until its workspace's next
+        prepare and release, or its purge."""
+        return []
 
     def describe(self) -> str:
         return f"workspaces=vm({self._image})"

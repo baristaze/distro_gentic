@@ -118,7 +118,7 @@ class HeldWorkspacesSweep:
     async def __call__(self, rctx: RequestContext) -> int:
         """One pass over what this host holds, then over what the tenants'
         hosts hold; returns how many it let go."""
-        held = await self._provider.held()
+        held = await self._provider.held_instances()
         hosted = await self._hosted()
         now = self._clock()
         ids = {instance.id for instance in held} | {b.session_id for _, b in hosted}

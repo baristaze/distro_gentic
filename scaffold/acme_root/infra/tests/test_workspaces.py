@@ -519,7 +519,7 @@ async def test_a_host_holds_each_directory_from_its_prepare_to_its_release(
     (root / ".records").mkdir()
     (root / org.hex / "not-an-id.held").touch()
     (root / org.hex / f"{new_id()}.held").touch()  # an id, though not as a prepare names it
-    assert sorted(await provider.held(), key=lambda held: held.location) == sorted(
+    assert sorted(await provider.held_instances(), key=lambda held: held.location) == sorted(
         (
             HeldInstance(id=place.id, org_id=org, location=place.location)
             for place in (first, second)
@@ -529,12 +529,12 @@ async def test_a_host_holds_each_directory_from_its_prepare_to_its_release(
     assert await asyncio.to_thread(os.listdir, first.location) == [], "no mark in it"
 
     await provider.release(first)
-    assert [held.id for held in await provider.held()] == [second.id]
+    assert [held.id for held in await provider.held_instances()] == [second.id]
     assert await asyncio.to_thread(Path(first.location).is_dir), "its files outlive the release"
     await provider.prepare(org, first.id, first.spec)
     await provider.purge(org, first.id)
     await provider.purge(org, second.id)
-    assert await provider.held() == []
+    assert await provider.held_instances() == []
 
 
 async def test_a_container_provider_holds_the_running_containers_it_started_alone(
@@ -559,7 +559,7 @@ async def test_a_container_provider_holds_the_running_containers_it_started_alon
 
     monkeypatch.setattr("acme.infra.workspaces.container.docker", listed)
     provider = WorkspaceContainerImpl("python:3.14-slim", timedelta(seconds=5), DEPLOYMENT)
-    assert await provider.held() == [
+    assert await provider.held_instances() == [
         HeldInstance(id=ours, org_id=org, location=container_name(ours))
     ]
     (call,) = calls
@@ -572,7 +572,7 @@ async def test_a_container_provider_holds_the_running_containers_it_started_alon
 
     monkeypatch.setattr("acme.infra.workspaces.container.docker", unreachable)
     with pytest.raises(BackendFailed):
-        await provider.held()
+        await provider.held_instances()
 
 
 def docker_runs() -> bool:
@@ -602,13 +602,13 @@ async def test_a_container_provider_never_holds_a_container_it_did_not_start() -
     )
     try:
         assert started.ok, started.reason()
-        held = await provider.held()
+        held = await provider.held_instances()
         assert HeldInstance(id=workspace.id, org_id=org, location=workspace.location) in held
         assert bare not in {instance.location for instance in held}
         assert elsewhere.id not in {instance.id for instance in held}, "another deployment's"
-        assert [instance.id for instance in await theirs.held()] == [elsewhere.id]
+        assert [instance.id for instance in await theirs.held_instances()] == [elsewhere.id]
         await provider.release(workspace)
-        assert workspace.id not in {instance.id for instance in await provider.held()}
+        assert workspace.id not in {instance.id for instance in await provider.held_instances()}
         for name in (bare, elsewhere.location):
             running = await docker_cli(
                 "inspect", "--format", "{{.State.Running}}", name, bound=bound
@@ -627,8 +627,8 @@ async def test_the_twin_holds_what_it_prepared_until_it_is_let_go() -> None:
         await twin.prepare(org, new_id(), spec(IsolationMode.TWIN, NONE)) for _ in range(2)
     ]
     await twin.release(let_go)
-    assert await twin.held() == [HeldInstance(id=kept.id, org_id=org, location=kept.location)]
-    assert await WorkspaceNullImpl().held() == []
+    assert await twin.held_instances() == [HeldInstance(id=kept.id, org_id=org, location=kept.location)]
+    assert await WorkspaceNullImpl().held_instances() == []
 
 
 async def test_a_container_spec_with_no_docker_is_refused_and_never_swapped_for_a_directory(
@@ -982,7 +982,7 @@ async def test_an_account_holds_each_workspace_from_its_prepare_to_its_release(
     first, second = [
         await provider.prepare(org, new_id(), spec(IsolationMode.ACCOUNT)) for _ in range(2)
     ]
-    assert sorted(await provider.held(), key=lambda held: held.location) == sorted(
+    assert sorted(await provider.held_instances(), key=lambda held: held.location) == sorted(
         (
             HeldInstance(id=place.id, org_id=org, location=place.location)
             for place in (first, second)
@@ -992,10 +992,10 @@ async def test_an_account_holds_each_workspace_from_its_prepare_to_its_release(
     assert await asyncio.to_thread(os.listdir, first.location) == [], "no mark in it"
 
     await provider.release(first)
-    assert [held.id for held in await provider.held()] == [second.id]
+    assert [held.id for held in await provider.held_instances()] == [second.id]
     await provider.purge(org, first.id)
     await provider.purge(org, second.id)
-    assert await provider.held() == []
+    assert await provider.held_instances() == []
 
 
 @needs_an_account

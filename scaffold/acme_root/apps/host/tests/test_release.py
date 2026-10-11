@@ -179,7 +179,7 @@ class Placed:
         await self.host.idle()
 
     async def held(self) -> set[UUID]:
-        return {instance.id for instance in await self.provider.held()}
+        return {instance.id for instance in await self.provider.held_instances()}
 
     def refs(self) -> list[str]:
         return git(

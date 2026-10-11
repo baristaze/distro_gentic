@@ -361,7 +361,7 @@ async def test_the_instance_goes_after_its_run_and_no_other_pools_or_tenants_hos
     ((location, _),) = host.transport.read
     assert Path(location).name == instance.hex
     assert gone(location), "the instance's files went with it"
-    assert await host.provider.held() == []
+    assert await host.provider.held_instances() == []
     assert gone(host.transport.records / instance.hex), "and its records"
     assert await managers.relay.binding_of(owner, instance) is None
     purge = await managers.work.latest_for_target(owner, WorkKind.WORKSPACE, instance)
@@ -389,7 +389,7 @@ async def test_the_instance_goes_when_its_check_ends_the_run(
     assert validation.records == (record.id,)
     assert record.outcome is RunOutcome.ERRORED, "a check that wrote no results counts, failed"
     assert host.claimed, "the run's instance was made on the pool's host"
-    assert await host.provider.held() == [], "and it went when the check ended the run"
+    assert await host.provider.held_instances() == [], "and it went when the check ended the run"
     assert gone(host.root / owner.org_id.hex)
 
 
@@ -413,4 +413,4 @@ async def test_a_results_stream_longer_than_one_relayed_read_is_an_errored_run_r
     assert validation.records == (record.id,) and record.outcome is RunOutcome.ERRORED
     ((_, read),) = host.transport.read
     assert len(read) == READ_BYTES + 1, "one read, of what crosses, and no more"
-    assert await host.provider.held() == [], "and the instance went"
+    assert await host.provider.held_instances() == [], "and the instance went"
