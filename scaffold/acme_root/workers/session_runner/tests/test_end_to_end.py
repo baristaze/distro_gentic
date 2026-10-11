@@ -367,6 +367,23 @@ async def settled(stack: Stack, person: Person, session_id: str) -> dict[str, An
     pytest.fail(f"session {session_id} never settled\n{logs}")
 
 
+async def awaiting_approval(
+    stack: Stack, person: Person, session_id: str, tool: str
+) -> dict[str, Any]:
+    """The call the session parks on for a person's approval, once the last
+    call it asked for is `tool`."""
+    deadline = asyncio.get_running_loop().time() + SETTLE_SECONDS
+    approval = {"reason": "person", "unlock": "approval", "retry_at": None, "line": None}
+    while asyncio.get_running_loop().time() < deadline:
+        parked = await settled(stack, person, session_id)
+        asked = of_type(await history(stack, person, session_id), "tool_request")[-1]
+        if parked["status"] == "parked" and parked["park"] == approval and asked["tool"] == tool:
+            return asked
+        await asyncio.sleep(0.25)
+    logs = "\n\n".join(f"{r.log.name}:\n{r.tail()}" for r in stack.runners)
+    pytest.fail(f"session {session_id} never held {tool} for a person\n{logs}")
+
+
 async def until_steps(
     stack: Stack, person: Person, session_id: str, *types: str
 ) -> list[dict[str, Any]]:
@@ -512,24 +529,17 @@ async def test_one_session_in_a_project_meets_every_gate_on_its_way_to_a_success
     session_id = await started(stack, person, "engineer")
 
     await say(stack, person, session_id, "The weekly report misses its total. Fix it.")
-    # The baseline runs before anything marks the session. The command's
-    # output marks it, and a validation from a workspace with open egress
-    # acts outward: it waits for a person.
-    parked = await settled(stack, person, session_id)
-    assert parked["park"] == {
-        "reason": "person",
-        "unlock": "approval",
-        "retry_at": None,
-        "line": None,
-    }
-    asked = of_type(await history(stack, person, session_id), "tool_request")[-1]
-    assert asked["tool"] == "validate"
-    approved = await stack.client.post(
-        f"/v1/agent-sessions/{session_id}/calls/{asked['seq']}/decision",
-        headers=created(person.headers),
-        json={"approve": True},
-    )
-    assert approved.status_code == 201, approved.text
+    # The baseline runs before anything marks the session, and its answer
+    # marks it: from a workspace with open egress, the command and then the
+    # validation act outward, and each waits for a person.
+    for tool in ("run_command", "validate"):
+        asked = await awaiting_approval(stack, person, session_id, tool)
+        approved = await stack.client.post(
+            f"/v1/agent-sessions/{session_id}/calls/{asked['seq']}/decision",
+            headers=created(person.headers),
+            json={"approve": True},
+        )
+        assert approved.status_code == 201, approved.text
     await until_steps(stack, person, session_id, "loop_ended")
     session = await settled(stack, person, session_id)
 
