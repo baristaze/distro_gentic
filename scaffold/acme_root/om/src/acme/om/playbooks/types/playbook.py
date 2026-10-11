@@ -56,7 +56,9 @@ class Playbook(Identifiable, Created):
     """One published version of a playbook. A version is written once; a
     change is the next version. `findings` is what the lever checks read
     in it as it was published: advice for the person who published it,
-    never a refusal."""
+    never a refusal. It is None on a version the checks never read, one
+    published before they ran, which is not one they read and found
+    nothing in."""
 
     name: Stored = Field(min_length=1, max_length=MAX_SKILL_NAME, pattern=SKILL_NAME)
     version: int = Field(ge=1)
@@ -64,7 +66,7 @@ class Playbook(Identifiable, Created):
     body: Stored = Field(min_length=1, max_length=MAX_BODY)
     gates: tuple[PlaybookGate, ...] = ()
     published_by: UUID
-    findings: tuple[LeverFinding, ...] = ()
+    findings: tuple[LeverFinding, ...] | None = None
 
 
 class PlaybookInvocation(Identifiable, Created):

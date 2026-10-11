@@ -42,7 +42,9 @@ class PublishRequest(RequestBody):
 
 class PlaybookView(View):
     """A version as published, with what the lever checks found in it as it
-    was: advice, which never refused the publish."""
+    was: advice, which never refused the publish. `findings` is null on a
+    version the checks never read, one published before they ran, and an
+    empty list on one they read and found nothing in."""
 
     id: UUID
     name: str
@@ -52,4 +54,4 @@ class PlaybookView(View):
     gates: list[GateView]
     published_by: UUID
     created_at: datetime
-    findings: list[FindingView]
+    findings: list[FindingView] | None

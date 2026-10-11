@@ -12,6 +12,10 @@ export const CHECK_LABEL: Record<LeverCheck, string> = {
   past_session_bound: "Longer than a session holds whole",
 };
 
+/** What a version the checks never read says: one published before they
+ * ran is not checked, which is not checked and clean. */
+export const NOT_CHECKED = "The checks have not read this version: it was published before they ran.";
+
 export interface FindingLine {
   label: string;
   detail: string;

@@ -100,6 +100,17 @@ class KnowledgeStorageContract:
         assert await storage.read_entries(org, KnowledgeStatus.REVIEWED, None, 10) == [kept]
         assert await storage.read_entries(org, KnowledgeStatus.SUGGESTED, None, 10) == []
 
+    async def test_an_entry_never_checked_reads_apart_from_one_checked_and_clean(
+        self, storage: KnowledgeStorageInterface
+    ) -> None:
+        org = new_id()
+        unchecked = make_entry().model_copy(update={"findings": None})
+        clean = make_entry().model_copy(update={"findings": ()})
+        for entry in (unchecked, clean):
+            assert await storage.create_entry(org, entry, ())
+        assert (await storage.read_entry(org, unchecked.id)) == unchecked
+        assert (await storage.read_entry(org, clean.id)) == clean
+
     async def test_create_entry_in_another_tenant_is_not_read_here(
         self, storage: KnowledgeStorageInterface
     ) -> None:

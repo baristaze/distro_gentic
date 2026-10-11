@@ -1,5 +1,6 @@
 """The playbooks storage contract: every published version, written once
-with the findings read in it, and the playbooks each session invoked. The cases named in
+with the findings read in it, none on one never checked, and the playbooks
+each session invoked. The cases named in
 `CROSS_TENANT_CASES` are the tenant fence's evidence: each one presents
 another tenant's identifier and asserts that nothing is found and nothing
 changes."""
@@ -75,6 +76,17 @@ class PlaybookStorageContract:
         assert await storage.read_latest(org, first.name) == second
         assert await storage.read_playbook(org, first.id) == first
         assert await storage.read_latest(org, "other") is None
+
+    async def test_a_version_never_checked_reads_apart_from_one_checked_and_clean(
+        self, storage: PlaybookStorageInterface
+    ) -> None:
+        org = new_id()
+        unchecked = make_playbook(1).model_copy(update={"findings": None})
+        clean = make_playbook(2).model_copy(update={"findings": ()})
+        for playbook in (unchecked, clean):
+            assert await storage.create_playbook(org, playbook, ())
+        assert (await storage.read_playbook(org, unchecked.id)) == unchecked
+        assert (await storage.read_playbook(org, clean.id)) == clean
 
     async def test_a_session_invokes_a_version_once(
         self, storage: PlaybookStorageInterface

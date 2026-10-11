@@ -23,4 +23,4 @@ class Playbooks(IdentifiableMixin, NamedMixin, CreatedMixin, Base):
     body: Mapped[str]
     gates: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
     published_by: Mapped[UUID]
-    findings: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
+    findings: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB())

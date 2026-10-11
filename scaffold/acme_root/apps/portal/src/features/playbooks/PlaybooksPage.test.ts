@@ -2,7 +2,8 @@
 // The playbooks page over a fake transport that answers as the API does: a
 // name is read in the member's own org alone, so another org's playbook is
 // no playbook here. Only a member who may write is offered the form. What
-// the lever checks found in a version shows beside it, and never stops it.
+// the lever checks found in a version shows beside it, and never stops it;
+// a version they never read says so.
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { PlaybookView } from "@acme/client";
 import { buttons, container, enter, mount, newNet, notFound, PEOPLE, press, unmount, writes, type Call } from "../screenTesting";
@@ -53,6 +54,15 @@ it("says when the checks found nothing in a version", async () => {
   await mount(routes, "/playbooks?name=ajax-release");
   expect(container.querySelector("ul[aria-label='What the checks found']")).toBeNull();
   expect(container.textContent).toContain("The checks found nothing to read again.");
+  HELD.a = playbook("a", "ajax-release");
+});
+
+it("says a version the checks never read was not checked, never that they found nothing", async () => {
+  HELD.a = { ...HELD.a, findings: null };
+  await mount(routes, "/playbooks?name=ajax-release");
+  expect(container.querySelector("ul[aria-label='What the checks found']")).toBeNull();
+  expect(container.textContent).toContain("The checks have not read this version: it was published before they ran.");
+  expect(container.textContent).not.toContain("The checks found nothing to read again.");
   HELD.a = playbook("a", "ajax-release");
 });
 

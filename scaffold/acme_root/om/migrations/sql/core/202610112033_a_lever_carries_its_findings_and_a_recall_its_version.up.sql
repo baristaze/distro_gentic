@@ -1,9 +1,11 @@
 -- What the lever checks read in each playbook version and knowledge entry,
 -- kept with the version they read. A row an earlier release wrote, and one
--- the release before inserts for the minutes of the roll, carries none.
+-- the release before inserts for the minutes of the roll, was never read by
+-- them: its findings are null, never checked, which is not an empty list,
+-- checked and clean.
 
-ALTER TABLE core.playbooks ADD COLUMN findings jsonb NOT NULL DEFAULT '[]'::jsonb;
-ALTER TABLE core.knowledge_entries ADD COLUMN findings jsonb NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE core.playbooks ADD COLUMN findings jsonb;
+ALTER TABLE core.knowledge_entries ADD COLUMN findings jsonb;
 
 -- The entry versions each session recalled, which a reading of the sessions
 -- that stalled names.

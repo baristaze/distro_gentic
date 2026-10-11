@@ -392,8 +392,9 @@ export interface paths {
          * @description The playbooks and knowledge the org's sessions created in `[since,
          *     until)` reached, ranked by how much more often the sessions that
          *     reached them stalled, with the sessions behind each figure. A stall is
-         *     read from the steps' headers, never from what a step says. A window
-         *     that does not end after it starts is `422`.
+         *     read from the steps' headers, never from what a step says, and a lever
+         *     is answered by its kind, id, and version, never by its name or its
+         *     slug. A window that does not end after it starts is `422`.
          */
         get: operations["read_levers_v1_admin_orgs__org_id__levers_get"];
         put?: never;
@@ -5594,7 +5595,8 @@ export interface components {
          * KnowledgeView
          * @description An entry, its state, who suggested and who reviewed it, the version
          *     an edit names in `If-Match`, and what the lever checks found in its
-         *     words at that version: advice, never a refusal.
+         *     words at that version: advice, never a refusal; null on a version they
+         *     never read, an empty list on one they read and found nothing in.
          */
         KnowledgeView: {
             /**
@@ -5603,7 +5605,7 @@ export interface components {
              */
             created_at: string;
             /** Findings */
-            findings: components["schemas"]["FindingView"][];
+            findings: components["schemas"]["FindingView"][] | null;
             /**
              * Id
              * Format: uuid
@@ -5882,8 +5884,9 @@ export interface components {
         };
         /**
          * LeverView
-         * @description One version of a lever as a session reached it: a playbook by its
-         *     name, a knowledge entry by its slug.
+         * @description One version of a lever as a session reached it, by its kind, its id,
+         *     and its version: never its name or its slug, the tenant's words, which
+         *     an operator who reads never sees.
          */
         LeverView: {
             /**
@@ -5892,8 +5895,6 @@ export interface components {
              */
             id: string;
             kind: components["schemas"]["LeverKind"];
-            /** Name */
-            name: string;
             /** Version */
             version: number;
         };
@@ -6670,7 +6671,9 @@ export interface components {
         /**
          * PlaybookView
          * @description A version as published, with what the lever checks found in it as it
-         *     was: advice, which never refused the publish.
+         *     was: advice, which never refused the publish. `findings` is null on a
+         *     version the checks never read, one published before they ran, and an
+         *     empty list on one they read and found nothing in.
          */
         PlaybookView: {
             /** Body */
@@ -6683,7 +6686,7 @@ export interface components {
             /** Description */
             description: string;
             /** Findings */
-            findings: components["schemas"]["FindingView"][];
+            findings: components["schemas"]["FindingView"][] | null;
             /** Gates */
             gates: components["schemas"]["GateView"][];
             /**

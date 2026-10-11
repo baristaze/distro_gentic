@@ -110,6 +110,11 @@ async def test_a_kept_suggestion_answers_what_the_checks_found_and_is_kept_whate
     assert keep.status_code == 200, keep.text
     assert keep.json()["status"] == "reviewed"
     assert [f["check"] for f in keep.json()["findings"]] == ["unbounded_retry"]
+    # Stored as an agent's session left it, a suggestion the checks never
+    # read answers null, never an empty list.
+    waiting = await suggested(container, ajax.org_id)
+    unread = await client.get(f"/v1/knowledge/{waiting}", headers=ajax.owner)
+    assert unread.json()["findings"] is None
     written = await client.post("/v1/knowledge", headers=ajax.owner, json=ENTRY)
     assert written.json()["findings"] == []
 

@@ -1068,12 +1068,12 @@ class LeverKind(StrEnum):
 
 class LeverView(BaseModel):
     """
-    One version of a lever as a session reached it: a playbook by its
-    name, a knowledge entry by its slug.
+    One version of a lever as a session reached it, by its kind, its id,
+    and its version: never its name or its slug, the tenant's words, which
+    an operator who reads never sees.
     """
     id: Annotated[UUID, Field(title='Id')]
     kind: LeverKind
-    name: Annotated[str, Field(title='Name')]
     version: Annotated[int, Field(title='Version')]
 
 
@@ -2955,10 +2955,11 @@ class KnowledgeView(BaseModel):
     """
     An entry, its state, who suggested and who reviewed it, the version
     an edit names in `If-Match`, and what the lever checks found in its
-    words at that version: advice, never a refusal.
+    words at that version: advice, never a refusal; null on a version they
+    never read, an empty list on one they read and found nothing in.
     """
     created_at: Annotated[AwareDatetime, Field(title='Created At')]
-    findings: Annotated[list[FindingView], Field(title='Findings')]
+    findings: Annotated[list[FindingView] | None, Field(title='Findings')]
     id: Annotated[UUID, Field(title='Id')]
     reviewed_by: Annotated[UUID | None, Field(title='Reviewed By')]
     status: KnowledgeStatus
@@ -3239,12 +3240,14 @@ class PlacementView(BaseModel):
 class PlaybookView(BaseModel):
     """
     A version as published, with what the lever checks found in it as it
-    was: advice, which never refused the publish.
+    was: advice, which never refused the publish. `findings` is null on a
+    version the checks never read, one published before they ran, and an
+    empty list on one they read and found nothing in.
     """
     body: Annotated[str, Field(title='Body')]
     created_at: Annotated[AwareDatetime, Field(title='Created At')]
     description: Annotated[str, Field(title='Description')]
-    findings: Annotated[list[FindingView], Field(title='Findings')]
+    findings: Annotated[list[FindingView] | None, Field(title='Findings')]
     gates: Annotated[list[GateView], Field(title='Gates')]
     id: Annotated[UUID, Field(title='Id')]
     name: Annotated[str, Field(title='Name')]

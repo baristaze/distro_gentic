@@ -42,7 +42,8 @@ class ReviewRequest(RequestBody):
 class KnowledgeView(View):
     """An entry, its state, who suggested and who reviewed it, the version
     an edit names in `If-Match`, and what the lever checks found in its
-    words at that version: advice, never a refusal."""
+    words at that version: advice, never a refusal; null on a version they
+    never read, an empty list on one they read and found nothing in."""
 
     id: UUID
     title: str
@@ -54,4 +55,4 @@ class KnowledgeView(View):
     version: int
     created_at: datetime
     updated_at: datetime
-    findings: list[FindingView]
+    findings: list[FindingView] | None

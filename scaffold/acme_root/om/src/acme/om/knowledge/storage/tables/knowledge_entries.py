@@ -28,4 +28,4 @@ class KnowledgeEntries(IdentifiableMixin, TrackableMixin, Base):
     version: Mapped[int]
     project_id: Mapped[UUID | None]
     slug: Mapped[str | None]
-    findings: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
+    findings: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB())

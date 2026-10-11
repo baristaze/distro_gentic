@@ -33,7 +33,8 @@ class Knowledge(Identifiable, Trackable):
     session of the tenant; `slug` is the handle an agent reads it by, None
     on a row an earlier release wrote. `findings` is what the lever checks
     read in its words at this version: advice for the person who reviews
-    it, never a refusal."""
+    it, never a refusal; None on a version they never read, one an earlier
+    release wrote."""
 
     MANAGER_OWNED_FIELDS: ClassVar[tuple[str, ...]] = (
         "status",
@@ -53,12 +54,13 @@ class Knowledge(Identifiable, Trackable):
     version: int = Field(default=1, ge=1)
     project_id: UUID | None = None
     slug: str | None = Field(default=None, max_length=MAX_SLUG, pattern=SLUG)
-    findings: tuple[LeverFinding, ...] = ()
+    findings: tuple[LeverFinding, ...] | None = None
 
 
 class KnowledgeRecall(Identifiable, Created):
-    """An entry's version a session recalled: which lever it reached, kept
-    so a reading of the sessions that stalled can name it."""
+    """An entry's version a session recalled, or an agent of it read by its
+    slug: which lever it reached, kept so a reading of the sessions that
+    stalled can name it."""
 
     session_id: UUID
     entry_id: UUID
