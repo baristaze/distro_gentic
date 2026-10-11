@@ -7,7 +7,8 @@ alone; a push that does not land keeps the instance for the next pass,
 and one the forge refuses is not tried again until the session's next
 loop. An
 instance whose tenant is deleted is purged, and one whose tenant or
-session this database holds no record of is left alone."""
+session this database holds no record of is left alone. A session kept by
+snapshots keeps an instance that no snapshot holds, until one does."""
 
 import logging
 import shutil
@@ -26,6 +27,7 @@ from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.transports import TransportInterface
 from acme.infra.transports.local import DEFAULT_PATH, TransportLocalImpl
 from acme.infra.workspaces import (
+    Durability,
     EgressMode,
     EgressPolicy,
     IsolationMode,
@@ -41,7 +43,9 @@ from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, OperatorRole, RequestContext, TenantContext
 from acme.om.exceptions import ValidationFailed
 from acme.om.root import Managers, build_managers
+from acme.om.steps.types.header import HASH_SCHEME, WorkspaceSnapshot
 from acme.om.storage.impl.memory import StorageMemoryImpl
+from acme.om.tools.rules import snapshotted_step
 from acme.om.work.types.work_item import WorkItem, WorkKind
 from acme.om.workspaces.impl.forge import SourceControlForgeImpl
 from acme.om.workspaces.rules import SNAPSHOT_PREFIX, session_branch
@@ -71,6 +75,7 @@ APP = AppContext(type=AppType.WORKER, version="session-runner@test")
 GRACE = timedelta(minutes=5)
 DIRECTORY = IsolationSpec(mode=IsolationMode.HOST, egress=EgressPolicy(mode=EgressMode.OPEN))
 TWIN = IsolationSpec(mode=IsolationMode.TWIN, egress=EgressPolicy(mode=EgressMode.NONE))
+KEPT = TWIN.model_copy(update={"durability": Durability.SNAPSHOT})
 
 
 def worker(isolation: IsolationSpec) -> AgentKind:
@@ -320,6 +325,47 @@ async def test_a_push_the_forge_refuses_waits_for_the_sessions_next_loop(
     monkeypatch.setattr(source, "snapshot", snapshot)
     assert await host.passes() == 1, "the next pass pushes it, and lets it go"
     assert await host.held() == set() and len(source.pushed) == 1
+
+
+async def test_a_kept_sessions_instance_that_no_snapshot_holds_stays_until_one_does(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    infra = InfraLocalImpl(tmp_path)
+    managers = build_managers(
+        StorageMemoryImpl(),
+        infra,
+        agent_kinds=(worker(KEPT),),
+        workspace_projects=ProjectsTwin(),
+        pull_requests=PullRequestsTwin(),
+        workspace_git=GitTwin(),
+        workspace_reader=ReaderTwin(),
+    )
+    provider = infra.get_workspaces()
+    assert isinstance(provider, WorkspaceTwinImpl)
+    host = Host(managers, provider)
+    await host.start()
+    # A run killed before its end's snapshot: what its commands wrote outside
+    # the files lives in the instance alone.
+    session_id, item, _ = await host.run_left(KEPT)
+    await managers.work.fail_for_good(host.owner, item, "its runner died")
+
+    assert await host.passes() == 0, "the grace begins"
+    with caplog.at_level(logging.WARNING):
+        assert await host.passes(GRACE) == 0, "no snapshot holds it: it stays"
+        assert await host.passes(GRACE) == 0
+    assert await host.held() == {session_id}
+    kept = [r for r in caplog.records if "no snapshot holds" in r.getMessage()]
+    assert len(kept) == 1, "logged once for its head"
+
+    # A snapshot taken of it as it stands: the next pass lets it go.
+    epoch = (await managers.steps.get_cursor(host.owner, session_id)).epoch
+    taken = WorkspaceSnapshot(
+        id=new_id(), hash=HASH_SCHEME + "0" * 64, size=0, workspace_id=session_id
+    )
+    step = snapshotted_step(new_id(), utcnow(), session_id, new_id(), taken)
+    await managers.steps.append_steps(host.owner, session_id, epoch, [step])
+    assert await host.passes() == 1
+    assert await host.held() == set()
 
 
 async def deleted(managers: Managers, org_id: UUID) -> None:

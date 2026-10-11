@@ -1129,6 +1129,10 @@ def build_managers(
         erase_on_host=lambda ctx, session_id, host_id: managers.relay.ask_erase(
             ctx, session_id, host_id
         ),
+        # So does the session's purge, which runs for no principal.
+        erase_purged=lambda org_id, session_id, host_id: managers.relay.erase_purged(
+            org_id, session_id, host_id
+        ),
     )
     tools: ToolsManagerInterface = held_to_pins
     # What makes a result: the runs, the policies, and validation on the

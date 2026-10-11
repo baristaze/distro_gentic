@@ -13,7 +13,8 @@ and kept as a snapshot
 and the pin carries a kind's base
 ([ADR 2050](2050-a-snapshot-lives-on-its-workspaces-side-of-the-wall.md)).
 What a session needs installed is its project's, not its kind's, and a
-customer's host held no base: a prepare on one was refused.
+customer's host built no base, so a session inside the wall whose pin
+named one was refused for good.
 
 ## Decision
 
@@ -54,7 +55,10 @@ snapshots, inside the wall: nothing of it reaches the platform. The
 build runs beside the prepares, since it outlasts a work item's claim: a
 prepare that finds it running waits a while, then is refused with a
 refusal that clears, and is asked again. One build serves the project on
-a host, and the hosts of a pool that share a store share it.
+a host, and the hosts of a pool that share a store share it. A workspace
+on it runs the environment's image in place of the host's own, as a
+cloud workspace on a base runs the base's image in place of its
+provider's.
 
 **A host's build holds to its owner's ceilings.** A prepare that may
 build a base whose setup has open egress asks its host for open egress,

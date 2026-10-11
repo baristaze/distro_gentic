@@ -80,6 +80,10 @@ EraseOnHost = Callable[[TenantContext, UUID, UUID], Awaitable[None]]
 """Asks the host given, by its id, to let the session's snapshots go from its
 store."""
 
+ErasePurged = Callable[[UUID, UUID, UUID], Awaitable[None]]
+"""Asks the same for a session's purge, which runs for no principal: given
+the tenant, the session, and the host."""
+
 FIRST_POLL = timedelta(milliseconds=50)
 LAST_POLL = timedelta(seconds=1)
 """How often a host's snapshot is looked for: a wait that doubles from the
@@ -137,6 +141,7 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         snapshots: SnapshotStore | None = None,
         keyed_hash: KeyedHash | None = None,
         erase_on_host: EraseOnHost | None = None,
+        erase_purged: ErasePurged | None = None,
         options: PinnedToolsOptions | None = None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         clock: Callable[[], datetime] = utcnow,
@@ -145,6 +150,7 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         self._snapshots = snapshots
         self._keyed_hash = keyed_hash
         self._erase_on_host = erase_on_host
+        self._erase_purged = erase_purged
         self._snapshot_wait = (options or PinnedToolsOptions()).snapshot_wait
         self._sleep = sleep
         self._clock = clock
@@ -322,9 +328,16 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
 
     async def purge_workspace(self, org_id: UUID, session_id: UUID) -> None:
         # The engine's purge takes the files, the instance, and every
-        # snapshot in the platform's bucket; the records of where they lived
-        # go once they did.
+        # snapshot in the platform's bucket. Each host whose store keeps one
+        # is asked to let them go while the records still name it; the
+        # records go last.
         await self._inner.purge_workspace(org_id, session_id)
+        hosts = await self._workspaces.snapshot_hosts(org_id, session_id)
+        if hosts and self._erase_purged is None:
+            log.error("session %s: no host is asked to erase its snapshots", session_id)
+        elif self._erase_purged is not None:
+            for host_id in sorted(hosts):
+                await self._erase_purged(org_id, session_id, host_id)
         await self._workspaces.forget_snapshots(org_id, session_id)
         await self._workspaces.purge_session(org_id, session_id)
         self._held.let_go(session_id)
@@ -470,7 +483,11 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         ):
             raise WorkspaceLost(f"{what} is not the one its record names")
         return HostSnapshot(
-            id=record.id, reference=record.reference, digest=record.digest, size=record.size
+            id=record.id,
+            reference=record.reference,
+            digest=record.digest,
+            size=record.size,
+            kept_by=record.host_id,
         )
 
     async def _in_bucket(

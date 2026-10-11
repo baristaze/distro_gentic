@@ -9,7 +9,7 @@ from pydantic import ValidationError
 from acme.infra.observability import OUTCOMES
 from acme.infra.workspaces import IsolationSpec
 from acme.om.base import EMPTY_UUID, Platform, new_id, utcnow
-from acme.om.context import Permission, RequestContext, TenantContext
+from acme.om.context import AppType, Permission, RequestContext, TenantContext
 from acme.om.exceptions import (
     InvalidCredential,
     LeaseLost,
@@ -20,7 +20,7 @@ from acme.om.exceptions import (
 from acme.om.hosts import HostsManagerInterface
 from acme.om.hosts.types.host import HostIdentity
 from acme.om.outbox import OutboxRelayInterface
-from acme.om.outbox.types.row import outbox_row, versioned_row
+from acme.om.outbox.types.row import OutboxRow, outbox_row, versioned_row
 from acme.om.placement.kinds import HOST
 from acme.om.placement.rules import host_lane
 from acme.om.placement.types.claimant import Claimant
@@ -71,7 +71,7 @@ from acme.om.steps import StepsManagerInterface
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tools.seal import RecordSealInterface
 from acme.om.work import WorkManagerInterface
-from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
+from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus, work_row_kind
 from acme.om.workspaces.types.snapshot import HostSnapshot
 
 log = logging.getLogger(__name__)
@@ -338,15 +338,19 @@ class RelayManagerImpl(RelayManagerInterface):
             if latest.status is WorkStatus.QUEUED:
                 await self._work.end_queued(ctx, latest, f"a restore of snapshot {snapshot.id}")
         # The host that holds the workspace replaces it, so no second one is
-        # made beside it; with none, any host of the pool whose store keeps
-        # the snapshot makes it.
-        holder = await self.holder(ctx, session_id)
+        # made beside it: while it is not revoked, the restore waits on its
+        # lane, offline or not, as the workspace does. With none, any host of
+        # the pool whose store keeps the snapshot makes it.
+        binding = await self._storage.read_binding(ctx.org_id, session_id)
+        held_by = None
+        if binding is not None and await self._holds(ctx, session_id, binding.host_id):
+            held_by = binding.host_id
         isolation, egress, _ = asks(spec, "")
         project = await self._projects.project_of(ctx, session_id)
         payload = WorkspacePayload(
             operation=WorkspaceOperation.PREPARE,
             pool_id=placed.pool.id,
-            host_id=None if holder is None else holder.host_id,
+            host_id=held_by,
             session_id=session_id,
             spec=spec,
             isolation=isolation,
@@ -382,6 +386,27 @@ class RelayManagerImpl(RelayManagerInterface):
             operation=WorkspaceOperation.ERASE, host_id=host_id, session_id=session_id
         )
         await self._enqueue_workspace(ctx, session_id, payload)
+        OUTCOMES.labels(subsystem="relay", outcome="erase_asked").inc()
+
+    async def erase_purged(self, org_id: UUID, session_id: UUID, host_id: UUID) -> None:
+        # A purge runs below any principal, so the ask lands as the
+        # machinery's, from a row of its own, on the lane of the host its
+        # payload names.
+        payload = WorkspacePayload(
+            operation=WorkspaceOperation.ERASE, host_id=host_id, session_id=session_id
+        )
+        row = OutboxRow(
+            id=new_id(),
+            created_at=self._clock(),
+            org_id=org_id,
+            kind=work_row_kind(WorkKind.WORKSPACE),
+            target_id=session_id,
+            payload=payload.model_dump(mode="json"),
+            actor_id=EMPTY_UUID,
+            request_id=new_id(),
+            app=AppType.WORKER.value,
+        )
+        await self._work.enqueue_relayed(org_id, row)
         OUTCOMES.labels(subsystem="relay", outcome="erase_asked").inc()
 
     async def workspace_work(self, ctx: TenantContext, item_id: UUID) -> WorkItem:
@@ -429,9 +454,16 @@ class RelayManagerImpl(RelayManagerInterface):
         row, payload = await self._prepare_held(ctx, host, item_id)
         assert payload.session_id is not None  # `_prepare_held` holds it
         session_id = payload.session_id
-        if answer.refused is not None and answer.lost and payload.snapshot is not None:
-            # What it was to start from is gone from the store that kept it:
-            # no other host is asked, and the run that waits loses it.
+        owner = payload.instance_of or session_id
+        if (
+            answer.refused is not None
+            and answer.lost
+            and payload.snapshot is not None
+            and not await self._kept_elsewhere(ctx, owner, payload, host)
+        ):
+            # What it was to start from is gone from the store that kept it,
+            # or no live host keeps it: no other host is asked, and the run
+            # that waits loses it.
             log.warning("host %s lost a snapshot it kept: %s", host.host_id, answer.refused)
             await self._work.fail_for_good(ctx, row, answer.refused)
             OUTCOMES.labels(subsystem="relay", outcome="restore_lost").inc()
@@ -453,9 +485,11 @@ class RelayManagerImpl(RelayManagerInterface):
             return None
         assert answer.location is not None  # the answer's own rule
         binding = await self._storage.read_binding(host.org_id, session_id)
-        owner = payload.instance_of or session_id
         if (
-            binding is None
+            # A restore replaced the workspace whole: the host that made it
+            # holds it, so no run is told of a restore another host's lacks.
+            payload.snapshot is not None
+            or binding is None
             or binding.host_id == host.host_id
             or not await self._holds(ctx, owner, binding.host_id)
         ):
@@ -999,6 +1033,22 @@ class RelayManagerImpl(RelayManagerInterface):
         if not held or row is None:
             raise ItemNotHeld(f"workspace item {item_id} is not held by this host")
         return row
+
+    async def _kept_elsewhere(
+        self, ctx: TenantContext, owner: UUID, payload: WorkspacePayload, host: HostIdentity
+    ) -> bool:
+        """Whether a restore this host could not make may still be made by
+        another: it waits on the pool's lane, and the host that kept its
+        snapshot is another live host of the pool, which, or a host that
+        shares its store, may. On the lane of the host that holds the
+        workspace, no other host is asked."""
+        kept_by = None if payload.snapshot is None else payload.snapshot.kept_by
+        return (
+            payload.host_id is None
+            and kept_by is not None
+            and kept_by != host.host_id
+            and await self._holds(ctx, owner, kept_by)
+        )
 
     async def _holds(self, ctx: TenantContext, session_id: UUID, host_id: UUID) -> bool:
         """Whether the host is a live host of the session's pool: one that was

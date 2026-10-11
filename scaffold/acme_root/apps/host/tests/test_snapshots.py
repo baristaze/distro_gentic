@@ -10,11 +10,20 @@ control of a workspace whose instance went since its run gets it back from
 its latest snapshot, never its files alone. A host that did not
 probe snapshots refuses a workspace kept by them, and a session pinned to
 a pool with no such host waits, with the reason, and is never prepared as a
-cache."""
+cache.
+
+A take of control whose restore outlasts its wait hands nothing over, and a
+take of a workspace a person holds restores nothing over their work. The
+runner's sweep keeps the instance of a kept session that no snapshot
+holds. A restore waits for the host that holds the
+workspace while it is not revoked, the host that restores it holds it, and
+a snapshot no live host keeps is lost, never waited on for good. A
+session's purge asks each host that keeps its snapshots to erase them."""
 
 import asyncio
 import hashlib
 from dataclasses import replace
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -40,9 +49,11 @@ from acme.infra.workspaces import (
     IsolationRefused,
     IsolationSpec,
     Workspace,
+    WorkspaceLost,
 )
 from acme.infra.workspaces.twin import WorkspaceTwinImpl
-from acme.om.base import new_id
+from acme.om.agents.loop_rules import changed_step
+from acme.om.base import new_id, utcnow
 from acme.om.context import (
     AppContext,
     AppType,
@@ -51,14 +62,20 @@ from acme.om.context import (
     TenantContext,
     build_context,
 )
+from acme.om.hosts.impl.manager import HostsOptions
 from acme.om.relay.impl.workspaces import PlacedWorkspacesRelayedImpl
-from acme.om.steps.types.header import HASH_SCHEME, WorkspaceSnapshot
+from acme.om.steps.types.header import HASH_SCHEME, ParkReason, WorkspaceSnapshot
 from acme.om.tenancy.rules import permissions_of
 from acme.om.tools.impl.snapshots import session_prefix
 from acme.om.tools.rules import snapshotted_step
+from acme.om.watch import root as watch_root
+from acme.om.watch.exceptions import NotHandedOver
+from acme.om.watch.impl.manager import TAKEN
 from acme.om.watch.root import build_watch
+from acme.om.watch.types.control import HandCommand
 from acme.om.work.types.work_item import WorkKind, WorkStatus
-from acme.om.workspaces.types.snapshot import HostSnapshot
+from acme.om.workspaces.types.snapshot import HostSnapshot, KeptSnapshot
+from acme.workers.session_runner.workspaces import HeldOptions, HeldWorkspacesSweep
 
 KEPT = IsolationSpec(
     mode=IsolationMode.CONTAINER,
@@ -88,13 +105,14 @@ class ContainerTwin(WorkspaceTwinImpl):
 
 
 async def a_host(
-    api: Stack, pool_id: UUID, where: Path, *, probed: bool = True
+    api: Stack, pool_id: UUID, where: Path, *, probed: bool = True, store: Path | None = None
 ) -> tuple[HostAgent, ContainerTwin, Path]:
     """A host of the pool that runs a container per workspace and keeps
-    their snapshots in its own store, when its probe showed it can; its
-    secret store holds one value for the tenant."""
+    their snapshots in its own store, or in `store` when it shares one,
+    when its probe showed it can; its secret store holds one value for the
+    tenant."""
     twin = ContainerTwin()
-    store = where / "snapshots"
+    store = store or where / "snapshots"
     secrets = where / "secrets"
     await SecretsLocalImpl(secrets).put(api.owner.org_id, "SERVICE_TOKEN", SECRET)
     snapshots = HostSnapshots(store, secrets)
@@ -347,3 +365,244 @@ async def test_taking_control_of_a_released_kept_workspace_restores_its_latest_s
 
     assert session_id in twin.live
     assert twin.files[session_id] == b"the tree and the tool the run installed"
+
+
+def restore_of(record: KeptSnapshot) -> HostSnapshot:
+    """A restore of the snapshot `record` names, as the platform's tools ask it."""
+    return HostSnapshot(
+        id=record.id,
+        reference=record.reference,
+        digest=record.digest,
+        size=record.size,
+        kept_by=record.host_id,
+    )
+
+
+async def kept_on(
+    api: Stack, host: HostAgent, twin: ContainerTwin, session_id: UUID, files: bytes
+) -> KeptSnapshot:
+    """A snapshot of the session's workspace, holding `files`, kept in the
+    store of the host that holds it, whose provider is `twin`."""
+    managers = api.container.managers
+    twin.files[session_id] = files
+    snapshot_id = new_id()
+    await managers.relay.ask_snapshot(api.owner, session_id, KEPT, snapshot_id)
+    await claimed(host)
+    record = await managers.workspaces.kept_snapshot(api.owner, snapshot_id)
+    assert record is not None and record.on_host
+    return record
+
+
+async def offline(api: Stack, host: HostAgent) -> None:
+    """The host went silent: its last call is older than the online window."""
+    hosts = api.container.storage.get_hosts_storage()
+    silent_since = utcnow() - 2 * HostsOptions().online_window
+    await hosts.mark_seen(api.owner.org_id, UUID(host.credential.claimant_id), silent_since)
+
+
+async def with_snapshot_step(api: Stack, session_id: UUID, record: KeptSnapshot) -> int:
+    """A run's end that named `record` in the history; the run's epoch."""
+    managers = api.container.managers
+    epoch = await managers.steps.begin_run(api.owner, session_id)
+    taken = WorkspaceSnapshot(
+        id=record.id, hash=record.hash, size=record.size, workspace_id=session_id
+    )
+    step = snapshotted_step(new_id(), record.created_at, session_id, new_id(), taken)
+    await managers.steps.append_steps(api.owner, session_id, epoch, [step])
+    return epoch
+
+
+async def test_a_take_whose_restore_outlasts_its_wait_hands_nothing_over_and_a_held_one_is_never_restored(
+    api: Stack, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    managers = api.container.managers
+    pool = await api.pool()
+    session_id = await a_pinned_session(api, pool.id)
+    await managers.workspaces.pinned(api.owner, session_id, KEPT)
+    host, twin, _ = await a_host(api, pool.id, tmp_path)
+    await prepared(api, host, session_id)
+    record = await kept_on(api, host, twin, session_id, b"the snapshot")
+    await with_snapshot_step(api, session_id, record)
+    monkeypatch.setattr(watch_root, "TAKE_RESTORE_WAIT", timedelta(milliseconds=200))
+    watch = build_watch(managers, api.container.stream)
+    person = in_person(api.owner)
+
+    # The host does not get to the restore in time: nothing is handed over.
+    with pytest.raises(IsolationRefused) as waits:
+        await watch.take_control(person, session_id)
+    assert waits.value.clears
+    session = await managers.agent_sessions.get_session(api.owner, session_id)
+    assert session.park is None or session.park.reason is not ParkReason.HANDOVER
+    events = await managers.events.get_events(api.owner, 0, 500)
+    assert [event for event in events if event.kind == TAKEN] == [], "no take to audit"
+    command = HandCommand(key=new_id(), argv=("ls",))
+    with pytest.raises(NotHandedOver):
+        await watch.run_command(person, session_id, command)
+
+    # A take again waits for the same restore, and hands over once it lands.
+    twin.files[session_id] = b"its files alone"
+    taking = asyncio.ensure_future(watch.take_control(person, session_id))
+    for _ in range(100):
+        if await host.claim_once() is not None:
+            break
+        await asyncio.sleep(0.01)
+    await host.idle()
+    taken = await taking
+    assert taken.park is not None and taken.park.reason is ParkReason.HANDOVER
+    assert twin.files[session_id] == b"the snapshot"
+    events = await managers.events.get_events(api.owner, 0, 500)
+    assert len([event for event in events if event.kind == TAKEN]) == 1, "audited once"
+
+    # The person works by hand; a take again restores nothing over it.
+    twin.files[session_id] = b"the person's work by hand"
+    await watch.take_control(person, session_id)
+    assert not await managers.work.has_open(api.owner, WorkKind.WORKSPACE, session_id)
+    assert await host.claim_once() is None
+    assert twin.files[session_id] == b"the person's work by hand"
+
+
+async def test_the_sweep_keeps_a_kept_sessions_hosted_instance_that_no_snapshot_holds(
+    api: Stack, tmp_path: Path
+) -> None:
+    managers = api.container.managers
+    pool = await api.pool()
+    session_id = await a_pinned_session(api, pool.id)
+    await managers.workspaces.pinned(api.owner, session_id, KEPT)
+    host, twin, _ = await a_host(api, pool.id, tmp_path)
+    await prepared(api, host, session_id)
+    record = await kept_on(api, host, twin, session_id, b"the snapshot")
+    epoch = await with_snapshot_step(api, session_id, record)
+    # The next run changed the workspace and died before its end's snapshot.
+    step = changed_step(new_id(), utcnow(), session_id, new_id())
+    await managers.steps.append_steps(api.owner, session_id, epoch, [step])
+    twin.files[session_id] = b"the snapshot, and what the run installed since"
+    now = [utcnow()]
+    sweep = HeldWorkspacesSweep(
+        api.container.infra.get_workspaces(),
+        managers.tools,
+        managers.workspaces,
+        managers.agent_sessions,
+        managers.steps,
+        managers.work,
+        managers.tenancy,
+        HeldOptions(grace=timedelta(minutes=5)),
+        clock=lambda: now[0],
+        relay=managers.relay,
+    )
+    stage = RequestContext(request_id=new_id(), app=AppContext(type=AppType.WORKER, version="t"))
+
+    assert await sweep(stage) == 0, "the grace begins"
+    now[0] += timedelta(minutes=10)
+    assert await sweep(stage) == 0, "no snapshot holds it: it stays"
+    assert await sweep(stage) == 0
+    asked = await managers.work.latest_for_target(api.owner, WorkKind.WORKSPACE, session_id)
+    assert asked is not None and asked.payload["operation"] == "snapshot", "no release is asked"
+    assert session_id in twin.live
+    assert twin.files[session_id] == b"the snapshot, and what the run installed since"
+
+
+async def test_a_restore_whose_snapshot_no_live_host_keeps_is_lost_never_waited_on(
+    api: Stack, tmp_path: Path
+) -> None:
+    managers = api.container.managers
+    pool = await api.pool()
+    session_id = await a_pinned_session(api, pool.id)
+    keeper, keeper_twin, _ = await a_host(api, pool.id, tmp_path / "a")
+    await prepared(api, keeper, session_id)
+    record = await kept_on(api, keeper, keeper_twin, session_id, b"kept on the first host")
+    other, other_twin, _ = await a_host(api, pool.id, tmp_path / "b")
+
+    # While the host that kept it is live, one whose store lacks it hands
+    # the restore back for another host.
+    fork = await a_pinned_session(api, pool.id)
+    waiting = await managers.relay.ask_restore(api.owner, fork, KEPT, restore_of(record))
+    await claimed(other)
+    row = await managers.relay.workspace_work(api.owner, waiting)
+    assert row.status is WorkStatus.QUEUED, "another host may still restore it"
+
+    # Once that host is revoked, no live host keeps it: the restore is lost,
+    # and the run that waits parks for a person.
+    await managers.hosts.revoke_host(api.owner, UUID(keeper.credential.claimant_id))
+    placed = PlacedWorkspacesRelayedImpl(
+        lambda: managers.relay, lambda: managers.hosts, restore_wait=timedelta(seconds=5)
+    )
+    restoring = asyncio.ensure_future(
+        placed.held_on_host(api.owner, session_id, KEPT, restore_of(record))
+    )
+    for _ in range(100):
+        if await other.claim_once() is not None:
+            break
+        await asyncio.sleep(0.01)
+    await other.idle()
+    with pytest.raises(WorkspaceLost):
+        await restoring
+    asked = await managers.work.latest_for_target(api.owner, WorkKind.WORKSPACE, session_id)
+    assert asked is not None and asked.status is WorkStatus.FAILED
+    assert session_id not in other_twin.live
+
+
+async def test_a_restore_waits_for_its_offline_holder_and_the_host_that_restores_holds_it(
+    api: Stack, tmp_path: Path
+) -> None:
+    managers = api.container.managers
+    pool = await api.pool()
+    shared = tmp_path / "shared"
+    session_id = await a_pinned_session(api, pool.id)
+    holder, holder_twin, _ = await a_host(api, pool.id, tmp_path / "a", store=shared)
+    await prepared(api, holder, session_id)
+    record = await kept_on(api, holder, holder_twin, session_id, b"the snapshot")
+    other, other_twin, _ = await a_host(api, pool.id, tmp_path / "b", store=shared)
+    holder_id, other_id = (UUID(h.credential.claimant_id) for h in (holder, other))
+
+    # Its holder is offline: the restore waits on its lane, and no other host
+    # restores a workspace that would stay bound to it.
+    await offline(api, holder)
+    holder_twin.files[session_id] = b"written since"
+    placed = PlacedWorkspacesRelayedImpl(
+        lambda: managers.relay, lambda: managers.hosts, restore_wait=timedelta(milliseconds=200)
+    )
+    restoring = asyncio.ensure_future(
+        placed.held_on_host(api.owner, session_id, KEPT, restore_of(record))
+    )
+    assert await other.claim_once() is None
+    with pytest.raises(IsolationRefused) as waits:
+        await restoring
+    assert waits.value.clears, "the run is not told it restored"
+    assert session_id not in other_twin.live
+    await claimed(holder)  # back online, it restores its own
+    assert holder_twin.files[session_id] == b"the snapshot"
+    binding = await managers.relay.binding_of(api.owner, session_id)
+    assert binding is not None and binding.host_id == holder_id
+
+    # A restore another host makes binds the workspace to it, whatever host
+    # was bound meanwhile.
+    fork = await a_pinned_session(api, pool.id)
+    asked = await managers.relay.ask_restore(api.owner, fork, KEPT, restore_of(record))
+    await managers.relay.bind_workspace(api.owner, fork, holder_id, "elsewhere")
+    await claimed(other)
+    assert (await managers.relay.workspace_work(api.owner, asked)).status is WorkStatus.DONE
+    binding = await managers.relay.binding_of(api.owner, fork)
+    assert binding is not None and binding.host_id == other_id
+    assert fork in other_twin.live and other_twin.files[fork] == b"the snapshot"
+
+
+async def test_a_sessions_purge_asks_each_host_that_keeps_its_snapshots_to_erase_them(
+    api: Stack, tmp_path: Path
+) -> None:
+    managers = api.container.managers
+    pool = await api.pool()
+    session_id = await a_pinned_session(api, pool.id)
+    host, twin, store = await a_host(api, pool.id, tmp_path)
+    await prepared(api, host, session_id)
+    await kept_on(api, host, twin, session_id, b"a day's work")
+    kept = store / str(api.owner.org_id) / str(session_id)
+    assert kept.is_dir()
+
+    await managers.tools.purge_workspace(api.owner.org_id, session_id)
+    assert await managers.workspaces.kept_snapshots(api.owner, session_id) == ()
+    await claimed(host)
+
+    assert not kept.exists(), "erased on the host, with no key revoked"
+    asked = await managers.work.latest_for_target(api.owner, WorkKind.WORKSPACE, session_id)
+    assert asked is not None and asked.payload["operation"] == "erase"
+    assert asked.status is WorkStatus.DONE

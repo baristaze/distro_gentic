@@ -312,9 +312,10 @@ class ExecutorRelayImpl(ExecutorInterface):
         differs from what it asked, or one this host cannot make, is answered
         as refused, so another host of the pool may. Where the workspace is
         made is the host's to choose, so a prepare reads no path of its own.
-        When another host holds the session's workspace already, this one's
-        goes. A release lets an instance go (`_release`); a purge destroys
-        one (`_purge`)."""
+        One on a base with setup starts from the base this host keeps, built
+        here first (`_base`). When another host holds the session's
+        workspace already, this one's goes. A release lets an instance go
+        (`_release`); a purge destroys one (`_purge`)."""
         payload = item.payload
         if payload.get("operation") == "release":
             await self._release(item)
@@ -357,10 +358,9 @@ class ExecutorRelayImpl(ExecutorInterface):
         try:
             restore = await self._restore(item, spec)
         except SnapshotLost as lost:
-            # The host that holds the workspace lost what it kept; a host of
-            # the pool whose store never held it passes it on.
-            holder = payload.get("host_id") is not None
-            await self._answer(item.id, refused=str(lost), lost=holder)
+            # This store does not hold it. The platform knows which host kept
+            # it, so it decides whether another host may still restore it.
+            await self._answer(item.id, refused=str(lost), lost=True)
             return
         base = None
         if restore is None and spec.base is not None and spec.base.setup:

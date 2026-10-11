@@ -101,11 +101,12 @@ class RelayManagerInterface(ABC):
         """Platform-internal: asks for the session's workspace started from
         `snapshot`, which a host's store keeps inside the session's wall,
         replaced whole: by the host that holds the workspace, on its lane,
-        while a live one does; else by any host of the session's pool whose
-        store reaches it. A restore of the same snapshot that waits or runs
-        is answered; one that ended never is, so each run that asks restores
-        anew. Any other prepare that waits is ended. The work's id.
-        `ValidationFailed` for a session of the cloud."""
+        while it is not revoked, online or not; else by any host of the
+        session's pool whose store reaches it. A restore of the same
+        snapshot that waits or runs is answered; one that ended never is, so
+        each run that asks restores anew. Any other prepare that waits is
+        ended. The work's id. `ValidationFailed` for a session of the
+        cloud."""
         ...
 
     @abstractmethod
@@ -130,6 +131,13 @@ class RelayManagerInterface(ABC):
         """Why a host refused the session's latest prepare, as its work keeps
         it while it waits or once it failed: a base the host failed to
         build. None when it was not refused so, or there is none."""
+        ...
+
+    @abstractmethod
+    async def erase_purged(self, org_id: UUID, session_id: UUID, host_id: UUID) -> None:
+        """Platform-internal: a session's purge asks the host whose store keeps
+        snapshots of it to let every one go, as `workspace` work on that
+        host's lane; for no principal."""
         ...
 
     @abstractmethod
@@ -161,8 +169,11 @@ class RelayManagerInterface(ABC):
         to the pool's lane after a wait, for a host that can give it, and
         None is answered. A base the host failed to build spends an attempt
         and keeps its reason with the work, which waits longer each time. A
-        restore the host that holds the workspace answers as lost fails for
-        good, with the reason, and no host is asked again.
+        restore binds the workspace to the host that made it, whatever
+        another holds. One answered as lost fails for good, with the reason,
+        and no host is asked again, unless it waits on the pool's lane and
+        another live host of the pool kept its snapshot: then it is handed
+        back, for that host or one that shares its store.
         `ItemNotHeld` for a prepare the host does not hold under a live
         claim."""
         ...

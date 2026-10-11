@@ -72,13 +72,16 @@ platform's cloud. Each call crosses the wall as `exec`
   reason.
 - **Restore.** A loop that starts from a snapshot a host keeps asks for
   it before anything else, and waits for it a while. The host that holds
-  the workspace replaces it whole; with none, a host of the pool whose
-  store keeps it makes it. A restore of the same snapshot that waits is
-  asked once. A host that lost the bytes answers it lost, and the work
-  fails for good. A session kept by snapshots waits, with the reason,
-  while no live host of its pool advertises snapshots at its level.
-- **Erase.** A revoked key asks each host whose store keeps the session's
-  snapshots to let them go.
+  the workspace replaces it whole while it is not revoked, and the
+  restore waits for it while it is offline; with none, a host of the pool
+  whose store keeps it makes it. The host that restores it holds it. A
+  restore of the same snapshot that waits is asked once. A host whose
+  store lacks the bytes answers it lost, and the work fails for good,
+  unless it waits on the pool's lane and another live host kept it. A
+  session kept by snapshots waits, with the reason, while no live host of
+  its pool advertises snapshots at its level.
+- **Erase.** A revoked key, and a session's purge, ask each host whose
+  store keeps the session's snapshots to let them go.
 - **Make an instance.** A run that validates a pinned session's delivery
   asks the session's pool for a new instance, as a prepare, and waits for
   a host's answer to bind it. Its checks run there as `exec` work. When
@@ -149,6 +152,7 @@ reads the bindings (`bindings`), reaches a holding host through `holder`,
 and asks it to let an instance go with `ask_release`; the host answers
 with `released`. The platform's tools ask a host's snapshot with
 `ask_snapshot`, a restore with `ask_restore`, and an erase with
-`ask_erase`, and read their work with `workspace_work`; the host answers
+`ask_erase`, or `erase_purged` for a session's purge, and read their work
+with `workspace_work`; the host answers
 a snapshot with `snapshotted`, which records it through the root's
 `kept`, a restore as a prepare, and an erase as a release.

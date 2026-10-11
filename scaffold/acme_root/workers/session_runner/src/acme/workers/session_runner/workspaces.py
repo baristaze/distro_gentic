@@ -11,6 +11,12 @@ within. It goes through the release a run makes, under its tenant's
 context: what its checkout holds is pushed to a snapshot ref first, and a
 push that does not land lets nothing go, so the next pass tries again.
 
+A session kept by snapshots whose instance no snapshot holds keeps it: a
+call or a change since its latest snapshot, or a run whose snapshot was
+refused, left state its files alone do not hold, which a release would
+lose. It is logged once a head, and its next run prepares it as it
+stands, so that run's end snapshots it.
+
 An instance is purged only on proof that nothing is left to keep its
 work for: its tenant's org row marks it deleted. One whose tenant this
 database holds no row of, or whose session it holds no history of, is
@@ -45,8 +51,14 @@ from uuid import UUID
 
 from pydantic import Field, ValidationError
 
-from acme.infra.workspaces import HeldInstance, Workspace, WorkspaceProviderInterface
+from acme.infra.workspaces import (
+    Durability,
+    HeldInstance,
+    Workspace,
+    WorkspaceProviderInterface,
+)
 from acme.om.agent_sessions import AgentSessionsManagerInterface
+from acme.om.agents.loop_rules import kept_snapshot
 from acme.om.base import EMPTY_UUID, Platform, utcnow
 from acme.om.context import RequestContext, TenantContext
 from acme.om.exceptions import NotAuthorized, NotFound, ValidationFailed
@@ -55,6 +67,7 @@ from acme.om.relay.manager import RelayManagerInterface
 from acme.om.relay.types.exec import WorkspaceBinding
 from acme.om.steps import StepsManagerInterface
 from acme.om.steps.types.header import ParkReason
+from acme.om.steps.types.step import Step
 from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.work import WorkManagerInterface
@@ -63,6 +76,9 @@ from acme.om.workspaces.manager import WorkspacesManagerInterface
 from acme.om.workspaces.rules import snapshot_at
 
 log = logging.getLogger(__name__)
+
+HISTORY_PAGE = 500
+"""How many steps a read of a session's history takes at a time."""
 
 REFUSED = (ValidationFailed, NotAuthorized)
 """A push the forge refuses for good, as a repository no installation of
@@ -114,6 +130,9 @@ class HeldWorkspacesSweep:
         self._failed: dict[UUID, UUID] = {}
         # Each session whose snapshot push was refused, and its head then.
         self._refused: dict[UUID, int] = {}
+        # Each session kept by snapshots whose instance no snapshot held, and
+        # its head then.
+        self._unkept: dict[UUID, int] = {}
 
     async def __call__(self, rctx: RequestContext) -> int:
         """One pass over what this host holds, then over what the tenants'
@@ -126,6 +145,7 @@ class HeldWorkspacesSweep:
         self._logged &= ids
         self._failed = {id_: item for id_, item in self._failed.items() if id_ in ids}
         self._refused = {id_: head for id_, head in self._refused.items() if id_ in ids}
+        self._unkept = {id_: head for id_, head in self._unkept.items() if id_ in ids}
         let_go = 0
         for instance in held:
             try:
@@ -191,10 +211,12 @@ class HeldWorkspacesSweep:
             # session with none here is one this database has no history of.
             self._unknown(instance, "its session")
             return False
-        elif self._refused.get(instance.id) == cursor.head:
+        elif cursor.head in (self._refused.get(instance.id), self._unkept.get(instance.id)):
             return False
         else:
             pinned = await self._workspaces.get_workspace(ctx, instance.id)
+            if await self._unsnapshotted(ctx, instance.id, pinned.durability, cursor.head):
+                return False
             workspace = Workspace(
                 id=instance.id,
                 org_id=instance.org_id,
@@ -250,7 +272,7 @@ class HeldWorkspacesSweep:
                 "its session",
             )
             return False
-        if self._refused.get(session_id) == cursor.head:
+        if cursor.head in (self._refused.get(session_id), self._unkept.get(session_id)):
             return False
         holder = await self._relay.holder(ctx, session_id)
         if holder is None:
@@ -258,6 +280,8 @@ class HeldWorkspacesSweep:
             # pass finds it online.
             return False
         pinned = await self._workspaces.get_workspace(ctx, session_id)
+        if await self._unsnapshotted(ctx, session_id, pinned.durability, cursor.head):
+            return False
         workspace = Workspace(
             id=session_id, org_id=org_id, spec=pinned.spec(), location=holder.location
         )
@@ -331,6 +355,36 @@ class HeldWorkspacesSweep:
             return True
         page = await self._steps.get_steps(ctx, session_id, head - 1, 1)
         return all(step.created_at <= taken for step in page.items)
+
+    async def _unsnapshotted(
+        self, ctx: TenantContext, session_id: UUID, durability: Durability, head: int
+    ) -> bool:
+        """Whether the session keeps its workspace by snapshots and no snapshot
+        holds its instance as it stands: one is recorded, and logged, at the
+        session's head, so no pass reads its history again until a loop
+        moves it."""
+        if durability is not Durability.SNAPSHOT:
+            return False
+        if kept_snapshot(await self._history(ctx, session_id)) is not None:
+            return False
+        self._unkept[session_id] = head
+        log.warning(
+            "session %s of org %s: no snapshot holds its workspace's instance, which stays "
+            "until a run's end snapshots it",
+            session_id,
+            ctx.org_id,
+        )
+        return True
+
+    async def _history(self, ctx: TenantContext, session_id: UUID) -> list[Step]:
+        steps: list[Step] = []
+        after = 0
+        while True:
+            page = await self._steps.get_steps(ctx, session_id, after, HISTORY_PAGE)
+            steps.extend(page.items)
+            if not page.has_more or not page.items:
+                return steps
+            after = page.items[-1].seq
 
     def _refuse(self, ctx: TenantContext, session_id: UUID, head: int, refused: Exception) -> None:
         """Records a snapshot push the forge refused at the session's head,

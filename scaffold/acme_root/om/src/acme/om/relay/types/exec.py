@@ -243,11 +243,12 @@ class WorkspaceBinding(Identifiable, Trackable):
 class PrepareAnswer(Platform):
     """A host's answer to a prepare it claimed: where on it the workspace
     it made is, or why it made none. Exactly one of the two. A refusal is
-    `lost` when the snapshot the host that holds the workspace was asked to
-    start it from is gone from its store, or altered there: no host is asked
-    again. It is `unbuilt` when the base the workspace starts from failed to
-    build on the host, as when a setup command failed: its reason is kept
-    with the work, so the run that waits says why."""
+    `lost` when the snapshot the host was asked to start it from is not in
+    its store, or is altered there: the platform asks no host again, unless
+    another live host kept it. It is `unbuilt` when the base the workspace
+    starts from failed to build on the host, as when a setup command
+    failed: its reason is kept with the work, so the run that waits says
+    why."""
 
     location: str | None = Field(default=None, min_length=1, max_length=1024)
     refused: str | None = Field(default=None, min_length=1, max_length=2000)

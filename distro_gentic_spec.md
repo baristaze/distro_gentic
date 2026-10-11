@@ -373,7 +373,8 @@ workspace itself stays a cache.
   a snapshot that holds a secret's value is refused.
 - **When.** The run that holds the workspace snapshots it at its end,
   before its instance goes, and its release pushes uncommitted work to a
-  snapshot ref as any release does. The next loop starts from the latest
+  snapshot ref as any release does. An instance no snapshot holds as it
+  stands is never let go. The next loop starts from the latest
   snapshot, and the restored tree stands: the session's branch is not
   brought over it. A person who takes control gets that tree too.
 - **Where it lives follows the wall.** A workspace in the platform's
@@ -390,9 +391,9 @@ workspace itself stays a cache.
   A provider that can never keep one refuses the workspace for good,
   with the reason.
 - **For how long.** A snapshot is content. When a session's content
-  expires, or its key is revoked, its snapshots go from the object store
-  and from each host's store that keeps one, and their records go with
-  them.
+  expires, its key is revoked, or the session is purged, its snapshots go
+  from the object store and from each host's store that keeps one, and
+  their records go with them.
 
 ### A Project's Environment
 

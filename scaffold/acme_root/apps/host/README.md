@@ -70,7 +70,8 @@ macOS.
   in a workspace of its own: its setup runs the project's commands with
   no secret and no variable of the host's, its snapshot is refused when
   it holds a value of the host's secrets, and it is kept in the store
-  beside the snapshots, never sent anywhere. A prepare that finds the
+  beside the snapshots, never sent anywhere. A workspace on it runs the
+  environment's image in place of the host's own. A prepare that finds the
   build running waits a while, then is refused until it is done. A
   setup command that fails keeps nothing, and the prepare is answered
   `unbuilt` with the command and its exit code. A prepare whose setup

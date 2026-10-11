@@ -129,12 +129,13 @@ rebuilt from.
   through the prepare it travels with. A snapshot kept on one side of
   the wall never restores on the other. A restored tree stands: nothing
   of the branch is brought over it. A person who takes control gets it
-  too.
+  too, before the workspace is handed over.
 - **Erase.** A revoked key takes the session's snapshots out of the
   bucket, asks each host that keeps one to erase it, and forgets their
   records.
 - **Purge.** A session the sweep purges loses its workspace row with its
-  files, and the records of its snapshots. A tenant deleted past its retention loses its workspaces, its
+  files, and its snapshots: each host that keeps one is asked to erase
+  it before their records go. A tenant deleted past its retention loses its workspaces, its
   allowlists, and its fetch credentials, each value out of the store
   before its record.
 
