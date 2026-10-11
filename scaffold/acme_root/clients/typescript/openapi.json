@@ -1954,7 +1954,8 @@
           "compact",
           "approve",
           "deny",
-          "unlock"
+          "unlock",
+          "restore"
         ],
         "title": "ControlCommand",
         "type": "string"
@@ -1974,7 +1975,7 @@
       },
       "ControlRequest": {
         "additionalProperties": false,
-        "description": "A control. An interrupt names the seq of the tool request it stops,\nand no other control names one.",
+        "description": "A control. An interrupt names the seq of the tool request it stops,\nand a restore the id of a snapshot the session's history names, which\nits workspace's next prepare starts from; no other control names\neither.",
         "properties": {
           "command": {
             "$ref": "#/components/schemas/SessionControl"
@@ -1990,6 +1991,18 @@
               }
             ],
             "title": "Request Seq"
+          },
+          "snapshot_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot Id"
           }
         },
         "required": [
@@ -8053,7 +8066,8 @@
           "cancel",
           "interrupt",
           "compact",
-          "unlock"
+          "unlock",
+          "restore"
         ],
         "title": "SessionControl",
         "type": "string"
@@ -8694,6 +8708,37 @@
         "title": "SignedOutView",
         "type": "object"
       },
+      "SnapshotView": {
+        "description": "A workspace's snapshot a step names: its id, which a restore names,\nthe hash of its bytes keyed by its session, its size in bytes, and the\nworkspace it was taken from.",
+        "properties": {
+          "hash": {
+            "title": "Hash",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "hash",
+          "size",
+          "workspace_id"
+        ],
+        "title": "SnapshotView",
+        "type": "object"
+      },
       "SsoLinkRequest": {
         "additionalProperties": false,
         "description": "What the identity provider's admin portal opens on: the single sign-on\nconnection (`sso`) or the org's domains (`domain_verification`), and the\npage of this environment's portal it links back to.",
@@ -9067,7 +9112,8 @@
           "resumed",
           "loop_ended",
           "switched",
-          "environment_changed"
+          "environment_changed",
+          "snapshotted"
         ],
         "title": "StepType",
         "type": "string"
@@ -9107,7 +9153,7 @@
         "type": "object"
       },
       "StepView": {
-        "description": "One step of a session's history, in its order. `text` is what it\nsays: a message's words, a model's answer, a tool's result. A model\nresponse also says what it thought (`thinking`) and the calls it made\n(`tool_uses`); a tool response names the call it answers\n(`tool_use_id`). Each of these is the step's content: where it is gone,\nits session's key revoked or its content never kept here, each is empty\nas `text` is. The rest is its header's, by type: the agent that wrote a\nmessage, on a message an agent wrote (`agent`); the tools a model\nresponse called, why it stopped, and what it used; a tool call's tool,\nthe id of the call it runs, and the class of its failure; a control's\ncommand; a park; a loop's outcome.",
+        "description": "One step of a session's history, in its order. `text` is what it\nsays: a message's words, a model's answer, a tool's result. A model\nresponse also says what it thought (`thinking`) and the calls it made\n(`tool_uses`); a tool response names the call it answers\n(`tool_use_id`). Each of these is the step's content: where it is gone,\nits session's key revoked or its content never kept here, each is empty\nas `text` is. The rest is its header's, by type: the agent that wrote a\nmessage, on a message an agent wrote (`agent`); the tools a model\nresponse called, why it stopped, and what it used; a tool call's tool,\nthe id of the call it runs, and the class of its failure; a control's\ncommand; a park; a loop's outcome; the snapshot a `snapshotted` step\nnames, or a restore starts from.",
         "properties": {
           "actor": {
             "$ref": "#/components/schemas/Actor"
@@ -9204,6 +9250,16 @@
             "title": "Seq",
             "type": "integer"
           },
+          "snapshot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SnapshotView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "stop_reason": {
             "anyOf": [
               {
@@ -9294,7 +9350,8 @@
           "failure",
           "command",
           "park",
-          "outcome"
+          "outcome",
+          "snapshot"
         ],
         "title": "StepView",
         "type": "object"

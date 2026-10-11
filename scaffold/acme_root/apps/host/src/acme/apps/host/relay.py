@@ -328,7 +328,7 @@ class ExecutorRelayImpl(ExecutorInterface):
             log.warning("item %s: the release names no session or spec", item.id)
             return
         provider = self._workspaces.get(spec.mode)
-        held = [] if provider is None else await provider.held()
+        held = [] if provider is None else await provider.held_instances()
         for instance in held:
             if instance.id == session_id and instance.org_id == item.org_id:
                 assert provider is not None

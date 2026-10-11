@@ -39,7 +39,7 @@ import shutil
 import struct
 import sys
 import time
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import UUID
@@ -52,11 +52,12 @@ from acme.infra.workspaces import (
     IsolationRefused,
     IsolationSpec,
     ResourceLimits,
+    SnapshotRefused,
     Workspace,
     WorkspaceProviderInterface,
     refusal,
 )
-from acme.infra.workspaces.host import held_mark, held_marks, remove_directory
+from acme.infra.workspaces.host import UNKEPT, held_mark, held_marks, remove_directory
 from acme.infra.workspaces.stragglers import PROC, end_stragglers
 
 LIMITS = frozenset({"processes"})
@@ -363,7 +364,8 @@ class WorkspaceAccountImpl(WorkspaceProviderInterface):
     account link a file it does not own is refused too: the link would
     reach this process's files from the workspace. Where this process cannot
     read the host's setting, `protected_hardlinks` is the runner's word that
-    it is on."""
+    it is on. Like any directory on a host, it never snapshots a workspace
+    (`UNKEPT`)."""
 
     def __init__(self, root: Path, account: str, *, protected_hardlinks: bool = False) -> None:
         self._root = root
@@ -373,8 +375,21 @@ class WorkspaceAccountImpl(WorkspaceProviderInterface):
         self._held: UUID | None = None
         self._lock: int | None = None
 
-    async def prepare(self, org_id: UUID, workspace_id: UUID, spec: IsolationSpec) -> Workspace:
-        why = refusal(spec, mode=IsolationMode.ACCOUNT, egress={EgressMode.OPEN}, limits=LIMITS)
+    async def prepare(
+        self,
+        org_id: UUID,
+        workspace_id: UUID,
+        spec: IsolationSpec,
+        snapshot: bytes | None = None,
+        base: bytes | None = None,
+        *,
+        building: bool = False,
+    ) -> Workspace:
+        why = refusal(
+            spec, mode=IsolationMode.ACCOUNT, egress={EgressMode.OPEN}, limits=LIMITS, unkept=UNKEPT
+        )
+        if why is None and (snapshot is not None or base is not None):
+            why = f"an account workspace cannot start from a snapshot: {UNKEPT}"
         if why is not None:
             raise IsolationRefused(why)
         switch = await asyncio.to_thread(switch_to, self._account)
@@ -398,6 +413,9 @@ class WorkspaceAccountImpl(WorkspaceProviderInterface):
                 raise
         return Workspace(id=workspace_id, org_id=org_id, spec=spec, location=str(job / HOME))
 
+    async def snapshot(self, workspace: Workspace) -> bytes:
+        raise SnapshotRefused(f"an account workspace cannot be snapshotted: {UNKEPT}")
+
     async def release(self, workspace: Workspace) -> None:
         await self._release(workspace)
         await asyncio.to_thread(self._mark(workspace.org_id, workspace.id).unlink, missing_ok=True)
@@ -420,7 +438,7 @@ class WorkspaceAccountImpl(WorkspaceProviderInterface):
         await self._purge(org_id, workspace_id)
         await asyncio.to_thread(self._mark(org_id, workspace_id).unlink, missing_ok=True)
 
-    async def held(self) -> list[HeldInstance]:
+    async def held_instances(self) -> list[HeldInstance]:
         marks = await asyncio.to_thread(held_marks, self._root)
         return [
             HeldInstance(
@@ -448,6 +466,18 @@ class WorkspaceAccountImpl(WorkspaceProviderInterface):
                 await asyncio.to_thread(remove_directory, job)
             finally:
                 self._give_back()
+
+    async def held(self, snapshot: bytes) -> AsyncIterator[bytes]:
+        yield snapshot  # it makes no snapshot, so none names bytes kept elsewhere
+
+    async def keep(self, snapshot: bytes, org_id: UUID, workspace_id: UUID) -> bytes:
+        return snapshot
+
+    async def discard(self, snapshot: bytes) -> None:
+        return None
+
+    async def erase_snapshots(self, org_id: UUID, workspace_id: UUID) -> None:
+        return None
 
     def describe(self) -> str:
         return f"workspaces=account({self._account}, {self._root})"

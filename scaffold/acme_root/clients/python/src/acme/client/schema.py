@@ -283,6 +283,7 @@ class ControlCommand(StrEnum):
     approve = 'approve'
     deny = 'deny'
     unlock = 'unlock'
+    restore = 'restore'
 
 
 class ControlKind(StrEnum):
@@ -1692,6 +1693,7 @@ class SessionControl(StrEnum):
     interrupt = 'interrupt'
     compact = 'compact'
     unlock = 'unlock'
+    restore = 'restore'
 
 
 class SessionModelUsageView(BaseModel):
@@ -1850,6 +1852,18 @@ class SignedOutView(BaseModel):
     revoked_at: Annotated[AwareDatetime | None, Field(title='Revoked At')]
 
 
+class SnapshotView(BaseModel):
+    """
+    A workspace's snapshot a step names: its id, which a restore names,
+    the hash of its bytes keyed by its session, its size in bytes, and the
+    workspace it was taken from.
+    """
+    hash: Annotated[str, Field(title='Hash')]
+    id: Annotated[UUID, Field(title='Id')]
+    size: Annotated[int, Field(title='Size')]
+    workspace_id: Annotated[UUID, Field(title='Workspace Id')]
+
+
 class Intent(StrEnum):
     sso = 'sso'
     domain_verification = 'domain_verification'
@@ -1940,6 +1954,7 @@ class StepType(StrEnum):
     loop_ended = 'loop_ended'
     switched = 'switched'
     environment_changed = 'environment_changed'
+    snapshotted = 'snapshotted'
 
 
 class StepUsageView(BaseModel):
@@ -2547,13 +2562,16 @@ class CommandProgressView(BaseModel):
 class ControlRequest(BaseModel):
     """
     A control. An interrupt names the seq of the tool request it stops,
-    and no other control names one.
+    and a restore the id of a snapshot the session's history names, which
+    its workspace's next prepare starts from; no other control names
+    either.
     """
     model_config = ConfigDict(
         extra='forbid',
     )
     command: SessionControl
     request_seq: Annotated[RequestSeq | None, Field(title='Request Seq')] = None
+    snapshot_id: Annotated[UUID | None, Field(title='Snapshot Id')] = None
 
 
 class CreateBudgetRequest(BaseModel):
@@ -3288,7 +3306,8 @@ class StepView(BaseModel):
     message, on a message an agent wrote (`agent`); the tools a model
     response called, why it stopped, and what it used; a tool call's tool,
     the id of the call it runs, and the class of its failure; a control's
-    command; a park; a loop's outcome.
+    command; a park; a loop's outcome; the snapshot a `snapshotted` step
+    names, or a restore starts from.
     """
     actor: Actor
     agent: AgentRefView | None
@@ -3303,6 +3322,7 @@ class StepView(BaseModel):
     refs: Annotated[list[UUID], Field(title='Refs')]
     responds_to: Annotated[UUID | None, Field(title='Responds To')]
     seq: Annotated[int, Field(title='Seq')]
+    snapshot: SnapshotView | None
     stop_reason: StopReason | None
     text: Annotated[str, Field(title='Text')]
     thinking: Annotated[str, Field(title='Thinking')]

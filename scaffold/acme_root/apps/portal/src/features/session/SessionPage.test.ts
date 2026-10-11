@@ -67,6 +67,7 @@ const step = (seq: number, fields: Partial<StepView>): StepView => ({
   park: null,
   refs: [],
   responds_to: null,
+  snapshot: null,
   stop_reason: null,
   tool: null,
   tools: [],

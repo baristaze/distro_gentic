@@ -2,7 +2,7 @@ import asyncio
 import os
 import shutil
 import stat
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 from uuid import UUID
 
@@ -12,6 +12,7 @@ from acme.infra.workspaces import (
     IsolationMode,
     IsolationRefused,
     IsolationSpec,
+    SnapshotRefused,
     Workspace,
     WorkspaceProviderInterface,
     refusal,
@@ -23,6 +24,12 @@ HELD = ".held"
 which its release takes away: the directory outlives its release, so the
 mark says whether an instance holds it."""
 
+UNKEPT = "its commands write outside its directory, so no snapshot of it holds all they wrote"
+"""Why a directory on a host is never snapshotted: what a command installs or
+leaves in the host's home, its temporary directory, or its packages sits
+outside the directory, and a snapshot of the directory alone would lose it
+without a word."""
+
 
 class WorkspaceHostImpl(WorkspaceProviderInterface):
     """A directory on this host, one per workspace, under `root`. A directory
@@ -32,19 +39,37 @@ class WorkspaceHostImpl(WorkspaceProviderInterface):
     Its instance is the processes running in it: a release ends what its
     commands left running there, and keeps the files. A prepare marks the
     directory held, beside it and never in it, so no command and no checkout
-    sees the mark, and the release or the purge takes the mark away."""
+    sees the mark, and the release or the purge takes the mark away. It
+    never snapshots a workspace (`UNKEPT`): a spec that asks for one is
+    refused, and so is a prepare from a snapshot."""
 
     def __init__(self, root: Path) -> None:
         self._root = root
 
-    async def prepare(self, org_id: UUID, workspace_id: UUID, spec: IsolationSpec) -> Workspace:
-        why = refusal(spec, mode=IsolationMode.HOST, egress={EgressMode.OPEN}, limits=())
+    async def prepare(
+        self,
+        org_id: UUID,
+        workspace_id: UUID,
+        spec: IsolationSpec,
+        snapshot: bytes | None = None,
+        base: bytes | None = None,
+        *,
+        building: bool = False,
+    ) -> Workspace:
+        why = refusal(
+            spec, mode=IsolationMode.HOST, egress={EgressMode.OPEN}, limits=(), unkept=UNKEPT
+        )
+        if why is None and (snapshot is not None or base is not None):
+            why = f"a host workspace cannot start from a snapshot: {UNKEPT}"
         if why is not None:
             raise IsolationRefused(why)
         directory = self._directory(org_id, workspace_id)
         await asyncio.to_thread(directory.mkdir, mode=0o700, parents=True, exist_ok=True)
         await asyncio.to_thread(self._mark(org_id, workspace_id).touch, mode=0o600)
         return Workspace(id=workspace_id, org_id=org_id, spec=spec, location=str(directory))
+
+    async def snapshot(self, workspace: Workspace) -> bytes:
+        raise SnapshotRefused(f"a host workspace cannot be snapshotted: {UNKEPT}")
 
     async def release(self, workspace: Workspace) -> None:
         await end_stragglers(self._directory(workspace.org_id, workspace.id))
@@ -56,8 +81,20 @@ class WorkspaceHostImpl(WorkspaceProviderInterface):
         await asyncio.to_thread(remove_directory, directory)
         await asyncio.to_thread(self._mark(org_id, workspace_id).unlink, missing_ok=True)
 
-    async def held(self) -> list[HeldInstance]:
+    async def held_instances(self) -> list[HeldInstance]:
         return await asyncio.to_thread(self._held)
+
+    async def held(self, snapshot: bytes) -> AsyncIterator[bytes]:
+        yield snapshot  # it makes no snapshot, so none names bytes kept elsewhere
+
+    async def keep(self, snapshot: bytes, org_id: UUID, workspace_id: UUID) -> bytes:
+        return snapshot
+
+    async def discard(self, snapshot: bytes) -> None:
+        return None
+
+    async def erase_snapshots(self, org_id: UUID, workspace_id: UUID) -> None:
+        return None
 
     def describe(self) -> str:
         return f"workspaces=host({self._root})"

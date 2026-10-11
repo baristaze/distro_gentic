@@ -213,8 +213,19 @@ class Instances(WorkspaceTwinImpl):
 
     made: Workspace | None = None
 
-    async def prepare(self, org_id: UUID, workspace_id: UUID, spec: IsolationSpec) -> Workspace:
-        self.made = await super().prepare(org_id, workspace_id, spec)
+    async def prepare(
+        self,
+        org_id: UUID,
+        workspace_id: UUID,
+        spec: IsolationSpec,
+        snapshot: bytes | None = None,
+        base: bytes | None = None,
+        *,
+        building: bool = False,
+    ) -> Workspace:
+        self.made = await super().prepare(
+            org_id, workspace_id, spec, snapshot, base, building=building
+        )
         return self.made
 
 

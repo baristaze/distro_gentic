@@ -4112,7 +4112,7 @@ export interface components {
          * @description What a `control` step records: a command that travels out of band.
          * @enum {string}
          */
-        ControlCommand: "pause" | "resume" | "cancel" | "interrupt" | "compact" | "approve" | "deny" | "unlock";
+        ControlCommand: "pause" | "resume" | "cancel" | "interrupt" | "compact" | "approve" | "deny" | "unlock" | "restore";
         /**
          * ControlKind
          * @description What one line of a host's control stream says.
@@ -4122,12 +4122,16 @@ export interface components {
         /**
          * ControlRequest
          * @description A control. An interrupt names the seq of the tool request it stops,
-         *     and no other control names one.
+         *     and a restore the id of a snapshot the session's history names, which
+         *     its workspace's next prepare starts from; no other control names
+         *     either.
          */
         ControlRequest: {
             command: components["schemas"]["SessionControl"];
             /** Request Seq */
             request_seq?: number | null;
+            /** Snapshot Id */
+            snapshot_id?: string | null;
         };
         /**
          * ControlView
@@ -6968,7 +6972,7 @@ export interface components {
          *     tool call is a route of its own.
          * @enum {string}
          */
-        SessionControl: "pause" | "resume" | "cancel" | "interrupt" | "compact" | "unlock";
+        SessionControl: "pause" | "resume" | "cancel" | "interrupt" | "compact" | "unlock" | "restore";
         /**
          * SessionModelUsageView
          * @description What a session's model calls used, as each provider reported it, per
@@ -7271,6 +7275,28 @@ export interface components {
             revoked_at: string | null;
         };
         /**
+         * SnapshotView
+         * @description A workspace's snapshot a step names: its id, which a restore names,
+         *     the hash of its bytes keyed by its session, its size in bytes, and the
+         *     workspace it was taken from.
+         */
+        SnapshotView: {
+            /** Hash */
+            hash: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Size */
+            size: number;
+            /**
+             * Workspace Id
+             * Format: uuid
+             */
+            workspace_id: string;
+        };
+        /**
          * SsoLinkRequest
          * @description What the identity provider's admin portal opens on: the single sign-on
          *     connection (`sso`) or the org's domains (`domain_verification`), and the
@@ -7419,7 +7445,7 @@ export interface components {
          *     compares strings.
          * @enum {string}
          */
-        StepType: "message" | "event" | "control" | "model_request" | "model_response" | "tool_request" | "tool_response" | "summary" | "parked" | "resumed" | "loop_ended" | "switched" | "environment_changed";
+        StepType: "message" | "event" | "control" | "model_request" | "model_response" | "tool_request" | "tool_response" | "summary" | "parked" | "resumed" | "loop_ended" | "switched" | "environment_changed" | "snapshotted";
         /**
          * StepUsageView
          * @description What a model call used, as its provider reported it, in disjoint
@@ -7449,7 +7475,8 @@ export interface components {
          *     message, on a message an agent wrote (`agent`); the tools a model
          *     response called, why it stopped, and what it used; a tool call's tool,
          *     the id of the call it runs, and the class of its failure; a control's
-         *     command; a park; a loop's outcome.
+         *     command; a park; a loop's outcome; the snapshot a `snapshotted` step
+         *     names, or a restore starts from.
          */
         StepView: {
             actor: components["schemas"]["Actor"];
@@ -7480,6 +7507,7 @@ export interface components {
             responds_to: string | null;
             /** Seq */
             seq: number;
+            snapshot: components["schemas"]["SnapshotView"] | null;
             stop_reason: components["schemas"]["StopReason"] | null;
             /** Text */
             text: string;

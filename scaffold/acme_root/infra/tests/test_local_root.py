@@ -34,5 +34,5 @@ async def test_every_capability_works_over_the_local_root(tmp_path: Path) -> Non
     await infra.get_streams().append(org, stream, [(0, b"a"), (1, b"b")], StreamBounds())
     (held,) = await infra.get_streams().read(org, {stream: 0}, StreamBounds())
     assert (held.stream, held.first, held.entries) == (stream, 0, ((1, b"b"),))
-    assert len(infra.describe()) == len(CacheScope) + 11
+    assert len(infra.describe()) == len(CacheScope) + 12
     await infra.close()

@@ -17,11 +17,12 @@ from acme.om.exceptions import NotFound
 from acme.om.playbooks.manager import PlaybooksManagerInterface
 from acme.om.playbooks.rules import narrowed
 from acme.om.steps import StepsManagerInterface
-from acme.om.steps.types.header import ToolFailure, ToolRequestHeader
+from acme.om.steps.types.header import ToolFailure, ToolRequestHeader, WorkspaceSnapshot
 from acme.om.steps.types.step import Step
 from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.tools.registry import ToolRegistry
 from acme.om.tools.rules import approver_roles, response, strictest, verdict
+from acme.om.tools.tool import TakenSnapshot
 from acme.om.tools.types.call import Gate, GateOutcome, JobHandle, JobNotStarted, Verdict
 from acme.om.tools.types.policy import Decision, PolicyLayer, ToolPolicy
 
@@ -176,12 +177,39 @@ class ToolsManagerPlaybooksImpl(ToolsManagerInterface):
         return await self._inner.write_policy(ctx, policy)
 
     async def prepare_workspace(
-        self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec
+        self,
+        ctx: TenantContext,
+        session_id: UUID,
+        spec: IsolationSpec,
+        restore: WorkspaceSnapshot | None = None,
     ) -> Workspace:
-        return await self._inner.prepare_workspace(ctx, session_id, spec)
+        return await self._inner.prepare_workspace(ctx, session_id, spec, restore)
 
     async def release_workspace(self, ctx: TenantContext, workspace: Workspace) -> None:
         await self._inner.release_workspace(ctx, workspace)
+
+    async def snapshot_workspace(
+        self,
+        ctx: TenantContext,
+        session_id: UUID,
+        workspace: Workspace,
+        *,
+        epoch: int,
+        loop_id: UUID,
+    ) -> Step:
+        return await self._inner.snapshot_workspace(
+            ctx, session_id, workspace, epoch=epoch, loop_id=loop_id
+        )
+
+    async def fork_snapshot(
+        self, ctx: TenantContext, child_id: UUID, snapshot_id: UUID, taken: TakenSnapshot
+    ) -> WorkspaceSnapshot:
+        return await self._inner.fork_snapshot(ctx, child_id, snapshot_id, taken)
+
+    async def find_snapshot(
+        self, ctx: TenantContext, session_id: UUID, snapshot_id: UUID
+    ) -> WorkspaceSnapshot:
+        return await self._inner.find_snapshot(ctx, session_id, snapshot_id)
 
     async def input_hash(
         self, ctx: TenantContext, session_id: UUID, call_input: Mapping[str, Any]
@@ -206,6 +234,9 @@ class ToolsManagerPlaybooksImpl(ToolsManagerInterface):
 
     async def purge_workspace(self, org_id: UUID, session_id: UUID) -> None:
         await self._inner.purge_workspace(org_id, session_id)
+
+    async def erase_snapshots(self, ctx: TenantContext, session_id: UUID) -> None:
+        await self._inner.erase_snapshots(ctx, session_id)
 
     async def purge_tenant(self, ctx: TenantContext) -> int:
         return await self._inner.purge_tenant(ctx)

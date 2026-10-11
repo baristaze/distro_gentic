@@ -31,6 +31,7 @@ function step(fields: Partial<StepView> & Pick<StepView, "type">, second = seq):
     park: null,
     refs: [],
     responds_to: null,
+    snapshot: null,
     stop_reason: null,
     tool: null,
     tools: [],

@@ -339,6 +339,7 @@ def wired(
             managers.steps,
             managers.agent_sessions,
             AttachmentReaderNullImpl(),
+            managers.windows,
             lambda: managers.agents,
         )
         + catalog,
