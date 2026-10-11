@@ -195,10 +195,11 @@ optional stopping.
 
 ## EVD-09 Every trial counts, and candidate and baseline interleave
 
-**Principle.** The gate counts every trial at that version, and an
-aborted trial is classified by a declared rule, never dropped. Candidate
-and baseline trials interleave on the same host, and a claim across
-many scenarios corrects for the number of comparisons.
+**Principle.** The gate counts every trial at that version, run at the
+check version the policy declares, and an aborted trial is classified by
+a declared rule, never dropped. Candidate and baseline trials interleave
+on the same host, and a claim across many scenarios corrects for the
+number of comparisons.
 
 **Source.** Evidence, Statistical Evidence.
 
@@ -206,10 +207,12 @@ many scenarios corrects for the number of comparisons.
 classified; how candidate and baseline trials are scheduled; how a claim
 across scenarios is corrected.
 
-**Violation.** A trial at the version dropped from the count; an aborted
-trial dropped, or classified by no declared rule; candidate and baseline
-run in separate blocks or on different hosts; a claim across
-scenarios with no correction for the number of comparisons.
+**Violation.** A trial at the version and the declared check version
+dropped from the count, or one at a check version the policy no longer
+declares counted; an aborted trial dropped, or classified by no declared
+rule; candidate and baseline run in separate blocks or on different
+hosts; a claim across scenarios with no correction for the number of
+comparisons.
 
 **Severity.** high
 

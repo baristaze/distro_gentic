@@ -575,10 +575,10 @@ to be zero, only bounded. A claim about a rate reports a one-sided exact
 or Wilson bound at a declared confidence, never a normal approximation,
 which collapses at zero failures. The trial count, or a sequential test
 valid under optional stopping, is declared before the trials. The gate
-counts every trial at that version, and an aborted trial is classified
-by a declared rule, never dropped. Candidate and baseline trials
-interleave on the same host, and a claim across many scenarios
-corrects for the number of comparisons.
+counts every trial at that version, run at the check version the policy
+declares, and an aborted trial is classified by a declared rule, never
+dropped. Candidate and baseline trials interleave on the same host, and
+a claim across many scenarios corrects for the number of comparisons.
 
 <!-- agents-only
 With zero failures in n trials, the one-sided 95% upper bound on the
