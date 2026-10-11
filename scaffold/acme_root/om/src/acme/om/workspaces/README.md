@@ -123,7 +123,7 @@ rebuilt from.
   through the prepare it travels with. A snapshot kept on one side of
   the wall never restores on the other. A restored tree stands: nothing
   of the branch is brought over it. A person who takes control gets it
-  too.
+  too, before the workspace is handed over.
 - **Erase.** A revoked key takes the session's snapshots out of the
   bucket, asks each host that keeps one to erase it, and forgets their
   records.

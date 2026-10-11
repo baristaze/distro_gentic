@@ -122,11 +122,12 @@ class WatchManagerInterface(ABC):
         host is stopped over its control stream and answered `interrupted`;
         the session, its workspace, and its evidence stay as they are. A
         workspace kept by snapshots, which a host holds, is restored from the
-        latest snapshot its history names first, as its next run's would be,
-        unless something touched it since: `IsolationRefused` while the host
-        has not restored it in time, and `WorkspaceLost` when its store lost
-        it. Parked on a hand-over already, it stays. Audited as that
-        person."""
+        latest snapshot its history names before it is handed over, as its
+        next run's would be, unless something touched it since:
+        `IsolationRefused` while the host has not restored it in time, and
+        `WorkspaceLost` when its store lost it, each with nothing handed
+        over. Parked on a hand-over already, it stays, and nothing is
+        restored over the person's work. Audited as that person."""
         ...
 
     @abstractmethod

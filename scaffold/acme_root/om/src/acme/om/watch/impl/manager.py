@@ -196,12 +196,15 @@ class WatchManagerImpl(WatchManagerInterface):
         await self._person(ctx, session_id)
         session = await self._sessions.get_session(ctx, session_id)
         if session.park is None or session.park.reason is not ParkReason.HANDOVER:
+            # Restored before it is handed over: a take whose restore fails
+            # hands nothing over, and a workspace a person holds already is
+            # never restored over their work.
+            await self._restore_kept(ctx, session_id)
             session = await self._loop.take_over(ctx, session_id)
         cursor = await self._steps.get_cursor(ctx, session_id)
         # What the agent's run still runs on the host stops now, so nothing of
         # its runs beside the person's commands; theirs run under this epoch.
         await self._relay.interrupt_running(ctx, ctx.org_id, session_id, cursor.epoch)
-        await self._restore_kept(ctx, session_id)
         await self._audit(ctx, new_id(), TAKEN, session_id, {"epoch": cursor.epoch})
         return session
 
@@ -212,8 +215,9 @@ class WatchManagerImpl(WatchManagerInterface):
         its run, and one started anew over its files alone would lack what
         its commands wrote outside them. The host that holds it replaces it
         from its store; the take waits for it a while, then fails with the
-        reason, and a take again asks the same restore. One that something
-        touched since its last snapshot stands as it is."""
+        reason, having handed nothing over, and a take again waits for the
+        same restore. One that something touched since its last snapshot
+        stands as it is."""
         try:
             pin = await self._workspaces.get_workspace(ctx, session_id)
         except NotFound:
