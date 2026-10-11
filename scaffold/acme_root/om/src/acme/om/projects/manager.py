@@ -15,7 +15,7 @@ from uuid import UUID
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agents.types.request import Start
 from acme.om.context import TenantContext
-from acme.om.projects.types.project import Project, Repository
+from acme.om.projects.types.project import Project, ProjectEnvironment, Repository
 
 
 class ProjectsManagerInterface(ABC):
@@ -46,6 +46,17 @@ class ProjectsManagerInterface(ABC):
         """The project under its new name, as one who writes the tenant's
         configuration may (`manage_members`). Announced. Its repository never
         moves. Another tenant's project is `NotFound`."""
+        ...
+
+    @abstractmethod
+    async def set_environment(
+        self, ctx: TenantContext, project_id: UUID, environment: ProjectEnvironment | None
+    ) -> Project:
+        """The project with the environment its sessions' workspaces start
+        from, or with none, as one who writes the tenant's configuration may
+        (`manage_members`). Announced. It reaches the sessions created after
+        it; each session keeps the one it pinned. Another tenant's project
+        is `NotFound`."""
         ...
 
     @abstractmethod

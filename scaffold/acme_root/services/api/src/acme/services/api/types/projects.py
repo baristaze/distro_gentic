@@ -1,5 +1,6 @@
 """Wire types of a tenant's projects: one as stored, with the repository it
-binds; a new one, and a new name; and the fetch credential its repository is
+binds and the environment its sessions' workspaces start from; a new one, a
+new name, and a new environment; and the fetch credential its repository is
 read with, which is written and never read back."""
 
 from datetime import datetime
@@ -7,7 +8,16 @@ from uuid import UUID
 
 from pydantic import Field, SecretStr, field_validator
 
-from acme.om.projects.types.project import HOST, MAX_PROJECT_NAME, REPOSITORY_PATH
+from acme.om.projects.types.project import (
+    HOST,
+    IMAGE,
+    MAX_PROJECT_NAME,
+    MAX_REGISTRIES,
+    MAX_SETUP,
+    REPOSITORY_PATH,
+    SetupCommand,
+)
+from acme.om.workspaces.types.egress import Destination
 from acme.services.api.types.common import RequestBody, View
 
 
@@ -29,14 +39,34 @@ class RepositoryView(View):
     path: str
 
 
+class EnvironmentBody(RequestBody):
+    """The environment a project's sessions' workspaces start from: the
+    image, the commands that set it up, run once in order, and the package
+    registries the setup reaches. A setup that names a registry runs with
+    open egress; one that names none reaches nothing. Registries serve a
+    setup, so they come with one."""
+
+    image: str = Field(min_length=1, max_length=255, pattern=IMAGE)
+    setup: list[SetupCommand] = Field(default_factory=lambda: [], max_length=MAX_SETUP)
+    registries: list[Destination] = Field(default_factory=lambda: [], max_length=MAX_REGISTRIES)
+
+
+class EnvironmentView(View):
+    image: str
+    setup: list[str]
+    registries: list[str]
+
+
 class CreateProjectRequest(RequestBody):
-    """A project and the one repository it binds, which never moves, and
-    whether a kind that keeps its workspace by snapshots keeps it so here:
-    False keeps each of its sessions' workspaces a cache."""
+    """A project and the one repository it binds, which never moves; whether
+    a kind that keeps its workspace by snapshots keeps it so here, False
+    keeping each of its sessions' workspaces a cache; and the environment
+    its sessions' workspaces start from, if it names one."""
 
     name: str = Field(min_length=1, max_length=MAX_PROJECT_NAME)
     repository: RepositoryBody
     workspace_snapshots: bool = True
+    environment: EnvironmentBody | None = None
 
 
 class RenameProjectRequest(RequestBody):
@@ -48,6 +78,7 @@ class ProjectView(View):
     name: str
     repository: RepositoryView
     workspace_snapshots: bool
+    environment: EnvironmentView | None
     created_at: datetime
     created_by: UUID
     updated_at: datetime

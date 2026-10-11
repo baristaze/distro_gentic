@@ -1,19 +1,21 @@
 """What the workspaces read of a session's project: which project it belongs
-to, which keys the allowlist it pins, and the one repository that project
-binds, where its branch and pull request are its work product. And the
+to, which keys the allowlist it pins, the one repository that project
+binds, where its branch and pull request are its work product, and the
+environment its workspace starts from. And the
 source control that holds that repository: what it says of a gone branch,
 and the writes that carry a session's commits to its branch or a snapshot
 and open its pull request.
 
 The projects own both answers; a root reads them from the projects' rows
 (`acme.om.workspaces.impl.projects.WorkspaceProjectsBoundImpl`). The null
-answers none: a session keeps its kind's egress, has no checkout, and every
-write it makes to source control acts outward
+answers none: a session keeps its kind's egress and its kind's base, has no
+checkout, and every write it makes to source control acts outward
 (`acme.om.workspaces.impl.projects.WorkspaceProjectsNullImpl`)."""
 
 from abc import ABC, abstractmethod
 from uuid import UUID
 
+from acme.infra.workspaces import WorkspaceBase
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.context import TenantContext
 from acme.om.workspaces.types.source import OpenedPullRequest, PullRequestFate, RepositoryBinding
@@ -37,6 +39,13 @@ class WorkspaceProjectsInterface(ABC):
         """Whether the tenant's project lets a kind keep its workspace by
         snapshots; False keeps each of its sessions' workspaces a cache. A
         project the tenant does not hold narrows nothing."""
+        ...
+
+    @abstractmethod
+    async def environment_of(self, ctx: TenantContext, project_id: UUID) -> WorkspaceBase | None:
+        """The base the tenant's project names for its sessions' workspaces:
+        its environment's image, setup, and the setup's egress. None when it
+        names none, or the tenant does not hold it."""
         ...
 
 

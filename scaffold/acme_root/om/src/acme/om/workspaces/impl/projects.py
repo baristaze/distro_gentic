@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from acme.infra.base import QuietNull
+from acme.infra.workspaces import WorkspaceBase
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.context import TenantContext
 from acme.om.projects.storage import ProjectStorageInterface
@@ -33,10 +34,17 @@ class WorkspaceProjectsBoundImpl(WorkspaceProjectsInterface):
         project = await self._storage.read_project(ctx.org_id, project_id)
         return project is None or project.workspace_snapshots
 
+    async def environment_of(self, ctx: TenantContext, project_id: UUID) -> WorkspaceBase | None:
+        project = await self._storage.read_project(ctx.org_id, project_id)
+        if project is None or project.environment is None:
+            return None
+        return project.environment.base()
+
 
 class WorkspaceProjectsNullImpl(WorkspaceProjectsInterface, QuietNull):
-    """No session belongs to a project yet: each keeps its kind's egress, has
-    no checkout, and acts outward with every write to source control."""
+    """No session belongs to a project yet: each keeps its kind's egress and
+    its kind's base, has no checkout, and acts outward with every write to
+    source control."""
 
     async def project_of(self, ctx: TenantContext, session: AgentSession) -> UUID | None:
         return None
@@ -46,6 +54,9 @@ class WorkspaceProjectsNullImpl(WorkspaceProjectsInterface, QuietNull):
 
     async def keeps_snapshots(self, ctx: TenantContext, project_id: UUID) -> bool:
         return True
+
+    async def environment_of(self, ctx: TenantContext, project_id: UUID) -> WorkspaceBase | None:
+        return None
 
 
 class PullRequestsNullImpl(PullRequestsInterface, QuietNull):

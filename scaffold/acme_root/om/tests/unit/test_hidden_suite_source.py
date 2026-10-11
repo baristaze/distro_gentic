@@ -28,7 +28,7 @@ from contracts.factories import make_org
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.transports import CommandSpec
 from acme.infra.transports.twin import TransportTwinImpl, TwinReply
-from acme.infra.workspaces import IsolationMode, IsolationSpec, Workspace
+from acme.infra.workspaces import IsolationMode, IsolationSpec, Workspace, WorkspaceBase
 from acme.infra.workspaces.twin import WorkspaceTwinImpl
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agents.types.result import Claim, Result
@@ -209,6 +209,9 @@ class Bound(WorkspaceProjectsInterface):
 
     async def keeps_snapshots(self, ctx: TenantContext, project_id: UUID) -> bool:
         return True
+
+    async def environment_of(self, ctx: TenantContext, project_id: UUID) -> WorkspaceBase | None:
+        return None
 
 
 class Instances(WorkspaceTwinImpl):

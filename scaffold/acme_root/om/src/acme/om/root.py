@@ -112,7 +112,7 @@ from acme.om.platform_agents.catalog import (
     with_shipped,
 )
 from acme.om.platform_agents.impl.manager import PlatformAgentsManagerImpl, PlatformAgentsOptions
-from acme.om.platform_agents.kinds import SHIPPED
+from acme.om.platform_agents.kinds import ENVIRONMENT_KINDS, SHIPPED
 from acme.om.privacy import PrivacyManagerInterface
 from acme.om.privacy.impl.artifacts import ArtifactSealKeysImpl
 from acme.om.privacy.impl.keys import SessionKeysImpl
@@ -901,6 +901,7 @@ def build_managers(
         infra.get_secrets(),
         writes,
         held,
+        environments=ENVIRONMENT_KINDS,
     )
     notification_storage = storage.get_notification_storage()
     engine_sessions = AgentSessionsManagerImpl(

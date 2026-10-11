@@ -263,13 +263,35 @@ ENGINEER_V6 = ENGINEER_V5.model_copy(
 """The engineer before it read back a result kept outside its window:
 kept while a session may still run it."""
 
-ENGINEER_KIND = ENGINEER_V6.model_copy(
+ENGINEER_V7 = ENGINEER_V6.model_copy(
     update={"version": 7, "tools": (*ENGINEER_V6.tools, READ_ARTIFACT)}
+)
+"""The engineer before its workspace started from its project's
+environment: kept while a session may still run it."""
+
+ENVIRONMENT = (
+    "Your workspace has no network. What your work needs installed comes from your project's "
+    "environment, set up before you start. When the work needs a package your workspace "
+    "lacks, do not try to install it: say which one in your result."
+)
+"""The engineer's layer on its project's environment, so a missing package
+is named rather than fetched through a network it does not have."""
+
+ENGINEER_KIND = ENGINEER_V7.model_copy(
+    update={"version": 8, "prompts": (*ENGINEER_V7.prompts, ENVIRONMENT)}
 )
 """The engineer. It starts sub-agents and waits on them, and since it
 delivers through its result tool, a product's kind may spawn it too, under
 its share. A result too large for its window, or one compaction elided, it
-reads back with `read_artifact`, by the handle the notice names."""
+reads back with `read_artifact`, by the handle the notice names. Its
+workspace starts from its project's environment, when the project names
+one, and keeps no egress (`ENVIRONMENT_KINDS`)."""
+
+ENVIRONMENT_KINDS: frozenset[tuple[str, int]] = frozenset({(ENGINEER, 8)})
+"""The platform's kinds, by name and version, whose workspace starts from
+the environment its session's project names: the engineer from version 8.
+A later version that takes it joins here; the versions before it keep
+their own base."""
 
 ANALYSIS_V1 = AgentKind(
     name=ANALYSIS,
@@ -439,6 +461,7 @@ SHIPPED: tuple[AgentKind, ...] = (
     ENGINEER_V4,
     ENGINEER_V5,
     ENGINEER_V6,
+    ENGINEER_V7,
     ENGINEER_KIND,
     ANALYSIS_V1,
     ANALYSIS_V2,

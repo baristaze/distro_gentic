@@ -15,7 +15,7 @@ from acme.om.projects.exceptions import ProjectFixed, ProjectInUse
 from acme.om.projects.impl.sessions import bind
 from acme.om.projects.manager import ProjectsManagerInterface
 from acme.om.projects.storage import ProjectStorageInterface
-from acme.om.projects.types.project import Project, Repository
+from acme.om.projects.types.project import Project, ProjectEnvironment, Repository
 from acme.om.tenancy import TenancyManagerInterface
 
 CREATED = "projects.project.created"
@@ -80,20 +80,13 @@ class ProjectsManagerImpl(ProjectsManagerInterface):
 
     async def rename_project(self, ctx: TenantContext, project_id: UUID, name: str) -> Project:
         ctx.require(Permission.MANAGE_MEMBERS)
-        stored = await self._project(ctx, project_id)
-        renamed = Project.model_validate(
-            {
-                **stored.model_dump(),
-                "name": name,
-                "updated_at": self._clock(),
-                "updated_by": ctx.user_id,
-            }
-        )
-        rows = (outbox_row(ctx, UPDATED, renamed.id, {}),)
-        if not await self._storage.write_project(ctx.org_id, renamed, rows):
-            raise NotFound(f"project {project_id} not found")
-        await self._relay_all(ctx, rows)
-        return renamed
+        return await self._update(ctx, project_id, {"name": name})
+
+    async def set_environment(
+        self, ctx: TenantContext, project_id: UUID, environment: ProjectEnvironment | None
+    ) -> Project:
+        ctx.require(Permission.MANAGE_MEMBERS)
+        return await self._update(ctx, project_id, {"environment": environment})
 
     async def remove_project(self, ctx: TenantContext, project_id: UUID) -> Project:
         ctx.require(Permission.MANAGE_MEMBERS)
@@ -138,6 +131,25 @@ class ProjectsManagerImpl(ProjectsManagerInterface):
         if not await self._tenancy.tenant_expired(ctx):
             return 0
         return await self._storage.purge_tenant(ctx.org_id, self._options.purge_batch)
+
+    async def _update(
+        self, ctx: TenantContext, project_id: UUID, update: dict[str, object]
+    ) -> Project:
+        """The stored project with `update` written over it, announced."""
+        stored = await self._project(ctx, project_id)
+        updated = Project.model_validate(
+            {
+                **stored.model_dump(),
+                **update,
+                "updated_at": self._clock(),
+                "updated_by": ctx.user_id,
+            }
+        )
+        rows = (outbox_row(ctx, UPDATED, updated.id, {}),)
+        if not await self._storage.write_project(ctx.org_id, updated, rows):
+            raise NotFound(f"project {project_id} not found")
+        await self._relay_all(ctx, rows)
+        return updated
 
     async def _project(self, ctx: TenantContext, project_id: UUID) -> Project:
         stored = await self._storage.read_project(ctx.org_id, project_id)
