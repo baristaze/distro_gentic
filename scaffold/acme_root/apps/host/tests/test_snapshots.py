@@ -5,11 +5,14 @@ hash, never the bytes: nothing reaches the platform's bucket. A restore
 travels with its prepare, and the host starts the workspace from its store
 once the bytes match their digest; bytes altered there lose it. A snapshot
 that holds the value of a secret the host keeps is refused, and nothing is
-kept. A revoked key asks the host to erase its copies. A host that did not
+kept. A revoked key asks the host to erase its copies. A person who takes
+control of a workspace whose instance went since its run gets it back from
+its latest snapshot, never its files alone. A host that did not
 probe snapshots refuses a workspace kept by them, and a session pinned to
 a pool with no such host waits, with the reason, and is never prepared as a
 cache."""
 
+import asyncio
 import hashlib
 from dataclasses import replace
 from pathlib import Path
@@ -40,9 +43,20 @@ from acme.infra.workspaces import (
 )
 from acme.infra.workspaces.twin import WorkspaceTwinImpl
 from acme.om.base import new_id
+from acme.om.context import (
+    AppContext,
+    AppType,
+    CredentialKind,
+    RequestContext,
+    TenantContext,
+    build_context,
+)
 from acme.om.relay.impl.workspaces import PlacedWorkspacesRelayedImpl
-from acme.om.steps.types.header import HASH_SCHEME
+from acme.om.steps.types.header import HASH_SCHEME, WorkspaceSnapshot
+from acme.om.tenancy.rules import permissions_of
 from acme.om.tools.impl.snapshots import session_prefix
+from acme.om.tools.rules import snapshotted_step
+from acme.om.watch.root import build_watch
 from acme.om.work.types.work_item import WorkKind, WorkStatus
 from acme.om.workspaces.types.snapshot import HostSnapshot
 
@@ -280,3 +294,55 @@ async def test_a_host_advertises_snapshots_only_at_a_mode_it_probed_with_a_usabl
 
     assert "snapshot.container" in capabilities(probed)
     assert not [name for name in capabilities(unprobed) if name.startswith("snapshot.")]
+
+
+def in_person(of: TenantContext) -> TenantContext:
+    """The owner at the portal, signed in on a session of their own."""
+    return build_context(
+        RequestContext(request_id=new_id(), app=AppContext(type=AppType.PORTAL, version="t")),
+        user_id=of.user_id,
+        org_id=of.org_id,
+        role=of.role,
+        permissions=permissions_of(of.role),
+        credential_kind=CredentialKind.SESSION_TOKEN,
+    )
+
+
+async def test_taking_control_of_a_released_kept_workspace_restores_its_latest_snapshot(
+    api: Stack, tmp_path: Path
+) -> None:
+    """Past its run, its host let the instance go and kept its files alone.
+    A person who takes control gets the workspace its latest snapshot holds,
+    as the next run would, before any command of theirs runs."""
+    managers = api.container.managers
+    pool = await api.pool()
+    session_id = await a_pinned_session(api, pool.id)
+    await managers.workspaces.pinned(api.owner, session_id, KEPT)
+    host, twin, _ = await a_host(api, pool.id, tmp_path)
+    await prepared(api, host, session_id)
+    twin.files[session_id] = b"the tree and the tool the run installed"
+    snapshot_id = new_id()
+    await managers.relay.ask_snapshot(api.owner, session_id, KEPT, snapshot_id)
+    await claimed(host)
+    record = await managers.workspaces.kept_snapshot(api.owner, snapshot_id)
+    assert record is not None
+    epoch = await managers.steps.begin_run(api.owner, session_id)
+    taken = WorkspaceSnapshot(
+        id=record.id, hash=record.hash, size=record.size, workspace_id=session_id
+    )
+    step = snapshotted_step(new_id(), record.created_at, session_id, new_id(), taken)
+    await managers.steps.append_steps(api.owner, session_id, epoch, [step])
+    twin.live.discard(session_id)  # let go past its grace
+    twin.files[session_id] = b"its files alone"
+
+    watch = build_watch(managers, api.container.stream)
+    taking = asyncio.ensure_future(watch.take_control(in_person(api.owner), session_id))
+    for _ in range(100):
+        if await host.claim_once() is not None:
+            break
+        await asyncio.sleep(0.01)
+    await host.idle()
+    await taking
+
+    assert session_id in twin.live
+    assert twin.files[session_id] == b"the tree and the tool the run installed"

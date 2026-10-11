@@ -120,8 +120,13 @@ class WatchManagerInterface(ABC):
         environment: a new writer epoch fences the run that held the loop,
         which parks on a hand-over, and what that run's items still run on the
         host is stopped over its control stream and answered `interrupted`;
-        the session, its workspace, and its evidence stay as they are.
-        Parked on a hand-over already, it stays. Audited as that person."""
+        the session, its workspace, and its evidence stay as they are. A
+        workspace kept by snapshots, which a host holds, is restored from the
+        latest snapshot its history names first, as its next run's would be,
+        unless something touched it since: `IsolationRefused` while the host
+        has not restored it in time, and `WorkspaceLost` when its store lost
+        it. Parked on a hand-over already, it stays. Audited as that
+        person."""
         ...
 
     @abstractmethod
