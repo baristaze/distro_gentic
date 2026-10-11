@@ -22,6 +22,9 @@ against.
 
 Read `../_shared/ops-preamble.md`, a path from this skill's folder,
 before the first step: the env file and the token's refresh are there.
+Its check of a cloud profile before any other command does not apply
+to this skill, which runs no `aws` command in any environment: `local`
+reads the local API that the env file names, and no cloud is needed.
 
 ## Input
 
@@ -38,9 +41,9 @@ Supporter, the operator plane's read alone: the env file's operator
 token, whose permission is `read`. No cloud profile is needed or used.
 The reads are `/v1/admin/me` at `ACME_API_URL`, and the levers route,
 `/v1/admin/orgs/<org_id>/levers`, which `uv run acme-ops levers` reads
-with the same token. A reading holds ids, versions, counts, and the
-name of each lever, which the tenant chose: the audit keeps the ids,
-the versions, and the counts, and never a name.
+with the same token. A reading holds ids, versions, and counts: each
+lever by its kind, id, and version, never its name, which the tenant
+chose.
 
 Before step 2 sources the env file, run `uv run acme-ops size --env
 <env>`, which refuses a file that holds the provisioner's token: then
@@ -71,7 +74,7 @@ token has expired: stop, and name the refresh the preamble gives.
    cannot parse: the report then says the operator plane was not read,
    and why.
 3. Read the reading once, through `jq`, which keeps each lever's kind,
-   id, and version and its figures, and drops its name:
+   id, and version and its figures, and nothing else:
 
    ```bash
    uv run acme-ops levers --env <env> --org <org_id> --days <days> \
@@ -82,19 +85,26 @@ token has expired: stop, and name the refresh the preamble gives.
    ends the run: the report says the reading was not made, and why. A
    reading of 0 sessions is an answer: the org started none in the
    window, or the org is not known. No read is made a second time.
-4. Judge each standing, in the order the reading gives. A lever whose
-   sessions stalled at least twice, with a `lift` of at least 0.25, is a
-   finding: the sessions that reached it stalled that much more often
-   than the rest. A lever whose sessions stalled once is listed as too
-   few to judge. A reading with `complete` false is judged on what it
-   read, and the report says the window held more. When `spun` is 0,
-   no session stalled, and the answer says so.
-5. Write the report, with each finding's proposed ticket: read that
-   lever's version as a person (the portal shows the playbook or the
-   entry with what its checks found), and the sessions named behind it,
-   for a phrase said again and again, a must and a must-not on one
+4. Judge each standing, in the order the reading gives, and give every
+   one a verdict. A standing's `spun` is at least 1 and its `lift` above
+   0, so one of these three fits each:
+   - **finding**: `spun` of 2 or more and a `lift` of at least 0.25: the
+     sessions that reached it stalled that much more often than the
+     rest;
+   - **weak**: `spun` of 2 or more and a `lift` below 0.25: it came
+     before stalls, but not much more often than its absence did;
+   - **too few**: `spun` of 1, too few to judge.
+
+   A reading with `complete` false is judged on what it read, and the
+   report says the window held more. When `spun` is 0, no session
+   stalled, and the answer says so.
+5. Write the report, with a proposed ticket for each finding. The
+   ticket's work is a person's of the tenant, never this audit's: that
+   person reads the lever's version (the portal shows the playbook or
+   the entry with what its checks found) and the sessions named behind
+   it, for a phrase said again and again, a must and a must-not on one
    subject, a tool its kinds do not hold, or a retry with no stopping
-   condition; then publish its next version. The audit proposes; it
+   condition, then publishes its next version. The audit proposes; it
    never fixes, and it never reads a lever's text or a session's
    content.
 
@@ -104,8 +114,8 @@ token has expired: stop, and name the refresh the preamble gives.
   operator plane and writes its report under `~/Downloads/`.
 - Never modifies a tracked file, never commits, never opens a pull
   request.
-- No lever's name in the report or the conversation: `jq` drops it, and
-  each lever is named by its kind, id, and version.
+- No lever's name in the report or the conversation: the reading
+  answers none, and each lever is named by its kind, id, and version.
 - No session's content: the reading counts headers, and the audit opens
   no session.
 - No token but the read one: the env file is sourced only in step 2 and
@@ -125,11 +135,11 @@ token has expired: stop, and name the refresh the preamble gives.
 
 | Kind | Id | Version | Stalled with | Stalled without | Lift | Verdict |
 |---|---|---|---|---|---|---|
-| <playbook / knowledge> | <id> | <n> | <spun> of <sessions> | <spun_without> of <sessions_without> | <lift> | finding / too few |
+| <playbook / knowledge> | <id> | <n> | <spun> of <sessions> | <spun_without> of <sessions_without> | <lift> | finding / weak / too few |
 
 ## Findings, by impact
 
-1. <kind> <id> v<version>: <figures>; sessions <spun_sessions>; fix: read it and publish its next version; effort <S/M/L>
+1. <kind> <id> v<version>: <figures>; sessions <spun_sessions>; fix: a person of the tenant reads it and publishes its next version; effort <S/M/L>
 
 ## Proposed tickets
 
