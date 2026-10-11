@@ -411,3 +411,45 @@ async def test_a_restore_on_a_host_without_the_image_pulls_it_by_the_digest_the_
         assert (await docker("image", "inspect", named.image, bound=timedelta(seconds=20))).ok
     finally:
         await provider.purge(org, workspace_id)
+
+
+@pytest.mark.parametrize(
+    "labels",
+    [
+        ("another-deployment", "{workspace}", "{org}"),
+        ("acme-test", "{other}", "{org}"),
+        ("acme-test", "{workspace}", "{other}"),
+        ("<no value>", "<no value>", "<no value>"),
+    ],
+    ids=["another deployment's", "another workspace's", "another tenant's", "unlabelled"],
+)
+async def test_a_container_another_deployment_workspace_or_tenant_started_is_never_snapshotted(
+    labels: tuple[str, str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two deployments may share one Docker, and a container's name is its
+    workspace's: a running container whose labels name another deployment,
+    workspace, or tenant is refused before it is paused, and nothing of it
+    is read."""
+    org, workspace_id, other = new_id(), new_id(), new_id()
+    named = [label.format(workspace=workspace_id, org=org, other=other) for label in labels]
+    calls: list[tuple[str, ...]] = []
+
+    async def recorded(*args: str, **_: object) -> object:
+        calls.append(args)
+        from acme.infra.docker import DockerReply
+
+        return DockerReply(0, " ".join(["true", "sha256:" + "ab" * 32, *named]).encode(), b"")
+
+    monkeypatch.setattr("acme.infra.workspaces.container.docker", recorded)
+    provider = WorkspaceContainerImpl(IMAGE, timedelta(seconds=5), "acme-test")
+    workspace = Workspace(
+        id=workspace_id,
+        org_id=org,
+        spec=kept(IsolationMode.CONTAINER),
+        location=container_name(workspace_id),
+    )
+
+    with pytest.raises(SnapshotRefused, match="holds no instance"):
+        await provider.snapshot(workspace)
+
+    assert [call[0] for call in calls] == ["inspect"], "never paused, diffed, or exported"
