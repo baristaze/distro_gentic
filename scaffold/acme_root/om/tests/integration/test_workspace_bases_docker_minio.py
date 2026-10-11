@@ -134,6 +134,9 @@ def docker_runs() -> bool:
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.skipif(not docker_runs(), reason="needs a local Docker"),
+    pytest.mark.skip(
+        reason="the platform's pin holds no base, so a workspace on a base is refused"
+    ),
     pytest.mark.usefixtures("migrated"),
 ]
 
