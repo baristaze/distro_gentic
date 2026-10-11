@@ -1,7 +1,7 @@
 """The business-layer root: constructs every manager in dependency order and
 hands back one frozen object with a field per manager."""
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from uuid import UUID
@@ -9,7 +9,7 @@ from uuid import UUID
 from acme.infra.base import QuietNull
 from acme.infra.cache import CacheInterface, CacheScope
 from acme.infra.root import InfraInterface
-from acme.infra.transports import TransportInterface
+from acme.infra.transports import SecretVia, TransportInterface
 from acme.infra.workspaces import IsolationSpec
 from acme.integrations.identity import IdentityProviderInterface
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
@@ -121,6 +121,7 @@ from acme.om.privacy.impl.memory_only_steps import StepStorageShapeOnlyImpl
 from acme.om.privacy.impl.records import RecordSealKeysImpl
 from acme.om.privacy.impl.routed_steps import StepStorageRoutedImpl
 from acme.om.privacy.impl.sealed_steps import StepStorageSealedImpl
+from acme.om.privacy.impl.snapshots import SnapshotSealKeysImpl
 from acme.om.privacy.keys import SessionKeysInterface
 from acme.om.projects import ProjectsManagerInterface
 from acme.om.projects.impl.manager import ProjectsManagerImpl, ProjectsOptions
@@ -161,13 +162,16 @@ from acme.om.tenancy.storage import TenancyStorageInterface
 from acme.om.tools import ToolRegistry, ToolsManagerInterface
 from acme.om.tools.attachments import AttachmentReaderInterface
 from acme.om.tools.impl.attachments import AttachmentReaderNullImpl
+from acme.om.tools.impl.bases import WorkspaceBases
 from acme.om.tools.impl.manager import ToolsManagerImpl, ToolsOptions
+from acme.om.tools.impl.snapshots import SnapshotStore
 from acme.om.tools.native.ask_person import AskPersonToolImpl
+from acme.om.tools.native.read_artifact import ReadArtifactToolImpl
 from acme.om.tools.native.read_attachment import ReadAttachmentToolImpl
 from acme.om.tools.native.spawn_sub_agent import SpawnSubAgentToolImpl
 from acme.om.tools.native.wait_for_sub_agents import WaitForSubAgentsToolImpl
 from acme.om.tools.native.write_plan import WritePlanToolImpl
-from acme.om.tools.seal import RecordSealInterface
+from acme.om.tools.seal import RecordSealInterface, SnapshotSealInterface
 from acme.om.tools.tool import ToolInterface
 from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule
 from acme.om.tools.types.tool import ToolClass
@@ -530,6 +534,7 @@ def build_managers(
     prompt_hash: PromptHashInterface | None = None,
     artifact_seal: ArtifactSealInterface | None = None,
     record_seal: RecordSealInterface | None = None,
+    snapshot_seal: SnapshotSealInterface | None = None,
     compaction_policy: CompactionPolicy | None = None,
     agents_options: AgentsOptions | None = None,
     attribution_options: AttributionOptions | None = None,
@@ -601,8 +606,9 @@ def build_managers(
     `environment` `local`, a quiet null gate or ledger is refused at boot
     (`UnsafeConfiguration`).
     `artifact_seal` is what seals an artifact's text under its session's
-    key, and `record_seal` what seals a command's output in its transport's
-    record; None wires the privacy namespace's seal over the session keys.
+    key, `record_seal` what seals a command's output in its transport's
+    record, and `snapshot_seal` what seals a workspace's snapshot; None
+    wires the privacy namespace's seal over the session keys.
     `compaction_policy` None keeps the default policy.
 
     Three are the adopter's for its agents: `agent_kinds`, every version of
@@ -918,6 +924,10 @@ def build_managers(
         tenancy,
         outbox,
         PrivacyOptions(),
+        # What the tools keep of a session outside its seal goes with its
+        # key. They are built below on this manager, so the edge is bound at
+        # call time.
+        revoked=lambda ctx, session_id: managers.tools.erase_snapshots(ctx, session_id),
     )
     # Each session's retention: the snapshot it takes as it is created, and
     # the sweep that destroys its key when its content expires and marks it
@@ -996,11 +1006,7 @@ def build_managers(
         storage.get_evidence_storage(), products, session_policies
     )
     refuse_quiet_nulls(environment, results, products)
-    # The spawn tool starts sub-agents through the agents manager, which is
-    # built below on this catalog, so that edge is bound at call time.
     reader = attachment_reader or AttachmentReaderNullImpl()
-    catalog = engine_tools(steps, agent_sessions, reader, lambda: managers.agents) + tool_catalog
-    ToolRegistry(catalog, domain_classes)  # refuses two tools of one name at boot
     # What a model request reads: rendered from the history, compacted by
     # the summarizer through the model providers, behind the gate, paid for
     # by the spender attribution names.
@@ -1041,28 +1047,22 @@ def build_managers(
         compaction_policy or CompactionPolicy(),
         WindowsOptions(),
     )
-    # A child's report reaches its parent through windows, which bounds it.
-    agents = AgentsManagerImpl(
-        storage.get_agent_storage(),
-        agent_sessions,
-        steps,
-        attribution,
-        results,
-        kinds,
-        tenancy,
-        outbox,
-        agents_options or AgentsOptions(),
-        budgets=budgets,
-        windows=windows,
-        tool_classes={tool.spec.name: tool.spec.authorization_class for tool in catalog},
-        secret_tools=frozenset(tool.spec.name for tool in catalog if tool.spec.secrets),
+    # The read tool pages through what windows keeps. The spawn tool starts
+    # sub-agents through the agents manager, which is built below on this
+    # catalog, so that edge is bound at call time.
+    catalog = (
+        engine_tools(steps, agent_sessions, reader, windows, lambda: managers.agents) + tool_catalog
     )
+    ToolRegistry(catalog, domain_classes)  # refuses two tools of one name at boot
     # Where the engine touches the world: the session's history for a
     # person's decisions, the events for the audit of each secret a call
     # uses, the workspace and the transport infra chose, and attribution,
     # which answers whose authority each call runs under and the rule of
     # two. What a call keeps of its session's content goes under the
-    # session's key: its input's hash, and its command's record.
+    # session's key: its input's hash, its command's record, and a snapshot
+    # of its workspace, which holds no secret a tool of the catalog may be
+    # given. A workspace base is the tenant's: built once, its claim on the
+    # cache every worker shares, and scanned as a snapshot is.
     # The ceilings: the options' own, the platform's on a protected path,
     # and the product's on its own classes.
     tool_options = tools_options or ToolsOptions()
@@ -1071,6 +1071,14 @@ def build_managers(
         ceilings = PolicyLayer(rules=(*ceilings.rules, PROTECTED_CEILING))
     ceilings = product_ceilings(ceilings, product)
     tool_options = tool_options.model_copy(update={"ceilings": ceilings})
+    snapshots = SnapshotStore(
+        infra.get_buckets(),
+        snapshot_seal or SnapshotSealKeysImpl(session_keys, storage.get_privacy_storage()),
+        privacy.keyed_hash,
+        infra.get_secrets(),
+        injected_secrets(catalog),
+        tool_options.purge_batch,
+    )
     engine_tools_manager = ToolsManagerImpl(
         storage.get_tool_storage(),
         steps,
@@ -1083,6 +1091,18 @@ def build_managers(
         keyed_hash=privacy.keyed_hash,
         record_seal=records,
         attribution=attribution,
+        broker=infra.get_broker(),
+        snapshots=snapshots,
+        bases=WorkspaceBases(
+            infra.get_buckets(),
+            infra.get_workspaces(),
+            infra.get_transport(),
+            infra.get_cache(CacheScope.WORKSPACE_BASE),
+            snapshots.scan,
+            tool_options.base_build_limit,
+            tool_options.purge_batch,
+            utcnow,
+        ),
     )
     # Each workspace is held to its session's pin, refused by this host where
     # it cannot give it, brought up to the session's branch, kept before it
@@ -1139,6 +1159,24 @@ def build_managers(
     )
     if tools_layer is not None:
         tools = tools_layer(tools)
+    # A child's report reaches its parent through windows, which bounds it,
+    # and a fork's copy of its parent's workspace is taken through the tools.
+    agents = AgentsManagerImpl(
+        storage.get_agent_storage(),
+        agent_sessions,
+        steps,
+        attribution,
+        results,
+        kinds,
+        tenancy,
+        outbox,
+        agents_options or AgentsOptions(),
+        budgets=budgets,
+        windows=windows,
+        tool_classes={tool.spec.name: tool.spec.authorization_class for tool in catalog},
+        secret_tools=frozenset(tool.spec.name for tool in catalog if tool.spec.secrets),
+        tools=tools,
+    )
     idempotency = IdempotencyManagerImpl(
         storage.get_idempotency_storage(), idempotency_options or IdempotencyOptions()
     )
@@ -1286,20 +1324,31 @@ def build_managers(
     return managers
 
 
+def injected_secrets(catalog: Iterable[ToolInterface]) -> frozenset[str]:
+    """The secrets a tool of the catalog may have injected into a command, by
+    name: what a workspace's snapshot is scanned for."""
+    return frozenset(
+        use.name for tool in catalog for use in tool.spec.secrets if use.via is SecretVia.INJECTED
+    )
+
+
 def engine_tools(
     steps: StepsManagerInterface,
     sessions: AgentSessionsManagerInterface,
     attachments: AttachmentReaderInterface,
+    windows: WindowsManagerInterface,
     agents: Callable[[], AgentsManagerInterface],
 ) -> tuple[ToolInterface, ...]:
     """The tools the engine ships, offered to a session only when its kind
     names them: asking its person or standing down, writing its plan,
-    reading an attachment by range, starting a sub-agent through the
+    reading an attachment by range, reading a result kept whole outside the
+    window by the handle the window names, starting a sub-agent through the
     agents manager `agents` provides, and waiting on its sub-agents."""
     return (
         AskPersonToolImpl(),
         WritePlanToolImpl(),
         ReadAttachmentToolImpl(steps, attachments),
+        ReadArtifactToolImpl(steps, windows),
         SpawnSubAgentToolImpl(sessions, agents),
         WaitForSubAgentsToolImpl(sessions),
     )

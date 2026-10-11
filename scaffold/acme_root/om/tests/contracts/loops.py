@@ -376,6 +376,7 @@ def loop_over(
     extra: tuple[ToolInterface, ...] = (),
     ceilings: PolicyLayer | None = None,
     sessions: AgentSessionsOptions | None = None,
+    infra: InfraLocalImpl | None = None,
     **roots: Any,
 ) -> Loop:
     """`storage` None is the memory storage, and `owner` None a fresh
@@ -390,9 +391,11 @@ def loop_over(
     its own builds it from the managers and the clock. `models_layer` goes
     to the root as a platform's root hands it in, and the loop takes the
     layer's call credentials. `ceilings` None keeps the platform's, and
-    `sessions` None is the sessions' own options; and `roots` is what else
-    the managers are built with."""
-    infra = InfraLocalImpl(tmp_path)
+    `sessions` None is the sessions' own options. `infra` None is the local
+    root over `tmp_path`; a suite on real Docker hands in one whose
+    workspaces are containers. `roots` is what else the managers are built
+    with."""
+    infra = infra or InfraLocalImpl(tmp_path)
     anthropic = ModelProviderScriptedImpl(ProviderName.ANTHROPIC)
     openai = ModelProviderScriptedImpl(ProviderName.OPENAI)
     providers = ModelProvidersOverImpl(
@@ -461,7 +464,13 @@ def loop_over(
         ),
         signal,
         sink,
-        engine_tools(managers.steps, managers.agent_sessions, reader, lambda: managers.agents)
+        engine_tools(
+            managers.steps,
+            managers.agent_sessions,
+            reader,
+            managers.windows,
+            lambda: managers.agents,
+        )
         + every,
         options,
         clock,

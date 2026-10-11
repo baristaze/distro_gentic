@@ -11,7 +11,10 @@ what the request recorded, under the key of its session.
 
 What a call keeps of its session's content goes under that session's key
 too: its input's hash is keyed by it, and the transport's record of its
-command keeps the output sealed by it."""
+command keeps the output sealed by it. So does a snapshot of its workspace:
+sealed by that key, stored under a hash keyed by it, and named in the
+history by a step (ADR 1027). A sub-agent forked from it keeps its own
+copy, taken by the spawning call (ADR 1030)."""
 
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable, Mapping, Sequence
@@ -22,8 +25,10 @@ from uuid import UUID
 from acme.infra.transports import OutputSink
 from acme.infra.workspaces import IsolationSpec, Workspace
 from acme.om.context import TenantContext
+from acme.om.steps.types.header import WorkspaceSnapshot
 from acme.om.steps.types.step import Step
 from acme.om.tools.registry import ToolRegistry
+from acme.om.tools.tool import TakenSnapshot
 from acme.om.tools.types.call import Gate, JobHandle, JobNotStarted
 from acme.om.tools.types.policy import PolicyLayer, ToolPolicy
 
@@ -49,17 +54,82 @@ class ToolsManagerInterface(ABC):
 
     @abstractmethod
     async def prepare_workspace(
-        self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec
+        self,
+        ctx: TenantContext,
+        session_id: UUID,
+        spec: IsolationSpec,
+        restore: WorkspaceSnapshot | None = None,
     ) -> Workspace:
         """The session's workspace, prepared to its spec, before its loop's
         first model call. `IsolationRefused` when the provider cannot meet
         the spec: never a weaker workspace. A spec of no workspace answers
-        the absent one, which every transport refuses, loudly."""
+        the absent one, which every transport refuses, loudly.
+
+        With `restore`, a snapshot the session's history names, the
+        workspace starts from it, replaced whole. Its bytes are read from
+        the store, opened under the session's key, and held to its hash
+        first: one that is gone, erased with its key, altered, or of
+        another hash loses the workspace (`WorkspaceLost`) before anything
+        starts.
+
+        Without it, a spec whose base has setup starts from the base's
+        snapshot, built first when the tenant has none: its setup runs once,
+        in a workspace of its own with the setup's egress, given no secret
+        and no session's content. A build another prepare is making now
+        refuses this one, and it clears once that build is kept. A setup
+        command that fails refuses it with the command and how it ended
+        (`BaseSetupFailed`), and nothing of the build is kept."""
         ...
 
     @abstractmethod
     async def release_workspace(self, ctx: TenantContext, workspace: Workspace) -> None:
         """Lets the workspace's instance go between loops; its files stay."""
+        ...
+
+    @abstractmethod
+    async def snapshot_workspace(
+        self,
+        ctx: TenantContext,
+        session_id: UUID,
+        workspace: Workspace,
+        *,
+        epoch: int,
+        loop_id: UUID,
+    ) -> Step:
+        """A snapshot of the session's live workspace, kept, and the
+        `snapshotted` step that names it, appended in the loop under
+        `loop_id` and under the run's `epoch`. The loop takes one at the end
+        of each run that holds a workspace kept by snapshots, before it lets
+        the instance go. Every credential the broker attached there is taken
+        back first, and the snapshot holds no value of a secret the
+        catalog's tools may have injected: one that does is refused, and
+        nothing is kept. It is sealed under the session's key and stored
+        under its keyed hash. `SnapshotRefused` before anything runs when
+        the provider cannot snapshot, the workspace holds no instance, as
+        once its run let it go, or the session keeps no content at rest."""
+        ...
+
+    @abstractmethod
+    async def fork_snapshot(
+        self, ctx: TenantContext, child_id: UUID, snapshot_id: UUID, taken: TakenSnapshot
+    ) -> WorkspaceSnapshot:
+        """The child's own copy of its parent's workspace as the spawning
+        call took it (`ToolRuntime.snapshot`): sealed under the child's key
+        and stored as the child's under `snapshot_id`, with what its
+        provider keeps outside the archive, such as a disk, copied under the
+        child's workspace, so neither purge nor revocation of one session
+        reaches the other. What the parent did not keep as its own goes once
+        the copy is kept. It names the parent's workspace as the one it came
+        from. `SnapshotRefused` when the child keeps no content at rest."""
+        ...
+
+    @abstractmethod
+    async def find_snapshot(
+        self, ctx: TenantContext, session_id: UUID, snapshot_id: UUID
+    ) -> WorkspaceSnapshot:
+        """The snapshot under `snapshot_id` that the session's history names:
+        one it took, or one a restore started it from. `NotFound` when no
+        step of it names one, so a session never starts from another's."""
         ...
 
     @abstractmethod
@@ -207,13 +277,24 @@ class ToolsManagerInterface(ABC):
     async def purge_workspace(self, org_id: UUID, session_id: UUID) -> None:
         """Platform-internal: what a session the sweep has claimed for its
         purge left where its tools ran goes with its history: its workspace,
-        files and instance, and the transport's records of how each command
-        there ended. For no principal. A process with no workspace provider
-        or transport holds none of it, and removes nothing."""
+        files and instance, the transport's records of how each command
+        there ended, and every snapshot kept of it. For no principal. A
+        process with no workspace provider or transport holds none of it,
+        and removes nothing."""
+        ...
+
+    @abstractmethod
+    async def erase_snapshots(self, ctx: TenantContext, session_id: UUID) -> None:
+        """What the session's snapshots keep outside their sealed archives,
+        such as a VM's disks, destroyed with the revocation of its key,
+        which leaves every archive noise. A copy kept for another session,
+        such as a fork's, is that session's and stays, and so does the
+        workspace itself, a cache. A process with no workspace provider
+        keeps none of it."""
         ...
 
     @abstractmethod
     async def purge_tenant(self, ctx: TenantContext) -> int:
-        """The sweep, for one tenant past its own retention: its policy. Any
-        other tenant returns 0 and reads nothing."""
+        """The sweep, for one tenant past its own retention: its policy and
+        its workspace bases. Any other tenant returns 0 and reads nothing."""
         ...
