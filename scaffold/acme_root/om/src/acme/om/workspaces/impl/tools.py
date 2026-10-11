@@ -6,8 +6,10 @@ the resource and no weaker place is made. Each refusal, the host's or its
 provider's, clears: a host of the session's placement may give it later, so
 the loop asks again and never ends for one. A prepared workspace is brought
 up to the session's branch; a release first pushes what the workspace
-holds, then lets go only of what its own run holds. Every other operation is
-the engine's, unchanged.
+holds, then lets go only of what its own run holds. A restore, a rewind or a
+fork's, starts the workspace this process prepares, and is lost for one a
+host of the tenant's holds, which no snapshot reaches. Every other
+operation is the engine's, unchanged.
 
 A run is named by its epoch, read from storage as it prepares: a session
 that resumes on this host while the run before it is still being released
@@ -29,12 +31,20 @@ from uuid import UUID
 
 from acme.infra.exceptions import InfraException
 from acme.infra.transports import OutputSink
-from acme.infra.workspaces import IsolationMode, IsolationRefused, IsolationSpec, Workspace
+from acme.infra.workspaces import (
+    IsolationMode,
+    IsolationRefused,
+    IsolationSpec,
+    Workspace,
+    WorkspaceLost,
+)
 from acme.om.context import TenantContext
 from acme.om.steps import StepsManagerInterface
+from acme.om.steps.types.header import WorkspaceSnapshot
 from acme.om.steps.types.step import Step
 from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.tools.registry import ToolRegistry
+from acme.om.tools.tool import TakenSnapshot
 from acme.om.tools.types.call import Gate, JobHandle, JobNotStarted
 from acme.om.tools.types.policy import PolicyLayer, ToolPolicy
 from acme.om.workspaces.manager import WorkspacesManagerInterface
@@ -100,29 +110,43 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
     # The workspace.
 
     async def prepare_workspace(
-        self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec
+        self,
+        ctx: TenantContext,
+        session_id: UUID,
+        spec: IsolationSpec,
+        restore: WorkspaceSnapshot | None = None,
     ) -> Workspace:
         # Marked before the first await, and until the workspace is held: a
         # release that lands meanwhile leaves the instance to this run.
         self._preparing[session_id] = self._preparing.get(session_id, 0) + 1
         try:
-            return await self._prepare(ctx, session_id, spec)
+            return await self._prepare(ctx, session_id, spec, restore)
         finally:
             left = self._preparing.pop(session_id) - 1
             if left:
                 self._preparing[session_id] = left
 
     async def _prepare(
-        self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec
+        self,
+        ctx: TenantContext,
+        session_id: UUID,
+        spec: IsolationSpec,
+        restore: WorkspaceSnapshot | None,
     ) -> Workspace:
         pinned = await self._workspaces.pinned(ctx, session_id, spec)
         if pinned.mode is IsolationMode.NONE:
-            return await self._inner.prepare_workspace(ctx, session_id, pinned)
+            return await self._inner.prepare_workspace(ctx, session_id, pinned, restore)
         # The run that prepares it took its epoch just before: what this
         # host holds for the session is held under it.
         epoch = (await self._steps.get_cursor(ctx, session_id)).epoch
         if self._placed is not None:
             hosted = await self._placed.held_on_host(ctx, session_id, pinned)
+            if hosted is not None and restore is not None:
+                # Its host made it, and no snapshot reaches the host: the
+                # restore is lost, never met by the host's workspace instead.
+                raise WorkspaceLost(
+                    f"snapshot {restore.id} cannot reach the host that holds the workspace"
+                )
             if hosted is not None:
                 # Its host made it to the pin and holds it; the checkout is
                 # brought up to the session's branch there.
@@ -139,7 +163,7 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         if pinned.mode is IsolationMode.HOST:
             self._directories[session_id] = epoch
         try:
-            workspace = await self._inner.prepare_workspace(ctx, session_id, pinned)
+            workspace = await self._inner.prepare_workspace(ctx, session_id, pinned, restore)
         except InfraException as refused:
             self._directories.pop(session_id, None)
             if isinstance(refused, IsolationRefused) and not refused.clears:
@@ -191,6 +215,29 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
             if self._directories.get(workspace.id) == epoch:
                 del self._directories[workspace.id]
 
+    async def snapshot_workspace(
+        self,
+        ctx: TenantContext,
+        session_id: UUID,
+        workspace: Workspace,
+        *,
+        epoch: int,
+        loop_id: UUID,
+    ) -> Step:
+        return await self._inner.snapshot_workspace(
+            ctx, session_id, workspace, epoch=epoch, loop_id=loop_id
+        )
+
+    async def fork_snapshot(
+        self, ctx: TenantContext, child_id: UUID, snapshot_id: UUID, taken: TakenSnapshot
+    ) -> WorkspaceSnapshot:
+        return await self._inner.fork_snapshot(ctx, child_id, snapshot_id, taken)
+
+    async def find_snapshot(
+        self, ctx: TenantContext, session_id: UUID, snapshot_id: UUID
+    ) -> WorkspaceSnapshot:
+        return await self._inner.find_snapshot(ctx, session_id, snapshot_id)
+
     def _taken_here(self, session_id: UUID, epoch: int) -> bool:
         """Whether a later run in this process prepares the session's
         workspace or holds it. One on another host, or one that never
@@ -204,6 +251,9 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         self._held.let_go(session_id)
         self._directories.pop(session_id, None)
         self._hosted.discard(session_id)
+
+    async def erase_snapshots(self, ctx: TenantContext, session_id: UUID) -> None:
+        await self._inner.erase_snapshots(ctx, session_id)
 
     # The engine's, unchanged.
 
