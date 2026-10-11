@@ -104,8 +104,8 @@ def refuse_unsafe(settings: InfraSettings) -> None:
         )
     if settings.workspace_backend == "vm" and settings.machines_backend == "ec2":
         raise UnsafeConfiguration(
-            "ACME_WORKSPACE_BACKEND=vm is refused with ACME_MACHINES_BACKEND=ec2: a machine of "
-            "the cloud takes no command from outside, and its host pulls"
+            "ACME_WORKSPACE_BACKEND=vm is refused with ACME_MACHINES_BACKEND=ec2: "
+            "a machine of the cloud takes no command from outside, and its host pulls"
         )
     if not settings.is_cloud_environment:
         return
