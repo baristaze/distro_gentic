@@ -1,15 +1,19 @@
-"""Workspace bases on real Docker, kept on the stack's MinIO (ADR 1028). The
-registry a setup reaches is a small HTTP server on this host, which counts
-each request: the setup reaches it through the shared bridge, by the host's
-name where Docker gives one and by the bridge's gateway where it does not.
+"""Workspace bases on real Docker, kept on the stack's MinIO (ADR 1028), as
+the platform serves them: each case's base is the environment its session's
+project names, which a kind that takes it pins when the session is created
+(ADR 2051). The registry a setup reaches is a small HTTP server on this
+host, which counts each request: the setup reaches it through the shared
+bridge, by the host's name where Docker gives one and by the bridge's
+gateway where it does not.
 
 A base is built once and every workspace on it starts from the same
 snapshot; a changed command builds another. The setup reaches the registry
 and the workspace, with no egress, does not. The setup's environment holds
-no platform credential, no tenant's secret, and no session's content. A
-setup command that fails keeps nothing, and the next prepare builds again.
-A setup installs a system package from the image's own package mirror, and
-a workspace on its base runs the program with every capability dropped.
+no platform credential, no tenant's secret, no session's content, and
+nothing of its project. A setup command that fails keeps nothing, and the
+next prepare builds again. A setup installs a system package from the
+image's own package mirror, and a workspace on its base runs the program
+with every capability dropped.
 
 Skipped, with the reason, where no Docker runs."""
 
@@ -28,6 +32,7 @@ from uuid import UUID
 import aioboto3
 import pytest
 from contracts.loops import ASSISTANT, Loop, loop_over
+from contracts.workspaces import ProjectsTwin
 
 from acme.infra.buckets import Buckets, BucketsInterface
 from acme.infra.buckets.s3 import BucketsS3Impl
@@ -47,6 +52,7 @@ from acme.infra.workspaces import (
     WorkspaceProviderInterface,
 )
 from acme.infra.workspaces.container import WorkspaceContainerImpl
+from acme.om.platform_agents.kinds import ENGINEER
 from acme.om.tools.impl.bases import BUCKET, PREFIX, base_key
 
 IMAGE = "python:3.14-slim"
@@ -134,12 +140,14 @@ def docker_runs() -> bool:
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.skipif(not docker_runs(), reason="needs a local Docker"),
-    pytest.mark.skip(
-        reason="each case prepares a base its session's pin does not hold, and the platform "
-        "holds every prepare to the pin: a base reaches a workspace through its kind"
-    ),
     pytest.mark.usefixtures("migrated"),
 ]
+
+SEALED = IsolationSpec(mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode=EgressMode.NONE))
+TAKES = ASSISTANT.model_copy(update={"name": ENGINEER, "version": 8, "isolation": SEALED})
+"""A kind the platform names among those that take their project's
+environment: the engineer at version 8, here with the assistant's loop, in
+a container with no egress."""
 
 
 class Spied(WorkspaceContainerImpl):
@@ -221,14 +229,27 @@ async def minio() -> AsyncIterator[BucketsS3Impl]:
 
 
 class OnDocker:
+    """A tenant whose sessions belong to one project, whose environment each
+    case names."""
+
     def __init__(self, tmp_path: Path, buckets: BucketsS3Impl) -> None:
         self.infra = InfraOnDocker(tmp_path, buckets)
-        self.loop: Loop = loop_over(tmp_path, kinds=(ASSISTANT,), infra=self.infra)
+        self.projects = ProjectsTwin(repository=None)
+        self.loop: Loop = loop_over(
+            tmp_path, kinds=(TAKES,), infra=self.infra, workspace_projects=self.projects
+        )
         self.sessions: list[UUID] = []
 
-    async def prepare(self, spec: IsolationSpec) -> Workspace:
-        session_id = await self.loop.start(ASSISTANT.name)
+    async def start(self, spec: IsolationSpec) -> UUID:
+        """A session of the project once it names `spec`'s base as its
+        environment: the session pins it."""
+        self.projects.environment = spec.base
+        session_id = await self.loop.start(TAKES.name)
         self.sessions.append(session_id)
+        return session_id
+
+    async def prepare(self, spec: IsolationSpec) -> Workspace:
+        session_id = await self.start(spec)
         return await self.loop.managers.tools.prepare_workspace(self.loop.owner, session_id, spec)
 
     async def kept(self) -> list[str]:
@@ -317,17 +338,16 @@ async def test_the_setups_environment_holds_no_credential_and_no_session_content
     monkeypatch.setenv("ACME_PLATFORM_CREDENTIAL", credential)
     loop = on_docker.loop
     await on_docker.infra.get_secrets().put(loop.owner.org_id, TOKEN, secret)
-    session_id = await loop.start(ASSISTANT.name)
-    on_docker.sessions.append(session_id)
+    spec = on_base("env > /opt/setup-env")
+    session_id = await on_docker.start(spec)
     await loop.say(session_id, content)
 
-    workspace = await loop.managers.tools.prepare_workspace(
-        loop.owner, session_id, on_base("env > /opt/setup-env")
-    )
+    workspace = await loop.managers.tools.prepare_workspace(loop.owner, session_id, spec)
 
     code, environment = await inside(workspace, "cat", "/opt/setup-env")
     assert code == 0 and "PATH=" in environment, "the image's own environment"
-    for held in (credential, secret, content, "ACME_", TOKEN):
+    project = str(on_docker.projects.project_id)
+    for held in (credential, secret, content, "ACME_", TOKEN, project, str(session_id)):
         assert held not in environment
 
 
