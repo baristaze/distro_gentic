@@ -217,12 +217,17 @@ def by_environment(request: ExecutionRequest) -> dict[str, ExecutionRequest]:
 # The baseline.
 
 
-def baseline(validations: Sequence[Validation], base: str) -> tuple[Validation, ...] | str:
+def baseline(
+    validations: Sequence[Validation], base: str, head: str | None
+) -> tuple[Validation, ...] | str:
     """The baselines that came first, or why none did. A baseline counts
     when it ran at `base`, lists the runs it wrote, and was taken before
-    the session validated any change from `base`, at any head. The one
-    rule the result gate and the acceptance harness both hold: a baseline
-    comes first, so "fixed" has something to be compared with."""
+    the latest validation at `head`: the base, measured before the change
+    it is compared with. One taken after the head was validated counts
+    once the head is validated again, and with nothing validated at the
+    head yet, every baseline at the base came first. The one rule the
+    result gate and the acceptance harness both hold: a baseline comes
+    first, so "fixed" has something to be compared with."""
     taken = [
         validation
         for validation in validations
@@ -232,21 +237,19 @@ def baseline(validations: Sequence[Validation], base: str) -> tuple[Validation, 
     ]
     if not taken:
         return f"no baseline ran at the base {base}"
-    first_change = min(
+    last = max(
         (
             validation.created_at
             for validation in validations
-            if validation.purpose is RunPurpose.VALIDATION and validation.source == base
+            if validation.purpose is RunPurpose.VALIDATION and validation.version == head
         ),
         default=None,
     )
     before = tuple(
-        validation
-        for validation in taken
-        if first_change is None or validation.created_at <= first_change
+        validation for validation in taken if last is None or validation.created_at <= last
     )
     if not before:
-        return "every baseline ran after the change was validated"
+        return f"every baseline at the base {base} ran after the head {head} was validated"
     return before
 
 
@@ -259,7 +262,7 @@ class Reading:
     work product as its system reports it (or what could not be read),
     the project's policy, every validation of the session at the
     delivered head with every run each one lists, and the session's
-    oldest validations, where a baseline that came first is."""
+    validations at the delivery's base, where its baselines are."""
 
     cited: tuple[ExecutionRecord, ...] = ()
     unresolved: tuple[UUID, ...] = ()
@@ -268,7 +271,7 @@ class Reading:
     policy: ValidationPolicy | None = None
     validations: tuple[Validation, ...] = ()
     records: tuple[ExecutionRecord, ...] = ()
-    earliest: tuple[Validation, ...] = ()
+    at_base: tuple[Validation, ...] = ()
 
 
 def refused(reason: str) -> Verdict:
@@ -319,12 +322,18 @@ def judge(claim: Claim, reading: Reading) -> Verdict:
     needed = required(policy, delivery.changed)
     if not needed:
         return accepted(LoopOutcome.INCONCLUSIVE)
-    first = baseline(reading.earliest, delivery.base)
+    first = baseline((*reading.at_base, *reading.validations), delivery.base, delivery.head)
     if isinstance(first, str):
+        # With no head validation named, any baseline at the base came first.
+        taken = not isinstance(baseline(reading.at_base, delivery.base, None), str)
+        step = (
+            "Validate the head again"
+            if taken
+            else "Take one with validate, baseline set, then validate the head again"
+        )
         return refused(
-            f"no success counts without a baseline taken before the change: {first}. "
-            "A baseline is taken with validate, baseline set, before a change from the base "
-            "is validated"
+            "a success counts only when a baseline at its base ran before the head was "
+            f"validated: {first}. {step}"
         )
     if not reading.validations:
         return refused(

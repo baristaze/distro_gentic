@@ -15,7 +15,7 @@ from acme.om.projects.policies import SessionProjectsInterface
 
 class ResultGateOptions(Platform):
     max_cited: int = 500  # ids one result may cite
-    max_validations: int = 100  # validations at one head, and the session's first, the gate reads
+    max_validations: int = 100  # validations at one head, and at the base, the gate reads
     max_runs: int = 100_000  # runs of those validations the gate reads
 
 
@@ -24,10 +24,11 @@ class ResultGateEvidenceImpl(ResultGateInterface):
     cites, the session's work product from the system that keeps it, the
     policy of the project `projects` answers for the session, never one the
     work product names, every validation at the delivered head with every
-    run it lists, and the session's oldest validations, and judges them
-    (`rules.judge`). A baseline comes first, so the one that counts is
-    among the oldest; one taken past them counts for nothing. What it
-    cannot read in full it does not judge: it refuses."""
+    run it lists, and the session's validations at the delivery's base,
+    where its baselines are, and judges them (`rules.judge`). Of those at
+    the base it reads the oldest, as many as `max_validations`: when any
+    baseline came first, the earliest did. What it cannot read in full it
+    does not judge: it refuses."""
 
     def __init__(
         self,
@@ -83,8 +84,8 @@ class ResultGateEvidenceImpl(ResultGateInterface):
             for validation in found
             if validation.purpose is RunPurpose.VALIDATION and validation.project == key
         )
-        oldest = await self._storage.read_validations(ctx.org_id, session_id, None, bound)
-        earliest = tuple(validation for validation in oldest if validation.project == key)
+        based = await self._storage.read_validations(ctx.org_id, session_id, delivery.base, bound)
+        at_base = tuple(validation for validation in based if validation.project == key)
         records = await self._storage.read_validation_records(
             ctx.org_id,
             session_id,
@@ -102,5 +103,5 @@ class ResultGateEvidenceImpl(ResultGateInterface):
             policy=policy,
             validations=validations,
             records=tuple(records),
-            earliest=earliest,
+            at_base=at_base,
         )

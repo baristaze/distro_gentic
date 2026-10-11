@@ -214,7 +214,7 @@ ENGINEER_SPLITS = (
 splits off runs as analysis, under analysis's share, and not as another
 engineer."""
 
-ENGINEER_KIND = ENGINEER_V4.model_copy(
+ENGINEER_V5 = ENGINEER_V4.model_copy(
     update={
         "version": 5,
         "tools": (
@@ -244,6 +244,20 @@ ENGINEER_KIND = ENGINEER_V4.model_copy(
             ToolClass.SPAWN,
         ),
     }
+)
+"""The engineer before it took a baseline again when its base moved: kept
+while a session may still run it."""
+
+BASE_MOVES = (
+    "Take a baseline again whenever your base moves, as when your branch takes the default "
+    "branch in or is cut again, then validate your head again: a success counts only when a "
+    "baseline at its base ran before its head was validated."
+)
+"""The engineer's layer on a base that moves, so feedback after its pull
+request merged, on a branch cut again, can still end in a success."""
+
+ENGINEER_KIND = ENGINEER_V5.model_copy(
+    update={"version": 6, "prompts": (*ENGINEER_V5.prompts, BASE_MOVES)}
 )
 """The engineer. It starts sub-agents and waits on them, and since it
 delivers through its result tool, a product's kind may spawn it too, under
@@ -407,6 +421,7 @@ SHIPPED: tuple[AgentKind, ...] = (
     ENGINEER_V2,
     ENGINEER_V3,
     ENGINEER_V4,
+    ENGINEER_V5,
     ENGINEER_KIND,
     ANALYSIS_V1,
     ANALYSIS_V2,

@@ -171,16 +171,53 @@ async def test_a_success_with_no_baseline_first_is_refused() -> None:
     bare = await Case.start(baseline=False)
     await bare.validate()
     # The validation passed at the head, and no baseline ran at the base:
-    # the agent reads why, and how a baseline is taken.
+    # the agent reads why, how a baseline is taken, and what comes after.
     verdict = await bare.submit()
-    assert refused(verdict, "no baseline ran at the base base0", "validate, baseline set")
+    assert refused(
+        verdict,
+        "no baseline ran at the base base0",
+        "Take one with validate, baseline set, then validate the head again",
+    )
     # The same submission, from a session that took its baseline first.
     first = await Case.start()
     await first.validate()
     assert succeeded(await first.submit())
-    # A baseline taken once the change was validated came too late.
+    # A baseline taken after the head was validated counts once the head is
+    # validated again.
     await bare.baseline()
-    assert refused(await bare.submit(), "every baseline ran after the change was validated")
+    verdict = await bare.submit()
+    assert refused(
+        verdict,
+        "every baseline at the base base0 ran after the head c0ffee was validated",
+        "Validate the head again",
+    )
+    await bare.validate()
+    assert succeeded(await bare.submit())
+
+
+async def test_a_session_whose_base_moved_takes_a_baseline_there_and_succeeds_again() -> None:
+    case = await Case.start()
+    await case.validate()
+    assert succeeded(await case.submit())
+    # Its pull request merged and its branch was cut again, or it took the
+    # default branch in: the base and the head moved. A validation at the new
+    # head, before any baseline at the new base, does not count.
+    case.deliver(base="base1", head="d00d")
+    await case.validate()
+    verdict = await case.submit()
+    assert refused(
+        verdict,
+        "no baseline ran at the base base1",
+        "Take one with validate, baseline set, then validate the head again",
+    )
+    await case.baseline()
+    assert refused(
+        await case.submit(),
+        "every baseline at the base base1 ran after the head d00d was validated",
+        "Validate the head again",
+    )
+    await case.validate()
+    assert succeeded(await case.submit())
 
 
 async def test_a_validation_counts_only_at_the_check_versions_the_policy_declares_now() -> None:

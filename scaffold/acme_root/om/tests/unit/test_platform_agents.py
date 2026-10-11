@@ -206,6 +206,7 @@ def test_every_shipped_agent_is_a_profile_that_sets_its_powers() -> None:
         ("engineer", 3),
         ("engineer", 4),
         ("engineer", 5),
+        ("engineer", 6),
         ("analysis", 1),
         ("analysis", 2),
         ("analysis", 3),
@@ -275,6 +276,14 @@ def test_the_engineers_layers_name_analysis_for_a_question_and_the_engineer_for_
     assert f'your own kind, "{kinds.ENGINEER}" (or leave kind out)' in layers
     assert "only for work that changes code" in layers
     assert ANALYSIS_KIND.share == ANALYSIS_SHARE
+
+
+def test_the_engineer_takes_a_baseline_again_when_its_base_moves() -> None:
+    """A success counts only when a baseline at its base ran before its head
+    was validated, so an engineer whose base moved takes one there."""
+    layers = " ".join(ENGINEER_KIND.prompts)
+    assert "Take a baseline with validate before you change anything" in layers
+    assert "Take a baseline again whenever your base moves" in layers
 
 
 def test_analysis_waits_for_every_report_before_it_answers() -> None:

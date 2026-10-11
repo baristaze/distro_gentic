@@ -223,10 +223,11 @@ uncertainties, and the runs each claim cites. It refuses a success that
 changed the work product unless a baseline came first and the validation
 policy passed at the committed head, with a clean tree, on results its
 executor wrote. A baseline comes first when it ran at the base before
-any change from it was validated, by the one rule acceptance holds too.
-A run counts only at the version of its check the policy declares now.
-A run that validated nothing gets no exemption; it is inconclusive. A
-failure with an evidence-backed explanation is a result.
+the head was validated, by the one rule acceptance holds too; a moved
+base asks for another. A run counts only at the version of its check the
+policy declares now. A run that validated nothing gets no exemption; it
+is inconclusive. A failure with an evidence-backed explanation is a
+result.
 
 **Source.** Evidence, The Result Gate; What Closes a Loop.
 
@@ -239,7 +240,8 @@ accepted at a head other than the validated one, with a dirty tree, or
 on results the executor did not write; a success accepted with no
 baseline that came first, or on runs at a check version the policy no
 longer declares; a baseline rule the gate and acceptance each hold a
-copy of; a run that validated nothing recorded as succeeded; a claim
+copy of, or one that leaves a session whose base moved no way to
+succeed; a run that validated nothing recorded as succeeded; a claim
 that cites no run.
 
 **Severity.** high

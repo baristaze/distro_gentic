@@ -102,12 +102,13 @@ def judge_chain(scenario: Scenario, chain: Chain) -> tuple[Break, ...]:
 def _baseline(scenario: Scenario, chain: Chain) -> list[Break]:
     """A baseline that came first at the scenario's base, by the rule the
     result gate holds too (`rules.baseline`), in which a visible check did
-    not pass: the defect, reproduced before a fix was tried."""
+    not pass: the defect, reproduced before the fix was validated."""
     delivery = chain.delivery
     if delivery is not None and delivery.base != scenario.base:
         reason = f"the work started from {delivery.base}, not the scenario's base {scenario.base}"
         return [Break(link=Link.BASELINE, reason=reason)]
-    before = baseline(chain.validations, scenario.base)
+    head = delivery.head if delivery is not None else None
+    before = baseline(chain.validations, scenario.base, head)
     if isinstance(before, str):
         return [Break(link=Link.BASELINE, reason=before)]
     listed = {run for validation in before for run in validation.records}

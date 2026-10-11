@@ -156,19 +156,23 @@ async def test_the_workspace_holds_no_file_of_the_hidden_suite_and_the_verdict_s
 # The other links.
 
 
-async def test_a_baseline_taken_after_an_earlier_head_was_validated_breaks_the_chain() -> None:
-    # The session validates a first head, then takes its baseline, then
-    # validates the head it delivers: the baseline came after a change.
+async def test_a_baseline_counts_only_when_it_ran_before_the_validation_the_result_cites() -> None:
+    # The session validates the head it delivers, then takes its baseline:
+    # the baseline came after the validation the result cites.
     run = await scripted()
-    run.deliver("cafe01", ("src/export.py",))
-    await run.evidence.manager.validate(run.ctx, run.session, RunPurpose.VALIDATION)
+    first = await run.change()
     await run.baseline()
-    validation = await run.change()
-    verdict = await run.judge(Result(claim=Claim.SUCCEEDED, evidence=(validation.id,)))
+    verdict = await run.judge(Result(claim=Claim.SUCCEEDED, evidence=(first.id,)))
     assert verdict.broken() == {Link.BASELINE, Link.VALIDATION}
     reasons = {found.link: found.reason for found in verdict.breaks}
-    assert "every baseline ran after the change was validated" in reasons[Link.BASELINE]
-    assert "every baseline ran after the change was validated" in reasons[Link.VALIDATION]
+    late = f"every baseline at the base {BASE} ran after the head {HEAD} was validated"
+    assert late in reasons[Link.BASELINE]
+    assert late in reasons[Link.VALIDATION]
+    # The head validated again, the baseline came before the validation cited.
+    again = await run.change()
+    verdict = await run.judge(Result(claim=Claim.SUCCEEDED, evidence=(again.id,)))
+    assert Link.BASELINE not in verdict.broken()
+    assert Link.VALIDATION not in verdict.broken()
 
 
 async def test_any_valid_fix_passes_and_a_hidden_failure_does_not() -> None:

@@ -149,33 +149,42 @@ def a_validation(
     )
 
 
-def test_a_baseline_counts_when_it_ran_first_at_the_base_and_lists_its_runs() -> None:
+def test_a_baseline_counts_when_it_ran_at_the_base_before_the_head_was_validated() -> None:
     first = a_validation(RunPurpose.BASELINE, "base0", 1)
     change = a_validation(RunPurpose.VALIDATION, "c0ffee", 2)
-    assert baseline((first, change), "base0") == (first,)
-    assert baseline((first,), "base0") == (first,), "nothing validated yet"
+    assert baseline((first, change), "base0", "c0ffee") == (first,)
+    assert baseline((first,), "base0", "c0ffee") == (first,), "nothing validated yet"
+    assert baseline((first, change), "base0", None) == (first,), "no head named"
     none = "no baseline ran at the base base0"
-    assert baseline((change,), "base0") == none
-    assert baseline((a_validation(RunPurpose.BASELINE, "other", 1), change), "base0") == none
-    assert (
-        baseline((a_validation(RunPurpose.BASELINE, "base0", 1, runs=0), change), "base0") == none
-    )
+    assert baseline((change,), "base0", "c0ffee") == none
+    elsewhere = a_validation(RunPurpose.BASELINE, "other", 1)
+    assert baseline((elsewhere, change), "base0", "c0ffee") == none
+    empty = a_validation(RunPurpose.BASELINE, "base0", 1, runs=0)
+    assert baseline((empty, change), "base0", "c0ffee") == none
+    # A baseline taken after the head was validated counts once the head is
+    # validated again.
     late = a_validation(RunPurpose.BASELINE, "base0", 3)
-    assert baseline((change, late), "base0") == "every baseline ran after the change was validated"
+    after = "every baseline at the base base0 ran after the head c0ffee was validated"
+    assert baseline((change, late), "base0", "c0ffee") == after
+    again = a_validation(RunPurpose.VALIDATION, "c0ffee", 4)
+    assert baseline((change, late, again), "base0", "c0ffee") == (late,)
 
 
-def test_a_change_from_another_base_leaves_a_baseline_first_at_this_one() -> None:
-    # The branch took the default branch in, so its base moved: a change
-    # validated from the old base does not make the new base's baseline late.
-    old = a_validation(RunPurpose.VALIDATION, "c0ffee", 1, source="base0")
-    moved = a_validation(RunPurpose.BASELINE, "base1", 2, source="base1")
-    change = a_validation(RunPurpose.VALIDATION, "d00d", 3, source="base1")
-    assert baseline((old, moved, change), "base1") == (moved,)
-    late = a_validation(RunPurpose.BASELINE, "base1", 4, source="base1")
+def test_a_base_that_moved_takes_its_own_baseline_before_its_head_is_validated() -> None:
+    # The branch took the default branch in, or was cut again, so its base
+    # and its head moved: the old base's baseline counts for nothing at the
+    # new one, and a change validated from the old base leaves no baseline late.
+    old = a_validation(RunPurpose.BASELINE, "base0", 1)
+    first = a_validation(RunPurpose.VALIDATION, "c0ffee", 2)
+    moved = a_validation(RunPurpose.VALIDATION, "d00d", 3, source="base1")
+    assert baseline((old, first, moved), "base1", "d00d") == "no baseline ran at the base base1"
+    taken = a_validation(RunPurpose.BASELINE, "base1", 4, source="base1")
     assert (
-        baseline((old, change, late), "base1")
-        == "every baseline ran after the change was validated"
+        baseline((old, first, moved, taken), "base1", "d00d")
+        == "every baseline at the base base1 ran after the head d00d was validated"
     )
+    again = a_validation(RunPurpose.VALIDATION, "d00d", 5, source="base1")
+    assert baseline((old, first, moved, taken, again), "base1", "d00d") == (taken,)
 
 
 def test_a_policy_is_well_formed() -> None:

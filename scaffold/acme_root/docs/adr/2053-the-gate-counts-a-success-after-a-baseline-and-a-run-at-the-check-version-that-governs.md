@@ -17,32 +17,39 @@ The baseline's rule lived in acceptance alone
 ## Decision
 
 - **One baseline rule.** `rules.baseline` holds it: a baseline counts
-  when it ran at the base, lists the runs it wrote, and was taken before
-  the session validated any change from that base. The gate and
+  when it ran at the delivery's base, lists the runs it wrote, and was
+  taken before the latest validation at the head. The gate and
   acceptance both call it, so a chain acceptance breaks for its baseline
   the gate refuses too, in the same words.
-- **From that base.** The base is where the branch meets the default
-  branch, and it moves when the branch takes the default in. Counted
-  against every change the session ever validated, a session whose base
-  moved could never succeed again. A baseline at the new base, taken
-  before a change from it is validated, counts.
-- **The gate reads the session's oldest validations** for it, as many
-  as `max_validations`. A baseline comes first, so the one that counts
-  is among them; one taken past them counts for nothing. Its read at the
-  head is unchanged.
+- **Before the validation it is compared with.** A baseline measures the
+  base before the change it is compared with, and the validation at the
+  head is that change's measure. So a baseline taken after the head was
+  validated is not wasted: once the head is validated again, it came
+  first. Counted against the first change the session validated, a
+  session whose base moved, on a rebuild after its pull request merged
+  or when it takes the default branch in, could never succeed again.
+- **The refusal says what to do.** With no baseline at the base, the
+  agent takes one, then validates the head again; with one taken after
+  the head was validated, it validates the head again. The validate
+  tool, the engineer's prompt, and the notice of a rebuilt branch say to
+  take a baseline before validating a change, and again whenever the
+  base moves.
+- **The gate reads the session's validations at the base** for it, the
+  oldest as many as `max_validations`, beside its read at the head.
 - **A run counts at the check version the policy declares now.** A run
   at another version measured a check that no longer governs, and counts
   for nothing, passed or failed. When every run at the head of a check
   the change asks for is at another version, the gate says so, and asks
   for the head to be validated again.
-- **A baseline holds across a check's new version.** It is taken once,
-  before the change. Asking for another at the new version would leave a
-  session no way to succeed once its policy moved.
+- **A baseline holds across a check's new version.** It measures the
+  base, which a new check version does not move. Asking for another at
+  the new version would cost a session a run that shows nothing new.
 
 ## Consequences
 
-- A session that validated a change before its baseline ends failed or
-  inconclusive, never succeeded.
+- A session that validated its head before its baseline, or whose base
+  moved, takes a baseline at its base and validates the head again
+  before a success counts.
 - A check whose version the policy changes is unmet until a validation
   runs it at the head, as a check the policy adds is.
 - A failed run at a check's old version no longer holds back a pass at

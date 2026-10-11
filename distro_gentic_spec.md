@@ -597,11 +597,11 @@ the uncertainties, and the runs each claim cites. It refuses a success
 that changed the work product unless a baseline came first and the
 validation policy passed at the committed head, with a clean tree, on
 results its executor wrote. A baseline comes first when it ran at the
-base before any change from it was validated; acceptance holds the same
-rule. A run counts only at the version of its check the policy declares
-now, so a policy that changes a check asks for the head to be validated
-again. A run that validated nothing gets no exemption; it is
-inconclusive.
+delivery's base before its head was validated; acceptance holds the same
+rule, and a session whose base moves takes one again. A run counts only
+at the version of its check the policy declares now, so a policy that
+changes a check asks for the head to be validated again. A run that
+validated nothing gets no exemption; it is inconclusive.
 
 ### The Results Contract
 
