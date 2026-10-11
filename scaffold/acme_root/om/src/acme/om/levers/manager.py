@@ -23,7 +23,8 @@ class LeversManagerInterface(ABC):
         until)`, best first: for each, how often the sessions that reached
         it stalled against those that did not, and the sessions behind the
         figure. A session's stall is read from its steps' headers, never
-        from what a step says. Requires `OperatorPermission.READ`, and is
+        from what a step says, and a lever is answered by its kind, id, and
+        version, never by its name or its slug. Requires `OperatorPermission.READ`, and is
         logged with the tenant and the operator. A window that does not
         end after it starts is `ValidationFailed`."""
         ...

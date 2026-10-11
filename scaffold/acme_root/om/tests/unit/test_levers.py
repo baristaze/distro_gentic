@@ -1,8 +1,10 @@
 """Levers, as the platform reads them: each check finds its defect in a
-playbook and none in a plain one; a publish with a finding lands and keeps
+playbook and none in a plain one, nor in quoted words, a playbook's
+gates, or a thing not to stop; a publish with a finding lands and keeps
 it with the version; and a reading of recorded sessions names the lever
-that came before the stalls, with the sessions behind it, and never one
-every session reached."""
+that came before the stalls, by its kind, id, and version alone, with the
+sessions behind it, counts an entry an agent read by its slug, and never
+names one every session reached."""
 
 from datetime import timedelta
 from pathlib import Path
@@ -43,6 +45,7 @@ from acme.om.levers.types.lever import (
     SessionLevers,
     SpinTally,
 )
+from acme.om.playbooks.impl.manager import PlaybooksManagerImpl, PlaybooksOptions
 from acme.om.playbooks.rules import skill_md
 from acme.om.playbooks.types.playbook import (
     Playbook,
@@ -71,7 +74,7 @@ DEFECTS = {
     LeverCheck.REPEATED_PHRASE: PLAIN
     + "\n".join("The source of truth decides." for _ in range(REPEAT_FLOOR + 1)),
     LeverCheck.CONTRADICTION: PLAIN + "\nYou must call the vendor first.\nNever call the vendor.",
-    LeverCheck.UNKNOWN_NAME: PLAIN + "\nThen run `run_tests` before you answer.",
+    LeverCheck.UNKNOWN_NAME: PLAIN + "\nThen run the `run_tests` tool before you answer.",
     LeverCheck.UNBOUNDED_RETRY: PLAIN + "\nKeep retrying the lookup until it answers.",
     LeverCheck.PAST_SESSION_BOUND: PLAIN + "\n" + " ".join(f"r{n}" for n in range(3_000)),
 }
@@ -128,6 +131,70 @@ def test_a_gate_on_a_tool_no_kind_holds_is_a_finding() -> None:
 def test_a_reach_of_no_kind_judges_no_name() -> None:
     gated = playbook(DEFECTS[LeverCheck.UNKNOWN_NAME])
     assert checked(skill_md(gated), LeverReach(), bound=BOUND, tools=("deploy",)) == ()
+
+
+QUOTED = """## Steps
+
+1. Set `DATABASE_URL` and `max_retries` before the migration.
+2. Run the migration, and read its total with the `lookup` tool.
+
+## Forbidden
+
+Do not stop the database during the migration.
+"""
+"""A playbook a person writes: an environment variable and a configuration
+key in backticks, and a thing not to stop."""
+
+GATED = ("deploy", "publish", "push", "merge", "tag", "rollback")
+"""Six tools, each gated for a person's approval."""
+
+
+def publisher(platform: Wired) -> PlaybooksManagerImpl:
+    """The platform's playbooks, against kinds that hold the six tools."""
+    managers, storage = platform.managers, platform.storage
+    return PlaybooksManagerImpl(
+        storage.get_playbook_storage(),
+        managers.agent_sessions,
+        storage.get_agent_session_storage(),
+        managers.agents,
+        managers.tenancy,
+        managers.outbox,
+        PlaybooksOptions(session_bound=BOUND),
+        REACH.model_copy(update={"tools": REACH.tools | set(GATED)}),
+    )
+
+
+async def test_quoted_words_six_gates_and_a_thing_not_to_stop_are_no_findings(
+    platform: Wired,
+) -> None:
+    author = platform.person(Role.MEMBER)
+    gates = tuple(PlaybookGate(tool=tool, decision=Decision.APPROVE) for tool in GATED)
+    draft = PlaybookDraft(
+        name="migrate-the-records", description="Migrate the records.", body=QUOTED, gates=gates
+    )
+    published = await publisher(platform).publish(author, draft)
+    assert published.findings == ()
+    # Not to stop at all is still an instruction with no stopping condition.
+    for told in ("Do not stop until the deploy is green.", "Never give up."):
+        (found,) = checked(told, REACH)
+        assert found.check is LeverCheck.UNBOUNDED_RETRY
+
+
+async def test_the_checks_read_the_persons_words_and_the_size_the_whole_brief(
+    platform: Wired,
+) -> None:
+    author = platform.person(Role.MEMBER)
+    gates = tuple(PlaybookGate(tool=tool, decision=Decision.APPROVE) for tool in GATED)
+    body = (PLAIN + "\n" + " ".join(f"r{n}" for n in range(2_000)))[: BOUND - 100]
+    draft = PlaybookDraft(name="long-brief", description="A long brief.", body=body, gates=gates)
+    published = await publisher(platform).publish(author, draft)
+    # The person's words fit; the brief a session receives, with its
+    # frontmatter and its gates, does not.
+    brief = len(skill_md(published))
+    assert len(f"{draft.description}\n\n{body}") <= BOUND < brief
+    (found,) = published.findings or ()
+    assert found.check is LeverCheck.PAST_SESSION_BOUND
+    assert found.detail.startswith(f"{brief} characters")
 
 
 def test_a_retry_with_its_stopping_condition_and_a_kind_by_name_are_no_findings() -> None:
@@ -224,10 +291,12 @@ async def test_the_reading_names_the_lever_before_the_stalls_and_never_one_every
     platform: Wired,
 ) -> None:
     author = platform.person(Role.MEMBER)
-    for name, body in (("flaky-deploys", DEFECTS[LeverCheck.UNBOUNDED_RETRY]), ("house", PLAIN)):
+    flaky, house = [
         await platform.playbooks.publish(
             author, PlaybookDraft(name=name, description="A brief.", body=body)
         )
+        for name, body in (("flaky-deploys", DEFECTS[LeverCheck.UNBOUNDED_RETRY]), ("house", PLAIN))
+    ]
     note = await platform.knowledge.write(author, "Totals", ("totals",), "Totals are monthly.")
     since = platform.clock.now - timedelta(minutes=1)
     sessions = [await platform.start() for _ in range(5)]
@@ -256,21 +325,46 @@ async def test_the_reading_names_the_lever_before_the_stalls_and_never_one_every
     )
     assert (reading.sessions, reading.spun, reading.complete) == (5, 3, True)
     first, second = reading.standings
-    assert (first.lever.kind, first.lever.name, first.lever.version) == (
-        LeverKind.PLAYBOOK,
-        "flaky-deploys",
-        1,
-    )
+    assert first.lever == LeverRef(kind=LeverKind.PLAYBOOK, id=flaky.id, version=1)
     assert set(first.spun_sessions) == {sessions[0], sessions[1]}
     assert (first.spun, first.sessions, first.spun_without, first.sessions_without) == (2, 2, 1, 3)
-    assert (second.lever.kind, second.lever.id, second.lever.version) == (
-        LeverKind.KNOWLEDGE,
-        note.id,
-        note.version,
-    )
-    assert second.lever.name == note.slug
+    assert second.lever == LeverRef(kind=LeverKind.KNOWLEDGE, id=note.id, version=note.version)
     assert set(second.spun_sessions) == {sessions[0], sessions[2]}
-    assert "house" not in {standing.lever.name for standing in reading.standings}
+    assert house.id not in {standing.lever.id for standing in reading.standings}
+    # An operator who reads sees a lever's shape, never the tenant's words.
+    assert all(set(s.lever.model_dump()) == {"kind", "id", "version"} for s in reading.standings)
+    answered = reading.model_dump_json()
+    assert note.slug and note.slug not in answered and "flaky-deploys" not in answered
+
+
+async def test_an_entry_an_agent_reads_by_its_slug_is_reached_and_counted(
+    platform: Wired,
+) -> None:
+    author = platform.person(Role.MEMBER)
+    note = await platform.knowledge.write(author, "Totals", ("totals",), "Totals are monthly.")
+    assert note.slug is not None
+    since = platform.clock.now - timedelta(minutes=1)
+    sessions = [await platform.start() for _ in range(3)]
+    await platform.playbooks.publish(
+        author, PlaybookDraft(name="house", description="A brief.", body=PLAIN)
+    )
+    # Every session is woken by the same playbook, which ranks nowhere.
+    for session_id in sessions:
+        await platform.playbooks.invoke(platform.owner, session_id, "house")
+    agent = await platform.agents_call(platform.owner)
+    # What `read_knowledge` does: the entry by its slug, and a read again.
+    for _ in range(2):
+        assert (await platform.knowledge.read(agent, sessions[0], note.slug)).id == note.id
+    await spin(platform, sessions[0])
+    for session_id in sessions[1:]:
+        await answer(platform, session_id)
+
+    reading = await build_levers(platform.storage).read_levers(
+        operator(), platform.owner.org_id, since, utcnow() + timedelta(minutes=1)
+    )
+    (standing,) = reading.standings
+    assert standing.lever == LeverRef(kind=LeverKind.KNOWLEDGE, id=note.id, version=note.version)
+    assert (standing.sessions, standing.spun, standing.spun_sessions) == (1, 1, (sessions[0],))
 
 
 async def test_a_reading_is_an_operators_over_a_window_that_ends_after_it_starts(
@@ -295,8 +389,8 @@ async def test_a_reading_is_an_operators_over_a_window_that_ends_after_it_starts
 
 
 def test_a_lever_present_everywhere_or_no_more_often_with_a_stall_ranks_nowhere() -> None:
-    everywhere = LeverRef(kind=LeverKind.PLAYBOOK, id=new_id(), name="house", version=1)
-    even = LeverRef(kind=LeverKind.PLAYBOOK, id=new_id(), name="even", version=1)
+    everywhere = LeverRef(kind=LeverKind.PLAYBOOK, id=new_id(), version=1)
+    even = LeverRef(kind=LeverKind.PLAYBOOK, id=new_id(), version=1)
     stalled = SpinTally(inconclusive=1)
     sessions = [
         SessionLevers(session_id=new_id(), spin=stalled, levers=(everywhere, even)),

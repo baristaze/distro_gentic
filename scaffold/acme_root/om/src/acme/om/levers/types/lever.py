@@ -14,7 +14,7 @@ from uuid import UUID
 from pydantic import Field
 
 from acme.om.base import Platform
-from acme.om.steps.types.content import MAX_NAME, Stored
+from acme.om.steps.types.content import Stored
 
 MAX_DETAIL = 500
 """The most characters a finding quotes or says: a lever is a person's
@@ -56,13 +56,13 @@ class LeverReach(Platform):
 
 
 class LeverRef(Platform):
-    """One version of a lever, as a session reached it: a playbook's
-    version id and its name, or a knowledge entry's id and its slug (its
-    title where it has none)."""
+    """One version of a lever, as a session reached it: a playbook
+    version's id, or a knowledge entry's id, and its version. Never its
+    name or its slug, which are the tenant's words: an operator who reads
+    sees the shape of what a session reached, never what it says."""
 
     kind: LeverKind
     id: UUID
-    name: Stored = Field(min_length=1, max_length=MAX_NAME)
     version: int = Field(ge=1)
 
 

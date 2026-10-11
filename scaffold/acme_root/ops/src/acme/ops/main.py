@@ -621,7 +621,8 @@ async def levers_command(
     """Which playbooks and knowledge an org's sessions reached before they
     stalled, over the last `--days`: the operator plane's reading, under the
     env file's `read` token, printed as JSON for the audit to read. It names
-    levers, their versions, and sessions, never what a step said."""
+    each lever by its kind, id, and version, and the sessions behind it,
+    never a lever's name or what a step said."""
     if args.days <= 0:
         print("acme-ops: --days is a positive number of days", file=sys.stderr)
         return USAGE

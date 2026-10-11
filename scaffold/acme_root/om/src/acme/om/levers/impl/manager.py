@@ -63,7 +63,6 @@ class LeversManagerImpl(LeversManagerInterface):
         )
         read: list[SessionLevers] = []
         complete = True
-        names: dict[UUID, str] = {}
         # Newest first, from the window's end: ids are minted in time order.
         after: UUID | None = id_floor(until)
         while after is not None:
@@ -78,7 +77,7 @@ class LeversManagerImpl(LeversManagerInterface):
                 if len(read) == self._options.sessions:
                     complete, after = False, None
                     break
-                levers, whole = await self._session(org_id, session, names)
+                levers, whole = await self._session(org_id, session)
                 read.append(levers)
                 complete = complete and whole
         return LeverReading(
@@ -90,9 +89,7 @@ class LeversManagerImpl(LeversManagerInterface):
             standings=standings(read, self._options.named),
         )
 
-    async def _session(
-        self, org_id: UUID, session: AgentSession, names: dict[UUID, str]
-    ) -> tuple[SessionLevers, bool]:
+    async def _session(self, org_id: UUID, session: AgentSession) -> tuple[SessionLevers, bool]:
         """One session's stall and levers, and whether every step was read."""
         shapes: list[StepShape] = []
         whole = True
@@ -108,30 +105,20 @@ class LeversManagerImpl(LeversManagerInterface):
             shapes.extend(shape_of(step) for step in rows)
             if len(rows) < min(self._options.page, room):
                 break
+        # A lever is answered by its kind, its id, and its version alone: its
+        # name or its slug is the tenant's words, which `read` never sees.
         levers = [
-            LeverRef(
-                kind=LeverKind.PLAYBOOK,
-                id=invocation.playbook_id,
-                name=invocation.name,
-                version=invocation.version,
-            )
+            LeverRef(kind=LeverKind.PLAYBOOK, id=invocation.playbook_id, version=invocation.version)
             for invocation in await self._playbooks.read_invocations(
                 org_id, session.id, self._options.levers
             )
         ]
-        for recall in await self._knowledge.read_recalls(org_id, session.id, self._options.levers):
-            if recall.entry_id not in names:
-                entry = await self._knowledge.read_entry(org_id, recall.entry_id)
-                # An entry is named by its handle, never by what it says.
-                names[recall.entry_id] = (entry.slug if entry else None) or str(recall.entry_id)
-            levers.append(
-                LeverRef(
-                    kind=LeverKind.KNOWLEDGE,
-                    id=recall.entry_id,
-                    name=names[recall.entry_id],
-                    version=recall.version,
-                )
+        levers += [
+            LeverRef(kind=LeverKind.KNOWLEDGE, id=recall.entry_id, version=recall.version)
+            for recall in await self._knowledge.read_recalls(
+                org_id, session.id, self._options.levers
             )
+        ]
         return SessionLevers(
             session_id=session.id, spin=spin_of(shapes), levers=tuple(levers)
         ), whole

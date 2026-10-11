@@ -1,6 +1,7 @@
 """`acme-ops levers`: the operator's `read` token reads one org's levers
 over the last days from `/v1/admin/orgs/<org>/levers`, and the reading is
-printed as JSON; a window of no days is refused before any call."""
+printed as JSON, each lever by its kind, id, and version alone; a window of
+no days is refused before any call."""
 
 import argparse
 import json
@@ -23,6 +24,8 @@ READING = {
     "complete": True,
     "standings": [
         {
+            # A name the API should never answer, which the command never
+            # prints: what it prints of a lever is its shape.
             "lever": {
                 "kind": "playbook",
                 "id": "0199a4c0-0000-7000-8000-0000000000b1",
@@ -75,7 +78,11 @@ async def test_levers_reads_the_window_with_the_read_token_and_prints_the_readin
     assert until - since == timedelta(days=7)
     printed = json.loads(capsys.readouterr().out)
     (standing,) = printed["standings"]
-    assert standing["lever"]["name"] == "flaky-deploys"
+    assert standing["lever"] == {
+        "kind": "playbook",
+        "id": "0199a4c0-0000-7000-8000-0000000000b1",
+        "version": 2,
+    }
     assert standing["spun_sessions"] == [SESSION]
 
 

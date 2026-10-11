@@ -20,12 +20,12 @@ class FindingView(View):
 
 
 class LeverView(View):
-    """One version of a lever as a session reached it: a playbook by its
-    name, a knowledge entry by its slug."""
+    """One version of a lever as a session reached it, by its kind, its id,
+    and its version: never its name or its slug, the tenant's words, which
+    an operator who reads never sees."""
 
     kind: LeverKind
     id: UUID
-    name: str
     version: int
 
 

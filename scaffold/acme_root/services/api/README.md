@@ -251,7 +251,10 @@ app, and `main.py` is the `acme-api` command: `serve`, `migrate`,
   content opens only under a grant the grant job wrote in that tenant,
   `403 content_not_granted` otherwise, and the tenant's stream names the
   operator at every opening (`.../sessions/{session_id}/content`,
-  ADR 2010).
+  ADR 2010). An operator who may read reads which levers a tenant's
+  sessions created in a window reached before they stalled, each lever
+  by its kind, id, and version, never its name or its slug, with
+  counts and session ids (`/v1/admin/orgs/{org_id}/levers`, ADR 2054).
 - **Operational.** Liveness (`/healthz`, the process alone),
   readiness (`/readyz`, asks the database under a deadline shorter
   than the probe's interval), metrics (`/metrics`), and the OpenAPI

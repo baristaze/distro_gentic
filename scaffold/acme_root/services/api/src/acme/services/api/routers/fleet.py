@@ -104,6 +104,7 @@ async def read_levers(
     """The playbooks and knowledge the org's sessions created in `[since,
     until)` reached, ranked by how much more often the sessions that
     reached them stalled, with the sessions behind each figure. A stall is
-    read from the steps' headers, never from what a step says. A window
-    that does not end after it starts is `422`."""
+    read from the steps' headers, never from what a step says, and a lever
+    is answered by its kind, id, and version, never by its name or its
+    slug. A window that does not end after it starts is `422`."""
     return await service.read_levers(admin, org_id, since, until)
