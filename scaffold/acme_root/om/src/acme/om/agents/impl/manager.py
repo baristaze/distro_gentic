@@ -3,6 +3,7 @@ from collections.abc import Callable, Iterable, Mapping
 from datetime import datetime
 from uuid import UUID
 
+from acme.infra.workspaces import IsolationMode
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.limits import deadline_park
 from acme.om.agent_sessions.types.agent_session import AgentSession, SessionStatus
@@ -34,10 +35,17 @@ from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import OutboxRow, versioned_row
 from acme.om.steps import StepsManagerInterface
 from acme.om.steps.types.content import Content, TextBlock
-from acme.om.steps.types.header import ControlCommand, ControlHeader, InputHeader
+from acme.om.steps.types.header import (
+    ControlCommand,
+    ControlHeader,
+    InputHeader,
+    WorkspaceSnapshot,
+)
 from acme.om.steps.types.step import Actor, Origin, Step, StepType
 from acme.om.tenancy import TenancyManagerInterface
+from acme.om.tools import ToolsManagerInterface
 from acme.om.tools.rules import instruct_refusal
+from acme.om.tools.tool import TakenSnapshot, TakeSnapshot
 from acme.om.windows import WindowsManagerInterface
 
 CREATED = "agents.agent_tree.created"
@@ -67,7 +75,9 @@ class AgentsManagerImpl(AgentsManagerInterface):
         windows: WindowsManagerInterface,
         tool_classes: Mapping[str, str],
         secret_tools: frozenset[str],
+        tools: ToolsManagerInterface,
     ) -> None:
+        self._tools = tools
         self._budgets = budgets
         self._windows = windows
         self._tool_classes = tool_classes
@@ -102,12 +112,15 @@ class AgentsManagerImpl(AgentsManagerInterface):
         if session is not None:
             self._may_instruct(ctx, session.tools)
 
-    async def spawn(self, ctx: TenantContext, parent_id: UUID, spawn: Spawn) -> AgentSession:
+    async def spawn(
+        self, ctx: TenantContext, parent_id: UUID, spawn: Spawn, fork: TakeSnapshot | None = None
+    ) -> AgentSession:
         ctx.require(Permission.WRITE)
         parent = await self._sessions.get_session(ctx, parent_id)
         child = await self._find(ctx, spawn.id)
         if child is not None and child.parent_id != parent_id:
             raise ValidationFailed(f"agent session {spawn.id} is not a child of {parent_id}")
+        taken: TakenSnapshot | None = None
         if child is not None:
             self._may_instruct(ctx, child.tools)
         else:
@@ -118,6 +131,8 @@ class AgentsManagerImpl(AgentsManagerInterface):
             if kind.share is None:
                 # With no cap of its own, one child could spend all its tree has left.
                 raise ValidationFailed(f"agent kind {kind.name} names no share to spawn it under")
+            if fork is not None and kind.isolation.mode is IsolationMode.NONE:
+                raise ValidationFailed(f"agent kind {kind.name} has no workspace to fork into")
             # Its objective instructs it: whoever spawns it may make every
             # call it will offer, asked before anything is made.
             self._may_instruct(ctx, [tool for tool in kind.tools if tool in parent.tools])
@@ -125,6 +140,9 @@ class AgentsManagerImpl(AgentsManagerInterface):
             refusal = tree_refusal(tree, parent.depth + 1)
             if refusal is not None:
                 raise TreeBoundReached(refusal)
+            # The parent's workspace as it stands is taken before anything of
+            # the tree is spent: one refused takes no slot and makes no child.
+            taken = None if fork is None else await fork()
             # The slot is taken before the child is made: a crash between the
             # two leaves the count one high, never one low.
             if await self._storage.take_slot(ctx.org_id, tree.id) is None:
@@ -152,10 +170,48 @@ class AgentsManagerImpl(AgentsManagerInterface):
             waking=True,
             untrusted=child.untrusted,
         )
+        arrivals = [objective]
+        if fork is not None:
+            # Its workspace starts from its own copy of its parent's as the
+            # spawn took it, so what it writes never reaches its parent's:
+            # the restore comes before the objective that wakes it. A retry
+            # makes the same step, which the inbox answers as stored.
+            copy = await self._fork_copy(ctx, child, fork, taken)
+            restore_id = derived_id(child.id, child.created_at, "fork")
+            restore = Step(
+                id=restore_id,
+                created_at=self._clock(),
+                session_id=child.id,
+                loop_id=restore_id,
+                type=StepType.CONTROL,
+                actor=Actor.ENGINE,
+                origin=Origin.PARENT,
+                header=ControlHeader(command=ControlCommand.RESTORE, snapshot=copy),
+            )
+            arrivals = [restore, objective]
         # Through the inbox: the projection that turns the child pending
         # asks for its loop's run.
-        _, child = await self._sessions.receive(ctx, child.id, [objective])
+        _, child = await self._sessions.receive(ctx, child.id, arrivals)
         return child
+
+    async def _fork_copy(
+        self,
+        ctx: TenantContext,
+        child: AgentSession,
+        fork: TakeSnapshot,
+        taken: TakenSnapshot | None,
+    ) -> WorkspaceSnapshot:
+        """The child's copy of its parent's workspace, under an id its
+        spawn derives. A spawn asked again answers the copy the child's
+        history already names; one that never got so far takes the
+        workspace as it stands now."""
+        snapshot_id = derived_id(child.id, child.created_at, "fork-snapshot")
+        if taken is None:
+            try:
+                return await self._tools.find_snapshot(ctx, child.id, snapshot_id)
+            except NotFound:
+                taken = await fork()
+        return await self._tools.fork_snapshot(ctx, child.id, snapshot_id, taken)
 
     async def tree_of(self, ctx: TenantContext, session_id: UUID) -> AgentTree:
         ctx.require(Permission.READ)

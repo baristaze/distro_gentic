@@ -32,11 +32,12 @@ thing [Acme is made of](../../../../README.md).
   starts it and names it, and the agent waits for it without holding
   anything. It has a deadline of its own, never later than the whole
   task's. A job that costs money by the hour says how much, at most.
-- **The engine's own tools**: five a kind may name. Four act on nothing
+- **The engine's own tools**: six a kind may name. Five act on nothing
   outside the session: asking its person, writing its plan, reading part
-  of a file attached to the session, and waiting on its sub-agents. They
-  read and keep the session's own records, so their class is reading.
-  The fifth starts a sub-agent, and its class is `spawn`.
+  of a file attached to the session, reading a result the window keeps
+  whole outside a step, and waiting on its sub-agents. They read and keep
+  the session's own records, so their class is reading. The sixth starts
+  a sub-agent, and its class is `spawn`.
 
 ## What can happen
 
@@ -80,12 +81,38 @@ thing [Acme is made of](../../../../README.md).
 - **Start a sub-agent** with a title, an objective that stands on its
   own, and a kind, the agent's own unless it names another. The child
   takes the call's id, so a call asked again finds the child it made,
-  and a bound the tree sets is the call's failure.
+  and a bound the tree sets is the call's failure. With `fork`, the
+  child's workspace starts from a copy of the agent's as it stands at
+  the call, taken whole by the call's run before anything of the tree
+  is spent.
+- **Snapshot a workspace.** A kind that asks for `snapshot` durability
+  has its workspace kept whole at the end of each run, live: everything
+  its commands wrote, sealed under the session's key and named by a step
+  in its history, and the next run starts from it. A VM's disk stays
+  with its machines, in a store encrypted at rest, and the sealed archive
+  names it (ADR 1029). A credential is never
+  in it, and a workspace that holds an injected secret's value keeps
+  none. A released workspace, and a directory on a host, cannot be kept
+  whole, so they refuse, before anything runs (ADR 1027).
+- **Start from a base.** A kind's workspace may name a base: an image
+  and the commands that set it up, with the egress they may use. The
+  setup runs once per tenant, in a workspace of its own, given no
+  secret, and is kept as a snapshot every workspace on the base starts
+  from, with its own egress. A changed base is built again; a setup
+  command that fails keeps nothing and says which (ADR 1028).
+- **Restore, rewind, fork.** A restore names a snapshot the history
+  holds, and the next loop starts from it, its bytes trusted only by
+  their hash; one that does not match loses the workspace before it
+  starts, and parks the loop once, until a person lets it go on as it
+  stands. A person's restore rewinds the session, and nothing is
+  deleted. A child's fork is a copy of its own, and a fork whose
+  snapshot is refused spends nothing (ADR 1030).
 - **Wait on sub-agents.** The call answers the children still running,
   and the agent's loop waits, holding nothing, until one reports. With
   none running, it is refused.
-- **Purge.** When a deleted session is purged, its workspace and the
-  records of its commands go with its history.
+- **Purge.** When a deleted session is purged, its workspace, the
+  records of its commands, and its snapshots go with its history. A
+  tenant's bases go with the tenant.
 
 ## The rules
 
