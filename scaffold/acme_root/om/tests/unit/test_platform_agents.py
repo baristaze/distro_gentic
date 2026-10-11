@@ -98,6 +98,7 @@ from acme.om.platform_agents.kinds import (
     ENGINEER_KIND,
     ENGINEER_SHARE,
     ENGINEER_V6,
+    ENGINEER_V7,
     PLATFORM_ASSISTANT_KIND,
     SHIPPED,
 )
@@ -212,6 +213,7 @@ def test_every_shipped_agent_is_a_profile_that_sets_its_powers() -> None:
         ("engineer", 5),
         ("engineer", 6),
         ("engineer", 7),
+        ("engineer", 8),
         ("analysis", 1),
         ("analysis", 2),
         ("analysis", 3),
@@ -294,7 +296,7 @@ def test_the_engineer_takes_a_baseline_again_when_its_base_moves() -> None:
 
 @pytest.mark.parametrize(
     ("latest", "before"),
-    [(ENGINEER_KIND, ENGINEER_V6), (ANALYSIS_KIND, ANALYSIS_V3)],
+    [(ENGINEER_V7, ENGINEER_V6), (ANALYSIS_KIND, ANALYSIS_V3)],
     ids=["engineer", "analysis"],
 )
 def test_the_engineer_and_analysis_read_back_a_kept_result_in_a_version_of_their_own(

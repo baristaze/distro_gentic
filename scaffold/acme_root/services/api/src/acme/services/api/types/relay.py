@@ -61,11 +61,13 @@ class PrepareRequest(RequestBody):
     """A host's answer to a prepare it claimed: where on it the workspace it
     made is, or why it made none. Exactly one of the two. A refusal is
     `lost` when the snapshot the host was asked to start it from is not in
-    its store, or is altered there."""
+    its store, or is altered there, and `unbuilt` when the base the
+    workspace starts from failed to build on the host."""
 
     location: str | None = Field(default=None, min_length=1, max_length=1024)
     refused: str | None = Field(default=None, min_length=1, max_length=2000)
     lost: bool = False
+    unbuilt: bool = False
 
 
 class SnapshotRequest(RequestBody):

@@ -96,6 +96,8 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         source_control: SourceControlInterface,
         held: HeldWorkspaces,
         clock: Callable[[], datetime] = utcnow,
+        *,
+        environments: frozenset[tuple[str, int]] = frozenset(),
     ) -> None:
         self._storage = storage
         self._tenancy = tenancy
@@ -110,6 +112,9 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         self._source_control = source_control
         self._held = held
         self._clock = clock
+        # The kinds, by name and version, whose workspace starts from the
+        # environment its session's project names.
+        self._environments = environments
         self._internal = rules.networks(options.internal_networks)
 
     # The pin.
@@ -166,6 +171,13 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
                 f"and {label} keeps its workspace by snapshots"
             )
         spec = kind.isolation.model_copy(update={"durability": durability})
+        if project_id is not None and (kind.name, kind.version) in self._environments:
+            # Read once, here: the session keeps the base it pinned, and a
+            # later change of its project's environment reaches only the
+            # sessions created after it.
+            environment = await self._projects.environment_of(ctx, project_id)
+            if environment is not None:
+                spec = spec.model_copy(update={"base": environment})
         return await self._land(ctx, session.id, spec, label, project_id, allowlist)
 
     async def get_workspace(self, ctx: TenantContext, session_id: UUID) -> SessionWorkspace:

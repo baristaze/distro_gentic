@@ -2908,6 +2908,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/projects/{project_id}/environment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Environment
+         * @description The environment the project's sessions' workspaces start from; a later
+         *     one replaces it. Each session keeps the one it started on, and a changed
+         *     one is built again for the sessions created after it.
+         */
+        put: operations["set_environment_v1_projects__project_id__environment_put"];
+        post?: never;
+        /**
+         * Remove Environment
+         * @description The project with no environment: its sessions created after it start
+         *     from their kind's own workspace.
+         */
+        delete: operations["remove_environment_v1_projects__project_id__environment_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/provider-keys": {
         parameters: {
             query?: never;
@@ -4215,11 +4242,13 @@ export interface components {
         };
         /**
          * CreateProjectRequest
-         * @description A project and the one repository it binds, which never moves, and
-         *     whether a kind that keeps its workspace by snapshots keeps it so here:
-         *     False keeps each of its sessions' workspaces a cache.
+         * @description A project and the one repository it binds, which never moves; whether
+         *     a kind that keeps its workspace by snapshots keeps it so here, False
+         *     keeping each of its sessions' workspaces a cache; and the environment
+         *     its sessions' workspaces start from, if it names one.
          */
         CreateProjectRequest: {
+            environment?: components["schemas"]["EnvironmentBody"] | null;
             /** Name */
             name: string;
             repository: components["schemas"]["RepositoryBody"];
@@ -4493,6 +4522,31 @@ export interface components {
             data: string;
             /** N */
             n: number;
+        };
+        /**
+         * EnvironmentBody
+         * @description The environment a project's sessions' workspaces start from: the
+         *     image, the commands that set it up, run once in order, and the package
+         *     registries the setup reaches. A setup that names a registry runs with
+         *     open egress; one that names none reaches nothing. Registries serve a
+         *     setup, so they come with one.
+         */
+        EnvironmentBody: {
+            /** Image */
+            image: string;
+            /** Registries */
+            registries?: string[];
+            /** Setup */
+            setup?: string[];
+        };
+        /** EnvironmentView */
+        EnvironmentView: {
+            /** Image */
+            image: string;
+            /** Registries */
+            registries: string[];
+            /** Setup */
+            setup: string[];
         };
         /** ErrorBody */
         ErrorBody: {
@@ -6565,7 +6619,8 @@ export interface components {
          * @description A host's answer to a prepare it claimed: where on it the workspace it
          *     made is, or why it made none. Exactly one of the two. A refusal is
          *     `lost` when the snapshot the host was asked to start it from is not in
-         *     its store, or is altered there.
+         *     its store, or is altered there, and `unbuilt` when the base the
+         *     workspace starts from failed to build on the host.
          */
         PrepareRequest: {
             /** Location */
@@ -6577,6 +6632,11 @@ export interface components {
             lost: boolean;
             /** Refused */
             refused?: string | null;
+            /**
+             * Unbuilt
+             * @default false
+             */
+            unbuilt: boolean;
         };
         /**
          * PreparedView
@@ -6621,6 +6681,7 @@ export interface components {
              * Format: uuid
              */
             created_by: string;
+            environment: components["schemas"]["EnvironmentView"] | null;
             /**
              * Id
              * Format: uuid
@@ -14488,6 +14549,80 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FetchCredentialView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_environment_v1_projects__project_id__environment_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnvironmentBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_environment_v1_projects__project_id__environment_delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectView"];
                 };
             };
             /** @description Validation Error */

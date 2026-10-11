@@ -40,7 +40,8 @@ class PlacedWorkspacesInterface(ABC):
         the loop waits on the resource with no call spent. A workspace kept
         by snapshots waits, with the reason, while no live host of its pool
         advertises snapshots at its level, and never runs as a cache. One
-        that names a base is refused for good, since no host builds one.
+        on a base starts from the base its host builds and keeps; one whose
+        base failed to build there waits with the host's reason.
 
         With `restore`, a snapshot a host's store keeps, the workspace is
         started from it, replaced whole: by the host that holds it while it

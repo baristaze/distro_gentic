@@ -115,10 +115,13 @@ app, and `main.py` is the `acme-api` command: `serve`, `migrate`,
 - **Projects.** An owner or an admin creates a project bound to its
   repository, under an Idempotency-Key, renames it, and removes it while
   no session belongs to it (`409 project_in_use` otherwise); any member
-  lists and reads them. The repository never moves. Its fetch credential
+  lists and reads them. The repository never moves. An owner or an admin
+  sets the environment its sessions' workspaces start from, an image,
+  its setup commands, and the registries the setup reaches, or takes it
+  away; a session keeps the one it started on. Its fetch credential
   is written and never read back: the answer says who gave it when, and
   it leaves the tenant's store with its project. (`/v1/projects`,
-  `/v1/projects/{project_id}`, `.../credential`)
+  `/v1/projects/{project_id}`, `.../environment`, `.../credential`)
 - **Validation sessions.** A member who may write starts one, under an
   Idempotency-Key, as a CI job asks for one: a check its project's policy
   declares, at a delivered head, with its checks from a base. The

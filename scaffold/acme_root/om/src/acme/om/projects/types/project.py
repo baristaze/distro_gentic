@@ -1,16 +1,21 @@
 """A project: a tenant's unit of work, bound to one repository. The
 policies the platform keys by project (what validates a change, where a
-workspace may reach, which secrets a command sees, retention's narrowing)
-are read through the project a session belongs to, and the session's own
-branch and pull request are work product on this repository alone.
+workspace may reach, which secrets a command sees, retention's narrowing,
+the environment its sessions' workspaces start from) are read through the
+project a session belongs to, and the session's own branch and pull
+request are work product on this repository alone.
 
 A project's name may change. Its repository never moves, so the work
 product of every session already in it stays where it was."""
 
-from pydantic import Field, field_validator
+from typing import Annotated, Self
 
+from pydantic import Field, StringConstraints, field_validator, model_validator
+
+from acme.infra.workspaces import EgressMode, EgressPolicy, WorkspaceBase
 from acme.om.base import Identifiable, Platform, Trackable
 from acme.om.steps.types.content import Stored
+from acme.om.workspaces.types.egress import Destination
 
 MAX_PROJECT_NAME = 200
 
@@ -36,12 +41,54 @@ class Repository(Platform):
         return value.lower() if isinstance(value, str) else value
 
 
+IMAGE = r"^[A-Za-z0-9][A-Za-z0-9._/:@-]*$"
+"""An image by its reference, as a registry serves it: a repository, and a
+tag or a digest. It starts with a letter or a digit, so the runtime never
+reads it as an option."""
+
+SetupCommand = Annotated[str, StringConstraints(min_length=1, max_length=4000)]
+
+MAX_SETUP = 50
+"""The most setup commands one environment runs."""
+
+MAX_REGISTRIES = 20
+
+
+class ProjectEnvironment(Platform):
+    """What a project's sessions work in: the image their workspace starts
+    on, and the commands that set it up, run once, in order, then kept as
+    the base every workspace of a kind that takes it starts from.
+    `registries` are the package registries its setup reaches, the
+    project's choice, recorded: a setup that names one runs with open
+    egress, since a setup's egress is open or none, and one that names none
+    reaches nothing. A workspace on it keeps its own kind's egress."""
+
+    image: str = Field(min_length=1, max_length=255, pattern=IMAGE)
+    setup: tuple[SetupCommand, ...] = Field(default=(), max_length=MAX_SETUP)
+    registries: tuple[Destination, ...] = Field(default=(), max_length=MAX_REGISTRIES)
+
+    @model_validator(mode="after")
+    def _registries_serve_a_setup(self) -> Self:
+        if self.registries and not self.setup:
+            raise ValueError("an environment names registries only for a setup to reach")
+        if len(set(self.registries)) != len(self.registries):
+            raise ValueError("an environment names each registry once")
+        return self
+
+    def base(self) -> WorkspaceBase:
+        """The engine's base: the image, its setup, and the setup's egress."""
+        egress = EgressMode.OPEN if self.registries else EgressMode.NONE
+        return WorkspaceBase(image=self.image, setup=self.setup, egress=EgressPolicy(mode=egress))
+
+
 class Project(Identifiable, Trackable):
-    """A tenant's project: its name, the one repository it binds, and
-    whether a kind that keeps its workspace by snapshots keeps it so here.
-    False narrows each of its sessions' workspaces to a cache, on purpose;
-    it reaches the sessions created after it."""
+    """A tenant's project: its name, the one repository it binds, whether a
+    kind that keeps its workspace by snapshots keeps it so here, and the
+    environment its sessions' workspaces start from. False narrows each of
+    its sessions' workspaces to a cache, on purpose. Both reach the
+    sessions created after they are set; a session keeps what it pinned."""
 
     name: Stored = Field(min_length=1, max_length=MAX_PROJECT_NAME)
     repository: Repository
     workspace_snapshots: bool = True
+    environment: ProjectEnvironment | None = None

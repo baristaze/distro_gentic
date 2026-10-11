@@ -1,6 +1,7 @@
 """The projects service: a tenant's projects, each bound to one repository,
-created, read, renamed, and removed, and the fetch credential its repository
-is read with, written and never read back."""
+created, read, renamed, and removed; the environment its sessions'
+workspaces start from, set and taken away; and the fetch credential its
+repository is read with, written and never read back."""
 
 from abc import ABC, abstractmethod
 from uuid import UUID
@@ -8,6 +9,7 @@ from uuid import UUID
 from acme.om.context import TenantContext
 from acme.services.api.types.projects import (
     CreateProjectRequest,
+    EnvironmentBody,
     FetchCredentialRequest,
     FetchCredentialView,
     ProjectView,
@@ -33,6 +35,14 @@ class ProjectsServiceInterface(ABC):
     async def rename_project(
         self, ctx: TenantContext, project_id: UUID, body: RenameProjectRequest
     ) -> ProjectView: ...
+
+    @abstractmethod
+    async def set_environment(
+        self, ctx: TenantContext, project_id: UUID, body: EnvironmentBody | None
+    ) -> ProjectView:
+        """The project with the environment its sessions' workspaces start
+        from, or with none. It reaches the sessions created after it."""
+        ...
 
     @abstractmethod
     async def remove_project(self, ctx: TenantContext, project_id: UUID) -> ProjectView:

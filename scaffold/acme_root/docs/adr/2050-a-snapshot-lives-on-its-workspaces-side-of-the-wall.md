@@ -79,10 +79,10 @@ from a base, or from a snapshot) is final, and the loop ends with its
 reason. Every other refusal still clears, since another host may give
 the isolation later.
 
-**A hosted base waits for a host that builds one.** No host builds a
-workspace base yet, so a session inside its tenant's wall whose kind
-names one is refused for good, with the reason, and a host refuses a
-prepare that names one: it runs its owner's image alone.
+**A hosted base is its host's to build.** A session inside its
+tenant's wall whose pin names a base starts from the base the host that
+prepares it builds and keeps in its own store
+([ADR 2051](2051-a-projects-environment-is-built-once-where-its-workspaces-run.md)).
 
 **A host advertises what it probed.** A host advertises
 `snapshot.<level>` only when that level's probe passed, a provider of its

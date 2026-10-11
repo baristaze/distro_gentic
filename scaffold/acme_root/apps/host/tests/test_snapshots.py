@@ -15,8 +15,7 @@ cache.
 A take of control whose restore outlasts its wait hands nothing over, and a
 take of a workspace a person holds restores nothing over their work. The
 runner's sweep keeps the instance of a kept session that no snapshot
-holds. A workspace that names a base is refused for good, and a host runs
-its owner's image alone. A restore waits for the host that holds the
+holds. A restore waits for the host that holds the
 workspace while it is not revoked, the host that restores it holds it, and
 a snapshot no live host keeps is lost, never waited on for good. A
 session's purge asks each host that keeps its snapshots to erase them."""
@@ -50,7 +49,6 @@ from acme.infra.workspaces import (
     IsolationRefused,
     IsolationSpec,
     Workspace,
-    WorkspaceBase,
     WorkspaceLost,
 )
 from acme.infra.workspaces.twin import WorkspaceTwinImpl
@@ -65,7 +63,7 @@ from acme.om.context import (
     build_context,
 )
 from acme.om.hosts.impl.manager import HostsOptions
-from acme.om.relay.impl.workspaces import HOSTED_BASE, PlacedWorkspacesRelayedImpl
+from acme.om.relay.impl.workspaces import PlacedWorkspacesRelayedImpl
 from acme.om.steps.types.header import HASH_SCHEME, ParkReason, WorkspaceSnapshot
 from acme.om.tenancy.rules import permissions_of
 from acme.om.tools.impl.snapshots import session_prefix
@@ -501,32 +499,6 @@ async def test_the_sweep_keeps_a_kept_sessions_hosted_instance_that_no_snapshot_
     assert asked is not None and asked.payload["operation"] == "snapshot", "no release is asked"
     assert session_id in twin.live
     assert twin.files[session_id] == b"the snapshot, and what the run installed since"
-
-
-async def test_a_hosted_workspace_on_a_base_is_refused_for_good_and_a_host_runs_its_own_image(
-    api: Stack, tmp_path: Path
-) -> None:
-    managers = api.container.managers
-    pool = await api.pool()
-    session_id = await a_pinned_session(api, pool.id)
-    host, twin, _ = await a_host(api, pool.id, tmp_path)
-    on_base = KEPT.model_copy(
-        update={"durability": Durability.CACHE, "base": WorkspaceBase(image="python:3.14-slim")}
-    )
-    placed = PlacedWorkspacesRelayedImpl(lambda: managers.relay, lambda: managers.hosts)
-
-    with pytest.raises(IsolationRefused) as refused:
-        await placed.held_on_host(api.owner, session_id, on_base)
-
-    assert not refused.value.clears, "refused for good: the loop ends with the reason"
-    assert refused.value.message == HOSTED_BASE
-    assert not await managers.work.has_open(api.owner, WorkKind.WORKSPACE, session_id)
-
-    # Asked anyway, the host refuses it: no workspace runs another's image.
-    assert await managers.relay.ask_prepare(api.owner, session_id, on_base)
-    await claimed(host)
-    assert await managers.relay.binding_of(api.owner, session_id) is None
-    assert twin.live == set()
 
 
 async def test_a_restore_whose_snapshot_no_live_host_keeps_is_lost_never_waited_on(

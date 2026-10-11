@@ -2184,8 +2184,18 @@
       },
       "CreateProjectRequest": {
         "additionalProperties": false,
-        "description": "A project and the one repository it binds, which never moves, and\nwhether a kind that keeps its workspace by snapshots keeps it so here:\nFalse keeps each of its sessions' workspaces a cache.",
+        "description": "A project and the one repository it binds, which never moves; whether\na kind that keeps its workspace by snapshots keeps it so here, False\nkeeping each of its sessions' workspaces a cache; and the environment\nits sessions' workspaces start from, if it names one.",
         "properties": {
+          "environment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EnvironmentBody"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "name": {
             "maxLength": 200,
             "minLength": 1,
@@ -2752,6 +2762,73 @@
           "data"
         ],
         "title": "EntryView",
+        "type": "object"
+      },
+      "EnvironmentBody": {
+        "additionalProperties": false,
+        "description": "The environment a project's sessions' workspaces start from: the\nimage, the commands that set it up, run once in order, and the package\nregistries the setup reaches. A setup that names a registry runs with\nopen egress; one that names none reaches nothing. Registries serve a\nsetup, so they come with one.",
+        "properties": {
+          "image": {
+            "maxLength": 255,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._/:@-]*$",
+            "title": "Image",
+            "type": "string"
+          },
+          "registries": {
+            "items": {
+              "maxLength": 253,
+              "pattern": "^(\\*\\.)?([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$",
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Registries",
+            "type": "array"
+          },
+          "setup": {
+            "items": {
+              "maxLength": 4000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 50,
+            "title": "Setup",
+            "type": "array"
+          }
+        },
+        "required": [
+          "image"
+        ],
+        "title": "EnvironmentBody",
+        "type": "object"
+      },
+      "EnvironmentView": {
+        "properties": {
+          "image": {
+            "title": "Image",
+            "type": "string"
+          },
+          "registries": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Registries",
+            "type": "array"
+          },
+          "setup": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Setup",
+            "type": "array"
+          }
+        },
+        "required": [
+          "image",
+          "setup",
+          "registries"
+        ],
+        "title": "EnvironmentView",
         "type": "object"
       },
       "ErrorBody": {
@@ -7157,7 +7234,7 @@
       },
       "PrepareRequest": {
         "additionalProperties": false,
-        "description": "A host's answer to a prepare it claimed: where on it the workspace it\nmade is, or why it made none. Exactly one of the two. A refusal is\n`lost` when the snapshot the host was asked to start it from is not in\nits store, or is altered there.",
+        "description": "A host's answer to a prepare it claimed: where on it the workspace it\nmade is, or why it made none. Exactly one of the two. A refusal is\n`lost` when the snapshot the host was asked to start it from is not in\nits store, or is altered there, and `unbuilt` when the base the\nworkspace starts from failed to build on the host.",
         "properties": {
           "location": {
             "anyOf": [
@@ -7189,6 +7266,11 @@
               }
             ],
             "title": "Refused"
+          },
+          "unbuilt": {
+            "default": false,
+            "title": "Unbuilt",
+            "type": "boolean"
           }
         },
         "title": "PrepareRequest",
@@ -7258,6 +7340,16 @@
             "title": "Created By",
             "type": "string"
           },
+          "environment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EnvironmentView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -7290,6 +7382,7 @@
           "name",
           "repository",
           "workspace_snapshots",
+          "environment",
           "created_at",
           "created_by",
           "updated_at",
@@ -27678,6 +27771,198 @@
           }
         },
         "summary": "Put Fetch Credential",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/v1/projects/{project_id}/environment": {
+      "delete": {
+        "description": "The project with no environment: its sessions created after it start\nfrom their kind's own workspace.",
+        "operationId": "remove_environment_v1_projects__project_id__environment_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Environment",
+        "tags": [
+          "projects"
+        ]
+      },
+      "put": {
+        "description": "The environment the project's sessions' workspaces start from; a later\none replaces it. Each session keeps the one it started on, and a changed\none is built again for the sessions created after it.",
+        "operationId": "set_environment_v1_projects__project_id__environment_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnvironmentBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Environment",
         "tags": [
           "projects"
         ]

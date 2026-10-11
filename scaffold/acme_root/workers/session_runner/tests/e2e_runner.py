@@ -8,7 +8,11 @@ The suite names a corpus root, so the platform's agents and their tools
 ship, its `run_command` among them. The ports stand in for what a product
 brings: an executor that writes the results stream a fresh executor would,
 and each bound repository cloned from a folder of bare repositories on
-this host (`E2E_REPOSITORIES`) instead of over HTTPS."""
+this host (`E2E_REPOSITORIES`) instead of over HTTPS.
+
+With `E2E_CONTAINERS` set, the platform's engineer is the latest, in its
+own container, and no session has a checkout: a container reaches no
+folder of this host's."""
 
 import os
 import sys
@@ -26,8 +30,9 @@ def main() -> int:
     install_trust_store()
     sys.path.insert(0, str(REPO / "om" / "tests"))
     from contracts.evidence import ScriptedExecutor
-    from runner_support import E2E_KINDS
+    from runner_support import E2E_KINDS, KINDS
 
+    from acme.infra.workspaces import WorkspaceBase
     from acme.om.agent_sessions.types.agent_session import AgentSession
     from acme.om.context import TenantContext
     from acme.om.root import PlatformPorts, ProductKinds
@@ -53,7 +58,7 @@ def main() -> int:
             self, ctx: TenantContext, project_id: UUID
         ) -> RepositoryBinding | None:
             bound = await self._inner.binding_of(ctx, project_id)
-            if bound is None:
+            if bound is None or containers:
                 return None
             local = bound.repository.replace("https://", f"file://{self._root}/", 1)
             return bound.model_copy(update={"repository": local})
@@ -61,12 +66,18 @@ def main() -> int:
         async def keeps_snapshots(self, ctx: TenantContext, project_id: UUID) -> bool:
             return await self._inner.keeps_snapshots(ctx, project_id)
 
+        async def environment_of(
+            self, ctx: TenantContext, project_id: UUID
+        ) -> WorkspaceBase | None:
+            return await self._inner.environment_of(ctx, project_id)
+
+    containers = bool(os.environ.get("E2E_CONTAINERS"))
     settings = SessionRunnerSettings()
     rows = StoragePostgresImpl(
         settings.role_urls(), settings.role_pools(), system_urls=settings.system_role_urls()
     )
     ports = PlatformPorts(
-        kinds=ProductKinds(agents=E2E_KINDS),
+        kinds=ProductKinds(agents=KINDS if containers else E2E_KINDS),
         executor=ScriptedExecutor(capabilities=frozenset()),
         workspace_projects=RepositoriesOnDisk(
             WorkspaceProjectsBoundImpl(rows.get_project_storage()),

@@ -101,6 +101,7 @@ def runner() -> int:
     sys.path.insert(0, str(REPO / "om" / "tests"))
     from contracts.evidence import ScriptedExecutor
 
+    from acme.infra.workspaces import WorkspaceBase
     from acme.om.agent_sessions.types.agent_session import AgentSession
     from acme.om.context import TenantContext
     from acme.om.root import PlatformPorts
@@ -133,6 +134,11 @@ def runner() -> int:
 
         async def keeps_snapshots(self, ctx: TenantContext, project_id: UUID) -> bool:
             return await self._inner.keeps_snapshots(ctx, project_id)
+
+        async def environment_of(
+            self, ctx: TenantContext, project_id: UUID
+        ) -> WorkspaceBase | None:
+            return await self._inner.environment_of(ctx, project_id)
 
     # One loop at a time: the script is one queue for every session.
     os.environ["ACME_RUNNER_CAPACITY"] = "1"

@@ -44,6 +44,7 @@ from acme.om.relay.rules import (
     repeatable,
     resent,
     row_id,
+    setup_reaches,
     stale,
 )
 from acme.om.relay.storage import RelayStorageInterface
@@ -126,6 +127,9 @@ tenant's context, the session, the snapshot as the host answered it, the
 host's pool, and the host."""
 
 OPEN = (WorkStatus.QUEUED, WorkStatus.CLAIMED)
+REFUSED = (WorkStatus.QUEUED, WorkStatus.CLAIMED, WorkStatus.FAILED)
+"""Where a prepare a host refused stands: waiting for a host again, held
+by one, or failed once its attempts were spent. Its reason stays with it."""
 
 
 class RelayManagerImpl(RelayManagerInterface):
@@ -232,6 +236,19 @@ class RelayManagerImpl(RelayManagerInterface):
         await self._ask_prepare(ctx, session_id, placed.pool.id, spec, None)
         OUTCOMES.labels(subsystem="relay", outcome="prepare_asked").inc()
         return True
+
+    async def prepare_refusal(self, ctx: TenantContext, session_id: UUID) -> str | None:
+        ctx.require(Permission.READ)
+        latest = await self._work.latest_for_target(ctx, WorkKind.WORKSPACE, session_id)
+        if latest is None or latest.status not in REFUSED or latest.last_error is None:
+            return None
+        try:
+            payload = WorkspacePayload.model_validate(latest.payload)
+        except ValidationError:
+            return None
+        if payload.operation is not WorkspaceOperation.PREPARE or payload.snapshot is not None:
+            return None
+        return latest.last_error
 
     async def ask_instance(
         self, ctx: TenantContext, session_id: UUID, instance_id: UUID, spec: IsolationSpec
@@ -450,6 +467,14 @@ class RelayManagerImpl(RelayManagerInterface):
             log.warning("host %s lost a snapshot it kept: %s", host.host_id, answer.refused)
             await self._work.fail_for_good(ctx, row, answer.refused)
             OUTCOMES.labels(subsystem="relay", outcome="restore_lost").inc()
+            return None
+        if answer.refused is not None and answer.unbuilt:
+            # Its base failed to build there, as when a setup command
+            # failed: an attempt is spent, the reason is kept for the run
+            # that waits, and a host builds again after a longer wait.
+            log.info("host %s did not build a workspace's base: %s", host.host_id, answer.refused)
+            await self._work.fail(ctx, row, answer.refused)
+            OUTCOMES.labels(subsystem="relay", outcome="base_unbuilt").inc()
             return None
         if answer.refused is not None:
             # Back to the pool's lane after a wait, for a host that can give
@@ -879,8 +904,11 @@ class RelayManagerImpl(RelayManagerInterface):
         """A prepare of the workspace under `target` on the pool's lane, held
         to the project of the session it is for."""
         # Where on the host it is made is the host's to choose, so a prepare
-        # reads no path of the host's.
+        # reads no path of the host's. One that may build its base first
+        # asks for what the base's setup reaches.
         isolation, egress, _ = asks(spec, "")
+        if setup_reaches(spec):
+            egress = None
         project = await self._projects.project_of(ctx, instance_of or target)
         payload = WorkspacePayload(
             operation=WorkspaceOperation.PREPARE,

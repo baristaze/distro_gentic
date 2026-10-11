@@ -5,7 +5,7 @@ checkout in a workspace, kept in memory."""
 from dataclasses import dataclass, field
 from uuid import UUID
 
-from acme.infra.workspaces import Workspace
+from acme.infra.workspaces import Workspace, WorkspaceBase
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.base import new_id
 from acme.om.context import TenantContext
@@ -30,11 +30,13 @@ BASE = "b" * 40
 
 class ProjectsTwin(WorkspaceProjectsInterface):
     """Every session belongs to one project, which binds `repository`, or
-    none when `repository` is None."""
+    none when `repository` is None, and names `environment` for its
+    sessions' workspaces, or none."""
 
     def __init__(self, repository: str | None = REPOSITORY) -> None:
         self.project_id = new_id()
         self.repository = repository
+        self.environment: WorkspaceBase | None = None
 
     async def project_of(self, ctx: TenantContext, session: AgentSession) -> UUID | None:
         return self.project_id
@@ -46,6 +48,9 @@ class ProjectsTwin(WorkspaceProjectsInterface):
 
     async def keeps_snapshots(self, ctx: TenantContext, project_id: UUID) -> bool:
         return True
+
+    async def environment_of(self, ctx: TenantContext, project_id: UUID) -> WorkspaceBase | None:
+        return self.environment if project_id == self.project_id else None
 
 
 class PullRequestsTwin(PullRequestsInterface):

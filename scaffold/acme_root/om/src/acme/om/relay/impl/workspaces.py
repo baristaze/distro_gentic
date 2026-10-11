@@ -5,9 +5,6 @@ refusal here clears once a host comes, so nothing is made on one of the
 platform's machines in its stead, and no call is spent on a loop that
 cannot run.
 
-No host builds a workspace base, so a workspace that names one is refused
-for good (`HOSTED_BASE`), never made on a host's own image in its stead.
-
 A workspace kept by snapshots keeps them in the store of a host inside its
 tenant's wall, never in the platform's: it waits, with the reason, while no
 live host of its pool advertises snapshots at its level. A restore is
@@ -18,7 +15,10 @@ pool whose store keeps the snapshot makes it. The run waits for it a while,
 then the loop waits on the resource; a snapshot no live host keeps loses
 the workspace, with the reason. A snapshot is asked of the host that holds
 the workspace, which keeps its bytes and answers its reference and its
-digest."""
+digest. A workspace on a base starts from the base its host builds and
+keeps in its own store; one whose base failed to build there waits with
+the host's reason, its failing command and that command's exit code among
+it."""
 
 import asyncio
 from collections.abc import Awaitable, Callable
@@ -45,13 +45,6 @@ from acme.om.relay.types.exec import WorkspaceBinding
 from acme.om.work.types.work_item import WorkStatus
 from acme.om.workspaces.placed import PlacedWorkspacesInterface
 from acme.om.workspaces.types.snapshot import HostSnapshot
-
-HOSTED_BASE = (
-    "no host builds a workspace base yet: a session inside its tenant's wall whose kind "
-    "names one is refused"
-)
-"""Why a workspace that names a base is refused for good on a host: the host
-would run the base's image in place of its owner's, with no setup run."""
 
 
 class PlacedWorkspacesRelayedImpl(PlacedWorkspacesInterface):
@@ -92,8 +85,6 @@ class PlacedWorkspacesRelayedImpl(PlacedWorkspacesInterface):
         placed = await self._hosts().placement_of(ctx, session_id)
         if placed.pool is None:
             return None
-        if spec.base is not None:
-            raise IsolationRefused(HOSTED_BASE)
         if spec.durability is Durability.SNAPSHOT:
             await self._snapshots_offered(ctx, placed, session_id, spec)
         if restore is not None:
@@ -113,10 +104,14 @@ class PlacedWorkspacesRelayedImpl(PlacedWorkspacesInterface):
                 return _held(ctx, session_id, spec, binding)
             # Its host was revoked or moved, and took the workspace with it:
             # another host of the pool prepares one.
+        # Read before the ask: a prepare that failed is followed by a new
+        # one, and the run still says why the last was refused.
+        refused = await self._relay().prepare_refusal(ctx, session_id)
         await self._relay().ask_prepare(ctx, session_id, spec)
+        why = "" if refused is None else f"; a host refused it: {refused}"
         raise IsolationRefused(
             f"no host of pool {placed.pool.name} holds session {session_id}'s workspace yet "
-            f"({placed.hosts_online} online); one prepares it when it claims the work",
+            f"({placed.hosts_online} online); one prepares it when it claims the work{why}",
             clears=True,
         )
 

@@ -115,6 +115,12 @@ path = "apps/host/src/acme/apps/host/relay.py"
 adr = "docs/adr/2004-a-tool-call-crosses-the-wall-as-keyed-exec-work-and-runs-once.md"
 reason = "a host runs the items it holds through the engine's container transport on its own disk, and reaches the platform through the client alone"
 
+[[tool.distro-check.exception]]
+rule = "PLC-10"
+path = "apps/host/src/acme/apps/host/bases.py"
+adr = "docs/adr/2051-a-projects-environment-is-built-once-where-its-workspaces-run.md"
+reason = "a host builds a workspace's base through the engine's provider and transport on its own disk, keeps it in its own store, and reaches the platform through the client alone"
+
 # The guideline's static checker (`make arch-check`). The layout is the
 # guideline's, so only the package and the project's own lists are named.
 [tool.arch-check]

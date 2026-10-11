@@ -14,7 +14,9 @@ rebuilt from.
   holds the isolation **pinned** when the session was created: the
   level, the limits, and the egress its project allowed then, with where
   that egress came from, and its **durability** and base: its kind's,
-  a cache where its project keeps its sessions' workspaces as caches. It
+  a cache where its project keeps its sessions' workspaces as caches,
+  and, for a kind that takes it, the base its project's environment
+  names. It
   also holds what the cache knows between
   loops: the session's branch, whether the remote has held it, the last
   snapshot of its work, and what the next loop is told.
@@ -47,7 +49,11 @@ rebuilt from.
   and its project's allowlist as it stands. A kind that takes no egress
   keeps none, whatever its project allows. A session of no project keeps
   its kind's own egress. A later write of the allowlist reaches only the
-  sessions created after it.
+  sessions created after it. A kind that takes its project's environment
+  pins the base the environment names then, and keeps it: a changed
+  environment reaches only the sessions created after it, and the first
+  of them builds it where its workspace runs
+  ([ADR 2051](../../../../../docs/adr/2051-a-projects-environment-is-built-once-where-its-workspaces-run.md)).
 - **Prepare.** Before a loop's first model call, the workspace is
   prepared to the pin, whatever the loop asks. The host refuses what it
   cannot give before its provider is reached, and the provider refuses
