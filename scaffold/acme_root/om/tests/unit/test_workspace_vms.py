@@ -194,7 +194,10 @@ async def test_a_revoked_key_destroys_the_disks_kept_for_its_snapshots_and_no_ot
     parent, child = [
         (await managers.agent_sessions.create_session(ctx, make_session())).id for _ in range(2)
     ]
-    workspace = await managers.tools.prepare_workspace(ctx, parent, KEPT)
+    # The platform's tools refuse a workspace kept by snapshots: a cache's
+    # snapshot is taken here by hand.
+    cache = KEPT.model_copy(update={"durability": Durability.CACHE})
+    workspace = await managers.tools.prepare_workspace(ctx, parent, cache)
     folder = infra.machines.machines[machine_name(PREFIX, parent)].folder / WORKSPACE
     (folder / "state.txt").write_text("the parent's")
     epoch = await managers.steps.begin_run(ctx, parent)
@@ -217,6 +220,6 @@ async def test_a_revoked_key_destroys_the_disks_kept_for_its_snapshots_and_no_ot
         machine_name(PREFIX, parent)
     ], "the workspace stays"
     assert await infra.machines.names(f"{machine_name(PREFIX, child)}-") == kept_for[child]
-    await managers.tools.prepare_workspace(ctx, child, KEPT, restore=copy)
+    await managers.tools.prepare_workspace(ctx, child, cache, restore=copy)
     forked = infra.machines.machines[machine_name(PREFIX, child)].folder / WORKSPACE
     assert (forked / "state.txt").read_text() == "the parent's"
