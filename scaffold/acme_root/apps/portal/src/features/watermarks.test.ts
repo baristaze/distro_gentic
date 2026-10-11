@@ -58,6 +58,7 @@ const ENTRY: KnowledgeView = {
   text: "Never edit a migration that has shipped.",
   status: "reviewed",
   suggested_by: null,
+  findings: [],
   reviewed_by: user.id,
   version: 1,
   created_at: at,

@@ -2,6 +2,7 @@ import type { FormEvent } from "react";
 import { errorMessage } from "../../app/errorMessage";
 import { Banner, Button, Card, ErrorText, Markdown, Muted, Page, TextArea, TextField } from "../../design/kit";
 import { tokens } from "../../design/tokens";
+import { Findings } from "../levers/Findings";
 import { ProviderNotice } from "../providers/ProviderNotice";
 import { shortTime } from "../sessions/sessionsModel";
 import { gateLine } from "./playbooksModel";
@@ -51,6 +52,7 @@ export function PlaybooksPage() {
             ) : (
               <Muted>No gate: the session&apos;s own policy holds.</Muted>
             )}
+            <Findings findings={vm.playbook.findings} />
             {vm.mayWrite ? (
               <div>
                 <Button tone="plain" onClick={vm.startNext}>

@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 // The playbooks page over a fake transport that answers as the API does: a
 // name is read in the member's own org alone, so another org's playbook is
-// no playbook here. Only a member who may write is offered the form.
+// no playbook here. Only a member who may write is offered the form. What
+// the lever checks found in a version shows beside it, and never stops it.
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { PlaybookView } from "@acme/client";
 import { buttons, container, enter, mount, newNet, notFound, PEOPLE, press, unmount, writes, type Call } from "../screenTesting";
@@ -20,8 +21,9 @@ const playbook = (org: "a" | "b", name: string): PlaybookView => ({
   gates: [{ tool: "git_push", authorization_class: null, decision: "approve" }],
   published_by: PEOPLE[org].id,
   created_at: "2026-10-03T10:00:00Z",
+  findings: [{ check: "unknown_name", detail: "names the tool “git_push”, which no kind it reaches holds", excerpt: "git_push" }],
 });
-const HELD = { a: playbook("a", "ajax-release"), b: playbook("b", "beta-release") };
+const HELD: Record<"a" | "b", PlaybookView> = { a: playbook("a", "ajax-release"), b: playbook("b", "beta-release") };
 
 function answer(call: Call): unknown {
   const held = HELD[net.org];
@@ -41,6 +43,17 @@ it("opens the org's playbook by name, its steps as Markdown and its gates in wor
   expect(container.querySelector("#playbook h2")!.textContent).toBe("ajax-release, version 2");
   expect(shown.querySelector("strong")!.textContent).toBe("log");
   expect(container.querySelector("ul[aria-label='Gates']")!.textContent).toBe("a call to git_push waits for a person's approval");
+  expect(container.querySelector("ul[aria-label='What the checks found']")!.textContent).toBe(
+    "A name no kind holds: names the tool “git_push”, which no kind it reaches holds “git_push”",
+  );
+});
+
+it("says when the checks found nothing in a version", async () => {
+  HELD.a = { ...HELD.a, findings: [] };
+  await mount(routes, "/playbooks?name=ajax-release");
+  expect(container.querySelector("ul[aria-label='What the checks found']")).toBeNull();
+  expect(container.textContent).toContain("The checks found nothing to read again.");
+  HELD.a = playbook("a", "ajax-release");
 });
 
 it("finds no playbook another org holds", async () => {

@@ -51,6 +51,7 @@ export function usePlaybooksVm() {
           gates: view.gates,
           publishedBy: personName(users.data, view.published_by),
           publishedAt: view.created_at,
+          findings: view.findings,
         }
       : view,
     mayWrite: me.data?.permissions.includes("write") ?? false,

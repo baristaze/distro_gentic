@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { errorMessage } from "../../app/errorMessage";
 import { Banner, Button, Card, ErrorText, Markdown, Muted, Page, Pill, TextArea, TextField } from "../../design/kit";
 import { tokens } from "../../design/tokens";
+import { Findings } from "../levers/Findings";
 import { ProviderNotice } from "../providers/ProviderNotice";
 import { shortTime } from "../sessions/sessionsModel";
 import { ENTRY_EXAMPLES } from "./knowledgeModel";
@@ -56,6 +57,7 @@ export function EntryPage() {
             )}
           </Muted>
           <Markdown text={entry.text} />
+          <Findings findings={entry.findings} />
           {vm.problem && !vm.draft ? <ErrorText>{vm.problem}</ErrorText> : null}
           {vm.mayWrite && entry.status === "suggested" ? (
             <div style={{ display: "flex", gap: tokens.space.sm }}>
