@@ -5,6 +5,9 @@ refusal here clears once a host comes, so nothing is made on one of the
 platform's machines in its stead, and no call is spent on a loop that
 cannot run.
 
+No host builds a workspace base, so a workspace that names one is refused
+for good (`HOSTED_BASE`), never made on a host's own image in its stead.
+
 A workspace kept by snapshots keeps them in the store of a host inside its
 tenant's wall, never in the platform's: it waits, with the reason, while no
 live host of its pool advertises snapshots at its level. A restore is
@@ -41,6 +44,13 @@ from acme.om.relay.types.exec import WorkspaceBinding
 from acme.om.work.types.work_item import WorkStatus
 from acme.om.workspaces.placed import PlacedWorkspacesInterface
 from acme.om.workspaces.types.snapshot import HostSnapshot
+
+HOSTED_BASE = (
+    "no host builds a workspace base yet: a session inside its tenant's wall whose kind "
+    "names one is refused"
+)
+"""Why a workspace that names a base is refused for good on a host: the host
+would run the base's image in place of its owner's, with no setup run."""
 
 
 class PlacedWorkspacesRelayedImpl(PlacedWorkspacesInterface):
@@ -81,6 +91,8 @@ class PlacedWorkspacesRelayedImpl(PlacedWorkspacesInterface):
         placed = await self._hosts().placement_of(ctx, session_id)
         if placed.pool is None:
             return None
+        if spec.base is not None:
+            raise IsolationRefused(HOSTED_BASE)
         if spec.durability is Durability.SNAPSHOT:
             await self._snapshots_offered(ctx, placed, session_id, spec)
         if restore is not None:

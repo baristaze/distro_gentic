@@ -53,7 +53,8 @@ platform's cloud. Each call crosses the wall as `exec`
   host that answers second, while the first holds it, lets its own go.
   One that cannot make it hands the ask back to the pool after a wait.
   A session whose host is offline waits for it; one whose host was
-  revoked asks the pool again.
+  revoked asks the pool again. A workspace that names a base is refused
+  for good, since no host builds one.
 - **Release.** The runner's sweep finds a workspace a host holds that no
   run accounts for past its grace, among the bindings. It pushes the
   checkout's work through the relay first, then asks the holding host,

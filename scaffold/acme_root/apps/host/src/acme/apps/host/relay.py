@@ -295,8 +295,9 @@ class ExecutorRelayImpl(ExecutorInterface):
         differs from what it asked, or one this host cannot make, is answered
         as refused, so another host of the pool may. Where the workspace is
         made is the host's to choose, so a prepare reads no path of its own.
-        When another host holds the session's workspace already, this one's
-        goes. A release lets an instance go (`_release`); a purge destroys
+        One that names a base is refused: the host runs its owner's image
+        alone. When another host holds the session's workspace already,
+        this one's goes. A release lets an instance go (`_release`); a purge destroys
         one (`_purge`)."""
         payload = item.payload
         if payload.get("operation") == "release":
@@ -325,6 +326,11 @@ class ExecutorRelayImpl(ExecutorInterface):
         differs = unlike(ask, spec, ())
         if differs is not None:
             await self._answer(item.id, refused="this host refused it: " + differs)
+            return
+        if spec.base is not None:
+            # A container here runs its owner's image alone: a base would
+            # name another, and this host builds none.
+            await self._answer(item.id, refused="this host builds no workspace base")
             return
         org_id = item.org_id
         provider = self._workspaces.get(spec.mode)

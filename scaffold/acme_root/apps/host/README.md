@@ -64,7 +64,8 @@ macOS.
   names a snapshot starts the workspace from it, replaced whole, once its
   bytes match their digest; bytes gone or altered are answered lost. An
   erase lets a session's snapshots go. It refuses a workspace kept by
-  snapshots at a mode whose snapshots it did not probe.
+  snapshots at a mode whose snapshots it did not probe, and one that
+  names a base: it runs its owner's image alone.
 - **Shares its proxy and its CA, under open egress alone.** A command in
   a workspace with open egress goes through the proxy the host's
   environment names, without any credential in its URL, and trusts the
