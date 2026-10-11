@@ -13,6 +13,7 @@ from collections.abc import Callable
 from datetime import datetime
 
 from acme.om.base import utcnow
+from acme.om.levers.rules import reach_of
 from acme.om.playbooks.impl.manager import PlaybooksManagerImpl, PlaybooksOptions
 from acme.om.playbooks.impl.tools import ToolsManagerPlaybooksImpl
 from acme.om.playbooks.manager import PlaybooksManagerInterface
@@ -52,6 +53,7 @@ class PlaybooksLayer:
                 managers.tenancy,
                 managers.outbox,
                 self.options,
+                reach_of(managers.kinds),
                 self._clock,
             )
             self._built = (playbooks, managers.steps)

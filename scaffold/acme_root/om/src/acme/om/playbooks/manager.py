@@ -24,9 +24,11 @@ class PlaybooksManagerInterface(ABC):
     ) -> Playbook:
         """The next version of the draft's name, announced, by a person in
         person: a context an agent's call runs under is `NotAuthorized`, so
-        no agent writes the brief the next session follows. An id written
-        already answers that version as stored, so a retry publishes none;
-        one another tenant holds is `TenantMismatch`."""
+        no agent writes the brief the next session follows. The version
+        carries what the lever checks find in it, against the kinds it
+        reaches; a finding advises and never refuses the publish. An id
+        written already answers that version as stored, so a retry
+        publishes none; one another tenant holds is `TenantMismatch`."""
         ...
 
     @abstractmethod

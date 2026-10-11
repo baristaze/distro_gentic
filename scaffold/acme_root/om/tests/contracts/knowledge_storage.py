@@ -1,7 +1,8 @@
 """The knowledge storage contract: a tenant's entries by their state, each
-change conditioned on the version read, and the reviewed ones a session of
-a project reaches, whole or by slug: its project's and those of no
-project, never another project's. The cases named in
+change conditioned on the version read, with the findings read in it, and
+the reviewed ones a session of a project reaches, whole or by slug: its
+project's and those of no project, never another project's; and the
+versions each session recalled, one recall of an entry a session. The cases named in
 `CROSS_TENANT_CASES` are the tenant fence's evidence: each one presents
 another tenant's identifier and asserts that nothing is found and nothing
 changes."""
@@ -14,7 +15,8 @@ from acme.om.base import new_id, utcnow
 from acme.om.exceptions import PreconditionFailed
 from acme.om.knowledge.rules import slug_of
 from acme.om.knowledge.storage import KnowledgeStorageInterface
-from acme.om.knowledge.types.knowledge import Knowledge, KnowledgeStatus
+from acme.om.knowledge.types.knowledge import Knowledge, KnowledgeRecall, KnowledgeStatus
+from acme.om.levers.types.lever import LeverCheck, LeverFinding
 
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
@@ -24,6 +26,8 @@ CROSS_TENANT_CASES: frozenset[str] = frozenset(
         "read_reachable",
         "read_by_slug",
         "update_entry",
+        "create_recalls",
+        "read_recalls",
         "purge_tenant",
     }
 )
@@ -51,6 +55,23 @@ def make_entry(
         reviewed_by=actor if status is KnowledgeStatus.REVIEWED else None,
         project_id=project_id,
         slug=slug_of(title, entry_id),
+        findings=(
+            LeverFinding(
+                check=LeverCheck.REPEATED_PHRASE,
+                detail="“staging database” comes 5 times, past 4",
+                excerpt="staging database",
+            ),
+        ),
+    )
+
+
+def make_recall(session_id: UUID, entry: Knowledge) -> KnowledgeRecall:
+    return KnowledgeRecall(
+        id=new_id(),
+        created_at=utcnow(),
+        session_id=session_id,
+        entry_id=entry.id,
+        version=entry.version,
     )
 
 
@@ -115,12 +136,46 @@ class KnowledgeStorageContract:
         self, storage: KnowledgeStorageInterface
     ) -> None:
         org_a, org_b = new_id(), new_id()
-        await storage.create_entry(org_a, make_entry(), ())
+        gone = make_entry()
+        await storage.create_entry(org_a, gone, ())
+        await storage.create_recalls(org_a, (make_recall(new_id(), gone),))
         kept = make_entry()
         await storage.create_entry(org_b, kept, ())
-        assert await storage.purge_tenant(org_a, 10) == 1
+        recall = make_recall(new_id(), kept)
+        await storage.create_recalls(org_b, (recall,))
+        assert await storage.purge_tenant(org_a, 10) == 2
         assert await storage.purge_tenant(org_a, 10) == 0
         assert await storage.read_entry(org_b, kept.id) == kept
+        assert await storage.read_recalls(org_b, recall.session_id, 10) == [recall]
+
+    async def test_a_session_recalls_an_entry_once_at_the_version_it_read(
+        self, storage: KnowledgeStorageInterface
+    ) -> None:
+        org, session_id = new_id(), new_id()
+        first, second = make_entry(KnowledgeStatus.REVIEWED), make_entry(KnowledgeStatus.REVIEWED)
+        recalls = (make_recall(session_id, first), make_recall(session_id, second))
+        await storage.create_recalls(org, recalls)
+        await storage.create_recalls(org, (make_recall(session_id, reviewed(first)),))
+        await storage.create_recalls(org, ())
+        assert await storage.read_recalls(org, session_id, 10) == sorted(
+            recalls, key=lambda r: (r.created_at, r.id)
+        )
+        assert len(await storage.read_recalls(org, session_id, 1)) == 1
+        assert await storage.read_recalls(org, new_id(), 10) == []
+
+    async def test_create_recalls_in_another_tenant_is_not_read_here(
+        self, storage: KnowledgeStorageInterface
+    ) -> None:
+        org, session_id = new_id(), new_id()
+        await storage.create_recalls(new_id(), (make_recall(session_id, make_entry()),))
+        assert await storage.read_recalls(org, session_id, 10) == []
+
+    async def test_read_recalls_of_another_tenant_finds_nothing(
+        self, storage: KnowledgeStorageInterface
+    ) -> None:
+        session_id = new_id()
+        await storage.create_recalls(new_id(), (make_recall(session_id, make_entry()),))
+        assert await storage.read_recalls(new_id(), session_id, 10) == []
 
     async def test_a_session_reaches_its_projects_entries_and_the_tenants_alone(
         self, storage: KnowledgeStorageInterface

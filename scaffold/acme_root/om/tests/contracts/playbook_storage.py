@@ -1,5 +1,5 @@
-"""The playbooks storage contract: every published version, written once,
-and the playbooks each session invoked. The cases named in
+"""The playbooks storage contract: every published version, written once
+with the findings read in it, and the playbooks each session invoked. The cases named in
 `CROSS_TENANT_CASES` are the tenant fence's evidence: each one presents
 another tenant's identifier and asserts that nothing is found and nothing
 changes."""
@@ -10,6 +10,7 @@ import pytest
 
 from acme.om.base import new_id, utcnow
 from acme.om.exceptions import UniqueKeyTaken
+from acme.om.levers.types.lever import LeverCheck, LeverFinding
 from acme.om.playbooks.storage import PlaybookStorageInterface
 from acme.om.playbooks.types.playbook import Playbook, PlaybookGate, PlaybookInvocation
 from acme.om.tools.types.policy import Decision
@@ -38,6 +39,13 @@ def make_playbook(version: int = 1, name: str = "release-a-build") -> Playbook:
         body="## Steps\n\n1. Build.\n2. Ask before you publish.",
         gates=(PlaybookGate(tool="publish", decision=Decision.APPROVE),),
         published_by=new_id(),
+        findings=(
+            LeverFinding(
+                check=LeverCheck.UNBOUNDED_RETRY,
+                detail="“keep trying” with no stopping condition",
+                excerpt="Keep trying the build until it is green.",
+            ),
+        ),
     )
 
 

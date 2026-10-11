@@ -1,10 +1,11 @@
 """Storage of the knowledge swimlane: the tenant's entries, suggested,
-reviewed, or rejected. Every operation takes org_id first."""
+reviewed, or rejected, and the versions each session recalled. Every
+operation takes org_id first."""
 
 from abc import ABC, abstractmethod
 from uuid import UUID
 
-from acme.om.knowledge.types.knowledge import Knowledge, KnowledgeStatus
+from acme.om.knowledge.types.knowledge import Knowledge, KnowledgeRecall, KnowledgeStatus
 from acme.om.outbox.types.row import OutboxRow
 
 
@@ -53,7 +54,20 @@ class KnowledgeStorageInterface(ABC):
         ...
 
     @abstractmethod
+    async def create_recalls(self, org_id: UUID, recalls: tuple[KnowledgeRecall, ...]) -> None:
+        """The recalls of one session, in one commit; one of an entry the
+        session recalled already lands nothing."""
+        ...
+
+    @abstractmethod
+    async def read_recalls(
+        self, org_id: UUID, session_id: UUID, limit: int
+    ) -> list[KnowledgeRecall]:
+        """The entries a session recalled, oldest first, at most `limit`."""
+        ...
+
+    @abstractmethod
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:
-        """At most `limit` entries of a deleted tenant past its retention;
-        returns how many went."""
+        """At most `limit` entries, and as many recalls, of a deleted tenant
+        past its retention; returns how many went."""
         ...

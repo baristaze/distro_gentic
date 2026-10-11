@@ -2,7 +2,7 @@ from uuid import UUID
 
 from acme.om.exceptions import PreconditionFailed
 from acme.om.knowledge.storage import KnowledgeStorageInterface
-from acme.om.knowledge.types.knowledge import Knowledge, KnowledgeStatus
+from acme.om.knowledge.types.knowledge import Knowledge, KnowledgeRecall, KnowledgeStatus
 from acme.om.outbox.storage import OutboxLandingInterface
 from acme.om.outbox.types.row import OutboxRow
 from acme.om.storage.impl.memory_base import MemoryStorageBase, MemoryTable
@@ -12,6 +12,7 @@ class KnowledgeStorageMemoryImpl(MemoryStorageBase, KnowledgeStorageInterface):
     def __init__(self, outbox: OutboxLandingInterface | None = None) -> None:
         super().__init__(outbox)
         self._entries: MemoryTable[Knowledge] = {}
+        self._recalls: MemoryTable[KnowledgeRecall] = {}
 
     async def create_entry(
         self, org_id: UUID, entry: Knowledge, outbox_rows: tuple[OutboxRow, ...]
@@ -61,9 +62,28 @@ class KnowledgeStorageMemoryImpl(MemoryStorageBase, KnowledgeStorageInterface):
                 raise PreconditionFailed(f"knowledge {entry.id} moved meanwhile")
             self._put(self._entries, org_id, entry, outbox_rows)
 
+    async def create_recalls(self, org_id: UUID, recalls: tuple[KnowledgeRecall, ...]) -> None:
+        async with self._lock:
+            # One recall of an entry in a session: the unique index the table holds.
+            held = {(r.session_id, r.entry_id) for r in self._rows(self._recalls, org_id)}
+            for recall in recalls:
+                if (recall.session_id, recall.entry_id) not in held:
+                    self._put(self._recalls, org_id, recall)
+                    held.add((recall.session_id, recall.entry_id))
+
+    async def read_recalls(
+        self, org_id: UUID, session_id: UUID, limit: int
+    ) -> list[KnowledgeRecall]:
+        rows = [r for r in self._rows(self._recalls, org_id) if r.session_id == session_id]
+        return sorted(rows, key=lambda r: (r.created_at, r.id))[:limit]
+
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:
         async with self._lock:
-            ids = [row.id for org, row in self._entries.values() if org == org_id][:limit]
-            for row_id in ids:
-                del self._entries[row_id]
-            return len(ids)
+            return _drop(self._recalls, org_id, limit) + _drop(self._entries, org_id, limit)
+
+
+def _drop[E: Knowledge | KnowledgeRecall](table: MemoryTable[E], org_id: UUID, limit: int) -> int:
+    ids = [row.id for org, row in table.values() if org == org_id][:limit]
+    for row_id in ids:
+        del table[row_id]
+    return len(ids)
