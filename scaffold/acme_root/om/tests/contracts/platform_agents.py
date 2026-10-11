@@ -287,10 +287,10 @@ async def a_woken_root(platform: Platform, root: UUID) -> None:
 async def an_engineer_starts_two_sub_agents_and_wakes_on_each_report(
     platform: Platform, executor: ScriptedExecutor, work: WorkProductMemoryImpl
 ) -> None:
-    """The shipped engineer starts two analysis sub-agents in one turn and
-    parks on them. Each report wakes it: it reads the first and waits on the
-    second, reads the second, validates its head, and ends through its
-    result gate. Each sub-agent runs under its share in the root's project,
+    """The shipped engineer takes its baseline, then starts two analysis
+    sub-agents in one turn and parks on them. Each report wakes it: it reads
+    the first and waits on the second, reads the second, validates its
+    head, and ends through its result gate. Each sub-agent runs under its share in the root's project,
     and what the whole tree spent and holds stays within the root's budget,
     which is far below the shares added up."""
     projects = platform.storage.get_project_storage()
@@ -313,6 +313,7 @@ async def an_engineer_starts_two_sub_agents_and_wakes_on_each_report(
         ),
     )
     platform.anthropic.add(
+        reply(calls(kinds.VALIDATE, "use_baseline", baseline=True)),
         reply(
             said("Two things decide this; a sub-agent looks at each."),
             *(
@@ -326,7 +327,7 @@ async def an_engineer_starts_two_sub_agents_and_wakes_on_each_report(
                 for n, (title, objective) in enumerate(split, 1)
             ),
             calls(WAIT_FOR_SUB_AGENTS, "use_wait_1"),
-        )
+        ),
     )
 
     parked = await platform.managers.loop.run(platform.owner, root)

@@ -67,10 +67,17 @@ of](../../../../README.md).
 - **Validation runs apart from the agent.** Never in its workspace, never
   with checks from the delivered tree, never under an environment it set.
 - **One gate decides.** A success that changed the work product counts
-  only when the policy passed at the committed head, on a clean tree, on
-  runs the validation's executor wrote, with every run of every check at
-  that head counted. A failure explained by runs is a result. A success
-  that validated nothing is inconclusive.
+  only after a baseline that came first, and only when the policy passed
+  at the committed head, on a clean tree, on runs the validation's
+  executor wrote, with every run of every check at that head counted at
+  the check version the policy declares now, and none at another. A
+  failure explained by runs is a result. A success that validated
+  nothing is inconclusive.
+- **One baseline rule.** A baseline comes first when it ran at the
+  delivery's base, lists its runs, and was taken before the head was
+  validated (`rules.baseline`). The gate and acceptance both call it. A
+  session whose base moves takes one at the new base, then validates its
+  head again.
 - **A rate is bounded, never zero.** An exact or Wilson bound at a
   declared confidence, over each validation's trials at the count the
   policy declared; a trial an abort ended is classified by the

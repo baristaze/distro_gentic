@@ -35,11 +35,12 @@ from acme.om.agents.types.request import Start
 from acme.om.agents.types.result import Claim, Result
 from acme.om.base import new_id
 from acme.om.context import AppContext, AppType, RequestContext, TenantContext
+from acme.om.evidence import EvidenceManagerInterface
 from acme.om.evidence.collector import digest
 from acme.om.evidence.impl.ports import WorkProductMemoryImpl
 from acme.om.evidence.rules import policy_key
 from acme.om.evidence.types.policy import ValidationPolicy
-from acme.om.evidence.types.record import RunOutcome, RunPurpose
+from acme.om.evidence.types.record import ExecutionRecord, RunOutcome, RunPurpose
 from acme.om.evidence.types.validation import Delivery
 from acme.om.platform_agents.types.validation import ValidationStart, ValidationStatus
 from acme.om.root import Managers, build_managers
@@ -205,6 +206,14 @@ class Delivered:
         return owner, session.id, head
 
 
+async def validated(
+    evidence: EvidenceManagerInterface, ctx: TenantContext, session_id: UUID
+) -> list[ExecutionRecord]:
+    """The session's runs at the head: every run but its baseline's."""
+    runs = (await evidence.get_runs(ctx, session_id, None, 10)).items
+    return [run for run in runs if run.purpose is RunPurpose.VALIDATION]
+
+
 def gone(instance: UUID) -> bool:
     """Whether nothing of an instance is left on the Docker: no container
     and no volume of its name."""
@@ -231,13 +240,14 @@ async def test_a_deliverys_checks_run_in_a_fresh_container_and_the_gate_confirms
     owner, session_id, head = await delivered.session({"src/cart.py": "TOTAL = 3\n"})
     evidence = delivered.managers.evidence
 
+    await evidence.validate(owner, session_id, RunPurpose.BASELINE)
     (validation,) = await evidence.validate(owner, session_id, RunPurpose.VALIDATION)
 
-    (stream,) = delivered.infra.transport.read
+    stream = delivered.infra.transport.read[-1]
     assert validation.results_sha256 == digest(stream.rstrip(b"\n")), (
         "the validation hashes to the results stream the run wrote"
     )
-    (record,) = (await evidence.get_runs(owner, session_id, None, 10)).items
+    (record,) = await validated(evidence, owner, session_id)
     assert validation.records == (record.id,)
     assert (record.version, record.outcome, record.purpose) == (
         head,
@@ -267,9 +277,10 @@ async def test_a_heads_attributes_leave_nothing_out_of_the_checks(
     )
     evidence = delivered.managers.evidence
 
+    await evidence.validate(owner, session_id, RunPurpose.BASELINE)
     await evidence.validate(owner, session_id, RunPurpose.VALIDATION)
 
-    (record,) = (await evidence.get_runs(owner, session_id, None, 10)).items
+    (record,) = await validated(evidence, owner, session_id)
     assert (record.version, record.outcome) == (head, RunOutcome.FAILED), (
         "the base's runner read the base's fixture against the head's cart"
     )
@@ -277,6 +288,7 @@ async def test_a_heads_attributes_leave_nothing_out_of_the_checks(
         owner, session_id, Result(claim=Claim.SUCCEEDED, evidence=(record.id,))
     )
     assert not verdict.accepted, "the gate refuses a success the checks never showed"
+    assert "did not pass" in (verdict.reason or ""), verdict.reason
 
 
 # Check 1, while the head runs: the base's fixture is read-only in the

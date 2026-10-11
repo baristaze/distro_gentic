@@ -219,6 +219,9 @@ def checkout_policy(
 
 
 def delivered(
-    head: str = "c0ffee", changed: tuple[str, ...] = ("src/cart.py",), dirty: bool = False
+    head: str = "c0ffee",
+    changed: tuple[str, ...] = ("src/cart.py",),
+    dirty: bool = False,
+    base: str = "base0",
 ) -> Delivery:
-    return Delivery(project="checkout", base="base0", head=head, dirty=dirty, changed=changed)
+    return Delivery(project="checkout", base=base, head=head, dirty=dirty, changed=changed)

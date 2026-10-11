@@ -1,7 +1,9 @@
 """The pure rules of evidence: protected paths, what a change asks for, the
-results contract and its one collector, and the acceptance scanner."""
+baseline that came first, the results contract and its one collector,
+and the acceptance scanner."""
 
 import json
+from datetime import timedelta
 from typing import Any
 
 import pytest
@@ -11,6 +13,7 @@ from contracts.evidence_storage import make_policy
 from acme.om.base import new_id, utcnow
 from acme.om.evidence.collector import Collector, collect
 from acme.om.evidence.rules import (
+    baseline,
     compatibility_refusal,
     execution_request,
     protected_paths,
@@ -23,7 +26,7 @@ from acme.om.evidence.types.contract import CheckDeclaration, Offer
 from acme.om.evidence.types.policy import Requirement, ValidationPolicy
 from acme.om.evidence.types.provenance import Provenance
 from acme.om.evidence.types.record import RunOutcome, RunPurpose
-from acme.om.evidence.types.validation import ExecutionRequest
+from acme.om.evidence.types.validation import ExecutionRequest, Validation
 from acme.om.exceptions import ValidationFailed
 
 # Protected paths.
@@ -127,6 +130,61 @@ def test_a_check_the_executor_cannot_run_is_refused_before_anything_runs() -> No
         )
         is None
     )
+
+
+def a_validation(
+    purpose: RunPurpose, version: str, minute: int, source: str = "base0", runs: int = 1
+) -> Validation:
+    return Validation(
+        id=new_id(),
+        created_at=utcnow().replace(hour=0, minute=0) + timedelta(minutes=minute),
+        session_id=new_id(),
+        project="checkout",
+        purpose=purpose,
+        version=version,
+        source=source,
+        executor="executor-1",
+        results_sha256="0" * 64,
+        records=tuple(new_id() for _ in range(runs)),
+    )
+
+
+def test_a_baseline_counts_when_it_ran_at_the_base_before_the_head_was_validated() -> None:
+    first = a_validation(RunPurpose.BASELINE, "base0", 1)
+    change = a_validation(RunPurpose.VALIDATION, "c0ffee", 2)
+    assert baseline((first, change), "base0", "c0ffee") == (first,)
+    assert baseline((first,), "base0", "c0ffee") == (first,), "nothing validated yet"
+    assert baseline((first, change), "base0", None) == (first,), "no head named"
+    none = "no baseline ran at the base base0"
+    assert baseline((change,), "base0", "c0ffee") == none
+    elsewhere = a_validation(RunPurpose.BASELINE, "other", 1)
+    assert baseline((elsewhere, change), "base0", "c0ffee") == none
+    empty = a_validation(RunPurpose.BASELINE, "base0", 1, runs=0)
+    assert baseline((empty, change), "base0", "c0ffee") == none
+    # A baseline taken after the head was validated counts once the head is
+    # validated again.
+    late = a_validation(RunPurpose.BASELINE, "base0", 3)
+    after = "every baseline at the base base0 ran after the head c0ffee was validated"
+    assert baseline((change, late), "base0", "c0ffee") == after
+    again = a_validation(RunPurpose.VALIDATION, "c0ffee", 4)
+    assert baseline((change, late, again), "base0", "c0ffee") == (late,)
+
+
+def test_a_base_that_moved_takes_its_own_baseline_before_its_head_is_validated() -> None:
+    # The branch took the default branch in, or was cut again, so its base
+    # and its head moved: the old base's baseline counts for nothing at the
+    # new one, and a change validated from the old base leaves no baseline late.
+    old = a_validation(RunPurpose.BASELINE, "base0", 1)
+    first = a_validation(RunPurpose.VALIDATION, "c0ffee", 2)
+    moved = a_validation(RunPurpose.VALIDATION, "d00d", 3, source="base1")
+    assert baseline((old, first, moved), "base1", "d00d") == "no baseline ran at the base base1"
+    taken = a_validation(RunPurpose.BASELINE, "base1", 4, source="base1")
+    assert (
+        baseline((old, first, moved, taken), "base1", "d00d")
+        == "every baseline at the base base1 ran after the head d00d was validated"
+    )
+    again = a_validation(RunPurpose.VALIDATION, "d00d", 5, source="base1")
+    assert baseline((old, first, moved, taken, again), "base1", "d00d") == (taken,)
 
 
 def test_a_policy_is_well_formed() -> None:

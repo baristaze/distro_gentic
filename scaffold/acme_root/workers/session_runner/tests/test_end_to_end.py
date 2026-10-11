@@ -367,6 +367,23 @@ async def settled(stack: Stack, person: Person, session_id: str) -> dict[str, An
     pytest.fail(f"session {session_id} never settled\n{logs}")
 
 
+async def awaiting_approval(
+    stack: Stack, person: Person, session_id: str, tool: str
+) -> dict[str, Any]:
+    """The call the session parks on for a person's approval, once the last
+    call it asked for is `tool`."""
+    deadline = asyncio.get_running_loop().time() + SETTLE_SECONDS
+    approval = {"reason": "person", "unlock": "approval", "retry_at": None, "line": None}
+    while asyncio.get_running_loop().time() < deadline:
+        parked = await settled(stack, person, session_id)
+        asked = of_type(await history(stack, person, session_id), "tool_request")[-1]
+        if parked["status"] == "parked" and parked["park"] == approval and asked["tool"] == tool:
+            return asked
+        await asyncio.sleep(0.25)
+    logs = "\n\n".join(f"{r.log.name}:\n{r.tail()}" for r in stack.runners)
+    pytest.fail(f"session {session_id} never held {tool} for a person\n{logs}")
+
+
 async def until_steps(
     stack: Stack, person: Person, session_id: str, *types: str
 ) -> list[dict[str, Any]]:
@@ -506,28 +523,23 @@ async def test_one_session_in_a_project_meets_every_gate_on_its_way_to_a_success
     project = policy_key(person.project_id)
     await stack.container.managers.evidence.write_policy(person.ctx, make_policy(project))
     runner = stack.runner(
-        "runner-gates", [runs(*FIXES_THE_REPORT), validates(), submits("succeeded")]
+        "runner-gates",
+        [validates(baseline=True), runs(*FIXES_THE_REPORT), validates(), submits("succeeded")],
     )
     session_id = await started(stack, person, "engineer")
 
     await say(stack, person, session_id, "The weekly report misses its total. Fix it.")
-    # The command's output marks the session, and a validation from a
-    # workspace with open egress acts outward: it waits for a person.
-    parked = await settled(stack, person, session_id)
-    assert parked["park"] == {
-        "reason": "person",
-        "unlock": "approval",
-        "retry_at": None,
-        "line": None,
-    }
-    asked = of_type(await history(stack, person, session_id), "tool_request")[-1]
-    assert asked["tool"] == "validate"
-    approved = await stack.client.post(
-        f"/v1/agent-sessions/{session_id}/calls/{asked['seq']}/decision",
-        headers=created(person.headers),
-        json={"approve": True},
-    )
-    assert approved.status_code == 201, approved.text
+    # The baseline runs before anything marks the session, and its answer
+    # marks it: from a workspace with open egress, the command and then the
+    # validation act outward, and each waits for a person.
+    for tool in ("run_command", "validate"):
+        asked = await awaiting_approval(stack, person, session_id, tool)
+        approved = await stack.client.post(
+            f"/v1/agent-sessions/{session_id}/calls/{asked['seq']}/decision",
+            headers=created(person.headers),
+            json={"approve": True},
+        )
+        assert approved.status_code == 201, approved.text
     await until_steps(stack, person, session_id, "loop_ended")
     session = await settled(stack, person, session_id)
 
@@ -549,14 +561,14 @@ async def test_one_session_in_a_project_meets_every_gate_on_its_way_to_a_success
     # Each model call was held and settled through the money gate.
     ledger = storage.get_money_ledger_storage()
     holds = await ledger.read_entries(org_id, session_id=sid, kind=EntryKind.HOLD, limit=10)
-    assert len(holds) == 3, "one hold for each of the three model calls"
+    assert len(holds) == 4, "one hold for each of the four model calls"
     bills: list[str] = []
     for held in holds:
         assert isinstance(held, FundedHold) and held.funding.mode is FundingMode.PLATFORM
         entries = await ledger.read_entries(org_id, hold_id=held.hold.id, limit=5)
         (settlement,) = [entry for entry in entries if isinstance(entry, Settlement)]
         bills.append(settlement.bill.kind)
-    assert bills == ["billed"] * 3
+    assert bills == ["billed"] * 4
     plans = {held.funding.plan.id for held in holds if isinstance(held, FundedHold)}
     found["money"] = f"{len(holds)} holds on plan {sorted(plans)}, settled {bills}"
 

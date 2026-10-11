@@ -286,6 +286,11 @@ async def test_a_pinned_projects_delivery_is_validated_on_its_pools_host_and_the
     host = await pool_host(api, pool.id, tmp_path / "host")
     session_id, head = await delivered(run, api, pool.id)
 
+    # The baseline at the base comes first, on the same host.
+    await pumped(
+        managers.evidence.validate(owner, session_id, RunPurpose.BASELINE),
+        {host.agent: host.claimed},
+    )
     (validation,) = await pumped(
         managers.evidence.validate(owner, session_id, RunPurpose.VALIDATION),
         {host.agent: host.claimed},
@@ -293,12 +298,13 @@ async def test_a_pinned_projects_delivery_is_validated_on_its_pools_host_and_the
 
     instance = instance_of(validation.executor)
     assert instance != session_id, "the run's instance is never the session's workspace"
-    ((location, stream),) = host.transport.read
+    location, stream = host.transport.read[-1]
     assert Path(location) == host.root.resolve() / owner.org_id.hex / instance.hex, (
         "the results stream was read on the pool's host, in the run's own instance"
     )
     assert validation.results_sha256 == digest(stream.rstrip(b"\n"))
-    (record,) = (await managers.evidence.get_runs(owner, session_id, None, 10)).items
+    runs = (await managers.evidence.get_runs(owner, session_id, None, 10)).items
+    (record,) = [found for found in runs if found.purpose is RunPurpose.VALIDATION]
     assert validation.records == (record.id,) and record.executor == validation.executor
     assert (record.version, record.outcome, record.purpose) == (
         head,

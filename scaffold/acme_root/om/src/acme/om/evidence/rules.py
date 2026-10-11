@@ -1,7 +1,8 @@
 """Pure rules of evidence: the key a project's policy is kept under, which
 paths a policy protects, the target a tool's call reports for them, the checks a change asks for, what a
-validation is asked to run, the result gate's judgment, and a validation
-session's verdict. Values in, values out; no clock, no storage."""
+validation is asked to run, the baseline that came first, the result
+gate's judgment, and a validation session's verdict. Values in, values
+out; no clock, no storage."""
 
 import posixpath
 import re
@@ -213,6 +214,45 @@ def by_environment(request: ExecutionRequest) -> dict[str, ExecutionRequest]:
     }
 
 
+# The baseline.
+
+
+def baseline(
+    validations: Sequence[Validation], base: str, head: str | None
+) -> tuple[Validation, ...] | str:
+    """The baselines that came first, or why none did. A baseline counts
+    when it ran at `base`, lists the runs it wrote, and was taken before
+    the latest validation at `head`: the base, measured before the change
+    it is compared with. One taken after the head was validated counts
+    once the head is validated again, and with nothing validated at the
+    head yet, every baseline at the base came first. The one rule the
+    result gate and the acceptance harness both hold: a baseline comes
+    first, so "fixed" has something to be compared with."""
+    taken = [
+        validation
+        for validation in validations
+        if validation.purpose is RunPurpose.BASELINE
+        and validation.version == base
+        and validation.records
+    ]
+    if not taken:
+        return f"no baseline ran at the base {base}"
+    last = max(
+        (
+            validation.created_at
+            for validation in validations
+            if validation.purpose is RunPurpose.VALIDATION and validation.version == head
+        ),
+        default=None,
+    )
+    before = tuple(
+        validation for validation in taken if last is None or validation.created_at <= last
+    )
+    if not before:
+        return f"every baseline at the base {base} ran after the head {head} was validated"
+    return before
+
+
 # The result gate.
 
 
@@ -220,8 +260,9 @@ def by_environment(request: ExecutionRequest) -> dict[str, ExecutionRequest]:
 class Reading:
     """What the gate read for one result: the runs its evidence names, the
     work product as its system reports it (or what could not be read),
-    the project's policy, and every validation of the session at the
-    delivered head with every run each one lists."""
+    the project's policy, every validation of the session at the
+    delivered head with every run each one lists, and the session's
+    validations at the delivery's base, where its baselines are."""
 
     cited: tuple[ExecutionRecord, ...] = ()
     unresolved: tuple[UUID, ...] = ()
@@ -230,6 +271,7 @@ class Reading:
     policy: ValidationPolicy | None = None
     validations: tuple[Validation, ...] = ()
     records: tuple[ExecutionRecord, ...] = ()
+    at_base: tuple[Validation, ...] = ()
 
 
 def refused(reason: str) -> Verdict:
@@ -243,11 +285,12 @@ def accepted(outcome: LoopOutcome) -> Verdict:
 def judge(claim: Claim, reading: Reading) -> Verdict:
     """The result gate. A claim cites runs of its own session, each one
     found. A failure explained by runs is a result. A success that changed
-    the work product counts only when the policy passed at the committed
-    head, on a clean tree, on runs the validation's executor wrote, with no
-    protected path touched. A success that validated nothing, because
-    nothing changed or the policy asks for no check of the change, is
-    inconclusive."""
+    the work product counts only after a baseline that came first
+    (`baseline`), and only when the policy passed at the committed head, on
+    a clean tree, on runs the validation's executor wrote at the check
+    versions the policy declares now, with no protected path touched. A
+    success that validated nothing, because nothing changed or the policy
+    asks for no check of the change, is inconclusive."""
     if reading.unresolved:
         names = ", ".join(str(found) for found in reading.unresolved)
         return refused(f"the evidence names no run of this session: {names}")
@@ -279,6 +322,19 @@ def judge(claim: Claim, reading: Reading) -> Verdict:
     needed = required(policy, delivery.changed)
     if not needed:
         return accepted(LoopOutcome.INCONCLUSIVE)
+    first = baseline((*reading.at_base, *reading.validations), delivery.base, delivery.head)
+    if isinstance(first, str):
+        # With no head validation named, any baseline at the base came first.
+        taken = not isinstance(baseline(reading.at_base, delivery.base, None), str)
+        step = (
+            "Validate the head again"
+            if taken
+            else "Take one with validate, baseline set, then validate the head again"
+        )
+        return refused(
+            "a success counts only when a baseline at its base ran before the head was "
+            f"validated: {first}. {step}"
+        )
     if not reading.validations:
         return refused(
             f"no validation ran at the head {delivery.head}: ask for one, then submit again"
@@ -286,11 +342,49 @@ def judge(claim: Claim, reading: Reading) -> Verdict:
     unwritten = provenance_refusal(reading.validations, reading.records, delivery.head)
     if unwritten is not None:
         return refused(unwritten)
+    current = governing(policy, reading.records)
+    stale = stale_checks(policy, needed, reading.records, current)
+    if stale:
+        return refused(
+            f"the checks changed since the head {delivery.head} was validated: "
+            + "; ".join(stale)
+            + ". Validate the head again"
+        )
     order = {run: at for found in reading.validations for at, run in enumerate(found.records)}
-    unmet = unmet_requirements(needed, reading.records, delivery.head, order)
+    unmet = unmet_requirements(needed, current, delivery.head, order)
     if unmet:
         return refused(f"the validation at {delivery.head} did not pass: " + "; ".join(unmet))
     return accepted(LoopOutcome.SUCCEEDED)
+
+
+def governing(
+    policy: ValidationPolicy, records: Iterable[ExecutionRecord]
+) -> tuple[ExecutionRecord, ...]:
+    """The runs at the check version the policy declares now. A run at
+    another version measured checks that no longer govern: it counts for
+    nothing, passed or failed."""
+    declared = {check.name: check.version for check in policy.checks}
+    return tuple(record for record in records if declared.get(record.check) == record.check_version)
+
+
+def stale_checks(
+    policy: ValidationPolicy,
+    needed: Sequence[Requirement],
+    records: Sequence[ExecutionRecord],
+    current: Sequence[ExecutionRecord],
+) -> list[str]:
+    """Each check the change asks for that ran at the head only at a check
+    version the policy no longer declares (`current` holds the runs at the
+    versions it declares)."""
+    names = {requirement.check for requirement in needed} - {record.check for record in current}
+    ran = sorted(
+        {(record.check, record.check_version) for record in records if record.check in names}
+    )
+    return [
+        f"{name} ran at check version {version}, and the policy declares "
+        f"{policy.declared(name).version}"
+        for name, version in ran
+    ]
 
 
 def provenance_refusal(

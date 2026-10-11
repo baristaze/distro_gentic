@@ -195,10 +195,11 @@ optional stopping.
 
 ## EVD-09 Every trial counts, and candidate and baseline interleave
 
-**Principle.** The gate counts every trial at that version, and an
-aborted trial is classified by a declared rule, never dropped. Candidate
-and baseline trials interleave on the same host, and a claim across
-many scenarios corrects for the number of comparisons.
+**Principle.** The gate counts every trial at that version, run at the
+check version the policy declares, and an aborted trial is classified by
+a declared rule, never dropped. Candidate and baseline trials interleave
+on the same host, and a claim across many scenarios corrects for the
+number of comparisons.
 
 **Source.** Evidence, Statistical Evidence.
 
@@ -206,10 +207,12 @@ many scenarios corrects for the number of comparisons.
 classified; how candidate and baseline trials are scheduled; how a claim
 across scenarios is corrected.
 
-**Violation.** A trial at the version dropped from the count; an aborted
-trial dropped, or classified by no declared rule; candidate and baseline
-run in separate blocks or on different hosts; a claim across
-scenarios with no correction for the number of comparisons.
+**Violation.** A trial at the version and the declared check version
+dropped from the count, or one at a check version the policy no longer
+declares counted; an aborted trial dropped, or classified by no declared
+rule; candidate and baseline run in separate blocks or on different
+hosts; a claim across scenarios with no correction for the number of
+comparisons.
 
 **Severity.** high
 
@@ -220,20 +223,29 @@ scenarios with no correction for the number of comparisons.
 **Principle.** Work completes through one gated tool. It records the
 outcome (succeeded, failed, or inconclusive), the report, the
 uncertainties, and the runs each claim cites. It refuses a success that
-changed the work product unless the validation policy passed at the
-committed head, with a clean tree, on results its executor wrote. A run
-that validated nothing gets no exemption; it is inconclusive. A failure
-with an evidence-backed explanation is a result.
+changed the work product unless a baseline came first and the validation
+policy passed at the committed head, with a clean tree, on results its
+executor wrote. A baseline comes first when it ran at the base before
+the head was validated, by the one rule acceptance holds too; a moved
+base asks for another. A run counts only at the version of its check the
+policy declares now. A run that validated nothing gets no exemption; it
+is inconclusive. A failure with an evidence-backed explanation is a
+result.
 
 **Source.** Evidence, The Result Gate; What Closes a Loop.
 
 **Look for.** Every path that completes work; the gate's checks on a
-success; what it records.
+success; where the baseline rule lives and who calls it; how a run is
+matched to the check version the policy declares; what it records.
 
 **Violation.** A path that completes work without the gate; a success
 accepted at a head other than the validated one, with a dirty tree, or
-on results the executor did not write; a run that validated nothing
-recorded as succeeded; a claim that cites no run.
+on results the executor did not write; a success accepted with no
+baseline that came first, or on runs at a check version the policy no
+longer declares; a baseline rule the gate and acceptance each hold a
+copy of, or one that leaves a session whose base moved no way to
+succeed; a run that validated nothing recorded as succeeded; a claim
+that cites no run.
 
 **Severity.** high
 

@@ -575,10 +575,10 @@ to be zero, only bounded. A claim about a rate reports a one-sided exact
 or Wilson bound at a declared confidence, never a normal approximation,
 which collapses at zero failures. The trial count, or a sequential test
 valid under optional stopping, is declared before the trials. The gate
-counts every trial at that version, and an aborted trial is classified
-by a declared rule, never dropped. Candidate and baseline trials
-interleave on the same host, and a claim across many scenarios
-corrects for the number of comparisons.
+counts every trial at that version, run at the check version the policy
+declares, and an aborted trial is classified by a declared rule, never
+dropped. Candidate and baseline trials interleave on the same host, and
+a claim across many scenarios corrects for the number of comparisons.
 
 <!-- agents-only
 With zero failures in n trials, the one-sided 95% upper bound on the
@@ -594,9 +594,14 @@ Work completes through one gated tool ([`agentic_core` Done Rules and
 the Result Gate][e-gate]).
 It records the outcome (succeeded, failed, or inconclusive), the report,
 the uncertainties, and the runs each claim cites. It refuses a success
-that changed the work product unless the validation policy passed at the
-committed head, with a clean tree, on results its executor wrote. A run
-that validated nothing gets no exemption; it is inconclusive.
+that changed the work product unless a baseline came first and the
+validation policy passed at the committed head, with a clean tree, on
+results its executor wrote. A baseline comes first when it ran at the
+delivery's base before its head was validated; acceptance holds the same
+rule, and a session whose base moves takes one again. A run counts only
+at the version of its check the policy declares now, so a policy that
+changes a check asks for the head to be validated again. A run that
+validated nothing gets no exemption; it is inconclusive.
 
 ### The Results Contract
 

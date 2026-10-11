@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from acme.om.agents.types.result import Claim, Result, Verdict
-from acme.om.evidence.rules import named, protected_paths
+from acme.om.evidence.rules import baseline, named, protected_paths
 from acme.om.evidence.types.acceptance import Break, Leak, Link, Scenario
 from acme.om.evidence.types.inference import Inference, InferenceKind
 from acme.om.evidence.types.policy import Grade
@@ -100,36 +100,17 @@ def judge_chain(scenario: Scenario, chain: Chain) -> tuple[Break, ...]:
 
 
 def _baseline(scenario: Scenario, chain: Chain) -> list[Break]:
-    """A baseline at the scenario's base, taken before the session validated
-    any change, at any head, in which a visible check did not pass: the
-    defect, reproduced before a fix was tried."""
+    """A baseline that came first at the scenario's base, by the rule the
+    result gate holds too (`rules.baseline`), in which a visible check did
+    not pass: the defect, reproduced before the fix was validated."""
     delivery = chain.delivery
     if delivery is not None and delivery.base != scenario.base:
         reason = f"the work started from {delivery.base}, not the scenario's base {scenario.base}"
         return [Break(link=Link.BASELINE, reason=reason)]
-    baselines = [
-        validation
-        for validation in chain.validations
-        if validation.purpose is RunPurpose.BASELINE and validation.version == scenario.base
-    ]
-    if not baselines:
-        return [Break(link=Link.BASELINE, reason=f"no baseline ran at the base {scenario.base}")]
-    first_change = min(
-        (
-            validation.created_at
-            for validation in chain.validations
-            if validation.purpose is RunPurpose.VALIDATION
-        ),
-        default=None,
-    )
-    before = [
-        validation
-        for validation in baselines
-        if first_change is None or validation.created_at <= first_change
-    ]
-    if not before:
-        reason = "every baseline ran after the change was validated"
-        return [Break(link=Link.BASELINE, reason=reason)]
+    head = delivery.head if delivery is not None else None
+    before = baseline(chain.validations, scenario.base, head)
+    if isinstance(before, str):
+        return [Break(link=Link.BASELINE, reason=before)]
     listed = {run for validation in before for run in validation.records}
     failing = [
         record

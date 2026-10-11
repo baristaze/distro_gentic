@@ -206,6 +206,7 @@ def test_every_shipped_agent_is_a_profile_that_sets_its_powers() -> None:
         ("engineer", 3),
         ("engineer", 4),
         ("engineer", 5),
+        ("engineer", 6),
         ("analysis", 1),
         ("analysis", 2),
         ("analysis", 3),
@@ -275,6 +276,14 @@ def test_the_engineers_layers_name_analysis_for_a_question_and_the_engineer_for_
     assert f'your own kind, "{kinds.ENGINEER}" (or leave kind out)' in layers
     assert "only for work that changes code" in layers
     assert ANALYSIS_KIND.share == ANALYSIS_SHARE
+
+
+def test_the_engineer_takes_a_baseline_again_when_its_base_moves() -> None:
+    """A success counts only when a baseline at its base ran before its head
+    was validated, so an engineer whose base moved takes one there."""
+    layers = " ".join(ENGINEER_KIND.prompts)
+    assert "Take a baseline with validate before you change anything" in layers
+    assert "Take a baseline again whenever your base moves" in layers
 
 
 def test_analysis_waits_for_every_report_before_it_answers() -> None:
@@ -383,11 +392,12 @@ async def test_the_engineers_success_needs_a_passing_validation_at_its_head(
     policy = make_policy(policy_key(project_id))
     await platform.managers.evidence.write_policy(platform.owner, policy)
 
-    # No validation at its head, then a failing one: no success counts, and
-    # a failure explained by the runs is an accepted end.
+    # A baseline first, then no validation at its head, then a failing one:
+    # no success counts, and a failure explained by the runs is an accepted end.
     executor.outcome = all_fail
     failing = await an_engineer(platform, work, project_id)
     platform.anthropic.add(
+        reply(calls(kinds.VALIDATE, "use_baseline", baseline=True)),
         reply(calls(kinds.SUBMIT_RESULT, "use_bare", claim="succeeded", evidence=[])),
         reply(calls(kinds.VALIDATE, "use_validate")),
         citing(Claim.SUCCEEDED),
@@ -403,12 +413,16 @@ async def test_the_engineers_success_needs_a_passing_validation_at_its_head(
     # A passing validation at its head: the success is accepted, verified.
     executor.outcome = lambda check, trial: "passed"
     passing = await an_engineer(platform, work, project_id)
-    platform.anthropic.add(reply(calls(kinds.VALIDATE, "use_validate")), citing(Claim.SUCCEEDED))
+    platform.anthropic.add(
+        reply(calls(kinds.VALIDATE, "use_baseline", baseline=True)),
+        reply(calls(kinds.VALIDATE, "use_validate")),
+        citing(Claim.SUCCEEDED),
+    )
     run = await platform.managers.loop.run(platform.owner, passing)
     assert run.outcome is LoopOutcome.SUCCEEDED
     failure, text = await platform.answer(passing, "use_succeeded")
     assert failure is None and "verified" in text and "unverified" not in text
-    assert [request.version for request in executor.requests] == ["c2", "c2"]
+    assert [request.version for request in executor.requests] == ["b1", "c2"] * 2
 
 
 async def test_analysis_the_planner_and_the_assistant_end_by_their_answer(

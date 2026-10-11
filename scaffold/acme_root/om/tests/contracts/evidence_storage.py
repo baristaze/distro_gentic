@@ -122,12 +122,13 @@ def make_validation(
     version: str = "c0ffee",
     executor: str = "executor-1",
     project: str = "checkout",
+    purpose: RunPurpose = RunPurpose.VALIDATION,
 ) -> tuple[Validation, tuple[ExecutionRecord, ...]]:
     validation_id = new_id()
     records = tuple(
         make_record(
             session_id,
-            purpose=RunPurpose.VALIDATION,
+            purpose=purpose,
             validation_id=validation_id,
             executor=executor,
             version=version,
@@ -139,7 +140,7 @@ def make_validation(
         created_at=utcnow(),
         session_id=session_id,
         project=project,
-        purpose=RunPurpose.VALIDATION,
+        purpose=purpose,
         version=version,
         source="base0",
         executor=executor,
