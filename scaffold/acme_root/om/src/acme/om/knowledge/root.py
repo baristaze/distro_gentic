@@ -21,6 +21,7 @@ from acme.om.base import utcnow
 from acme.om.knowledge.impl.manager import KnowledgeManagerImpl, KnowledgeOptions
 from acme.om.knowledge.impl.tools import ToolsManagerRecallImpl
 from acme.om.knowledge.manager import KnowledgeManagerInterface
+from acme.om.levers.rules import reach_of
 from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.root import Managers
 from acme.om.storage.root import StorageInterface
@@ -41,6 +42,7 @@ def build_knowledge(
         managers.tenancy,
         managers.outbox,
         options or KnowledgeOptions(),
+        reach_of(managers.kinds),
         clock,
     )
 

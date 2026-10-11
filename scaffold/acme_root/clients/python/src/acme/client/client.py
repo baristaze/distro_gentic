@@ -52,6 +52,7 @@ from acme.client.types import (
     LeasePageView,
     LeaseRequestView,
     LeaseView,
+    LeverReadingView,
     LineView,
     MembershipChoicePageView,
     MembershipChoiceView,
@@ -1418,3 +1419,16 @@ class ApiClient:
         write, refused with `work_not_failed` for an item that is not failed."""
         body = await self.request("POST", f"/v1/admin/orgs/{org_id}/work/{item_id}/requeue")
         return OperatorWorkItemView.model_validate(body)
+
+    async def admin_levers(
+        self, org_id: UUID, since: datetime, until: datetime
+    ) -> LeverReadingView:
+        """The playbooks and knowledge the org's sessions created in `[since,
+        until)` reached, ranked by how much more often the sessions that
+        reached them stalled; a read under `read`."""
+        body = await self.request(
+            "GET",
+            f"/v1/admin/orgs/{org_id}/levers",
+            params={"since": since.isoformat(), "until": until.isoformat()},
+        )
+        return LeverReadingView.model_validate(body)

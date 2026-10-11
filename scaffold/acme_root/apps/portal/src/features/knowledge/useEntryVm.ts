@@ -51,6 +51,7 @@ export function useEntryVm(id: string) {
           reviewedBy: view.reviewed_by ? personName(users.data, view.reviewed_by) : null,
           version: view.version,
           updatedAt: view.updated_at,
+          findings: view.findings,
         }
       : null,
     mayWrite: me.data?.permissions.includes("write") ?? false,

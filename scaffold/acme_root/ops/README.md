@@ -36,6 +36,7 @@ gets onto the plane.
 - `stress` runs a scenario and judges it against its target.
 - `signals check` reads one request id's log lines, metric, trace, and error event.
 - `size` prints the platform's size, the traffic run's tenants left out.
+- `levers` prints which playbooks and knowledge an org's sessions reached before they stalled.
 - `token` writes an operator token into its file, or lists and revokes your own.
 - `work requeue` sends one failed work item back to the queue.
 - `workos-bootstrap` reconciles the WorkOS application with `deployment/workos/environments.yaml`.
@@ -79,8 +80,8 @@ their own on the local stack and drop it; their tools are in
 [audit/](audit/README.md). The platform requires two audits the
 guideline leaves optional, `audit-provider-calls` and
 `audit-credential-lifetimes`, since a platform of agents lives on
-provider calls and credentials, and adds `audit-matrix-spend` and
-`audit-ontology-drift`.
+provider calls and credentials, and adds `audit-matrix-spend`,
+`audit-agent-levers`, and `audit-ontology-drift`.
 
 | Skill | Needs | Answers |
 |-------|-------|---------|
@@ -89,6 +90,7 @@ provider calls and credentials, and adds `audit-matrix-spend` and
 | `audit-database-calls` | none (local) | The round trips and transactions of each endpoint and worker flow. |
 | `audit-credential-lifetimes` | none (local) | How long each credential works after it is revoked, on each channel. |
 | `audit-provider-calls` | none (local) | Every call to a provider, flow by flow, and which to remove, fold, move, or cache. |
+| `audit-agent-levers` | Supporter (the `read` operator token alone) | Which playbooks and knowledge an org's sessions reached before they stalled, ranked against the sessions that did not reach them. |
 | `audit-model-spend` | Supporter (the `read` operator token alone) | What an org's model calls spend by agent kind, kind version, and model role, the cache's hit rate, and what rebuilt caches cost. |
 | `audit-deploy-time` | Investigator | Where a deploy's minutes go, and what would shorten it. |
 | `audit-matrix-spend` | Investigator | What model calls spend by matrix version and plan tier, across the environment, the cache's hit rate, and what rebuilt caches cost. |

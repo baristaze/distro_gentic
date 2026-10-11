@@ -615,6 +615,43 @@ async def own_tokens_command(
             raise
 
 
+async def levers_command(
+    args: argparse.Namespace, transport: httpx.AsyncBaseTransport | None = None
+) -> int:
+    """Which playbooks and knowledge an org's sessions reached before they
+    stalled, over the last `--days`: the operator plane's reading, under the
+    env file's `read` token, printed as JSON for the audit to read. It names
+    each lever by its kind, id, and version, and the sessions behind it,
+    never a lever's name or what a step said."""
+    if args.days <= 0:
+        print("acme-ops: --days is a positive number of days", file=sys.stderr)
+        return USAGE
+    env = load_environment(args.env)
+    if not env.operator_token:
+        print(
+            f"environment {env.name!r} holds no operator token; write one with "
+            f"`uv run acme-ops token --env {env.name} --identity operator`",
+            file=sys.stderr,
+        )
+        return USAGE
+    until = datetime.now(UTC)
+    async with ApiClient(
+        env.api_url,
+        app=OPERATOR_APP,
+        app_version=app_version(),
+        token=env.operator_token,
+        transport=transport,
+    ) as client:
+        try:
+            reading = await client.admin_levers(args.org, until - timedelta(days=args.days), until)
+        except ApiError as error:
+            if error.status == 401:
+                raise TokenRefused(env, "operator") from None
+            raise
+    print(reading.model_dump_json(indent=2))
+    return OK
+
+
 async def work_requeue_command(
     args: argparse.Namespace, transport: httpx.AsyncBaseTransport | None = None
 ) -> int:
@@ -711,6 +748,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_size = sub.add_parser("size", help="the platform's size as the operator plane reports it")
     p_size.add_argument("--env", required=True)
 
+    p_levers = sub.add_parser(
+        "levers", help="the playbooks and knowledge an org's sessions reached before they stalled"
+    )
+    p_levers.add_argument("--env", required=True)
+    p_levers.add_argument("--org", required=True, type=UUID, help="the org whose sessions to read")
+    p_levers.add_argument(
+        "--days", type=float, default=7.0, help="how far back the window opens; a week by default"
+    )
+
     p_token = sub.add_parser(
         "token", help="write an operator token into its file, or list or revoke your own"
     )
@@ -778,6 +824,8 @@ def main(argv: list[str] | None = None) -> int:
             return asyncio.run(signals_command(args))
         if args.command == "token":
             return asyncio.run(token_command(args))
+        if args.command == "levers":
+            return asyncio.run(levers_command(args))
         if args.command == "work":
             return asyncio.run(work_requeue_command(args))
         if args.command == "workos-bootstrap":

@@ -1,7 +1,8 @@
 """A tenant's knowledge over the API: a person writes an entry, reads it and
 the entries in a state, edits it on the version they read, and keeps or
-rejects an agent's suggestion. A viewer reads and writes none; another
-tenant's entry is not found; a malformed entry is refused whole."""
+rejects an agent's suggestion, each answered with what the lever checks
+found in its words. A viewer reads and writes none; another tenant's entry
+is not found; a malformed entry is refused whole."""
 
 from uuid import UUID
 
@@ -20,7 +21,11 @@ ENTRY = {
 }
 
 
-async def suggested(container: AppContainer, org_id: UUID) -> UUID:
+async def suggested(
+    container: AppContainer,
+    org_id: UUID,
+    text: str = "The export times out past a thousand rows.",
+) -> UUID:
     """An agent's suggestion, as its session would leave it."""
     now, session = utcnow(), new_id()
     entry = Knowledge(
@@ -31,7 +36,7 @@ async def suggested(container: AppContainer, org_id: UUID) -> UUID:
         updated_by=session,
         title="the export",
         trigger=("export",),
-        text="The export times out past a thousand rows.",
+        text=text,
         suggested_by=session,
     )
     await container.storage.get_knowledge_storage().create_entry(org_id, entry, ())
@@ -92,6 +97,26 @@ async def test_a_person_keeps_or_rejects_a_suggestion(
     refused(again, 409, "conflict")
     edit = await client.put(f"/v1/knowledge/{rejected}", headers=at(ajax.owner, 2), json=ENTRY)
     refused(edit, 409, "conflict")
+
+
+async def test_a_kept_suggestion_answers_what_the_checks_found_and_is_kept_whatever_they_find(
+    client: httpx.AsyncClient, container: AppContainer
+) -> None:
+    ajax = await tenant(client, container, "ajax")
+    retrying = await suggested(container, ajax.org_id, "Keep retrying the export until it ends.")
+    keep = await client.post(
+        f"/v1/knowledge/{retrying}/review", headers=ajax.owner, json={"keep": True}
+    )
+    assert keep.status_code == 200, keep.text
+    assert keep.json()["status"] == "reviewed"
+    assert [f["check"] for f in keep.json()["findings"]] == ["unbounded_retry"]
+    # Stored as an agent's session left it, a suggestion the checks never
+    # read answers null, never an empty list.
+    waiting = await suggested(container, ajax.org_id)
+    unread = await client.get(f"/v1/knowledge/{waiting}", headers=ajax.owner)
+    assert unread.json()["findings"] is None
+    written = await client.post("/v1/knowledge", headers=ajax.owner, json=ENTRY)
+    assert written.json()["findings"] == []
 
 
 async def test_a_viewer_reads_knowledge_and_writes_none(

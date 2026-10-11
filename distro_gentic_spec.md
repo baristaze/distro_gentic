@@ -647,6 +647,17 @@ new session does not rediscover its environment. It renders as data. An
 agent may suggest knowledge, and a person reviews it before any session
 recalls it, so one session cannot plant instructions for the next.
 
+A playbook and a reviewed entry are a tenant's **levers**: texts written
+for people that an agent then follows. A lever is read as a person
+publishes it, by checks that call no model, for what makes an agent
+spin: a phrase repeated until it looks load-bearing, a must and a
+must-not on one subject, a tool no kind it reaches holds, a retry with
+no stopping condition, a brief longer than a session holds whole. A
+finding advises and never refuses the publish; it is kept with the
+version it read. Afterwards, an operator reads which levers the
+sessions that stalled reached, against the sessions that did not reach
+them, from the steps' headers alone.
+
 ### Notifications
 
 A park that needs a person notifies whoever can clear it (the requester,
@@ -1044,6 +1055,7 @@ provider calls and credentials:
 | `ops-host-idle` | supporter | Why a host takes no work: what it advertises against what its lane needs |
 | `ops-provider-outage` | investigator | Which provider and credential fails, its outage signal, and how many sessions park on it |
 | `audit-matrix-spend` | investigator | Spend by matrix version and plan tier, cache hits and misses, the cost of rebuilt caches |
+| `audit-agent-levers` | supporter | Which playbooks and knowledge a tenant's sessions reached before they stalled, against the sessions that did not reach them |
 | `audit-ontology-drift` | none | Which concept sits in a layer its nature contradicts, read from the product down to the guideline |
 
 The gates hold the layers consistent with each other. They cannot say

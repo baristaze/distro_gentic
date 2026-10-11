@@ -247,6 +247,9 @@ class Managers:
     platform_agents: PlatformAgentsManagerInterface
     projects: ProjectsManagerInterface
     benchmarks: BenchmarksManagerInterface
+    kinds: AgentKindCatalog
+    """The kinds every session starts on, each version they run: what a
+    text a person writes for them, such as a playbook, reaches."""
 
 
 ProductTools = Callable[[Callable[[], Managers]], tuple[ToolInterface, ...]]
@@ -1370,6 +1373,7 @@ def build_managers(
         platform_agents=platform,
         projects=projects,
         benchmarks=BenchmarksManagerImpl(storage.get_benchmark_storage()),
+        kinds=kinds,
     )
     return managers
 

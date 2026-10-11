@@ -9,6 +9,7 @@ from acme.om.automations import AutomationsManagerInterface
 from acme.om.billing import BillingManagerInterface
 from acme.om.intake import IntakeManagerInterface
 from acme.om.knowledge import KnowledgeManagerInterface
+from acme.om.levers import LeversManagerInterface
 from acme.om.matrix.root import MatrixManagers
 from acme.om.notifications import NotificationsManagerInterface
 from acme.om.playbooks import PlaybooksManagerInterface
@@ -239,6 +240,7 @@ def build_services(
     billing: BillingManagerInterface,
     knowledge: KnowledgeManagerInterface,
     playbooks: PlaybooksManagerInterface,
+    levers: LeversManagerInterface,
 ) -> ServicesInterface:
     """In-process impls only: a Python caller outside the process reaches the
     same services through the typed client under `clients/python`."""
@@ -269,7 +271,7 @@ def build_services(
             project_required=project_required,
         ),
         hosts=HostsServiceImpl(managers.hosts, managers.cloud_pool),
-        fleet=FleetServiceImpl(managers.placement_operator, trust_operator),
+        fleet=FleetServiceImpl(managers.placement_operator, trust_operator, levers),
         relay=RelayServiceImpl(managers.relay, infra.get_topics()),
         intake=IntakeServiceImpl(intake),
         budgets=BudgetsServiceImpl(managers.budgets, billing),

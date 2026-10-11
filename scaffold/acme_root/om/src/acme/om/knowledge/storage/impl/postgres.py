@@ -1,11 +1,13 @@
 from uuid import UUID
 
 from sqlalchemy import ColumnElement, or_, select, update
+from sqlalchemy.dialects.postgresql import insert
 
 from acme.om.exceptions import PreconditionFailed
 from acme.om.knowledge.storage import KnowledgeStorageInterface
 from acme.om.knowledge.storage.tables.knowledge_entries import KnowledgeEntries
-from acme.om.knowledge.types.knowledge import Knowledge, KnowledgeStatus
+from acme.om.knowledge.storage.tables.knowledge_recalls import KnowledgeRecalls
+from acme.om.knowledge.types.knowledge import Knowledge, KnowledgeRecall, KnowledgeStatus
 from acme.om.outbox.storage.tables.outbox_rows import OutboxRows
 from acme.om.outbox.types.row import OutboxRow
 from acme.om.storage.impl.pg_base import PgStorageBase, delete_batch, deleted
@@ -96,12 +98,45 @@ class KnowledgeStoragePostgresImpl(PgStorageBase, KnowledgeStorageInterface):
                 db.add(to_row(outbox_row, OutboxRows, org_id=org_id))
             await db.commit()
 
-    async def purge_tenant(self, org_id: UUID, limit: int) -> int:
-        stmt = delete_batch(KnowledgeEntries, KnowledgeEntries.org_id == org_id, limit=limit)
+    async def create_recalls(self, org_id: UUID, recalls: tuple[KnowledgeRecall, ...]) -> None:
+        if not recalls:
+            return
+        stmt = (
+            insert(KnowledgeRecalls)
+            .values([{**to_values(r, KnowledgeRecalls), "org_id": org_id} for r in recalls])
+            .on_conflict_do_nothing(
+                index_elements=[
+                    KnowledgeRecalls.org_id,
+                    KnowledgeRecalls.session_id,
+                    KnowledgeRecalls.entry_id,
+                ]
+            )
+        )
         async with self._session_for(stmt, org_id=org_id) as session:
-            gone = deleted(await session.execute(stmt))
+            await session.execute(stmt)
             await session.commit()
-            return gone
+
+    async def read_recalls(
+        self, org_id: UUID, session_id: UUID, limit: int
+    ) -> list[KnowledgeRecall]:
+        stmt = (
+            select(KnowledgeRecalls)
+            .where(KnowledgeRecalls.org_id == org_id, KnowledgeRecalls.session_id == session_id)
+            .order_by(KnowledgeRecalls.created_at, KnowledgeRecalls.id)
+            .limit(limit)
+        )
+        async with self._session_for(stmt, org_id=org_id) as session:
+            rows = (await session.execute(stmt)).scalars().all()
+            return [to_model(row, KnowledgeRecall) for row in rows]
+
+    async def purge_tenant(self, org_id: UUID, limit: int) -> int:
+        gone = 0
+        for table in (KnowledgeRecalls, KnowledgeEntries):
+            stmt = delete_batch(table, table.org_id == org_id, limit=limit)
+            async with self._session_for(stmt, org_id=org_id) as session:
+                gone += deleted(await session.execute(stmt))
+                await session.commit()
+        return gone
 
 
 def _reached_by(project_id: UUID | None) -> ColumnElement[bool]:

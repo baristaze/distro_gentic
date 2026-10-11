@@ -17,6 +17,8 @@ from acme.om.exceptions import (
     UniqueKeyTaken,
 )
 from acme.om.intake.rules import in_person
+from acme.om.levers.rules import checked
+from acme.om.levers.types.lever import LeverReach
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import versioned_row
 from acme.om.playbooks.manager import PlaybooksManagerInterface
@@ -30,6 +32,7 @@ from acme.om.playbooks.types.playbook import (
 )
 from acme.om.steps.rules import message_step
 from acme.om.tenancy import TenancyManagerInterface
+from acme.om.windows.types.policy import CompactionPolicy
 
 PUBLISHED = "playbooks.playbook.created"
 
@@ -38,6 +41,9 @@ class PlaybooksOptions(Platform):
     # The most playbooks one session's gates are read from.
     per_session: int = Field(default=50, gt=0)
     purge_batch: int = Field(default=1000, gt=0)
+    # The characters of a brief a session holds whole once it summarizes:
+    # its pinned zone's. A longer one is published with a finding.
+    session_bound: int = Field(default=CompactionPolicy().pinned_bound, gt=0)
 
 
 class PlaybooksManagerImpl(PlaybooksManagerInterface):
@@ -50,6 +56,7 @@ class PlaybooksManagerImpl(PlaybooksManagerInterface):
         tenancy: TenancyManagerInterface,
         relay: OutboxRelayInterface,
         options: PlaybooksOptions,
+        reach: LeverReach,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._storage = storage
@@ -59,6 +66,7 @@ class PlaybooksManagerImpl(PlaybooksManagerInterface):
         self._tenancy = tenancy
         self._relay = relay
         self._options = options
+        self._reach = reach
         self._clock = clock
 
     async def publish(
@@ -78,6 +86,18 @@ class PlaybooksManagerImpl(PlaybooksManagerInterface):
             gates=draft.gates,
             published_by=ctx.user_id,
         )
+        # The checks read the words the person wrote, its description and
+        # its steps, never the frontmatter the platform writes around them;
+        # the size is the brief's as a session receives it. They advise:
+        # what they find is kept with the version, and the publish stands.
+        findings = checked(
+            f"{playbook.description}\n\n{playbook.body}",
+            self._reach,
+            bound=self._options.session_bound,
+            size=len(skill_md(playbook)),
+            tools=(gate.tool for gate in draft.gates if gate.tool is not None),
+        )
+        playbook = playbook.model_copy(update={"findings": findings})
         rows = (versioned_row(ctx, PUBLISHED, playbook.id, playbook.version),)
         try:
             landed = await self._storage.create_playbook(ctx.org_id, playbook, rows)

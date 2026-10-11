@@ -1,7 +1,8 @@
 """The platform's operator routes under /v1/admin/*, beside the
 guideline's: a tenant's fair share, where one of its sessions' work stands,
-what one of its hosts is handed, and a session's history, its shape under
-`read` and its content under a grant of its own. Each takes
+what one of its hosts is handed, a session's history, its shape under
+`read` and its content under a grant of its own, and which levers its
+sessions reached before they stalled. Each takes
 `OperatorContext` and names the tenant; the managers decide, and each read
 is logged with the tenant and the operator.
 
@@ -15,6 +16,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Query
+from pydantic import AwareDatetime
 
 from acme.services.api.gateway.admin import OperatorCtx
 from acme.services.api.gateway.resolve import FleetService
@@ -27,6 +29,7 @@ from acme.services.api.types.fleet import (
     ShapePageView,
     ShareView,
 )
+from acme.services.api.types.levers import LeverReadingView
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -88,3 +91,20 @@ async def session_content(
     content grant of the operator in that tenant, and each opening is an
     entry in the tenant's stream."""
     return await service.get_session_content(admin, org_id, session_id, after_seq, limit)
+
+
+@router.get("/orgs/{org_id}/levers", response_model=LeverReadingView)
+async def read_levers(
+    admin: OperatorCtx,
+    service: FleetService,
+    org_id: UUID,
+    since: Annotated[AwareDatetime, Query()],
+    until: Annotated[AwareDatetime, Query()],
+) -> LeverReadingView:
+    """The playbooks and knowledge the org's sessions created in `[since,
+    until)` reached, ranked by how much more often the sessions that
+    reached them stalled, with the sessions behind each figure. A stall is
+    read from the steps' headers, never from what a step says, and a lever
+    is answered by its kind, id, and version, never by its name or its
+    slug. A window that does not end after it starts is `422`."""
+    return await service.read_levers(admin, org_id, since, until)

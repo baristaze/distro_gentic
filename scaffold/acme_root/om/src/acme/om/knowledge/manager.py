@@ -96,9 +96,10 @@ class KnowledgeManagerInterface(ABC):
 
     @abstractmethod
     async def read(self, ctx: TenantContext, session_id: UUID, slug: str) -> Knowledge:
-        """The reviewed entry of `slug` the session reaches. One waiting for
-        its review, rejected, of another project, or of another tenant is
-        `NotFound`, as one that never existed is."""
+        """The reviewed entry of `slug` the session reaches, its version
+        recorded as one the session reached, as a recall's is. One waiting
+        for its review, rejected, of another project, or of another tenant
+        is `NotFound`, as one that never existed is."""
         ...
 
     @abstractmethod

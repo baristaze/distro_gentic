@@ -76,6 +76,7 @@ TABLE_ROLES: dict[str, DatabaseRole] = {
     "playbooks": DatabaseRole.CORE,
     "playbook_invocations": DatabaseRole.CORE,
     "knowledge_entries": DatabaseRole.CORE,
+    "knowledge_recalls": DatabaseRole.CORE,
     "billing_accounts": DatabaseRole.CORE,
     "ledger_entries": DatabaseRole.ACTIVITY,
     "ledger_counts": DatabaseRole.ACTIVITY,

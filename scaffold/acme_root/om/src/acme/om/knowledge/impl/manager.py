@@ -6,7 +6,7 @@ from pydantic import Field
 
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.attribution.types.principal import Principal, PrincipalKind
-from acme.om.base import Platform, new_id, utcnow
+from acme.om.base import Platform, derived_id, new_id, utcnow
 from acme.om.context import Permission, TenantContext
 from acme.om.exceptions import (
     Conflict,
@@ -19,7 +19,9 @@ from acme.om.intake.rules import in_person
 from acme.om.knowledge.manager import KnowledgeManagerInterface
 from acme.om.knowledge.rules import ranked, reaches, recalled_step, slug_of, triggered
 from acme.om.knowledge.storage import KnowledgeStorageInterface
-from acme.om.knowledge.types.knowledge import Knowledge, KnowledgeStatus
+from acme.om.knowledge.types.knowledge import Knowledge, KnowledgeRecall, KnowledgeStatus
+from acme.om.levers.rules import checked
+from acme.om.levers.types.lever import LeverFinding, LeverReach
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import OutboxRow, versioned_row
 from acme.om.projects.policies import SessionProjectsInterface
@@ -47,6 +49,7 @@ class KnowledgeManagerImpl(KnowledgeManagerInterface):
         tenancy: TenancyManagerInterface,
         relay: OutboxRelayInterface,
         options: KnowledgeOptions,
+        reach: LeverReach,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._storage = storage
@@ -55,6 +58,7 @@ class KnowledgeManagerImpl(KnowledgeManagerInterface):
         self._tenancy = tenancy
         self._relay = relay
         self._options = options
+        self._reach = reach
         self._clock = clock
 
     async def suggest(
@@ -130,6 +134,7 @@ class KnowledgeManagerImpl(KnowledgeManagerInterface):
                 "title": title,
                 "trigger": trigger,
                 "text": text,
+                "findings": self._findings(title, text),
                 "reviewed_by": ctx.user_id if reviewed else entry.reviewed_by,
                 "updated_at": self._clock(),
                 "updated_by": ctx.user_id,
@@ -151,6 +156,8 @@ class KnowledgeManagerImpl(KnowledgeManagerInterface):
         decided = entry.model_copy(
             update={
                 "status": KnowledgeStatus.REVIEWED if keep else KnowledgeStatus.REJECTED,
+                # Read again against the kinds it reaches as it is kept.
+                "findings": self._findings(entry.title, entry.text) if keep else entry.findings,
                 "reviewed_by": ctx.user_id,
                 "updated_at": self._clock(),
                 "updated_by": ctx.user_id,
@@ -181,6 +188,11 @@ class KnowledgeManagerImpl(KnowledgeManagerInterface):
         if found:
             principal = Principal(kind=PrincipalKind.SERVICE, id=ctx.user_id)
             now = self._clock()
+            # Which version each recall brought in, kept before the session
+            # reads it, so a reading of the sessions that stalled names it.
+            await self._storage.create_recalls(
+                ctx.org_id, tuple(self._recall(entry, session_id) for entry in found)
+            )
             steps = [recalled_step(entry, session_id, principal, now) for entry in found]
             await self._sessions.receive(ctx, session_id, steps)
         return tuple(found)
@@ -213,6 +225,9 @@ class KnowledgeManagerImpl(KnowledgeManagerInterface):
         entry = await self._storage.read_by_slug(ctx.org_id, project_id, slug)
         if entry is None or not reaches(entry, project_id):
             raise NotFound(f"no knowledge {slug!r} this session reaches")
+        # An entry read on demand is reached as a recalled one is: its
+        # version is kept for the reading of the sessions that stalled.
+        await self._storage.create_recalls(ctx.org_id, (self._recall(entry, session_id),))
         return entry
 
     async def purge_tenant(self, ctx: TenantContext) -> int:
@@ -248,6 +263,7 @@ class KnowledgeManagerImpl(KnowledgeManagerInterface):
             reviewed_by=ctx.user_id if by_person else None,
             project_id=project_id,
             slug=slug_of(title, entry_id),
+            findings=self._findings(title, text),
         )
         rows = (versioned_row(ctx, CREATED, entry.id, entry.version),)
         if not await self._storage.create_entry(ctx.org_id, entry, rows):
@@ -257,6 +273,24 @@ class KnowledgeManagerImpl(KnowledgeManagerInterface):
             return stored
         await self._relay_all(ctx, rows)
         return entry
+
+    def _findings(self, title: str, text: str) -> tuple[LeverFinding, ...]:
+        """What the lever checks read in an entry's words, against the kinds
+        its sessions start on. A recalled entry is read before any summary
+        and read again on demand, so it has no bound of a session's to meet."""
+        return checked(f"{title}\n{text}", self._reach)
+
+    def _recall(self, entry: Knowledge, session_id: UUID) -> KnowledgeRecall:
+        """The record that a session reached an entry's version. Its id is
+        the entry's in the session, so a recall or a read again writes
+        none."""
+        return KnowledgeRecall(
+            id=derived_id(entry.id, entry.created_at, f"recalled:{session_id}"),
+            created_at=self._clock(),
+            session_id=session_id,
+            entry_id=entry.id,
+            version=entry.version,
+        )
 
     async def _entry(self, ctx: TenantContext, entry_id: UUID) -> Knowledge:
         entry = await self._storage.read_entry(ctx.org_id, entry_id)

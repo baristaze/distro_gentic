@@ -1,7 +1,9 @@
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import Index
-from sqlalchemy.orm import Mapped
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column
 
 from acme.om.storage.tables.base import Base, IdentifiableMixin, TrackableMixin
 
@@ -26,3 +28,4 @@ class KnowledgeEntries(IdentifiableMixin, TrackableMixin, Base):
     version: Mapped[int]
     project_id: Mapped[UUID | None]
     slug: Mapped[str | None]
+    findings: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB())

@@ -10,7 +10,8 @@ from uuid import UUID
 
 from pydantic import Field
 
-from acme.om.base import Identifiable, Trackable
+from acme.om.base import Created, Identifiable, Trackable
+from acme.om.levers.types.lever import LeverFinding
 from acme.om.steps.types.content import MAX_NAME, Stored
 
 MAX_TEXT = 10_000
@@ -30,7 +31,10 @@ class Knowledge(Identifiable, Trackable):
     whose agent suggested it; `reviewed_by` the person who decided.
     `project_id` is the project whose sessions reach it, None for every
     session of the tenant; `slug` is the handle an agent reads it by, None
-    on a row an earlier release wrote."""
+    on a row an earlier release wrote. `findings` is what the lever checks
+    read in its words at this version: advice for the person who reviews
+    it, never a refusal; None on a version they never read, one an earlier
+    release wrote."""
 
     MANAGER_OWNED_FIELDS: ClassVar[tuple[str, ...]] = (
         "status",
@@ -38,6 +42,7 @@ class Knowledge(Identifiable, Trackable):
         "version",
         "project_id",
         "slug",
+        "findings",
     )
 
     trigger: tuple[Stored, ...] = Field(min_length=1, max_length=20)
@@ -49,3 +54,14 @@ class Knowledge(Identifiable, Trackable):
     version: int = Field(default=1, ge=1)
     project_id: UUID | None = None
     slug: str | None = Field(default=None, max_length=MAX_SLUG, pattern=SLUG)
+    findings: tuple[LeverFinding, ...] | None = None
+
+
+class KnowledgeRecall(Identifiable, Created):
+    """An entry's version a session recalled, or an agent of it read by its
+    slug: which lever it reached, kept so a reading of the sessions that
+    stalled can name it."""
+
+    session_id: UUID
+    entry_id: UUID
+    version: int = Field(ge=1)

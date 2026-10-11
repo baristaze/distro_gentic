@@ -1,6 +1,8 @@
+from datetime import datetime
 from uuid import UUID
 
 from acme.om.context import OperatorContext
+from acme.om.levers import LeversManagerInterface
 from acme.om.placement import PlacementOperatorManagerInterface
 from acme.om.steps.types.header import (
     ControlHeader,
@@ -26,6 +28,7 @@ from acme.services.api.types.fleet import (
     StepShapeView,
 )
 from acme.services.api.types.hosts import AdvertisementView
+from acme.services.api.types.levers import LeverReadingView
 
 
 def shape_view(shape: StepShape) -> StepShapeView:
@@ -53,9 +56,11 @@ class FleetServiceImpl(FleetServiceInterface):
         self,
         placement: PlacementOperatorManagerInterface,
         trust: TrustOperatorManagerInterface,
+        levers: LeversManagerInterface,
     ) -> None:
         self._placement = placement
         self._trust = trust
+        self._levers = levers
 
     async def set_share(
         self, admin: OperatorContext, org_id: UUID, body: SetShareRequest
@@ -139,3 +144,9 @@ class FleetServiceImpl(FleetServiceInterface):
             admin, org_id, session_id, after_seq, clamp_limit(limit)
         )
         return StepPageView(items=[step_view(step) for step in page.items], has_more=page.has_more)
+
+    async def read_levers(
+        self, admin: OperatorContext, org_id: UUID, since: datetime, until: datetime
+    ) -> LeverReadingView:
+        reading = await self._levers.read_levers(admin, org_id, since, until)
+        return LeverReadingView.model_validate(reading)

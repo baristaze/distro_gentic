@@ -160,6 +160,15 @@ path = "om/src/acme/om/watch/__init__.py"
 adr = "docs/adr/2007-a-live-view-reads-a-session-by-a-scoped-handle.md"
 reason = "the watch keeps no rows: its buffers are a cache, and its records are the relay's items and the event stream"
 
+# The levers keep no table: a finding is kept in its lever's own row, with
+# the version it read, and a reading is read from the sessions, the
+# playbooks they invoked, and the knowledge they recalled (ADR 2054).
+[[tool.arch-check.exception]]
+rule = "OM-14"
+path = "om/src/acme/om/levers/__init__.py"
+adr = "docs/adr/2054-a-lever-is-checked-as-a-person-publishes-it-and-read-back-from-the-sessions-that-stalled.md"
+reason = "the levers keep no rows: a finding lives in its lever's row, and a reading reads the sessions and what they reached"
+
 # The host's check boots a Linux machine with systemd as its first process,
 # as root, to install the host there; no deployment builds it (ADR 2026).
 [[tool.arch-check.exception]]

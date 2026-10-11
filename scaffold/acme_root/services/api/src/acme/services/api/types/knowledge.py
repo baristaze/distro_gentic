@@ -10,6 +10,7 @@ from acme.om.knowledge.rules import words
 from acme.om.knowledge.types.knowledge import MAX_TEXT, KnowledgeStatus
 from acme.om.steps.types.content import MAX_NAME
 from acme.services.api.types.common import RequestBody, View
+from acme.services.api.types.levers import FindingView
 
 MAX_TRIGGER_WORDS = 20
 
@@ -39,8 +40,10 @@ class ReviewRequest(RequestBody):
 
 
 class KnowledgeView(View):
-    """An entry, its state, who suggested and who reviewed it, and the
-    version an edit names in `If-Match`."""
+    """An entry, its state, who suggested and who reviewed it, the version
+    an edit names in `If-Match`, and what the lever checks found in its
+    words at that version: advice, never a refusal; null on a version they
+    never read, an empty list on one they read and found nothing in."""
 
     id: UUID
     title: str
@@ -52,3 +55,4 @@ class KnowledgeView(View):
     version: int
     created_at: datetime
     updated_at: datetime
+    findings: list[FindingView] | None

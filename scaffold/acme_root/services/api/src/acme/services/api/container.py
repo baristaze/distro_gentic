@@ -25,6 +25,7 @@ from acme.om.intake import IntakeManagerInterface
 from acme.om.intake.root import build_intake
 from acme.om.intake.tools import CommentImpl
 from acme.om.knowledge.root import build_knowledge
+from acme.om.levers.root import build_levers
 from acme.om.matrix.impl.resolver import MatrixOptions
 from acme.om.matrix.root import MatrixLayer
 from acme.om.notifications.root import build_notifications
@@ -324,6 +325,8 @@ class AppContainer:
             # the playbooks they follow; the runner recalls and invokes them.
             knowledge=build_knowledge(storage, managers),
             playbooks=PlaybooksLayer(storage).build(managers),
+            # An operator reads which of them the sessions that stalled reached.
+            levers=build_levers(storage),
         )
         return cls(
             settings,

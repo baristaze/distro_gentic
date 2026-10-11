@@ -20,18 +20,22 @@ const entry = (org: "a" | "b", title: string, status: KnowledgeView["status"]): 
   text: "Releases go out on **Tuesday**.",
   status,
   suggested_by: status === "suggested" ? "s1" : null,
+  findings: [],
   reviewed_by: status === "suggested" ? null : PEOPLE[org].id,
   version: 3,
   created_at: "2026-10-03T10:00:00Z",
   updated_at: "2026-10-03T10:00:00Z",
 });
 const HELD = { a: entry("a", "Ajax release day", "suggested"), b: entry("b", "Beta release day", "reviewed") };
+const KEPT_FINDINGS: KnowledgeView["findings"] = [
+  { check: "contradiction", detail: "one instruction says to “release tuesday” and another says never to", excerpt: null },
+];
 
 function answer(call: Call): unknown {
   const held = HELD[net.org];
   if (call.method === "GET" && call.path.startsWith("/v1/knowledge?")) return call.path.includes(`status=${held.status}`) ? [held] : [];
   if (call.path === `/v1/knowledge/${held.id}`) return call.method === "PUT" ? { ...held, ...(call.body as object), version: 4 } : held;
-  if (call.path === `/v1/knowledge/${held.id}/review`) return { ...held, status: (call.body as { keep: boolean }).keep ? "reviewed" : "rejected" };
+  if (call.path === `/v1/knowledge/${held.id}/review`) return { ...held, status: (call.body as { keep: boolean }).keep ? "reviewed" : "rejected", findings: KEPT_FINDINGS };
   if (call.method === "POST" && call.path === "/v1/knowledge") return { ...held, id: "knew" };
   return notFound(call.path);
 }
@@ -78,8 +82,11 @@ describe("an entry's page", () => {
   it("draws the text as Markdown and keeps a suggestion on a review", async () => {
     await mount(routes, "/knowledge/ka");
     expect(container.querySelector("[data-entry] strong")!.textContent).toBe("Tuesday");
+    expect(container.textContent).toContain("The checks found nothing to read again.");
     await press("Keep");
     expect(writes(net)).toEqual([{ method: "POST", path: "/v1/knowledge/ka/review", body: { keep: true } }]);
+    // The kept entry answers what the checks found in it, and stays kept.
+    expect(container.querySelector("ul[aria-label='What the checks found']")!.textContent).toContain("A must and a must-not on one subject");
   });
 
   it("edits on the version read", async () => {

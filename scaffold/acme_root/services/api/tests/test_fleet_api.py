@@ -1,8 +1,10 @@
 """The platform's operator routes over the live app, in memory: a tenant's
 share written by an operator who may write, and on the tenant's own record;
 a session's shape read under `read`, and its content opened only under a
-grant the grant job writes and ends, each on the tenant's record too; and
-where a session's work and a host stand, by the tenant named."""
+grant the grant job writes and ends, each on the tenant's record too;
+where a session's work and a host stand, by the tenant named; and the
+levers a tenant's sessions reached, over a window, under `read`, each by
+its kind, id, and version alone."""
 
 import argparse
 from datetime import timedelta
@@ -20,6 +22,7 @@ from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, OperatorRole, RequestContext
 from acme.om.exceptions import NotFound
+from acme.om.levers.types.lever import LeverKind, LeverReading, LeverRef, LeverStanding
 from acme.om.placement.impl.manager import PlacementOptions
 from acme.om.placement.impl.operator import SHARE_SET_KIND
 from acme.om.placement.rules import tier_lane
@@ -27,6 +30,7 @@ from acme.om.trust.impl.operator import CONTENT_OPENED, GRANTED, REVOKED
 from acme.om.work.types.work_item import WorkItem, WorkKind
 from acme.services.api.container import AppContainer
 from acme.services.api.main import granted
+from acme.services.api.types.levers import LeverReadingView
 
 ASSISTANT = AgentKind(
     name="assistant",
@@ -359,3 +363,46 @@ async def test_the_fleet_counts_carry_bounded_labels_alone(
     assert {c.labels[0] for c in counts.hosts} == {"online", "offline", "below_floor"}
     for count in (*counts.parked, *counts.loops_ready, *counts.hosts):
         assert org_id not in count.labels
+
+
+async def test_an_operator_reads_the_levers_of_a_tenants_sessions_over_a_window(
+    client: httpx.AsyncClient, owner: dict[str, str], reader: dict[str, str]
+) -> None:
+    org_id = await org_of(client, owner)
+    since = utcnow() - timedelta(minutes=1)
+    await a_session_that_was_told(client, owner)
+    until = utcnow() + timedelta(minutes=1)
+    path = f"/v1/admin/orgs/{org_id}/levers"
+    window = {"since": since.isoformat(), "until": until.isoformat()}
+
+    read = await client.get(path, headers=reader, params=window)
+    assert read.status_code == 200, read.text
+    assert (read.json()["sessions"], read.json()["spun"]) == (1, 0)
+    assert (read.json()["complete"], read.json()["standings"]) == (True, [])
+    assert (await client.get(path, headers=owner, params=window)).status_code == 401
+    for wrong in (
+        {"since": until.isoformat(), "until": since.isoformat()},
+        {"since": since.replace(tzinfo=None).isoformat(), "until": until.isoformat()},
+        {"until": until.isoformat()},
+    ):
+        assert (await client.get(path, headers=reader, params=wrong)).status_code == 422
+
+
+def test_a_lever_is_answered_by_its_kind_id_and_version_never_its_name() -> None:
+    """What the route answers of a reading: each lever's shape, never the
+    tenant's words, its name or its slug."""
+    lever = LeverRef(kind=LeverKind.KNOWLEDGE, id=new_id(), version=3)
+    standing = LeverStanding(
+        lever=lever, sessions=2, spun=2, sessions_without=3, spun_without=1, spun_sessions=()
+    )
+    now = utcnow()
+    reading = LeverReading(
+        since=now - timedelta(days=1),
+        until=now,
+        sessions=5,
+        spun=3,
+        complete=True,
+        standings=(standing,),
+    )
+    (answered,) = LeverReadingView.model_validate(reading).model_dump(mode="json")["standings"]
+    assert answered["lever"] == {"kind": "knowledge", "id": str(lever.id), "version": 3}

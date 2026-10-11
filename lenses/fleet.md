@@ -217,7 +217,7 @@ every system: each task that repeats is a skill a person runs with an
 agent, and the boundary is the credential it holds. The scaffold ships
 the platform's operational skills beside the guideline's own
 (`ops-session-stuck`, `ops-host-idle`, `ops-provider-outage`,
-`audit-matrix-spend`, `audit-ontology-drift`), and
+`audit-matrix-spend`, `audit-agent-levers`, `audit-ontology-drift`), and
 makes two of the guideline's optional audits required,
 `audit-provider-calls` and `audit-credential-lifetimes`.
 

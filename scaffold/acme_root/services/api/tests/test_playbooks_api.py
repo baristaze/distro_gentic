@@ -1,12 +1,16 @@
 """A tenant's playbooks over the API: a person publishes a name's next
-version with its gates, and the latest version is read. A viewer publishes
-none; another tenant's playbook is not found; a malformed draft, a gate
-that would allow among them, is refused whole."""
+version with its gates, and the latest version is read, each with what the
+lever checks found in it, which never refuses the publish, and null on a
+version the checks never read. A viewer publishes none; another tenant's
+playbook is not found; a malformed draft, a gate that would allow among
+them, is refused whole."""
 
 import httpx
 from tenant_support import person, refused, tenant
 
+from acme.om.base import new_id, utcnow
 from acme.om.context import Role
+from acme.om.playbooks.types.playbook import Playbook
 from acme.services.api.container import AppContainer
 
 DRAFT = {
@@ -37,6 +41,24 @@ async def test_a_person_publishes_versions_and_the_latest_is_read(
     latest = await client.get("/v1/playbooks/release-check", headers=member)
     assert latest.status_code == 200, latest.text
     assert latest.json() == second.json()
+
+
+async def test_a_publish_with_a_finding_lands_and_answers_it_beside_the_version(
+    client: httpx.AsyncClient, container: AppContainer
+) -> None:
+    ajax = await tenant(client, container, "ajax")
+    retrying = {**DRAFT, "gates": [], "body": "1. Deploy.\n2. Keep retrying until it is green."}
+    published = await client.post("/v1/playbooks", headers=ajax.owner, json=retrying)
+    assert published.status_code == 201, published.text
+    assert published.json()["version"] == 1
+    (finding,) = published.json()["findings"]
+    assert finding["check"] == "unbounded_retry"
+    assert finding["excerpt"] == "Keep retrying until it is green."
+    latest = await client.get("/v1/playbooks/release-check", headers=ajax.owner)
+    assert latest.json() == published.json()
+    plain = {**retrying, "body": "1. Deploy.\n2. Retry once, then say what failed."}
+    second = await client.post("/v1/playbooks", headers=ajax.owner, json=plain)
+    assert (second.json()["version"], second.json()["findings"]) == (2, [])
 
 
 async def test_a_viewer_reads_playbooks_and_publishes_none(
@@ -86,3 +108,26 @@ async def test_a_malformed_draft_is_refused_whole(
         422,
         "validation_failed",
     )
+
+
+async def test_a_version_the_checks_never_read_answers_null_never_an_empty_list(
+    client: httpx.AsyncClient, container: AppContainer
+) -> None:
+    ajax = await tenant(client, container, "ajax")
+    # A version as a release before the checks wrote it.
+    before = Playbook(
+        id=new_id(),
+        created_at=utcnow(),
+        name="release-check",
+        version=1,
+        description="What a release needs before it ships.",
+        body="1. Keep retrying until it is green.",
+        published_by=new_id(),
+    )
+    await container.storage.get_playbook_storage().create_playbook(ajax.org_id, before, ())
+    read = await client.get("/v1/playbooks/release-check", headers=ajax.owner)
+    assert read.status_code == 200, read.text
+    assert read.json()["findings"] is None
+    plain = {**DRAFT, "body": "1. Deploy.\n2. Retry once, then say what failed."}
+    second = await client.post("/v1/playbooks", headers=ajax.owner, json=plain)
+    assert (second.json()["version"], second.json()["findings"]) == (2, [])

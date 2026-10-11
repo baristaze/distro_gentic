@@ -9,8 +9,9 @@ tenant's, the one notice leaves the table with every notice kept in the list,
 the validation sessions' station columns leave the table with every session
 this release wrote kept, a platform automation this release writes reads as
 the previous release's after a downgrade, which drops the automations of a
-product's kind, and a refused validation session goes back to queued, kept,
-when its reason's column leaves."""
+product's kind, a refused validation session goes back to queued, kept,
+when its reason's column leaves, and a playbook version the release before
+wrote reads as never checked by the lever checks."""
 
 import asyncio
 import json
@@ -22,6 +23,7 @@ import pytest
 from contracts.automation_storage import make_automation
 from contracts.event_storage import make_event
 from contracts.platform_agents_storage import finished, make_validation, refused
+from contracts.playbook_storage import make_playbook
 from contracts.workspace_storage import make_workspace
 from sqlalchemy import Connection, text
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -32,6 +34,7 @@ from acme.om.base import new_id
 from acme.om.events.storage.impl.postgres import EventStoragePostgresImpl
 from acme.om.platform_agents.storage.impl.postgres import PlatformAgentsStoragePostgresImpl
 from acme.om.platform_agents.types.validation import ValidationSession, ValidationStatus
+from acme.om.playbooks.storage.impl.postgres import PlaybookStoragePostgresImpl
 from acme.om.storage.impl.pg_base import LoginSessions
 from acme.om.storage.logins import MIGRATION_LOGIN, PURGE_LOGIN, RUNTIME_LOGIN, SYSTEM_LOGIN
 from acme.om.storage.migrate import (
@@ -658,4 +661,36 @@ async def test_a_platform_automation_reads_as_the_previous_releases_after_a_down
     assert set(previous) == {written.id, carried.id}
     assert all(set(action) == PREVIOUS_ACTION for action in previous.values())
     assert await storage.read_automation(org, written.id) == written
+    assert await check(DatabaseRole.CORE, core) == []
+
+
+BEFORE_LEVERS = "202610110914"
+"""The core head before a playbook version carried what the lever checks
+found in it."""
+
+
+async def test_a_version_the_release_before_wrote_reads_as_never_checked(
+    pg_sessions: LoginSessions, migrated: dict[DatabaseRole, str]
+) -> None:
+    """At the release before, a playbook version is written with no
+    findings column. Forward, its findings are null: it reads as never
+    checked, which is not checked and clean."""
+    core = migrated[DatabaseRole.CORE]
+    org, playbook = new_id(), make_playbook()
+    await downgrade(DatabaseRole.CORE, core, BEFORE_LEVERS)
+    gates = json.dumps([gate.model_dump(mode="json") for gate in playbook.gates])
+    await in_tenant(
+        core,
+        org,
+        "INSERT INTO core.playbooks (id, org_id, created_at, name, version, description,"
+        " body, gates, published_by) VALUES"
+        f" ('{playbook.id}', '{org}', now(), '{playbook.name}', 1, 'Cut a build.',"
+        f" 'Build.', '{gates}'::jsonb, '{playbook.published_by}')",
+    )
+
+    await upgrade(DatabaseRole.CORE, core)
+
+    stored = await PlaybookStoragePostgresImpl(pg_sessions).read_playbook(org, playbook.id)
+    assert stored is not None and stored.findings is None
+    assert await in_tenant(core, org, "SELECT findings IS NULL FROM core.playbooks") == [(True,)]
     assert await check(DatabaseRole.CORE, core) == []
