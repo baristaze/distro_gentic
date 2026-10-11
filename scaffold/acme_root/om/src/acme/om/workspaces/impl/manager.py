@@ -9,7 +9,13 @@ from pydantic import Field, SecretStr, ValidationError
 
 from acme.infra.exceptions import InfraException
 from acme.infra.secrets import SecretsInterface
-from acme.infra.workspaces import IsolationMode, IsolationSpec, Workspace, WorkspaceLost
+from acme.infra.workspaces import (
+    Durability,
+    IsolationMode,
+    IsolationSpec,
+    Workspace,
+    WorkspaceLost,
+)
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agents.types.kind import AgentKindCatalog
 from acme.om.base import Platform, utcnow
@@ -40,6 +46,7 @@ from acme.om.workspaces.projects import (
 from acme.om.workspaces.storage import WorkspaceStorageInterface
 from acme.om.workspaces.types.credential import FetchCredential, PushToken, RepositoryCredential
 from acme.om.workspaces.types.egress import EgressAllowlist, EgressDecision, EgressRequest
+from acme.om.workspaces.types.snapshot import KeptSnapshot
 from acme.om.workspaces.types.source import (
     BranchPlan,
     OpenedPullRequest,
@@ -68,6 +75,9 @@ class WorkspacesOptions(Platform):
     # The longest a push token lives; a prepare or a release of the loop's
     # workspace ends it sooner.
     push_token_lifetime: timedelta = Field(default=timedelta(minutes=15), gt=timedelta(0))
+    # The most records of a session's snapshots one read returns: a session
+    # keeps one a run, and a sweep or a rewind reads them all.
+    snapshots_read: int = Field(default=10_000, gt=0)
 
 
 class WorkspacesManagerImpl(WorkspacesManagerInterface):
@@ -104,7 +114,9 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
 
     # The pin.
 
-    async def pin(self, ctx: TenantContext, session: AgentSession) -> SessionWorkspace | None:
+    async def pin(
+        self, ctx: TenantContext, session: AgentSession, *, at_rest: bool = True
+    ) -> SessionWorkspace | None:
         ctx.require(Permission.WRITE)
         stored = await self._storage.read_workspace(ctx.org_id, session.id)
         if stored is not None:
@@ -128,7 +140,33 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
             else await self._storage.read_allowlist(ctx.org_id, project_id)
         )
         label = f"{kind.name} at version {kind.version}"
-        return await self._land(ctx, session.id, kind.isolation, label, project_id, allowlist)
+        durability = kind.isolation.durability
+        if (
+            durability is Durability.SNAPSHOT
+            and project_id is not None
+            and not await self._projects.keeps_snapshots(ctx, project_id)
+        ):
+            # Its project keeps its sessions' workspaces as caches, on
+            # purpose: the kind's durability is narrowed, and the pin says
+            # so.
+            log.info(
+                "session %s of org %s: project %s keeps its workspaces as caches, so %s's is one",
+                session.id,
+                ctx.org_id,
+                project_id,
+                label,
+            )
+            durability = Durability.CACHE
+        if durability is Durability.SNAPSHOT and not at_rest:
+            # Each of its snapshots would be refused, and its instance kept
+            # live between runs for good: refused here, where its
+            # durability is chosen, never pinned as a cache in its stead.
+            raise ValidationFailed(
+                f"session {session.id} keeps no content at rest, so it keeps no snapshot, "
+                f"and {label} keeps its workspace by snapshots"
+            )
+        spec = kind.isolation.model_copy(update={"durability": durability})
+        return await self._land(ctx, session.id, spec, label, project_id, allowlist)
 
     async def get_workspace(self, ctx: TenantContext, session_id: UUID) -> SessionWorkspace:
         ctx.require(Permission.READ)
@@ -159,7 +197,9 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
 
     # Around a loop.
 
-    async def attach(self, ctx: TenantContext, workspace: Workspace, epoch: int) -> Workspace:
+    async def attach(
+        self, ctx: TenantContext, workspace: Workspace, epoch: int, *, restored: bool = False
+    ) -> Workspace:
         ctx.require(Permission.WRITE)
         held = await self._storage.read_workspace(ctx.org_id, workspace.id)
         if held is None:
@@ -168,7 +208,9 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
         seen = held.branch_seen
         kept: str | None = None
         forget = False
-        binding = await self._binding(ctx, held)
+        # A restore holds the checkout the snapshot kept: a sync would bring
+        # the remote's commits over it, and a cut would clean it away.
+        binding = None if restored else await self._binding(ctx, held)
         if binding is not None:
             # The platform reads the repository on its own host, with the
             # project's fetch credential, and the checkout takes a bundle:
@@ -547,6 +589,32 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
             await self._write(ctx, session_id, {"branch_seen": True})
         return await self._source_control.open_pull_request(ctx, binding, held.branch, title, body)
 
+    # Where a session's snapshots live.
+
+    async def keep_snapshot(self, ctx: TenantContext, snapshot: KeptSnapshot) -> KeptSnapshot:
+        ctx.require(Permission.WRITE)
+        if not await self._storage.create_snapshot(ctx.org_id, snapshot):
+            stored = await self._storage.read_snapshot(ctx.org_id, snapshot.id)
+            if stored is None:
+                raise PreconditionFailed(f"snapshot {snapshot.id} is another's")
+            return stored
+        return snapshot
+
+    async def kept_snapshot(self, ctx: TenantContext, snapshot_id: UUID) -> KeptSnapshot | None:
+        ctx.require(Permission.READ)
+        return await self._storage.read_snapshot(ctx.org_id, snapshot_id)
+
+    async def kept_snapshots(
+        self, ctx: TenantContext, session_id: UUID
+    ) -> tuple[KeptSnapshot, ...]:
+        ctx.require(Permission.READ)
+        return tuple(
+            await self._storage.read_snapshots(ctx.org_id, session_id, self._options.snapshots_read)
+        )
+
+    async def forget_snapshots(self, org_id: UUID, session_id: UUID) -> int:
+        return await self._storage.purge_snapshots(org_id, session_id)
+
     async def purge_session(self, org_id: UUID, session_id: UUID) -> bool:
         return await self._storage.purge_workspace(org_id, session_id)
 
@@ -619,6 +687,8 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
                 egress=egress,
                 rules=egress_rules,
                 egress_source=source,
+                durability=spec.durability,
+                base=spec.base,
                 branch=rules.session_branch(session_id),
             )
         except ValidationError as error:
@@ -631,11 +701,12 @@ class WorkspacesManagerImpl(WorkspacesManagerInterface):
                 raise PreconditionFailed(f"the workspace of session {session_id} is another's")
             return landed
         log.info(
-            "session %s of org %s pinned %s isolation, egress %s: %s",
+            "session %s of org %s pinned %s isolation, egress %s, durability %s: %s",
             session_id,
             ctx.org_id,
             workspace.level.value,
             workspace.egress.value,
+            workspace.durability.value,
             source,
         )
         return workspace

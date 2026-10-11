@@ -264,6 +264,7 @@ MANAGER_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         ("WindowsManagerInterface", "purge_artifacts"),
         ("ToolsManagerInterface", "purge_workspace"),
         ("WorkspacesManagerInterface", "purge_session"),
+        ("WorkspacesManagerInterface", "forget_snapshots"),
         ("EvidenceManagerInterface", "purge_session"),
         ("ProjectsManagerInterface", "purge_session"),
         ("RelayManagerInterface", "purge_session"),

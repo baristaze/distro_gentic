@@ -11,6 +11,7 @@ from uuid import UUID
 from acme.om.outbox.types.row import OutboxRow
 from acme.om.workspaces.types.credential import RepositoryCredential
 from acme.om.workspaces.types.egress import EgressAllowlist
+from acme.om.workspaces.types.snapshot import KeptSnapshot
 from acme.om.workspaces.types.workspace import SessionWorkspace
 
 
@@ -95,6 +96,31 @@ class WorkspaceStorageInterface(ABC):
         ...
 
     @abstractmethod
+    async def create_snapshot(self, org_id: UUID, snapshot: KeptSnapshot) -> bool:
+        """The record of where a snapshot lives; False, with nothing landed,
+        when its id is recorded already."""
+        ...
+
+    @abstractmethod
+    async def read_snapshot(self, org_id: UUID, snapshot_id: UUID) -> KeptSnapshot | None:
+        """The record of the snapshot under `snapshot_id`, or None."""
+        ...
+
+    @abstractmethod
+    async def read_snapshots(
+        self, org_id: UUID, session_id: UUID, limit: int
+    ) -> list[KeptSnapshot]:
+        """At most `limit` records of the snapshots the session keeps, oldest
+        first."""
+        ...
+
+    @abstractmethod
+    async def purge_snapshots(self, org_id: UUID, session_id: UUID) -> int:
+        """The records of every snapshot the session keeps; returns how many
+        went."""
+        ...
+
+    @abstractmethod
     async def purge_workspace(self, org_id: UUID, session_id: UUID) -> bool:
         """The workspace row of a session its purge has claimed. False when
         none was left."""
@@ -102,6 +128,7 @@ class WorkspaceStorageInterface(ABC):
 
     @abstractmethod
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:
-        """At most `limit` workspaces and `limit` allowlists of a deleted
-        tenant past its retention; returns how many went."""
+        """At most `limit` workspaces, `limit` allowlists, and `limit`
+        records of snapshots of a deleted tenant past its retention; returns
+        how many went."""
         ...

@@ -131,6 +131,9 @@ def runner() -> int:
             local = bound.repository.replace("https://", f"file://{self._root}/", 1)
             return bound.model_copy(update={"repository": local})
 
+        async def keeps_snapshots(self, ctx: TenantContext, project_id: UUID) -> bool:
+            return await self._inner.keeps_snapshots(ctx, project_id)
+
     # One loop at a time: the script is one queue for every session.
     os.environ["ACME_RUNNER_CAPACITY"] = "1"
     settings = SessionRunnerSettings()

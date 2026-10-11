@@ -8,10 +8,14 @@ the loop asks again and never ends for one. A prepared workspace is brought
 up to the session's branch; a release first pushes what the workspace
 holds, then lets go only of what its own run holds. A restore, a rewind or a
 fork's, starts the workspace this process prepares, and is lost for one a
-host of the tenant's holds, which no snapshot reaches. A pin holds no
-durability and no base, so a spec that asks for a workspace kept by
-snapshots, or started from a base, is refused (`UNPINNED`), never prepared
-as a cache in its stead. Every other operation is the engine's, unchanged.
+host of the tenant's holds, which no snapshot reaches. The pin holds the
+session's durability and base with its isolation. A provider's refusal
+clears, since another host may give the isolation later, unless it refuses
+what the prepare asks beyond it (a snapshot's durability, a base, or a
+restore): that refusal is for good, and ends the loop with its reason. A
+workspace a snapshot started keeps the tree the snapshot holds: its branch
+is not brought up over it. Every other operation is the engine's,
+unchanged.
 
 A run is named by its epoch, read from storage as it prepares: a session
 that resumes on this host while the run before it is still being released
@@ -26,7 +30,7 @@ of its pool holds (`PlacedWorkspacesInterface`), which this process neither
 makes nor lets go, and its checkout runs there through the relay."""
 
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -41,12 +45,15 @@ from acme.infra.workspaces import (
     Workspace,
     WorkspaceLost,
 )
+from acme.om.base import utcnow
 from acme.om.context import TenantContext
 from acme.om.steps import StepsManagerInterface
 from acme.om.steps.types.header import WorkspaceSnapshot
 from acme.om.steps.types.step import Step
+from acme.om.tools.impl.snapshots import SnapshotStore, snapshot_key
 from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.tools.registry import ToolRegistry
+from acme.om.tools.rules import named_snapshot
 from acme.om.tools.tool import TakenSnapshot
 from acme.om.tools.types.call import Gate, JobHandle, JobNotStarted
 from acme.om.tools.types.policy import PolicyLayer, ToolPolicy
@@ -54,15 +61,18 @@ from acme.om.workspaces.manager import WorkspacesManagerInterface
 from acme.om.workspaces.placed import PlacedWorkspacesInterface
 from acme.om.workspaces.rules import host_refusal
 from acme.om.workspaces.types.host import HostOffer
+from acme.om.workspaces.types.snapshot import KeptSnapshot
 
 log = logging.getLogger(__name__)
 
-UNPINNED = (
-    "a session's pin holds no durability and no base: a workspace kept by"
-    " snapshots, or started from a base, is refused"
-)
-"""Why a spec that asks for either is refused here: its pin, which every
-prepare of the session is held to, would drop what it asks."""
+
+def _beyond_isolation(spec: IsolationSpec, restore: WorkspaceSnapshot | None) -> bool:
+    """Whether a prepare asks more of its provider than the isolation: to keep
+    the workspace by snapshots, to start it from a base, or to start it
+    from a snapshot. A provider that refuses any of it for good refuses it
+    on every host like it, so the refusal ends the loop with its reason,
+    never a wait that no host ends."""
+    return spec.durability is Durability.SNAPSHOT or spec.base is not None or restore is not None
 
 
 class HeldWorkspaces:
@@ -104,8 +114,12 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         local: bool,
         held: HeldWorkspaces | None = None,
         placed: PlacedWorkspacesInterface | None = None,
+        snapshots: SnapshotStore | None = None,
+        clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._inner = inner
+        self._snapshots = snapshots
+        self._clock = clock
         self._workspaces = workspaces
         self._steps = steps
         self._offer = offer
@@ -143,11 +157,6 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         spec: IsolationSpec,
         restore: WorkspaceSnapshot | None,
     ) -> Workspace:
-        if spec.durability is Durability.SNAPSHOT or spec.base is not None:
-            # The pin holds the isolation alone: what a snapshot or a base
-            # asks is refused whole, never met by a cache on the provider's
-            # own image in its stead.
-            raise IsolationRefused(UNPINNED)
         pinned = await self._workspaces.pinned(ctx, session_id, spec)
         if pinned.mode is IsolationMode.NONE:
             return await self._inner.prepare_workspace(ctx, session_id, pinned, restore)
@@ -169,6 +178,8 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
                 self._hosted.add(session_id)
                 self._held.hold(attached, epoch)
                 return attached
+        if restore is not None:
+            await self._in_bucket(ctx, session_id, restore)
         running = len(self._directories.keys() - {session_id})
         why = host_refusal(pinned, self._offer, local=self._local, running=running)
         if why is not None:
@@ -181,14 +192,22 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
             workspace = await self._inner.prepare_workspace(ctx, session_id, pinned, restore)
         except InfraException as refused:
             self._directories.pop(session_id, None)
-            if isinstance(refused, IsolationRefused) and not refused.clears:
+            if (
+                isinstance(refused, IsolationRefused)
+                and not refused.clears
+                and not _beyond_isolation(pinned, restore)
+            ):
+                # Another host of the session's placement may give the
+                # isolation later.
                 raise IsolationRefused(refused.message, clears=True) from refused
             raise
         except BaseException:
             self._directories.pop(session_id, None)
             raise
         try:
-            attached = await self._workspaces.attach(ctx, workspace, epoch)
+            attached = await self._workspaces.attach(
+                ctx, workspace, epoch, restored=restore is not None
+            )
         except BaseException:
             # Its instance goes, and its files stay as they were: nothing of
             # the loop ran in it.
@@ -239,14 +258,20 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         epoch: int,
         loop_id: UUID,
     ) -> Step:
-        return await self._inner.snapshot_workspace(
+        step = await self._inner.snapshot_workspace(
             ctx, session_id, workspace, epoch=epoch, loop_id=loop_id
         )
+        taken = named_snapshot(step)
+        if taken is not None:
+            await self._recorded(ctx, session_id, taken)
+        return step
 
     async def fork_snapshot(
         self, ctx: TenantContext, child_id: UUID, snapshot_id: UUID, taken: TakenSnapshot
     ) -> WorkspaceSnapshot:
-        return await self._inner.fork_snapshot(ctx, child_id, snapshot_id, taken)
+        kept = await self._inner.fork_snapshot(ctx, child_id, snapshot_id, taken)
+        await self._recorded(ctx, child_id, kept)
+        return kept
 
     async def find_snapshot(
         self, ctx: TenantContext, session_id: UUID, snapshot_id: UUID
@@ -261,14 +286,63 @@ class ToolsManagerWorkspacesImpl(ToolsManagerInterface):
         return session_id in self._preparing or (held is not None and held != epoch)
 
     async def purge_workspace(self, org_id: UUID, session_id: UUID) -> None:
+        # The engine's purge takes the files, the instance, and every
+        # snapshot in the platform's bucket; the records of where they lived
+        # go once they did.
         await self._inner.purge_workspace(org_id, session_id)
+        await self._workspaces.forget_snapshots(org_id, session_id)
         await self._workspaces.purge_session(org_id, session_id)
         self._held.let_go(session_id)
         self._directories.pop(session_id, None)
         self._hosted.discard(session_id)
 
     async def erase_snapshots(self, ctx: TenantContext, session_id: UUID) -> None:
+        # The session's key is gone, so its archives are noise: they leave
+        # the bucket, and what its provider keeps outside them goes with
+        # them. A copy kept for another session, a fork's, is that one's.
         await self._inner.erase_snapshots(ctx, session_id)
+        if self._snapshots is not None:
+            await self._snapshots.purge(ctx.org_id, session_id)
+        await self._workspaces.forget_snapshots(ctx.org_id, session_id)
+
+    async def _recorded(
+        self, ctx: TenantContext, session_id: UUID, taken: WorkspaceSnapshot
+    ) -> None:
+        """Records that a snapshot this process kept lives in the platform's
+        bucket. The step names it either way, and a snapshot with no record
+        is read from the bucket, so a record that fails to land loses
+        nothing: it is logged."""
+        now = self._clock()
+        record = KeptSnapshot(
+            id=taken.id,
+            created_at=now,
+            updated_at=now,
+            created_by=ctx.user_id,
+            updated_by=ctx.user_id,
+            session_id=session_id,
+            hash=taken.hash,
+            size=taken.size,
+            reference=snapshot_key(session_id, taken.hash),
+        )
+        try:
+            await self._workspaces.keep_snapshot(ctx, record)
+        except Exception:
+            log.exception(
+                "session %s: where snapshot %s lives was not recorded", session_id, taken.id
+            )
+
+    async def _in_bucket(
+        self, ctx: TenantContext, session_id: UUID, restore: WorkspaceSnapshot
+    ) -> None:
+        """Holds a restore this process makes to a snapshot of the platform's
+        bucket: one a host keeps inside its tenant's wall never leaves it,
+        so a workspace made here cannot start from it (`WorkspaceLost`)."""
+        record = await self._workspaces.kept_snapshot(ctx, restore.id)
+        if record is not None and record.on_host:
+            raise WorkspaceLost(
+                f"snapshot {restore.id} is kept inside the wall of pool {record.pool_id}, "
+                f"which session {session_id}'s workspace does not run in"
+            )
 
     # The engine's, unchanged.
 

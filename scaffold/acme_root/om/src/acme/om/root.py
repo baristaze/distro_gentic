@@ -952,7 +952,8 @@ def build_managers(
     # namespace reaches the sessions through the decorators, so no such
     # session stands outside its origin's project, or unpinned.
     agent_sessions = AgentSessionsInProjectImpl(
-        AgentSessionsPinnedImpl(retained, workspaces), storage.get_project_storage()
+        AgentSessionsPinnedImpl(retained, workspaces, retention.keeps_at_rest),
+        storage.get_project_storage(),
     )
     # The gate reads the budgets of a call's scopes and holds on the ledger.
     budgets = BudgetsManagerImpl(
@@ -1120,6 +1121,7 @@ def build_managers(
         placed=None
         if transport_layer is None
         else PlacedWorkspacesRelayedImpl(lambda: managers.relay, lambda: managers.hosts),
+        snapshots=snapshots,
     )
     # What makes a result: the runs, the policies, and validation on the
     # executor, apart from every agent's workspace. Outside `local`, it is

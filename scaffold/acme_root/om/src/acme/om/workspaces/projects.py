@@ -32,6 +32,13 @@ class WorkspaceProjectsInterface(ABC):
         none."""
         ...
 
+    @abstractmethod
+    async def keeps_snapshots(self, ctx: TenantContext, project_id: UUID) -> bool:
+        """Whether the tenant's project lets a kind keep its workspace by
+        snapshots; False keeps each of its sessions' workspaces a cache. A
+        project the tenant does not hold narrows nothing."""
+        ...
+
 
 class PullRequestsInterface(ABC):
     """What source control says of a session's branch that is gone. The null

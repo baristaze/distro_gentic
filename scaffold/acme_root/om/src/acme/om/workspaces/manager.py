@@ -21,6 +21,7 @@ from acme.om.context import TenantContext
 from acme.om.evidence.types.validation import Delivery
 from acme.om.workspaces.types.credential import FetchCredential, PushToken, RepositoryCredential
 from acme.om.workspaces.types.egress import EgressAllowlist, EgressDecision, EgressRequest
+from acme.om.workspaces.types.snapshot import KeptSnapshot
 from acme.om.workspaces.types.source import OpenedPullRequest, RepositoryWrite
 from acme.om.workspaces.types.workspace import SessionWorkspace
 
@@ -29,15 +30,21 @@ class WorkspacesManagerInterface(ABC):
     # The pin, and the cache around a loop.
 
     @abstractmethod
-    async def pin(self, ctx: TenantContext, session: AgentSession) -> SessionWorkspace | None:
+    async def pin(
+        self, ctx: TenantContext, session: AgentSession, *, at_rest: bool = True
+    ) -> SessionWorkspace | None:
         """Pins a new session's isolation before it is written: its kind's
-        level and limits at the version it starts on, and the egress its
-        project allows now (`rules.pinned_egress`). Pinned once: a session
-        pinned already is answered as stored. None, with nothing pinned, for
-        a kind this process does not declare: no loop of it runs here, and
-        one that runs elsewhere finds no pin and gets no workspace.
+        level, limits, and base at the version it starts on, the egress its
+        project allows now (`rules.pinned_egress`), and its kind's
+        durability, narrowed to a cache when its project keeps its
+        sessions' workspaces as caches. Pinned once: a session pinned
+        already is answered as stored. None, with nothing pinned, for a kind
+        this process does not declare: no loop of it runs here, and one that
+        runs elsewhere finds no pin and gets no workspace.
         `ValidationFailed` for egress a kind names that no allowlist can
-        hold."""
+        hold, and for a workspace kept by snapshots in a session that keeps
+        no content at rest (`at_rest` False), whose every snapshot would be
+        refused: never pinned as a cache in its stead."""
         ...
 
     @abstractmethod
@@ -58,7 +65,9 @@ class WorkspacesManagerInterface(ABC):
         ...
 
     @abstractmethod
-    async def attach(self, ctx: TenantContext, workspace: Workspace, epoch: int) -> Workspace:
+    async def attach(
+        self, ctx: TenantContext, workspace: Workspace, epoch: int, *, restored: bool = False
+    ) -> Workspace:
         """The prepared workspace, its checkout brought up to the session's
         branch on the repository its project binds (`rules.branch_plan`), and
         what the loop is told of it in `changed`: the snapshot of every
@@ -67,7 +76,12 @@ class WorkspacesManagerInterface(ABC):
         no known fate is `WorkspaceLost`, which parks the loop for a person,
         and nothing is checked out from the default branch in its stead. A session whose project binds no
         repository has no checkout. Every command in the checkout carries
-        `epoch`, the one the run that prepares it held when it began."""
+        `epoch`, the one the run that prepares it held when it began.
+
+        A workspace a snapshot started (`restored`) holds the tree the
+        snapshot kept, its checkout included: nothing of its branch is
+        brought up, cut, or checked, so the restore stands for the run, and
+        the loop is told only what the cache holds for it."""
         ...
 
     @abstractmethod
@@ -202,6 +216,37 @@ class WorkspacesManagerInterface(ABC):
         the forge fetch a URL off the repository's host is `ValidationFailed`
         before anything is pushed (`rules.body_refusal`). A refusal of source
         control's is `ValidationFailed`, and its absence `Unavailable`."""
+        ...
+
+    # Where a session's snapshots live.
+
+    @abstractmethod
+    async def keep_snapshot(self, ctx: TenantContext, snapshot: KeptSnapshot) -> KeptSnapshot:
+        """Platform-internal: records where a snapshot the session keeps
+        lives, the platform's bucket or a host's store, by its reference and
+        its hash, never its bytes. Once: a snapshot recorded already is
+        answered as stored."""
+        ...
+
+    @abstractmethod
+    async def kept_snapshot(self, ctx: TenantContext, snapshot_id: UUID) -> KeptSnapshot | None:
+        """Where the snapshot under `snapshot_id` lives; None when none is
+        recorded."""
+        ...
+
+    @abstractmethod
+    async def kept_snapshots(
+        self, ctx: TenantContext, session_id: UUID
+    ) -> tuple[KeptSnapshot, ...]:
+        """Where each snapshot the session keeps lives, oldest first, at most
+        the options' `snapshots_read` of them."""
+        ...
+
+    @abstractmethod
+    async def forget_snapshots(self, org_id: UUID, session_id: UUID) -> int:
+        """Platform-internal: the records of the session's snapshots go, once
+        their bytes went with its content or its purge; for no principal.
+        Returns how many went."""
         ...
 
     @abstractmethod

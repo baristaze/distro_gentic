@@ -1,0 +1,344 @@
+"""A workspace's durability as the platform runs it, over the memory roots,
+the twin provider, and the local buckets. A kind chooses `cache`, the
+default, or `snapshot`, and a project narrows it to a cache; a session that
+keeps no content at rest is refused a workspace kept by snapshots. A cache
+takes no snapshot, and its next loop starts from its branch. A workspace a
+snapshot restores keeps the tree it holds: no branch is brought over it. A
+provider that refuses for good what a prepare asks beyond its isolation
+ends the loop with its reason. Past a session's content's life, the sweep
+takes its snapshots from the bucket and their records."""
+
+import logging
+from dataclasses import dataclass, field, replace
+from datetime import timedelta
+from pathlib import Path
+from typing import Any
+from uuid import UUID
+
+import pytest
+from contracts.doubles import APP
+from contracts.loops import ASSISTANT, Asked, Found, Lookup, Loop, call, loop_over, reply, said
+from contracts.project_storage import make_project
+from contracts.workspaces import GitTwin, ProjectsTwin, ReaderTwin
+
+from acme.infra.buckets import Buckets
+from acme.infra.impl.local import InfraLocalImpl
+from acme.infra.keys.memory import KeyServiceMemoryImpl
+from acme.infra.workspaces import (
+    Durability,
+    EgressMode,
+    EgressPolicy,
+    IsolationMode,
+    IsolationRefused,
+    IsolationSpec,
+    Workspace,
+)
+from acme.infra.workspaces.twin import WorkspaceTwinImpl
+from acme.om.agents.types.kind import AgentKind
+from acme.om.agents.types.request import Start
+from acme.om.base import Platform, new_id, utcnow
+from acme.om.context import RequestContext, TenantContext
+from acme.om.exceptions import NotFound, ValidationFailed
+from acme.om.privacy.types.session_privacy import StorageMode
+from acme.om.projects.impl.retention import SessionProjectBoundImpl
+from acme.om.retention.impl.keys import TenantKeysImpl
+from acme.om.retention.impl.manager import RetentionManagerImpl, RetentionOptions
+from acme.om.retention.types.policy import RetentionPolicy
+from acme.om.steps.types.header import LoopOutcome, ParkReason
+from acme.om.steps.types.step import Step, StepType
+from acme.om.tools.impl.snapshots import session_prefix
+from acme.om.tools.tool import ToolRuntime
+from acme.om.tools.types.tool import Effect, ToolClass, ToolInput
+from acme.om.workspaces.rules import session_branch
+
+KEPT = IsolationSpec(
+    mode=IsolationMode.TWIN,
+    egress=EgressPolicy(mode=EgressMode.NONE),
+    durability=Durability.SNAPSHOT,
+)
+CACHED = KEPT.model_copy(update={"durability": Durability.CACHE})
+WEEK, DAY = timedelta(days=7), timedelta(days=1)
+
+
+class Scribble(Lookup):
+    """A command's writes, on the twin: its input becomes all the
+    workspace's files hold."""
+
+    def __init__(self, twin: WorkspaceTwinImpl) -> None:
+        super().__init__("scribble", effect=Effect.IDEMPOTENT, authorization_class=ToolClass.WRITE)
+        self._twin = twin
+
+    async def run(
+        self, ctx: TenantContext, call_input: ToolInput, runtime: ToolRuntime
+    ) -> Platform:
+        assert isinstance(call_input, Asked)
+        self._twin.files[runtime.session_id] = call_input.q.encode()
+        return Found(text="written")
+
+
+@dataclass
+class Syncs(GitTwin):
+    """The git twin, counting each time a checkout is brought up to its
+    branch."""
+
+    synced: list[str] = field(default_factory=lambda: list[str]())
+
+    async def sync(self, *args: Any, **kwargs: Any) -> Any:
+        self.synced.append(str(args[3]))
+        return await super().sync(*args, **kwargs)
+
+
+def kind(name: str, spec: IsolationSpec) -> AgentKind:
+    return ASSISTANT.model_copy(
+        update={"name": name, "isolation": spec, "tools": (*ASSISTANT.tools, "scribble")}
+    )
+
+
+KEEPER = kind("keeper", KEPT)
+CACHER = kind("cacher", CACHED)
+
+
+def kept_loop(tmp_path: Path, **roots: Any) -> tuple[Loop, WorkspaceTwinImpl]:
+    infra = InfraLocalImpl(tmp_path)
+    twin = infra.get_workspaces()
+    assert isinstance(twin, WorkspaceTwinImpl)
+    roots.setdefault("workspace_reader", ReaderTwin())
+    loop = loop_over(
+        tmp_path, kinds=(KEEPER, CACHER), infra=infra, extra=(Scribble(twin),), **roots
+    )
+    return loop, twin
+
+
+async def wrote(loop: Loop, session_id: UUID, files: str) -> LoopOutcome:
+    await loop.say(session_id, "Write it.")
+    loop.anthropic.add(reply(call("scribble", q=files)), reply(said("Written.")))
+    return (await loop.loops.run(loop.owner, session_id)).outcome
+
+
+def of_type(steps: list[Step], step_type: StepType) -> list[Step]:
+    return [step for step in steps if step.type is step_type]
+
+
+async def in_bucket(loop: Loop, session_id: UUID) -> list[str]:
+    buckets = loop.infra.get_buckets()
+    return await buckets.list(loop.owner.org_id, Buckets.SNAPSHOTS, session_prefix(session_id), 50)
+
+
+def prepares(twin: WorkspaceTwinImpl, monkeypatch: pytest.MonkeyPatch) -> list[bytes | None]:
+    """The snapshot each prepare of the twin starts from, in order."""
+    started: list[bytes | None] = []
+    prepare = twin.prepare
+
+    async def spied(
+        org_id: UUID,
+        workspace_id: UUID,
+        spec: IsolationSpec,
+        snapshot: bytes | None = None,
+        base: bytes | None = None,
+        *,
+        building: bool = False,
+    ) -> Workspace:
+        started.append(snapshot)
+        return await prepare(org_id, workspace_id, spec, snapshot, base, building=building)
+
+    monkeypatch.setattr(twin, "prepare", spied)
+    return started
+
+
+# Who chooses: a kind, narrowed by a project; refused without content at rest.
+
+
+async def test_a_kept_kind_is_pinned_kept_and_a_project_that_keeps_caches_narrows_it(
+    tmp_path: Path,
+) -> None:
+    loop, _ = kept_loop(tmp_path)
+    kept = await loop.start(KEEPER.name)
+    projects = loop.managers.projects
+    caches = await projects.create_project(
+        loop.owner, make_project().model_copy(update={"workspace_snapshots": False})
+    )
+    narrowed = await projects.start_session(
+        loop.owner, caches.id, Start(id=new_id(), kind=KEEPER.name, title="a cache")
+    )
+    workspaces = loop.managers.workspaces
+
+    pinned = await workspaces.get_workspace(loop.owner, kept)
+    assert (
+        pinned.durability is Durability.SNAPSHOT and pinned.spec().durability is Durability.SNAPSHOT
+    )
+    cached = await workspaces.get_workspace(loop.owner, narrowed.id)
+    assert cached.durability is Durability.CACHE, "its project keeps its workspaces as caches"
+
+
+async def test_a_session_that_keeps_no_content_at_rest_is_refused_a_kept_workspace(
+    tmp_path: Path,
+) -> None:
+    """Every snapshot of it would be refused and its instance kept live for
+    good: refused at its creation, never pinned as a cache in its stead. A
+    cache of the same tenant is created."""
+    loop, _ = kept_loop(tmp_path)
+    retention = loop.managers.retention
+    policy = await retention.get_policy(loop.owner)
+    nothing_at_rest = RetentionPolicy(storage_mode=StorageMode.MEMORY_ONLY)
+    await retention.write_policy(loop.owner, policy.model_copy(update={"policy": nothing_at_rest}))
+
+    with pytest.raises(ValidationFailed, match="keeps no content at rest"):
+        await loop.start(KEEPER.name)
+
+    cache = await loop.start(CACHER.name)
+    assert (await loop.managers.workspaces.get_workspace(loop.owner, cache)).durability is (
+        Durability.CACHE
+    )
+
+
+# Check 2: a cache takes no snapshot, and its next loop starts from its branch.
+
+
+async def test_a_cache_sessions_release_takes_no_snapshot_and_its_next_loop_starts_from_its_branch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    git = Syncs()
+    loop, twin = kept_loop(tmp_path, workspace_projects=ProjectsTwin(), workspace_git=git)
+    started = prepares(twin, monkeypatch)
+    session_id = await loop.start(CACHER.name)
+    branch = session_branch(session_id)
+
+    assert await wrote(loop, session_id, "built once") is LoopOutcome.SUCCEEDED
+    assert await wrote(loop, session_id, "built again") is LoopOutcome.SUCCEEDED
+
+    assert not of_type(await loop.history(session_id), StepType.SNAPSHOTTED), "no snapshot"
+    assert await in_bucket(loop, session_id) == []
+    assert await loop.managers.workspaces.kept_snapshots(loop.owner, session_id) == ()
+    assert started == [None, None], "each loop starts from no snapshot"
+    assert git.cuts == [branch], "its first loop cut the branch, and the next kept it"
+    assert git.synced == [branch, branch], "each loop's checkout was brought up to its branch"
+    assert twin.live == set(), "each instance was let go"
+
+
+# A restore is never undone by the branch.
+
+
+async def test_a_restored_workspace_keeps_its_tree_and_no_branch_is_brought_over_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The next run starts from the snapshot the last one took. Its branch
+    moved on its repository and in the checkout both since, which a sync
+    would park for a person: nothing of the branch is brought over the
+    restored tree, so the run goes on from what the snapshot holds."""
+    git = Syncs()
+    loop, twin = kept_loop(tmp_path, workspace_projects=ProjectsTwin(), workspace_git=git)
+    started = prepares(twin, monkeypatch)
+    session_id = await loop.start(KEEPER.name)
+    branch = session_branch(session_id)
+    assert await wrote(loop, session_id, "as the run left it") is LoopOutcome.SUCCEEDED
+    (taken,) = of_type(await loop.history(session_id), StepType.SNAPSHOTTED)
+    git.remote.add(branch)
+    git.diverged = True
+
+    await loop.say(session_id, "Go on.")
+    loop.anthropic.add(reply(said("Going on.")))
+    ran = await loop.loops.run(loop.owner, session_id)
+
+    assert ran.outcome is LoopOutcome.SUCCEEDED, "never parked over a branch it did not sync"
+    assert started[-1] is not None, "the run started from the snapshot"
+    assert twin.files[session_id] == b"as the run left it"
+    assert git.cuts == [branch] and git.synced == [branch], "no branch was brought over it"
+    (record, *_) = await loop.managers.workspaces.kept_snapshots(loop.owner, session_id)
+    assert record.id == taken.header.snapshot.id and not record.on_host, "in the bucket"  # type: ignore[union-attr]
+
+
+# A refusal for good of what a prepare asks beyond its isolation.
+
+
+@pytest.mark.parametrize(
+    ("asked", "ends"),
+    [(KEEPER, LoopOutcome.ERRORED), (CACHER, None)],
+    ids=["kept by snapshots: ends errored", "a cache: waits for a host"],
+)
+async def test_a_refusal_for_good_of_a_kept_workspace_ends_the_loop_with_its_reason(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    asked: AgentKind,
+    ends: LoopOutcome | None,
+) -> None:
+    """A provider that cannot snapshot refuses a workspace kept by snapshots
+    on every host like it: the loop ends with the reason, never a wait that
+    no host ends. A refusal of the isolation alone waits on the resource,
+    since another host may give it."""
+    loop, twin = kept_loop(tmp_path)
+    reason = "a twin workspace cannot be snapshotted: its store is not encrypted at rest"
+
+    async def refuses(*args: Any, **kwargs: Any) -> Workspace:
+        raise IsolationRefused(reason)
+
+    monkeypatch.setattr(twin, "prepare", refuses)
+    session_id = await loop.start(asked.name)
+    await loop.say(session_id, "Install the tool.")
+
+    with caplog.at_level(logging.WARNING):
+        ran = await loop.loops.run(loop.owner, session_id)
+
+    history = await loop.history(session_id)
+    assert not of_type(history, StepType.MODEL_REQUEST), "no call spent"
+    if ends is not None:
+        assert ran.outcome is ends
+        assert any(reason in record.getMessage() for record in caplog.records)
+    else:
+        session = await loop.managers.agent_sessions.get_session(loop.owner, session_id)
+        assert session.park is not None and session.park.reason is ParkReason.RESOURCE
+
+
+# Check 5: the sweep takes a session's snapshots with its content.
+
+
+async def test_the_sweep_takes_a_sessions_snapshots_past_its_contents_life(
+    tmp_path: Path,
+) -> None:
+    """Within its content's life, the session's snapshots are in the bucket
+    and recorded there. Past it, the sweep revokes its key and takes them,
+    from the bucket and from the records; another session's stay."""
+    keys = TenantKeysImpl(KeyServiceMemoryImpl(), {})
+    loop, _ = kept_loop(tmp_path, tenant_keys=keys)
+    # A live tenant, whose org the sweep mints a context for.
+    owner, _ = await loop.managers.tenancy.bootstrap(
+        RequestContext(request_id=new_id(), app=APP), "Ajax", "ajax-kept", "a@x.test", "Ann"
+    )
+    loop = replace(loop, owner=owner)
+    retention = loop.managers.retention
+    policy = await retention.get_policy(loop.owner)
+    week = RetentionPolicy(content_lifetime=WEEK)
+    await retention.write_policy(loop.owner, policy.model_copy(update={"policy": week}))
+    expiring = await loop.start(KEEPER.name)
+    assert await wrote(loop, expiring, "a week's work") is LoopOutcome.SUCCEEDED
+    await retention.write_policy(
+        loop.owner,
+        (await retention.get_policy(loop.owner)).model_copy(update={"policy": RetentionPolicy()}),
+    )
+    staying = await loop.start(KEEPER.name)
+    assert await wrote(loop, staying, "kept for good") is LoopOutcome.SUCCEEDED
+    workspaces = loop.managers.workspaces
+    assert len(await in_bucket(loop, expiring)) == 1
+    assert len(await workspaces.kept_snapshots(loop.owner, expiring)) == 1
+
+    later = utcnow() + WEEK + DAY
+    sweep = RetentionManagerImpl(
+        loop.storage.get_retention_storage(),
+        keys,
+        loop.managers.privacy,
+        loop.managers.agent_sessions,
+        loop.managers.tenancy,
+        loop.managers.events,
+        loop.managers.outbox,
+        SessionProjectBoundImpl(loop.storage.get_project_storage()),
+        RetentionOptions(),
+        clock=lambda: later,
+    )
+    assert await sweep.sweep(RequestContext(request_id=new_id(), app=APP)) == 1
+
+    assert await in_bucket(loop, expiring) == [], "gone from the bucket"
+    assert await workspaces.kept_snapshots(loop.owner, expiring) == (), "and from the records"
+    assert len(await in_bucket(loop, staying)) == 1
+    assert len(await workspaces.kept_snapshots(loop.owner, staying)) == 1
+    with pytest.raises(NotFound):
+        await loop.managers.tools.find_snapshot(loop.owner, expiring, new_id())

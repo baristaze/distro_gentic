@@ -12,8 +12,10 @@ from acme.om.workspaces.storage import WorkspaceStorageInterface
 from acme.om.workspaces.storage.tables.egress_allowlists import EgressAllowlists
 from acme.om.workspaces.storage.tables.repository_credentials import RepositoryCredentials
 from acme.om.workspaces.storage.tables.session_workspaces import SessionWorkspaces
+from acme.om.workspaces.storage.tables.workspace_snapshots import WorkspaceSnapshots
 from acme.om.workspaces.types.credential import RepositoryCredential
 from acme.om.workspaces.types.egress import EgressAllowlist
+from acme.om.workspaces.types.snapshot import KeptSnapshot
 from acme.om.workspaces.types.workspace import SessionWorkspace
 
 
@@ -154,6 +156,39 @@ class WorkspaceStoragePostgresImpl(PgStorageBase, WorkspaceStorageInterface):
             await session.commit()
             return gone
 
+    async def create_snapshot(self, org_id: UUID, snapshot: KeptSnapshot) -> bool:
+        return await self._insert(WorkspaceSnapshots, org_id, snapshot)
+
+    async def read_snapshot(self, org_id: UUID, snapshot_id: UUID) -> KeptSnapshot | None:
+        stmt = select(WorkspaceSnapshots).where(
+            WorkspaceSnapshots.org_id == org_id, WorkspaceSnapshots.id == snapshot_id
+        )
+        async with self._session_for(stmt, org_id=org_id) as session:
+            row = (await session.execute(stmt)).scalar_one_or_none()
+            return None if row is None else to_model(row, KeptSnapshot)
+
+    async def read_snapshots(
+        self, org_id: UUID, session_id: UUID, limit: int
+    ) -> list[KeptSnapshot]:
+        stmt = (
+            select(WorkspaceSnapshots)
+            .where(WorkspaceSnapshots.org_id == org_id, WorkspaceSnapshots.session_id == session_id)
+            .order_by(WorkspaceSnapshots.created_at, WorkspaceSnapshots.id)
+            .limit(limit)
+        )
+        async with self._session_for(stmt, org_id=org_id) as session:
+            rows = (await session.execute(stmt)).scalars().all()
+            return [to_model(row, KeptSnapshot) for row in rows]
+
+    async def purge_snapshots(self, org_id: UUID, session_id: UUID) -> int:
+        stmt = delete(WorkspaceSnapshots).where(
+            WorkspaceSnapshots.org_id == org_id, WorkspaceSnapshots.session_id == session_id
+        )
+        async with self._session_for(stmt, org_id=org_id) as session:
+            gone = deleted(await session.execute(stmt))
+            await session.commit()
+            return gone
+
     async def purge_workspace(self, org_id: UUID, session_id: UUID) -> bool:
         stmt = delete(SessionWorkspaces).where(
             SessionWorkspaces.org_id == org_id, SessionWorkspaces.id == session_id
@@ -165,7 +200,7 @@ class WorkspaceStoragePostgresImpl(PgStorageBase, WorkspaceStorageInterface):
 
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:
         purged = 0
-        for table in (SessionWorkspaces, EgressAllowlists):
+        for table in (SessionWorkspaces, EgressAllowlists, WorkspaceSnapshots):
             stmt = delete_batch(table, table.org_id == org_id, limit=limit)
             async with self._session_for(stmt, org_id=org_id) as session:
                 purged += deleted(await session.execute(stmt))

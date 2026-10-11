@@ -1,5 +1,6 @@
 from typing import Any
 
+from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -12,3 +13,4 @@ class Projects(IdentifiableMixin, TrackableMixin, Base):
     __tablename__ = "projects"
     name: Mapped[str]
     repository: Mapped[dict[str, Any]] = mapped_column(JSONB())
+    workspace_snapshots: Mapped[bool] = mapped_column(server_default=text("true"))

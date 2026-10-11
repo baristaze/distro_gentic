@@ -44,6 +44,9 @@ class ProjectsTwin(WorkspaceProjectsInterface):
             return None
         return RepositoryBinding(project_id=project_id, repository=self.repository)
 
+    async def keeps_snapshots(self, ctx: TenantContext, project_id: UUID) -> bool:
+        return True
+
 
 class PullRequestsTwin(PullRequestsInterface):
     def __init__(self) -> None:

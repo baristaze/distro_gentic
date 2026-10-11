@@ -207,6 +207,9 @@ class Bound(WorkspaceProjectsInterface):
         url = self._urls.get(project_id)
         return None if url is None else RepositoryBinding(project_id=project_id, repository=url)
 
+    async def keeps_snapshots(self, ctx: TenantContext, project_id: UUID) -> bool:
+        return True
+
 
 class Instances(WorkspaceTwinImpl):
     """The twin provider, keeping the last instance it made."""

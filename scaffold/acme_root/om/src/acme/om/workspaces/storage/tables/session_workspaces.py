@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -19,6 +20,8 @@ class SessionWorkspaces(IdentifiableMixin, TrackableMixin, Base):
     egress: Mapped[str]
     rules: Mapped[list[dict[str, Any]]] = mapped_column(JSONB())
     egress_source: Mapped[str]
+    durability: Mapped[str] = mapped_column(server_default=text("'cache'"))
+    base: Mapped[dict[str, Any] | None] = mapped_column(JSONB())
     branch: Mapped[str]
     branch_seen: Mapped[bool]
     snapshot_ref: Mapped[str | None]

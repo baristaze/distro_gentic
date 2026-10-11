@@ -1,9 +1,10 @@
 """A session's workspace as the platform keeps it between loops. Its isolation
 is pinned when the session is created and never changes: the level, the
-limits, and the egress its project allowed then. The rest is what the cache
-knows of the durable state it is rebuilt from: the session's branch, whether
-the remote has held it, the last snapshot of its work, and what the next
-loop must be told of every instance let go since."""
+limits, the egress its project allowed then, whether snapshots keep it, and
+the base it starts from. The rest is what the cache knows of the durable
+state it is rebuilt from: the session's branch, whether the remote has held
+it, the last snapshot of its work, and what the next loop must be told of
+every instance let go since."""
 
 from datetime import datetime
 from typing import Annotated, ClassVar
@@ -12,11 +13,13 @@ from uuid import UUID
 from pydantic import Field
 
 from acme.infra.workspaces import (
+    Durability,
     EgressMode,
     EgressPolicy,
     IsolationMode,
     IsolationSpec,
     ResourceLimits,
+    WorkspaceBase,
 )
 from acme.om.base import Identifiable, Trackable
 from acme.om.workspaces.types.egress import EgressRule
@@ -33,6 +36,8 @@ class SessionWorkspace(Identifiable, Trackable):
         "egress",
         "rules",
         "egress_source",
+        "durability",
+        "base",
         "branch",
         "branch_seen",
         "snapshot_ref",
@@ -51,6 +56,10 @@ class SessionWorkspace(Identifiable, Trackable):
     # allowlist at its version, with the reason open egress was chosen, or
     # its kind's own.
     egress_source: str = Field(min_length=1, max_length=1000)
+    # Whether a snapshot of the whole workspace keeps it between runs, or it
+    # is a cache alone: its kind's, narrowed by its project.
+    durability: Durability = Durability.CACHE
+    base: WorkspaceBase | None = None  # its kind's; None, the provider's own image
     branch: str = Field(min_length=1, max_length=200)
     # The remote held the session's branch at a release: gone after that,
     # it vanished.
@@ -72,4 +81,10 @@ class SessionWorkspace(Identifiable, Trackable):
         hold, from the rules here."""
         hosts = tuple(dict.fromkeys(rule.destination for rule in self.rules))
         egress = EgressPolicy(mode=self.egress, hosts=hosts)
-        return IsolationSpec(mode=self.level, egress=egress, limits=self.limits)
+        return IsolationSpec(
+            mode=self.level,
+            egress=egress,
+            limits=self.limits,
+            durability=self.durability,
+            base=self.base,
+        )

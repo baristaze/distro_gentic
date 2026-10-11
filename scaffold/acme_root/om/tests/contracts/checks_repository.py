@@ -115,3 +115,6 @@ class OnDisk(WorkspaceProjectsInterface):
 
     async def binding_of(self, ctx: TenantContext, project_id: UUID) -> RepositoryBinding | None:
         return RepositoryBinding(project_id=project_id, repository=self._url)
+
+    async def keeps_snapshots(self, ctx: TenantContext, project_id: UUID) -> bool:
+        return True

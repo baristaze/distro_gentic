@@ -47,6 +47,13 @@ class RetentionManagerInterface(ABC):
         ...
 
     @abstractmethod
+    async def keeps_at_rest(self, ctx: TenantContext, session: AgentSession) -> bool:
+        """Whether `session`, before it is written, keeps its content at rest
+        by the policy its snapshot would take now; a snapshot taken already
+        answers for it. Reads only."""
+        ...
+
+    @abstractmethod
     async def get_snapshot(self, ctx: TenantContext, session_id: UUID) -> SessionRetention:
         """The session's snapshot; `NotFound` when the tenant holds none."""
         ...
