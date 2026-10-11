@@ -4,7 +4,7 @@ its own, and keeps it in its own store: the next workspace on it starts from
 the store's copy with no setup run, and nothing of it reaches the
 platform's bucket. A setup command that fails keeps nothing, and the host
 answers the prepare unbuilt, so the run that waits says which command
-failed and how. A command in a
+failed and how, one too long for the answer cut to fit it. A command in a
 workspace on a base, and what a checkout's attach sends it, runs on the
 base the host keeps. The setup is given no secret and no credential of the
 host's, and a base that holds the value of a secret the host keeps is not
@@ -13,9 +13,11 @@ owner who closed egress refuses it before anything runs."""
 
 import asyncio
 import hashlib
+import re
 from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
+from typing import get_args
 from uuid import UUID
 
 import pytest
@@ -45,6 +47,7 @@ from acme.infra.workspaces import (
     WorkspaceBase,
 )
 from acme.infra.workspaces.twin import WorkspaceTwinImpl
+from acme.om.projects.types.project import SetupCommand
 from acme.om.relay.impl.workspaces import PlacedWorkspacesRelayedImpl
 from acme.om.tools.impl.bases import PREFIX
 from acme.om.work.types.work_item import WorkKind, WorkStatus
@@ -58,6 +61,8 @@ ON_BASE = IsolationSpec(
     mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode=EgressMode.NONE), base=BASE
 )
 SECRET = "tok-0123456789abcdef"
+LONGEST = get_args(SetupCommand)[1].max_length
+"""The longest setup command a project's environment allows."""
 
 
 async def _unsealed(data: bytes) -> None:
@@ -254,6 +259,31 @@ async def test_a_failed_setup_keeps_nothing_and_the_run_waits_with_its_command_a
     assert row.last_error is not None and failed in row.last_error
     with pytest.raises(IsolationRefused, match=failed) as waits:
         await placed.held_on_host(api.owner, session_id, ON_BASE)
+    assert waits.value.clears
+
+
+async def test_a_setup_command_at_the_longest_a_project_allows_fails_and_the_wait_names_it(
+    api: Stack, tmp_path: Path
+) -> None:
+    managers = api.container.managers
+    pool = await api.pool()
+    session_id = await a_pinned_session(api, pool.id)
+    host = await a_host(api, pool.id, tmp_path)
+    longest = "pip install " + "x" * (LONGEST - len("pip install "))
+    spec = ON_BASE.model_copy(update={"base": BASE.model_copy(update={"setup": (longest,)})})
+    host.setup.exits[longest] = 2
+    placed = PlacedWorkspacesRelayedImpl(lambda: managers.relay, lambda: managers.hosts)
+
+    with pytest.raises(IsolationRefused):
+        await placed.held_on_host(api.owner, session_id, spec)
+    await host.claimed()
+
+    row = await managers.work.latest_for_target(api.owner, WorkKind.WORKSPACE, session_id)
+    assert row is not None and row.last_error is not None, "the platform took the answer"
+    cut = r"the base's setup command 1, 'pip install x+…\[\d+ more characters\]', exited 2"
+    assert re.search(cut, row.last_error)
+    with pytest.raises(IsolationRefused, match=cut) as waits:
+        await placed.held_on_host(api.owner, session_id, spec)
     assert waits.value.clears
 
 

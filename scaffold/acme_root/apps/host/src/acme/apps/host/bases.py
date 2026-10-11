@@ -17,7 +17,8 @@ A build outlasts the claim of the prepare that asked for it, so it runs
 beside the prepares: one that finds the base being built waits a while,
 then is refused with a refusal that clears, and the platform asks again. A
 build that fails keeps nothing, and its reason answers each prepare of
-that base for a while; after that, the next prepare builds again. One build
+that base for a while, a command too long for a refusal on the wire cut
+to fit; after that, the next prepare builds again. One build
 a base, on this host: hosts of a pool that share a store share its bases."""
 
 import asyncio
@@ -56,6 +57,9 @@ FAILURE_KEPT = timedelta(minutes=10)
 """How long a failed build answers the prepares of its base before the
 next one builds again."""
 
+REFUSAL_LIMIT = 2000
+"""The most characters a prepare's refusal carries on the wire."""
+
 KEPT_UNDER = uuid.UUID("8f1d3c52-6b0e-4f7a-9a41-5c2e7d9b0a13")
 """The namespace of the workspace a provider keeps a base under, when it
 keeps one outside its snapshot, such as a disk."""
@@ -75,6 +79,20 @@ def base_key(spec: IsolationSpec) -> str:
     if spec.base is not None:
         named["base"] = spec.base.model_dump(mode="json")
     return hashlib.sha256(json.dumps(named, sort_keys=True).encode()).hexdigest()
+
+
+def setup_failed(index: int, command: str, exit_code: int | None) -> BaseSetupFailed:
+    """The failure of the setup's command `index`, its text cut with a marker
+    where the whole would not fit a refusal on the wire, so the command's
+    start and how it ended always reach the platform."""
+    failed = BaseSetupFailed(index, command, exit_code)
+    kept = len(command)
+    while len(failed.message) > REFUSAL_LIMIT and kept > 0:
+        marker = f"…[{len(command) - kept} more characters]"
+        kept = max(kept - (len(failed.message) - REFUSAL_LIMIT) - len(marker) - 1, 0)
+        cut = f"{command[:kept]}…[{len(command) - kept} more characters]"
+        failed = BaseSetupFailed(index, cut, exit_code)
+    return failed
 
 
 async def _unkept(data: bytes) -> None:
@@ -209,7 +227,7 @@ class HostBases:
                     seal=UNKEPT,
                 )
                 if ran.exit_code != 0:
-                    raise BaseSetupFailed(index, command, ran.exit_code)
+                    raise setup_failed(index, command, ran.exit_code)
             taken = await provider.snapshot(workspace)
             archive = await provider.keep(taken, org_id, kept_under)
         finally:

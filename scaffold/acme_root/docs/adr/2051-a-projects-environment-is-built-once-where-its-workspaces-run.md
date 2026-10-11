@@ -81,7 +81,11 @@ refusal does not clear, and the loop ends with the command's place, its
 text, and its exit code. On a host, the host answers the prepare
 `unbuilt` with that reason: the work spends an attempt and keeps the
 reason, and the loop waits on the resource and says it, since another
-host may build the base. A host answers the same failure for ten
+host may build the base. A refusal on the wire holds 2,000 characters
+and a setup command 4,000, so the host cuts the command's text to fit,
+with a marker that says how much it left out, and keeps its place and
+its exit code whole. The command keeps its cap: a setup command is
+often a long script. A host answers the same failure for ten
 minutes, then builds again.
 
 ## Consequences
