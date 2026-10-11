@@ -227,7 +227,11 @@ def _named(lowered: str, start: int, end: int) -> str | None:
 def unknown_names(lowered: str, reach: LeverReach, tools: Iterable[str]) -> list[LeverFinding]:
     """A name in backticks that its words call a tool or a kind, or that is
     spelled as a tool is, with an underscore, and that no kind the lever
-    reaches holds; and each of `tools` none of them holds."""
+    reaches holds; and each of `tools` none of them holds. A lever that
+    reaches no kind, in a process that registers none, has nothing to be
+    read against, and this check says nothing of it."""
+    if not reach.kinds:
+        return []
     unknown: dict[str, str] = {}
     held = reach.tools | reach.kinds
     for tool in tools:

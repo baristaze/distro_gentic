@@ -125,6 +125,11 @@ def test_a_gate_on_a_tool_no_kind_holds_is_a_finding() -> None:
     assert (found.check, found.excerpt) == (LeverCheck.UNKNOWN_NAME, "deploy")
 
 
+def test_a_reach_of_no_kind_judges_no_name() -> None:
+    gated = playbook(DEFECTS[LeverCheck.UNKNOWN_NAME])
+    assert checked(skill_md(gated), LeverReach(), bound=BOUND, tools=("deploy",)) == ()
+
+
 def test_a_retry_with_its_stopping_condition_and_a_kind_by_name_are_no_findings() -> None:
     body = PLAIN + "\nKeep retrying the lookup, at most three times.\nStart a `steady` agent."
     assert checked(body, REACH) == ()
