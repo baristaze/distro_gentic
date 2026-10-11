@@ -3,12 +3,15 @@ from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import delete, func, select, text, update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 
 from acme.om.base import EMPTY_UUID
 from acme.om.cloud_pool.rules import warm_to_start
 from acme.om.cloud_pool.storage import CloudPoolStorageInterface
+from acme.om.cloud_pool.storage.tables.pool_erasures import PoolErasures
 from acme.om.cloud_pool.storage.tables.pool_machines import PoolMachines
+from acme.om.cloud_pool.types.erasure import PoolErasure
 from acme.om.cloud_pool.types.machine import PoolMachine
 from acme.om.exceptions import UniqueKeyTaken
 from acme.om.storage.impl.pg_base import PgStorageBase, violated_constraint
@@ -61,6 +64,12 @@ class CloudPoolStoragePostgresImpl(PgStorageBase, CloudPoolStorageInterface):
             row = (await session.execute(stmt)).scalar_one_or_none()
             return None if row is None else to_model(row, PoolMachine)
 
+    async def read_by_name(self, name: str) -> PoolMachine | None:
+        stmt = select(PoolMachines).where(PoolMachines.name == name)
+        async with self._session_for(stmt, org_id=EMPTY_UUID) as session:
+            row = (await session.execute(stmt)).scalar_one_or_none()
+            return None if row is None else to_model(row, PoolMachine)
+
     async def read_of_session(self, tenant_id: UUID, session_id: UUID) -> PoolMachine | None:
         stmt = (
             select(PoolMachines)
@@ -82,8 +91,10 @@ class CloudPoolStoragePostgresImpl(PgStorageBase, CloudPoolStorageInterface):
         async with self._session_for(stmt, org_id=EMPTY_UUID) as session:
             return [to_model(row, PoolMachine) for row in (await session.execute(stmt)).scalars()]
 
-    async def read_machines(self, limit: int) -> list[PoolMachine]:
-        stmt = select(PoolMachines).order_by(PoolMachines.created_at, PoolMachines.id).limit(limit)
+    async def read_machines(self, limit: int, after: UUID | None = None) -> list[PoolMachine]:
+        stmt = select(PoolMachines).order_by(PoolMachines.id).limit(limit)
+        if after is not None:
+            stmt = stmt.where(PoolMachines.id > after)
         async with self._session_for(stmt, org_id=EMPTY_UUID) as session:
             return [to_model(row, PoolMachine) for row in (await session.execute(stmt)).scalars()]
 
@@ -94,6 +105,7 @@ class CloudPoolStoragePostgresImpl(PgStorageBase, CloudPoolStorageInterface):
         pool_id: UUID,
         bound_by: UUID,
         egress_open: bool,
+        at: datetime,
     ) -> PoolMachine | None:
         stmt = (
             select(PoolMachines)
@@ -114,6 +126,7 @@ class CloudPoolStoragePostgresImpl(PgStorageBase, CloudPoolStorageInterface):
             row.session_id = session_id
             row.pool_id = pool_id
             row.bound_by = bound_by
+            row.bound_at = at
             claimed = to_model(row, PoolMachine)
             await session.commit()
             return claimed
@@ -149,7 +162,7 @@ class CloudPoolStoragePostgresImpl(PgStorageBase, CloudPoolStorageInterface):
             await session.commit()
 
     async def rekey(
-        self, machine_id: UUID, key_digest: str, restored_from: UUID | None
+        self, machine_id: UUID, key_digest: str, restored_from: UUID | None, at: datetime
     ) -> PoolMachine | None:
         stmt = (
             update(PoolMachines)
@@ -158,7 +171,7 @@ class CloudPoolStoragePostgresImpl(PgStorageBase, CloudPoolStorageInterface):
                 key_digest=key_digest,
                 restored_from=restored_from,
                 host_id=None,
-                started_at=None,
+                bound_at=at,
                 sealed_at=None,
             )
             .returning(PoolMachines)
@@ -171,6 +184,40 @@ class CloudPoolStoragePostgresImpl(PgStorageBase, CloudPoolStorageInterface):
 
     async def delete_machine(self, machine_id: UUID) -> None:
         stmt = delete(PoolMachines).where(PoolMachines.id == machine_id)
+        async with self._session_for(stmt, org_id=EMPTY_UUID) as session:
+            await session.execute(stmt)
+            await session.commit()
+
+    async def ask_erase(self, erasure: PoolErasure) -> PoolErasure:
+        asked = (
+            insert(PoolErasures)
+            .values(
+                id=erasure.id,
+                created_at=erasure.created_at,
+                tenant_id=erasure.tenant_id,
+                session_id=erasure.session_id,
+            )
+            .on_conflict_do_nothing(
+                index_elements=[PoolErasures.tenant_id, PoolErasures.session_id]
+            )
+        )
+        standing = select(PoolErasures).where(
+            PoolErasures.tenant_id == erasure.tenant_id,
+            PoolErasures.session_id == erasure.session_id,
+        )
+        async with self._session_for(PoolErasures, org_id=EMPTY_UUID) as session:
+            await session.execute(asked)
+            stood = to_model((await session.execute(standing)).scalar_one(), PoolErasure)
+            await session.commit()
+            return stood
+
+    async def read_erasures(self, limit: int) -> list[PoolErasure]:
+        stmt = select(PoolErasures).order_by(PoolErasures.created_at, PoolErasures.id).limit(limit)
+        async with self._session_for(stmt, org_id=EMPTY_UUID) as session:
+            return [to_model(row, PoolErasure) for row in (await session.execute(stmt)).scalars()]
+
+    async def delete_erasure(self, erasure_id: UUID) -> None:
+        stmt = delete(PoolErasures).where(PoolErasures.id == erasure_id)
         async with self._session_for(stmt, org_id=EMPTY_UUID) as session:
             await session.execute(stmt)
             await session.commit()

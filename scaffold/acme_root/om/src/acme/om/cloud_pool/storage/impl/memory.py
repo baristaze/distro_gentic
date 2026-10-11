@@ -5,6 +5,7 @@ from uuid import UUID
 
 from acme.om.cloud_pool.rules import warm_to_start
 from acme.om.cloud_pool.storage import CloudPoolStorageInterface
+from acme.om.cloud_pool.types.erasure import PoolErasure
 from acme.om.cloud_pool.types.machine import PoolMachine
 from acme.om.exceptions import UniqueKeyTaken
 
@@ -16,6 +17,7 @@ class CloudPoolStorageMemoryImpl(CloudPoolStorageInterface):
     def __init__(self) -> None:
         self._lock = asyncio.Lock()
         self._machines: dict[UUID, PoolMachine] = {}
+        self._erasures: dict[tuple[UUID, UUID], PoolErasure] = {}
 
     async def create_machine(self, machine: PoolMachine) -> None:
         async with self._lock:
@@ -38,6 +40,9 @@ class CloudPoolStorageMemoryImpl(CloudPoolStorageInterface):
             None,
         )
 
+    async def read_by_name(self, name: str) -> PoolMachine | None:
+        return next((m for m in self._machines.values() if m.name == name), None)
+
     async def read_of_session(self, tenant_id: UUID, session_id: UUID) -> PoolMachine | None:
         return next(
             (
@@ -51,8 +56,9 @@ class CloudPoolStorageMemoryImpl(CloudPoolStorageInterface):
     async def read_of_tenant(self, tenant_id: UUID, limit: int) -> list[PoolMachine]:
         return [m for m in self._oldest_first() if m.tenant_id == tenant_id][:limit]
 
-    async def read_machines(self, limit: int) -> list[PoolMachine]:
-        return self._oldest_first()[:limit]
+    async def read_machines(self, limit: int, after: UUID | None = None) -> list[PoolMachine]:
+        by_id = sorted(self._machines.values(), key=lambda m: m.id)
+        return [m for m in by_id if after is None or m.id > after][:limit]
 
     async def claim_warm(
         self,
@@ -61,6 +67,7 @@ class CloudPoolStorageMemoryImpl(CloudPoolStorageInterface):
         pool_id: UUID,
         bound_by: UUID,
         egress_open: bool,
+        at: datetime,
     ) -> PoolMachine | None:
         async with self._lock:
             for machine in self._oldest_first():
@@ -75,6 +82,7 @@ class CloudPoolStorageMemoryImpl(CloudPoolStorageInterface):
                             "session_id": session_id,
                             "pool_id": pool_id,
                             "bound_by": bound_by,
+                            "bound_at": at,
                         }
                     )
                     self._machines[machine.id] = claimed
@@ -99,20 +107,34 @@ class CloudPoolStorageMemoryImpl(CloudPoolStorageInterface):
         await self._update(machine_id, sealed_at=at)
 
     async def rekey(
-        self, machine_id: UUID, key_digest: str, restored_from: UUID | None
+        self, machine_id: UUID, key_digest: str, restored_from: UUID | None, at: datetime
     ) -> PoolMachine | None:
         return await self._update(
             machine_id,
             key_digest=key_digest,
             restored_from=restored_from,
             host_id=None,
-            started_at=None,
+            bound_at=at,
             sealed_at=None,
         )
 
     async def delete_machine(self, machine_id: UUID) -> None:
         async with self._lock:
             self._machines.pop(machine_id, None)
+
+    async def ask_erase(self, erasure: PoolErasure) -> PoolErasure:
+        async with self._lock:
+            return self._erasures.setdefault((erasure.tenant_id, erasure.session_id), erasure)
+
+    async def read_erasures(self, limit: int) -> list[PoolErasure]:
+        asked = sorted(self._erasures.values(), key=lambda e: (e.created_at, e.id))
+        return asked[:limit]
+
+    async def delete_erasure(self, erasure_id: UUID) -> None:
+        async with self._lock:
+            for at, erasure in list(self._erasures.items()):
+                if erasure.id == erasure_id:
+                    del self._erasures[at]
 
     def _add(self, machine: PoolMachine) -> None:
         for held in self._machines.values():

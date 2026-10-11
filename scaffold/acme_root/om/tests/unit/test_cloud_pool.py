@@ -4,26 +4,33 @@ credential of the session's pool of one. A warm machine serves no session
 until one claims it, and the pool starts another in its place. A snapshot
 ends the host's credential, stops the machine, and keeps its disk; a
 restore holds the disk to its digest and starts a machine on a copy of it.
-A spec the machines cannot hold is refused for good. The sweep lets go of
-a start that died, a machine whose host never came, one whose session is
-gone, and one no row holds; a purge, an erase, and a tenant's purge take
-the session's disks, and no other session's."""
+A spec the machines cannot hold is refused for good. The sweep reads every
+row, a page at a time: it lets go of a first start that died, one whose
+session is gone, and one no row holds, and stops a machine that runs with
+no host to work for, whose disk its session's next prepare starts again; a
+machine started again keeps its disk through a sweep and a failed start. A
+purge, an erase, and a tenant's purge take the session's disks, and no
+other session's; an erase asked where no machine is reached is done by the
+sweep."""
 
 import asyncio
 import json
-from collections.abc import AsyncIterator
-from datetime import timedelta
+from collections.abc import AsyncIterator, Callable
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 from uuid import UUID
 
 import pytest
+from contracts.agent_session_storage import make_session
 from contracts.doubles import context
 from contracts.factories import make_org
 
+from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.machines import SEED_FILE, MachineSpec, MachineState
 from acme.infra.machines.seeded import PLAIN_WRITE, SeedsChannelImpl
-from acme.infra.machines.twin import MachinesTwinImpl
+from acme.infra.machines.twin import MachinesNullImpl, MachinesTwinImpl
 from acme.infra.workspaces import (
     Durability,
     EgressMode,
@@ -50,6 +57,9 @@ from acme.om.hosts.types.host import Advertisement, Enrollment, HostStatus
 from acme.om.hosts.types.host import IsolationMode as HostMode
 from acme.om.hosts.types.placement import PlacementState
 from acme.om.hosts.types.pool import HostPool
+from acme.om.root import build_managers
+from acme.om.storage.impl.memory import StorageMemoryImpl
+from acme.om.tenancy.rules import hash_token
 from acme.om.workspaces.types.snapshot import KeptSnapshot
 
 PREFIX = "acme-vm-"
@@ -67,13 +77,24 @@ def stage() -> RequestContext:
     return RequestContext(request_id=new_id(), app=AppContext(type=AppType.WORKER, version="t"))
 
 
+@dataclass
+class Seen:
+    """A machine's host as the pool reads it: when it last called, and when
+    its credential ended."""
+
+    last_seen_at: datetime
+    revoked_at: datetime | None = None
+
+
 class Hosts:
     """What the pool asks of the hosts: a session's pool of one, a machine's
-    host admitted into it, and a host's credential ended."""
+    host admitted into it, read, and its credential ended."""
 
-    def __init__(self) -> None:
+    def __init__(self, clock: Callable[[], datetime]) -> None:
         self.admitted: list[tuple[UUID, UUID, UUID]] = []  # host, pool, machine row
         self.retired: list[UUID] = []
+        self.seen: dict[UUID, Seen] = {}
+        self._clock = clock
 
     async def session_pool(self, ctx: TenantContext, session_id: UUID, region: str) -> HostPool:
         now = utcnow()
@@ -99,6 +120,7 @@ class Hosts:
     ) -> IssuedCredential:
         host_id = new_id()
         self.admitted.append((host_id, pool_id, enrolled_with))
+        self.seen[host_id] = Seen(last_seen_at=self._clock())
         return IssuedCredential(
             credential="hst_test",
             credential_id=new_id(),
@@ -112,6 +134,11 @@ class Hosts:
         self, rctx: RequestContext, org_id: UUID, host_id: UUID, by: UUID
     ) -> None:
         self.retired.append(host_id)
+        if host_id in self.seen and self.seen[host_id].revoked_at is None:
+            self.seen[host_id].revoked_at = self._clock()
+
+    async def machine_host(self, rctx: RequestContext, org_id: UUID, host_id: UUID) -> Seen | None:
+        return self.seen.get(host_id)
 
     async def get_hosts(self, ctx: TenantContext, pool_id: UUID) -> tuple[HostStatus, ...]:
         return ()
@@ -138,36 +165,46 @@ class Placed:
 
 
 class Pool:
-    def __init__(self, root: Path, *, warm: int = 0, closes_egress: bool = False) -> None:
+    def __init__(
+        self, root: Path, *, warm: int = 0, closes_egress: bool = False, page: int = 1000
+    ) -> None:
         self.machines = MachinesTwinImpl(root / "machines", closes_egress=closes_egress)
         self.storage = CloudPoolStorageMemoryImpl()
-        self.hosts = Hosts()
+        self.now = utcnow()
+        self.hosts = Hosts(lambda: self.now)
         self.placed = Placed()
         self.gone: set[UUID] = set()
-        self.now = utcnow()
-        self.manager = CloudPoolManagerImpl(
+        self.options = CloudPoolOptions(
+            prefix=PREFIX,
+            image=IMAGE,
+            warm=warm,
+            api_url="http://gateway.test",
+            ready_wait=timedelta(seconds=5),
+            boot=timedelta(minutes=15),
+            silent=timedelta(minutes=15),
+            page=page,
+            first_poll=timedelta(milliseconds=5),
+            last_poll=timedelta(milliseconds=20),
+        )
+        self.manager = self.built(self.machines)
+        self.expired_tenants: set[UUID] = set()
+
+    def built(self, machines: MachinesTwinImpl | MachinesNullImpl) -> CloudPoolManagerImpl:
+        """The pool as a process builds it on these machines, over the same
+        rows: the API's process reaches none."""
+        return CloudPoolManagerImpl(
             self.storage,
-            self.machines,
-            SeedsChannelImpl(self.machines, timedelta(seconds=10), PLAIN_WRITE),
+            machines,
+            SeedsChannelImpl(machines, timedelta(seconds=10), PLAIN_WRITE),
             lambda: cast(Any, self.hosts),
             lambda: cast(Any, self.placed),
             lambda: cast(Any, None),
-            CloudPoolOptions(
-                prefix=PREFIX,
-                image=IMAGE,
-                warm=warm,
-                api_url="http://gateway.test",
-                ready_wait=timedelta(seconds=5),
-                boot=timedelta(minutes=15),
-                first_poll=timedelta(milliseconds=5),
-                last_poll=timedelta(milliseconds=20),
-            ),
+            self.options,
             session_gone=self.session_gone,
             expired=self.expired,
             stage=stage,
             clock=lambda: self.now,
         )
-        self.expired_tenants: set[UUID] = set()
 
     async def session_gone(self, org_id: UUID, session_id: UUID) -> bool:
         return session_id in self.gone
@@ -191,13 +228,15 @@ class Pool:
 
     async def host_comes(self, session_id: UUID | None = None) -> UUID:
         """Plays the machine's host: once a machine that serves the session
-        runs, it trades the key in its seed."""
+        runs with the seed of its latest start, it trades the key there."""
         while True:
             for row in await self.rows():
                 if (session_id is None or row.session_id == session_id) and (
                     row.started_at is not None and row.key_digest is not None
                 ):
                     key = self.seed(row.name)["key"]
+                    if hash_token(key) != row.key_digest:
+                        continue  # started again, and its new seed not handed yet
                     issued = await self.manager.enroll(stage(), key, ENROLLMENT)
                     return issued.claimant_id
             await asyncio.sleep(0.005)
@@ -415,7 +454,7 @@ async def test_a_backend_that_closes_egress_holds_a_session_that_reaches_nothing
 # Every machine started is let go.
 
 
-async def test_the_sweep_lets_go_of_a_dead_start_a_hostless_machine_a_gone_session_and_an_orphan(
+async def test_the_sweep_lets_go_of_a_dead_start_a_gone_session_and_an_orphan_and_stops_the_hostless(
     pool: Pool, ctx: TenantContext
 ) -> None:
     alive, gone = new_id(), new_id()
@@ -448,10 +487,180 @@ async def test_the_sweep_lets_go_of_a_dead_start_a_hostless_machine_a_gone_sessi
     await pool.machines.launch(vm_provider, MachineSpec(image="twin", egress_open=True))
 
     assert await pool.manager.sweep(stage()) == 4
-    left = await pool.rows()
-    assert [row.session_id for row in left] == [alive]
+    left = {row.session_id: row for row in await pool.rows()}
+    assert set(left) == {alive, hostless.session_id}
+    assert await pool.machines.state(hostless.name) is MachineState.STOPPED, "its disk kept"
     names = await pool.machines.names(PREFIX)
-    assert sorted(names) == sorted([left[0].name, IMAGE, vm_provider])
+    assert sorted(names) == sorted([left[alive].name, hostless.name, IMAGE, vm_provider])
+
+
+async def test_the_sweep_reads_every_row_a_page_at_a_time_and_takes_no_machine_a_row_holds(
+    tmp_path: Path, ctx: TenantContext
+) -> None:
+    pool = Pool(tmp_path, page=1)
+    await pool.image()
+    sessions = [new_id() for _ in range(3)]
+    for session_id in sessions:
+        await pool.prepare(ctx, session_id)
+    pool.gone.add(sessions[2])
+    assert await pool.manager.sweep(stage()) == 1, "the gone session's machine, whatever its page"
+    left = await pool.rows()
+    assert {row.session_id for row in left} == set(sessions[:2])
+    for row in left:
+        assert await pool.machines.state(row.name) is MachineState.RUNNING
+    await pool.manager.close()
+
+
+async def test_a_sweep_mid_restart_and_after_a_failed_one_keeps_the_machine_and_its_disk(
+    tmp_path: Path, ctx: TenantContext
+) -> None:
+    pool = Pool(tmp_path)
+    await pool.image()
+    session_id = new_id()
+    await pool.prepare(ctx, session_id, KEPT)
+    (row,) = await pool.rows()
+    work = pool.machines.root / row.name / "state.bin"
+    work.write_text("unpushed work")
+    await pool.machines.stop(row.name)  # the cloud stopped it; hours pass
+    pool.now = pool.now + timedelta(hours=2)
+    seeds = pool.manager._seeds  # pyright: ignore[reportPrivateUsage]
+    real = seeds.launch_seeded
+    swept: list[int] = []
+
+    async def fails_after_a_sweep(*args: Any, **kwargs: Any) -> None:
+        swept.append(await pool.manager.sweep(stage()))
+        raise RuntimeError("a start that fails")
+
+    seeds.launch_seeded = fails_after_a_sweep  # type: ignore[method-assign]
+    with pytest.raises(RuntimeError):
+        await pool.prepare(ctx, session_id, KEPT)
+    pool.now = pool.now + timedelta(hours=1)
+    swept.append(await pool.manager.sweep(stage()))
+    assert swept == [0, 0], "neither mid start nor after a failed one"
+    assert work.read_text() == "unpushed work"
+
+    async def starts_after_a_sweep(*args: Any, **kwargs: Any) -> None:
+        swept.append(await pool.manager.sweep(stage()))
+        await real(*args, **kwargs)
+
+    seeds.launch_seeded = starts_after_a_sweep  # type: ignore[method-assign]
+    await pool.prepare(ctx, session_id, KEPT)
+    assert swept == [0, 0, 0]
+    (again,) = await pool.rows()
+    assert again.id == row.id and again.host_id is not None and again.host_id != row.host_id
+    assert await pool.machines.state(row.name) is MachineState.RUNNING
+    assert work.read_text() == "unpushed work", "the next ask finds the disk it left"
+    await pool.manager.close()
+
+
+async def test_a_machine_whose_host_ended_or_went_silent_is_stopped_and_started_again_on_its_disk(
+    pool: Pool, ctx: TenantContext
+) -> None:
+    ended, silent = new_id(), new_id()
+    for session_id in (ended, silent):
+        await pool.prepare(ctx, session_id, KEPT)
+    rows = {row.session_id: row for row in await pool.rows()}
+    ended_host, silent_host = rows[ended].host_id, rows[silent].host_id
+    assert ended_host is not None and silent_host is not None
+    work = pool.machines.root / rows[ended].name / "work.txt"
+    work.write_text("kept")
+    # One host's credential is ended under it; the other exits and calls no
+    # more, as a host that never probed does.
+    pool.hosts.seen[ended_host].revoked_at = pool.now
+    pool.now = pool.now + timedelta(minutes=10)
+    assert await pool.manager.sweep(stage()) == 1
+    assert await pool.machines.state(rows[ended].name) is MachineState.STOPPED
+    assert await pool.machines.state(rows[silent].name) is MachineState.RUNNING, "not silent yet"
+    pool.now = pool.now + timedelta(minutes=10)
+    assert await pool.manager.sweep(stage()) == 1
+    assert await pool.machines.state(rows[silent].name) is MachineState.STOPPED
+    assert silent_host in pool.hosts.retired, "its credential ends as it stops"
+    assert await pool.manager.sweep(stage()) == 0, "a stopped machine bills no compute"
+    assert len(await pool.rows()) == 2, "and stays for its session"
+
+    await pool.prepare(ctx, ended, KEPT)
+    (again,) = [row for row in await pool.rows() if row.session_id == ended]
+    assert again.id == rows[ended].id and again.host_id not in (None, ended_host)
+    assert await pool.machines.state(again.name) is MachineState.RUNNING
+    assert work.read_text() == "kept"
+
+
+async def test_a_warm_machine_claimed_after_standing_long_waits_for_its_host_from_the_claim(
+    tmp_path: Path, ctx: TenantContext
+) -> None:
+    pool = Pool(tmp_path, warm=1)
+    await pool.image()
+    await pool.manager.sweep(stage())
+    await pool.manager.close()
+    (warm,) = await pool.rows()
+    pool.now = pool.now + timedelta(minutes=30)  # it stood warm half an hour
+    swept: list[int] = []
+    real = pool.manager._enrolled  # pyright: ignore[reportPrivateUsage]
+
+    async def swept_before_the_host(session_id: UUID, machine: PoolMachine) -> PoolMachine:
+        swept.append(await pool.manager.sweep(stage()))
+        return await real(session_id, machine)
+
+    pool.manager._enrolled = swept_before_the_host  # type: ignore[method-assign]
+    session_id = new_id()
+    await pool.prepare(ctx, session_id)
+    await pool.manager.close()
+    claimed = await pool.storage.read_machine(warm.id)
+    assert swept == [0], "a sweep before its host enrolls leaves it be"
+    assert claimed is not None and claimed.session_id == session_id
+    assert claimed.bound_at == pool.now and claimed.host_id is not None
+    assert await pool.machines.state(warm.name) is MachineState.RUNNING
+
+
+async def test_an_erase_asked_where_no_machine_is_reached_is_done_by_the_sweep(
+    pool: Pool, ctx: TenantContext
+) -> None:
+    session_id = new_id()
+    await pool.prepare(ctx, session_id, KEPT)
+    taken = (await pool.manager.snapshot(ctx, session_id)).reference
+    api = pool.built(MachinesNullImpl())  # the API's process reaches no machine
+    await api.erase(ctx.org_id, session_id)
+    await api.erase(ctx.org_id, session_id)  # asked again, as every revocation call does
+    assert await pool.machines.state(taken) is MachineState.STOPPED
+    assert len(await pool.storage.read_erasures(10)) == 1
+    await pool.manager.sweep(stage())
+    assert await pool.machines.state(taken) is MachineState.ABSENT
+    assert await pool.storage.read_erasures(10) == []
+
+
+async def test_a_deleted_tenants_machine_goes_at_the_next_sweep(tmp_path: Path) -> None:
+    storage = StorageMemoryImpl()
+    managers = build_managers(
+        storage,
+        InfraLocalImpl(tmp_path),
+        cloud_pool_options=CloudPoolOptions(prefix=PREFIX, image=IMAGE),
+        cloud_pool_stage=stage,
+    )
+    orgs, rows = storage.get_tenancy_storage(), storage.get_cloud_pool_storage()
+    held: dict[str, PoolMachine] = {}
+    deleted = make_org("Deleted")
+    for org in (deleted, make_org("Kept")):
+        await orgs.write_org(org.id, org)
+        session = make_session()
+        await storage.get_agent_session_storage().create_session(org.id, session, ())
+        now = utcnow()
+        held[org.name] = PoolMachine(
+            id=new_id(),
+            created_at=now,
+            name=f"{PREFIX}p{org.name.lower()}",
+            egress_open=True,
+            tenant_id=org.id,
+            session_id=session.id,
+            pool_id=new_id(),
+            bound_by=new_id(),
+            started_at=now,
+            bound_at=now,
+        )
+        await rows.create_machine(held[org.name])
+    gone = deleted.model_copy(update={"deleted_at": utcnow(), "deleted_by": deleted.id})
+    await orgs.write_org(deleted.id, gone)
+    assert await managers.cloud_pool.sweep(stage()) == 1, "its session still stands"
+    assert [row.id for row in await rows.read_machines(10)] == [held["Kept"].id]
 
 
 async def test_a_purge_and_an_erase_take_the_sessions_disks_and_no_other_sessions(

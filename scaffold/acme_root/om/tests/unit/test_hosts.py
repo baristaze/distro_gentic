@@ -511,6 +511,36 @@ async def test_a_machines_host_names_its_session_and_is_handed_no_other_sessions
     await hosts.retire_host(request(), owner.org_id, host_id, owner.user_id)  # once is all
 
 
+async def test_no_person_revokes_a_machines_host_and_the_pool_reads_when_it_ended(
+    managers: Managers, hosts: HostsManagerImpl
+) -> None:
+    owner = await an_owner(managers)
+    session = await managers.agent_sessions.create_session(owner, make_session())
+    service = await managers.tenancy.service_context(request(), owner.org_id, owner.user_id)
+    pool = await hosts.session_pool(service, session.id, "cloud")
+    issued = await hosts.admit_machine(
+        request(),
+        owner.org_id,
+        pool.id,
+        owner.user_id,
+        new_id(),
+        Enrollment(name="machine", advertisement=PROBED, exec_version=1),
+    )
+    host_id = issued.claimant_id
+    # Its machine would run on with no host: the host ends with its machine.
+    with pytest.raises(ValidationFailed, match="platform's"):
+        await hosts.revoke_host(owner, host_id)
+    with pytest.raises(ValidationFailed, match="platform's"):
+        await hosts.revoke_claimant(owner, host_id)
+    await hosts.authenticate(request(), issued.credential)
+    read = await hosts.machine_host(request(), owner.org_id, host_id)
+    assert read is not None and read.revoked_at is None and read.session_id == session.id
+    await hosts.retire_host(request(), owner.org_id, host_id, owner.user_id)
+    ended = await hosts.machine_host(request(), owner.org_id, host_id)
+    assert ended is not None and ended.revoked_at is not None
+    assert await hosts.machine_host(request(), owner.org_id, new_id()) is None
+
+
 async def test_a_claim_below_the_floor_is_refused_before_anything_is_claimed(
     managers: Managers, hosts: HostsManagerImpl, monkeypatch: pytest.MonkeyPatch
 ) -> None:

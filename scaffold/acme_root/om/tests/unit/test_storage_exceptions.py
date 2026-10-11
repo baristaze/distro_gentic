@@ -180,12 +180,17 @@ STORAGE_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         ("BenchmarkStorageInterface", "read_history"),
         # The machines the cloud pool started: the platform's own rows of the
         # system scope, since a warm machine serves no tenant until a
-        # session claims it, and the sweep reads them all.
+        # session claims it, and the sweep reads them all, and the erasures
+        # it owes.
         ("CloudPoolStorageInterface", "create_machine"),
         ("CloudPoolStorageInterface", "reserve_warm"),
         ("CloudPoolStorageInterface", "read_machine"),
         ("CloudPoolStorageInterface", "read_by_key"),
+        ("CloudPoolStorageInterface", "read_by_name"),
         ("CloudPoolStorageInterface", "read_machines"),
+        ("CloudPoolStorageInterface", "ask_erase"),
+        ("CloudPoolStorageInterface", "read_erasures"),
+        ("CloudPoolStorageInterface", "delete_erasure"),
         ("CloudPoolStorageInterface", "read_of_session"),
         ("CloudPoolStorageInterface", "read_of_tenant"),
         ("CloudPoolStorageInterface", "claim_warm"),
@@ -375,9 +380,11 @@ REQUEST_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
         # and placement rebuilds the tenant's context from the item.
         ("HostsManagerInterface", "enroll_claimant"),
         # The cloud pool's machine host, which enrolls through the pool with
-        # the key the pool handed its machine, and is ended as the pool lets
-        # the machine go, from its sweep and its purge too.
+        # the key the pool handed its machine, is read by the pool's sweep,
+        # and is ended as the pool lets the machine go, from its sweep and
+        # its purge too.
         ("HostsManagerInterface", "admit_machine"),
+        ("HostsManagerInterface", "machine_host"),
         ("HostsManagerInterface", "retire_host"),
         ("CloudPoolManagerInterface", "enroll"),
         # And the pool's sweep, across tenants and for none.

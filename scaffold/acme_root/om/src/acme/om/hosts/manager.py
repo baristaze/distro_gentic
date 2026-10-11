@@ -90,14 +90,16 @@ class HostsManagerInterface(ABC):
     async def revoke_host(self, ctx: TenantContext, host_id: UUID) -> Host:
         """Ends the host and every credential it holds at once: its next call
         is refused, and it is handed no more work. Requires the members
-        permission. NotFound for a claimant of another kind."""
+        permission. NotFound for a claimant of another kind;
+        `ValidationFailed` for the host of a machine of the cloud pool, which
+        is the platform's and ends with its machine."""
         ...
 
     @abstractmethod
     async def revoke_claimant(self, ctx: TenantContext, claimant_id: UUID) -> EnrolledClaimant:
         """Ends the claimant of any kind and every credential it holds at
-        once, as `revoke_host` ends a host. Requires the members
-        permission."""
+        once, as `revoke_host` ends a host, and refuses what it refuses.
+        Requires the members permission."""
         ...
 
     @abstractmethod
@@ -158,6 +160,14 @@ class HostsManagerInterface(ABC):
         machine handed its key over once (`enrolled_with`), and the person
         its session's work is for answers for it (`created_by`). Its claims
         are its session's work alone."""
+        ...
+
+    @abstractmethod
+    async def machine_host(self, rctx: RequestContext, org_id: UUID, host_id: UUID) -> Host | None:
+        """Platform-internal: the host of a machine of the cloud pool,
+        revoked or not, as the pool's sweep reads it for no principal: when
+        it last called, and whether it was ended. None when the tenant holds
+        no such host."""
         ...
 
     @abstractmethod

@@ -1120,8 +1120,14 @@ def build_managers(
     # builds it: the gateway trades a machine's key, the sweep lets its
     # machines go, and the runner starts them, on the machines infra chose.
     sessions_rows = storage.get_agent_session_storage()
+    orgs_rows = storage.get_tenancy_storage()
 
     async def session_gone(org_id: UUID, session_id: UUID) -> bool:
+        # A deleted tenant's machines go at the next sweep, never at its
+        # purge alone: a machine bills while it runs.
+        org = await orgs_rows.read_org(org_id)
+        if org is None or org.deleted_at is not None:
+            return True
         session = await sessions_rows.read_session(org_id, session_id)
         return session is None or session.deleted_at is not None
 

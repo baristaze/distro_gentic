@@ -26,9 +26,12 @@ class PoolMachine(Identifiable, Created):
     was handed at its start; its host trades the key for a credential once,
     and the digest goes. `host_id` is the host that did. `restored_from` is
     the snapshot its disk started from, so a prepare asked again does not
-    start it again. `started_at` is None while it starts, and `sealed_at`
-    says when nothing in it could read its key from outside its disk any
-    more."""
+    start it again. `started_at` is None until it first runs, and stays set
+    once it has: a machine started again keeps its disk. `bound_at` is when
+    it was last handed a key for its session: its start for the session,
+    its claim, or its start again; its host enrolls within the boot bound
+    and the wait after it. `sealed_at` says when nothing in it could read
+    its key from outside its disk any more."""
 
     name: str = Field(pattern=MACHINE_NAME)
     egress_open: bool
@@ -40,6 +43,7 @@ class PoolMachine(Identifiable, Created):
     key_digest: str | None = None
     restored_from: UUID | None = None
     started_at: datetime | None = None
+    bound_at: datetime | None = None
     sealed_at: datetime | None = None
 
     @property

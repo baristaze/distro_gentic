@@ -78,7 +78,9 @@ class CloudPoolManagerInterface(ABC):
     async def erase(self, org_id: UUID, session_id: UUID) -> None:
         """Platform-internal: the revocation of the session's key, named with
         its tenant: every snapshot kept under its names goes. Its machine, a
-        cache, stays."""
+        cache, stays. The erasure is asked first, and done at once where this
+        process reaches the machines; elsewhere, as in the API's process, the
+        sweep does it."""
         ...
 
     @abstractmethod
@@ -103,11 +105,14 @@ class CloudPoolManagerInterface(ABC):
     @abstractmethod
     async def sweep(self, rctx: RequestContext) -> int:
         """Platform-internal: one pass of the sweep, across tenants and for
-        none: lets go of a machine whose start died with the process that
-        started it, of one whose host never came, of one whose session is
-        gone, and of one under the pool's names that no row holds; then
-        starts warm machines until the pool's warm count stands. Answers how
-        many it let go."""
+        none, over every machine the pool holds, a page at a time: lets go of
+        a machine whose first start died with the process that started it,
+        of one whose session, or tenant, is gone, and of one under the pool's
+        names that no row holds; stops a session's machine that runs with no
+        host to work for, its host never enrolled, ended, or silent, and
+        keeps its disk; does the erasures asked; then starts warm machines
+        until the pool's warm count stands. Answers how many machines it let
+        go or stopped."""
         ...
 
     @abstractmethod

@@ -7,8 +7,10 @@ boot bound, as the VM workspace provider's is; a warm machine starts in the
 background, since nothing waits on it. Every path that starts a machine has
 the one that lets it go: a session's snapshot, its release after the
 grace, its purge, its tenant's purge, and the sweep, which lets go of a
-start that died, a machine whose host never came, and a machine no row
-holds."""
+start that never ran, of a machine whose session or tenant is gone, and of
+a machine no row holds. A machine that ran keeps its disk until its session
+lets it go: the sweep stops one that runs with no host to work for, and its
+session's next prepare starts it again under a new key."""
 
 import asyncio
 import logging
@@ -46,6 +48,7 @@ from acme.om.cloud_pool.rules import (
     tenant_snapshots,
 )
 from acme.om.cloud_pool.storage import CloudPoolStorageInterface
+from acme.om.cloud_pool.types.erasure import PoolErasure
 from acme.om.cloud_pool.types.machine import MachineSnapshot, PoolMachine
 from acme.om.context import Permission, RequestContext, TenantContext
 from acme.om.exceptions import InvalidCredential
@@ -87,8 +90,11 @@ class CloudPoolOptions(Platform):
     # How long a machine may take to start: a start older than this with no
     # machine running died with the process that began it.
     boot: timedelta = Field(default=timedelta(minutes=15), gt=timedelta(0))
-    # The most rows one pass of the sweep reads.
-    max_machines: int = Field(default=1000, gt=0)
+    # How long a machine's host may go without a call before the sweep stops
+    # its machine: it exited, or its credential was ended.
+    silent: timedelta = Field(default=timedelta(minutes=15), gt=timedelta(0))
+    # The rows the sweep, and a tenant's purge, read at a time.
+    page: int = Field(default=1000, gt=0)
     first_poll: timedelta = Field(default=timedelta(milliseconds=200), gt=timedelta(0))
     last_poll: timedelta = Field(default=timedelta(seconds=2), gt=timedelta(0))
 
@@ -188,16 +194,22 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         await self.erase(org_id, session_id)
 
     async def erase(self, org_id: UUID, session_id: UUID) -> None:
-        named = snapshots_of(self._options.prefix, org_id, session_id)
-        for name in await self._machines.names(named):
-            await self._machines.destroy(name)
+        # Asked first: a process that reaches no machine, as the API's does,
+        # leaves it to the sweep, which does, and one that fails part way is
+        # finished there.
+        asked = PoolErasure(
+            id=new_id(), created_at=self._clock(), tenant_id=org_id, session_id=session_id
+        )
+        standing = await self._storage.ask_erase(asked)
+        if await self._reaches_machines():
+            await self._erased(standing)
 
     async def purge_tenant(self, ctx: TenantContext) -> int:
         ctx.require(Permission.WRITE)
         if not await self._expired(ctx):
             return 0
         gone = 0
-        for machine in await self._storage.read_of_tenant(ctx.org_id, self._options.max_machines):
+        for machine in await self._storage.read_of_tenant(ctx.org_id, self._options.page):
             await self._let_go(ctx, machine)
             gone += 1
         prefix = self._options.prefix
@@ -245,24 +257,34 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         if not self._options.image:
             return 0
         now = self._clock()
-        let_go = 0
-        rows = await self._storage.read_machines(self._options.max_machines)
-        for machine in rows:
-            if await self._lost(machine, now):
-                await self._let_go(rctx, machine)
-                let_go += 1
-        held = {machine.name for machine in rows}
+        acted = 0
+        held: set[str] = set()
+        after: UUID | None = None
+        while True:
+            page = await self._storage.read_machines(self._options.page, after)
+            for machine in page:
+                held.add(machine.name)
+                if await self._swept(rctx, machine, now):
+                    acted += 1
+            if len(page) < self._options.page:
+                break
+            after = page[-1].id
         prefix = self._options.prefix
         for name in await self._machines.names(f"{prefix}{MARK}"):
             # A snapshot is kept under its session's names; a machine is not.
             if is_snapshot(prefix, name) or name == self._options.image or name in held:
                 continue
-            if await self._storage_holds_no(name):
+            # Read again just before a destroy: a start writes its row before
+            # its machine, so a machine whose row the pass did not read may
+            # have one now.
+            if await self._storage.read_by_name(name) is None:
                 log.warning("machine %s is held by no row of the pool, and goes", name)
                 await self._machines.destroy(name)
-                let_go += 1
+                acted += 1
+        for erasure in await self._storage.read_erasures(self._options.page):
+            await self._erased(erasure)
         await self._refill()
-        return let_go
+        return acted
 
     async def close(self) -> None:
         if self._starting:
@@ -293,7 +315,7 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         egress_open = spec.egress.mode is EgressMode.OPEN
         if self._options.warm and not spec.limits.asked():
             claimed = await self._storage.claim_warm(
-                ctx.org_id, session_id, pool.id, ctx.user_id, egress_open
+                ctx.org_id, session_id, pool.id, ctx.user_id, egress_open, self._clock()
             )
             if claimed is not None:
                 log.info("session %s claimed warm machine %s", session_id, claimed.name)
@@ -304,10 +326,11 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
     async def _running(
         self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec, machine: PoolMachine
     ) -> PoolMachine:
-        """The session's machine, running. One still starting waits on the
-        resource, unless its start died; one that stopped starts again under
-        a new key, since its host's credential ended with it; one gone is
-        forgotten, and another starts."""
+        """The session's machine, running. One still on its first start waits
+        on the resource, unless its start died; one that stopped starts again
+        on its own disk under a new key, since its host's credential ended
+        with it, and a start again that fails leaves it stopped, for the next
+        ask; one gone is forgotten, and another starts."""
         if machine.started_at is None:
             if self._clock() - machine.created_at < self._options.boot:
                 raise IsolationRefused(
@@ -331,7 +354,9 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
             )
         await self._retire(ctx, machine)
         key = new_key()
-        again = await self._storage.rekey(machine.id, hash_token(key), machine.restored_from)
+        again = await self._storage.rekey(
+            machine.id, hash_token(key), machine.restored_from, self._clock()
+        )
         if again is None:
             raise IsolationRefused(f"session {session_id}'s machine is gone", clears=True)
         await self._seeds.launch_seeded(
@@ -352,9 +377,10 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
         image. Its row is written first, so a start that dies leaves a row
         the sweep finds; one that fails here leaves nothing."""
         key = new_key()
+        now = self._clock()
         machine = PoolMachine(
             id=new_id(),
-            created_at=self._clock(),
+            created_at=now,
             name=machine_name(self._options.prefix),
             egress_open=spec.egress.mode is EgressMode.OPEN,
             tenant_id=ctx.org_id,
@@ -363,6 +389,7 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
             bound_by=ctx.user_id,
             key_digest=hash_token(key),
             restored_from=None if restore is None else restore.id,
+            bound_at=now,
         )
         await self._storage.create_machine(machine)
         source = self._options.image if restore is None else restore.reference
@@ -460,27 +487,63 @@ class CloudPoolManagerImpl(CloudPoolManagerInterface):
             by = machine.bound_by or machine.host_id
             await self._hosts().retire_host(rctx, machine.tenant_id, machine.host_id, by)
 
-    async def _lost(self, machine: PoolMachine, now: datetime) -> bool:
-        """Whether the sweep lets a machine go: a start older than the boot
-        bound that never ran; a session's machine whose host has not
-        enrolled within the boot bound and the wait after it; or one whose
-        session, or tenant, is gone."""
+    async def _swept(self, rctx: RequestContext, machine: PoolMachine, now: datetime) -> bool:
+        """Whether the sweep acted on a machine. It lets go of a start older
+        than the boot bound that never ran, whose disk is its source's, and
+        of a machine whose session, or tenant, is gone. It stops a session's
+        machine that runs with no host to work for, and keeps its disk: the
+        session's next prepare starts it again under a new key, and the
+        session's end lets it go."""
         if machine.started_at is None:
-            return now - machine.created_at > self._options.boot
-        if machine.tenant_id is None or machine.session_id is None:
-            return False
-        if machine.host_id is None and (
-            now - machine.started_at > self._options.boot + self._options.ready_wait
-        ):
+            if now - machine.created_at <= self._options.boot:
+                return False
+            await self._let_go(rctx, machine)
             return True
-        return await self._session_gone(machine.tenant_id, machine.session_id)
+        if machine.tenant_id is None or machine.session_id is None:
+            return False  # warm: no host enrolls until a session claims it
+        if await self._session_gone(machine.tenant_id, machine.session_id):
+            await self._let_go(rctx, machine)
+            return True
+        if not await self._hostless(rctx, machine, now):
+            return False
+        if await self._machines.state(machine.name) is not MachineState.RUNNING:
+            return False
+        log.warning(
+            "machine %s of session %s runs with no host to work for, and stops",
+            machine.name,
+            machine.session_id,
+        )
+        await self._retire(rctx, machine)
+        await self._machines.stop(machine.name)
+        return True
 
-    async def _storage_holds_no(self, name: str) -> bool:
-        """Read again just before a destroy: a start writes its row before
-        its machine, so a machine whose row the pass did not read may have
-        one now."""
-        rows = await self._storage.read_machines(self._options.max_machines)
-        return all(row.name != name for row in rows)
+    async def _hostless(self, rctx: RequestContext, machine: PoolMachine, now: datetime) -> bool:
+        """Whether a session's machine has no host to work for: none enrolled
+        within the boot bound and the wait after the machine was handed its
+        key for the session, or its host was ended, or has not called within
+        the silence bound."""
+        if machine.host_id is None:
+            since = machine.bound_at or machine.created_at
+            return now - since > self._options.boot + self._options.ready_wait
+        assert machine.tenant_id is not None  # a session's machine names its tenant
+        host = await self._hosts().machine_host(rctx, machine.tenant_id, machine.host_id)
+        if host is None or host.revoked_at is not None:
+            return True
+        return now - host.last_seen_at > self._options.silent
+
+    async def _reaches_machines(self) -> bool:
+        """Whether this process reaches the pool's machines, as the runner's
+        and the sweep's do."""
+        if not self._options.image:
+            return False
+        return await self._machines.probe(longest_name(self._options.prefix)) is None
+
+    async def _erased(self, erasure: PoolErasure) -> None:
+        """Every disk kept under the session's names goes, then the ask."""
+        named = snapshots_of(self._options.prefix, erasure.tenant_id, erasure.session_id)
+        for name in await self._machines.names(named):
+            await self._machines.destroy(name)
+        await self._storage.delete_erasure(erasure.id)
 
     async def _refill(self) -> None:
         """Starts warm machines, in the background, until the warm count

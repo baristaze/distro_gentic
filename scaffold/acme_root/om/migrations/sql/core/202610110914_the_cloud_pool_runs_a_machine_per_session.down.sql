@@ -5,6 +5,7 @@
 -- for this transaction alone, since the migration login owns the tables and
 -- FORCE binds the owner.
 
+DROP TABLE core.pool_erasures;
 DROP TABLE core.pool_machines;
 
 ALTER TABLE core.workspace_snapshots NO FORCE ROW LEVEL SECURITY;

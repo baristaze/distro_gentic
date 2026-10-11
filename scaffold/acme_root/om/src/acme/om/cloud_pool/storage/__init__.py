@@ -1,13 +1,15 @@
 """Storage of the cloud pool swimlane: one row per machine the pool started,
 in the platform's own table, since a warm machine names no tenant. A row is
 written before its machine starts and deleted once its machine is gone, so
-a machine under the pool's names with no row is one nobody holds."""
+a machine under the pool's names with no row is one nobody holds. Beside
+them, one row per erasure the pool owes, until the sweep has done it."""
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
+from acme.om.cloud_pool.types.erasure import PoolErasure
 from acme.om.cloud_pool.types.machine import PoolMachine
 
 
@@ -38,6 +40,12 @@ class CloudPoolStorageInterface(ABC):
         ...
 
     @abstractmethod
+    async def read_by_name(self, name: str) -> PoolMachine | None:
+        """Global: the machine under its name in the machines'
+        backend."""
+        ...
+
+    @abstractmethod
     async def read_of_session(self, tenant_id: UUID, session_id: UUID) -> PoolMachine | None:
         """Global: the machine that serves the tenant's session;
         None when none does."""
@@ -50,9 +58,10 @@ class CloudPoolStorageInterface(ABC):
         ...
 
     @abstractmethod
-    async def read_machines(self, limit: int) -> list[PoolMachine]:
-        """Global: every machine the pool holds, oldest first, at
-        most `limit`, for the sweep."""
+    async def read_machines(self, limit: int, after: UUID | None = None) -> list[PoolMachine]:
+        """Global: the machines the pool holds, in the order of their
+        ids, at most `limit` past `after`: the sweep reads them all, a page
+        at a time."""
         ...
 
     @abstractmethod
@@ -63,10 +72,11 @@ class CloudPoolStorageInterface(ABC):
         pool_id: UUID,
         bound_by: UUID,
         egress_open: bool,
+        at: datetime,
     ) -> PoolMachine | None:
         """Global: binds one started warm machine of the egress
-        asked to the tenant's session, and answers it; None when none
-        stands. Two claims never take one machine."""
+        asked to the tenant's session from `at`, and answers it; None when
+        none stands. Two claims never take one machine."""
         ...
 
     @abstractmethod
@@ -93,14 +103,33 @@ class CloudPoolStorageInterface(ABC):
 
     @abstractmethod
     async def rekey(
-        self, machine_id: UUID, key_digest: str, restored_from: UUID | None
+        self, machine_id: UUID, key_digest: str, restored_from: UUID | None, at: datetime
     ) -> PoolMachine | None:
-        """Global: a machine started again under a new key: its
-        host is to enroll anew, it is not started and not sealed yet. None
-        once it is gone."""
+        """Global: a machine started again under a new key from `at`:
+        its host is to enroll anew, and it is not sealed yet. It keeps when
+        it first ran, since its disk is the one it ran on. None once it is
+        gone."""
         ...
 
     @abstractmethod
     async def delete_machine(self, machine_id: UUID) -> None:
         """Global: the row of a machine that is gone."""
+        ...
+
+    @abstractmethod
+    async def ask_erase(self, erasure: PoolErasure) -> PoolErasure:
+        """Global: a session's disks are to go. Answers the erasure
+        that stands for the session: this one, or one asked before it, which
+        stands as it is."""
+        ...
+
+    @abstractmethod
+    async def read_erasures(self, limit: int) -> list[PoolErasure]:
+        """Global: the erasures asked and not done yet, oldest
+        first, at most `limit`."""
+        ...
+
+    @abstractmethod
+    async def delete_erasure(self, erasure_id: UUID) -> None:
+        """Global: an erasure done."""
         ...

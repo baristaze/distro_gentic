@@ -281,6 +281,13 @@ class HostsManagerImpl(HostsManagerInterface):
 
     async def revoke_claimant(self, ctx: TenantContext, claimant_id: UUID) -> EnrolledClaimant:
         ctx.require(Permission.MANAGE_MEMBERS)
+        host = await self._storage.read_host(ctx.org_id, claimant_id)
+        if host is not None and host.session_id is not None:
+            # Its machine runs on: it would bill with no host to work for.
+            raise ValidationFailed(
+                f"host {claimant_id} is the platform's, for session {host.session_id} alone: "
+                "it ends with its machine, when the session ends"
+            )
         rows = (outbox_row(ctx, HOST_REVOKED_KIND, claimant_id, {}),)
         revoked = await self._storage.revoke_claimant(
             ctx.org_id, claimant_id, self._clock(), ctx.user_id, rows
@@ -405,6 +412,9 @@ class HostsManagerImpl(HostsManagerInterface):
             session_id=pool.session_id,
         )
         return await self._admit(rctx, org_id, host)
+
+    async def machine_host(self, rctx: RequestContext, org_id: UUID, host_id: UUID) -> Host | None:
+        return await self._storage.read_host(org_id, host_id)
 
     async def retire_host(
         self, rctx: RequestContext, org_id: UUID, host_id: UUID, by: UUID
