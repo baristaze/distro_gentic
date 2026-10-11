@@ -29,6 +29,10 @@ class WorkspaceProjectsBoundImpl(WorkspaceProjectsInterface):
             project_id=project_id, repository=f"https://{repository.host}/{repository.path}.git"
         )
 
+    async def keeps_snapshots(self, ctx: TenantContext, project_id: UUID) -> bool:
+        project = await self._storage.read_project(ctx.org_id, project_id)
+        return project is None or project.workspace_snapshots
+
 
 class WorkspaceProjectsNullImpl(WorkspaceProjectsInterface, QuietNull):
     """No session belongs to a project yet: each keeps its kind's egress, has
@@ -39,6 +43,9 @@ class WorkspaceProjectsNullImpl(WorkspaceProjectsInterface, QuietNull):
 
     async def binding_of(self, ctx: TenantContext, project_id: UUID) -> RepositoryBinding | None:
         return None
+
+    async def keeps_snapshots(self, ctx: TenantContext, project_id: UUID) -> bool:
+        return True
 
 
 class PullRequestsNullImpl(PullRequestsInterface, QuietNull):

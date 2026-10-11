@@ -4,10 +4,12 @@ from uuid import UUID
 
 from pydantic import Field, SecretStr
 
+from acme.infra.workspaces import Durability
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.types.agent_session import AgentSession
 from acme.om.agents import AgentsManagerInterface
 from acme.om.agents.loop import LoopManagerInterface
+from acme.om.agents.loop_rules import kept_snapshot
 from acme.om.base import Platform, derived_id, new_id, utcnow
 from acme.om.context import Permission, RequestContext, TenantContext
 from acme.om.events import EventsManagerInterface
@@ -24,6 +26,8 @@ from acme.om.retention.crossing import CrossingKind, CrossingRefused
 from acme.om.retention.crossing import verified as crossed
 from acme.om.steps import StepsManagerInterface
 from acme.om.steps.types.header import ParkReason
+from acme.om.steps.types.step import Step
+from acme.om.tools.rules import named_snapshot
 from acme.om.watch.exceptions import CommandRunning, LiveReadRefused, NotHandedOver
 from acme.om.watch.kinds import MAX_APPEND_BYTES, MAX_APPEND_ENTRIES, KindStreamsInterface
 from acme.om.watch.manager import WatchManagerInterface
@@ -46,6 +50,8 @@ from acme.om.watch.types.live import (
 )
 from acme.om.work import WorkManagerInterface
 from acme.om.workspaces import WorkspacesManagerInterface
+from acme.om.workspaces.placed import PlacedWorkspacesInterface
+from acme.om.workspaces.types.snapshot import HostSnapshot
 
 TAKEN = "watch.control.taken"
 SENT = "watch.command.sent"
@@ -77,6 +83,7 @@ class WatchManagerImpl(WatchManagerInterface):
         hosts: HostsManagerInterface,
         work: WorkManagerInterface,
         kind_streams: KindStreamsInterface | None = None,
+        placed: PlacedWorkspacesInterface | None = None,
     ) -> None:
         self._sessions = sessions
         self._agents = agents
@@ -91,6 +98,7 @@ class WatchManagerImpl(WatchManagerInterface):
         self._hosts = hosts
         self._work = work
         self._kind_streams = kind_streams
+        self._placed = placed
 
     # The live read.
 
@@ -188,6 +196,10 @@ class WatchManagerImpl(WatchManagerInterface):
         await self._person(ctx, session_id)
         session = await self._sessions.get_session(ctx, session_id)
         if session.park is None or session.park.reason is not ParkReason.HANDOVER:
+            # Restored before it is handed over: a take whose restore fails
+            # hands nothing over, and a workspace a person holds already is
+            # never restored over their work.
+            await self._restore_kept(ctx, session_id)
             session = await self._loop.take_over(ctx, session_id)
         cursor = await self._steps.get_cursor(ctx, session_id)
         # What the agent's run still runs on the host stops now, so nothing of
@@ -195,6 +207,50 @@ class WatchManagerImpl(WatchManagerInterface):
         await self._relay.interrupt_running(ctx, ctx.org_id, session_id, cursor.epoch)
         await self._audit(ctx, new_id(), TAKEN, session_id, {"epoch": cursor.epoch})
         return session
+
+    async def _restore_kept(self, ctx: TenantContext, session_id: UUID) -> None:
+        """A workspace kept by snapshots, which a host holds, is restored from
+        the latest snapshot its history names before the person's hands are
+        on it, as its next run's would be: its instance may have gone since
+        its run, and one started anew over its files alone would lack what
+        its commands wrote outside them. The host that holds it replaces it
+        from its store; the take waits for it a while, then fails with the
+        reason, having handed nothing over, and a take again waits for the
+        same restore. One that something touched since its last snapshot
+        stands as it is."""
+        try:
+            pin = await self._workspaces.get_workspace(ctx, session_id)
+        except NotFound:
+            return
+        if pin.durability is not Durability.SNAPSHOT:
+            return
+        latest = kept_snapshot(await self._history(ctx, session_id))
+        named = None if latest is None else named_snapshot(latest)
+        if named is None:
+            return
+        record = await self._workspaces.kept_snapshot(ctx, named.id)
+        if self._placed is None or record is None or not record.on_host:
+            return
+        if record.hash != named.hash:
+            return
+        restore = HostSnapshot(
+            id=record.id,
+            reference=record.reference,
+            digest=record.digest,
+            size=record.size,
+            kept_by=record.host_id,
+        )
+        await self._placed.held_on_host(ctx, session_id, pin.spec(), restore)
+
+    async def _history(self, ctx: TenantContext, session_id: UUID) -> list[Step]:
+        steps: list[Step] = []
+        after = 0
+        while True:
+            page = await self._steps.get_steps(ctx, session_id, after, 500)
+            steps.extend(page.items)
+            if not page.has_more or not page.items:
+                return steps
+            after = page.items[-1].seq
 
     async def run_command(
         self, ctx: TenantContext, session_id: UUID, command: HandCommand

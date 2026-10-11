@@ -37,7 +37,11 @@ class Repository(Platform):
 
 
 class Project(Identifiable, Trackable):
-    """A tenant's project: its name, and the one repository it binds."""
+    """A tenant's project: its name, the one repository it binds, and
+    whether a kind that keeps its workspace by snapshots keeps it so here.
+    False narrows each of its sessions' workspaces to a cache, on purpose;
+    it reaches the sessions created after it."""
 
     name: Stored = Field(min_length=1, max_length=MAX_PROJECT_NAME)
     repository: Repository
+    workspace_snapshots: bool = True

@@ -15,6 +15,7 @@ from acme.services.api.types.relay import (
     PreparedView,
     PrepareRequest,
     ResultRequest,
+    SnapshotRequest,
 )
 
 
@@ -41,6 +42,11 @@ class RelayServiceInterface(ABC):
 
     @abstractmethod
     async def released(self, rctx: RequestContext, host: HostIdentity, item_id: UUID) -> None: ...
+
+    @abstractmethod
+    async def snapshotted(
+        self, rctx: RequestContext, host: HostIdentity, item_id: UUID, body: SnapshotRequest
+    ) -> None: ...
 
     @abstractmethod
     async def extend(

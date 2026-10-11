@@ -19,6 +19,7 @@ from acme.services.api.types.relay import (
     PreparedView,
     PrepareRequest,
     ResultRequest,
+    SnapshotRequest,
 )
 
 router = APIRouter(tags=["relay"])
@@ -67,6 +68,18 @@ async def prepared(
 
 @router.post("/hosts/me/workspaces/{item_id}/released", status_code=204)
 async def released(rctx: Rctx, relay: RelayService, host: Host, item_id: UUID) -> None:
-    """The host's answer to a release or a purge it claimed: the instance is
-    gone. A release keeps its files on the host; a purge keeps none."""
+    """The host's answer to a release, a purge, or an erase it claimed: what
+    it names is gone. A release keeps the workspace's files on the host; a
+    purge keeps none, and an erase lets the session's snapshots go from the
+    host's store."""
     await relay.released(rctx, host, item_id)
+
+
+@router.post("/hosts/me/workspaces/{item_id}/snapshot", status_code=204)
+async def snapshotted(
+    rctx: Rctx, relay: RelayService, host: Host, item_id: UUID, body: SnapshotRequest
+) -> None:
+    """The host's answer to a snapshot it claimed: kept in its own store, by
+    the reference the store knows it by and the digest of its bytes, which
+    the platform records, never the bytes; or why it kept none."""
+    await relay.snapshotted(rctx, host, item_id, body)

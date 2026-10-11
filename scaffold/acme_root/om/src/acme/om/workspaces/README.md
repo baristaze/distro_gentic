@@ -13,7 +13,9 @@ rebuilt from.
 - **A session's workspace**, one per session, under the session's id. It
   holds the isolation **pinned** when the session was created: the
   level, the limits, and the egress its project allowed then, with where
-  that egress came from. It also holds what the cache knows between
+  that egress came from, and its **durability** and base: its kind's,
+  a cache where its project keeps its sessions' workspaces as caches. It
+  also holds what the cache knows between
   loops: the session's branch, whether the remote has held it, the last
   snapshot of its work, and what the next loop is told.
 - **A project's fetch credential**, one per project: a read-only
@@ -25,6 +27,11 @@ rebuilt from.
 - **A project's egress allowlist**, one per project: the destinations a
   workspace reaches and the methods each takes, or open egress, chosen
   on purpose and recorded with its reason and who chose it.
+- **Where each snapshot of a session lives**, one record per snapshot
+  of a workspace kept by snapshots: the platform's bucket, or the store
+  of a host of the session's pool, by its reference, the digest the host
+  declared, its size, and the hash its step names. Never its bytes
+  ([ADR 2050](../../../../../docs/adr/2050-a-snapshot-lives-on-its-workspaces-side-of-the-wall.md)).
 - **A validation's instance**: one for each run of a delivery's checks,
   under an id nobody used, made by the platform's executor, or by a host
   of the pool a session inside its tenant's wall is pinned to, and
@@ -104,8 +111,25 @@ rebuilt from.
   wall, a host of its pool makes the instance instead, to the isolation
   the session is pinned to, and every step crosses the wall as `exec`
   work; no host of another pool or tenant takes it.
+- **Keep a snapshot.** A workspace kept by snapshots is snapshotted at
+  the end of each run that holds it: by the engine, into the platform's
+  bucket, when this process holds it; by the host that holds it, into
+  that host's own store, when a host of the session's pool does. A
+  session that keeps no content at rest is refused such a kind when it
+  is created, and a pool with no host that probed snapshots at its level
+  keeps it waiting, never a cache in its stead.
+- **Restore.** The next loop starts from the latest snapshot, decided
+  before any host is asked: from the bucket here, or from a host's store
+  through the prepare it travels with. A snapshot kept on one side of
+  the wall never restores on the other. A restored tree stands: nothing
+  of the branch is brought over it. A person who takes control gets it
+  too, before the workspace is handed over.
+- **Erase.** A revoked key takes the session's snapshots out of the
+  bucket, asks each host that keeps one to erase it, and forgets their
+  records.
 - **Purge.** A session the sweep purges loses its workspace row with its
-  files. A tenant deleted past its retention loses its workspaces, its
+  files, and its snapshots: each host that keeps one is asked to erase
+  it before their records go. A tenant deleted past its retention loses its workspaces, its
   allowlists, and its fetch credentials, each value out of the store
   before its record.
 
@@ -121,6 +145,9 @@ rebuilt from.
   Outside `local`, open egress needs a host that keeps it off the
   platform's insides, and an allowlist needs a proxy that holds its
   methods.
+- **A snapshot lives on its workspace's side of the wall.** Its bytes
+  stay in the store of the side that took it; the platform records the
+  reference and the hash.
 - **A workspace is a cache of durable state.** What a loop leaves is
   pushed before its instance goes, and a vanished branch is rebuilt only
   when its fate is known. An instance a dead run left is released the

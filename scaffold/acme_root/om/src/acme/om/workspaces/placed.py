@@ -15,18 +15,63 @@ from uuid import UUID
 from acme.infra.transports import TransportInterface
 from acme.infra.workspaces import IsolationSpec, Workspace
 from acme.om.context import TenantContext
+from acme.om.workspaces.types.snapshot import HostSnapshot
 
 
 class PlacedWorkspacesInterface(ABC):
     @abstractmethod
+    async def pool_of(self, ctx: TenantContext, session_id: UUID) -> UUID | None:
+        """The host pool the session is pinned to; None for a session of the
+        cloud."""
+        ...
+
+    @abstractmethod
     async def held_on_host(
-        self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec
+        self,
+        ctx: TenantContext,
+        session_id: UUID,
+        spec: IsolationSpec,
+        restore: HostSnapshot | None = None,
     ) -> Workspace | None:
         """The session's workspace, at its pinned `spec`, on the host of its
         pool that holds it; None for a session of the cloud, which this
         process prepares itself. `IsolationRefused` while no live host of
         its pool holds it: a host of the pool is asked to prepare it, and
-        the loop waits on the resource with no call spent."""
+        the loop waits on the resource with no call spent. A workspace kept
+        by snapshots waits, with the reason, while no live host of its pool
+        advertises snapshots at its level, and never runs as a cache. One
+        that names a base is refused for good, since no host builds one.
+
+        With `restore`, a snapshot a host's store keeps, the workspace is
+        started from it, replaced whole: by the host that holds it while it
+        is not revoked, or, with none, by a host of the pool whose store
+        keeps it, which then holds it. The restore is asked before anything
+        else and travels with the ask; the call waits for it a while, then
+        the loop waits on the resource. `WorkspaceLost` when the host that
+        holds the workspace lost it, or when no live host keeps it."""
+        ...
+
+    @abstractmethod
+    async def snapshot_on_host(
+        self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec, snapshot_id: UUID
+    ) -> UUID:
+        """Asks the host that holds the session's workspace to keep a snapshot
+        of it in its own store under `snapshot_id`; the work's id. Its bytes
+        never leave the host: the platform records the reference and the
+        digest the host answers. `SnapshotRefused` when no live host holds
+        the workspace."""
+        ...
+
+    @abstractmethod
+    async def refusal_of(self, ctx: TenantContext, item_id: UUID) -> str | None:
+        """Why the work under `item_id` failed; None while it waits or runs,
+        and once it is done."""
+        ...
+
+    @abstractmethod
+    async def erase_on_host(self, ctx: TenantContext, session_id: UUID, host_id: UUID) -> None:
+        """Asks the host whose store keeps snapshots of the session to let
+        every one go."""
         ...
 
 

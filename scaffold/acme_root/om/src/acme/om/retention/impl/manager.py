@@ -189,6 +189,15 @@ class RetentionManagerImpl(RetentionManagerInterface):
         )
         return await self._storage.create_snapshot(ctx.org_id, snapshot)
 
+    async def keeps_at_rest(self, ctx: TenantContext, session: AgentSession) -> bool:
+        ctx.require(Permission.READ)
+        stored = await self._storage.read_snapshot(ctx.org_id, session.id)
+        if stored is not None:
+            return stored.at_rest
+        project_id = await self._project_of(ctx, session)
+        policy = effective(await self._storage.read_policy(ctx.org_id), project_id)
+        return policy.storage_mode is StorageMode.SEALED
+
     async def _project_of(self, ctx: TenantContext, session: AgentSession) -> UUID | None:
         """The project of the session it came from, when it came from one
         that has a snapshot; otherwise the one the platform names for it."""

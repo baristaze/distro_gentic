@@ -952,7 +952,8 @@ def build_managers(
     # namespace reaches the sessions through the decorators, so no such
     # session stands outside its origin's project, or unpinned.
     agent_sessions = AgentSessionsInProjectImpl(
-        AgentSessionsPinnedImpl(retained, workspaces), storage.get_project_storage()
+        AgentSessionsPinnedImpl(retained, workspaces, retention.keeps_at_rest),
+        storage.get_project_storage(),
     )
     # The gate reads the budgets of a call's scopes and holds on the ledger.
     budgets = BudgetsManagerImpl(
@@ -1107,7 +1108,7 @@ def build_managers(
     # Each workspace is held to its session's pin, refused by this host where
     # it cannot give it, brought up to the session's branch, kept before it
     # goes, and let go by the run that holds it alone.
-    tools: ToolsManagerInterface = ToolsManagerWorkspacesImpl(
+    held_to_pins = ToolsManagerWorkspacesImpl(
         engine_tools_manager,
         workspaces,
         steps,
@@ -1120,7 +1121,19 @@ def build_managers(
         placed=None
         if transport_layer is None
         else PlacedWorkspacesRelayedImpl(lambda: managers.relay, lambda: managers.hosts),
+        snapshots=snapshots,
+        # A snapshot a host keeps is named by the digest it declared, keyed
+        # by the session; its revoked key asks the host to let it go.
+        keyed_hash=privacy.keyed_hash,
+        erase_on_host=lambda ctx, session_id, host_id: managers.relay.ask_erase(
+            ctx, session_id, host_id
+        ),
+        # So does the session's purge, which runs for no principal.
+        erase_purged=lambda org_id, session_id, host_id: managers.relay.erase_purged(
+            org_id, session_id, host_id
+        ),
     )
+    tools: ToolsManagerInterface = held_to_pins
     # What makes a result: the runs, the policies, and validation on the
     # executor, apart from every agent's workspace. Outside `local`, it is
     # the platform's own: an instance made for each run. For a session of
@@ -1316,6 +1329,8 @@ def build_managers(
             outbox,
             records,
             relay_options or RelayOptions(),
+            # A snapshot a host answers is recorded where it lives.
+            kept=held_to_pins.keep_on_host,
         ),
         platform_agents=platform,
         projects=projects,

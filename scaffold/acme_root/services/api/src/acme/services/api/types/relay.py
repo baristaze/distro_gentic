@@ -12,6 +12,7 @@ from pydantic import Field
 
 from acme.om.relay.rules import RESULT_CHARS
 from acme.om.retention.crossing import SHA256, CrossingKind
+from acme.om.workspaces.types.snapshot import DIGEST, REFERENCE
 from acme.services.api.types.common import RequestBody, View
 
 
@@ -58,9 +59,24 @@ class ResultRequest(RequestBody):
 
 class PrepareRequest(RequestBody):
     """A host's answer to a prepare it claimed: where on it the workspace it
-    made is, or why it made none. Exactly one of the two."""
+    made is, or why it made none. Exactly one of the two. A refusal is
+    `lost` when the snapshot the host was asked to start it from is not in
+    its store, or is altered there."""
 
     location: str | None = Field(default=None, min_length=1, max_length=1024)
+    refused: str | None = Field(default=None, min_length=1, max_length=2000)
+    lost: bool = False
+
+
+class SnapshotRequest(RequestBody):
+    """A host's answer to a snapshot it claimed: kept in its own store, under
+    the reference the store knows it by, with the SHA-256 of its bytes and
+    their size, never the bytes; or why it kept none. Exactly one of the
+    two."""
+
+    reference: str | None = Field(default=None, pattern=REFERENCE)
+    digest: str | None = Field(default=None, pattern=DIGEST)
+    size: int | None = Field(default=None, ge=0)
     refused: str | None = Field(default=None, min_length=1, max_length=2000)
 
 

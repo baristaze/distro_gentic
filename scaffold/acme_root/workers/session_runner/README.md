@@ -49,9 +49,11 @@ inside the API ([ADR 1011](../../docs/adr/1011-a-sessions-loop-runs-in-a-worker-
   run releases it, its work pushed to a snapshot ref first. A push that
   does not land keeps it for the next pass. One whose tenant is deleted
   is purged. One whose tenant or session the database holds no record
-  of, as after a restore, is left alone and logged. Then it reads every
-  workspace a tenant's host holds, by the relay's bindings, and holds
-  each to the same proofs. One whose loop is parked on a hand-over is
+  of, as after a restore, is left alone and logged. One whose session is
+  kept by snapshots stays while no snapshot holds it as it stands, since
+  a release would lose what its commands wrote outside its files. Then it
+  reads every workspace a tenant's host holds, by the relay's bindings,
+  and holds each to the same proofs. One whose loop is parked on a hand-over is
   the person's, and stays. Past the grace, its work is pushed to a
   snapshot ref through the relay, unless a snapshot after the session's
   last step holds it already, as a loop's end leaves it; only then is its

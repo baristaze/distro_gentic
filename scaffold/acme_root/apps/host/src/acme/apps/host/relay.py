@@ -5,7 +5,14 @@ item whose spec asks other than its fields say is refused, with nothing
 made or run. A prepare makes the workspace through the host's own provider
 for the session's isolation and answers where it is, which binds the
 session to this host; a release lets its instance go and keeps its
-files, and a purge destroys an instance and its files. An `exec` item
+files, and a purge destroys an instance and its files. A workspace kept by
+snapshots keeps them in the host's own store, inside its owner's wall: a
+snapshot takes back what the broker attached, is refused when it holds a
+value of the host's secrets, and is answered by its reference, its digest,
+and its size, never its bytes; a prepare that names one starts the
+workspace from it, replaced whole, once its bytes match their digest; an
+erase lets a session's go. A level whose snapshots the host's probe did not
+show is refused for a workspace kept by snapshots. An `exec` item
 runs through its own local transport, in the workspace it holds,
 prepared again first, so an instance that stopped since starts anew over
 its files. The output streams back a part
@@ -33,17 +40,26 @@ from pydantic import ValidationError
 
 from acme.apps.host.agent import ExecutorInterface
 from acme.apps.host.ceilings import Ask
+from acme.apps.host.snapshots import HostSnapshots, SnapshotHeldSecret, SnapshotLost
 from acme.client.client import WIRE_FAILURES, ApiClient, ApiError
 from acme.client.types import ClaimedWorkView, ExecDetailView, OutputStream
 from acme.client.types import IsolationMode as HostIsolation
 from acme.infra.exceptions import InfraException
-from acme.infra.transports import CommandSpec, RecordSeal, TransportInterface
+from acme.infra.transports import (
+    CommandSpec,
+    CredentialBrokerInterface,
+    RecordSeal,
+    TransportInterface,
+    secret_held,
+)
 from acme.infra.workspaces import (
+    Durability,
     EgressMode,
     IsolationMode,
     IsolationRefused,
     IsolationSpec,
     Workspace,
+    WorkspaceLost,
     WorkspaceProviderInterface,
 )
 
@@ -140,6 +156,9 @@ class ExecutorRelayImpl(ExecutorInterface):
         transports: Mapping[IsolationMode, TransportInterface],
         workspaces: Mapping[IsolationMode, WorkspaceProviderInterface] | None = None,
         *,
+        snapshots: HostSnapshots | None = None,
+        snapshot_modes: Callable[[], frozenset[IsolationMode]] = frozenset,
+        broker: CredentialBrokerInterface | None = None,
         flush_seconds: float = 0.25,
         part_bytes: int = 32_000,
         renew_seconds: float = 20.0,
@@ -148,6 +167,9 @@ class ExecutorRelayImpl(ExecutorInterface):
         self._client = client
         self._transports = dict(transports)
         self._workspaces = dict(workspaces or {})
+        self._snapshots = snapshots
+        self._probed_snapshots = snapshot_modes
+        self._broker = broker
         self._flush_seconds = flush_seconds
         self._part_bytes = part_bytes
         self._renew_seconds = renew_seconds
@@ -273,8 +295,9 @@ class ExecutorRelayImpl(ExecutorInterface):
         differs from what it asked, or one this host cannot make, is answered
         as refused, so another host of the pool may. Where the workspace is
         made is the host's to choose, so a prepare reads no path of its own.
-        When another host holds the session's workspace already, this one's
-        goes. A release lets an instance go (`_release`); a purge destroys
+        One that names a base is refused: the host runs its owner's image
+        alone. When another host holds the session's workspace already,
+        this one's goes. A release lets an instance go (`_release`); a purge destroys
         one (`_purge`)."""
         payload = item.payload
         if payload.get("operation") == "release":
@@ -282,6 +305,12 @@ class ExecutorRelayImpl(ExecutorInterface):
             return
         if payload.get("operation") == "purge":
             await self._purge(item)
+            return
+        if payload.get("operation") == "snapshot":
+            await self._snapshot(item)
+            return
+        if payload.get("operation") == "erase":
+            await self._erase(item)
             return
         if payload.get("operation") != "prepare":
             log.warning(
@@ -298,15 +327,33 @@ class ExecutorRelayImpl(ExecutorInterface):
         if differs is not None:
             await self._answer(item.id, refused="this host refused it: " + differs)
             return
+        if spec.base is not None:
+            # A container here runs its owner's image alone: a base would
+            # name another, and this host builds none.
+            await self._answer(item.id, refused="this host builds no workspace base")
+            return
         org_id = item.org_id
         provider = self._workspaces.get(spec.mode)
         if provider is None:
             await self._answer(item.id, refused=f"this host makes no {spec.mode.value} workspace")
             return
+        if spec.durability is Durability.SNAPSHOT and spec.mode not in self._snapshot_modes():
+            # Never made as a cache in its stead: another host may keep it.
+            why = f"this host has not probed snapshots of a {spec.mode.value} workspace"
+            await self._answer(item.id, refused=why)
+            return
         try:
-            workspace = await provider.prepare(org_id, session_id, spec)
+            restore = await self._restore(item, spec)
+        except SnapshotLost as lost:
+            # This store does not hold it. The platform knows which host kept
+            # it, so it decides whether another host may still restore it.
+            await self._answer(item.id, refused=str(lost), lost=True)
+            return
+        try:
+            workspace = await provider.prepare(org_id, session_id, spec, snapshot=restore)
         except InfraException as error:
-            await self._answer(item.id, refused=error.message)
+            lost_here = restore is not None and error.code == WorkspaceLost.code
+            await self._answer(item.id, refused=error.message, lost=lost_here)
             return
         held = await self._answer(item.id, location=workspace.location)
         if held is False:
@@ -368,15 +415,134 @@ class ExecutorRelayImpl(ExecutorInterface):
         except (ApiError, *WIRE_FAILURES) as error:
             log.warning("item %s: its answer was not taken: %s", item.id, error)
 
+    def _snapshot_modes(self) -> frozenset[IsolationMode]:
+        """The levels whose snapshots its probe showed; none without a
+        store."""
+        return frozenset() if self._snapshots is None else self._probed_snapshots()
+
+    async def _restore(self, item: ClaimedWorkView, spec: IsolationSpec) -> bytes | None:
+        """The bytes a prepare starts the workspace from: the snapshot it
+        names, from this host's store, once they match their digest and
+        their size; None for a prepare that names none. `SnapshotLost` when
+        the store does not hold it, or holds other bytes."""
+        named = item.payload.get("snapshot")
+        if named is None:
+            return None
+        if self._snapshots is None or spec.mode not in self._snapshot_modes():
+            raise SnapshotLost("this host keeps no snapshot store")
+        try:
+            reference = str(named["reference"])
+            digest = str(named["digest"])
+            size = int(named["size"])
+        except KeyError, TypeError, ValueError:
+            raise SnapshotLost("the prepare names no snapshot this store keeps") from None
+        return await self._snapshots.load(reference, digest, size)
+
+    async def _snapshot(self, item: ClaimedWorkView) -> None:
+        """A snapshot: the live instance this host's provider holds for the
+        session, by its labels, taken whole once the broker took back what
+        it attached there, scanned for the host's secrets' values, and kept
+        in this host's store. Answered by its reference, its digest, and
+        its size, never its bytes, or by why none was kept."""
+        try:
+            spec = IsolationSpec.model_validate(item.payload["spec"])
+            session_id = UUID(str(item.payload["session_id"]))
+            snapshot_id = UUID(str(item.payload["snapshot"]["id"]))
+        except KeyError, TypeError, ValueError, ValidationError:
+            await self._answer_snapshot(item.id, refused="the snapshot names no workspace")
+            return
+        provider = self._workspaces.get(spec.mode)
+        if provider is None or self._snapshots is None or spec.mode not in self._snapshot_modes():
+            why = f"this host has not probed snapshots of a {spec.mode.value} workspace"
+            await self._answer_snapshot(item.id, refused=why)
+            return
+        held = [
+            instance
+            for instance in await provider.held_instances()
+            if instance.id == session_id and instance.org_id == item.org_id
+        ]
+        if not held:
+            why = f"this host holds no live instance of session {session_id}'s workspace"
+            await self._answer_snapshot(item.id, refused=why)
+            return
+        workspace = Workspace(
+            id=session_id, org_id=item.org_id, spec=spec, location=held[0].location
+        )
+        try:
+            if self._broker is not None:
+                await self._broker.detach_all(workspace)
+            archive = await provider.snapshot(workspace)
+            try:
+                values = await self._snapshots.values(item.org_id)
+                found = await secret_held(provider.held(archive), values)
+                if found is not None:
+                    raise SnapshotHeldSecret(
+                        f"the workspace holds the secret {found!r}, so it is not kept"
+                    )
+                reference, digest, size = await self._snapshots.keep(
+                    item.org_id, session_id, snapshot_id, archive
+                )
+            except BaseException:
+                await provider.discard(archive)
+                raise
+        except (InfraException, SnapshotHeldSecret, OSError) as error:
+            why = error.message if isinstance(error, InfraException) else str(error)
+            await self._answer_snapshot(item.id, refused=why)
+            return
+        log.info("item %s: session %s's snapshot is kept as %s", item.id, session_id, reference)
+        await self._answer_snapshot(item.id, reference=reference, digest=digest, size=size)
+
+    async def _erase(self, item: ClaimedWorkView) -> None:
+        """An erase: every snapshot of the session in this host's store goes.
+        One that fails is not answered: its lease runs out, and it is
+        claimed again."""
+        try:
+            session_id = UUID(str(item.payload["session_id"]))
+        except KeyError, ValueError:
+            log.warning("item %s: the erase names no session", item.id)
+            return
+        if self._snapshots is not None:
+            await self._snapshots.erase(item.org_id, session_id)
+        log.info("item %s: the snapshots of session %s are erased", item.id, session_id)
+        try:
+            async with self._client() as client:
+                await client.answer_release(item.id)
+        except (ApiError, *WIRE_FAILURES) as error:
+            log.warning("item %s: its answer was not taken: %s", item.id, error)
+
+    async def _answer_snapshot(
+        self,
+        item_id: UUID,
+        *,
+        reference: str | None = None,
+        digest: str | None = None,
+        size: int | None = None,
+        refused: str | None = None,
+    ) -> None:
+        try:
+            async with self._client() as client:
+                await client.answer_snapshot(
+                    item_id, reference=reference, digest=digest, size=size, refused=refused
+                )
+        except (ApiError, *WIRE_FAILURES) as error:
+            log.warning("item %s: its answer was not taken: %s", item_id, error)
+
     async def _answer(
-        self, item_id: UUID, *, location: str | None = None, refused: str | None = None
+        self,
+        item_id: UUID,
+        *,
+        location: str | None = None,
+        refused: str | None = None,
+        lost: bool = False,
     ) -> bool | None:
         """A prepare's answer; whether the session's workspace is this host's,
         or None when the platform took no answer, and the work's lease is
         left to run out."""
         try:
             async with self._client() as client:
-                answered = await client.answer_prepare(item_id, location=location, refused=refused)
+                answered = await client.answer_prepare(
+                    item_id, location=location, refused=refused, lost=lost
+                )
         except (ApiError, *WIRE_FAILURES) as error:
             log.warning("item %s: its answer was not taken: %s", item_id, error)
             return None

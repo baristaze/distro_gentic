@@ -94,9 +94,18 @@ STARTED_TO = (
 """What an inspect answers of a container: whether it runs, the spec it was
 started to, and the deployment that started it."""
 
-RUNS_ON = "{{.State.Running}} {{.Image}}"
-"""What an inspect answers of a container: whether it runs, and the id of the
-image it runs on."""
+RUNS_ON = (
+    '{{.State.Running}} {{.Image}} {{index .Config.Labels "'
+    + DEPLOYMENT_LABEL
+    + '"}} {{index .Config.Labels "'
+    + WORKSPACE_LABEL
+    + '"}} {{index .Config.Labels "'
+    + ORG_LABEL
+    + '"}}'
+)
+"""What an inspect answers of a container: whether it runs, the id of the
+image it runs on, and the deployment, the workspace, and the tenant its
+labels name."""
 
 FORMAT = "acme.container-snapshot/1"
 """What a container's snapshot says it is, in its manifest."""
@@ -174,7 +183,7 @@ class WorkspaceContainerImpl(WorkspaceProviderInterface):
 
     Every container and volume it makes carries its deployment's label, and
     it holds only those that carry it: a running container without it is
-    replaced at its next prepare, its files kept.
+    replaced at its next prepare, its files kept, and is never snapshotted.
 
     A workspace's container drops every capability, takes no new
     privileges, and keeps nothing of the engine's environment: its
@@ -274,10 +283,19 @@ class WorkspaceContainerImpl(WorkspaceProviderInterface):
     async def snapshot(self, workspace: Workspace) -> bytes:
         name = workspace.location
         shown = await docker("inspect", "--format", RUNS_ON, name, bound=self._timeout)
-        running = shown.stdout.split()
-        if not shown.ok or len(running) != 2 or running[0] != b"true":
+        running = shown.stdout.decode(errors="replace").split()
+        if not shown.ok or len(running) != 5 or running[0] != "true":
             raise SnapshotRefused(f"workspace {workspace.id} holds no instance to snapshot")
-        image = running[1].decode()
+        image, deployment, labelled, org = running[1:]
+        if (deployment, labelled, org) != (
+            self._deployment,
+            str(workspace.id),
+            str(workspace.org_id),
+        ):
+            # A container of that name another deployment, workspace, or
+            # tenant started is never this workspace's: two deployments may
+            # share one Docker.
+            raise SnapshotRefused(f"workspace {workspace.id} holds no instance to snapshot")
         pull = await self._pullable(image)
         paused = await docker("pause", name, bound=self._timeout)
         if not paused.ok:

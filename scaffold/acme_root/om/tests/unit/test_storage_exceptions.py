@@ -264,6 +264,11 @@ MANAGER_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset(
         ("WindowsManagerInterface", "purge_artifacts"),
         ("ToolsManagerInterface", "purge_workspace"),
         ("WorkspacesManagerInterface", "purge_session"),
+        ("WorkspacesManagerInterface", "forget_snapshots"),
+        # And the hosts whose stores keep its snapshots, which that purge asks
+        # to erase them before their records go.
+        ("WorkspacesManagerInterface", "snapshot_hosts"),
+        ("RelayManagerInterface", "erase_purged"),
         ("EvidenceManagerInterface", "purge_session"),
         ("ProjectsManagerInterface", "purge_session"),
         ("RelayManagerInterface", "purge_session"),
@@ -377,6 +382,7 @@ REQUEST_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
         # and to a release.
         ("RelayManagerInterface", "prepared"),
         ("RelayManagerInterface", "released"),
+        ("RelayManagerInterface", "snapshotted"),
         # And the sweep's settlement of the items whose lease ended, across
         # tenants, each under its tenant's service context.
         ("RelayManagerInterface", "settle_expired"),

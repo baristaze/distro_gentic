@@ -15,19 +15,24 @@ from acme.om.outbox.types.row import OutboxRow
 from acme.om.workspaces.storage import WorkspaceStorageInterface
 from acme.om.workspaces.types.credential import RepositoryCredential
 from acme.om.workspaces.types.egress import EgressAllowlist, EgressMethod, EgressRule
+from acme.om.workspaces.types.snapshot import KeptSnapshot
 from acme.om.workspaces.types.workspace import SessionWorkspace
 
 CROSS_TENANT_CASES: frozenset[str] = frozenset(
     {
         "create_allowlist",
         "create_credential",
+        "create_snapshot",
         "create_workspace",
         "purge_credentials",
+        "purge_snapshots",
         "purge_tenant",
         "purge_workspace",
         "read_allowlist",
         "read_credential",
         "read_credentials",
+        "read_snapshot",
+        "read_snapshots",
         "read_workspace",
         "write_allowlist",
         "write_credential",
@@ -73,6 +78,25 @@ def make_allowlist(*, project_id: UUID | None = None, open_egress: bool = False)
         rules=() if open_egress else (RULE,),
         open=open_egress,
         reason="the build reaches the public internet" if open_egress else None,
+    )
+
+
+def make_snapshot(session_id: UUID, *, on_host: bool = False) -> KeptSnapshot:
+    now = utcnow()
+    actor = new_id()
+    snapshot_id = new_id()
+    hosted = {"pool_id": new_id(), "host_id": new_id(), "digest": "sha256:" + "ab" * 32}
+    return KeptSnapshot(
+        id=snapshot_id,
+        created_at=now,
+        updated_at=now,
+        created_by=actor,
+        updated_by=actor,
+        session_id=session_id,
+        hash="hmac-sha256:" + "cd" * 32,
+        size=4096,
+        reference=f"{session_id}/{snapshot_id}",
+        **(hosted if on_host else {}),
     )
 
 
@@ -240,6 +264,56 @@ class WorkspaceStorageContract:
         assert not await storage.purge_workspace(org, purged.id)
         assert await storage.read_workspace(org, purged.id) is None
         assert await storage.read_workspace(org, stays.id) == stays
+
+    # Where a session's snapshots live.
+
+    async def test_a_snapshots_record_round_trips_once(
+        self, storage: WorkspaceStorageInterface
+    ) -> None:
+        org, session = new_id(), new_id()
+        hosted, kept = make_snapshot(session, on_host=True), make_snapshot(session)
+        assert await storage.create_snapshot(org, hosted)
+        assert not await storage.create_snapshot(org, hosted.model_copy(update={"size": 1}))
+        assert await storage.create_snapshot(org, kept)
+        assert await storage.read_snapshot(org, hosted.id) == hosted
+        assert {row.id for row in await storage.read_snapshots(org, session, 10)} == {
+            hosted.id,
+            kept.id,
+        }
+        assert len(await storage.read_snapshots(org, session, 1)) == 1
+
+    async def test_create_snapshot_under_another_tenant_is_not_read_here(
+        self, storage: WorkspaceStorageInterface
+    ) -> None:
+        org, session = new_id(), new_id()
+        snapshot = make_snapshot(session)
+        assert await storage.create_snapshot(new_id(), snapshot)
+        assert await storage.read_snapshot(org, snapshot.id) is None
+
+    async def test_read_snapshot_and_snapshots_of_another_tenant_find_nothing(
+        self, storage: WorkspaceStorageInterface
+    ) -> None:
+        org, session = new_id(), new_id()
+        snapshot = make_snapshot(session, on_host=True)
+        assert await storage.create_snapshot(org, snapshot)
+        assert await storage.read_snapshot(new_id(), snapshot.id) is None
+        assert await storage.read_snapshots(new_id(), session, 10) == []
+
+    async def test_purge_snapshots_takes_the_sessions_records_and_no_other(
+        self, storage: WorkspaceStorageInterface
+    ) -> None:
+        org, session, other = new_id(), new_id(), new_id()
+        for snapshot in (make_snapshot(session), make_snapshot(session, on_host=True)):
+            assert await storage.create_snapshot(org, snapshot)
+        stays = make_snapshot(other)
+        assert await storage.create_snapshot(org, stays)
+        assert await storage.purge_snapshots(new_id(), session) == 0, "another tenant's takes none"
+        assert len(await storage.read_snapshots(org, session, 10)) == 2
+
+        assert await storage.purge_snapshots(org, session) == 2
+
+        assert await storage.read_snapshots(org, session, 10) == []
+        assert await storage.read_snapshots(org, other, 10) == [stays]
 
     async def test_purge_workspace_of_another_tenant_takes_nothing(
         self, storage: WorkspaceStorageInterface

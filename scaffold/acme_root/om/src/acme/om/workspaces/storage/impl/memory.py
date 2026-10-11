@@ -7,6 +7,7 @@ from acme.om.storage.impl.memory_base import HasId, MemoryStorageBase, MemoryTab
 from acme.om.workspaces.storage import WorkspaceStorageInterface
 from acme.om.workspaces.types.credential import RepositoryCredential
 from acme.om.workspaces.types.egress import EgressAllowlist
+from acme.om.workspaces.types.snapshot import KeptSnapshot
 from acme.om.workspaces.types.workspace import SessionWorkspace
 
 
@@ -16,6 +17,7 @@ class WorkspaceStorageMemoryImpl(MemoryStorageBase, WorkspaceStorageInterface):
         self._workspaces: MemoryTable[SessionWorkspace] = {}
         self._allowlists: MemoryTable[EgressAllowlist] = {}
         self._credentials: MemoryTable[RepositoryCredential] = {}
+        self._snapshots: MemoryTable[KeptSnapshot] = {}
 
     async def read_workspace(self, org_id: UUID, session_id: UUID) -> SessionWorkspace | None:
         return self._get(self._workspaces, org_id, session_id)
@@ -100,6 +102,30 @@ class WorkspaceStorageMemoryImpl(MemoryStorageBase, WorkspaceStorageInterface):
                 del self._credentials[row_id]
             return len(gone)
 
+    async def create_snapshot(self, org_id: UUID, snapshot: KeptSnapshot) -> bool:
+        async with self._lock:
+            return self._insert(self._snapshots, org_id, snapshot)
+
+    async def read_snapshot(self, org_id: UUID, snapshot_id: UUID) -> KeptSnapshot | None:
+        return self._get(self._snapshots, org_id, snapshot_id)
+
+    async def read_snapshots(
+        self, org_id: UUID, session_id: UUID, limit: int
+    ) -> list[KeptSnapshot]:
+        found = [row for row in self._rows(self._snapshots, org_id) if row.session_id == session_id]
+        return sorted(found, key=lambda row: (row.created_at, row.id))[:limit]
+
+    async def purge_snapshots(self, org_id: UUID, session_id: UUID) -> int:
+        async with self._lock:
+            gone = [
+                row.id
+                for row in self._rows(self._snapshots, org_id)
+                if row.session_id == session_id
+            ]
+            for row_id in gone:
+                del self._snapshots[row_id]
+            return len(gone)
+
     async def purge_workspace(self, org_id: UUID, session_id: UUID) -> bool:
         async with self._lock:
             if self._get(self._workspaces, org_id, session_id) is None:
@@ -110,7 +136,8 @@ class WorkspaceStorageMemoryImpl(MemoryStorageBase, WorkspaceStorageInterface):
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:
         async with self._lock:
             purged = self._purged(self._workspaces, org_id, limit)
-            return purged + self._purged(self._allowlists, org_id, limit)
+            purged += self._purged(self._allowlists, org_id, limit)
+            return purged + self._purged(self._snapshots, org_id, limit)
 
     def _purged[E: HasId](self, table: MemoryTable[E], org_id: UUID, limit: int) -> int:
         gone = [row.id for row in self._rows(table, org_id)][:limit]

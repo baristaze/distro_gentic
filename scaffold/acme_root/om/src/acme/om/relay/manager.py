@@ -18,11 +18,13 @@ from acme.om.relay.types.exec import (
     ExecItem,
     ExecProgress,
     PrepareAnswer,
+    SnapshotAnswer,
     StopKind,
     WorkspaceBinding,
 )
 from acme.om.retention.crossing import Crossing
 from acme.om.work.types.work_item import WorkItem
+from acme.om.workspaces.types.snapshot import HostSnapshot
 
 
 class RelayManagerInterface(ABC):
@@ -93,6 +95,63 @@ class RelayManagerInterface(ABC):
         ...
 
     @abstractmethod
+    async def ask_restore(
+        self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec, snapshot: HostSnapshot
+    ) -> UUID:
+        """Platform-internal: asks for the session's workspace started from
+        `snapshot`, which a host's store keeps inside the session's wall,
+        replaced whole: by the host that holds the workspace, on its lane,
+        while it is not revoked, online or not; else by any host of the
+        session's pool whose store reaches it. A restore of the same
+        snapshot that waits or runs is answered; one that ended never is, so
+        each run that asks restores anew. Any other prepare that waits is
+        ended. The work's id. `ValidationFailed` for a session of the
+        cloud."""
+        ...
+
+    @abstractmethod
+    async def ask_snapshot(
+        self, ctx: TenantContext, session_id: UUID, spec: IsolationSpec, snapshot_id: UUID
+    ) -> UUID | None:
+        """Platform-internal: asks the host that holds the session's
+        workspace, live and online, to keep a snapshot of it in its own
+        store under `snapshot_id`, as `workspace` work on that host's lane.
+        The work's id; None when no live host holds the workspace."""
+        ...
+
+    @abstractmethod
+    async def ask_erase(self, ctx: TenantContext, session_id: UUID, host_id: UUID) -> None:
+        """Platform-internal: asks the host whose store keeps snapshots of the
+        session to let every one go, as `workspace` work on that host's
+        lane."""
+        ...
+
+    @abstractmethod
+    async def erase_purged(self, org_id: UUID, session_id: UUID, host_id: UUID) -> None:
+        """Platform-internal: a session's purge asks the host whose store keeps
+        snapshots of it to let every one go, as `workspace` work on that
+        host's lane; for no principal."""
+        ...
+
+    @abstractmethod
+    async def workspace_work(self, ctx: TenantContext, item_id: UUID) -> WorkItem:
+        """The `workspace` work under `item_id` as the queue holds it: whether
+        it waits, runs, is done, or failed, and why. `NotFound` for none."""
+        ...
+
+    @abstractmethod
+    async def snapshotted(
+        self, rctx: RequestContext, host: HostIdentity, item_id: UUID, answer: SnapshotAnswer
+    ) -> None:
+        """Platform-internal: a host answers a snapshot it claimed. One it kept
+        is recorded where it lives: the host, its pool, the reference its
+        store knows it by, and the digest and the size the host declared,
+        never its bytes; then its row is done. One it refused fails its row
+        for good with the reason. `ItemNotHeld` for a snapshot the host does
+        not hold under a live claim."""
+        ...
+
+    @abstractmethod
     async def prepared(
         self, rctx: RequestContext, host: HostIdentity, item_id: UUID, answer: PrepareAnswer
     ) -> WorkspaceBinding | None:
@@ -101,14 +160,19 @@ class RelayManagerInterface(ABC):
         unless a live host of the pool holds the session's workspace
         already, and the binding is answered; a refusal hands the work back
         to the pool's lane after a wait, for a host that can give it, and
-        None is answered. `ItemNotHeld` for a prepare the host does not hold
-        under a live claim."""
+        None is answered. A restore binds the workspace to the host that made
+        it, whatever another holds. One answered as lost fails for good, with
+        the reason, and no host is asked again, unless it waits on the
+        pool's lane and another live host of the pool kept its snapshot: then
+        it is handed back, for that host or one that shares its store.
+        `ItemNotHeld` for a prepare the host does not hold under a live
+        claim."""
         ...
 
     @abstractmethod
     async def released(self, rctx: RequestContext, host: HostIdentity, item_id: UUID) -> None:
-        """Platform-internal: a host answers a release or a purge it claimed,
-        once the instance is gone: its row completes. `ItemNotHeld` for one
+        """Platform-internal: a host answers a release, a purge, or an erase
+        it claimed, once what it names is gone: its row completes. `ItemNotHeld` for one
         the host does not hold under a live claim."""
         ...
 

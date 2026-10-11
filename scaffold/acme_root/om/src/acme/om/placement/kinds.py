@@ -13,7 +13,7 @@ from types import MappingProxyType
 from acme.om.context import Permission
 from acme.om.placement.rules import host_lane, pool_lane
 from acme.om.placement.types.claimant import Claimant
-from acme.om.placement.types.work import ExecPayload, WorkspaceOperation, WorkspacePayload
+from acme.om.placement.types.work import ExecPayload, WorkspacePayload
 from acme.om.work.kinds import WORK_KINDS, WorkKinds, WorkKindSpec
 from acme.om.work.types.work_item import WorkKind
 
@@ -138,12 +138,13 @@ def _exec_lane(payload: ExecPayload) -> str:
 
 
 def _workspace_lane(payload: WorkspacePayload) -> str:
-    """A prepare goes to its pool, since any host of the pool may make it; a
-    release or a purge to the host that holds the workspace."""
-    if payload.operation is WorkspaceOperation.PREPARE:
+    """A prepare goes to its pool, since any host of the pool may make it,
+    unless it restores a snapshot over the workspace a host holds; that,
+    and a release, a purge, a snapshot, or an erase, go to the host the
+    payload names."""
+    if payload.host_id is None:
         assert payload.pool_id is not None  # the payload's own rule
         return pool_lane(payload.pool_id)
-    assert payload.host_id is not None
     return host_lane(payload.host_id)
 
 

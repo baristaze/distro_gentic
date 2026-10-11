@@ -30,10 +30,13 @@ class RepositoryView(View):
 
 
 class CreateProjectRequest(RequestBody):
-    """A project and the one repository it binds, which never moves."""
+    """A project and the one repository it binds, which never moves, and
+    whether a kind that keeps its workspace by snapshots keeps it so here:
+    False keeps each of its sessions' workspaces a cache."""
 
     name: str = Field(min_length=1, max_length=MAX_PROJECT_NAME)
     repository: RepositoryBody
+    workspace_snapshots: bool = True
 
 
 class RenameProjectRequest(RequestBody):
@@ -44,6 +47,7 @@ class ProjectView(View):
     id: UUID
     name: str
     repository: RepositoryView
+    workspace_snapshots: bool
     created_at: datetime
     created_by: UUID
     updated_at: datetime

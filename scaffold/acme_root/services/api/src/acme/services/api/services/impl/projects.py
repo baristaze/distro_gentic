@@ -44,6 +44,7 @@ class ProjectsServiceImpl(ProjectsServiceInterface):
                 "updated_by": ctx.user_id,
                 "name": body.name,
                 "repository": body.repository.model_dump(),
+                "workspace_snapshots": body.workspace_snapshots,
             },
         )
         return ProjectView.model_validate(await self._projects.create_project(ctx, project))

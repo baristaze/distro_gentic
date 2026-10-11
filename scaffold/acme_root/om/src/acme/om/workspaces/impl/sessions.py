@@ -3,9 +3,12 @@
 A decorator over the engine's sessions manager, behind the same interface.
 A create pins the session's isolation first, so no session is written
 without one, and a create retried under the same id meets the pin already
-there. Every other operation is the engine's, unchanged."""
+there. Whether the session keeps content at rest is read first, by the
+policy its retention will take (`at_rest`): one that keeps none is refused
+a workspace kept by snapshots. Every other operation is the engine's,
+unchanged."""
 
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime
 from uuid import UUID
 
@@ -21,16 +24,24 @@ from acme.om.steps.types.header import Park, ParkReason
 from acme.om.steps.types.step import Step
 from acme.om.workspaces.manager import WorkspacesManagerInterface
 
+AtRest = Callable[[TenantContext, AgentSession], Awaitable[bool]]
+"""Whether a session about to be created keeps its content at rest."""
+
 
 class AgentSessionsPinnedImpl(AgentSessionsManagerInterface):
     def __init__(
-        self, inner: AgentSessionsManagerInterface, workspaces: WorkspacesManagerInterface
+        self,
+        inner: AgentSessionsManagerInterface,
+        workspaces: WorkspacesManagerInterface,
+        at_rest: AtRest | None = None,
     ) -> None:
         self._inner = inner
         self._workspaces = workspaces
+        self._at_rest = at_rest
 
     async def create_session(self, ctx: TenantContext, session: AgentSession) -> AgentSession:
-        await self._workspaces.pin(ctx, session)
+        at_rest = True if self._at_rest is None else await self._at_rest(ctx, session)
+        await self._workspaces.pin(ctx, session, at_rest=at_rest)
         return await self._inner.create_session(ctx, session)
 
     async def get_session(self, ctx: TenantContext, session_id: UUID) -> AgentSession:

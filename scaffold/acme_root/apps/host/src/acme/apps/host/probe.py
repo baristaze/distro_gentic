@@ -5,7 +5,10 @@ which isolation modes it can provide; and whether it reaches a cloud's
 metadata service, which keeps open egress off it. It advertises its
 operating system and shell, its capabilities, and the modes whose probe
 passed, and nothing else: there is no setting that names a mode, so a
-mode no probe showed is never advertised."""
+mode no probe showed is never advertised. It advertises snapshots of a
+workspace at a mode, `snapshot.<mode>`, only when that mode's probe passed,
+a provider of its own snapshots a workspace there, and its store takes a
+snapshot and gives it back."""
 
 import os
 import platform
@@ -216,16 +219,34 @@ class Probes:
     metadata: Callable[[], Probe] = metadata
     isolation: Mapping[IsolationMode, Callable[[], Probe]] = field(default_factory=dict)
     capabilities: Mapping[str, Callable[[], bool]] = field(default_factory=lambda: {"git": git})
+    # Whether the host keeps snapshots of a workspace at a mode: a provider
+    # of its own snapshots one there, and its store takes one.
+    snapshots: Mapping[IsolationMode, Callable[[], bool]] = field(default_factory=dict)
 
 
-def real_probes(workspace_user: str | None) -> Probes:
+SNAPSHOT_PREFIX = "snapshot."
+"""A mode's snapshot capability is its name after this: `snapshot.container`
+holds a container's whole filesystem, `snapshot.vm` a VM's whole disk, and
+`snapshot.directory` the directory alone."""
+
+
+def real_probes(
+    workspace_user: str | None, snapshots: Mapping[IsolationMode, Callable[[], bool]] | None = None
+) -> Probes:
     return Probes(
         isolation={
             IsolationMode.vm: vm,
             IsolationMode.container: container,
             IsolationMode.directory: lambda: directory(workspace_user),
-        }
+        },
+        snapshots=snapshots or {},
     )
+
+
+def snapshot_modes(advertisement: AdvertisementBody) -> frozenset[IsolationMode]:
+    """The modes whose snapshots the advertisement says the host keeps."""
+    names = [capability.root for capability in advertisement.capabilities or ()]
+    return frozenset(mode for mode in IsolationMode if SNAPSHOT_PREFIX + mode.value in names)
 
 
 @dataclass(frozen=True)
@@ -255,11 +276,18 @@ async def startup(
     if failed:
         raise Misconfigured(failed)
     modes = {mode: check() for mode, check in probes.isolation.items()}
+    kept = [
+        Probe(SNAPSHOT_PREFIX + mode.value, check(), f"{mode.value} snapshots in its store")
+        for mode, check in probes.snapshots.items()
+        if mode in modes and modes[mode].passed
+    ]
+    capabilities = [name for name, check in probes.capabilities.items() if check()]
+    capabilities += [probe.name for probe in kept if probe.passed]
     advertised = AdvertisementBody.model_validate(
         {
             "os": f"{platform.system()} {platform.release()}".strip()[:64] or "unknown",
             "shell": os.environ.get("SHELL", "")[:64],
-            "capabilities": sorted(name for name, check in probes.capabilities.items() if check()),
+            "capabilities": sorted(capabilities),
             "isolation_modes": [
                 mode for mode in IsolationMode if mode in modes and modes[mode].passed
             ],
@@ -267,7 +295,7 @@ async def startup(
     )
     reach = probes.metadata()
     return Probed(
-        results=[*checks, reach, *modes.values()],
+        results=[*checks, reach, *modes.values(), *kept],
         advertisement=advertised,
         open_egress=reach.passed,
     )

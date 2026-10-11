@@ -12,7 +12,7 @@ import contextlib
 import logging
 import os
 import sys
-from collections.abc import Coroutine
+from collections.abc import Callable, Coroutine, Mapping
 from datetime import timedelta
 from importlib.metadata import PackageNotFoundError, version
 from typing import Any, NoReturn
@@ -23,13 +23,15 @@ import typer
 from acme.apps.host import ceilings
 from acme.apps.host.agent import HostAgent
 from acme.apps.host.config import BadSetting, Settings, settings_from_env
-from acme.apps.host.probe import Misconfigured, Probe, real_probes, startup
-from acme.apps.host.relay import ExecutorRelayImpl
+from acme.apps.host.probe import Misconfigured, Probe, real_probes, snapshot_modes, startup
+from acme.apps.host.relay import HOST_MODES, ExecutorRelayImpl
+from acme.apps.host.snapshots import HostSnapshots
 from acme.client.claimant.enrollment import CredentialRefused, NotEnrolled
 from acme.client.client import WIRE_FAILURES, ApiClient, ApiError
+from acme.client.types import IsolationMode as HostIsolation
 from acme.infra.exceptions import InfraException
 from acme.infra.secrets.local import SecretsLocalImpl
-from acme.infra.transports import TransportInterface
+from acme.infra.transports import CredentialBrokerInterface, TransportInterface
 from acme.infra.transports.broker import BrokerNullImpl
 from acme.infra.transports.container import TransportContainerImpl
 from acme.infra.workspaces import IsolationMode, WorkspaceProviderInterface
@@ -96,13 +98,24 @@ def run() -> None:
 
     async def go() -> None:
         agents: list[HostAgent] = []
+        workspaces = host_workspaces(settings)
+        store = HostSnapshots(settings.snapshots_path, settings.secrets_path)
+        # One broker: what the transport attaches, a snapshot takes back.
+        broker = BrokerNullImpl()
         executor = ExecutorRelayImpl(
-            lambda: agents[0].client(), host_transports(settings), host_workspaces(settings)
+            lambda: agents[0].client(),
+            host_transports(settings, broker),
+            workspaces,
+            snapshots=store,
+            broker=broker,
+            snapshot_modes=lambda: frozenset(
+                ENGINE_MODES[mode] for mode in snapshot_modes(agents[0].probed.advertisement)
+            ),
         )
         agent = HostAgent(
             settings,
             ceilings.load(settings.ceilings_path),
-            real_probes(settings.workspace_user),
+            real_probes(settings.workspace_user, host_snapshots(workspaces, store)),
             lambda token: build_client(settings.api_url, token),
             executor,
         )
@@ -123,7 +136,9 @@ def host_network() -> HostNetwork:
         raise Misconfigured([Probe("trust_store", False, str(error))]) from error
 
 
-def host_transports(settings: Settings) -> dict[IsolationMode, TransportInterface]:
+def host_transports(
+    settings: Settings, broker: CredentialBrokerInterface | None = None
+) -> dict[IsolationMode, TransportInterface]:
     """The transports this host runs work through: a container per session,
     on its local Docker. A bare directory runs only as the host's dedicated
     user, which no transport here does yet, so an item at that mode is
@@ -133,7 +148,7 @@ def host_transports(settings: Settings) -> dict[IsolationMode, TransportInterfac
     container = TransportContainerImpl(
         settings.records_path,
         secrets,
-        BrokerNullImpl(),
+        broker or BrokerNullImpl(),
         timedelta(seconds=30),
         host_network(),
     )
@@ -153,6 +168,28 @@ def host_workspaces(settings: Settings) -> dict[IsolationMode, WorkspaceProvider
             host_network(),
         )
     }
+
+
+ENGINE_MODES: dict[HostIsolation, IsolationMode] = {
+    host: engine for engine, host in HOST_MODES.items()
+}
+"""The engine's mode a host's advertised mode names."""
+
+
+def host_snapshots(
+    workspaces: Mapping[IsolationMode, WorkspaceProviderInterface], store: HostSnapshots
+) -> dict[HostIsolation, Callable[[], bool]]:
+    """The modes whose snapshots this host keeps: each one a provider of its
+    own snapshots, once its store takes one and gives it back. The
+    container provider snapshots its whole filesystem; a mode with no
+    provider here keeps none."""
+    return {HOST_MODES[mode]: store.usable for mode in workspaces if mode in SNAPSHOTTING}
+
+
+SNAPSHOTTING = frozenset({IsolationMode.CONTAINER})
+"""The engine's modes whose providers here snapshot a workspace whole: the
+container's. A directory's commands write outside it, so its provider
+snapshots none, and this host runs no VM."""
 
 
 async def serve(agent: HostAgent, settings: Settings) -> None:

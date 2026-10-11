@@ -169,6 +169,7 @@ TABLE_SCOPES: dict[str, TableScope] = {
     "workspace_bindings": TableScope(ScopeKind.ORG),
     "session_workspaces": TableScope(ScopeKind.ORG),
     "egress_allowlists": TableScope(ScopeKind.ORG),
+    "workspace_snapshots": TableScope(ScopeKind.ORG),
     "repository_credentials": TableScope(ScopeKind.ORG),
     "matrix_pins": TableScope(ScopeKind.ORG),
     "fill_overrides": TableScope(ScopeKind.ORG),

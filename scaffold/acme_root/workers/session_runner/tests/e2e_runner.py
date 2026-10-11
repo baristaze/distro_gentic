@@ -58,6 +58,9 @@ def main() -> int:
             local = bound.repository.replace("https://", f"file://{self._root}/", 1)
             return bound.model_copy(update={"repository": local})
 
+        async def keeps_snapshots(self, ctx: TenantContext, project_id: UUID) -> bool:
+            return await self._inner.keeps_snapshots(ctx, project_id)
+
     settings = SessionRunnerSettings()
     rows = StoragePostgresImpl(
         settings.role_urls(), settings.role_pools(), system_urls=settings.system_role_urls()

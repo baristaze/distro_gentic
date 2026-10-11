@@ -1978,10 +1978,34 @@ export interface paths {
         put?: never;
         /**
          * Released
-         * @description The host's answer to a release or a purge it claimed: the instance is
-         *     gone. A release keeps its files on the host; a purge keeps none.
+         * @description The host's answer to a release, a purge, or an erase it claimed: what
+         *     it names is gone. A release keeps the workspace's files on the host; a
+         *     purge keeps none, and an erase lets the session's snapshots go from the
+         *     host's store.
          */
         post: operations["released_v1_hosts_me_workspaces__item_id__released_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/hosts/me/workspaces/{item_id}/snapshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Snapshotted
+         * @description The host's answer to a snapshot it claimed: kept in its own store, by
+         *     the reference the store knows it by and the digest of its bytes, which
+         *     the platform records, never the bytes; or why it kept none.
+         */
+        post: operations["snapshotted_v1_hosts_me_workspaces__item_id__snapshot_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4191,12 +4215,19 @@ export interface components {
         };
         /**
          * CreateProjectRequest
-         * @description A project and the one repository it binds, which never moves.
+         * @description A project and the one repository it binds, which never moves, and
+         *     whether a kind that keeps its workspace by snapshots keeps it so here:
+         *     False keeps each of its sessions' workspaces a cache.
          */
         CreateProjectRequest: {
             /** Name */
             name: string;
             repository: components["schemas"]["RepositoryBody"];
+            /**
+             * Workspace Snapshots
+             * @default true
+             */
+            workspace_snapshots: boolean;
         };
         /**
          * CreateTeamOrgRequest
@@ -6532,11 +6563,18 @@ export interface components {
         /**
          * PrepareRequest
          * @description A host's answer to a prepare it claimed: where on it the workspace it
-         *     made is, or why it made none. Exactly one of the two.
+         *     made is, or why it made none. Exactly one of the two. A refusal is
+         *     `lost` when the snapshot the host was asked to start it from is not in
+         *     its store, or is altered there.
          */
         PrepareRequest: {
             /** Location */
             location?: string | null;
+            /**
+             * Lost
+             * @default false
+             */
+            lost: boolean;
             /** Refused */
             refused?: string | null;
         };
@@ -6601,6 +6639,8 @@ export interface components {
              * Format: uuid
              */
             updated_by: string;
+            /** Workspace Snapshots */
+            workspace_snapshots: boolean;
         };
         /**
          * Provenance
@@ -7273,6 +7313,23 @@ export interface components {
             provider_logout_url?: string | null;
             /** Revoked At */
             revoked_at: string | null;
+        };
+        /**
+         * SnapshotRequest
+         * @description A host's answer to a snapshot it claimed: kept in its own store, under
+         *     the reference the store knows it by, with the SHA-256 of its bytes and
+         *     their size, never the bytes; or why it kept none. Exactly one of the
+         *     two.
+         */
+        SnapshotRequest: {
+            /** Digest */
+            digest?: string | null;
+            /** Reference */
+            reference?: string | null;
+            /** Refused */
+            refused?: string | null;
+            /** Size */
+            size?: number | null;
         };
         /**
          * SnapshotView
@@ -12161,6 +12218,43 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    snapshotted_v1_hosts_me_workspaces__item_id__snapshot_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                authorization?: string | null;
+            };
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SnapshotRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             204: {

@@ -135,7 +135,8 @@ pytestmark = [
     pytest.mark.integration,
     pytest.mark.skipif(not docker_runs(), reason="needs a local Docker"),
     pytest.mark.skip(
-        reason="the platform's pin holds no base, so a workspace on a base is refused"
+        reason="each case prepares a base its session's pin does not hold, and the platform "
+        "holds every prepare to the pin: a base reaches a workspace through its kind"
     ),
     pytest.mark.usefixtures("migrated"),
 ]

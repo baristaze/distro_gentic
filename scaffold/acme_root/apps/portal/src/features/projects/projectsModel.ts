@@ -54,7 +54,8 @@ export function createRequest(draft: NewProjectDraft): { request: CreateProjectR
   if (name.length > NAME_MAX) return { problem: `A name is at most ${NAME_MAX} characters.` };
   const repository = repositoryOf(draft.repository);
   if ("problem" in repository) return repository;
-  return { request: { name, repository } };
+  // A new project lets each kind keep its workspace as the kind says.
+  return { request: { name, repository, workspace_snapshots: true } };
 }
 
 export function renameRequest(name: string, current: string): { name: string } | { problem: string } | null {

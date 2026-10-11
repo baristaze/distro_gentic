@@ -23,7 +23,10 @@ macOS.
   probes each isolation mode: a VM per session, a container per session,
   a directory run as a dedicated user. It advertises its operating
   system, its shell, its capabilities, and only the modes whose probe
-  passed. No setting names a mode.
+  passed. No setting names a mode. It advertises snapshots of a mode,
+  `snapshot.<mode>`, only when that mode's probe passed, its provider
+  there snapshots a workspace whole, and its snapshot store takes one and
+  gives it back: a container's, today.
 - **Enrolls once.** With the enrollment token its owner issued, it gets
   a credential of its own, kept owner-only in its home. Every start after
   that picks the credential up; it rotates it at half its life. It does
@@ -51,6 +54,18 @@ macOS.
   host. One it cannot make is answered as refused, so another host of
   the pool may. When another host holds the workspace already, this
   host's goes.
+- **Keeps its workspaces' snapshots in its own store.** A workspace kept
+  by snapshots is snapshotted by this host at the end of each run, never
+  by the platform. It takes back what its broker attached, takes the
+  container it holds by its labels whole, and refuses the snapshot when
+  it holds the value of a secret it keeps for the tenant. It keeps the
+  bytes in its store, owner-only, and answers their reference, their
+  SHA-256, and their size; the bytes never leave the host. A prepare that
+  names a snapshot starts the workspace from it, replaced whole, once its
+  bytes match their digest; bytes gone or altered are answered lost. An
+  erase lets a session's snapshots go. It refuses a workspace kept by
+  snapshots at a mode whose snapshots it did not probe, and one that
+  names a base: it runs its owner's image alone.
 - **Shares its proxy and its CA, under open egress alone.** A command in
   a workspace with open egress goes through the proxy the host's
   environment names, without any credential in its URL, and trusts the
@@ -143,7 +158,9 @@ refused. What the item runs it reads from the gateway while it holds it
   that image may run when a prepare finds it absent; the image is large,
   and a pull cut short leaves nothing.
   `ACME_HOST_WORKSPACE_USER` is the user a bare-directory workspace runs
-  as.
+  as. `ACME_HOST_SNAPSHOTS` (default `snapshots` in its home) is the store
+  its workspaces' snapshots are kept in; hosts of a pool that share it
+  restore one another's.
 
 ## Test
 

@@ -6,7 +6,7 @@ Values in, values out; no clock, no storage, no settings."""
 from datetime import datetime, timedelta
 from enum import StrEnum
 
-from acme.om.hosts.types.host import Host
+from acme.om.hosts.types.host import Host, IsolationMode
 
 ENROLLMENT_PREFIX = "hen_"
 """An enrollment token's prefix, whatever claimant kind it enrolls. It
@@ -71,3 +71,22 @@ def retired_at(expires_at: datetime, now: datetime, grace: timedelta) -> datetim
     with it still lands, and never later than it would have. It does not
     rotate again in the grace: a credential rotates once."""
     return min(expires_at, now + grace)
+
+
+# What a host's snapshot holds, by the level it runs a workspace at.
+
+SNAPSHOTS: dict[IsolationMode, tuple[str, str]] = {
+    IsolationMode.VM: ("snapshot.vm", "a VM's whole disk"),
+    IsolationMode.CONTAINER: ("snapshot.container", "a container's whole filesystem"),
+    IsolationMode.DIRECTORY: ("snapshot.directory", "the directory alone"),
+}
+"""The capability a host advertises once its probe showed it keeps a
+snapshot of a workspace at that level in its own store, and what such a
+snapshot holds: everything a workspace's commands could write there, and
+no running process."""
+
+
+def snapshots_advertised(host: Host, mode: IsolationMode) -> bool:
+    """Whether the host's probe showed it keeps snapshots of a workspace at
+    `mode`."""
+    return SNAPSHOTS[mode][0] in host.advertisement.capabilities

@@ -15,11 +15,12 @@ before the managers, and the API's watch reads it, so a read in one process
 finds the streams the runner writes in another."""
 
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from acme.infra.root import InfraInterface
 from acme.om.base import utcnow
 from acme.om.events import EventsManagerInterface
+from acme.om.relay.impl.workspaces import PlacedWorkspacesRelayedImpl
 from acme.om.root import Managers, ProductKinds
 from acme.om.watch.impl.kinds import KindStreamsImpl
 from acme.om.watch.impl.manager import WatchManagerImpl, WatchOptions
@@ -27,6 +28,10 @@ from acme.om.watch.impl.stream import StreamOptions, StreamServiceImpl, step_kin
 from acme.om.watch.kinds import KindStreamsInterface
 from acme.om.watch.manager import WatchManagerInterface
 from acme.om.watch.stream import StreamServiceInterface
+
+TAKE_RESTORE_WAIT = timedelta(seconds=30)
+"""How long a take of control waits for the host that holds a workspace
+kept by snapshots to restore it from its latest one."""
 
 
 def build_stream(
@@ -76,4 +81,9 @@ def build_watch(
         hosts=managers.hosts,
         work=managers.work,
         kind_streams=kind_streams,
+        # A take of control waits a while for a host to restore a workspace
+        # kept by snapshots.
+        placed=PlacedWorkspacesRelayedImpl(
+            lambda: managers.relay, lambda: managers.hosts, restore_wait=TAKE_RESTORE_WAIT
+        ),
     )
