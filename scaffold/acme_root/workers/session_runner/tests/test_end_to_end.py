@@ -10,6 +10,11 @@ runner takes the loop under a new epoch once the lease runs out, the lost
 run can append nothing more, and the call it left open is settled by its
 effect.
 
+A project's environment runs on real Docker and the stack's object store:
+the first engineer session builds its base, whose setup installs a package
+from a registry on this host, and the next starts from the same base with
+no setup run, and imports the package with no egress.
+
 Every case runs in the first project `make seed` writes, its repository a
 bare one on this host, and one session there meets every gate on its way
 to a success: its claim, its money, its audit, its result, and its seal.
@@ -19,15 +24,22 @@ tables. The one case that calls a live provider spends money and runs by
 hand alone (`make test-live`)."""
 
 import asyncio
+import base64
+import hashlib
+import io
 import json
 import os
 import signal
 import socket
 import subprocess
 import sys
+import threading
 import time
+import zipfile
 from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -37,7 +49,7 @@ import pytest
 from api_support import seed_request, sign_in_as
 from contracts.evidence_storage import make_policy
 from httpx import ASGITransport
-from runner_support import E2E_KINDS, answers, runs, submits, validates
+from runner_support import E2E_KINDS, KINDS, answers, runs, submits, validates
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -49,6 +61,7 @@ from acme.integrations.model_providers.scripted import SCRIPT, Turn
 from acme.integrations.model_providers.types import ProviderName
 from acme.integrations.payments.twin import PaymentProviderTwinImpl
 from acme.om.agents.loop_rules import ended_step
+from acme.om.agents.types.kind import AgentKind
 from acme.om.base import new_id, utcnow
 from acme.om.billing.root import build_billing
 from acme.om.billing.types.account import FundingMode
@@ -68,6 +81,7 @@ from acme.om.steps.types.header import LoopEndedHeader, LoopOutcome, ToolRespons
 from acme.om.storage.migrate import VERSION_TABLE
 from acme.om.storage.roles import DatabaseRole
 from acme.om.storage.settings import MigrationSettings
+from acme.om.tools.impl.bases import base_key
 from acme.om.trust.impl.manager import CALL_AUDITED
 from acme.om.trust.types.identities import CallAudit
 from acme.om.work.types.work_item import WorkKind, WorkStatus
@@ -262,6 +276,13 @@ def emptied() -> None:
 
 @pytest.fixture
 async def stack(emptied: None, tmp_path: Path) -> AsyncIterator[Stack]:
+    async with a_stack(tmp_path, E2E_KINDS) as built:
+        yield built
+
+
+@asynccontextmanager
+async def a_stack(tmp_path: Path, kinds: tuple[AgentKind, ...]) -> AsyncIterator[Stack]:
+    """The API over the stack, with `kinds` beside the platform's own."""
     # The developer's tracker and exporter are left off: an error a case
     # raises on purpose is no report. The platform's agents ship over the
     # repository's corpus, as they do in the runner and in a deployed api,
@@ -273,7 +294,7 @@ async def stack(emptied: None, tmp_path: Path) -> AsyncIterator[Stack]:
         postgres_storage(settings),
         InfraConfiguredImpl(settings),
         absent_integrations(),
-        ports=PlatformPorts(kinds=ProductKinds(agents=E2E_KINDS)),
+        ports=PlatformPorts(kinds=ProductKinds(agents=kinds)),
         platform_agents=PlatformAgents(corpus=read_corpus(REPO)),
     )
     app = create_app(container)
@@ -763,3 +784,260 @@ async def test_a_step_the_runner_streams_is_read_live_through_the_api_by_its_han
         ("watch.stream.opened", session_id, live["step_id"]),
         ("watch.stream.completed", session_id, live["step_id"]),
     ]
+
+
+# A project's environment: built once, served to every session, sealed.
+
+PACKAGE = "envpkg"
+WHEEL = f"{PACKAGE}-1.0-py3-none-any.whl"
+VALUE = "set up once, by the environment"
+
+INSTALL = r"""
+import socket, subprocess, sys, urllib.request
+def gateway():
+    for line in open("/proc/net/route").read().splitlines()[1:]:
+        fields = line.split()
+        if fields[1] == "00000000":
+            return socket.inet_ntoa(int(fields[2], 16).to_bytes(4, "little"))
+    return "unrouted"
+port, package = int(sys.argv[1]), sys.argv[2]
+for host in ("host.docker.internal", gateway()):
+    index = f"http://{host}:{port}/simple"
+    try:
+        urllib.request.urlopen(f"{index}/{package}/", timeout=5).read()
+    except Exception as error:
+        print(f"{host}: {error}", file=sys.stderr)
+        continue
+    sys.exit(subprocess.call([sys.executable, "-m", "pip", "install", "--no-cache-dir",
+        "--index-url", index, "--trusted-host", host, package]))
+sys.exit(1)
+"""
+"""Installs the package from the registry on the port it is given, at this
+host's name where Docker gives one and at the bridge's gateway where it
+does not."""
+
+IMPORTS = f"""
+import urllib.request
+import {PACKAGE}
+print({PACKAGE}.VALUE)
+try:
+    urllib.request.urlopen("http://host.docker.internal:{{port}}/simple/", timeout=5)
+    print("reached the registry")
+except Exception:
+    print("no egress")
+"""
+"""What the engineer runs: the package's import, then a reach for the
+registry its environment's setup used."""
+
+
+def wheel() -> bytes:
+    """A wheel of one pure module, its record holding each file's hash."""
+    files = {
+        f"{PACKAGE}/__init__.py": f"VALUE = {VALUE!r}\n".encode(),
+        f"{PACKAGE}-1.0.dist-info/METADATA": (
+            f"Metadata-Version: 2.1\nName: {PACKAGE}\nVersion: 1.0\n".encode()
+        ),
+        f"{PACKAGE}-1.0.dist-info/WHEEL": (
+            b"Wheel-Version: 1.0\nGenerator: e2e\nRoot-Is-Purelib: true\nTag: py3-none-any\n"
+        ),
+    }
+    record = [
+        f"{path},sha256="
+        f"{base64.urlsafe_b64encode(hashlib.sha256(data).digest()).decode().rstrip('=')},"
+        f"{len(data)}"
+        for path, data in files.items()
+    ]
+    files[f"{PACKAGE}-1.0.dist-info/RECORD"] = (
+        "\n".join([*record, f"{PACKAGE}-1.0.dist-info/RECORD,,"]) + "\n"
+    ).encode()
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w") as archive:
+        for path, data in files.items():
+            archive.writestr(path, data)
+    return out.getvalue()
+
+
+class Registry:
+    """A package index on this host, in the simple form, serving the one
+    wheel; it counts every request."""
+
+    def __init__(self) -> None:
+        self.hits = 0
+        served = wheel()
+        digest = hashlib.sha256(served).hexdigest()
+        registry = self
+
+        class Answer(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:
+                registry.hits += 1
+                if self.path.rstrip("/") == f"/simple/{PACKAGE}":
+                    page = f'<a href="/files/{WHEEL}#sha256={digest}">{WHEEL}</a>'.encode()
+                    self._answer(page, "text/html")
+                elif self.path == f"/files/{WHEEL}":
+                    self._answer(served, "application/octet-stream")
+                else:
+                    self._answer(b"", "text/html")
+
+            def _answer(self, body: bytes, kind: str) -> None:
+                self.send_response(200)
+                self.send_header("Content-Type", kind)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, format: str, *args: Any) -> None:
+                return None
+
+        # Every address of this host: a container reaches it through its bridge.
+        self.server = ThreadingHTTPServer(("0.0.0.0", 0), Answer)
+        self.port = self.server.server_address[1]
+
+
+@pytest.fixture
+def registry() -> Iterator[Registry]:
+    served = Registry()
+    thread = threading.Thread(target=served.server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield served
+    finally:
+        served.server.shutdown()
+        served.server.server_close()
+
+
+KEPT_BASES = """
+import asyncio, sys
+from datetime import timedelta
+from uuid import UUID
+import aioboto3
+from acme.infra.buckets import Buckets
+from acme.infra.buckets.s3 import BucketsS3Impl
+from acme.infra.impl.settings import InfraSettings
+from acme.om.tools.impl.bases import PREFIX
+
+async def kept():
+    settings = InfraSettings()
+    session = aioboto3.Session(
+        aws_access_key_id=settings.s3_access_key,
+        aws_secret_access_key=settings.s3_secret_key,
+        region_name=settings.aws_region,
+    )
+    buckets = BucketsS3Impl(
+        session,
+        endpoint_url=settings.s3_endpoint_url,
+        region=settings.aws_region,
+        bucket_prefix=settings.s3_bucket_prefix,
+        timeout=timedelta(seconds=30),
+    )
+    await buckets.start()
+    try:
+        for key in await buckets.list(UUID(sys.argv[1]), Buckets.SNAPSHOTS, PREFIX, 10):
+            print(key)
+    finally:
+        await buckets.close()
+
+asyncio.run(kept())
+"""
+"""Lists the tenant's bases in the stack's object store, as the runner
+keeps them, from an interpreter of its own: the API in this process holds
+the trust store it installed, which no new client here can take."""
+
+
+def kept_bases(org_id: UUID) -> list[str]:
+    listed = subprocess.run(
+        [sys.executable, "-c", KEPT_BASES, str(org_id)],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert listed.returncode == 0, listed.stderr
+    return listed.stdout.split()
+
+
+def docker_runs() -> bool:
+    try:
+        reply = subprocess.run(["docker", "version"], capture_output=True, timeout=20)
+    except FileNotFoundError, subprocess.TimeoutExpired:
+        return False
+    return reply.returncode == 0
+
+
+@pytest.fixture
+async def shipped(emptied: None, tmp_path: Path) -> AsyncIterator[Stack]:
+    """The stack with the platform's own engineer as the latest, in its
+    container."""
+    async with a_stack(tmp_path, KINDS) as built:
+        yield built
+
+
+def removed(deployment: str) -> None:
+    """Every container and volume the runner's provider made, by its
+    deployment's label."""
+    label = f"label=acme.deployment={deployment}"
+    for listing, removal in (
+        (["ps", "--all", "--quiet"], ["rm", "-f"]),
+        (["volume", "ls", "--quiet"], ["volume", "rm", "-f"]),
+    ):
+        found = subprocess.run(
+            ["docker", *listing, "--filter", label], capture_output=True, text=True, timeout=60
+        ).stdout.split()
+        if found:
+            subprocess.run(["docker", *removal, *found], capture_output=True, timeout=120)
+
+
+@pytest.mark.skipif(not docker_runs(), reason="needs a local Docker")
+async def test_a_projects_environment_is_built_once_and_its_engineer_imports_its_package_sealed(
+    shipped: Stack, registry: Registry
+) -> None:
+    person = await owner_of(shipped)
+    install = base64.b64encode(INSTALL.encode()).decode()
+    keep = f"import base64; open('/opt/install.py', 'wb').write(base64.b64decode('{install}'))"
+    environment = {
+        "image": "python:3.14-slim",
+        "setup": [f'python -c "{keep}"', f"python /opt/install.py {registry.port} {PACKAGE}"],
+        "registries": ["host.docker.internal"],
+    }
+    named = await shipped.client.put(
+        f"/v1/projects/{person.project_id}/environment",
+        headers=person.headers,
+        json=environment,
+    )
+    assert named.status_code == 200, named.text
+    assert named.json()["environment"] == environment
+    imports = IMPORTS.replace("{port}", str(registry.port))
+    sealed = [runs("python", "-c", imports), *[answers("The package imports.")] * 3]
+    deployment = f"e2e-{new_id().hex[:8]}"
+    shipped.runner(
+        "runner-environment",
+        [*sealed, *sealed],
+        ACME_WORKSPACE_BACKEND="container",
+        ACME_WORKSPACE_DEPLOYMENT=deployment,
+        E2E_CONTAINERS="1",
+    )
+    workspaces = shipped.container.managers.workspaces
+    try:
+        first = await started(shipped, person, "engineer")
+        await say(shipped, person, first, "Check that the report's package imports.")
+        first_steps = await until_steps(shipped, person, first, "loop_ended")
+        built = registry.hits
+        second = await started(shipped, person, "engineer")
+        await say(shipped, person, second, "Check that the report's package imports.")
+        second_steps = await until_steps(shipped, person, second, "loop_ended")
+        pins = [await workspaces.get_workspace(person.ctx, UUID(s)) for s in (first, second)]
+        kept = kept_bases(person.ctx.org_id)
+    finally:
+        for runner in shipped.runners:
+            runner.stop()
+        removed(deployment)
+
+    assert built >= 2, "the first session's setup reached the registry"
+    assert registry.hits == built, "the second session ran no setup, and reached nothing"
+    assert pins[0].base == pins[1].base and pins[0].base is not None
+    assert pins[0].base.setup == tuple(environment["setup"])
+    assert [pin.egress.value for pin in pins] == ["none", "none"]
+    assert kept == [base_key(pins[0].spec())], "one base, kept once, for both"
+    for steps in (first_steps, second_steps):
+        (answer,) = of_type(steps, "tool_response")
+        assert answer["failure"] is None, answer
+        assert VALUE in answer["text"] and "no egress" in answer["text"], answer["text"]
