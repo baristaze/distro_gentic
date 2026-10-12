@@ -135,8 +135,16 @@ async def test_a_calls_audit_entry_holds_its_four_answers_apart(tmp_path: Path) 
     platform = trusted(tmp_path)
     session_id = await platform.start()
     platform.placement.walled.add(session_id)
-    asker = platform.member()
-    await platform.say(session_id, "Find the total.", asker)
+    # The owner asks, then hands the steer to a member: the call runs under
+    # its steerer, and the one whose message it answers pays.
+    await platform.say(session_id, "Find the total.")
+    steerer = platform.member()
+    await platform.managers.agent_sessions.add_participant(
+        platform.owner, session_id, steerer.user_id
+    )
+    await platform.managers.attribution.assign_principal(
+        platform.owner, session_id, steerer.user_id
+    )
     platform.anthropic.add(reply(said("Looking."), call("lookup")), reply(said("It is 12.")))
 
     run = await platform.loops.run(platform.owner, session_id)
@@ -148,8 +156,8 @@ async def test_a_calls_audit_entry_holds_its_four_answers_apart(tmp_path: Path) 
     # The machine that ran it, whom it ran under, who paid, and who acted:
     # each from its own source, and no two the same.
     assert audit.executor == platform.placement.host
-    assert audit.principal == person(platform.owner.user_id), "steady: its starter's authority"
-    assert audit.spender == person(asker.user_id), "the person who asked pays"
+    assert audit.principal == person(steerer.user_id), "steady: its steerer's authority"
+    assert audit.spender == person(platform.owner.user_id), "the person who asked pays"
     assert audit.actor == ActorRef(
         actor=Actor.AGENT, agent=AgentRef(kind="steady", version=1, session_id=session_id)
     )
@@ -160,7 +168,7 @@ async def test_a_calls_audit_entry_holds_its_four_answers_apart(tmp_path: Path) 
         audit.actor.agent.session_id if audit.actor.agent else None,
     ]
     assert len(set(answers)) == 4
-    assert platform.lookup.ran_as == [platform.owner.user_id]
+    assert platform.lookup.ran_as == [steerer.user_id]
 
 
 async def test_an_audit_entry_refuses_one_answer_in_two_fields() -> None:
@@ -213,9 +221,11 @@ async def test_a_lapsed_principal_parks_the_call_until_a_person_takes_the_sessio
     assert (parked.park.reason, parked.park.unlock) == (ParkReason.PERSON, PRINCIPAL_PARK.unlock)
     assert platform.lookup.ran_as == [] and await audits(platform) == []
 
-    # A message from someone else lends the call no authority: the session
-    # stays parked, and a run takes nothing up.
-    other = platform.member()
+    # A message from someone else, who joins to speak, lends the call no
+    # authority: the session stays parked, and a run takes nothing up. An
+    # admin, who may take a lapsed steer.
+    other = platform.member(Role.ADMIN)
+    await platform.managers.agent_sessions.add_participant(other, session_id, other.user_id)
     await platform.say(session_id, "Please go on.", other)
     again = await platform.loops.run(platform.owner, session_id)
     assert again.end is RunEnd.IDLE
@@ -257,7 +267,7 @@ async def test_a_take_over_resumes_the_sessions_children_parked_on_its_principal
     parked = await platform.loops.run(platform.owner, child.id)
 
     assert parked.park is not None and parked.park.unlock == PRINCIPAL_PARK.unlock
-    other = platform.member()
+    other = platform.member(Role.ADMIN)
     with pytest.raises(ValidationFailed):
         await platform.managers.attribution.assign_principal(other, child.id)
     with pytest.raises(ValidationFailed):
