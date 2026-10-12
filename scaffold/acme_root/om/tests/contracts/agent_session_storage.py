@@ -186,7 +186,8 @@ class AgentSessionStorageContract:
     ) -> None:
         """With `among`, a page holds roots alone: the ones a person made or
         takes part in, and with `VISIBLE` the org-wide ones too, or every
-        root when it names no person. A sub-agent is on no such page. Who
+        root when it names no person, newest first. A sub-agent is on no
+        such page. Who
         sees a session, and who steers it, read back as written."""
         org, person = new_id(), new_id()
         made = make_session().model_copy(update={"created_by": person})
@@ -202,9 +203,11 @@ class AgentSessionStorageContract:
             org, None, None, 10, among=Among.VISIBLE, person=person
         )
         every = await storage.read_sessions(org, None, None, 10, among=Among.VISIBLE)
-        assert [s.id for s in mine] == sorted([made.id, joined.id])
-        assert [s.id for s in visible] == sorted([made.id, joined.id, seen.id])
-        assert [s.id for s in every] == sorted([made.id, joined.id, seen.id, closed.id])
+        assert [s.id for s in mine] == sorted([made.id, joined.id], reverse=True)
+        assert [s.id for s in visible] == sorted([made.id, joined.id, seen.id], reverse=True)
+        assert [s.id for s in every] == sorted(
+            [made.id, joined.id, seen.id, closed.id], reverse=True
+        )
         assert len(await storage.read_sessions(org, None, None, 10)) == 5
         assert await storage.read_session(org, joined.id) == joined
         assert await storage.read_session(org, seen.id) == seen

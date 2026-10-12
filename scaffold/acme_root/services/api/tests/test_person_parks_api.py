@@ -20,7 +20,15 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from api_support import add_member, build_container, seed_request, sign_in_as
+from api_support import (
+    PROJECT_ID,
+    add_member,
+    build_container,
+    open_account,
+    seed_request,
+    sign_in,
+    sign_in_as,
+)
 from contracts.loops import Build, Lookup, call, reply, said, use
 from contracts.sub_agents import spawn
 
@@ -108,7 +116,9 @@ class Case:
     async def started(self, headers: dict[str, str], kind: str = "steward") -> str:
         """A session on `kind`, spoken to: its loop waits for a run."""
         made = await self.client.post(
-            "/v1/agent-sessions", headers=created(headers), json={"kind": kind, "title": "t"}
+            "/v1/agent-sessions",
+            headers=created(headers),
+            json={"kind": kind, "title": "t", "project_id": PROJECT_ID},
         )
         assert made.status_code == 201, made.text
         session_id = made.json()["id"]
@@ -143,7 +153,7 @@ class Case:
         work = self.container.storage.get_work_storage()
         assert isinstance(work, WorkStorageMemoryImpl)
         items = [item for _, item in work._items.values()]  # pyright: ignore[reportPrivateUsage]
-        return len([i for i in items if i.kind is WorkKind.LOOP and str(i.target_id) == session_id])
+        return len([i for i in items if i.kind == WorkKind.LOOP and str(i.target_id) == session_id])
 
     async def runs_again(self, session_id: str, cleared: httpx.Response, runs: int) -> None:
         """The route answered the session pending, its park gone, with one
@@ -181,6 +191,15 @@ def container(tmp_path: Path, providers: ModelProvidersInterface, build: Build) 
         agent_kinds=(STEWARD, GUARDED, HAND, LEAD),
         tool_catalog=(Lookup(), Lookup("note", authorization_class=ToolClass.WRITE), build),
     )
+
+
+@pytest.fixture
+async def owner(client: httpx.AsyncClient, container: AppContainer) -> dict[str, str]:
+    """The owner, signed in, the tenant's account open: a loop's calls have
+    someone to charge."""
+    headers = await sign_in(client, container)
+    await open_account(container, headers)
+    return headers
 
 
 @pytest.fixture

@@ -22,6 +22,8 @@ from acme.integrations.model_providers import ModelProvidersInterface
 from acme.integrations.model_providers.calls import ModelCall
 from acme.integrations.model_providers.scripted import ScriptedFailure
 from acme.integrations.model_providers.types import ErrorKind, ProviderName
+from acme.om.agent_sessions.impl.manager import AgentSessionsOptions
+from acme.om.agent_sessions.rules import wakes_after
 from acme.om.agents.impl.loop import LoopOptions
 from acme.om.agents.types.run import RunEnd
 from acme.om.attribution.types.principal import Principal
@@ -291,11 +293,12 @@ async def test_a_park_on_a_key_or_an_account_says_who_acts_and_wakes_once_it_is_
     wakes = [
         item
         for _, item in work._items.values()  # pyright: ignore[reportPrivateUsage]
-        if item.kind is WorkKind.WAKE_SESSION and item.target_id == session_id
+        if item.kind == WorkKind.WAKE_SESSION and item.target_id == session_id
     ]
+    spread = AgentSessionsOptions().wake_spread
     assert [WakeSessionPayload.model_validate(w.payload).not_before for w in wakes] == [
-        park.retry_at
-    ], "the queue holds its wake until the retry time"
+        wakes_after(session_id, park, spread)
+    ], "the queue holds its wake until the retry time, and a share of the spread"
 
     loop.clock.now = park.retry_at
     await loop.managers.agent_sessions.wake_session(loop.owner, session_id, park)

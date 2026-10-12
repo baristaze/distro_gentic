@@ -14,6 +14,7 @@ from contracts.agent_session_storage import make_session
 from unit.test_placement import exec_on
 
 from acme.infra.impl.local import InfraLocalImpl
+from acme.om.attribution.types.authority import Visibility
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext, Role, TenantContext
 from acme.om.exceptions import (
@@ -633,7 +634,9 @@ async def test_only_a_principal_with_write_moves_a_session(
 ) -> None:
     owner = await an_owner(managers)
     pool = await hosts.create_pool(owner, a_pool())
-    session = await managers.agent_sessions.create_session(owner, make_session())
+    # Org-wide, so the viewer sees it: what the viewer lacks is the write.
+    shared = make_session(visibility=Visibility.ORG_WIDE)
+    session = await managers.agent_sessions.create_session(owner, shared)
     placed = await hosts.place_session(owner, session.id, pool.id)
     viewer = await a_member(managers, "ajax", Role.VIEWER)
     with pytest.raises(NotAuthorized):

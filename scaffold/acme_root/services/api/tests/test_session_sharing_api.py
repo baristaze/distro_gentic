@@ -16,7 +16,7 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from api_support import add_member, build_container, seed_request, sign_in_as
+from api_support import PROJECT_ID, add_member, build_container, seed_request, sign_in_as
 from contracts.histories import History
 
 from acme.om.agents.types.kind import AgentKind, DoneRule, TreeLimits
@@ -66,7 +66,7 @@ class Org:
         made = await self.client.post(
             "/v1/agent-sessions",
             headers=created(self.headers["ann"]),
-            json={"kind": kind, "title": "the dropped order"},
+            json={"kind": kind, "title": "the dropped order", "project_id": PROJECT_ID},
         )
         assert made.status_code == 201, made.text
         session_id = made.json()["id"]
@@ -150,7 +150,7 @@ async def test_a_sessions_history_and_artifacts_open_to_whom_it_is_visible(org: 
     assert await org.reads("ada", closed_id, closed_artifact) == (200, 200, 200)
     assert await org.listed("mia", "visible") == [open_id]
     assert await org.listed("noa", "mine") == [closed_id]
-    assert await org.listed("ada", "visible") == [open_id, closed_id]
+    assert await org.listed("ada", "visible") == [closed_id, open_id], "newest first"
     joined = await org.put("mia", f"/v1/agent-sessions/{closed_id}/participants/{org.ids['mia']}")
     assert joined.status_code == 404, "a private session is joined by whom its creator adds"
 
