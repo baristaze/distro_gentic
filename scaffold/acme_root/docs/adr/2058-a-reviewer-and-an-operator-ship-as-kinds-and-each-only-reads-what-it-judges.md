@@ -87,8 +87,9 @@ root, so every root that ships the reviewer holds the tool it names.
 
 **A role of roles is a lead.** A kind whose toolsets include
 `sub_agents` starts the others, such as an engineer on a change and a
-reviewer on its pull request, and answers with their reports. It is a
-kind like any other; no noun is added.
+reviewer on its pull request, and answers with their reports. A child
+holds no tool its lead may not call, so a lead holds the tools of every
+kind it starts. It is a kind like any other; no noun is added.
 
 **Nothing is migrated.**
 

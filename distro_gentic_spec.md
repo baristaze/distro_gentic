@@ -1009,9 +1009,10 @@ kinds the same way, as data, and the models and the rhythm follow.
 A role of roles is a kind like any other: a lead, whose toolsets include
 starting the others as sub-agents. A lead that takes a change through
 review starts an engineer on it, then a reviewer on the pull request the
-engineer opened, and answers with both reports. Each child keeps its
-own kind's powers and spends from its own share, so the lead adds no
-power and no noun.
+engineer opened, and answers with both reports. A child holds no tool
+its lead may not call, each call passes its own kind's policy and the
+lead's, and each spends from its own share, so the lead adds no power
+and no noun.
 
 The assistant's corpus is what the guideline's knowledge map lists for
 the tenant's users ([The Knowledge Map][g-kmap]), so internal text never

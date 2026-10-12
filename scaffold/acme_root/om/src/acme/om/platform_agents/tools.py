@@ -1720,7 +1720,8 @@ class ReadPullRequestImpl(NativeToolImpl):
 
 class FileAtHeadInput(PullRequestAddress):
     path: str = Field(min_length=1, max_length=MAX_PATH, pattern=ONE_LINE)
-    head: str = Field(pattern=COMMIT.pattern)  # the head read_pull_request answered
+    # The head read_pull_request answered: a commit's full id, nothing else.
+    head: str = Field(pattern=rf"^(?:{COMMIT.pattern})$")
 
     @field_validator("path")
     @classmethod

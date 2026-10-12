@@ -99,8 +99,9 @@ calls, and holds its workspace warm for a while after a loop.
   objective a person hands to an engineer.
 - **A lead** is any kind whose toolsets include `sub_agents`: it starts
   the others, such as an engineer on a change and the reviewer on its
-  pull request, and answers with their reports. It is no kind of its
-  own here.
+  pull request, and answers with their reports. It holds every tool of
+  the kinds it starts, since a child's tools are cut to its parent's. It
+  is no kind of its own here.
 - **The assistant's readers**, each a tool that reads through the asking
   person's own context: `list_sessions`, by status, park reason, and
   project, newest first; `read_session`, where one stands, each call it

@@ -420,6 +420,29 @@ async def test_a_products_kind_spawns_the_engineer_under_its_share(tmp_path: Pat
     assert [budget.amount for budget in page.items if budget.scope == own] == [ENGINEER_SHARE]
 
 
+async def test_a_lead_spawns_the_reviewer_under_its_share(tmp_path: Path) -> None:
+    """A lead that holds the reviewer's tools starts it as a sub-agent, on
+    a pull request its objective names, under the reviewer's share."""
+    lead = LEAD.model_copy(
+        update={
+            "name": "review_lead",
+            "tools": (*REVIEWER_KIND.tools, kinds.SUBMIT_RESULT),
+        }
+    )
+    platform = platform_over(tmp_path, kinds=(lead,))
+    lead_id = await platform.start(lead.name)
+    asked = Spawn(
+        id=new_id(), kind=kinds.REVIEWER, title="the review", objective="Review acme/widgets#12."
+    )
+
+    child = await platform.managers.agents.spawn(platform.owner, lead_id, asked)
+
+    assert (child.kind, child.kind_version) == (kinds.REVIEWER, REVIEWER_KIND.version)
+    page = await platform.managers.budgets.get_budgets(platform.owner, None, 50)
+    own = BudgetScope(kind=BudgetScopeKind.SESSION, key=str(child.id))
+    assert [budget.amount for budget in page.items if budget.scope == own] == [REVIEWER_SHARE]
+
+
 # Each shipped kind reaches an accepted end; the engineer's success only on
 # a passing validation at its head.
 
@@ -509,7 +532,7 @@ RENDERED = {
         kinds.PLATFORM_ASSISTANT,
         2,
     ): "763da40ce8397d462e984d71769c53e04a1fbbeb5cf3201941cd4745ec504467",
-    (kinds.REVIEWER, 1): "45319ec7f85981d68947f4c0bc22967f32810437033d12449a2cebac658cb071",
+    (kinds.REVIEWER, 1): "9169d7509ea4a5efe4731ce7d87c5fac16ed041d2cdbc8288b1b80bb847b7c3b",
     (kinds.OPERATOR, 1): "edb2ed24dffcbcd62dfaa4c05d94378097d0daf296a99cbde2ec3f65373665d4",
 }
 """Each shipped kind at the version a session starts on, and the digest of
@@ -1671,6 +1694,42 @@ async def test_a_finding_off_the_file_and_a_review_citing_no_read_are_refused(
     assert failure is ToolFailure.DENIED and "its read of the pull request" in text
     failure, text = await platform.answer(session_id, "use_made_up")
     assert failure is ToolFailure.DENIED and "names no read or finding of this session" in text
+
+
+async def test_a_reviewers_malformed_input_is_refused_before_anything_is_read(
+    tmp_path: Path,
+) -> None:
+    platform, _ = await reviewing(tmp_path)
+    session_id = await platform.start(kinds.REVIEWER)
+    await platform.say(session_id, f"Review {REVIEWED}.")
+    at = {"on": REVIEWED, "head": REVIEWED_HEAD, "grade": "low", "text": "Name it."}
+    platform.anthropic.add(
+        reply(
+            calls(
+                kinds.NOTE_FINDING,
+                "use_ref",
+                path="src/cart.py",
+                line=1,
+                **{**at, "head": f"x{REVIEWED_HEAD}"},
+            ),
+            calls(kinds.NOTE_FINDING, "use_zero", path="src/cart.py", line=0, **at),
+            calls(
+                kinds.NOTE_FINDING,
+                "use_grade",
+                path="src/cart.py",
+                line=1,
+                **{**at, "grade": "blocker"},
+            ),
+            calls(kinds.READ_PULL_REQUEST, "use_lines", on=f"{REVIEWED}\nacme/other#1"),
+        ),
+        reply(said("I could not read it.")),
+    )
+
+    await platform.managers.loop.run(platform.owner, session_id)
+
+    for malformed in ("use_ref", "use_zero", "use_grade", "use_lines"):
+        failure, _ = await platform.answer(session_id, malformed)
+        assert failure is ToolFailure.INVALID_INPUT, malformed
 
 
 async def test_a_reviewer_cannot_change_what_it_reviews(tmp_path: Path) -> None:

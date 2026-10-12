@@ -148,7 +148,7 @@ async def test_an_operator_publishes_a_version_once_its_fills_qualify(
     assert version["rows"][0]["matches"]["role"] is None
     # A row names the size it answers, and a fill the efforts an ask may
     # move it to, as the operator sent them.
-    assert [row["matches"]["size"] for row in version["rows"]] == [None, "l", "s"]
+    assert [row["matches"]["size"] for row in version["rows"]] == [None, "l", "s", "xl"]
     assert {tuple(row["fills"][0]["efforts"]) for row in version["rows"]} == {("high", "xhigh")}
     missing = {**a_version(opus), "rows": a_version(opus)["rows"][:2]}
     unsized = await client.post("/v1/admin/matrix/versions", headers=writer, json=missing)
