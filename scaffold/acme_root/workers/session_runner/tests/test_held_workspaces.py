@@ -42,14 +42,15 @@ from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, OperatorRole, RequestContext, TenantContext
 from acme.om.exceptions import ValidationFailed
-from acme.om.root import Managers, build_managers
+from acme.om.platform_agents.kinds import PROMPT_CACHE_LIFE, WARM_GRACE
+from acme.om.root import Managers, ProductKinds, build_managers
 from acme.om.steps.types.header import HASH_SCHEME, WorkspaceSnapshot
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tools.rules import snapshotted_step
 from acme.om.work.types.work_item import WorkItem, WorkKind
 from acme.om.workspaces.impl.forge import SourceControlForgeImpl
 from acme.om.workspaces.rules import SNAPSHOT_PREFIX, session_branch
-from acme.workers.session_runner.workspaces import HeldOptions, HeldWorkspacesSweep
+from acme.workers.session_runner.workspaces import Graces, HeldWorkspacesSweep
 
 GIT = shutil.which("git")
 
@@ -72,15 +73,16 @@ def forge(connected: Connected) -> SourceControlForgeImpl:
 
 
 APP = AppContext(type=AppType.WORKER, version="session-runner@test")
-GRACE = timedelta(minutes=5)
+GRACE = WARM_GRACE
+NO_PRODUCT = ProductKinds()
 DIRECTORY = IsolationSpec(mode=IsolationMode.HOST, egress=EgressPolicy(mode=EgressMode.OPEN))
 TWIN = IsolationSpec(mode=IsolationMode.TWIN, egress=EgressPolicy(mode=EgressMode.NONE))
 KEPT = TWIN.model_copy(update={"durability": Durability.SNAPSHOT})
 
 
-def worker(isolation: IsolationSpec) -> AgentKind:
+def worker(isolation: IsolationSpec, name: str = "worker") -> AgentKind:
     return AgentKind(
-        name="worker",
+        name=name,
         version=1,
         done_rule=DoneRule.ANSWER,
         authority=AuthorityMode.DELEGATED,
@@ -135,7 +137,12 @@ class Host:
     """One runner's host over memory: a tenant, its sessions, and the sweep
     on a clock the case moves."""
 
-    def __init__(self, managers: Managers, provider: WorkspaceProviderInterface) -> None:
+    def __init__(
+        self,
+        managers: Managers,
+        provider: WorkspaceProviderInterface,
+        graces: Graces = NO_PRODUCT.warm_grace,
+    ) -> None:
         self.managers = managers
         self.provider = provider
         self.clock = Clock()
@@ -147,7 +154,7 @@ class Host:
             managers.steps,
             managers.work,
             managers.tenancy,
-            HeldOptions(grace=GRACE),
+            graces,
             clock=self.clock,
         )
         self.owner: TenantContext
@@ -157,12 +164,14 @@ class Host:
             request(), "Ajax", "ajax", "ann@ajax.test", "Ann"
         )
 
-    async def run_left(self, spec: IsolationSpec) -> tuple[UUID, WorkItem, Path]:
+    async def run_left(
+        self, spec: IsolationSpec, kind: str = "worker"
+    ) -> tuple[UUID, WorkItem, Path]:
         """What a run killed mid-loop leaves: its loop item claimed, its
         writer epoch taken, and its workspace prepared, never released."""
         managers, owner = self.managers, self.owner
         session = await managers.agent_sessions.create_session(
-            owner, make_session().model_copy(update={"kind": "worker", "tools": ()})
+            owner, make_session().model_copy(update={"kind": kind, "tools": ()})
         )
         now = utcnow()
         queued = await managers.work.enqueue(
@@ -279,6 +288,44 @@ async def test_a_push_that_does_not_land_keeps_the_instance_for_the_next_pass(
     source.refuses_push = False
     assert await host.passes() == 1, "the next pass pushes it, and lets it go"
     assert await host.held() == set() and len(source.pushed) == 1
+
+
+async def test_each_instance_stays_for_its_own_kinds_grace_never_past_the_cache_life(
+    tmp_path: Path,
+) -> None:
+    """One sweep holds each instance no run accounts for as long as its
+    session's kind says: a kind that names a short grace is let go after
+    it, and one that names none after the default, the prompt cache's life.
+    No kind names a grace past that life: the slot refuses it."""
+    brief = timedelta(minutes=1)
+    with pytest.raises(ValueError, match="runs outside the prompt cache's life"):
+        ProductKinds(agents=(worker(TWIN, "brief"),), graces={"brief": PROMPT_CACHE_LIFE + brief})
+    kinds = ProductKinds(agents=(worker(TWIN, "brief"), worker(TWIN)), graces={"brief": brief})
+    assert (kinds.warm_grace("brief"), kinds.warm_grace("worker")) == (brief, PROMPT_CACHE_LIFE)
+    infra = InfraLocalImpl(tmp_path)
+    managers = build_managers(
+        StorageMemoryImpl(),
+        infra,
+        agent_kinds=kinds.agents,
+        workspace_projects=ProjectsTwin(),
+        pull_requests=PullRequestsTwin(),
+        workspace_git=GitTwin(),
+        workspace_reader=ReaderTwin(),
+    )
+    host = Host(managers, infra.get_workspaces(), kinds.warm_grace)
+    await host.start()
+    short, short_item, _ = await host.run_left(TWIN, "brief")
+    default, default_item, _ = await host.run_left(TWIN)
+    await managers.work.complete(host.owner, short_item)
+    await managers.work.complete(host.owner, default_item)
+
+    assert await host.passes() == 0, "both graces begin"
+    assert await host.passes(brief - timedelta(seconds=1)) == 0
+    assert await host.passes(timedelta(seconds=1)) == 1, "the brief kind's goes at its grace"
+    assert await host.held() == {default}
+    assert await host.passes(PROMPT_CACHE_LIFE - brief - timedelta(seconds=1)) == 0
+    assert await host.passes(timedelta(seconds=1)) == 1, "the other's at the cache's life"
+    assert await host.held() == set() and short not in await host.held()
 
 
 async def test_a_push_the_forge_refuses_waits_for_the_sessions_next_loop(

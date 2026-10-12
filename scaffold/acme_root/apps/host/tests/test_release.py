@@ -48,6 +48,7 @@ from acme.om.context import AppContext, AppType, RequestContext, TenantContext
 from acme.om.exceptions import NotAuthorized
 from acme.om.intake.types.link import Installation
 from acme.om.placement.types.work import WorkspaceOperation, WorkspacePayload
+from acme.om.platform_agents.kinds import WARM_GRACE
 from acme.om.root import Managers, PlatformPorts, ProductKinds
 from acme.om.steps.types.header import ParkReason
 from acme.om.work.types.work_item import WorkItem, WorkKind, WorkStatus
@@ -56,11 +57,11 @@ from acme.om.workspaces.rules import SNAPSHOT_PREFIX, session_branch
 from acme.services.api.seed import seed_platform
 from acme.workers.session_runner.container import RunnerContainer
 from acme.workers.session_runner.settings import SessionRunnerSettings
-from acme.workers.session_runner.workspaces import HeldOptions, HeldWorkspacesSweep
+from acme.workers.session_runner.workspaces import HeldWorkspacesSweep
 
 GIT = shutil.which("git")
 APP = AppContext(type=AppType.WORKER, version="session-runner@test")
-GRACE = timedelta(minutes=5)
+GRACE = WARM_GRACE
 KIND = assistant()
 SETTINGS = SessionRunnerSettings.model_validate(
     {"_env_file": None, "environment": "test", "runner_id": "runner-release"}
@@ -201,7 +202,12 @@ class Placed:
         return asked if payload.operation is WorkspaceOperation.RELEASE else None
 
 
-async def placed(api: Stack, tmp_path: Path, remote: Path) -> Placed:
+async def placed(
+    api: Stack, tmp_path: Path, remote: Path, grace: timedelta | None = None
+) -> Placed:
+    """A session of `KIND` placed on a host of a pool, its workspace there
+    holding work, and the sweep over it. `grace` is the kind's warm grace;
+    None takes the default."""
     assert GIT is not None
     projects = ProjectsTwin(repository=str(remote))
     forge = IntegrationTwinImpl("forge", writes=True)
@@ -216,7 +222,11 @@ async def placed(api: Stack, tmp_path: Path, remote: Path) -> Placed:
         ),
         ports=PlatformPorts(
             workspace_projects=projects,
-            kinds=ProductKinds(agents=(KIND,), tools=lambda _managers: TOOLS),
+            kinds=ProductKinds(
+                agents=(KIND,),
+                tools=lambda _managers: TOOLS,
+                graces={} if grace is None else {KIND.name: grace},
+            ),
         ),
     )
     managers, owner = runner.managers, api.owner
@@ -266,7 +276,7 @@ async def placed(api: Stack, tmp_path: Path, remote: Path) -> Placed:
         managers.steps,
         managers.work,
         managers.tenancy,
-        HeldOptions(grace=GRACE),
+        runner.kinds.warm_grace,
         clock=clock,
         relay=managers.relay,
     )
@@ -393,6 +403,26 @@ async def test_after_a_loop_ends_the_sweep_lets_its_instance_go_with_no_second_s
     assert run.session_id not in await run.held()
     assert run.refs() == [kept], "no second ref of the same work"
     assert await run.notices() == 1, "no second notice"
+
+
+@pytest.mark.skipif(GIT is None, reason="git is not on this host")
+async def test_after_a_loop_ends_its_hosted_instance_stays_warm_for_its_kinds_grace(
+    api: Stack, tmp_path: Path, remote: Path
+) -> None:
+    """A loop's end leaves its instance warm on its host for its kind's own
+    grace, read from its session's kind, and the sweep lets it go then."""
+    grace = timedelta(minutes=2)
+    run = await placed(api, tmp_path, remote, grace)
+    managers, owner = run.managers, run.owner
+    await pumped(run.host, managers.tools.release_workspace(owner, run.workspace))
+    await managers.work.complete(owner, run.item)
+
+    assert await run.passes() == 0, "its grace begins"
+    assert await run.passes(grace - timedelta(seconds=1)) == 0
+    assert run.session_id in await run.held()
+    assert await run.passes(timedelta(seconds=1)) == 1, "it goes at its kind's grace"
+    await run.answers()
+    assert run.session_id not in await run.held()
 
 
 @pytest.mark.skipif(GIT is None, reason="git is not on this host")

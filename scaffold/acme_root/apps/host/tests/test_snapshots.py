@@ -64,6 +64,7 @@ from acme.om.context import (
 )
 from acme.om.hosts.impl.manager import HostsOptions
 from acme.om.relay.impl.workspaces import PlacedWorkspacesRelayedImpl
+from acme.om.root import ProductKinds
 from acme.om.steps.types.header import HASH_SCHEME, ParkReason, WorkspaceSnapshot
 from acme.om.tenancy.rules import permissions_of
 from acme.om.tools.impl.snapshots import session_prefix
@@ -75,7 +76,7 @@ from acme.om.watch.root import build_watch
 from acme.om.watch.types.control import HandCommand
 from acme.om.work.types.work_item import WorkKind, WorkStatus
 from acme.om.workspaces.types.snapshot import HostSnapshot, KeptSnapshot
-from acme.workers.session_runner.workspaces import HeldOptions, HeldWorkspacesSweep
+from acme.workers.session_runner.workspaces import HeldWorkspacesSweep
 
 KEPT = IsolationSpec(
     mode=IsolationMode.CONTAINER,
@@ -485,7 +486,7 @@ async def test_the_sweep_keeps_a_kept_sessions_hosted_instance_that_no_snapshot_
         managers.steps,
         managers.work,
         managers.tenancy,
-        HeldOptions(grace=timedelta(minutes=5)),
+        ProductKinds().warm_grace,
         clock=lambda: now[0],
         relay=managers.relay,
     )

@@ -25,19 +25,31 @@ engine runs every one of them the same way.
   applies, and hands engineering work to an engineer. It has no
   workspace, repository, or shell.
 
+Every kind is built from the platform's toolsets (`TOOLSETS`), with a few
+tools named alone where a toolset would give it more than it may call. It
+asks a model size of each model role it calls (`ASKS`), and carries its
+warm grace (`GRACES`): how long its workspace stays held after a loop for
+a follow-up.
+
 A validation session is not here: it runs a check with no agent at all
 (`types/validation.py`). Nothing routes a message to one kind or another:
 a person chooses by choosing the session they type in."""
+
+from collections.abc import Mapping
+from datetime import timedelta
+from typing import Any
 
 from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
 from acme.om.agent_sessions.limits import Limits
 from acme.om.agents.types.kind import NO_WORKSPACE, AgentKind, DoneRule
 from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.budgets.types.amount import Amount
+from acme.om.models.types.fill import MAIN, SUMMARIZER, ModelAsk, ModelSize
 from acme.om.tools.native.spawn_sub_agent import SPAWN_SUB_AGENT
 from acme.om.tools.native.wait_for_sub_agents import WAIT_FOR_SUB_AGENTS
 from acme.om.tools.types.policy import Decision, PolicyLayer, PolicyRule
 from acme.om.tools.types.tool import ToolClass
+from acme.om.tools.types.toolset import Toolset
 from acme.om.windows.rules import READ_ARTIFACT
 
 ENGINEER = "engineer"
@@ -69,6 +81,111 @@ READ_PROJECT = "read_project"
 LIST_AUTOMATIONS = "list_automations"
 READ_AUTOMATION = "read_automation"
 
+ASSISTANT_READERS = (
+    READ_SESSION,
+    LIST_SESSIONS,
+    READ_WAIT,
+    LIST_PROJECTS,
+    READ_PROJECT,
+    LIST_AUTOMATIONS,
+    READ_AUTOMATION,
+)
+"""The assistant's readers of the tenant's live records, each through the
+asking person's own context."""
+
+# The platform's toolsets: each a group of tools a kind takes whole. A tool
+# a toolset holds that a kind may not call keeps the kind off that toolset,
+# and the kind names the tools it may call alone.
+
+FILES_TOOLSET = Toolset(
+    name="files",
+    version=1,
+    summary="List, read, and search the files in your workspace.",
+    tools=(LIST_FILES, READ_FILE, SEARCH_CODE),
+)
+CODE_TOOLSET = Toolset(
+    name="code",
+    version=1,
+    summary="Change the files in your workspace, one place at a time or whole, and run commands.",
+    tools=(EDIT_FILE, WRITE_FILE, RUN_COMMAND),
+)
+KNOWLEDGE_TOOLSET = Toolset(
+    name="knowledge",
+    version=1,
+    summary="Search and read what your team already knows.",
+    tools=(SEARCH_KNOWLEDGE, READ_KNOWLEDGE),
+)
+DELIVERY_TOOLSET = Toolset(
+    name="delivery",
+    version=1,
+    summary="Validate your change, open its pull request, and submit your result.",
+    tools=(VALIDATE, OPEN_PULL_REQUEST, SUBMIT_RESULT),
+)
+SUB_AGENTS_TOOLSET = Toolset(
+    name="sub_agents",
+    version=1,
+    summary="Start a sub-agent on a question of its own, and wait for the reports.",
+    tools=(SPAWN_SUB_AGENT, WAIT_FOR_SUB_AGENTS),
+)
+RECORDS_TOOLSET = Toolset(
+    name="records",
+    version=1,
+    summary="Read the tenant's sessions and what they wait on, its projects, and its automations.",
+    tools=ASSISTANT_READERS,
+)
+HANDOFF_TOOLSET = Toolset(
+    name="handoff",
+    version=1,
+    summary="Hand engineering work to an engineer, in a session of its own.",
+    tools=(HAND_OFF,),
+)
+ARTIFACTS_TOOLSET = Toolset(
+    name="artifacts",
+    version=1,
+    summary="Read back a result kept outside your window, by the handle its notice names.",
+    tools=(READ_ARTIFACT,),
+)
+
+TOOLSETS: tuple[Toolset, ...] = (
+    FILES_TOOLSET,
+    CODE_TOOLSET,
+    KNOWLEDGE_TOOLSET,
+    DELIVERY_TOOLSET,
+    SUB_AGENTS_TOOLSET,
+    RECORDS_TOOLSET,
+    HANDOFF_TOOLSET,
+    ARTIFACTS_TOOLSET,
+)
+"""The platform's catalog of toolsets, which a product's kinds name as the
+platform's do. A product adds toolsets of its own beside them
+(`ProductKinds.toolsets`) and never changes one of these."""
+
+ASKS = (ModelAsk(role=MAIN, size=ModelSize.L), ModelAsk(role=SUMMARIZER, size=ModelSize.S))
+"""What every shipped kind asks of its two model roles: L of its own turns
+and S of its compaction, each at its fill's own effort. They are the sizes
+of the models those roles ran on before any kind asked."""
+
+PROMPT_CACHE_LIFE = timedelta(minutes=5)
+"""How long a provider the platform calls keeps a request's cached prefix
+after its last use, at the shortest of them. A follow-up later than this
+writes its prefix again, so holding a workspace for it saves little: no
+kind's warm grace runs past it."""
+
+WARM_GRACE = PROMPT_CACHE_LIFE
+"""The warm grace of a kind that names none."""
+
+GRACES: Mapping[str, timedelta] = {ENGINEER: PROMPT_CACHE_LIFE, ANALYSIS: PROMPT_CACHE_LIFE}
+"""Each shipped kind's warm grace, by name, every version of it: how long
+its workspace stays held after a loop, for a follow-up to find it warm. The
+planner and the assistant have no workspace to hold."""
+
+
+def revised(kind: AgentKind, **update: Any) -> AgentKind:
+    """`kind` with `update`, built again, so a toolset it adds folds into
+    its tools as it does in a kind declared whole."""
+    return AgentKind.model_validate({**dict(kind), **update})
+
+
 WORKSPACE = IsolationSpec(mode=IsolationMode.CONTAINER, egress=EgressPolicy(mode=EgressMode.NONE))
 """A container of its own, from which nothing leaves: the workspace of the
 kinds that change or read files and run code."""
@@ -85,15 +202,9 @@ def allowing(*classes: ToolClass) -> PolicyLayer:
 ENGINEER_V1 = AgentKind(
     name=ENGINEER,
     version=1,
-    tools=(
-        LIST_FILES,
-        READ_FILE,
-        WRITE_FILE,
-        RUN_COMMAND,
-        VALIDATE,
-        OPEN_PULL_REQUEST,
-        SUBMIT_RESULT,
-    ),
+    tools=(LIST_FILES, READ_FILE, WRITE_FILE, RUN_COMMAND),
+    toolsets=(DELIVERY_TOOLSET,),
+    asks=ASKS,
     done_rule=DoneRule.RESULT_TOOL,
     result_tool=SUBMIT_RESULT,
     authority=AuthorityMode.STEADY,
@@ -117,20 +228,9 @@ the knowledge base: kept while a session may still run it."""
 ENGINEER_V2 = AgentKind(
     name=ENGINEER,
     version=2,
-    tools=(
-        LIST_FILES,
-        READ_FILE,
-        SEARCH_CODE,
-        EDIT_FILE,
-        WRITE_FILE,
-        RUN_COMMAND,
-        SEARCH_KNOWLEDGE,
-        READ_KNOWLEDGE,
-        SUGGEST_KNOWLEDGE,
-        VALIDATE,
-        OPEN_PULL_REQUEST,
-        SUBMIT_RESULT,
-    ),
+    tools=(SUGGEST_KNOWLEDGE,),
+    toolsets=(FILES_TOOLSET, CODE_TOOLSET, KNOWLEDGE_TOOLSET, DELIVERY_TOOLSET),
+    asks=ASKS,
     done_rule=DoneRule.RESULT_TOOL,
     result_tool=SUBMIT_RESULT,
     authority=AuthorityMode.STEADY,
@@ -215,36 +315,20 @@ ENGINEER_SPLITS = (
 splits off runs as analysis, under analysis's share, and not as another
 engineer."""
 
-ENGINEER_V5 = ENGINEER_V4.model_copy(
-    update={
-        "version": 5,
-        "tools": (
-            LIST_FILES,
-            READ_FILE,
-            SEARCH_CODE,
-            EDIT_FILE,
-            WRITE_FILE,
-            RUN_COMMAND,
-            SEARCH_KNOWLEDGE,
-            READ_KNOWLEDGE,
-            SUGGEST_KNOWLEDGE,
-            SPAWN_SUB_AGENT,
-            WAIT_FOR_SUB_AGENTS,
-            VALIDATE,
-            OPEN_PULL_REQUEST,
-            SUBMIT_RESULT,
-        ),
-        "prompts": (*ENGINEER_V4.prompts, SUB_AGENTS, ENGINEER_SPLITS),
-        # A sub-agent's calls are still decided under its own kind's
-        # policy and under this one, and the strictest holds.
-        "policy": allowing(
-            ToolClass.READ,
-            ToolClass.WRITE,
-            ToolClass.EXECUTE,
-            ToolClass.INTEGRATION,
-            ToolClass.SPAWN,
-        ),
-    }
+ENGINEER_V5 = revised(
+    ENGINEER_V4,
+    version=5,
+    toolsets=(*ENGINEER_V4.toolsets, SUB_AGENTS_TOOLSET),
+    prompts=(*ENGINEER_V4.prompts, SUB_AGENTS, ENGINEER_SPLITS),
+    # A sub-agent's calls are still decided under its own kind's policy and
+    # under this one, and the strictest holds.
+    policy=allowing(
+        ToolClass.READ,
+        ToolClass.WRITE,
+        ToolClass.EXECUTE,
+        ToolClass.INTEGRATION,
+        ToolClass.SPAWN,
+    ),
 )
 """The engineer before it took a baseline again when its base moved: kept
 while a session may still run it."""
@@ -263,9 +347,7 @@ ENGINEER_V6 = ENGINEER_V5.model_copy(
 """The engineer before it read back a result kept outside its window:
 kept while a session may still run it."""
 
-ENGINEER_V7 = ENGINEER_V6.model_copy(
-    update={"version": 7, "tools": (*ENGINEER_V6.tools, READ_ARTIFACT)}
-)
+ENGINEER_V7 = revised(ENGINEER_V6, version=7, toolsets=(*ENGINEER_V6.toolsets, ARTIFACTS_TOOLSET))
 """The engineer before its workspace started from its project's
 environment: kept while a session may still run it."""
 
@@ -297,6 +379,7 @@ ANALYSIS_V1 = AgentKind(
     name=ANALYSIS,
     version=1,
     tools=(LIST_FILES, READ_FILE, RUN_COMMAND),
+    asks=ASKS,
     done_rule=DoneRule.ANSWER,
     authority=AuthorityMode.STEADY,
     prompts=(
@@ -313,7 +396,10 @@ while a session may still run it."""
 ANALYSIS_V2 = AgentKind(
     name=ANALYSIS,
     version=2,
-    tools=(LIST_FILES, READ_FILE, SEARCH_CODE, RUN_COMMAND, SEARCH_KNOWLEDGE, READ_KNOWLEDGE),
+    # It runs commands and changes no file, so it names its shell alone.
+    tools=(RUN_COMMAND,),
+    toolsets=(FILES_TOOLSET, KNOWLEDGE_TOOLSET),
+    asks=ASKS,
     done_rule=DoneRule.ANSWER,
     authority=AuthorityMode.STEADY,
     prompts=(
@@ -347,21 +433,18 @@ ANALYSIS_WAITS = (
 """Analysis's layer on its sub-agents: it answers with a turn that calls no
 tool, so it waits for every report before that turn."""
 
-ANALYSIS_V3 = ANALYSIS_V2.model_copy(
-    update={
-        "version": 3,
-        "tools": (*ANALYSIS_V2.tools, SPAWN_SUB_AGENT, WAIT_FOR_SUB_AGENTS),
-        "prompts": (*ANALYSIS_V2.prompts, SUB_AGENTS, ANALYSIS_WAITS),
-        "policy": allowing(ToolClass.READ, ToolClass.EXECUTE, ToolClass.SPAWN),
-        "share": ANALYSIS_SHARE,
-    }
+ANALYSIS_V3 = revised(
+    ANALYSIS_V2,
+    version=3,
+    toolsets=(*ANALYSIS_V2.toolsets, SUB_AGENTS_TOOLSET),
+    prompts=(*ANALYSIS_V2.prompts, SUB_AGENTS, ANALYSIS_WAITS),
+    policy=allowing(ToolClass.READ, ToolClass.EXECUTE, ToolClass.SPAWN),
+    share=ANALYSIS_SHARE,
 )
 """Analysis before it read back a result kept outside its window: kept
 while a session may still run it."""
 
-ANALYSIS_KIND = ANALYSIS_V3.model_copy(
-    update={"version": 4, "tools": (*ANALYSIS_V3.tools, READ_ARTIFACT)}
-)
+ANALYSIS_KIND = revised(ANALYSIS_V3, version=4, toolsets=(*ANALYSIS_V3.toolsets, ARTIFACTS_TOOLSET))
 """Analysis. It starts sub-agents of its own, and a spawn may start it, the
 way an engineer splits a question, so it names a share. A result too large
 for its window, or one compaction elided, it reads back with
@@ -370,7 +453,10 @@ for its window, or one compaction elided, it reads back with
 PLANNER_KIND = AgentKind(
     name=PLANNER,
     version=1,
-    tools=(READ_SESSION, HAND_OFF),
+    # It reads one session, never the tenant's other records.
+    tools=(READ_SESSION,),
+    toolsets=(HANDOFF_TOOLSET,),
+    asks=ASKS,
     done_rule=DoneRule.ANSWER,
     authority=AuthorityMode.STEADY,
     prompts=(
@@ -386,7 +472,9 @@ PLANNER_KIND = AgentKind(
 PLATFORM_ASSISTANT_V1 = AgentKind(
     name=PLATFORM_ASSISTANT,
     version=1,
-    tools=(SEARCH_CORPUS, READ_SESSION, DRAFT_TOOL_POLICY, HAND_OFF),
+    tools=(SEARCH_CORPUS, READ_SESSION, DRAFT_TOOL_POLICY),
+    toolsets=(HANDOFF_TOOLSET,),
+    asks=ASKS,
     done_rule=DoneRule.ANSWER,
     authority=AuthorityMode.DELEGATED,
     prompts=(
@@ -405,29 +493,12 @@ PLATFORM_ASSISTANT_V1 = AgentKind(
 and automations, and its knowledge: kept while a session may still run
 it."""
 
-ASSISTANT_READERS = (
-    READ_SESSION,
-    LIST_SESSIONS,
-    READ_WAIT,
-    LIST_PROJECTS,
-    READ_PROJECT,
-    LIST_AUTOMATIONS,
-    READ_AUTOMATION,
-)
-"""The assistant's readers of the tenant's live records, each through the
-asking person's own permissions."""
-
 PLATFORM_ASSISTANT_KIND = AgentKind(
     name=PLATFORM_ASSISTANT,
     version=2,
-    tools=(
-        SEARCH_CORPUS,
-        SEARCH_KNOWLEDGE,
-        READ_KNOWLEDGE,
-        *ASSISTANT_READERS,
-        DRAFT_TOOL_POLICY,
-        HAND_OFF,
-    ),
+    tools=(SEARCH_CORPUS, DRAFT_TOOL_POLICY),
+    toolsets=(KNOWLEDGE_TOOLSET, RECORDS_TOOLSET, HANDOFF_TOOLSET),
+    asks=ASKS,
     done_rule=DoneRule.ANSWER,
     authority=AuthorityMode.DELEGATED,
     prompts=(
