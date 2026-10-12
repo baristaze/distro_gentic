@@ -2,7 +2,7 @@ import { expect, it } from "vitest";
 import type { ParkView } from "@acme/client";
 import { noticeLine, outageNotices } from "./outageModel";
 
-const parked = (unlock: string, retry_at: string | null = null, reason: ParkView["reason"] = "provider") => ({ park: { reason, unlock, retry_at } });
+const parked = (unlock: string, retry_at: string | null = null, reason: ParkView["reason"] = "provider") => ({ park: { reason, unlock, retry_at, cause: null } });
 const when = (iso: string) => iso.slice(11, 16);
 
 it("says nothing when no session waits on a provider", () => {

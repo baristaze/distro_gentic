@@ -22,10 +22,13 @@ function session(id: string, over: Partial<AgentSessionView> = {}): AgentSession
     created_at: `2026-10-05T10:${String(clock).padStart(2, "0")}:00Z`,
     archived_at: null,
     deleted_at: null,
+    visibility: "private",
+    participants: [],
+    steerer: "u1",
     ...over,
   };
 }
-const park = (reason: ParkView["reason"], unlock: string): ParkView => ({ reason, unlock, retry_at: null });
+const park = (reason: ParkView["reason"], unlock: string): ParkView => ({ reason, unlock, retry_at: null, cause: null });
 const ids = (rows: readonly ShellRow[]) => rows.map((row) => row.id);
 const options = { filter: DEFAULT_FILTER, me: "u1" };
 

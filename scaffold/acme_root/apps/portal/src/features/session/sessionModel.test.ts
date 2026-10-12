@@ -27,6 +27,9 @@ const session: AgentSessionView = {
   created_by: "u1",
   archived_at: null,
   deleted_at: null,
+  visibility: "private",
+  participants: [],
+  steerer: "u1",
 };
 
 describe("status and parks", () => {
@@ -36,11 +39,11 @@ describe("status and parks", () => {
   });
 
   it("says why a park waits, what clears it, and the action a person takes", () => {
-    expect(parkLine({ reason: "person", unlock: "approval", retry_at: null })).toMatchObject({ action: "decide", unlock: "a decision on the call it holds" });
-    expect(parkLine({ reason: "person", unlock: "step_guard", retry_at: null })).toMatchObject({ action: "unlock", unlock: "lifting its step guard" });
-    expect(parkLine({ reason: "handover", unlock: "give_back", retry_at: null }).action).toBe("give_back");
-    expect(parkLine({ reason: "pause", unlock: "resume", retry_at: null }).action).toBe("resume");
-    expect(parkLine({ reason: "provider", unlock: "provider", retry_at: at })).toMatchObject({ action: null, retryAt: at });
+    expect(parkLine({ reason: "person", unlock: "approval", retry_at: null, cause: null })).toMatchObject({ action: "decide", unlock: "a decision on the call it holds" });
+    expect(parkLine({ reason: "person", unlock: "step_guard", retry_at: null, cause: null })).toMatchObject({ action: "unlock", unlock: "lifting its step guard" });
+    expect(parkLine({ reason: "handover", unlock: "give_back", retry_at: null, cause: null }).action).toBe("give_back");
+    expect(parkLine({ reason: "pause", unlock: "resume", retry_at: null, cause: null }).action).toBe("resume");
+    expect(parkLine({ reason: "provider", unlock: "provider", retry_at: at, cause: null })).toMatchObject({ action: null, retryAt: at });
   });
 
 });
@@ -107,8 +110,8 @@ describe("what a person may do", () => {
   it("offers pause while it runs, resume while paused, and give back while a person has control", () => {
     expect(allowed({ ...session, status: "running" }, true)).toMatchObject({ pause: true, resume: false, cancel: true, archive: false });
     expect(allowed({ ...session, status: "pending" }, true)).toMatchObject({ pause: true, resume: false, cancel: true, archive: false });
-    expect(allowed({ ...session, status: "parked", park: { reason: "pause", unlock: "resume", retry_at: null } }, true)).toMatchObject({ resume: true, pause: false });
-    expect(allowed({ ...session, status: "parked", park: { reason: "handover", unlock: "give_back", retry_at: null } }, true)).toMatchObject({
+    expect(allowed({ ...session, status: "parked", park: { reason: "pause", unlock: "resume", retry_at: null, cause: null } }, true)).toMatchObject({ resume: true, pause: false });
+    expect(allowed({ ...session, status: "parked", park: { reason: "handover", unlock: "give_back", retry_at: null, cause: null } }, true)).toMatchObject({
       giveBack: true,
       takeControl: false,
       send: false,
@@ -117,7 +120,7 @@ describe("what a person may do", () => {
   });
 
   it("lets a person send at any time, running or not, until a person takes control", () => {
-    const parked = (reason: "pause" | "handover", unlock: "resume" | "give_back") => ({ ...session, status: "parked" as const, park: { reason, unlock, retry_at: null } });
+    const parked = (reason: "pause" | "handover", unlock: "resume" | "give_back") => ({ ...session, status: "parked" as const, park: { reason, unlock, retry_at: null, cause: null } });
     expect(allowed({ ...session, status: "running" }, true).send).toBe(true);
     expect(allowed({ ...session, status: "pending" }, true).send).toBe(true);
     expect(allowed(parked("pause", "resume"), true).send).toBe(true);

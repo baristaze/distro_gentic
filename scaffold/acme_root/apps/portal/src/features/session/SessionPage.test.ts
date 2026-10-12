@@ -45,6 +45,9 @@ const sessionOf = (id: string, title: string): AgentSessionView => ({
   created_by: "u1",
   archived_at: null,
   deleted_at: null,
+  visibility: "private",
+  participants: [],
+  steerer: "u1",
 });
 const HELD = { a: sessionOf("sa", "Ajax's own session"), b: sessionOf("sb", "Beta's own session") };
 
@@ -72,6 +75,11 @@ const step = (seq: number, fields: Partial<StepView>): StepView => ({
   tool: null,
   tools: [],
   usage: null,
+  cause: null,
+  author: null,
+  participant: false,
+  steerer: null,
+  visibility: null,
   ...fields,
 });
 
@@ -253,7 +261,7 @@ describe("the org's own session", () => {
   });
 
   it("draws a held call as an action card whose Approve sends the decision on that call", async () => {
-    net.over = { status: "parked", park: { reason: "person", unlock: "approval", retry_at: null } };
+    net.over = { status: "parked", park: { reason: "person", unlock: "approval", retry_at: null, cause: null } };
     net.held = [{ seq: 3, session_id: "sa", tool: "run_command", authorization_class: "execute", principal_id: "u1", requested_at: at }];
     await open("a", "/sessions/sa", [
       step(1, { type: "message", actor: "person", origin: "portal", text: "Run the tests." }),
@@ -340,7 +348,7 @@ describe("the org's own session", () => {
   });
 
   it("says a person has control in place of Send while they hold it", async () => {
-    net.over = { status: "parked", park: { reason: "handover", unlock: "give_back", retry_at: null } };
+    net.over = { status: "parked", park: { reason: "handover", unlock: "give_back", retry_at: null, cause: null } };
     await open("a", "/sessions/sa");
     expect(container.querySelector("form[aria-label='Send a message']")).toBeNull();
     expect(container.querySelector(".acme-session-composer")!.textContent).toBe("A person has control: the agent reads what they did once they give it back.");

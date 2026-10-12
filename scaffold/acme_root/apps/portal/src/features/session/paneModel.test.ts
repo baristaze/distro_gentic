@@ -238,7 +238,7 @@ describe("what the platform's tabs read from the calls", () => {
 });
 
 it("groups a session's sub-agents by where each stands: needs you, working, done", () => {
-  const child = (id: string, status: "running" | "parked" | "idle", park: { reason: "person" | "budget"; unlock: string; retry_at: null } | null = null) => ({
+  const child = (id: string, status: "running" | "parked" | "idle", park: { reason: "person" | "budget"; unlock: string; retry_at: null, cause: null } | null = null) => ({
     id,
     title: id,
     kind: "analysis",
@@ -251,8 +251,8 @@ it("groups a session's sub-agents by where each stands: needs you, working, done
   });
   const groups = childGroups([
     child("reads", "running"),
-    child("asks", "parked", { reason: "person", unlock: "answer", retry_at: null }),
-    child("spends", "parked", { reason: "budget", unlock: "budget", retry_at: null }),
+    child("asks", "parked", { reason: "person", unlock: "answer", retry_at: null, cause: null }),
+    child("spends", "parked", { reason: "budget", unlock: "budget", retry_at: null, cause: null }),
     child("done", "idle"),
   ]);
   expect(groups.map((group) => [group.label, group.children.map((one) => one.id)])).toEqual([

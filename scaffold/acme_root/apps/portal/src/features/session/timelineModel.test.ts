@@ -36,6 +36,11 @@ function step(fields: Partial<StepView> & Pick<StepView, "type">, second = seq):
     tool: null,
     tools: [],
     usage: null,
+    cause: null,
+    author: null,
+    participant: false,
+    steerer: null,
+    visibility: null,
     ...fields,
   };
 }
@@ -158,7 +163,7 @@ describe("timeline", () => {
     const steps = turn().slice(0, 3);
     const ran = steps[2]!;
     const { entries, status } = read(steps, {
-      session: { status: "parked", park: { reason: "person", unlock: "approval", retry_at: null }, archived_at: null },
+      session: { status: "parked", park: { reason: "person", unlock: "approval", retry_at: null, cause: null }, archived_at: null },
       held: [{ seq: ran.seq, tool: "run_command", authorization_class: "execute" }],
     });
     expect(kinds(entries)).toEqual(["thought", "prose", "action"]);
@@ -172,7 +177,7 @@ describe("timeline", () => {
     const decided = read(steps, { session: { status: "running", park: null, archived_at: null }, held: stale });
     expect(kinds(decided.entries)).toEqual(["thought", "prose", "work"]);
     expect(decided.status).toEqual({ text: "Running `pytest -q`", needsYou: false, working: true, open: null });
-    const paused = read(steps, { session: { status: "parked", park: { reason: "pause", unlock: "resume", retry_at: null }, archived_at: null }, held: stale });
+    const paused = read(steps, { session: { status: "parked", park: { reason: "pause", unlock: "resume", retry_at: null, cause: null }, archived_at: null }, held: stale });
     expect(kinds(paused.entries)).not.toContain("action");
     expect(paused.status.text).not.toMatch(/approve/);
   });
@@ -182,8 +187,8 @@ describe("timeline", () => {
     const asks = response(asked, 1, { tool_uses: [toolUse("q1", "ask_person", { question: "Shall I add a leap-year test too?" })] });
     const made = call(asks, "q1", "ask_person", 2);
     const echoed = answer(made, JSON.stringify({ question: "Shall I add a leap-year test too?" }), 2);
-    const parked = step({ type: "parked", park: { reason: "person", unlock: "answer", retry_at: null } }, 3);
-    const session = { status: "parked" as const, park: { reason: "person" as const, unlock: "answer", retry_at: null }, archived_at: null };
+    const parked = step({ type: "parked", park: { reason: "person", unlock: "answer", retry_at: null, cause: null } }, 3);
+    const session = { status: "parked" as const, park: { reason: "person" as const, unlock: "answer", retry_at: null, cause: null }, archived_at: null };
     const open = read([asked, asks, made, echoed, parked], { session });
     expect(only(open.entries, "ask")).toMatchObject({ question: "Shall I add a leap-year test too?", open: true });
     expect(open.status).toEqual({ text: "Needs you: answer the agent's question", needsYou: true, working: false, open: null });
@@ -192,8 +197,8 @@ describe("timeline", () => {
   });
 
   it("draws a park only a person clears as the agent's ask that holds its unlock, which no message answers", () => {
-    const parked = step({ type: "parked", park: { reason: "person", unlock: "step_guard", retry_at: null } }, 3);
-    const session = { status: "parked" as const, park: { reason: "person" as const, unlock: "step_guard", retry_at: null }, archived_at: null };
+    const parked = step({ type: "parked", park: { reason: "person", unlock: "step_guard", retry_at: null, cause: null } }, 3);
+    const session = { status: "parked" as const, park: { reason: "person" as const, unlock: "step_guard", retry_at: null, cause: null }, archived_at: null };
     const { entries, status } = read([...turn(), parked], { session });
     const ask = entries[entries.length - 1]!;
     expect(ask).toMatchObject({ kind: "ask", open: true, unlock: "step_guard", line: null });
@@ -242,7 +247,7 @@ describe("timeline", () => {
   it("draws a control, a park, a resume, and the loop's end as thin lines", () => {
     const { entries } = read([
       step({ type: "control", actor: "person", command: "pause" }, 0),
-      step({ type: "parked", park: { reason: "resource", unlock: "workspace", retry_at: "2026-10-05T10:42:00Z" } }, 1),
+      step({ type: "parked", park: { reason: "resource", unlock: "workspace", retry_at: "2026-10-05T10:42:00Z", cause: null } }, 1),
       step({ type: "resumed" }, 2),
       step({ type: "control", actor: "person", command: "deny", text: "Leave the migrations alone" }, 3),
       step({ type: "loop_ended", outcome: "succeeded" }, 252),
@@ -326,7 +331,7 @@ const PARENT = "0a1b2c3d-0000-4000-8000-0000000000ff";
 function child(id: string, title: string, fields: Partial<ChildState> = {}): ChildState {
   return { id, title, kind: "analysis", status: "running", park: null, archived_at: null, created_at: at(10), activity: null, waits: null, ...fields };
 }
-const asksPerson = { reason: "person" as const, unlock: "answer", retry_at: null };
+const asksPerson = { reason: "person" as const, unlock: "answer", retry_at: null, cause: null };
 const READS = child(C1, "Read how the other parsers take a date", { activity: "Running `pytest -q`" });
 const CHECKS = child(C2, "Check every caller of parse", { status: "parked", park: asksPerson, activity: "Needs you: answer the agent's question" });
 
@@ -354,7 +359,7 @@ function report(id: string, title: string, standing: string, said: string | null
   return step({ type: "message", actor: "agent", origin: "engine", agent: { kind: "analysis", session_id: id }, text }, second);
 }
 
-const onChildren = { status: "parked" as const, park: { reason: "children" as const, unlock: "children", retry_at: null }, archived_at: null };
+const onChildren = { status: "parked" as const, park: { reason: "children" as const, unlock: "children", retry_at: null, cause: null }, archived_at: null };
 
 describe("sub-agents", () => {
   it("draws the sub-agents one response started as one card, a row each following its child live", () => {
@@ -522,7 +527,7 @@ describe("the outline", () => {
     const pr = response(asked, 21, { tool_uses: [toolUse("p1", "open_pull_request", { title: "Read a date day first", body: "Fixes it." })] });
     const opened = call(pr, "p1", "open_pull_request", 22);
     const { entries } = read([said("Fix the failing test"), ...steps, asked, pr, opened, answer(opened, "{}", 23)], {
-      session: { status: "parked", park: { reason: "person", unlock: "approval", retry_at: null }, archived_at: null },
+      session: { status: "parked", park: { reason: "person", unlock: "approval", retry_at: null, cause: null }, archived_at: null },
       held: [{ seq: ran.seq, tool: "run_command", authorization_class: "execute" }],
     });
     expect(outline(entries).map((mark) => [mark.kind, mark.label])).toEqual([

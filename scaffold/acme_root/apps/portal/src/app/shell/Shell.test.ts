@@ -47,6 +47,9 @@ const session = (id: string, over: Partial<AgentSessionView> = {}): AgentSession
   created_at: at,
   archived_at: null,
   deleted_at: null,
+  visibility: "private",
+  participants: [],
+  steerer: "u1",
   ...over,
 });
 
@@ -192,7 +195,7 @@ it("says there are no sessions yet, and reads no held call while none waits", as
 
 it("groups the sessions into Needs you, Running, and Recent, a sub-agent under its parent, the held tool named", async () => {
   net.sessions = [
-    session("asks", { status: "parked", park: { reason: "person", unlock: "approval", retry_at: null } }),
+    session("asks", { status: "parked", park: { reason: "person", unlock: "approval", retry_at: null, cause: null } }),
     session("runs", { status: "running" }),
     session("child", { parent_id: "runs", root_id: "runs", status: "running" }),
     session("done"),
@@ -209,9 +212,9 @@ it("groups the sessions into Needs you, Running, and Recent, a sub-agent under i
 
 it("folds a parent row's sub-agents, saying how many and how many need the person, and keeps the fold", async () => {
   net.sessions = [
-    session("runs", { status: "parked", park: { reason: "children", unlock: "children", retry_at: null } }),
+    session("runs", { status: "parked", park: { reason: "children", unlock: "children", retry_at: null, cause: null } }),
     session("reads", { parent_id: "runs", root_id: "runs", status: "running" }),
-    session("asks", { parent_id: "runs", root_id: "runs", status: "parked", park: { reason: "person", unlock: "answer", retry_at: null } }),
+    session("asks", { parent_id: "runs", root_id: "runs", status: "parked", park: { reason: "person", unlock: "answer", retry_at: null, cause: null } }),
   ];
   await mount();
   const fold = q<HTMLButtonElement>("button[aria-label='Fold the sub-agents of runs']")!;
@@ -230,7 +233,7 @@ it("raises a toast on any page when a sub-agent of the person's starts to need t
   net.sessions = running;
   await mount("/settings");
   expect(q(".acme-needs-toasts")).toBeNull();
-  net.sessions = running.map((one) => (one.id === "asks" ? { ...one, status: "parked", park: { reason: "person", unlock: "answer", retry_at: null } } : one));
+  net.sessions = running.map((one) => (one.id === "asks" ? { ...one, status: "parked", park: { reason: "person", unlock: "answer", retry_at: null, cause: null } } : one));
   await act(async () => queryClient.invalidateQueries());
   await settle();
   const toast = q(".acme-needs-toasts")!;
