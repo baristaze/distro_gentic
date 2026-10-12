@@ -9,6 +9,7 @@ the queue, run on a fresh executor with no model call."""
 
 import hashlib
 import json
+import re
 from collections.abc import Collection
 from datetime import timedelta
 from pathlib import Path
@@ -120,13 +121,19 @@ from acme.om.platform_agents.kinds import (
 from acme.om.platform_agents.tools import (
     MAX_EDIT,
     MAX_MATCH_TEXT,
+    MAX_VIEW,
     EditFileImpl,
     SearchCodeImpl,
 )
 from acme.om.platform_agents.types.validation import ValidationStart, ValidationStatus
 from acme.om.root import ProductKinds, build_managers, engine_tools
 from acme.om.steps.types.content import TextBlock, ToolResultBlock
-from acme.om.steps.types.header import LoopOutcome, ParkReason, ToolFailure
+from acme.om.steps.types.header import (
+    LoopOutcome,
+    ParkReason,
+    ToolFailure,
+    ToolResponseHeader,
+)
 from acme.om.steps.types.step import Step
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import permissions_of
@@ -532,7 +539,7 @@ RENDERED = {
         kinds.PLATFORM_ASSISTANT,
         2,
     ): "763da40ce8397d462e984d71769c53e04a1fbbeb5cf3201941cd4745ec504467",
-    (kinds.REVIEWER, 1): "9169d7509ea4a5efe4731ce7d87c5fac16ed041d2cdbc8288b1b80bb847b7c3b",
+    (kinds.REVIEWER, 1): "c1a92e4a377c940c269ee3e8c5e81572ba581f4473f664324d11bd3fe9593396",
     (kinds.OPERATOR, 1): "edb2ed24dffcbcd62dfaa4c05d94378097d0daf296a99cbde2ec3f65373665d4",
 }
 """Each shipped kind at the version a session starts on, and the digest of
@@ -1595,6 +1602,32 @@ def submitting(claim: Claim) -> Later:
     return turn
 
 
+NAMED_ID = re.compile(r"submit_review cites: ([0-9a-f-]{36})")
+"""The id a failed read of a review names, which a failed review cites."""
+
+
+def giving_up(reason: str) -> Later:
+    """The reviewer's turn that says why it could not review, and submits
+    the review as failed, citing the id each failed read named."""
+
+    def turn(call: ModelCall) -> ModelReply:
+        cited = [
+            found
+            for message in call.messages
+            for block in message.blocks
+            if isinstance(block, ToolResultBlock)
+            for part in block.parts
+            if isinstance(part, TextBlock)
+            for found in NAMED_ID.findall(part.text)
+        ]
+        return reply(
+            said(reason),
+            calls(kinds.SUBMIT_REVIEW, "use_review", claim=Claim.FAILED.value, evidence=cited),
+        )
+
+    return turn
+
+
 async def test_a_reviewer_answers_its_findings_with_file_and_line_through_its_result_tool(
     tmp_path: Path,
 ) -> None:
@@ -1769,24 +1802,117 @@ async def test_a_reviewer_cannot_change_what_it_reviews(tmp_path: Path) -> None:
     assert forge.posted == [] and forge.refs == {} and forge.pull_requests == []
 
 
-async def test_a_pull_request_of_a_tenant_that_connected_no_installation_is_not_read(
-    tmp_path: Path,
+@pytest.mark.parametrize(
+    ("connects", "on", "failure", "why"),
+    [
+        # Of a tenant that connected no installation of the forge.
+        (False, REVIEWED, ToolFailure.DENIED, "no installation of the forge this tenant connected"),
+        # A pull request the forge does not hold.
+        (True, "acme/widgets#99", ToolFailure.PERMANENT, "holds no pull request acme/widgets#99"),
+    ],
+)
+async def test_a_reviewer_that_cannot_read_its_pull_request_fails_citing_that_read(
+    tmp_path: Path, connects: bool, on: str, failure: ToolFailure, why: str
 ) -> None:
     forge = IntegrationTwinImpl(FORGE)
     forge.record_pull_request(RECORDED, {"src/cart.py": CART.encode()})
     platform = platform_over(tmp_path, forge=forge)
+    if connects:
+        await platform.connect(FORGE, twin_installation("acme"))
+    session_id = await platform.start(kinds.REVIEWER)
+    await platform.say(session_id, f"Review {on}.")
+    reason = f"I could not review {on}: the forge would not read it to me."
+    platform.anthropic.add(
+        reply(calls(kinds.READ_PULL_REQUEST, "use_read", on=on)),
+        giving_up(reason),
+    )
+
+    run = await platform.managers.loop.run(platform.owner, session_id)
+
+    read_failure, text = await platform.answer(session_id, "use_read")
+    assert read_failure is failure and why in text
+    # The failed read names its id, the review cites it, and the gate finds
+    # it among the session's own reads: the run ends failed at once, with
+    # its reason, after no more calls than the read and the review.
+    (named,) = NAMED_ID.findall(text)
+    review_failure, verdict = await platform.answer(session_id, "use_review")
+    assert review_failure is None and "accepted, verified" in verdict
+    assert run.outcome is LoopOutcome.FAILED
+    assert len(platform.anthropic.calls) == 2
+    history = await platform.history(session_id)
+    assert reason in [step.as_text() for step in history]
+    assert UUID(named) in {step.id for step in history}
+    assert forge.posted == []
+
+
+async def kept_whole(platform: Platform, session_id: UUID, use_id: str) -> tuple[str, str]:
+    """What the window shows at once of a long answer to the call `use_id`,
+    its head, and the whole answer it keeps as an artifact."""
+    for step in await platform.history(session_id):
+        header = step.header
+        if not isinstance(header, ToolResponseHeader) or header.artifact is None:
+            continue
+        (result,) = step.content.blocks
+        assert isinstance(result, ToolResultBlock)
+        if result.tool_use_id != use_id:
+            continue
+        head = result.parts[0]
+        assert isinstance(head, TextBlock)
+        pages: list[str] = []
+        while True:
+            page = await platform.managers.windows.get_artifact(
+                platform.owner, session_id, header.artifact.id, len("".join(pages)), 100_000
+            )
+            pages.append(page.text)
+            if not page.has_more:
+                return head.text, "".join(pages)
+    raise AssertionError(f"no answer to {use_id} kept as an artifact")
+
+
+async def test_a_pull_request_too_large_for_one_answer_keeps_its_id_and_head_whole(
+    tmp_path: Path,
+) -> None:
+    """A mass rename of 1,500 files, its body past what one answer holds:
+    the read lists the files that fit, counts the rest, and cuts nothing
+    else, so its id and its head are whole for the review to cite."""
+    renamed = tuple(
+        ChangedFile(
+            path=f"src/generated/client_{n:04d}.py",
+            status="renamed",
+            patch="@@ -1 +1 @@\n-old\n+new",
+        )
+        for n in range(1500)
+    )
+    forge = IntegrationTwinImpl(FORGE)
+    forge.record_pull_request(
+        RECORDED.model_copy(update={"files": renamed, "body": "x" * 60_000}), {}
+    )
+    platform = platform_over(tmp_path, forge=forge)
+    await platform.connect(FORGE, twin_installation("acme"))
     session_id = await platform.start(kinds.REVIEWER)
     await platform.say(session_id, f"Review {REVIEWED}.")
     platform.anthropic.add(
         reply(calls(kinds.READ_PULL_REQUEST, "use_read", on=REVIEWED)),
-        reply(said("I cannot read it.")),
+        reply(said("It renames 1,500 files.")),
     )
 
     await platform.managers.loop.run(platform.owner, session_id)
 
-    failure, text = await platform.answer(session_id, "use_read")
-    assert failure is ToolFailure.DENIED
-    assert "no installation of the forge this tenant connected" in text
+    failure, _ = await platform.answer(session_id, "use_read")
+    shown, whole = await kept_whole(platform, session_id, "use_read")
+    assert failure is None and len(whole) <= MAX_VIEW
+    read = json.loads(whole)
+    assert UUID(read["id"]) in {step.id for step in await platform.history(session_id)}
+    assert read["head"] == REVIEWED_HEAD
+    listed = len(read["files"])
+    assert 0 < listed < len(renamed)
+    assert read["files_left_out"] == len(renamed) - listed and read["complete"] is False
+    assert [f["path"] for f in read["files"]] == [f.path for f in renamed[:listed]]
+    assert read["patches_left_out"] == sum(f["patch"] is None for f in read["files"])
+    assert len(read["body"]) < 11_000 and "[cut:" in read["body"]
+    # What the window shows at once holds the id, the head, and the count.
+    for field in ("id", "head", "files_left_out"):
+        assert f'"{field}":{json.dumps(read[field])}' in shown, field
 
 
 @pytest.mark.parametrize(

@@ -52,7 +52,17 @@ carries only a claim and ids, so each finding is a call of
 wrong. The file is read at that head through the forge first, so a line
 past its end is refused, and so is a path outside the repository. The
 reviewer submits through `submit_review`, citing the ids its reads and
-findings answered.
+findings answered. A read or a finding that fails names its id in its
+failure, so a reviewer that cannot read its pull request submits a
+failed review that cites why.
+
+**A read of a pull request fits one answer.** The engine cuts an answer
+past what the model reads of one, an even share for each string, so a
+pull request of some hundreds of files would lose its id and its head.
+`read_pull_request` measures its answer instead: the body to 10,000
+characters, then the files it changes listed while they fit, then
+their patches, and it counts the files and the patches it left out.
+The id, the head, and the counts come first.
 
 **A review passes a gate of its own.** A result of a reviewer's session
 cites calls of that session to read the pull request, read its files, or

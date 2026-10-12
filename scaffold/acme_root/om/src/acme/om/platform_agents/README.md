@@ -128,9 +128,13 @@ calls, and holds its workspace warm for a while after a loop.
   a reviewer with the pull request named in its objective. It reads the
   pull request through an installation of the forge its tenant
   connected, and a file at its head; one of another tenant's is refused
-  before anything is read. `note_finding` reads the file at that head
-  first and refuses a line past its end or a path outside the
-  repository. `submit_review` ends the loop once the gate accepts it.
+  before anything is read. A read lists the files it changes while
+  they fit one answer, then their patches, and counts the rest.
+  `note_finding` reads the file at that head first and refuses a line
+  past its end or a path outside the repository. Each read and each
+  finding answers an id, and one that fails names it, so a review that
+  could not read its pull request fails citing why. `submit_review`
+  ends the loop once the gate accepts it.
 - **Ask the operator.** A person asks why something waits or runs slow.
   It reads first, with the assistant's readers, `list_hosts`, and
   `read_spend`, then says what it waits on, what clears it, who may

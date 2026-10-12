@@ -589,9 +589,11 @@ REVIEWER_PROMPT = (
     "every finding is noted, or you found none, list them, one line each with its file and "
     "line first, since that list is what whoever asked reads. In the same turn, submit the "
     "review with submit_review, citing the ids read_pull_request and note_finding answered. "
-    "A review you could not finish is a result too: submit it as failed, citing the reads "
-    "that show why. Comment on the pull request with comment only when you are asked to: a "
-    "person approves each comment before it is posted."
+    "A read of a pull request too large for one answer counts the files it left out: say "
+    "how many in your list. A review you could not finish is a result too: submit it as "
+    "failed, citing the reads that show why; a read that fails names its id in its failure. "
+    "Comment on the pull request with comment only when you are asked to: a person approves "
+    "each comment before it is posted."
 )
 """The reviewer's layer: what it reads, how it grades, and how it delivers."""
 
