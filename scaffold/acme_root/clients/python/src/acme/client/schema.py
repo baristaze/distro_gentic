@@ -1788,6 +1788,29 @@ class ReviewRequest(BaseModel):
     keep: Annotated[bool, Field(title='Keep')]
 
 
+class AuthorizationClass2(StrEnum):
+    read = 'read'
+    integration = 'integration'
+    destructive = 'destructive'
+
+
+class ReviewedToolBody(BaseModel):
+    """
+    A tool a person binds: the server's tool, the hash of the definition
+    they read, and the class and the effect they give it, each said
+    outright: what a server says of its own tool is a hint, never
+    authority. A class that acts on the server's system waits for a person
+    at each call, as any outward call does.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    authorization_class: Annotated[AuthorizationClass2, Field(title='Authorization Class')]
+    definition_hash: Annotated[str, Field(max_length=80, min_length=1, title='Definition Hash')]
+    effect: Effect
+    server_tool: Annotated[str, Field(max_length=128, min_length=1, title='Server Tool')]
+
+
 class Role(StrEnum):
     owner = 'owner'
     admin = 'admin'
@@ -2775,6 +2798,18 @@ class Definitions(RootModel[list[DefinitionBody]]):
     root: Annotated[list[DefinitionBody], Field(max_length=1000, title='Definitions')]
 
 
+class ConnectorReviewRequest(BaseModel):
+    """
+    Every tool a person binds, none to withdraw them all. A host server's
+    review carries the definitions its host lists.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    definitions: Annotated[Definitions | None, Field(title='Definitions')] = None
+    tools: Annotated[list[ReviewedToolBody] | None, Field(max_length=64, title='Tools')] = None
+
+
 class ControlRequest(BaseModel):
     """
     A control. An interrupt names the seq of the tool request it stops,
@@ -3515,23 +3550,6 @@ class RetentionPolicyView(BaseModel):
     zero_retention: Annotated[bool, Field(title='Zero Retention')]
 
 
-class ReviewedToolBody(BaseModel):
-    """
-    A tool a person binds: the server's tool, the hash of the definition
-    they read, and the class and the effect they give it, each said
-    outright: what a server says of its own tool is a hint, never
-    authority. A class that acts on the server's system waits for a person
-    at each call, as any outward call does.
-    """
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    authorization_class: ToolClass
-    definition_hash: Annotated[str, Field(max_length=80, min_length=1, title='Definition Hash')]
-    effect: Effect
-    server_tool: Annotated[str, Field(max_length=128, min_length=1, title='Server Tool')]
-
-
 class RoleFillView(BaseModel):
     fallbacks: Annotated[list[FillView], Field(title='Fallbacks')]
     fill: FillView
@@ -3855,18 +3873,6 @@ class ClaimantClaimView(BaseModel):
     What a claim answers: the item, or none when nothing is ready.
     """
     item: ClaimantWorkView | None
-
-
-class ConnectorReviewRequest(BaseModel):
-    """
-    Every tool a person binds, none to withdraw them all. A host server's
-    review carries the definitions its host lists.
-    """
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    definitions: Annotated[Definitions | None, Field(title='Definitions')] = None
-    tools: Annotated[list[ReviewedToolBody] | None, Field(max_length=64, title='Tools')] = None
 
 
 class ConnectorToolView(BaseModel):

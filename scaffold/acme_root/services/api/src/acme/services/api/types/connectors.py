@@ -14,6 +14,7 @@ from acme.om.connectors.types.connector import (
     HOST_SERVER,
     MAX_TOOLS,
     ConnectorPlace,
+    ServerToolClass,
 )
 from acme.om.tools.types.tool import Effect, ToolClass
 from acme.om.tools.types.toolset import SUMMARY_CHARS
@@ -63,7 +64,7 @@ class ReviewedToolBody(RequestBody):
 
     server_tool: str = Field(min_length=1, max_length=128)
     definition_hash: str = Field(min_length=1, max_length=80)
-    authorization_class: ToolClass
+    authorization_class: ServerToolClass
     effect: Effect
 
 

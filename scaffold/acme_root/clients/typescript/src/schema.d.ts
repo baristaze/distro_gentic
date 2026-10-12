@@ -7687,7 +7687,11 @@ export interface components {
          *     at each call, as any outward call does.
          */
         ReviewedToolBody: {
-            authorization_class: components["schemas"]["ToolClass"];
+            /**
+             * Authorization Class
+             * @enum {string}
+             */
+            authorization_class: "read" | "integration" | "destructive";
             /** Definition Hash */
             definition_hash: string;
             effect: components["schemas"]["Effect"];

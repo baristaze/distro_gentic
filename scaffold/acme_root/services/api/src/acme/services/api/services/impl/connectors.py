@@ -6,11 +6,10 @@ from acme.om.connectors.types.connector import (
     ConnectorAttachment,
     ConnectorDraft,
     ConnectorReview,
-    ReviewedTool,
 )
 from acme.om.context import TenantContext
-from acme.om.tools.types.mcp import McpToolDefinition
 from acme.services.api.services.connectors import ConnectorsServiceInterface
+from acme.services.api.services.impl.built import built
 from acme.services.api.types.connectors import (
     AttachmentView,
     AttachRequest,
@@ -31,14 +30,7 @@ class ConnectorsServiceImpl(ConnectorsServiceInterface):
     async def connect_server(
         self, ctx: TenantContext, body: ConnectRequest, connector_id: UUID
     ) -> ConnectorView:
-        draft = ConnectorDraft(
-            name=body.name,
-            summary=body.summary,
-            url=body.url,
-            credential_header=body.credential_header,
-            credential_scheme=body.credential_scheme,
-            host_server=body.host_server,
-        )
+        draft = built(ConnectorDraft, body.model_dump())
         connected = await self._connectors.connect_server(ctx, draft, connector_id=connector_id)
         return view_of(connected)
 
@@ -71,22 +63,7 @@ class ConnectorsServiceImpl(ConnectorsServiceInterface):
     async def review(
         self, ctx: TenantContext, connector_id: UUID, body: ConnectorReviewRequest
     ) -> ConnectorView:
-        review = ConnectorReview(
-            tools=tuple(
-                ReviewedTool(
-                    server_tool=each.server_tool,
-                    definition_hash=each.definition_hash,
-                    authorization_class=each.authorization_class,
-                    effect=each.effect,
-                )
-                for each in body.tools
-            ),
-            definitions=None
-            if body.definitions is None
-            else tuple(
-                McpToolDefinition.model_validate(each.model_dump()) for each in body.definitions
-            ),
-        )
+        review = built(ConnectorReview, body.model_dump())
         return view_of(await self._connectors.review(ctx, connector_id, review))
 
     async def attach(

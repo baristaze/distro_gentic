@@ -8951,7 +8951,13 @@
         "description": "A tool a person binds: the server's tool, the hash of the definition\nthey read, and the class and the effect they give it, each said\noutright: what a server says of its own tool is a hint, never\nauthority. A class that acts on the server's system waits for a person\nat each call, as any outward call does.",
         "properties": {
           "authorization_class": {
-            "$ref": "#/components/schemas/ToolClass"
+            "enum": [
+              "read",
+              "integration",
+              "destructive"
+            ],
+            "title": "Authorization Class",
+            "type": "string"
           },
           "definition_hash": {
             "maxLength": 80,

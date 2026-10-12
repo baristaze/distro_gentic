@@ -2,7 +2,8 @@
 the tenant connects a server, reads what it lists, reviews its tools in
 person, and attaches it to a kind; the credential comes back in no
 response; a member connects nothing; a cloud address the platform's cloud
-must not call is refused; and a host's server is listed on its host."""
+must not call is refused; a host's server is listed on its host; and a
+malformed connector or review is refused with its reason."""
 
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
@@ -13,10 +14,14 @@ import pytest
 from api_support import add_member, build_container, client_over, sign_in, sign_in_as
 from unit.test_connectors import OPERATOR, RECORDS, Served, serve
 
+from acme.integrations.mcp import McpListedTool
 from acme.om.connectors.impl.manager import connector_secret
 from acme.om.context import Role
 from acme.om.root import PlatformPorts, ProductKinds
+from acme.om.tools.mcp import definition_of
+from acme.om.tools.rules import definition_hash
 from acme.services.api.container import AppContainer
+from acme.services.api.types.connectors import ReviewedToolBody
 
 TOKEN = "tok-0d6a92ce51b7f3"
 PORTS = PlatformPorts(kinds=ProductKinds(agents=(OPERATOR,), toolsets=(RECORDS,)))
@@ -180,3 +185,60 @@ async def test_an_address_the_cloud_must_not_call_is_refused(
         json={"name": "words", "summary": "Look words up.", "url": url},
     )
     assert refused.status_code == 422, refused.text
+
+
+@pytest.mark.parametrize(
+    ("body", "reason"),
+    [
+        (
+            {
+                "name": "words",
+                "summary": "Look.",
+                "url": "http://127.0.0.1:9/mcp",
+                "host_server": "w",
+            },
+            "has an address, or names its host's server",
+        ),
+        ({"name": "words", "summary": "Look."}, "has an address, or names its host's server"),
+        (
+            {"name": "words", "summary": "one\ntwo", "host_server": "words"},
+            "summary is one line",
+        ),
+    ],
+    ids=["both-places", "no-place", "two-line-summary"],
+)
+async def test_a_malformed_connector_is_refused_with_its_reason(
+    client: httpx.AsyncClient, owner: dict[str, str], body: dict[str, str], reason: str
+) -> None:
+    refused = await client.post("/v1/connectors", headers=owner, json=body)
+    assert refused.status_code == 422, refused.text
+    assert reason in refused.text
+
+
+async def test_a_review_offers_and_takes_a_server_tools_classes_alone(
+    client: httpx.AsyncClient, owner: dict[str, str]
+) -> None:
+    inside = await client.post(
+        "/v1/connectors",
+        headers=owner,
+        json={"name": "tracker", "summary": "Read tickets.", "host_server": "tracker"},
+    )
+    assert inside.status_code == 201, inside.text
+    definition = definition_of(McpListedTool(name="find", description="Finds a ticket."))
+    tool = {
+        "server_tool": "find",
+        "definition_hash": definition_hash(definition),
+        "effect": "read_only",
+    }
+    refused = await client.post(
+        f"/v1/connectors/{inside.json()['id']}/review",
+        headers=owner,
+        json={
+            "tools": [{**tool, "authorization_class": "execute"}],
+            "definitions": [definition.model_dump(mode="json")],
+        },
+    )
+    assert refused.status_code == 422, refused.text
+    assert "authorization_class" in refused.text
+    offered = ReviewedToolBody.model_json_schema()["properties"]["authorization_class"]["enum"]
+    assert sorted(offered) == ["destructive", "integration", "read"]

@@ -8,7 +8,7 @@ configures by name, and is reached through `exec` work: the platform names
 it and never opens a connection to it, and never holds its credential."""
 
 from enum import StrEnum
-from typing import ClassVar, Self
+from typing import ClassVar, Literal, Self, get_args
 from uuid import UUID
 
 from pydantic import Field, model_validator
@@ -32,9 +32,11 @@ MAX_TOOLS = 64
 """The most tools of one server a person binds: a toolset loads whole, and
 a model chooses worse among many."""
 
-TOOL_CLASSES = frozenset({ToolClass.READ, ToolClass.INTEGRATION, ToolClass.DESTRUCTIVE})
+ServerToolClass = Literal[ToolClass.READ, ToolClass.INTEGRATION, ToolClass.DESTRUCTIVE]
 """The classes a server's tool may take: it reads a system, acts on it, or
 changes it past undoing. Policy keys on the class, as on every tool's."""
+
+TOOL_CLASSES: frozenset[ToolClass] = frozenset(get_args(ServerToolClass))
 
 
 class ConnectorPlace(StrEnum):
@@ -164,6 +166,8 @@ class ConnectorDraft(Platform):
 
     @model_validator(mode="after")
     def _one_place(self) -> Self:
+        if "\n" in self.summary or "\r" in self.summary:
+            raise ValueError("a connector's summary is one line")
         if (self.url is None) == (self.host_server is None):
             raise ValueError("a connector has an address, or names its host's server")
         return self
