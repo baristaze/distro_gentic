@@ -8,7 +8,7 @@
 // is a card that opens the child, and a child's first message is a card
 // that opens its parent. A stream of a step not stored yet joins at the
 // end, and the step that lands replaces it. No React, no fetch.
-import type { AgentSessionView, ApprovalView, StepView } from "@acme/client";
+import type { AgentSessionView, ApprovalView, StepView, Visibility } from "@acme/client";
 import { looksLikeDiff, parseJsonText } from "../../design/kit";
 import type { LiveStream } from "../../queries/live";
 import { needsYou, statusWords } from "../../app/shell/shellModel";
@@ -120,7 +120,11 @@ export interface SubAgentRow {
 }
 
 export type Entry =
-  | { kind: "person"; key: string; seq: number; at: string; text: string }
+  /** A person's message: its author, and whether it is a participant's,
+   * which reaches the agent as a suggestion, never an instruction. */
+  | { kind: "person"; key: string; seq: number; at: string; text: string; author: string | null; suggestion: boolean }
+  /** The steer moved to `steerer`, or the session switched who sees it. */
+  | { kind: "shared"; key: string; seq: number; at: string; steerer: string | null; visibility: Visibility | null }
   | { kind: "note"; key: string; seq: number; at: string; label: string; text: string }
   | ThoughtEntry
   | { kind: "prose"; key: string; seq: number | null; at: string; text: string; live: boolean }
@@ -642,7 +646,8 @@ export function timeline(given: TimelineInput): Timeline {
           break;
         }
         const label = noteLabel(step);
-        if (label === null) entries.push({ kind: "person", key, seq: step.seq, at: step.created_at, text: step.text });
+        if (label === null)
+          entries.push({ kind: "person", key, seq: step.seq, at: step.created_at, text: step.text, author: step.author, suggestion: step.participant });
         else entries.push({ kind: "note", key, seq: step.seq, at: step.created_at, label, text: step.text });
         break;
       }
@@ -723,7 +728,9 @@ export function timeline(given: TimelineInput): Timeline {
         break;
       case "switched":
         close();
-        entries.push({ kind: "fold", key, seq: step.seq, at: step.created_at, label: "Switched to a new version of its agent", text: step.text });
+        if (step.steerer !== null || step.visibility !== null)
+          entries.push({ kind: "shared", key, seq: step.seq, at: step.created_at, steerer: step.steerer, visibility: step.visibility });
+        else entries.push({ kind: "fold", key, seq: step.seq, at: step.created_at, label: "Switched to a new version of its agent", text: step.text });
         break;
       case "environment_changed":
         close();

@@ -3163,6 +3163,64 @@ select.acme-field {
   overflow-wrap: anywhere;
 }
 
+/* Who wrote a message, over it; a participant's suggestion is drawn open,
+   since it reaches the agent as data for its steerer. */
+.acme-bubble-by {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--acme-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.acme-bubble[data-suggestion] {
+  background: transparent;
+  border: 1px dashed var(--acme-border-strong);
+}
+
+/* Who steers a session and who sees it, in its header. */
+.acme-sharing {
+  display: grid;
+  gap: 8px;
+  padding: 4px;
+  font-size: 13px;
+}
+
+.acme-sharing p {
+  margin: 0;
+}
+
+.acme-sharing-people {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.acme-sharing-hand {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.acme-sharing-hand .acme-label {
+  flex: 1 1 auto;
+}
+
+.acme-sharing-chip {
+  max-width: 220px;
+}
+
+.acme-sharing-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acme-composer-join {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 /* The user chip, and "?" beside it. */
 .acme-sidebar-foot {
   display: flex;
