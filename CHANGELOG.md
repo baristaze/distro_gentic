@@ -5,59 +5,73 @@ included, stay on its GitHub release. Releases are tagged
 `vMAJOR.MINOR.PATCH`; see `CONTRIBUTING.md` for what bumps which
 number.
 
-## 0.16.0 (2026-10-11)
+## 0.17.0 (2026-10-12)
 
-The platform's base moves to the engine at v0.15.0: `read_artifact`,
-workspace snapshots and bases, a fork at the spawn, and a VM workspace
-on a machines interface. A workspace stays a cache, and a session may
-now keep its whole workspace: its snapshot stays on its workspace's side
-of the wall. A project's environment is built once where its workspaces
-run, and every session starts from it sealed. The cloud pool runs a VM
-per session, the same host program inside, its disk kept by the cloud's
-own snapshots. The result gate counts a success only after a baseline
-at its base, and only runs at the check versions the policy declares.
-Minor: nothing is reversed.
+The platform defines, runs, and hosts agents, and its agent kinds are
+its heart. Its base moves to the engine at v0.16.0: toolsets, a model
+size and an effort per role, standing text, and an MCP client. The
+platform's kinds are built from toolsets, ask a model size the matrix
+answers, and keep their workspace warm for their own grace. A playbook
+is invoked into a session, or pinned to a kind as its manual. A tenant
+connects its MCP servers as toolsets of its kinds, and one inside the
+wall runs on its host. A reviewer and an operator ship as templates.
+The levers a tenant customizes an agent with are read before they ship,
+and read back from the sessions that stalled. Minor, with two reversals
+named: the runner's grace setting is gone, and a matrix version is
+published only with a row for each size a shipped kind asks.
 
 ### Added
 
-- From the engine's v0.15.0, in the scaffold: `read_artifact`;
-  workspace snapshots (a run keeps a `snapshot` workspace whole at its
-  end, a restore, a rewind, a fork at the spawn); workspace bases built
-  once per tenant; and the VM workspace provider over
-  `acme.infra.machines`, local on Lima. The engineer at version 7 and
-  analysis at version 4 read a kept result back (#145).
-- A durable workspace: an agent kind chooses `cache` or `snapshot`, and
-  a project may narrow it to a cache. A cloud workspace's snapshot goes
-  to the platform's bucket; a hosted workspace is snapshotted by its host
-  through the relay, into the host's own store, the platform holding the
-  reference and its hash. A host advertises snapshotting only when it
-  probed it. A restore travels with the prepare and keeps its tree
-  through the branch's sync; a take of control restores before the
-  hand-over; a purge and a key's revocation erase a session's snapshots
-  everywhere. Lenses WSP-12 and WSP-13, ADR 2050, migration core
-  `202610110551` (#146).
-- A project's environment: an image, setup commands, and the
-  registries its setup may reach, at `PUT` and `DELETE
-  /v1/projects/{id}/environment`. The engineer at version 8 pins it as
-  its base and keeps egress `none`; a host builds it once into its own
-  store. Lens WSP-14, ADR 2051, migration core `202610110736` (#147).
-- The cloud pool runs a VM per session: one machine per session, from
-  the session's environment or its latest snapshot, running the host
-  program with a one-use key, holding no platform credential; a warm
-  count; a machine with no host stopped, its disk kept until its
-  session ends; an erase finished by the sweep. Machines on EC2 behind
-  the engine's interface, with the Terraform module `cloud_pool`, and on
-  Lima locally. Lens PLC-21, ADR 2052, migration core `202610110914`
-  (#148).
+- The lever review: pure checks read each published playbook and
+  reviewed knowledge entry for a repeated phrase, a must and a must-not
+  on one subject, a name no kind holds, a retry with no stop, and a size
+  past what a session holds whole; a finding advises and stays with its
+  version, and a version never read answers null, shown as not checked.
+  An operator reads which levers came before stalls
+  (`GET /v1/admin/orgs/{org_id}/levers`, `acme-ops levers`), and the
+  skill `audit-agent-levers` ranks them (ADR 2054) (#150).
+- From the engine's v0.16.0, in the scaffold: toolsets and
+  `load_toolset`, a kind's asks, standing text in the cached system
+  layer, and the MCP client. The matrix resolver takes a kind's asks
+  (#151).
+- Toolsets: the platform's tools form eight (files, code, knowledge,
+  delivery, sub_agents, records, handoff, artifacts), every shipped kind
+  version is rebuilt from them with the same bytes, and a product's slot
+  adds its own. Shipped kinds ask L of main and S of the summarizer. The
+  matrix keys on a size: of a version holding a row for the asked size,
+  a row naming the kind answers first, then size rows, then the rest; of
+  any other version every question answers as before. A kind carries
+  its warm grace, at most the prompt cache's life (ADR 2055) (#152).
+- Playbooks invoked and pinned: a person invokes one into a session
+  (`POST /v1/playbooks/{name}/invocations`, `acme playbook invoke`, the
+  session page), and an automation's start may name one. A person who
+  manages the tenant pins a playbook's version to a kind as its manual
+  (`/v1/playbook-pins`), and each later session of the kind holds it as
+  standing text, its gates only narrowing (ADR 2056) (#153).
+- A reviewer and an operator, built from toolsets: the reviewer reads a
+  pull request through the forge and submits findings with file and
+  line through a gate that checks its own reads; the operator reads
+  sessions, waits, hosts, and spend. A kind that may only read is held
+  to its reach at boot (ADR 2058) (#154).
+- Connectors: a tenant connects an MCP server, reviews its tools at
+  pinned hashes, and attaches it to a kind as a deferred toolset; a
+  server inside the wall is named in its host's ceilings and called as
+  `exec` work, so the platform opens no connection into the wall
+  (ADR 2057) (#155).
 
 ### Changed
 
-- The result gate counts a success only when a baseline at the
-  delivery's base ran before the head's latest validation, and a run
-  only at the check version the policy declares now; one rule,
-  `rules.baseline`, serves the gate and the acceptance harness. The
-  engineer at version 6 takes a baseline again when its base moves.
-  ADR 2053 (#144).
-- The platform's own `held()` is `held_instances()`, and every platform
-  provider and fake takes the engine's `snapshot`, `base`, and
-  `building` (#145).
+- The README and the spec open on defining, running, and hosting agents,
+  with the kinds as templates a product copies (#156).
+- The forge's integration reads a pull request and a file back (#154).
+- `build_managers` takes an agents layer every session's start, spawn,
+  and hand-off passes through (#153); the loop takes an
+  `AttachedToolsetsInterface`, a null object by default (#155).
+
+### Removed
+
+- `ACME_RUNNER_WORKSPACE_GRACE_SECONDS`: a kind's own grace replaces it.
+  A reversal (#152).
+- A matrix version without a row for each size a shipped kind asks (L,
+  S, and the reviewer's XL) is no longer published. A reversal (#152,
+  #154).
