@@ -40,6 +40,7 @@ from acme.client.types import (
     HostView,
     InvitationPageView,
     InvitationView,
+    InvocationView,
     IssuedClaimantCredentialView,
     IssuedDownloadView,
     IssuedHostCredentialView,
@@ -64,6 +65,7 @@ from acme.client.types import (
     OperatorWorkItemView,
     OrgView,
     OutputStream,
+    PinView,
     PlatformSizeView,
     PlaybookView,
     PreparedView,
@@ -956,6 +958,40 @@ class ApiClient:
             "POST", "/v1/playbooks", json=draft.model_dump(mode="json", exclude_unset=True)
         )
         return PlaybookView.model_validate(published)
+
+    async def invoke_playbook(self, name: str, session_id: UUID) -> InvocationView:
+        """The name's latest version brought into the session, in person: its
+        gates hold there from now on, and its brief arrives as the caller's
+        message. Invoked again, the same invocation."""
+        invoked = await self.request(
+            "POST", f"/v1/playbooks/{name}/invocations", json={"session_id": str(session_id)}
+        )
+        return InvocationView.model_validate(invoked)
+
+    async def playbook_pins(self) -> list[PinView]:
+        """The tenant's pins, by kind, the tenant's before a project's."""
+        return [
+            PinView.model_validate(pin) for pin in await self.request("GET", "/v1/playbook-pins")
+        ]
+
+    async def pin_playbook(
+        self, kind: str, name: str, *, project_id: UUID | None = None
+    ) -> PinView:
+        """The name's latest version pinned to the kind as its manual, for the
+        tenant, or for one project; each session of the kind made from now
+        on holds it, and one made before keeps its own."""
+        body: dict[str, Any] = {"kind": kind, "name": name}
+        if project_id is not None:
+            body["project_id"] = str(project_id)
+        return PinView.model_validate(await self.request("PUT", "/v1/playbook-pins", json=body))
+
+    async def unpin_playbook(self, kind: str, *, project_id: UUID | None = None) -> PinView:
+        """The kind's pin for the tenant, or for one project, taken away."""
+        params: dict[str, Any] = {"kind": kind}
+        if project_id is not None:
+            params["project_id"] = str(project_id)
+        unpinned = await self.request("DELETE", "/v1/playbook-pins", params=params)
+        return PinView.model_validate(unpinned)
 
     async def tool_policy(self) -> ToolPolicyView:
         return ToolPolicyView.model_validate(await self.request("GET", "/v1/tools/policy"))

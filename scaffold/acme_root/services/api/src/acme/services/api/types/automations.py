@@ -14,6 +14,7 @@ from acme.om.attribution.types.principal import MAX_KIND
 from acme.om.automations.types.automation import ACTION_NAME, MAX_BRIEF, RunsAs, TriggerKind
 from acme.om.base import thaw_mapping
 from acme.om.context import Role
+from acme.om.playbooks.types.playbook import MAX_SKILL_NAME, SKILL_NAME
 from acme.om.steps.types.content import MAX_NAME
 from acme.services.api.types.common import RequestBody, View
 
@@ -44,7 +45,9 @@ class TriggerView(View):
 
 class ActionBody(RequestBody):
     """`start_session`: start a session of `agent_kind` titled `title` in the
-    tenant's project `project_id`. `message_session`: send the brief to the
+    tenant's project `project_id`, and invoke the tenant's `playbook` of
+    that name into it first, its latest version at each firing, when one is
+    named; a name with no version is refused. `message_session`: send the brief to the
     standing session `session_id`; an enabled one is refused, since nothing
     would hold its run to `run_cap_micros`. The brief is the creator's word. Any
     other kind is one the product declares, which takes its `params` and no
@@ -57,6 +60,9 @@ class ActionBody(RequestBody):
     project_id: UUID | None = None
     session_id: UUID | None = None
     params: dict[str, JsonValue] = Field(default_factory=lambda: {})
+    playbook: str | None = Field(
+        default=None, min_length=1, max_length=MAX_SKILL_NAME, pattern=SKILL_NAME
+    )
 
 
 class ActionView(View):
@@ -66,6 +72,7 @@ class ActionView(View):
     title: str | None
     project_id: UUID | None
     session_id: UUID | None
+    playbook: str | None
     # The stored params are frozen, a nested list a tuple and a nested
     # mapping a read-only view, so they are thawed back to JSON here.
     params: Annotated[dict[str, JsonValue], BeforeValidator(thaw_mapping)]

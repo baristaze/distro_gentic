@@ -252,6 +252,8 @@ class AppContainer:
         starts and is messaged."""
         ports = ports or PlatformPorts()
         held: list[IntakeManagerInterface] = []
+        # A start makes each session with its kind's manual.
+        playbooks = PlaybooksLayer(storage)
         managers = build_managers(
             storage,
             infra,
@@ -269,6 +271,7 @@ class AppContainer:
             session_projects=ports.session_projects,
             workspace_projects=ports.workspace_projects,
             product_kinds=ports.kinds,
+            agents_layer=playbooks.agents,
         )
         refuse_open_money(settings.environment, managers)
         # A tenant's own provider keys, saved and listed here and never read
@@ -315,16 +318,18 @@ class AppContainer:
                 managers,
                 project_required=settings.environment != LOCAL,
                 actions=ports.kinds.actions,
+                playbooks=lambda: playbooks.build(managers),
             ),
             notifications=build_notifications(storage, managers, integrations, intake),
             matrix=matrix,
             trust=trust.trust,
             # The ledger the operators read; this process takes no payment.
             billing=build_billing(storage, managers, PaymentProviderAbsentImpl()),
-            # A person writes and reviews what sessions recall, and publishes
-            # the playbooks they follow; the runner recalls and invokes them.
+            # A person writes and reviews what sessions recall; the runner
+            # recalls them. A person publishes the playbooks sessions follow,
+            # invokes one into a session, and pins one to a kind.
             knowledge=build_knowledge(storage, managers),
-            playbooks=PlaybooksLayer(storage).build(managers),
+            playbooks=playbooks.build(managers),
             # An operator reads which of them the sessions that stalled reached.
             levers=build_levers(storage),
         )
