@@ -1974,23 +1974,8 @@
       },
       "ConnectRequest": {
         "additionalProperties": false,
-        "description": "A server on the internet, at its `url`, with the credential its calls\ncarry in `credential_header`, after `credential_scheme`; or the server\nthe tenant's host runs, by the name its owner gives it,\n`host_server`, whose credential stays on that host.",
+        "description": "A server on the internet, at its `url`, whose calls carry their\ncredential in `credential_header`, after `credential_scheme`; or the\nserver the tenant's host runs, by the name its owner gives it,\n`host_server`, whose credential stays on that host.",
         "properties": {
-          "credential": {
-            "anyOf": [
-              {
-                "format": "password",
-                "maxLength": 4096,
-                "minLength": 1,
-                "type": "string",
-                "writeOnly": true
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Credential"
-          },
           "credential_header": {
             "default": "Authorization",
             "pattern": "^[A-Za-z0-9-]{1,64}$",
@@ -2608,6 +2593,25 @@
         ],
         "title": "CredentialKind",
         "type": "string"
+      },
+      "CredentialRequest": {
+        "additionalProperties": false,
+        "description": "A cloud server's credential. It is written under the connector's own\nname, and no response, log, or error ever carries it.",
+        "properties": {
+          "value": {
+            "format": "password",
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Value",
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "value"
+        ],
+        "title": "CredentialRequest",
+        "type": "object"
       },
       "CrossingBody": {
         "additionalProperties": false,
@@ -20854,7 +20858,7 @@
         ]
       },
       "post": {
-        "description": "A server connected, with no tool reviewed. Requires managing the org.\nA cloud address that is this host or a private network is refused.",
+        "description": "A server connected, with no credential and no tool reviewed. Requires\nmanaging the org. A cloud address that is this host or a private\nnetwork is refused.",
         "operationId": "connect_v1_connectors_post",
         "parameters": [
           {
@@ -20903,6 +20907,24 @@
                 }
               ],
               "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
             }
           }
         ],
@@ -21248,6 +21270,108 @@
           }
         },
         "summary": "Attach",
+        "tags": [
+          "connectors"
+        ]
+      }
+    },
+    "/v1/connectors/{connector_id}/credential": {
+      "put": {
+        "description": "A cloud server's credential, written over the last one; a session's\nnext call carries it. Requires managing the org. A host's server keeps\nits credential on its host: 422.",
+        "operationId": "put_credential_v1_connectors__connector_id__credential_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connector_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Connector Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CredentialRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Credential",
         "tags": [
           "connectors"
         ]

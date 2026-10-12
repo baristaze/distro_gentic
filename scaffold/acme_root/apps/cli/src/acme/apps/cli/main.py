@@ -737,29 +737,44 @@ def connect(
         str | None,
         typer.Option(help="A server inside the wall: the name the org's host runs it by."),
     ] = None,
-    credential: Annotated[
-        str | None,
-        typer.Option(
-            envvar="ACME_CONNECTOR_CREDENTIAL",
-            help="What a cloud server's calls carry; read from the environment, never echoed.",
-        ),
-    ] = None,
     as_json: Json = False,
     api: Api = None,
 ) -> None:
-    """Connect a server, with no tool reviewed. An owner's or an admin's. Its
-    credential is written and never read back."""
+    """Connect a server, with no credential and no tool reviewed. An owner's
+    or an admin's."""
     if (url is None) == (host_server is None):
         raise typer.BadParameter("a connector has --url or --host-server, one of them")
 
     async def go(client: ApiClient) -> None:
-        made = await client.connect(
-            name, summary, url=url, credential=credential, host_server=host_server
-        )
+        made = await client.connect(name, summary, url=url, host_server=host_server)
         if as_json:
             typer.echo(made.model_dump_json(indent=2))
         else:
             typer.echo(f"connected {made.id} ({made.name})")
+
+    run(go, api)
+
+
+@connector_app.command("credential")
+def put_connector_credential(
+    connector_id: ConnectorId,
+    value: Annotated[
+        str,
+        typer.Option(
+            prompt=True,
+            hide_input=True,
+            envvar="ACME_CONNECTOR_CREDENTIAL",
+            help="What a cloud server's calls carry; asked for when not given, never echoed.",
+        ),
+    ],
+    api: Api = None,
+) -> None:
+    """Give a cloud server its credential, over the last one. It is written
+    and never read back; a server inside the wall keeps its own."""
+
+    async def go(client: ApiClient) -> None:
+        given = await client.put_connector_credential(connector_id, value)
+        typer.echo(f"the credential of {given.name} is set")
 
     run(go, api)
 

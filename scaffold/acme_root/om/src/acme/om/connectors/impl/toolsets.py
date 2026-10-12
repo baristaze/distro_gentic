@@ -13,9 +13,9 @@ from datetime import datetime, timedelta
 from typing import Any, Protocol
 from uuid import UUID
 
-from pydantic import ConfigDict
+from pydantic import Field, model_serializer, model_validator
 
-from acme.infra.base import thaw_mapping
+from acme.infra.base import FrozenMapping, thaw_mapping
 from acme.infra.secrets import SecretsInterface
 from acme.infra.workspaces import Workspace
 from acme.integrations.mcp import McpAnswer, McpClientInterface
@@ -39,7 +39,7 @@ from acme.om.exceptions import ToolFailed
 from acme.om.projects.policies import SessionProjectsInterface
 from acme.om.relay.types.exec import McpRequest
 from acme.om.steps.types.header import ToolFailure
-from acme.om.tools.mcp import McpCall, McpServers, McpToolImpl, secret_use
+from acme.om.tools.mcp import McpCall, McpServers, secret_use
 from acme.om.tools.tool import ToolInterface, ToolRuntime
 from acme.om.tools.types.mcp import McpBinding
 from acme.om.tools.types.tool import Effect, ToolInput
@@ -48,6 +48,11 @@ from acme.om.trust.placement import PlacementInterface
 
 CALL_TIMEOUT = timedelta(seconds=60)
 """How long one call of a server's tool may take, its listing included."""
+
+ToolOf = Callable[..., ToolInterface]
+"""Builds the tool of a binding over a server's definition, its call, and
+the secret its spec declares: the engine's `McpToolImpl`, as a root wires
+it."""
 
 
 class HostCall(Protocol):
@@ -67,11 +72,21 @@ class HostCall(Protocol):
 
 
 class ServerInput(ToolInput):
-    """A server's tool's input: the object the model wrote, passed on whole.
-    The server holds it to the schema it listed, which is the one the model
-    reads, and its refusal is the call's failure the model reads."""
+    """A server's tool's input: the object the model wrote, held whole and
+    passed on whole. The server holds it to the schema it listed, which is
+    the one the model reads, and its refusal is the call's failure the
+    model reads. An input that is not an object is refused here."""
 
-    model_config = ConfigDict(frozen=True, extra="allow")
+    arguments: FrozenMapping = Field(default_factory=dict, validate_default=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _held_whole(cls, data: Any) -> Any:
+        return {"arguments": data}
+
+    @model_serializer(mode="plain")
+    def _the_arguments(self) -> dict[str, Any]:
+        return thaw_mapping(self.arguments)
 
 
 def input_model_of(schema: Mapping[str, Any]) -> type[ToolInput]:
@@ -101,11 +116,13 @@ class ConnectorToolsetsImpl(AttachedToolsetsInterface):
         secrets: SecretsInterface,
         options: ConnectorsOptions,
         *,
+        tool_of: ToolOf,
         host: HostCall | None = None,
         resolver: Resolve = resolve,
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         self._storage = storage
+        self._tool_of = tool_of
         self._kinds = kinds
         self._projects = projects
         self._placement = placement
@@ -171,7 +188,7 @@ class ConnectorToolsetsImpl(AttachedToolsetsInterface):
                 return found
             after = page[-1].id
 
-    def _tool(self, connector: PinnedConnector, tool: ConnectorTool) -> McpToolImpl:
+    def _tool(self, connector: PinnedConnector, tool: ConnectorTool) -> ToolInterface:
         binding = McpBinding(
             server=connector.name,
             server_tool=tool.definition.name,
@@ -188,9 +205,9 @@ class ConnectorToolsetsImpl(AttachedToolsetsInterface):
                 call = self._cloud(
                     connector, tool, McpServers(self._client, self._secrets, (server,))
                 )
-                return McpToolImpl(tool.definition, binding, call, secret=secret_use(server))
+                return self._tool_of(tool.definition, binding, call, secret=secret_use(server))
             case ConnectorPlace.HOST:
-                return McpToolImpl(tool.definition, binding, self._on_host(connector, tool))
+                return self._tool_of(tool.definition, binding, self._on_host(connector, tool))
 
     def _cloud(
         self, connector: PinnedConnector, tool: ConnectorTool, servers: McpServers

@@ -13,6 +13,8 @@ from cli_support import BOB, Stack
 from acme.om.tools.rules import definition_hash
 from acme.om.tools.types.mcp import McpToolDefinition
 
+SECRET = "tok-never-printed-6b0e2a"
+
 FIND = McpToolDefinition(
     name="find",
     description="Finds a ticket.",
@@ -69,6 +71,11 @@ def test_a_server_inside_the_wall_is_connected_reviewed_attached_and_detached(
     listing = stack.acme("connector", "listing", connector_id)
     assert listing.exit_code == 1, "a host's server is listed on its host"
     assert "conflict" in listing.output
+    held = stack.acme(
+        "connector", "credential", connector_id, env={"ACME_CONNECTOR_CREDENTIAL": SECRET}
+    )
+    assert held.exit_code == 1, "its credential stays on its host"
+    assert "validation_failed" in held.output and SECRET not in held.output
 
 
 def test_a_member_connects_nothing_and_a_connector_without_a_place_is_usage(

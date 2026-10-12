@@ -20,6 +20,7 @@ from acme.integrations.impl.configured import IntegrationsOverImpl
 from acme.integrations.model_providers.registry import ModelProvidersOverImpl
 from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl
 from acme.integrations.model_providers.types import ProviderName
+from acme.om.agents.attached import AttachedToolsetsNoneImpl
 from acme.om.agents.impl.loop import LoopManagerImpl, LoopOptions
 from acme.om.agents.impl.sink import StreamSinkMemoryImpl
 from acme.om.agents.types.kind import AgentKindCatalog
@@ -347,6 +348,7 @@ def wired(
         clock,
         sleep,
         leases=managers.leases,
+        attached=AttachedToolsetsNoneImpl(),
     )
     intake = build_intake(storage, managers, principal_context=members, clock=clock)
     return Wired(

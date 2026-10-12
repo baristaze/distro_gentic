@@ -43,18 +43,17 @@ async def test_a_server_is_connected_reviewed_and_attached_and_its_credential_ne
 ) -> None:
     connected = await client.post(
         "/v1/connectors",
-        headers=owner,
-        json={
-            "name": "words",
-            "summary": "Look words up.",
-            "url": words.url,
-            "credential": TOKEN,
-        },
+        headers={**owner, "Idempotency-Key": "connect-words"},
+        json={"name": "words", "summary": "Look words up.", "url": words.url},
     )
     assert connected.status_code == 201, connected.text
     connector = connected.json()
-    assert connector["has_credential"] and connector["tools"] == [] and connector["review"] == 0
-    assert TOKEN not in connected.text
+    assert not connector["has_credential"] and connector["tools"] == [] and connector["review"] == 0
+    given = await client.put(
+        f"/v1/connectors/{connector['id']}/credential", headers=owner, json={"value": TOKEN}
+    )
+    assert given.status_code == 200, given.text
+    assert given.json()["has_credential"] and TOKEN not in given.text
     org_id = (await client.get("/v1/orgs/current", headers=owner)).json()["id"]
     stored = await container.infra.get_secrets().get(
         UUID(org_id), connector_secret(UUID(connector["id"]))
@@ -146,6 +145,11 @@ async def test_a_member_connects_nothing_and_a_host_server_is_listed_on_its_host
     assert inside.json()["place"] == "host" and not inside.json()["has_credential"]
     listing = await client.get(f"/v1/connectors/{inside.json()['id']}/listing", headers=owner)
     assert listing.status_code == 409, "the platform never reaches into the wall"
+    held = await client.put(
+        f"/v1/connectors/{inside.json()['id']}/credential", headers=owner, json={"value": TOKEN}
+    )
+    assert held.status_code == 422, "its credential stays on its host"
+    assert TOKEN not in held.text
 
 
 @pytest.fixture
@@ -173,7 +177,6 @@ async def test_an_address_the_cloud_must_not_call_is_refused(
     refused = await client.post(
         "/v1/connectors",
         headers=owner,
-        json={"name": "words", "summary": "Look words up.", "url": url, "credential": TOKEN},
+        json={"name": "words", "summary": "Look words up.", "url": url},
     )
     assert refused.status_code == 422, refused.text
-    assert TOKEN not in refused.text

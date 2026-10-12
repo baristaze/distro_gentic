@@ -10,13 +10,21 @@ from acme.services.api.types.connectors import (
     ConnectorReviewRequest,
     ConnectorView,
     ConnectRequest,
+    CredentialRequest,
     ListedToolView,
 )
 
 
 class ConnectorsServiceInterface(ABC):
     @abstractmethod
-    async def connect(self, ctx: TenantContext, body: ConnectRequest) -> ConnectorView: ...
+    async def connect(
+        self, ctx: TenantContext, body: ConnectRequest, connector_id: UUID
+    ) -> ConnectorView: ...
+
+    @abstractmethod
+    async def put_credential(
+        self, ctx: TenantContext, connector_id: UUID, body: CredentialRequest
+    ) -> ConnectorView: ...
 
     @abstractmethod
     async def list_connectors(

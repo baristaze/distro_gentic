@@ -25,21 +25,25 @@ from acme.om.context import TenantContext
 class ConnectorsManagerInterface(ABC):
     @abstractmethod
     async def connect(
-        self,
-        ctx: TenantContext,
-        draft: ConnectorDraft,
-        *,
-        credential: SecretStr | None = None,
-        connector_id: UUID | None = None,
+        self, ctx: TenantContext, draft: ConnectorDraft, *, connector_id: UUID | None = None
     ) -> Connector:
-        """A server the tenant connects, with no tool reviewed and attached
-        to no kind. A cloud server's address is one the platform's cloud
-        may call, and its credential, when it takes one, is kept as the
-        tenant's secret: the connector names it, never holds it. A host
-        server's credential stays on its host, so it takes none here. A
-        name the platform's toolsets hold is `ValidationFailed`, and one
-        the tenant holds `UniqueKeyTaken`. An id written already answers
-        the connector as stored, so a retry connects none."""
+        """A server the tenant connects, with no credential, no tool
+        reviewed, and attached to no kind. A cloud server's address is one
+        the platform's cloud may call. A name a kind's toolsets hold is
+        `ValidationFailed`, and one the tenant holds `UniqueKeyTaken`. An id
+        written already answers the connector as stored, so a retry
+        connects none."""
+        ...
+
+    @abstractmethod
+    async def put_credential(
+        self, ctx: TenantContext, connector_id: UUID, credential: SecretStr
+    ) -> Connector:
+        """A cloud server's credential, kept as the tenant's secret under the
+        connector's own name: the connector names it and never holds it,
+        and a session's next call carries the value written last. It goes
+        over https, or to this host. A host server's credential stays on
+        its host: `ValidationFailed`."""
         ...
 
     @abstractmethod

@@ -24,8 +24,11 @@ customer's wall, where the platform must never open a connection.
 toolset's, and a one-line summary, which `load_toolset` gives it. A
 server on the internet has its address, and its credential is the
 tenant's secret, kept under a name of the connector's own. The connector
-names it and never holds it. A server inside the wall is named by its
-host: the platform holds that name alone. A connector is written in
+names it and never holds it. The credential is written apart from the
+connect, with a PUT, over the last one, and never read back, so the
+connect is a create under an Idempotency-Key that carries no secret. A
+server inside the wall is named by its host: the platform holds that
+name alone. A connector is written in
 `core.connectors`. Its reviewed tools and its attachments are its own
 lists, read whole.
 
@@ -123,5 +126,5 @@ loaded in a tenth of the sessions that stall.
 - A host runs only the servers its owner names. One that names none
   refuses every `mcp_call`, and a host from before this release refuses
   the operation.
-- Connecting takes no Idempotency-Key, since the credential rides it: a
-  retry finds its name taken.
+- A cloud server's credential is rotated in place: a session's next call
+  carries the value written last.

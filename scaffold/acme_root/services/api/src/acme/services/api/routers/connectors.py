@@ -1,15 +1,15 @@
 """A tenant's connectors: its MCP servers, as toolsets of its agents. A
 person who manages the tenant connects a server, reads what it lists, and
 reviews the tools a session may call, in person; then attaches it to a
-kind, for one project or the whole tenant. A credential goes in and never
-comes back, so a connect takes no Idempotency-Key: a retry finds its name
-taken."""
+kind, for one project or the whole tenant. A cloud server's credential is
+written apart, with a PUT, and never comes back."""
 
 from uuid import UUID
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
 
 from acme.services.api.gateway.auth import Ctx
+from acme.services.api.gateway.idempotency import Idem
 from acme.services.api.gateway.resolve import ConnectorsService
 from acme.services.api.types.common import LIMIT_DEFAULT
 from acme.services.api.types.connectors import (
@@ -17,6 +17,7 @@ from acme.services.api.types.connectors import (
     ConnectorReviewRequest,
     ConnectorView,
     ConnectRequest,
+    CredentialRequest,
     ListedToolView,
 )
 
@@ -35,10 +36,23 @@ async def list_connectors(
 
 
 @router.post("", response_model=ConnectorView, status_code=201)
-async def connect(ctx: Ctx, connectors: ConnectorsService, body: ConnectRequest) -> ConnectorView:
-    """A server connected, with no tool reviewed. Requires managing the org.
-    A cloud address that is this host or a private network is refused."""
-    return await connectors.connect(ctx, body)
+async def connect(
+    ctx: Ctx, connectors: ConnectorsService, body: ConnectRequest, idem: Idem
+) -> Response:
+    """A server connected, with no credential and no tool reviewed. Requires
+    managing the org. A cloud address that is this host or a private
+    network is refused."""
+    return await idem.run(201, lambda attempt: connectors.connect(ctx, body, attempt.target_id))
+
+
+@router.put("/{connector_id}/credential", response_model=ConnectorView)
+async def put_credential(
+    ctx: Ctx, connectors: ConnectorsService, connector_id: UUID, body: CredentialRequest
+) -> ConnectorView:
+    """A cloud server's credential, written over the last one; a session's
+    next call carries it. Requires managing the org. A host's server keeps
+    its credential on its host: 422."""
+    return await connectors.put_credential(ctx, connector_id, body)
 
 
 @router.get("/{connector_id}", response_model=ConnectorView)

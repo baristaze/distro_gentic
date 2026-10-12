@@ -23,7 +23,7 @@ from acme.integrations.model_providers.registry import ModelProvidersOverImpl
 from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl, ScriptedFailure
 from acme.integrations.model_providers.types import ErrorKind, ProviderName, StopReason, Usage
 from acme.om.agent_sessions.impl.manager import AgentSessionsOptions
-from acme.om.agents.attached import AttachedToolsetsInterface
+from acme.om.agents.attached import AttachedToolsetsInterface, AttachedToolsetsNoneImpl
 from acme.om.agents.gate import ResultGateInterface
 from acme.om.agents.impl.gate import ResultGateNullImpl
 from acme.om.agents.impl.loop import LoopManagerImpl, LoopOptions
@@ -480,7 +480,7 @@ def loop_over(
         sleep,
         leases=managers.leases,
         jitter=jitter,
-        attached=attached,
+        attached=attached or AttachedToolsetsNoneImpl(),
     )
     owner = owner or context(Role.OWNER, make_org())
     return Loop(

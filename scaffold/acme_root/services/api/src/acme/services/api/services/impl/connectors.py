@@ -18,6 +18,7 @@ from acme.services.api.types.connectors import (
     ConnectorToolView,
     ConnectorView,
     ConnectRequest,
+    CredentialRequest,
     ListedToolView,
 )
 from acme.services.api.types.levers import FindingView
@@ -27,7 +28,9 @@ class ConnectorsServiceImpl(ConnectorsServiceInterface):
     def __init__(self, connectors: ConnectorsManagerInterface) -> None:
         self._connectors = connectors
 
-    async def connect(self, ctx: TenantContext, body: ConnectRequest) -> ConnectorView:
+    async def connect(
+        self, ctx: TenantContext, body: ConnectRequest, connector_id: UUID
+    ) -> ConnectorView:
         draft = ConnectorDraft(
             name=body.name,
             summary=body.summary,
@@ -36,8 +39,13 @@ class ConnectorsServiceImpl(ConnectorsServiceInterface):
             credential_scheme=body.credential_scheme,
             host_server=body.host_server,
         )
-        connected = await self._connectors.connect(ctx, draft, credential=body.credential)
+        connected = await self._connectors.connect(ctx, draft, connector_id=connector_id)
         return view_of(connected)
+
+    async def put_credential(
+        self, ctx: TenantContext, connector_id: UUID, body: CredentialRequest
+    ) -> ConnectorView:
+        return view_of(await self._connectors.put_credential(ctx, connector_id, body.value))
 
     async def list_connectors(
         self, ctx: TenantContext, after: UUID | None, limit: int

@@ -18,7 +18,7 @@ from acme.integrations.root import IntegrationsInterface
 from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.impl.manager import AgentSessionsManagerImpl, AgentSessionsOptions
 from acme.om.agents import AgentsManagerInterface, ResultGateInterface
-from acme.om.agents.attached import AttachedToolsetsInterface
+from acme.om.agents.attached import AttachedToolsetsInterface, AttachedToolsetsNoneImpl
 from acme.om.agents.impl.loop import LoopManagerImpl, LoopOptions
 from acme.om.agents.impl.manager import AgentsManagerImpl, AgentsOptions
 from acme.om.agents.impl.sink import StreamSinkNullImpl
@@ -1392,7 +1392,7 @@ def build_managers(
             loop_options or LoopOptions(),
             leases=leases,
             domain_classes=domain_classes,
-            attached=attached_toolsets,
+            attached=attached_toolsets or AttachedToolsetsNoneImpl(),
         ),
         evidence=evidence,
         placement=placement,

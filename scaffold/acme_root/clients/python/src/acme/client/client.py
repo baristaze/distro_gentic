@@ -979,18 +979,26 @@ class ApiClient:
         summary: str,
         *,
         url: str | None = None,
-        credential: str | None = None,
         host_server: str | None = None,
+        idempotency_key: str | None = None,
     ) -> ConnectorView:
-        """A server on the internet at `url`, its calls carrying `credential`,
-        or the server the tenant's host runs as `host_server`. The credential
-        goes in once and never comes back."""
+        """A server on the internet at `url`, or the server the tenant's host
+        runs as `host_server`. Always under an idempotency key."""
         body: dict[str, Any] = {"name": name, "summary": summary}
-        for key, value in (("url", url), ("credential", credential), ("host_server", host_server)):
+        for key, value in (("url", url), ("host_server", host_server)):
             if value is not None:
                 body[key] = value
-        made = await self.request("POST", "/v1/connectors", json=body)
+        made = await self.request(
+            "POST", "/v1/connectors", json=body, idempotency_key=idempotency_key or str(uuid4())
+        )
         return ConnectorView.model_validate(made)
+
+    async def put_connector_credential(self, connector_id: UUID, value: str) -> ConnectorView:
+        """A cloud server's credential. It goes in and never comes back."""
+        given = await self.request(
+            "PUT", f"/v1/connectors/{connector_id}/credential", json={"value": value}
+        )
+        return ConnectorView.model_validate(given)
 
     async def connector_listing(self, connector_id: UUID) -> list[ListedToolView]:
         """What a cloud server lists now, each tool with the hash a review names."""

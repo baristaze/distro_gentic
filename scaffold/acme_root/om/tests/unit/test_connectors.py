@@ -191,7 +191,9 @@ def tenant(
         host=host,
         options=ConnectorsOptions(private_addresses=True),
     )
-    loop = loop_over(tmp_path, kinds=(OPERATOR,), attached=layer, storage=storage, infra=infra)
+    loop = loop_over(
+        tmp_path, kinds=(OPERATOR,), attached=layer.attached, storage=storage, infra=infra
+    )
     return Tenant(loop, layer.build(loop.managers))
 
 
@@ -248,10 +250,9 @@ async def connected(at: Tenant, url: str, *tools: str) -> UUID:
     reviewed, attached to the operator."""
     owner = at.loop.owner
     connector = await at.connectors.connect(
-        owner,
-        ConnectorDraft(name="words", summary="Look words up.", url=url),
-        credential=SecretStr(TOKEN),
+        owner, ConnectorDraft(name="words", summary="Look words up.", url=url)
     )
+    await at.connectors.put_credential(owner, connector.id, SecretStr(TOKEN))
     await review(at, connector.id, *tools)
     await at.connectors.attach(owner, connector.id, ConnectorAttachment(kind="operator"))
     return connector.id
@@ -315,12 +316,13 @@ async def test_connecting_and_reviewing_are_a_managers_and_in_person(
         await at.connectors.connect(
             owner, ConnectorDraft(name="ledger", summary="x", url=words.url)
         )
+    inside = await at.connectors.connect(
+        owner, ConnectorDraft(name="inside", summary="x", host_server="tracker")
+    )
     with pytest.raises(ValidationFailed, match="credential stays on its host"):
-        await at.connectors.connect(
-            owner,
-            ConnectorDraft(name="inside", summary="x", host_server="tracker"),
-            credential=SecretStr(TOKEN),
-        )
+        await at.connectors.put_credential(owner, inside.id, SecretStr(TOKEN))
+    with pytest.raises(NotAuthorized):
+        await at.connectors.put_credential(acting(at, Role.MEMBER), connector.id, SecretStr(TOKEN))
     with pytest.raises(ValidationFailed, match="no kind"):
         await at.connectors.attach(owner, connector.id, ConnectorAttachment(kind="nobody"))
 

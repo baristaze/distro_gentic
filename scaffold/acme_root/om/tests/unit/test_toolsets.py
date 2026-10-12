@@ -358,7 +358,7 @@ class Attaching(AttachedToolsetsInterface):
 
     async def of(self, ctx: TenantContext, session: AgentSession) -> Attached:
         self.asked.append(session.id)
-        return Attached(deferred=(TRACKER,), tools=(self.tool,))
+        return Attached(held=(), deferred=(TRACKER,), tools=(self.tool,))
 
 
 async def test_a_toolset_attached_to_a_session_loads_as_its_kinds_own_would(
@@ -395,10 +395,12 @@ async def test_a_toolset_attached_to_a_session_loads_as_its_kinds_own_would(
 
 def test_an_attached_toolset_names_each_of_its_tools_once() -> None:
     with pytest.raises(ValueError, match="given once"):
-        Attached(deferred=(TRACKER,), tools=())
+        Attached(held=(), deferred=(TRACKER,), tools=())
     with pytest.raises(ValueError, match="given once"):
         Attached(held=(TRACKER,), deferred=(TRACKER,), tools=(Lookup("tracker__find"),))
-    folded = with_attached(BUILT, Attached(deferred=(TRACKER,), tools=(Lookup("tracker__find"),)))
+    folded = with_attached(
+        BUILT, Attached(held=(), deferred=(TRACKER,), tools=(Lookup("tracker__find"),))
+    )
     assert {"tracker__find", LOAD_TOOLSET} <= set(folded.tools)
     assert folded.waiting == frozenset({"tracker__find"})
     assert with_attached(BUILT, NOTHING) is BUILT

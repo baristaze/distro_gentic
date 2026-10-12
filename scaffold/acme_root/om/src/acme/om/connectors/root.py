@@ -30,6 +30,7 @@ from acme.om.levers.rules import reach_of
 from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.root import Managers
 from acme.om.storage.root import StorageInterface
+from acme.om.tools.mcp import McpToolImpl
 from acme.om.trust.placement import PlacementInterface
 
 
@@ -58,7 +59,18 @@ def build_connectors(
     )
 
 
-class ConnectorsLayer(AttachedToolsetsInterface):
+class AttachedToolsetsLateImpl(AttachedToolsetsInterface):
+    """The toolsets the impl `late` answers once it is built: a root hands
+    the loop this before it builds the managers the impl reads."""
+
+    def __init__(self, late: Callable[[], AttachedToolsetsInterface]) -> None:
+        self._late = late
+
+    async def of(self, ctx: TenantContext, session: AgentSession) -> Attached:
+        return await self._late().of(ctx, session)
+
+
+class ConnectorsLayer:
     """The toolsets each session holds of its tenant's connectors, for the
     loop, and the connectors manager, once `build` has built both over the
     managers."""
@@ -88,10 +100,7 @@ class ConnectorsLayer(AttachedToolsetsInterface):
     @property
     def attached(self) -> AttachedToolsetsInterface:
         """What `build_managers` takes as `attached_toolsets`."""
-        return self
-
-    async def of(self, ctx: TenantContext, session: AgentSession) -> Attached:
-        return await self._parts()[1].of(ctx, session)
+        return AttachedToolsetsLateImpl(lambda: self._parts()[1])
 
     def build(self, managers: Managers) -> ConnectorsManagerInterface:
         """The connectors manager over the engine's, once; built again, the same."""
@@ -113,6 +122,7 @@ class ConnectorsLayer(AttachedToolsetsInterface):
                 self._client,
                 self._infra.get_secrets(),
                 self._options,
+                tool_of=McpToolImpl,
                 host=self._host,
                 resolver=self._resolve,
                 clock=self._clock,

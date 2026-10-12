@@ -281,10 +281,6 @@ class ConnectInstallationRequest(BaseModel):
     grant: Annotated[str, Field(max_length=4096, min_length=1, title='Grant')]
 
 
-class Credential(RootModel[SecretStr]):
-    root: Annotated[SecretStr, Field(max_length=4096, min_length=1, title='Credential')]
-
-
 class HostServer(RootModel[str]):
     root: Annotated[str, Field(pattern='^[a-z][a-z0-9_-]{0,63}$', title='Host Server')]
 
@@ -295,15 +291,14 @@ class Url(RootModel[str]):
 
 class ConnectRequest(BaseModel):
     """
-    A server on the internet, at its `url`, with the credential its calls
-    carry in `credential_header`, after `credential_scheme`; or the server
-    the tenant's host runs, by the name its owner gives it,
+    A server on the internet, at its `url`, whose calls carry their
+    credential in `credential_header`, after `credential_scheme`; or the
+    server the tenant's host runs, by the name its owner gives it,
     `host_server`, whose credential stays on that host.
     """
     model_config = ConfigDict(
         extra='forbid',
     )
-    credential: Annotated[Credential | None, Field(title='Credential')] = None
     credential_header: Annotated[str | None, Field(pattern='^[A-Za-z0-9-]{1,64}$', title='Credential Header')] = 'Authorization'
     credential_scheme: Annotated[str | None, Field(max_length=32, title='Credential Scheme')] = 'Bearer'
     host_server: Annotated[HostServer | None, Field(title='Host Server')] = None
@@ -427,6 +422,17 @@ class CredentialKind(StrEnum):
     socket_ticket = 'socket_ticket'
     operator_token = 'operator_token'
     internal = 'internal'
+
+
+class CredentialRequest(BaseModel):
+    """
+    A cloud server's credential. It is written under the connector's own
+    name, and no response, log, or error ever carries it.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    value: Annotated[SecretStr, Field(max_length=4096, min_length=1, title='Value')]
 
 
 class CrossingKind(StrEnum):

@@ -24,9 +24,9 @@ MAX_CREDENTIAL = 4_096
 
 
 class ConnectRequest(RequestBody):
-    """A server on the internet, at its `url`, with the credential its calls
-    carry in `credential_header`, after `credential_scheme`; or the server
-    the tenant's host runs, by the name its owner gives it,
+    """A server on the internet, at its `url`, whose calls carry their
+    credential in `credential_header`, after `credential_scheme`; or the
+    server the tenant's host runs, by the name its owner gives it,
     `host_server`, whose credential stays on that host."""
 
     name: str = Field(pattern=CONNECTOR_NAME)
@@ -34,8 +34,14 @@ class ConnectRequest(RequestBody):
     url: str | None = Field(default=None, max_length=2_000)
     credential_header: str = Field(default="Authorization", pattern=HEADER_NAME)
     credential_scheme: str = Field(default="Bearer", max_length=32)
-    credential: SecretStr | None = Field(default=None, min_length=1, max_length=MAX_CREDENTIAL)
     host_server: str | None = Field(default=None, pattern=HOST_SERVER)
+
+
+class CredentialRequest(RequestBody):
+    """A cloud server's credential. It is written under the connector's own
+    name, and no response, log, or error ever carries it."""
+
+    value: SecretStr = Field(min_length=1, max_length=MAX_CREDENTIAL)
 
 
 class DefinitionBody(RequestBody):

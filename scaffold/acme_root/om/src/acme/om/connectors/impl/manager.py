@@ -94,66 +94,57 @@ class ConnectorsManagerImpl(ConnectorsManagerInterface):
         self._tools = frozenset(tool for kind in kinds.kinds for tool in kind.tools)
 
     async def connect(
-        self,
-        ctx: TenantContext,
-        draft: ConnectorDraft,
-        *,
-        credential: SecretStr | None = None,
-        connector_id: UUID | None = None,
+        self, ctx: TenantContext, draft: ConnectorDraft, *, connector_id: UUID | None = None
     ) -> Connector:
         ctx.require(Permission.MANAGE_MEMBERS)
         if draft.name in self._toolsets:
             raise ValidationFailed(f"{draft.name} is a toolset a kind names")
-        place = draft.place
-        if place is ConnectorPlace.HOST and credential is not None:
-            raise ValidationFailed("a host connector's credential stays on its host")
         if draft.url is not None:
             refusal = await refused_now(
                 draft.url, private=self._options.private_addresses, resolver=self._resolve
             )
             if refusal is not None:
                 raise ValidationFailed(refusal)
-        connector_id = connector_id or new_id()
-        secret = connector_secret(connector_id) if credential is not None else None
-        if draft.url is not None and secret is not None and not McpHttp(url=draft.url).private:
-            raise ValidationFailed("a credential goes over https, or to this host")
         now = self._clock()
         connector = Connector(
-            id=connector_id,
+            id=connector_id or new_id(),
             created_at=now,
             updated_at=now,
             created_by=ctx.user_id,
             updated_by=ctx.user_id,
             name=draft.name,
             summary=draft.summary,
-            place=place,
+            place=draft.place,
             url=draft.url,
             credential_header=draft.credential_header,
             credential_scheme=draft.credential_scheme,
-            secret=secret,
             host_server=draft.host_server,
         )
-        if credential is not None and secret is not None:
-            # The value first, so no connector ever names a secret it lacks.
-            await self._secrets.put(
-                ctx.org_id, secret, credential.get_secret_value(), deadline=ctx.deadline
-            )
         rows = (versioned_row(ctx, CREATED, connector.id, connector.version),)
-        try:
-            created = await self._storage.create_connector(ctx.org_id, connector, rows)
-        except Exception:
-            # A connector a retry finds written already keeps the value it names.
-            held = await self._storage.read_connector(ctx.org_id, connector.id)
-            if secret is not None and held is None:
-                await self._secrets.delete(ctx.org_id, secret, deadline=ctx.deadline)
-            raise
-        if not created:
+        if not await self._storage.create_connector(ctx.org_id, connector, rows):
             stored = await self._storage.read_connector(ctx.org_id, connector.id)
             if stored is None:
                 raise TenantMismatch(f"connector {connector.id} is not in {ctx.org_id}")
             return stored
         await self._relay_all(ctx, rows)
         return connector
+
+    async def put_credential(
+        self, ctx: TenantContext, connector_id: UUID, credential: SecretStr
+    ) -> Connector:
+        ctx.require(Permission.MANAGE_MEMBERS)
+        connector = await self._connector(ctx, connector_id)
+        if connector.url is None:
+            raise ValidationFailed(f"{connector.name}'s credential stays on its host")
+        if not McpHttp(url=connector.url).private:
+            raise ValidationFailed("a credential goes over https, or to this host")
+        secret = connector_secret(connector.id)
+        await self._secrets.put(
+            ctx.org_id, secret, credential.get_secret_value(), deadline=ctx.deadline
+        )
+        if connector.secret == secret:
+            return connector
+        return await self._update(ctx, self._next(ctx, connector, secret=secret))
 
     async def get_connector(self, ctx: TenantContext, connector_id: UUID) -> Connector:
         ctx.require(Permission.READ)

@@ -1638,8 +1638,9 @@ export interface paths {
         put?: never;
         /**
          * Connect
-         * @description A server connected, with no tool reviewed. Requires managing the org.
-         *     A cloud address that is this host or a private network is refused.
+         * @description A server connected, with no credential and no tool reviewed. Requires
+         *     managing the org. A cloud address that is this host or a private
+         *     network is refused.
          */
         post: operations["connect_v1_connectors_post"];
         delete?: never;
@@ -1686,6 +1687,28 @@ export interface paths {
          *     pinned the connector keeps it.
          */
         delete: operations["detach_v1_connectors__connector_id__attachments_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/connectors/{connector_id}/credential": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Credential
+         * @description A cloud server's credential, written over the last one; a session's
+         *     next call carries it. Requires managing the org. A host's server keeps
+         *     its credential on its host: 422.
+         */
+        put: operations["put_credential_v1_connectors__connector_id__credential_put"];
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -4326,14 +4349,12 @@ export interface components {
         };
         /**
          * ConnectRequest
-         * @description A server on the internet, at its `url`, with the credential its calls
-         *     carry in `credential_header`, after `credential_scheme`; or the server
-         *     the tenant's host runs, by the name its owner gives it,
+         * @description A server on the internet, at its `url`, whose calls carry their
+         *     credential in `credential_header`, after `credential_scheme`; or the
+         *     server the tenant's host runs, by the name its owner gives it,
          *     `host_server`, whose credential stays on that host.
          */
         ConnectRequest: {
-            /** Credential */
-            credential?: string | null;
             /**
              * Credential Header
              * @default Authorization
@@ -4580,6 +4601,18 @@ export interface components {
          * @enum {string}
          */
         CredentialKind: "api_key" | "session_token" | "login" | "socket_ticket" | "operator_token" | "internal";
+        /**
+         * CredentialRequest
+         * @description A cloud server's credential. It is written under the connector's own
+         *     name, and no response, log, or error ever carries it.
+         */
+        CredentialRequest: {
+            /**
+             * Value
+             * Format: password
+             */
+            value: string;
+        };
         /**
          * CrossingBody
          * @description What the sender declares of the bytes it sends: what they are, their
@@ -12142,6 +12175,7 @@ export interface operations {
                 authorization?: string | null;
                 "x-app"?: string | null;
                 "x-app-version"?: string | null;
+                "idempotency-key"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -12263,6 +12297,45 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectorView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_credential_v1_connectors__connector_id__credential_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path: {
+                connector_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CredentialRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

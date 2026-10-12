@@ -27,13 +27,7 @@ from acme.om.agent_sessions.types.agent_session import AgentSession, SessionStat
 from acme.om.agents import AgentsManagerInterface
 from acme.om.agents import line_rules as lines
 from acme.om.agents import loop_rules as rules
-from acme.om.agents.attached import (
-    NOTHING,
-    Attached,
-    AttachedToolsetsInterface,
-    AttachedToolsetsNoneImpl,
-    with_attached,
-)
+from acme.om.agents.attached import NOTHING, Attached, AttachedToolsetsInterface, with_attached
 from acme.om.agents.loop import LoopManagerInterface
 from acme.om.agents.rules import CHILDREN_PARK, after_turn, ends_parents_wait, notes_parent
 from acme.om.agents.sink import StreamSinkInterface
@@ -239,15 +233,14 @@ class LoopManagerImpl(LoopManagerInterface):
         *,
         leases: LeasesManagerInterface,
         domain_classes: Sequence[str] = (),
+        attached: AttachedToolsetsInterface,
         jitter: Callable[[], float] = random.random,
-        attached: AttachedToolsetsInterface | None = None,
     ) -> None:
         """`credentials` answers the client each call runs on and the
         credential it carries: the platform's key, or a tenant's. `leases`
         answers where each request a tool asked in line stands. `attached`
-        answers the toolsets a session holds beyond its kind; None attaches
-        nothing."""
-        self._attached = attached or AttachedToolsetsNoneImpl()
+        answers the toolsets a session holds beyond its kind."""
+        self._attached = attached
         self._jitter = jitter
         self._leases = leases
         self._steps = steps

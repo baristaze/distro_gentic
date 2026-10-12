@@ -522,15 +522,14 @@ async def test_a_tenants_server_is_connected_reviewed_attached_and_called_by_a_s
     connected = await stack.client.post(
         "/v1/connectors",
         headers=headers,
-        json={
-            "name": "words",
-            "summary": "Look words up.",
-            "url": words,
-            "credential": MCP_TOKEN,
-        },
+        json={"name": "words", "summary": "Look words up.", "url": words},
     )
     assert connected.status_code == 201, connected.text
     connector_id = connected.json()["id"]
+    given = await stack.client.put(
+        f"/v1/connectors/{connector_id}/credential", headers=headers, json={"value": MCP_TOKEN}
+    )
+    assert given.status_code == 200, given.text
     listing = await stack.client.get(f"/v1/connectors/{connector_id}/listing", headers=headers)
     assert listing.status_code == 200, listing.text
     (lookup,) = (tool for tool in listing.json() if tool["name"] == "lookup")

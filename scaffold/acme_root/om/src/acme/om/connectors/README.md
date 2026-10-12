@@ -22,7 +22,8 @@ the kinds of thing [Acme is made of](../../../../README.md).
 ## What can happen
 
 - **Connect.** A person who manages the tenant connects a server: its
-  address and its credential, or the name its host runs it by.
+  address, or the name its host runs it by. A cloud server's credential
+  is written apart, over the last one, and never read back.
 - **List.** What a server on the internet lists now, each tool with its
   hash and its findings, for the person who reviews it. A server inside
   the wall is listed on its host.
