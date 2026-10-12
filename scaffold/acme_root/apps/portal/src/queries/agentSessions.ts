@@ -14,7 +14,7 @@ import type {
   DecisionRequest,
   DeliveryView,
   ExecutionPageView,
-  GiveBackRequest,
+  ControlGiveBackRequest,
   HandRunView,
   InvocationView,
   InvokeRequest,
@@ -303,7 +303,7 @@ export function useSessionActions(id: string) {
       onSettled: settled,
     }),
     giveBack: useMutation({
-      mutationFn: (body: Pick<GiveBackRequest, "summary"> & Partial<GiveBackRequest>) => api.post<AgentSessionView>(`${path(id)}/control/give-back`, body),
+      mutationFn: (body: Pick<ControlGiveBackRequest, "summary"> & Partial<ControlGiveBackRequest>) => api.post<AgentSessionView>(`${path(id)}/control/give-back`, body),
       onSettled: settled,
     }),
     archive: useMutation({

@@ -366,6 +366,17 @@ class ControlCommand(StrEnum):
     restore = 'restore'
 
 
+class ControlGiveBackRequest(BaseModel):
+    """
+    What the person did, as the agent reads it on resume.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    stop: Annotated[bool | None, Field(title='Stop')] = False
+    summary: Annotated[str, Field(max_length=100000, min_length=1, title='Summary')]
+
+
 class ControlKind(StrEnum):
     """
     What one line of a host's control stream says.
@@ -884,6 +895,17 @@ class GateView(BaseModel):
     authorization_class: Annotated[str | None, Field(title='Authorization Class')]
     decision: Decision
     tool: Annotated[str | None, Field(title='Tool')]
+
+
+class GiveBackRequest(BaseModel):
+    """
+    What the person who held the environment did there, which the model
+    reads as their message when the loop goes on.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    summary: Annotated[str, Field(max_length=100000, min_length=1, title='Summary')]
 
 
 class HandRunView(BaseModel):
@@ -2568,28 +2590,6 @@ class WorkStatus(StrEnum):
     claimed = 'claimed'
     done = 'done'
     failed = 'failed'
-
-
-class AcmeServicesApiTypesAgentSessionsGiveBackRequest(BaseModel):
-    """
-    What the person who held the environment did there, which the model
-    reads as their message when the loop goes on.
-    """
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    summary: Annotated[str, Field(max_length=100000, min_length=1, title='Summary')]
-
-
-class AcmeServicesApiTypesWatchGiveBackRequest(BaseModel):
-    """
-    What the person did, as the agent reads it on resume.
-    """
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    stop: Annotated[bool | None, Field(title='Stop')] = False
-    summary: Annotated[str, Field(max_length=100000, min_length=1, title='Summary')]
 
 
 class ActionBody(BaseModel):

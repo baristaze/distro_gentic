@@ -4760,6 +4760,19 @@ export interface components {
          */
         ControlCommand: "pause" | "resume" | "cancel" | "interrupt" | "compact" | "approve" | "deny" | "unlock" | "restore";
         /**
+         * ControlGiveBackRequest
+         * @description What the person did, as the agent reads it on resume.
+         */
+        ControlGiveBackRequest: {
+            /**
+             * Stop
+             * @default false
+             */
+            stop: boolean;
+            /** Summary */
+            summary: string;
+        };
+        /**
          * ControlKind
          * @description What one line of a host's control stream says.
          * @enum {string}
@@ -5633,6 +5646,15 @@ export interface components {
             decision: components["schemas"]["Decision"];
             /** Tool */
             tool: string | null;
+        };
+        /**
+         * GiveBackRequest
+         * @description What the person who held the environment did there, which the model
+         *     reads as their message when the loop goes on.
+         */
+        GiveBackRequest: {
+            /** Summary */
+            summary: string;
         };
         /**
          * GrantRequest
@@ -9194,28 +9216,6 @@ export interface components {
          * @enum {string}
          */
         WorkStatus: "queued" | "claimed" | "done" | "failed";
-        /**
-         * GiveBackRequest
-         * @description What the person who held the environment did there, which the model
-         *     reads as their message when the loop goes on.
-         */
-        acme__services__api__types__agent_sessions__GiveBackRequest: {
-            /** Summary */
-            summary: string;
-        };
-        /**
-         * GiveBackRequest
-         * @description What the person did, as the agent reads it on resume.
-         */
-        acme__services__api__types__watch__GiveBackRequest: {
-            /**
-             * Stop
-             * @default false
-             */
-            stop: boolean;
-            /** Summary */
-            summary: string;
-        };
     };
     responses: never;
     parameters: never;
@@ -10968,7 +10968,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["acme__services__api__types__watch__GiveBackRequest"];
+                "application/json": components["schemas"]["ControlGiveBackRequest"];
             };
         };
         responses: {
@@ -11160,7 +11160,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["acme__services__api__types__agent_sessions__GiveBackRequest"];
+                "application/json": components["schemas"]["GiveBackRequest"];
             };
         };
         responses: {

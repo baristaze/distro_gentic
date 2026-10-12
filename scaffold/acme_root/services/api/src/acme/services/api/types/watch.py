@@ -109,7 +109,7 @@ class CommandProgressView(View):
     stderr: str | None = None
 
 
-class GiveBackRequest(RequestBody):
+class ControlGiveBackRequest(RequestBody):
     """What the person did, as the agent reads it on resume."""
 
     summary: str = Field(min_length=1, max_length=MAX_MESSAGE)

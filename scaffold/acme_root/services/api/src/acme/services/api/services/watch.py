@@ -16,7 +16,7 @@ from acme.services.api.types.claimants import ClaimantAppendRequest
 from acme.services.api.types.watch import (
     CommandProgressView,
     CommandRequest,
-    GiveBackRequest,
+    ControlGiveBackRequest,
     HandRunView,
     ItemPageView,
     ItemReadView,
@@ -94,5 +94,5 @@ class WatchServiceInterface(ABC):
 
     @abstractmethod
     async def give_back(
-        self, ctx: TenantContext, session_id: UUID, body: GiveBackRequest
+        self, ctx: TenantContext, session_id: UUID, body: ControlGiveBackRequest
     ) -> AgentSessionView: ...

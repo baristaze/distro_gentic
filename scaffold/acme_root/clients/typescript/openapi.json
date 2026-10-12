@@ -2390,6 +2390,28 @@
         "title": "ControlCommand",
         "type": "string"
       },
+      "ControlGiveBackRequest": {
+        "additionalProperties": false,
+        "description": "What the person did, as the agent reads it on resume.",
+        "properties": {
+          "stop": {
+            "default": false,
+            "title": "Stop",
+            "type": "boolean"
+          },
+          "summary": {
+            "maxLength": 100000,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary"
+        ],
+        "title": "ControlGiveBackRequest",
+        "type": "object"
+      },
       "ControlKind": {
         "description": "What one line of a host's control stream says.",
         "enum": [
@@ -4300,6 +4322,23 @@
           "decision"
         ],
         "title": "GateView",
+        "type": "object"
+      },
+      "GiveBackRequest": {
+        "additionalProperties": false,
+        "description": "What the person who held the environment did there, which the model\nreads as their message when the loop goes on.",
+        "properties": {
+          "summary": {
+            "maxLength": 100000,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary"
+        ],
+        "title": "GiveBackRequest",
         "type": "object"
       },
       "GrantRequest": {
@@ -11876,45 +11915,6 @@
         ],
         "title": "WorkStatus",
         "type": "string"
-      },
-      "acme__services__api__types__agent_sessions__GiveBackRequest": {
-        "additionalProperties": false,
-        "description": "What the person who held the environment did there, which the model\nreads as their message when the loop goes on.",
-        "properties": {
-          "summary": {
-            "maxLength": 100000,
-            "minLength": 1,
-            "title": "Summary",
-            "type": "string"
-          }
-        },
-        "required": [
-          "summary"
-        ],
-        "title": "GiveBackRequest",
-        "type": "object"
-      },
-      "acme__services__api__types__watch__GiveBackRequest": {
-        "additionalProperties": false,
-        "description": "What the person did, as the agent reads it on resume.",
-        "properties": {
-          "stop": {
-            "default": false,
-            "title": "Stop",
-            "type": "boolean"
-          },
-          "summary": {
-            "maxLength": 100000,
-            "minLength": 1,
-            "title": "Summary",
-            "type": "string"
-          }
-        },
-        "required": [
-          "summary"
-        ],
-        "title": "GiveBackRequest",
-        "type": "object"
       }
     }
   },
@@ -16909,7 +16909,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/acme__services__api__types__watch__GiveBackRequest"
+                "$ref": "#/components/schemas/ControlGiveBackRequest"
               }
             }
           },
@@ -17461,7 +17461,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/acme__services__api__types__agent_sessions__GiveBackRequest"
+                "$ref": "#/components/schemas/GiveBackRequest"
               }
             }
           },

@@ -109,4 +109,4 @@ export type LivePartView = Schemas["LivePartView"];
 export type CommandRequest = Schemas["CommandRequest"];
 export type HandRunView = Schemas["HandRunView"];
 export type CommandProgressView = Schemas["CommandProgressView"];
-export type GiveBackRequest = Schemas["GiveBackRequest"];
+export type ControlGiveBackRequest = Schemas["ControlGiveBackRequest"];
