@@ -124,6 +124,16 @@ app, and `main.py` is the `acme-api` command: `serve`, `migrate`,
   `.../calls/{request_seq}/decision`, `.../deadline`, `.../principal`,
   `.../take-over`, `.../give-back`, `.../jobs/{key}/completion`,
   `.../steps`, `.../artifacts/{artifact_id}`, ADRs 1038 and 1039)
+- **Parks on the tenant's money.** An owner or an admin approves a
+  session's next call far above its norm, up to a cost, and raises a
+  budget for the window open now, its own amount unchanged, each under an
+  Idempotency-Key; a person who may write posts a payment the provider
+  confirmed, with its signature in `Payment-Signature`, credited once by
+  the provider's reference. Each wakes the sessions parked on it and
+  answers the ledger entry it posted. A signature that does not check out
+  is `400`, and another tenant's confirmation `403`.
+  (`/v1/agent-sessions/{session_id}/cost-approval`,
+  `/v1/budgets/{budget_id}/raises`, `/v1/billing/payments`, ADR 2060)
 - **Projects.** An owner or an admin creates a project bound to its
   repository, under an Idempotency-Key, renames it, and removes it while
   no session belongs to it (`409 project_in_use` otherwise); any member
@@ -271,6 +281,10 @@ app, and `main.py` is the `acme-api` command: `serve`, `migrate`,
   sessions created in a window reached before they stalled, each lever
   by its kind, id, and version, never its name or its slug, with
   counts and session ids (`/v1/admin/orgs/{org_id}/levers`, ADR 2054).
+  An operator who may read reads the tenant's ledger, and one who may
+  write grants it units for its life, under an Idempotency-Key, which
+  wakes its sessions parked on its funds; an org that is gone is `404`
+  (`/v1/admin/orgs/{org_id}/ledger`, `.../grants`, ADR 2060).
 - **Operational.** Liveness (`/healthz`, the process alone),
   readiness (`/readyz`, asks the database under a deadline shorter
   than the probe's interval), metrics (`/metrics`), and the OpenAPI
