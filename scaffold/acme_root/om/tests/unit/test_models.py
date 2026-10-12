@@ -174,7 +174,7 @@ async def test_a_kind_that_asks_sizes_gets_the_tables_fills_at_its_efforts() -> 
         ModelAsk(role="analysis", size=ModelSize.XL, effort=Effort.MEDIUM),
     )
     analysis, main, summarizer = await resolver.resolve(
-        ctx, [MAIN, SUMMARIZER, "analysis"], Eligibility(), asks
+        ctx, new_id(), [MAIN, SUMMARIZER, "analysis"], Eligibility(), asks
     )
     sizes = {entry.size: entry for entry in DEFAULT_SIZES}
     for role, size in ((main, ModelSize.L), (summarizer, ModelSize.S), (analysis, ModelSize.XL)):
@@ -196,19 +196,21 @@ async def test_a_kind_that_asks_sizes_gets_the_tables_fills_at_its_efforts() -> 
     ], "a role no table names, served by its size, at the effort asked"
     assert (main.ask, summarizer.ask, analysis.ask) == (asks[0], asks[1], asks[2])
     # A kind with no ask resolves as before; one role asked leaves the other.
-    assert await resolver.resolve(ctx, [MAIN, SUMMARIZER], Eligibility()) == DEFAULT_TABLE
+    assert await resolver.resolve(ctx, new_id(), [MAIN, SUMMARIZER], Eligibility()) == DEFAULT_TABLE
     raised = ModelAsk(role=MAIN, size=ModelSize.L, effort=Effort.XHIGH)
-    main, summarizer = await resolver.resolve(ctx, [MAIN, SUMMARIZER], Eligibility(), (raised,))
+    main, summarizer = await resolver.resolve(
+        ctx, new_id(), [MAIN, SUMMARIZER], Eligibility(), (raised,)
+    )
     assert served(main) == [
         ("anthropic/claude-sonnet-5-5", Effort.XHIGH),
         ("openai/gpt-6.1-sol", Effort.XHIGH),
     ]
     assert summarizer == DEFAULT_TABLE[1]
     with pytest.raises(UnresolvedRole):
-        await resolver.resolve(ctx, [MAIN], Eligibility(), (raised, raised))
+        await resolver.resolve(ctx, new_id(), [MAIN], Eligibility(), (raised, raised))
     unsized = ModelResolverTableImpl(EVERY_DEFAULT, ResolverOptions(sizes=()))
     with pytest.raises(UnresolvedRole, match="model size"):
-        await unsized.resolve(ctx, [MAIN], Eligibility(), (raised,))
+        await unsized.resolve(ctx, new_id(), [MAIN], Eligibility(), (raised,))
 
 
 async def test_an_ask_never_widens_what_a_fill_allows_and_the_fill_set_keeps_both(
@@ -256,7 +258,7 @@ async def test_each_openai_fill_lists_exactly_the_efforts_its_model_takes() -> N
     ctx = context(Role.MEMBER)
     for asked, fallback in ((Effort.NONE, Effort.HIGH), (Effort.MAX, Effort.MAX)):
         ask = ModelAsk(role=MAIN, size=ModelSize.L, effort=asked)
-        (main,) = await resolver.resolve(ctx, [MAIN], Eligibility(), (ask,))
+        (main,) = await resolver.resolve(ctx, new_id(), [MAIN], Eligibility(), (ask,))
         assert served(main)[1] == ("openai/gpt-6.1-sol", fallback), f"an ask at {asked}"
 
 

@@ -110,11 +110,11 @@ async def test_a_session_resolves_keeps_and_renews_its_fill_through_the_matrix_o
 
     assert fleet.loop.anthropic.calls[-1].model == OPUS.model
     (switched,) = [
-        step.header
+        step.header.fills
         for step in await fleet.loop.history(session_id)
-        if isinstance(step.header, SwitchedHeader)
+        if isinstance(step.header, SwitchedHeader) and step.header.fills is not None
     ]
-    assert (switched.fills.from_fill, switched.fills.to_fill) == (SONNET, OPUS)
-    assert switched.fills.reason is SwitchReason.RETIRED
+    assert (switched.from_fill, switched.to_fill) == (SONNET, OPUS)
+    assert switched.reason is SwitchReason.RETIRED
     pin = await fleet.matrix.matrix.get_pin(owner, session_id)
     assert (pin.matrix_version, pin.fill_set_version) == (second.number, 2)
