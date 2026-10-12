@@ -11,6 +11,7 @@ from acme.infra.cache import CacheInterface, CacheScope
 from acme.infra.root import InfraInterface
 from acme.infra.transports import SecretVia, TransportInterface
 from acme.infra.workspaces import IsolationSpec
+from acme.integrations.events import IntegrationAbsentImpl
 from acme.integrations.identity import IdentityProviderInterface
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
 from acme.integrations.model_providers.registry import absent_model_providers
@@ -114,6 +115,7 @@ from acme.om.platform_agents.catalog import (
     with_assistant_tools,
     with_shipped,
 )
+from acme.om.platform_agents.impl.gate import ResultGateReviewImpl
 from acme.om.platform_agents.impl.manager import PlatformAgentsManagerImpl, PlatformAgentsOptions
 from acme.om.platform_agents.kinds import (
     ENVIRONMENT_KINDS,
@@ -825,8 +827,11 @@ def build_managers(
             workspaces=lambda: managers.workspaces,
             intake=intake or intake_absent,
             knowledge=knowledge or knowledge_absent,
+            integrations=IntegrationAbsentImpl
+            if integrations is None
+            else integrations.get_integration,
+            budgets=lambda: managers.budgets,
         )
-        refuse_reach(agent_kinds, tool_catalog)
     # The relay every core-role manager hands its outbox rows to. It reaches
     # the work manager through the root below, because a row of kind
     # `work.<kind>` is enqueued there: the work manager needs the tenancy
@@ -1082,6 +1087,10 @@ def build_managers(
         storage.get_evidence_storage(), products, session_policies
     )
     refuse_quiet_nulls(environment, results, products)
+    if platform_agents is not None:
+        # A reviewer's result is judged by the reads and findings it cites;
+        # every other result passes the gate above, unchanged.
+        results = ResultGateReviewImpl(results, agent_sessions, steps)
     reader = attachment_reader or AttachmentReaderNullImpl()
     # What a model request reads: rendered from the history, compacted by
     # the summarizer through the model providers, behind the gate, paid for
@@ -1130,6 +1139,10 @@ def build_managers(
         engine_tools(steps, agent_sessions, reader, windows, lambda: managers.agents) + tool_catalog
     )
     ToolRegistry(catalog, domain_classes)  # refuses two tools of one name at boot
+    if platform_agents is not None:
+        # The kinds that may only read are held to it over the whole
+        # catalog, the engine's tools included.
+        refuse_reach(agent_kinds, catalog)
     # Where the engine touches the world: the session's history for a
     # person's decisions, the events for the audit of each secret a call
     # uses, the workspace and the transport infra chose, and attribution,

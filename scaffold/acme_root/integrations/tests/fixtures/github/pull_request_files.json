@@ -1,0 +1,19 @@
+[
+  {
+    "sha": "b1946ac92492d2347c6235b4d2611184d7e6f5a4",
+    "filename": "src/cart.py",
+    "status": "modified",
+    "additions": 3,
+    "deletions": 1,
+    "changes": 4,
+    "patch": "@@ -10,7 +10,9 @@ def total(cart):\n     prices = [item.price for item in cart]\n-    return sum(prices) / len(prices)\n+    if not prices:\n+        return 0\n+    return sum(prices)\n \n \n def count(cart):"
+  },
+  {
+    "sha": "591785b794601e212b260e25925636fd1fdd0ac7",
+    "filename": "assets/logo.png",
+    "status": "added",
+    "additions": 0,
+    "deletions": 0,
+    "changes": 0
+  }
+]

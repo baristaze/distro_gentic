@@ -6,8 +6,10 @@ under the system's own id for it. An event that is or follows from the act
 names the session it came from, and an automation it feeds knows its cause
 and its hop, so an agent's act cannot start an endless chain.
 
-A tool that reads a manager takes it late, as a callable the root answers
-once it has built it."""
+A tool that reaches the forge, to act or to read, does so only through an
+installation the session's own tenant connected (`connected`). A tool
+that reads a manager takes it late, as a callable the root answers once
+it has built it."""
 
 from collections.abc import Callable
 from datetime import timedelta
@@ -34,6 +36,27 @@ FORGE = "forge"
 tickets."""
 
 MAX_COMMENT = 20_000
+
+
+async def connected(
+    ctx: TenantContext, intake: IntakeManagerInterface, forge: IntegrationInterface, target: str
+) -> str:
+    """The installation of the forge that holds `target`, a repository or
+    an address on one (`owner/repo#12`), once the tenant of `ctx` connected
+    it. Any other is `ToolFailed`, denied, before anything is read or
+    written through it; a forge that names none fails as its refusal is."""
+    try:
+        installation = await forge.installation_of(target)
+    except InfraException as failed:
+        raise ToolFailed(
+            ToolFailure.PERMANENT if isinstance(failed, ProviderRefused) else ToolFailure.TRANSIENT,
+            f"the forge named no installation of {target}: {failed.message}",
+        ) from None
+    if await intake.tenant_of(ctx, FORGE, installation) != ctx.org_id:
+        raise ToolFailed(
+            ToolFailure.DENIED, f"no installation of the forge this tenant connected holds {target}"
+        )
+    return installation
 
 
 class CommentInput(ToolInput):
@@ -100,20 +123,7 @@ class CommentImpl(ToolInterface):
         intake = self._intake()
         forge = self._integrations(FORGE)
         mark = str(runtime.key)
-        try:
-            installation = await forge.installation_of(call_input.on)
-        except InfraException as failed:
-            raise ToolFailed(
-                ToolFailure.PERMANENT
-                if isinstance(failed, ProviderRefused)
-                else ToolFailure.TRANSIENT,
-                f"the forge named no installation of {call_input.on}: {failed.message}",
-            ) from None
-        if await intake.tenant_of(ctx, FORGE, installation) != ctx.org_id:
-            raise ToolFailed(
-                ToolFailure.DENIED,
-                f"no installation of the forge this tenant connected holds {call_input.on}",
-            )
+        installation = await connected(ctx, intake, forge, call_input.on)
         # Recorded before the act: the forge's event may come back before the
         # post answers.
         await intake.record_act(ctx, runtime.session_id, FORGE, (mark,))

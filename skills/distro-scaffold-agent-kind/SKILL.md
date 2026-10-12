@@ -17,7 +17,7 @@ where a kind lives.
 
 ## Input
 
-`<kind> [--done answer|result_tool] [--tools <tool,...>] [--authority delegated|steady] [--workspace none|container] [--classes <class,...>] [--roles <role,...>]`,
+`<kind> [--done answer|result_tool] [--tools <tool,...>] [--authority delegated|steady] [--workspace none|container] [--classes <class,...>] [--roles <role,...>] [--asks <role>=<size>,...]`,
 and what the kind's agent does and may never do, in the arguments or
 in the conversation.
 
@@ -41,6 +41,11 @@ session should take it".
   talks to has none, as the assistant has none.
 - `--classes`: the tool classes its policy layer allows, `allowing(...)`.
 - `--roles`: model roles beyond `MAIN` the kind's calls take.
+- `--asks`: the model size the kind asks of a role, as `main=xl`. By
+  default a kind asks what every shipped kind but the reviewer asks,
+  `ASKS` in `kinds.py`: L of `MAIN` and S of `SUMMARIZER`. A size named
+  here replaces that role's ask, as the reviewer's `REVIEWER_ASKS` asks
+  XL of `MAIN`, and a role of `--roles` asks nothing unless it is named.
 
 ## Created
 
@@ -58,9 +63,11 @@ The shape of a kind is the four profiles in
 | `om/src/<name>/om/platform_agents/kinds.py` | `<KIND>`, any tool name constant it adds, `<KIND>_KIND`, its place in `SHIPPED`, and its line in the module docstring |
 | `om/src/<name>/om/platform_agents/tools.py` (a tool of its own) | `<Tool>Impl(NativeToolImpl)`, its input, and its output |
 | `om/src/<name>/om/platform_agents/catalog.py` (a tool of its own) | the tool in `with_shipped`, in `own_specs` and in `own` |
-| `om/tests/unit/test_platform_agents.py` | the kind in `test_every_shipped_agent_is_a_profile_that_sets_its_powers`, and the cases of step 5 |
+| `om/tests/unit/test_platform_agents.py` | the kind in `test_every_shipped_agent_is_a_profile_that_sets_its_powers`, the cases of step 5, and its version in `RENDERED`, the digest of its request's system text and tools, with its profile in the loop of `test_each_shipped_kind_renders_its_versions_bytes_with_a_break_after_its_prompts`: run that test once and pin the digest its failure prints |
 | `om/tests/unit/test_matrix.py` (with `--roles`) | the case of step 5 for its roles |
 | `om/tests/contracts/matrix.py` (with `--roles`) | `CATCH_ALL` and the default roles of `publish` serve the kind's roles, since a role added to a shipped kind joins the required set of every version, and the unit and integration matrix suites refuse a default publish that lacks it |
+| `om/tests/contracts/matrix.py`, `om/tests/unit/test_matrix.py`, and `services/api/tests/test_matrix_api.py` (a model size no shipped kind asked before) | `SIZED` holds a row for the size, since a version is published only with a row for each size a shipped kind asks; in `test_matrix.py`, the roles zipped strictly with `SIZED` take the role the size is asked of, and the set of the sizes the shipped kinds ask takes the pair; in `test_matrix_api.py`, the list of the sizes a published version's rows match takes the size |
+| `om/src/<name>/om/platform_agents/rules.py` (a kind that may only read, or read and hand on) | its reach in `REACHES`, as step 4 says |
 | `om/src/<name>/om/platform_agents/README.md` | the kind, in What it holds |
 | `om/README.md`, `llms.txt` | the count and the list of the kinds the platform ships |
 
@@ -124,11 +131,13 @@ The shape of a kind is the four profiles in
    A `result_tool` kind names its result tool among its tools.
 4. The profile sets its powers: `isolation` is `WORKSPACE` or
    `NO_WORKSPACE`, and its `policy` is `allowing(...)` the classes it
-   needs and no more. A delegated kind with a workspace or a shell is
-   refused at boot by `refuse_reach` in `catalog.py` for the assistant;
-   a new delegated kind a person talks to is held the same way: add it
-   to `refuse_reach`, shape `PLATFORM_ASSISTANT`. Its prompt says what
-   it does and what it answers, never how policy treats it.
+   needs and no more. A kind that may only read, or read and hand on,
+   is held to it at boot by its reach: the classes it may make, its
+   authority, and no workspace, in `REACHES` in `rules.py`, which
+   `refuse_reach` in `catalog.py` checks for every version of it over
+   the whole catalog. A new kind a person talks to that acts on nothing
+   takes a reach of its own, shape `OPERATOR`. Its prompt says what it
+   does and what it answers, never how policy treats it.
 5. The tests hold, over `SHIPPED`, with the helpers of
    `om/tests/contracts/platform_agents.py` (`platform_over`,
    `Platform.start`, `calls`):

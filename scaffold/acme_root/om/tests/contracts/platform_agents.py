@@ -15,6 +15,7 @@ from pydantic import SecretStr
 
 from acme.infra.impl.local import InfraLocalImpl
 from acme.infra.workspaces import EgressMode, EgressPolicy, IsolationMode, IsolationSpec
+from acme.integrations.events import IntegrationInterface
 from acme.integrations.identity.absent import IdentityProviderAbsentImpl
 from acme.integrations.impl.configured import IntegrationsOverImpl
 from acme.integrations.model_providers.calls import ModelCall, ModelReply, StreamPart
@@ -31,13 +32,17 @@ from acme.om.agents.types.run import RunEnd
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.automations import AutomationsManagerInterface
 from acme.om.automations.root import build_automations
-from acme.om.base import new_id
+from acme.om.base import new_id, utcnow
 from acme.om.budgets.types.budget import BudgetScope, BudgetScopeKind, WindowKind
 from acme.om.context import Role, TenantContext
 from acme.om.evidence import ExecutorInterface, WorkProductInterface
 from acme.om.evidence.impl.ports import WorkProductMemoryImpl
 from acme.om.evidence.rules import policy_key
 from acme.om.evidence.types.validation import Delivery
+from acme.om.intake import IntakeManagerInterface
+from acme.om.intake.root import build_intake
+from acme.om.intake.tools import FORGE
+from acme.om.intake.types.link import Installation
 from acme.om.platform_agents import kinds
 from acme.om.platform_agents.catalog import PlatformAgents
 from acme.om.platform_agents.kinds import ANALYSIS_KIND, ANALYSIS_SHARE, ENGINEER_KIND
@@ -106,6 +111,21 @@ class Platform:
     openai: ModelProviderScriptedImpl
     owner: TenantContext
     automations: AutomationsManagerInterface
+    intake: IntakeManagerInterface | None = None
+
+    async def connect(self, integration: str, installation: str) -> None:
+        """The owner's tenant connects `installation` of `integration`, as
+        its person would through the grant."""
+        await self.storage.get_intake_storage().create_installation(
+            self.owner.org_id,
+            Installation(
+                id=new_id(),
+                created_at=utcnow(),
+                integration=integration,
+                installation=installation,
+                created_by=self.owner.user_id,
+            ),
+        )
 
     async def start(self, kind: str) -> UUID:
         session = await self.managers.agents.start_session(
@@ -155,6 +175,7 @@ def platform_over(
     executor: ExecutorInterface | None = None,
     work_product: WorkProductInterface | None = None,
     product_kinds: ProductKinds | None = None,
+    forge: IntegrationInterface | None = None,
 ) -> Platform:
     """The managers with the platform's agents shipped over `corpus`, each
     principal a member of the tenant at every call, and the automations the
@@ -162,7 +183,9 @@ def platform_over(
     and `owner` None a fresh tenant's owner; a suite over Postgres hands in
     both. `kinds` are the adopter's beside the shipped ones, `executor` and
     `work_product` the evidence's ports, None the root's own, and
-    `product_kinds` what a product adds, None nothing."""
+    `product_kinds` what a product adds, None nothing. `forge`, when given,
+    is the forge the platform's tools reach, with the intake built over the
+    managers, which knows the installations a tenant connected."""
     anthropic = ModelProviderReadingImpl(ProviderName.ANTHROPIC)
     openai = ModelProviderScriptedImpl(ProviderName.OPENAI)
     providers = ModelProvidersOverImpl(
@@ -170,10 +193,14 @@ def platform_over(
     )
     storage = storage or StorageMemoryImpl()
     automations: list[AutomationsManagerInterface] = []
+    intakes: list[IntakeManagerInterface] = []
+    integrations = IntegrationsOverImpl(
+        IdentityProviderAbsentImpl(), providers, {} if forge is None else {FORGE: forge}
+    )
     managers = build_managers(
         storage,
         InfraLocalImpl(tmp_path),
-        integrations=IntegrationsOverImpl(IdentityProviderAbsentImpl(), providers),
+        integrations=integrations,
         principal_context=live,
         loop_options=LoopOptions(control_poll=timedelta(milliseconds=1)),
         platform_agents=PlatformAgents(corpus=corpus),
@@ -182,10 +209,14 @@ def platform_over(
         work_product=work_product,
         product_kinds=product_kinds,
         automations=lambda: automations[0],
+        intake=None if forge is None else lambda: intakes[0],
     )
     automations.append(build_automations(storage, managers, project_required=False))
+    if forge is not None:
+        intakes.append(build_intake(storage, managers, integrations=integrations))
     owner = owner or context(Role.OWNER, make_org())
-    return Platform(storage, managers, anthropic, openai, owner, automations[0])
+    intake = intakes[0] if intakes else None
+    return Platform(storage, managers, anthropic, openai, owner, automations[0], intake)
 
 
 def calls(name: str, use_id: str, **tool_input: object) -> ToolUseBlock:

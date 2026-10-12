@@ -24,6 +24,22 @@ engine runs every one of them the same way.
   on, its projects, its automations), drafts configuration a person
   applies, and hands engineering work to an engineer. It has no
   workspace, repository, or shell.
+- The reviewer reads one pull request through the forge: its files and
+  their patches, its checks, and a file at its head. It notes each
+  finding with its file, its line, and its grade, and submits its review
+  through its result tool, citing them. It has no workspace and changes
+  nothing; it comments on the pull request only through the forge's
+  integration, and a person approves each comment. It asks XL of its main
+  role.
+- The operator reads the tenant's operations on its person's own
+  permissions: its sessions and what they wait on, its hosts and what they
+  offer, its budgets and their spend. Every tool it holds reads; a fix it
+  finds leaves as an objective a person hands to an engineer.
+
+A lead is a kind like any other, whose toolsets include `sub_agents`: it
+starts the others as sub-agents, such as an engineer on a change and a
+reviewer on the pull request the engineer opens, and answers with their
+reports.
 
 Every kind is built from the platform's toolsets (`TOOLSETS`), with a few
 tools named alone where a toolset would give it more than it may call. It
@@ -56,6 +72,8 @@ ENGINEER = "engineer"
 ANALYSIS = "analysis"
 PLANNER = "planner"
 PLATFORM_ASSISTANT = "platform_assistant"
+REVIEWER = "reviewer"
+OPERATOR = "operator"
 
 # The tools the shipped kinds call, by name (`tools.py`).
 LIST_FILES = "list_files"
@@ -80,6 +98,13 @@ LIST_PROJECTS = "list_projects"
 READ_PROJECT = "read_project"
 LIST_AUTOMATIONS = "list_automations"
 READ_AUTOMATION = "read_automation"
+READ_PULL_REQUEST = "read_pull_request"
+READ_PULL_REQUEST_FILE = "read_pull_request_file"
+NOTE_FINDING = "note_finding"
+SUBMIT_REVIEW = "submit_review"
+COMMENT = "comment"  # the forge's, `intake.tools`
+LIST_HOSTS = "list_hosts"
+READ_SPEND = "read_spend"
 
 ASSISTANT_READERS = (
     READ_SESSION,
@@ -146,6 +171,22 @@ ARTIFACTS_TOOLSET = Toolset(
     tools=(READ_ARTIFACT,),
 )
 
+REVIEW_TOOLSET = Toolset(
+    name="review",
+    version=1,
+    summary=(
+        "Read a pull request, its checks, and its files at its head; note each finding, and "
+        "submit your review."
+    ),
+    tools=(READ_PULL_REQUEST, READ_PULL_REQUEST_FILE, NOTE_FINDING, SUBMIT_REVIEW),
+)
+OPERATIONS_TOOLSET = Toolset(
+    name="operations",
+    version=1,
+    summary="Read the tenant's hosts and what each offers, and what its budgets spent.",
+    tools=(LIST_HOSTS, READ_SPEND),
+)
+
 TOOLSETS: tuple[Toolset, ...] = (
     FILES_TOOLSET,
     CODE_TOOLSET,
@@ -155,15 +196,25 @@ TOOLSETS: tuple[Toolset, ...] = (
     RECORDS_TOOLSET,
     HANDOFF_TOOLSET,
     ARTIFACTS_TOOLSET,
+    REVIEW_TOOLSET,
+    OPERATIONS_TOOLSET,
 )
 """The platform's catalog of toolsets, which a product's kinds name as the
 platform's do. A product adds toolsets of its own beside them
 (`ProductKinds.toolsets`) and never changes one of these."""
 
 ASKS = (ModelAsk(role=MAIN, size=ModelSize.L), ModelAsk(role=SUMMARIZER, size=ModelSize.S))
-"""What every shipped kind asks of its two model roles: L of its own turns
-and S of its compaction, each at its fill's own effort. They are the sizes
-of the models those roles ran on before any kind asked."""
+"""What every shipped kind but the reviewer asks of its two model roles: L
+of its own turns and S of its compaction, each at its fill's own effort.
+They are the sizes of the models those roles ran on before any kind
+asked."""
+
+REVIEWER_ASKS = (
+    ModelAsk(role=MAIN, size=ModelSize.XL),
+    ModelAsk(role=SUMMARIZER, size=ModelSize.S),
+)
+"""What the reviewer asks: XL of its own turns, since a review is worth the
+defects it finds and a larger model finds more, and S of its compaction."""
 
 PROMPT_CACHE_LIFE = timedelta(minutes=5)
 """How long a provider the platform calls keeps a request's cached prefix
@@ -525,6 +576,99 @@ PLATFORM_ASSISTANT_KIND = AgentKind(
 slot (`ProductKinds.assistant_tools`), which the root joins to this version
 alone."""
 
+REVIEWER_PROMPT = (
+    "You review one pull request, named in what you were asked as owner/repo#12. Read it with "
+    "read_pull_request: its head, the files it changes with their patches, and its checks. "
+    "When a patch shows too little, read the whole file at the head with "
+    "read_pull_request_file, and look up what your team already knows with search_knowledge. "
+    "Note each defect you find with note_finding: the file, its line at the head, a grade, "
+    "and what is wrong and what it does in real use. Grade it high for harm that cannot be "
+    "undone or a wrong result on the path the change exists for, medium for a wrong result "
+    "on another path real use takes, and low for anything else. A matter of taste is no "
+    "finding. You change nothing: no tool you hold writes a file, runs code, or pushes. When "
+    "every finding is noted, or you found none, list them, one line each with its file and "
+    "line first, since that list is what whoever asked reads. In the same turn, submit the "
+    "review with submit_review, citing the ids read_pull_request and note_finding answered. "
+    "A read of a pull request too large for one answer counts the files it left out: say "
+    "how many in your list. A review you could not finish is a result too: submit it as "
+    "failed, citing the reads that show why; a read that fails names its id in its failure. "
+    "Comment on the pull request with comment only when you are asked to: a person approves "
+    "each comment before it is posted."
+)
+"""The reviewer's layer: what it reads, how it grades, and how it delivers."""
+
+XL_CALL_FACTOR = 2
+"""What one call of a main role at XL costs against one at L, at the list
+prices of the models the two sizes run on: twice. A choice."""
+
+REVIEWER_LOOPS = 2
+"""The loops at its step guard, the engine's, one reviewer's share pays
+for: its review, and one more a follow-up asks for."""
+
+REVIEWER_SHARE = Amount(
+    cost_micros=REVIEWER_LOOPS * Limits().step_guard * CACHED_CALL_MICROS * XL_CALL_FACTOR
+)
+"""What one reviewer a spawn starts may spend over its life, in reference
+cost: its loops at the engine's step guard over a cached window at XL,
+which is also more than three of XL's worst-case calls at a full window,
+so its first call is never refused. Its tree's budget still bounds it, and
+a share never raises that budget."""
+
+REVIEWER_KIND = AgentKind(
+    name=REVIEWER,
+    version=1,
+    # It comments on what it reviews through the forge's integration, and a
+    # person approves each comment: the platform's ceiling holds every
+    # outward call, and its own layer runs no integration unattended.
+    tools=(COMMENT,),
+    toolsets=(REVIEW_TOOLSET, KNOWLEDGE_TOOLSET, ARTIFACTS_TOOLSET),
+    asks=REVIEWER_ASKS,
+    done_rule=DoneRule.RESULT_TOOL,
+    result_tool=SUBMIT_REVIEW,
+    authority=AuthorityMode.STEADY,
+    prompts=(REVIEWER_PROMPT,),
+    policy=allowing(ToolClass.READ),
+    isolation=NO_WORKSPACE,
+    share=REVIEWER_SHARE,
+)
+"""The reviewer. It reads one pull request through the forge, at its head,
+and changes nothing: it has no workspace, and no tool it holds writes a
+file, runs code, or pushes. It delivers its review through its result
+tool, citing the findings it noted, and its share lets a lead start it as
+a sub-agent on the pull request another kind opened."""
+
+OPERATOR_PROMPT = (
+    "You read how the tenant's part of the platform runs, and you change nothing: every "
+    "tool you hold reads. Find sessions with list_sessions and read one with read_session. "
+    "Read what a waiting session waits on with read_wait: its loop's place on the work "
+    "queue, its lane, the loops running ahead of it, and the hosts that may run it. Read the "
+    "tenant's hosts and what each offers with list_hosts, its budgets and what they spent "
+    "with read_spend, and its projects and automations with their readers. Explain only from "
+    "what search_knowledge finds, and cite the document of every passage you use. Diagnose "
+    "by reading first, never by guessing: say what something waits on as you read it, what "
+    "clears it, who may clear it, and where they do. When the fix is engineering, write it "
+    "as an objective that stands on its own, for a person to hand to an engineer: you start "
+    "no session and apply nothing."
+)
+"""The operator's layer: what it reads, and how a fix leaves it."""
+
+OPERATOR_KIND = AgentKind(
+    name=OPERATOR,
+    version=1,
+    toolsets=(RECORDS_TOOLSET, OPERATIONS_TOOLSET, KNOWLEDGE_TOOLSET, ARTIFACTS_TOOLSET),
+    asks=ASKS,
+    done_rule=DoneRule.ANSWER,
+    authority=AuthorityMode.DELEGATED,
+    prompts=(OPERATOR_PROMPT,),
+    policy=allowing(ToolClass.READ),
+    isolation=NO_WORKSPACE,
+)
+"""The operator. It reads the tenant's operations on its person's own
+permissions: its sessions and what they wait on, its hosts and what they
+offer, its budgets and their spend, its projects and automations. Every
+tool it holds reads, so it changes nothing; a fix it finds leaves as an
+objective a person hands to an engineer."""
+
 SHIPPED: tuple[AgentKind, ...] = (
     ENGINEER_V1,
     ENGINEER_V2,
@@ -541,5 +685,7 @@ SHIPPED: tuple[AgentKind, ...] = (
     PLANNER_KIND,
     PLATFORM_ASSISTANT_V1,
     PLATFORM_ASSISTANT_KIND,
+    REVIEWER_KIND,
+    OPERATOR_KIND,
 )
 """Every kind the platform ships, at every version it still runs."""

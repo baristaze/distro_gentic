@@ -2,8 +2,10 @@
 platform tells a person what waits on them: a forge's comments, checks,
 pushes, and tickets, a chat's messages. The forge also takes a session's
 branch and opens its pull request, with the integration's own credential,
-which never leaves it. One interface for each, a real
-client or a twin, and a caller never knows which it holds.
+which never leaves it, and reads a pull request back: the files it
+changes, their patches, the checks at its head, and a file at a commit.
+One interface for each, a real client or a twin, and a caller never knows
+which it holds.
 
 An integration checks the signature of each delivery its system sends and
 reads it into the platform's terms (`ProvidedEvent`). It also checks the
@@ -107,6 +109,55 @@ class OpenedPullRequest(BaseModel):
     provenance: Provenance
 
 
+class ChangedFile(BaseModel):
+    """One file a pull request changes: its path at the head, how it changed
+    (`added`, `modified`, `removed`, `renamed`, as the system says it), and
+    its patch, the hunks of the change in unified form, or None where the
+    system shows none, as for a binary file or one past its size."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    path: str
+    status: str
+    patch: str | None = None
+
+
+class CheckRun(BaseModel):
+    """One check the system holds at a commit: its name, whether it ran
+    (`queued`, `in_progress`, `completed`), and how it ended once it did
+    (`success`, `failure`, and the system's other words for an end)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    status: str
+    conclusion: str | None = None
+
+
+class PullRequestRead(BaseModel):
+    """A pull request as the system holds it when it is read, with what
+    served it: its address (`owner/repo#12`), where a person reads it, its
+    title and body, its state (`open`, `closed`, or `merged`), its head
+    commit's full id, the branch it comes from and the branch it goes onto,
+    the files it changes, and the checks at its head. `complete` is False
+    when the system listed fewer files than the pull request changes."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    address: str
+    url: str
+    title: str
+    body: str
+    state: str
+    head: str
+    head_ref: str
+    base_ref: str
+    files: tuple[ChangedFile, ...]
+    complete: bool = True
+    checks: tuple[CheckRun, ...] = ()
+    provenance: Provenance
+
+
 class IntegrationInterface(ABC):
     @property
     @abstractmethod
@@ -199,6 +250,25 @@ class IntegrationInterface(ABC):
         ...
 
     @abstractmethod
+    async def read_pull_request(self, address: str, *, installation: str) -> PullRequestRead:
+        """The pull request `address` names (`owner/repo#12`) as the system
+        holds it now, read through `installation`, as `post` writes: its
+        head, the files it changes with their patches, and the checks at its
+        head. It changes nothing. `ProviderRefused` from an integration that
+        holds no repository, for an address that names no pull request, and
+        through an installation that does not hold it; `ProviderUnavailable`
+        when it cannot."""
+        ...
+
+    @abstractmethod
+    async def read_file(self, address: str, path: str, ref: str, *, installation: str) -> bytes:
+        """The file at `path` of the repository `address` is on, at the
+        commit `ref`, read through `installation` as `read_pull_request`
+        reads, and refused as it is; `ProviderRefused` too for a path the
+        commit holds no file at."""
+        ...
+
+    @abstractmethod
     def describe(self) -> str:
         """One line for the boot log."""
         ...
@@ -262,6 +332,12 @@ class IntegrationAbsentImpl(IntegrationInterface):
         *,
         installation: str,
     ) -> OpenedPullRequest:
+        raise self._unavailable()
+
+    async def read_pull_request(self, address: str, *, installation: str) -> PullRequestRead:
+        raise self._unavailable()
+
+    async def read_file(self, address: str, path: str, ref: str, *, installation: str) -> bytes:
         raise self._unavailable()
 
     def describe(self) -> str:

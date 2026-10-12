@@ -1,5 +1,7 @@
-"""Pure rules of the agents a platform ships: the platform assistant's
-reach, an edit of one place in a file, the matches a search of the code
+"""Pure rules of the agents a platform ships: the reach of the assistant,
+the operator, and the reviewer, a finding's place in a file, a review's
+verdict, an edit of
+one place in a file, the matches a search of the code
 answers, the corpus the knowledge map lists for one audience, a search of
 it, and a draft of the tenant's tool policy against what is live. Values
 in, values out."""
@@ -8,16 +10,31 @@ import re
 from collections.abc import Collection, Iterable, Mapping
 from pathlib import PurePosixPath
 from typing import NamedTuple
+from uuid import UUID
 
 from acme.infra.workspaces import IsolationMode
 from acme.om.agents.types.kind import AgentKind
+from acme.om.agents.types.result import Claim, Verdict
 from acme.om.attribution.types.authority import AuthorityMode
+from acme.om.platform_agents import kinds
 from acme.om.platform_agents.types.corpus import Corpus, Document, Listing, Passage
 from acme.om.platform_agents.types.draft import PolicyDraft
+from acme.om.steps.types.header import LoopOutcome, ToolFailure
 from acme.om.tools.types.policy import ApproverRule, PolicyRule, ToolPolicy
 from acme.om.tools.types.tool import ToolClass
 
-# The assistant's reach.
+# The reach of the kinds that may only read.
+
+
+class Reach(NamedTuple):
+    """What a kind of the platform's may hold, whoever declares a version of
+    it: the classes of call it may make, said as `what`, whose authority its
+    calls run under, and that it has no workspace."""
+
+    classes: frozenset[str]
+    authority: AuthorityMode
+    what: str
+
 
 ASSISTANT_CLASSES: frozenset[str] = frozenset({ToolClass.READ, ToolClass.SPAWN})
 """The only classes of call the platform assistant makes: it reads, and it
@@ -25,26 +42,123 @@ hands work to an engineer. A tool that writes, runs code, reaches a bound
 system such as a repository, or changes configuration or credentials is of
 another class, so no profile of the assistant holds one."""
 
+REACHES: Mapping[str, Reach] = {
+    kinds.PLATFORM_ASSISTANT: Reach(
+        ASSISTANT_CLASSES, AuthorityMode.DELEGATED, "only reads and hands work on"
+    ),
+    # The operator reads the tenant's operations and acts on none of them:
+    # a fix it finds is an objective a person hands on.
+    kinds.OPERATOR: Reach(frozenset({ToolClass.READ}), AuthorityMode.DELEGATED, "only reads"),
+    # The reviewer reads what it reviews through the forge, and comments on
+    # it through the forge's integration, which a person approves: nothing
+    # it holds writes a file, runs code, or pushes.
+    kinds.REVIEWER: Reach(
+        frozenset({ToolClass.READ, ToolClass.INTEGRATION}),
+        AuthorityMode.STEADY,
+        "only reads and comments",
+    ),
+}
+"""The kinds that hold no workspace and act on nothing, by name, each with
+what it may hold."""
+
 
 def reach_refusal(kind: AgentKind, classes: Mapping[str, str]) -> str | None:
-    """Why a profile of the platform assistant reaches past what it may, or
-    None when it does not. `classes` is the class of every tool the catalog
-    holds, by name. Its authority is delegated, it has no workspace, and
-    every tool it names is one the catalog holds, of a class it may make."""
-    if kind.authority is not AuthorityMode.DELEGATED:
-        return f"{kind.name} v{kind.version}: the assistant's authority is delegated"
+    """Why a profile of a kind `REACHES` names reaches past what it may, or
+    None when it does not, or when the kind is none of them. `classes` is
+    the class of every tool the catalog holds, by name. Its authority is
+    the one its reach names, it has no workspace, and every tool it names is
+    one the catalog holds, of a class it may make."""
+    reach = REACHES.get(kind.name)
+    if reach is None:
+        return None
+    who = f"{kind.name} v{kind.version}"
+    if kind.authority is not reach.authority:
+        return f"{who}: its authority is {reach.authority.value}"
     if kind.isolation.mode is not IsolationMode.NONE:
-        return f"{kind.name} v{kind.version}: the assistant has no workspace"
+        return f"{who}: it has no workspace"
     for tool in kind.tools:
         found = classes.get(tool)
         if found is None:
-            return f"{kind.name} v{kind.version}: {tool} is not a tool the catalog holds"
-        if found not in ASSISTANT_CLASSES:
-            return (
-                f"{kind.name} v{kind.version}: {tool} is a {found} tool, and the assistant "
-                f"only reads and hands work on"
-            )
+            return f"{who}: {tool} is not a tool the catalog holds"
+        if found not in reach.classes:
+            return f"{who}: {tool} is a {found} tool, and the {kind.name} {reach.what}"
     return None
+
+
+# A finding's place in a file.
+
+
+def path_refusal(path: str) -> str | None:
+    """Why `path` names no file of a repository, or None when it does: a
+    path relative to the repository's root, each of its parts a name, never
+    `.` or `..`."""
+    parts = path.split("/")
+    if path.startswith("/") or any(part in ("", ".", "..") for part in parts):
+        return f"{path} is no path of a file in the repository: name it from the root, as src/a.py"
+    return None
+
+
+def line_refusal(path: str, text: str, line: int) -> str | None:
+    """Why `line` of the file `path`, which holds `text`, is no line of it,
+    or None when it is one: lines are counted from 1, as a search counts
+    them."""
+    count = len(lines_of(text))
+    if line > count:
+        return f"{path} holds {count} lines at the head: line {line} is none of them"
+    return None
+
+
+# A review's verdict.
+
+REVIEW_READS: frozenset[str] = frozenset(
+    {kinds.READ_PULL_REQUEST, kinds.READ_PULL_REQUEST_FILE, kinds.NOTE_FINDING}
+)
+"""The calls a review cites: its reads of the pull request and its files,
+and its findings."""
+
+
+class Call(NamedTuple):
+    """A call of a session, as its history holds it: the tool it named, and
+    whether it was answered, and how: None while unanswered, else the
+    failure it met, or no failure."""
+
+    tool: str
+    answered: bool = False
+    failure: ToolFailure | None = None
+
+
+def review_verdict(claim: Claim, cited: Collection[UUID], calls: Mapping[UUID, Call]) -> Verdict:
+    """The gate a review passes. Every id it cites is a call of its own
+    session to read the pull request, read a file of it, or note a
+    finding. A failure is a result once it cites them. A success cites only
+    calls that answered without failing, among them a read of the pull
+    request, so every finding it carries landed on a line that is there."""
+    review = {key: call for key, call in calls.items() if call.tool in REVIEW_READS}
+    unresolved = sorted((key for key in cited if key not in review), key=str)
+    if unresolved:
+        names = ", ".join(str(key) for key in unresolved)
+        return Verdict(
+            accepted=False,
+            reason=f"the evidence names no read or finding of this session: {names}",
+        )
+    if claim is Claim.FAILED:
+        return Verdict(accepted=True, verified=True, outcome=LoopOutcome.FAILED)
+    failed = sorted(
+        (key for key in cited if not review[key].answered or review[key].failure is not None),
+        key=str,
+    )
+    if failed:
+        names = ", ".join(str(key) for key in failed)
+        return Verdict(
+            accepted=False,
+            reason=f"a review that succeeded cites only reads and findings that answered: {names}",
+        )
+    if not any(review[key].tool == kinds.READ_PULL_REQUEST for key in cited):
+        return Verdict(
+            accepted=False,
+            reason="a review that succeeded cites its read of the pull request, with read_pull_request",
+        )
+    return Verdict(accepted=True, verified=True, outcome=LoopOutcome.SUCCEEDED)
 
 
 # An edit of one place in a file.
