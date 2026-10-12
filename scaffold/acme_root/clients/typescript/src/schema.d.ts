@@ -4890,16 +4890,19 @@ export interface components {
         };
         /**
          * FillBody
-         * @description A fill: a provider's model, how hard it works, its output bound and
-         *     shape, its context window, and what it offers. The output bound fits
-         *     inside the window, and a schema is named exactly when the output is one.
-         *     An output left out is text, and an eligibility left out offers
-         *     nothing.
+         * @description A fill: a provider's model, how hard it works and the efforts a kind's
+         *     ask may move it to (those its model takes), its output bound and shape,
+         *     its context window, and what it offers. The output bound fits inside
+         *     the window, and a schema is named exactly when the output is one. An
+         *     output left out is text, an eligibility left out offers nothing, and
+         *     efforts left out let no ask move the fill.
          */
         FillBody: {
             /** Context Window */
             context_window: number;
             effort?: components["schemas"]["Effort"] | null;
+            /** Efforts */
+            efforts?: components["schemas"]["Effort"][];
             eligibility?: components["schemas"]["EligibilityBody"] | null;
             /** Max Output Tokens */
             max_output_tokens: number;
@@ -4980,6 +4983,8 @@ export interface components {
             /** Context Window */
             context_window: number;
             effort: components["schemas"]["Effort"] | null;
+            /** Efforts */
+            efforts: components["schemas"]["Effort"][];
             eligibility: components["schemas"]["EligibilityView"];
             /** Max Output Tokens */
             max_output_tokens: number;
@@ -6140,7 +6145,8 @@ export interface components {
          * MatrixKeyBody
          * @description What a row answers: each key it names must equal the question's, and a
          *     key left out matches every value. The row that names none matches every
-         *     question.
+         *     question. A row that names a model size answers only a role a kind asks
+         *     that size of, and before a row that names the role.
          */
         MatrixKeyBody: {
             /** Environment */
@@ -6151,6 +6157,7 @@ export interface components {
             plan_tier?: string | null;
             /** Role */
             role?: string | null;
+            size?: components["schemas"]["ModelSize"] | null;
             /** Workload */
             workload?: string | null;
         };
@@ -6164,6 +6171,7 @@ export interface components {
             plan_tier: string | null;
             /** Role */
             role: string | null;
+            size: components["schemas"]["ModelSize"] | null;
             /** Workload */
             workload: string | null;
         };
@@ -6300,6 +6308,13 @@ export interface components {
             expires_in?: number | null;
             permission: components["schemas"]["OperatorRole"];
         };
+        /**
+         * ModelSize
+         * @description How much model a role needs, from the smallest to the largest. A
+         *     resolver maps each size to fills; a kind asks a size, never a model.
+         * @enum {string}
+         */
+        ModelSize: "xs" | "s" | "m" | "l" | "xl";
         /**
          * NotificationView
          * @description What waits on the caller: the session, why it parked, the one action

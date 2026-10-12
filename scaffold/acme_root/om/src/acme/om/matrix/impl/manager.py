@@ -19,7 +19,7 @@ from acme.om.matrix.types.matrix import MatrixRow, MatrixStatus, MatrixVersion
 from acme.om.matrix.types.record import BenchmarkResult, BenchmarkRun, ModelRef, Retirement
 from acme.om.matrix.types.tenant import FillOptions, FillOverride, MatrixPin
 from acme.om.models.prices import ModelPricesInterface
-from acme.om.models.types.fill import Fill, ModelRole
+from acme.om.models.types.fill import Fill, ModelRole, ModelSize
 from acme.om.trust.storage import TrustStorageInterface
 
 log = logging.getLogger(__name__)
@@ -35,14 +35,17 @@ class MatrixOperatorManagerImpl(MatrixOperatorManagerInterface):
         prices: ModelPricesInterface,
         options: MatrixOptions,
         required: frozenset[ModelRole],
+        sizes: frozenset[ModelSize],
         clock: Callable[[], datetime] = utcnow,
     ) -> None:
         """`required` is every model role a version must serve: those the
-        engine calls and those of each kind the platform runs."""
+        engine calls and those of each kind the platform runs; `sizes` every
+        model size a version must name a row for: those the kinds ask."""
         self._matrix = matrix
         self._prices = prices
         self._options = options
         self._required = required
+        self._sizes = sizes
         self._clock = clock
 
     async def stage(
@@ -94,6 +97,7 @@ class MatrixOperatorManagerImpl(MatrixOperatorManagerInterface):
             qualified=qualified,
             retired=lambda model: model in retired,
             required=self._required,
+            sizes=self._sizes,
         )
         if refusals:
             raise ValidationFailed(

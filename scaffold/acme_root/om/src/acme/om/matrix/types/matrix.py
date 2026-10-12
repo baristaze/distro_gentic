@@ -1,10 +1,11 @@
 """The model matrix: which fills serve which question, by version.
 
 A question names an environment, a model role, an agent kind, a plan tier,
-and a workload class. A row names any of the five, and leaves the rest
-open; the row that matches every question names none. The most specific
-row that matches wins, and a version publishes only with the row that
-matches everything, so every question has an answer.
+and a workload class, and, for a role its kind asks a size of, the model
+size. A row names any of the six, and leaves the rest open; the row that
+matches every question names none. The most specific row that matches
+wins, and a version publishes only with the row that matches everything,
+so every question has an answer.
 
 A version is written once, pending, and then published as it is: an edit
 is a new version. The current matrix is the latest version published."""
@@ -18,7 +19,7 @@ from pydantic import Field, StringConstraints, model_validator
 
 from acme.om.attribution.types.principal import MAX_KIND
 from acme.om.base import Identifiable, Platform
-from acme.om.models.types.fill import Fill, ModelRole
+from acme.om.models.types.fill import Fill, ModelRole, ModelSize
 from acme.om.placement.types.share import PlanTier
 
 NAME = r"^[a-z][a-z0-9-]{0,31}$"
@@ -42,16 +43,22 @@ MAX_FILLS = 8
 MAX_ROLES = 64
 """The model roles one version serves at most."""
 
-KEYS = ("environment", "role", "kind", "plan_tier", "workload")
-"""The five keys of a question, in the spec's order. Of two rows that name
-as many keys, the one that names the earlier key is the more specific."""
+KEYS = ("environment", "size", "role", "kind", "plan_tier", "workload")
+"""The six keys of a question, in the spec's order. Of two rows that name
+as many keys, the one that names the earlier key is the more specific. The
+size comes before the role, so a role a kind asks a size of takes its
+size's row over the role's, as the engine resolves an ask; and the role
+before the kind, so a row for one kind's role names both."""
 
 
 class MatrixQuery(Platform):
     """One question: which fills serve this model role, for this agent kind
-    on this plan tier, in this workload class and environment."""
+    on this plan tier, in this workload class and environment. `size` is the
+    model size the kind asks of the role, and None when it asks none, which
+    no row that names a size answers."""
 
     environment: Environment
+    size: ModelSize | None = None
     role: ModelRole
     kind: AgentKindName
     plan_tier: PlanTier
@@ -63,6 +70,7 @@ class MatrixKey(Platform):
     a key left None matches every value."""
 
     environment: Environment | None = None
+    size: ModelSize | None = None
     role: ModelRole | None = None
     kind: AgentKindName | None = None
     plan_tier: PlanTier | None = None

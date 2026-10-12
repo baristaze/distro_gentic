@@ -3395,7 +3395,7 @@
       },
       "FillBody": {
         "additionalProperties": false,
-        "description": "A fill: a provider's model, how hard it works, its output bound and\nshape, its context window, and what it offers. The output bound fits\ninside the window, and a schema is named exactly when the output is one.\nAn output left out is text, and an eligibility left out offers\nnothing.",
+        "description": "A fill: a provider's model, how hard it works and the efforts a kind's\nask may move it to (those its model takes), its output bound and shape,\nits context window, and what it offers. The output bound fits inside\nthe window, and a schema is named exactly when the output is one. An\noutput left out is text, an eligibility left out offers nothing, and\nefforts left out let no ask move the fill.",
         "properties": {
           "context_window": {
             "exclusiveMinimum": 0.0,
@@ -3411,6 +3411,14 @@
                 "type": "null"
               }
             ]
+          },
+          "efforts": {
+            "items": {
+              "$ref": "#/components/schemas/Effort"
+            },
+            "maxItems": 6,
+            "title": "Efforts",
+            "type": "array"
           },
           "eligibility": {
             "anyOf": [
@@ -3605,6 +3613,13 @@
               }
             ]
           },
+          "efforts": {
+            "items": {
+              "$ref": "#/components/schemas/Effort"
+            },
+            "title": "Efforts",
+            "type": "array"
+          },
           "eligibility": {
             "$ref": "#/components/schemas/EligibilityView"
           },
@@ -3649,6 +3664,7 @@
           "provider",
           "model",
           "effort",
+          "efforts",
           "thinking_budget",
           "max_output_tokens",
           "output",
@@ -6002,7 +6018,7 @@
       },
       "MatrixKeyBody": {
         "additionalProperties": false,
-        "description": "What a row answers: each key it names must equal the question's, and a\nkey left out matches every value. The row that names none matches every\nquestion.",
+        "description": "What a row answers: each key it names must equal the question's, and a\nkey left out matches every value. The row that names none matches every\nquestion. A row that names a model size answers only a role a kind asks\nthat size of, and before a row that names the role.",
         "properties": {
           "environment": {
             "anyOf": [
@@ -6052,6 +6068,16 @@
               }
             ],
             "title": "Role"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelSize"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "workload": {
             "anyOf": [
@@ -6115,6 +6141,16 @@
             ],
             "title": "Role"
           },
+          "size": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelSize"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "workload": {
             "anyOf": [
               {
@@ -6129,6 +6165,7 @@
         },
         "required": [
           "environment",
+          "size",
           "role",
           "kind",
           "plan_tier",
@@ -6461,6 +6498,18 @@
         ],
         "title": "MintOperatorTokenRequest",
         "type": "object"
+      },
+      "ModelSize": {
+        "description": "How much model a role needs, from the smallest to the largest. A\nresolver maps each size to fills; a kind asks a size, never a model.",
+        "enum": [
+          "xs",
+          "s",
+          "m",
+          "l",
+          "xl"
+        ],
+        "title": "ModelSize",
+        "type": "string"
       },
       "NotificationView": {
         "description": "What waits on the caller: the session, why it parked, the one action\nthat clears it, and that action's route, empty when none serves it yet.\n`read_at` is when the caller marked it read.",

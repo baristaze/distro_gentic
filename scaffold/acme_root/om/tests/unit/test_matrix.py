@@ -20,6 +20,7 @@ from contracts.matrix import (
     HAIKU,
     LUNA,
     OPUS,
+    SIZED,
     SOL,
     SONNET,
     UNPRICED,
@@ -34,8 +35,10 @@ from acme.infra.base import SYSTEM_SCOPE
 from acme.integrations.model_providers.calls import ModelCall, StreamPart
 from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl, ScriptedFailure
 from acme.integrations.model_providers.types import Effort, ErrorKind, ProviderName
+from acme.om.agents.types.kind import AgentKind, DoneRule
 from acme.om.agents.types.request import Start
 from acme.om.agents.types.run import RunEnd
+from acme.om.attribution.types.authority import AuthorityMode
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import new_id, utcnow
 from acme.om.billing.types.account import AccountRequest, FundingMode
@@ -70,11 +73,15 @@ from acme.om.models.types.fill import (
 )
 from acme.om.placement.rules import DEFAULT_TIER
 from acme.om.placement.types.share import FairShare
+from acme.om.platform_agents import kinds
+from acme.om.platform_agents.kinds import SHIPPED
 from acme.om.privacy.types.session_privacy import StorageMode
 from acme.om.retention import rules as retention_rules
 from acme.om.retention.types.policy import RetentionPolicy
+from acme.om.root import ProductKinds
 from acme.om.steps.types.header import ControlCommand, LoopOutcome, ParkReason, SwitchedHeader
 from acme.om.steps.types.step import StepType
+from acme.om.tools.types.toolset import Toolset
 from acme.om.trust.types.provider_key import KeyStatus, key_secret_name
 
 
@@ -144,9 +151,12 @@ def test_every_question_resolves_to_its_most_specific_matching_row() -> None:
             key=MatrixKey(environment="production", role=MAIN, kind="engineer"),
             fills=(kept_in(SONNET, EU),),
         ),
+        MatrixRow(key=MatrixKey(size=ModelSize.L), fills=(OPUS, SOL)),
+        MatrixRow(key=MatrixKey(role=MAIN, kind="analyst"), fills=(HAIKU, SOL)),
     )
     values = {
         "environment": ("production", "staging"),
+        "size": (ModelSize.L, None),
         "role": (MAIN, SUMMARIZER),
         "kind": ("engineer", "assistant"),
         "plan_tier": ("pro", "standard"),
@@ -164,6 +174,19 @@ def test_every_question_resolves_to_its_most_specific_matching_row() -> None:
     assert rules.answer(rows, query, anywhere) == (kept_in(SONNET, EU),), "three keys beat two"
     tie = query.model_copy(update={"kind": "assistant", "workload": "standard"})
     assert rules.answer(rows, tie, anywhere) == (SOL,), "the environment comes first in a tie"
+    asked = MatrixQuery(
+        environment="staging",
+        size=ModelSize.L,
+        role=MAIN,
+        kind="planner",
+        plan_tier="standard",
+        workload="standard",
+    )
+    assert rules.answer(rows, asked, anywhere) == (OPUS, SOL), "an asked size before its role"
+    own = asked.model_copy(update={"kind": "analyst"})
+    assert rules.answer(rows, own, anywhere) == (HAIKU, SOL), "a row for the kind's role first"
+    unasked = asked.model_copy(update={"size": None})
+    assert rules.answer(rows, unasked, anywhere) == (OPUS,), "a size row answers only its ask"
 
 
 # A model enters a role's fills only priced, and only qualified for it.
@@ -173,7 +196,7 @@ async def test_a_version_that_serves_not_every_role_its_kinds_call_is_refused(
     tmp_path: Path,
 ) -> None:
     fleet = await fleet_over(tmp_path)
-    rows = (CATCH_ALL[0], CATCH_ALL[2])
+    rows = (CATCH_ALL[0], *CATCH_ALL[2:])
 
     with pytest.raises(ValidationFailed, match="serves no model role summarizer"):
         await fleet.publish(rows, roles=(MAIN,))
@@ -198,7 +221,17 @@ async def test_a_model_enters_only_the_roles_a_passing_benchmark_qualified_it_fo
 ) -> None:
     fleet = await fleet_over(tmp_path)
     operators = fleet.matrix.matrix_operator
-    version = await operators.stage(fleet.admin, (MAIN, SUMMARIZER), CATCH_ALL)
+    # Each size row names the one role it is asked of, so it serves that
+    # role alone.
+    rows = (
+        *CATCH_ALL[:2],
+        *(
+            MatrixRow(key=row.key.model_copy(update={"role": role}), fills=row.fills)
+            for row, role in zip(SIZED, (MAIN, SUMMARIZER), strict=True)
+        ),
+        CATCH_ALL[-1],
+    )
+    version = await operators.stage(fleet.admin, (MAIN, SUMMARIZER), rows)
     await fleet.qualify(SONNET, MAIN)  # the row that matches everything serves both
     await fleet.qualify(SOL, MAIN)
     await fleet.qualify(HAIKU, SUMMARIZER)
@@ -242,6 +275,7 @@ async def test_a_tenant_that_keeps_nothing_in_one_region_resolves_only_to_fills_
             MatrixRow(key=MatrixKey(role=MAIN, kind="assistant"), fills=(OPUS, elsewhere)),
             MatrixRow(key=MatrixKey(role=MAIN), fills=(SONNET, sol_eu, elsewhere, sonnet_eu)),
             MatrixRow(key=MatrixKey(role=SUMMARIZER), fills=(HAIKU, haiku_eu)),
+            *SIZED,
             MatrixRow(fills=(SONNET,)),
         )
     )
@@ -290,6 +324,7 @@ async def test_a_tightened_retention_reaches_a_running_sessions_fills_at_its_nex
         (
             MatrixRow(key=MatrixKey(role=MAIN), fills=(SONNET, SOL, sonnet_eu)),
             MatrixRow(key=MatrixKey(role=SUMMARIZER), fills=(HAIKU, haiku_eu)),
+            *SIZED,
             MatrixRow(fills=(SONNET,)),
         )
     )
@@ -348,6 +383,7 @@ async def test_a_session_that_resolves_nothing_is_pinned_to_nothing(tmp_path: Pa
         (
             MatrixRow(key=MatrixKey(role=MAIN), fills=(kept_in(SONNET, EU),)),
             MatrixRow(key=MatrixKey(role=SUMMARIZER), fills=(kept_in(HAIKU, EU),)),
+            *SIZED,
             MatrixRow(fills=(SONNET,)),
         )
     )
@@ -524,14 +560,21 @@ async def test_a_retired_model_switches_at_the_next_loop_with_a_switched_step(
     ) == OPUS
 
 
-async def test_a_kinds_ask_is_answered_by_its_roles_row_at_the_effort_a_fill_lists(
+def resized(size: ModelSize, *fills: Fill) -> tuple[MatrixRow, ...]:
+    """`CATCH_ALL` with its row of `size` answering `fills`."""
+    return tuple(
+        MatrixRow(key=row.key, fills=fills) if row.key.size is size else row for row in CATCH_ALL
+    )
+
+
+async def test_a_kinds_ask_is_answered_by_its_sizes_row_at_the_effort_a_fill_lists(
     tmp_path: Path,
 ) -> None:
     ask = ModelAsk(role=MAIN, size=ModelSize.L, effort=Effort.XHIGH)
     asking = ASSISTANT.model_copy(update={"name": "asking", "asks": (ask,)})
     fleet = await fleet_over(tmp_path, kinds=(ASSISTANT, DELIVERY, asking))
     sonnet = SONNET.model_copy(update={"efforts": (Effort.HIGH, Effort.XHIGH)})
-    await fleet.publish((MatrixRow(key=MatrixKey(role=MAIN), fills=(sonnet, SOL)), *CATCH_ALL[1:]))
+    await fleet.publish(resized(ModelSize.L, sonnet, SOL))
     session_id = await fleet.loop.start("asking")
     fleet.loop.anthropic.add(reply(said("The total is 12.")))
     assert await loop_once(fleet, session_id) is RunEnd.ENDED
@@ -539,15 +582,16 @@ async def test_a_kinds_ask_is_answered_by_its_roles_row_at_the_effort_a_fill_lis
     fills = await fleet.loop.managers.models.get_fill_set(fleet.owner, session_id)
     main, summarizer = fills.roles
     assert served(main) == [(SONNET.name, Effort.XHIGH), (SOL.name, SOL.effort)], (
-        "the role's row, each fill at the effort asked where it lists it"
+        "the size's row, each fill at the effort asked where it lists it"
     )
     assert (main.ask, summarizer.ask) == (ask, None), "the ask kept beside its fill"
     assert summarizer.fill == HAIKU, "a role asked nothing takes its row as it is"
     assert [call.effort for call in fleet.loop.anthropic.calls] == [Effort.XHIGH]
 
-    # A switch at the start of a loop keeps the ask's effort.
+    # A switch at the start of a loop keeps the ask's size and effort.
     opus = OPUS.model_copy(update={"efforts": (Effort.HIGH, Effort.XHIGH)})
-    await fleet.publish((MatrixRow(key=MatrixKey(role=MAIN), fills=(opus,)), *CATCH_ALL[1:]))
+    main_row = MatrixRow(key=MatrixKey(role=MAIN), fills=(opus,))
+    await fleet.publish((main_row, *resized(ModelSize.L, opus)[1:]))
     await fleet.matrix.matrix_operator.retire_model(fleet.admin, ModelRef.of(SONNET))
     fleet.loop.anthropic.add(reply(said("The average is 3."), model=OPUS.model))
     assert await loop_once(fleet, session_id, "And the average?") is RunEnd.ENDED
@@ -560,6 +604,73 @@ async def test_a_kinds_ask_is_answered_by_its_roles_row_at_the_effort_a_fill_lis
     fleet.loop.anthropic.add(reply(said("The total is 12."), model=OPUS.model))
     assert await loop_once(fleet, plain) is RunEnd.ENDED
     assert fleet.loop.anthropic.calls[-1].effort is OPUS.effort
+
+
+LOOKUPS = Toolset(
+    name="lookups", version=1, summary="Look a record up, and note it.", tools=("lookup", "note")
+)
+
+TRIAGE = AgentKind(
+    name="triage",
+    version=1,
+    toolsets=(LOOKUPS, kinds.ARTIFACTS_TOOLSET),
+    asks=(ModelAsk(role=MAIN, size=ModelSize.L),),
+    done_rule=DoneRule.ANSWER,
+    authority=AuthorityMode.STEADY,
+)
+"""A product's kind declared as data: a toolset of the product's and one of
+the platform's, and how much model its own turns need, never a model."""
+
+
+async def test_a_products_kind_takes_the_row_of_the_size_it_asks_until_a_row_names_it(
+    tmp_path: Path,
+) -> None:
+    """A product adds a kind built from toolsets that asks L of its main
+    role. With no row that names it, the matrix answers its ask with the L
+    row, ahead of the main role's row: no operator edits the matrix for it.
+    Once the operator publishes a row for the kind's main role, that row
+    answers its next session; the first keeps its version."""
+    ProductKinds(agents=(TRIAGE,), toolsets=(LOOKUPS,))
+    fleet = await fleet_over(tmp_path, kinds=(ASSISTANT, DELIVERY, TRIAGE))
+    await fleet.publish(resized(ModelSize.L, OPUS, SOL))
+    first = await fleet.loop.start(TRIAGE.name)
+    fleet.loop.anthropic.add(reply(said("Two of them."), model=OPUS.model))
+    assert await loop_once(fleet, first) is RunEnd.ENDED
+    assert fleet.loop.anthropic.calls[-1].model == OPUS.model, "the L row"
+    plain = await fleet.loop.start()
+    fleet.loop.anthropic.add(reply(said("The total is 12.")))
+    assert await loop_once(fleet, plain) is RunEnd.ENDED
+    assert fleet.loop.anthropic.calls[-1].model == SONNET.model, "the main role's row"
+
+    own = MatrixRow(key=MatrixKey(role=MAIN, kind=TRIAGE.name), fills=(HAIKU,))
+    await fleet.publish((*resized(ModelSize.L, OPUS, SOL), own))
+    second = await fleet.loop.start(TRIAGE.name)
+    fleet.loop.anthropic.add(reply(said("Three of them."), model=HAIKU.model))
+    assert await loop_once(fleet, second) is RunEnd.ENDED
+    assert fleet.loop.anthropic.calls[-1].model == HAIKU.model, "its own row"
+    kept = await fleet.loop.managers.models.get_fill_set(fleet.owner, first)
+    assert kept.fill_for(MAIN) == OPUS, "a running session keeps its version"
+
+
+async def test_a_version_without_a_row_for_a_size_a_shipped_kind_asks_is_refused(
+    tmp_path: Path,
+) -> None:
+    """Every shipped kind asks L of its own turns and S of its compaction,
+    so a version names a row for each: one that names no row for S is not
+    published, though its role rows and its catch-all row would answer."""
+    assert {(ask.role, ask.size) for kind in SHIPPED for ask in kind.asks} == {
+        (MAIN, ModelSize.L),
+        (SUMMARIZER, ModelSize.S),
+    }
+    fleet = await fleet_over(tmp_path)
+    rows = tuple(row for row in CATCH_ALL if row.key.size is not ModelSize.S)
+
+    with pytest.raises(ValidationFailed, match="no row names the model size s, which a kind"):
+        await fleet.publish(rows)
+
+    with pytest.raises(NotFound):
+        await fleet.matrix.matrix_operator.get_version(fleet.admin, None)
+    assert (await fleet.publish()).status is MatrixStatus.PUBLISHED
 
 
 def served(role: RoleFill) -> list[tuple[str, Effort | None]]:
@@ -827,8 +938,10 @@ async def test_a_tenant_on_its_own_keys_chooses_only_among_qualified_fills_it_ho
     )
     # What it may choose from is what choose takes: the qualified fills of
     # each role, its rows' order, from the one provider it holds a key for.
+    # A size's row serves every role, as the row that matches everything
+    # does.
     assert await fleet.matrix.matrix.get_options(fleet.owner) == (
-        FillOptions(role=MAIN, fills=(OPUS, SONNET)),
+        FillOptions(role=MAIN, fills=(OPUS, SONNET, HAIKU)),
         FillOptions(role=SUMMARIZER, fills=(HAIKU, SONNET)),
     )
     with pytest.raises(ValidationFailed, match="no live openai key"):

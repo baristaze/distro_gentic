@@ -29,7 +29,14 @@ from acme.om.matrix.impl.resolver import MatrixOptions, Workload
 from acme.om.matrix.root import MatrixLayer, MatrixManagers
 from acme.om.matrix.types.matrix import MatrixKey, MatrixRow, MatrixVersion
 from acme.om.matrix.types.record import BenchmarkRun
-from acme.om.models.types.fill import MAIN, SUMMARIZER, Eligibility, Fill, ModelRole
+from acme.om.models.types.fill import (
+    MAIN,
+    SUMMARIZER,
+    Eligibility,
+    Fill,
+    ModelRole,
+    ModelSize,
+)
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
 from acme.om.tenancy.rules import operator_permissions_of
@@ -85,13 +92,23 @@ def kept_in(fill: Fill, eligibility: Eligibility) -> Fill:
     return fill.model_copy(update={"eligibility": eligibility})
 
 
+SIZED = (
+    MatrixRow(key=MatrixKey(size=ModelSize.L), fills=(SONNET, SOL)),
+    MatrixRow(key=MatrixKey(size=ModelSize.S), fills=(HAIKU, LUNA)),
+)
+"""A row for each size the platform's kinds ask, L of their own turns and S
+of their compaction, on the fills of those roles: every version names a
+row for each."""
+
 CATCH_ALL = (
     MatrixRow(key=MatrixKey(role=MAIN), fills=(SONNET, SOL)),
     MatrixRow(key=MatrixKey(role=SUMMARIZER), fills=(HAIKU, LUNA)),
+    *SIZED,
     MatrixRow(fills=(SONNET,)),
 )
 """A matrix that answers every question: the engine's own two roles, each
-with a fallback, and the row that matches everything."""
+with a fallback, the sizes the platform's kinds ask, and the row that
+matches everything."""
 
 
 def operator() -> OperatorContext:

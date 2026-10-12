@@ -86,7 +86,8 @@ async def seed_matrix(
 ) -> int:
     """The published version of the matrix, published by the seed when
     none is: every model role the engine, the platform's agents, and
-    `kinds` call, and every fill qualified for every role its row serves."""
+    `kinds` call, a row for each of the engine's model sizes, and every
+    fill qualified for every role its row serves."""
     roles = sorted(
         {MAIN, SUMMARIZER, *(role for kind in (*SHIPPED, *kinds) for role in kind.roles)}
     )
@@ -97,18 +98,24 @@ async def seed_matrix(
     operators = layer.build(managers).matrix_operator
     async with seed_operator(managers, rctx) as admin:
         version = await operators.stage(admin, roles, engine_rows())
-        for row in version.rows:
-            for fill in row.fills:
-                for role in version.roles_of(row):
-                    run = BenchmarkRun(
-                        provider=fill.provider,
-                        model=fill.model,
-                        role=role,
-                        benchmark=BENCHMARK,
-                        passed=True,
-                        run=f"{BENCHMARK}-{new_id().hex[:8]}",
-                    )
-                    await operators.record_benchmark(admin, run)
+        # One run for each model and each role a row of it serves, however
+        # many rows name the model.
+        qualified = dict.fromkeys(
+            (fill.provider, fill.model, role)
+            for row in version.rows
+            for fill in row.fills
+            for role in version.roles_of(row)
+        )
+        for provider, model, role in qualified:
+            run = BenchmarkRun(
+                provider=provider,
+                model=model,
+                role=role,
+                benchmark=BENCHMARK,
+                passed=True,
+                run=f"{BENCHMARK}-{new_id().hex[:8]}",
+            )
+            await operators.record_benchmark(admin, run)
         return (await operators.publish(admin, version.number)).number
 
 
