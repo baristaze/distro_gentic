@@ -97,6 +97,16 @@ export function fetchUser(id: string): Promise<UserView> {
   return api.get<UserView>(`/v1/users/${encodeURIComponent(id)}`);
 }
 
+/** One member by its id, while `id` names one: who holds a session's
+ * environment. A push about the user reads it again (`userCache.ts`). */
+export function useUser(id: string | null) {
+  return useQuery({
+    queryKey: keys.users.one(id ?? ""),
+    queryFn: () => fetchUser(id!),
+    enabled: id !== null,
+  });
+}
+
 /** Every membership of the org, page after page, as the member list is read:
  * the role beside each member in Settings. Read whole, like the users, so a
  * member on a later page still shows their role. */

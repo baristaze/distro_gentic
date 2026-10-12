@@ -64,7 +64,7 @@ export function useSupportVm(page: PageContext) {
     [record, chat, runs],
   );
   const mayWrite = me.data?.permissions.includes("write") ?? false;
-  const may = record ? allowed(record, mayWrite) : null;
+  const may = record ? allowed(record, mayWrite, me.data?.user.id ?? null) : null;
 
   /** Sends what the person typed, with the page they are on; the first
    * message starts the conversation. */

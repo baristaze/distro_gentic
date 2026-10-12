@@ -40,7 +40,8 @@ import { CUT_NOTE, callLine, childActivity, childPhase, childWords, duration, ed
 const count = (n: number) => n.toLocaleString("en-US");
 
 /** What streams in its workspace now, and a person's hands on it: take
- * control, run a command, give it back. */
+ * control, run a command, give it back, or end the run instead. Another
+ * person's hand-over shows who holds it, and the end of the run alone. */
 function WorkspaceTab() {
   const vm = useSessionPage();
   const [line, setLine] = useState("");
@@ -119,12 +120,31 @@ function WorkspaceTab() {
               }}
             >
               <TextArea label="What you did, for the agent to read" value={summary} onChange={setSummary} placeholder='e.g. "I fixed the import in conftest.py"' />
-              <div>
+              <div className="acme-pane-row">
                 <Button type="submit" disabled={!summary.trim()}>
                   Give it back
                 </Button>
+                {vm.may.cancel ? (
+                  <Button tone="danger" onClick={() => vm.control("cancel")}>
+                    End this run
+                  </Button>
+                ) : null}
               </div>
             </form>
+          </div>
+        </Card>
+      ) : null}
+      {vm.heldBy !== null ? (
+        <Card title={`${vm.heldBy} has control`} id="control">
+          <div className="acme-pane-stack">
+            <Muted>Their commands run on the host that holds its workspace, and only they give it back. Ending the run stays open to every member who may write.</Muted>
+            {vm.may?.cancel ? (
+              <div>
+                <Button tone="danger" onClick={() => vm.control("cancel")}>
+                  End this run
+                </Button>
+              </div>
+            ) : null}
           </div>
         </Card>
       ) : null}

@@ -9,12 +9,12 @@ import { useSlot } from "../../app/slot";
 import type { PaletteCommand } from "../../design/kit";
 import { useAgentSession, useApprovals, useChildren, useChildSteps, useCommandProgress, useDelivery, useSessionActions, useSessionRecords, useSteps } from "../../queries/agentSessions";
 import { useLiveStreams } from "../../queries/live";
-import { useMe } from "../../queries/tenancy";
+import { useMe, useUser } from "../../queries/tenancy";
 import { useNoticesStore } from "../../store/notices";
 import { paneOf, usePanesStore } from "../../store/panes";
 import { sessionRow } from "../sessions/sessionsModel";
 import { addable, closeTab, knownTabs, openCall, openTab, openThemselves, resizePane, shownTab, togglePane, type PaneState } from "./paneModel";
-import { allowed, composerOf, deliveryLines, parkLine, pullRequestBadge, splitCommand, statusLine } from "./sessionModel";
+import { allowed, composerOf, deliveryLines, heldBy, parkLine, pullRequestBadge, splitCommand, statusLine } from "./sessionModel";
 import { answers, callsOf, handedTo, outline, timeline, type Call, type ChildState } from "./timelineModel";
 
 const NONE: readonly AgentSessionView[] = [];
@@ -112,7 +112,10 @@ export function useSessionVm(id: string) {
     if (ended) void refetchSteps();
   }, [live, refetchSteps]);
 
-  const may = session.data ? allowed(session.data, me.data?.permissions.includes("write") ?? false) : null;
+  const myId = me.data?.user.id ?? null;
+  const holderId = session.data ? heldBy(session.data, myId) : null;
+  const holder = useUser(holderId);
+  const may = session.data ? allowed(session.data, me.data?.permissions.includes("write") ?? false, myId) : null;
   const fail = useCallback((what: string) => (caught: unknown) => notify(errorMessage(caught, what), { tone: "problem" }), [notify]);
 
   // The pane: kept per session in this browser, its active tab and the call
@@ -352,6 +355,8 @@ export function useSessionVm(id: string) {
     runCommand,
     commandProblem,
     giveBack,
+    /** Who holds the environment when someone other than this person does. */
+    heldBy: holderId === null ? null : (holder.data?.display_name ?? "Another person"),
     copy,
     copyLink,
     archive,

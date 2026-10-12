@@ -22,6 +22,7 @@ export const keys = {
   users: {
     all: ["user"] as const,
     list: (limit: number) => ["user", "list", limit] as const,
+    one: (id: string) => ["user", "one", id] as const,
   },
   apiKeys: {
     all: ["api_key"] as const,
