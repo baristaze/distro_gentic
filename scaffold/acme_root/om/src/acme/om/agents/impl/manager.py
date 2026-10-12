@@ -25,12 +25,19 @@ from acme.om.agents.types.request import Handoff, Spawn, Start, SwitchStanding
 from acme.om.agents.types.result import Result, Verdict
 from acme.om.agents.types.tree import AgentTree
 from acme.om.attribution import AttributionManagerInterface
+from acme.om.attribution.rules import visibility_of
 from acme.om.attribution.types.authority import SessionAuthority
 from acme.om.attribution.types.principal import AgentRef, Principal, PrincipalKind
 from acme.om.base import Platform, derived_id, new_id, utcnow
 from acme.om.budgets import BudgetsManagerInterface
 from acme.om.context import Permission, TenantContext
-from acme.om.exceptions import NotAuthorized, NotFound, TreeBoundReached, ValidationFailed
+from acme.om.exceptions import (
+    KeyRevoked,
+    NotAuthorized,
+    NotFound,
+    TreeBoundReached,
+    ValidationFailed,
+)
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import OutboxRow, versioned_row
 from acme.om.steps import StepsManagerInterface
@@ -298,10 +305,17 @@ class AgentsManagerImpl(AgentsManagerInterface):
             untrusted=child.untrusted,
             holds_private=child.holds_private,
         )
-        bounded = await self._windows.bound_report(ctx, parent.id, step)
-        # Through the inbox: the projection that turns the parent pending
-        # asks for its loop's run.
-        (stored,), parent = await self._sessions.receive(ctx, parent.id, [bounded])
+        try:
+            # A report over the bound seals its whole under the parent's key.
+            bounded = await self._windows.bound_report(ctx, parent.id, step)
+            # Through the inbox: the projection that turns the parent pending
+            # asks for its loop's run.
+            (stored,), parent = await self._sessions.receive(ctx, parent.id, [bounded])
+        except KeyRevoked:
+            # The parent's content is past its life: it takes no content
+            # again, so the report has no reader, its artifact included, and
+            # the child's loop ends as under a parent gone.
+            return None
         if report_wakes(report) and parent.park == CHILDREN_PARK:
             # A parent that waits on its children waits for this report: it
             # clears the park, and the parent's gates run again as it resumes.
@@ -324,10 +338,13 @@ class AgentsManagerImpl(AgentsManagerInterface):
                 ctx, tree_for(kind, handoff.id, None, self._clock(), ctx.user_id)
             )
             principal = await self._attribution.call_principal(ctx, session_id)
-            participants = (principal.id,) if principal.kind is PrincipalKind.PERSON else ()
+            person = principal.id if principal.kind is PrincipalKind.PERSON else None
+            participants = () if person is None else (person,)
+            # It runs under the principal its source's calls run under, who
+            # steers it from its start.
             made = self._session(
                 ctx, kind, handoff.id, handoff.title, participants, handed_off_from=session_id
-            )
+            ).model_copy(update={"steerer": person})
             session = await self._sessions.create_session(ctx, made)
         authority = await self._open(ctx, session)
         # The objective is the agent's, so it is data and wakes nothing: the
@@ -387,9 +404,10 @@ class AgentsManagerImpl(AgentsManagerInterface):
         handed_off_from: UUID | None = None,
     ) -> AgentSession:
         """A session as its maker sends it: the kind pinned at its version,
-        its tools, and whether they hold private data: its kind says so, or
-        one of its tools is given a secret. What it takes from where it came
-        from is the create's to set."""
+        its tools, whether they hold private data: its kind says so, or one
+        of its tools is given a secret, and who sees it, as its kind's mode
+        says. What it takes from where it came from is the create's to
+        set."""
         now = self._clock()
         return AgentSession(
             id=session_id,
@@ -403,6 +421,7 @@ class AgentsManagerImpl(AgentsManagerInterface):
             kind_version=kind.version,
             tools=kind.tools,
             holds_private=kind.private_data or not self._secret_tools.isdisjoint(kind.tools),
+            visibility=visibility_of(kind.authority),
             parent_id=parent_id,
             root_id=session_id,
             handed_off_from=handed_off_from,

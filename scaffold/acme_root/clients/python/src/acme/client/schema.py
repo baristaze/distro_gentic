@@ -35,6 +35,28 @@ class TtlDays(RootModel[int]):
     root: Annotated[int, Field(ge=1, le=90, title='Ttl Days')]
 
 
+class Among(StrEnum):
+    """
+    Which root sessions a person's list holds: sub-agents are read
+    through their tree.
+    """
+    mine = 'mine'
+    visible = 'visible'
+
+
+class ArtifactPageView(BaseModel):
+    """
+    A page of what a session keeps whole outside its window, such as a
+    long tool result: its characters from `start`, the whole artifact's
+    length, and whether more follow.
+    """
+    artifact_id: Annotated[UUID, Field(title='Artifact Id')]
+    characters: Annotated[int, Field(title='Characters')]
+    has_more: Annotated[bool, Field(title='Has More')]
+    start: Annotated[int, Field(title='Start')]
+    text: Annotated[str, Field(title='Text')]
+
+
 class Label(RootModel[str]):
     root: Annotated[str, Field(max_length=200, min_length=1, pattern='^[^\\x00-\\x1f\\x7f]+$')]
 
@@ -115,6 +137,19 @@ class CredentialKind(StrEnum):
     socket_ticket = 'socket_ticket'
     operator_token = 'operator_token'
     internal = 'internal'
+
+
+class DeadlineRequest(BaseModel):
+    """
+    The deadline the session's tree shares, set whole: an instant, or
+    null to take it away. One past now, or none, unlocks every session of
+    the tree parked on the deadline. An instant with no offset names no
+    moment, so it is refused.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    deadline: Annotated[AwareDatetime | None, Field(title='Deadline')]
 
 
 class DecisionRequest(BaseModel):
@@ -282,6 +317,17 @@ class FlagsView(BaseModel):
     its user. A flag read on the server alone is never in it.
     """
     flags: Annotated[dict[str, bool], Field(description="Each flag marked for clients, by name, and its value for the session's org and user.", title='Flags')]
+
+
+class GiveBackRequest(BaseModel):
+    """
+    What the person who held the environment did there, which the model
+    reads as their message when the loop goes on.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    summary: Annotated[str, Field(max_length=100000, min_length=1, title='Summary')]
 
 
 class InvitationState(StrEnum):
@@ -508,8 +554,13 @@ class ParkView(BaseModel):
     """
     Why a parked loop waits, what clears it, and when it tries again by
     itself; a park only a person clears has no time, and neither has a park
-    in line, which names where it stands.
+    in line, which names where it stands. `cause` says why in words when the
+    engine can name it, such as a workspace base still being built, or a
+    key a provider refused and who must act. A hand-over names `holder`,
+    the user who holds the environment and alone gives it back.
     """
+    cause: Annotated[str | None, Field(title='Cause')]
+    holder: Annotated[UUID | None, Field(title='Holder')] = None
     line: LineParkView | None = None
     reason: ParkReason
     retry_at: Annotated[AwareDatetime | None, Field(title='Retry At')]
@@ -521,6 +572,7 @@ class Permission(StrEnum):
     write = 'write'
     manage_members = 'manage_members'
     manage_keys = 'manage_keys'
+    manage_sessions = 'manage_sessions'
 
 
 class PlaceView(BaseModel):
@@ -546,6 +598,17 @@ class PlatformSizeView(BaseModel):
     since: Annotated[AwareDatetime, Field(title='Since')]
     tenants: Annotated[int, Field(title='Tenants')]
     users: Annotated[int, Field(title='Users')]
+
+
+class PrincipalRequest(BaseModel):
+    """
+    Who steers the session from here: a participant its steerer hands it
+    to. Left out, the caller takes it.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    steerer: Annotated[UUID | None, Field(title='Steerer')] = None
 
 
 class PurposeUsageView(BaseModel):
@@ -1008,6 +1071,26 @@ class ValidationError(BaseModel):
     type: Annotated[str, Field(title='Error Type')]
 
 
+class Visibility(StrEnum):
+    """
+    Who sees a session and opens its content. The org is the team: there
+    is no axis between the two.
+    """
+    org_wide = 'org_wide'
+    private = 'private'
+
+
+class VisibilityRequest(BaseModel):
+    """
+    Who sees the session from here: every member of the org, or its
+    creator and its participants alone.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    visibility: Visibility
+
+
 class WaiterKind(StrEnum):
     """
     What waits on a request, so a grant wakes it. A product adds its own,
@@ -1064,7 +1147,11 @@ class AgentSessionView(BaseModel):
     A session: its kind, its title, and its status, which follows its
     steps. `pending` while an input waits for a run, `running` while a run
     holds its loop, `parked` while the loop waits, `idle` when no loop is
-    open.
+    open. `visibility` says who sees it: every member of the org, who may
+    join it, or its creator and its `participants` alone. `steerer` is the
+    person whose messages instruct it, its creator until a hand-off; a
+    participant's message is data. A sub-agent names none: its parent
+    steers it, and it is seen as its root is.
     """
     archived_at: Annotated[AwareDatetime | None, Field(title='Archived At')]
     created_at: Annotated[AwareDatetime, Field(title='Created At')]
@@ -1072,9 +1159,13 @@ class AgentSessionView(BaseModel):
     id: Annotated[UUID, Field(title='Id')]
     kind: Annotated[str, Field(title='Kind')]
     kind_version: Annotated[int, Field(title='Kind Version')]
+    parent_id: Annotated[UUID | None, Field(title='Parent Id')]
     park: ParkView | None
+    participants: Annotated[list[UUID], Field(title='Participants')]
     status: SessionStatus
+    steerer: Annotated[UUID | None, Field(title='Steerer')]
     title: Annotated[str, Field(title='Title')]
+    visibility: Visibility
 
 
 class ApiKeyView(BaseModel):
@@ -1219,6 +1310,21 @@ class IssuedUploadView(BaseModel):
     expires_at: Annotated[AwareDatetime, Field(title='Expires At')]
     fields: Annotated[list[UploadFieldView], Field(title='Fields')]
     url: Annotated[str | None, Field(title='Url')]
+
+
+class JobCompletionRequest(BaseModel):
+    """
+    How a job ended, from the system it ran on: the tool's handle for
+    the work, its result as text, and the class of its failure when it
+    failed. A job that spends is counted at its whole hold: no cost is
+    taken over the wire.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    failure: ToolFailure | None = None
+    handle: Annotated[str, Field(max_length=200, min_length=1, title='Handle')]
+    text: Annotated[str | None, Field(max_length=1000000, title='Text')] = ''
 
 
 class LastOwnerDetail(BaseModel):
@@ -1375,10 +1481,17 @@ class StepView(BaseModel):
     says: a message's words, a model's answer, a tool's result. The rest is
     its header's, by type: the tools a model response called, why it
     stopped, and what it used; a tool call's tool and the class of its
-    failure; a control's command; a park; a loop's outcome; the snapshot a
-    `snapshotted` step names, or a restore starts from.
+    failure; a control's command; a park; a loop's outcome, and its cause
+    when the engine names one, such as the setup command that failed and
+    its exit code; the snapshot a `snapshotted` step names, or a restore
+    starts from. A message names its `author`, and `participant` says it is
+    a participant's, data, never an instruction. A `switched` step that
+    moved the steer names the new `steerer`, and one that switched who sees
+    the session its `visibility`.
     """
     actor: Actor
+    author: Annotated[UUID | None, Field(title='Author')]
+    cause: Annotated[str | None, Field(title='Cause')]
     command: ControlCommand | None
     created_at: Annotated[AwareDatetime, Field(title='Created At')]
     failure: ToolFailure | None
@@ -1387,16 +1500,19 @@ class StepView(BaseModel):
     origin: Origin
     outcome: LoopOutcome | None
     park: ParkView | None
+    participant: Annotated[bool, Field(title='Participant')]
     refs: Annotated[list[UUID], Field(title='Refs')]
     responds_to: Annotated[UUID | None, Field(title='Responds To')]
     seq: Annotated[int, Field(title='Seq')]
     snapshot: SnapshotView | None
+    steerer: Annotated[UUID | None, Field(title='Steerer')]
     stop_reason: StopReason | None
     text: Annotated[str, Field(title='Text')]
     tool: Annotated[str | None, Field(title='Tool')]
     tools: Annotated[list[str], Field(title='Tools')]
     type: StepType
     usage: StepUsageView | None
+    visibility: Visibility | None
 
 
 class UserPageView(BaseModel):
@@ -1407,6 +1523,15 @@ class UserPageView(BaseModel):
     """
     items: Annotated[list[UserView], Field(title='Items')]
     next_cursor: Annotated[str | None, Field(title='Next Cursor')]
+
+
+class AgentSessionPageView(BaseModel):
+    """
+    One page of root sessions by id. With `has_more`, the next page
+    starts after the last one's id.
+    """
+    has_more: Annotated[bool, Field(title='Has More')]
+    items: Annotated[list[AgentSessionView], Field(title='Items')]
 
 
 class ApiKeyPageView(BaseModel):

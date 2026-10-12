@@ -24,26 +24,64 @@ from acme.om.attribution.types.authority import (
     CallReach,
     SessionAuthority,
     Trust,
+    Visibility,
 )
 from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.context import CredentialKind, Role, TenantContext
-from acme.om.steps.types.header import ControlHeader, InputHeader, ModelRequestHeader
+from acme.om.steps.types.header import (
+    ControlHeader,
+    InputHeader,
+    ModelRequestHeader,
+    Park,
+    ParkReason,
+    SwitchedHeader,
+)
 from acme.om.steps.types.step import Actor, Origin, Step, StepType, switches_standing
 
 PRINCIPAL_ACTORS = frozenset({Actor.PERSON, Actor.PROGRAM})
 """The actors that speak for a principal: a person, or a program a person or
 a service principal runs."""
 
+PRINCIPAL_PARK = Park(reason=ParkReason.PERSON, unlock="principal")
+"""The park of a loop whose tool calls run under a principal who no longer
+holds: a person who assigns themselves clears it (`assign_principal`)."""
+
 DATA_TYPES = frozenset({StepType.EVENT, StepType.TOOL_RESPONSE, StepType.SUMMARY})
 """What a model reads as data whoever wrote it: an event from outside, a
 tool's output, and a summary of the window."""
 
 
-def principal_authored(step: Step) -> bool:
-    """A message a principal wrote, through a product surface or as an
-    automation's trigger. An agent's message, an event, and what the engine
-    writes never are, whoever stands behind them."""
+VISIBILITY: dict[AuthorityMode, Visibility] = {
+    AuthorityMode.STEADY: Visibility.ORG_WIDE,
+    AuthorityMode.DELEGATED: Visibility.PRIVATE,
+}
+"""Who sees a new session, by its kind's mode, until its creator switches
+it. A steady session behaves the same for whoever resumes it, so every
+member may find it and join it. A delegated session's tools run with one
+person's own permissions, and its results may hold what other members
+cannot fetch, so it is private."""
+
+
+def visibility_of(mode: AuthorityMode) -> Visibility:
+    return VISIBILITY[mode]
+
+
+def person_written(step: Step) -> bool:
+    """A message a person or a program wrote, through a product surface or
+    as an automation's trigger, whether or not its author steers the
+    session."""
     return step.type is StepType.MESSAGE and step.actor in PRINCIPAL_ACTORS
+
+
+def principal_authored(step: Step) -> bool:
+    """A message a principal wrote: the session's steerer, through a product
+    surface or as an automation's trigger. A participant who does not steer
+    it writes data (`InputHeader.participant`), and an agent's message, an
+    event, and what the engine writes never are, whoever stands behind
+    them."""
+    header = step.header
+    participant = isinstance(header, InputHeader) and header.participant
+    return person_written(step) and not participant
 
 
 def trust_of(step: Step) -> Trust | None:
@@ -90,6 +128,13 @@ def marks(step: Step) -> bool:
     return carried or trust_of(step) is Trust.DATA
 
 
+def in_person(ctx: TenantContext) -> bool:
+    """Whether a person acts themselves, signed in on a session of their
+    own: a program on an API key, and an agent's call on a principal's
+    live context, are no person in person."""
+    return ctx.credential_kind is CredentialKind.SESSION_TOKEN
+
+
 def principal_of(ctx: TenantContext) -> Principal:
     """The principal a context speaks for: its user, and the API key it came
     on, which caps the user's role at every call made on what they said. A
@@ -98,17 +143,38 @@ def principal_of(ctx: TenantContext) -> Principal:
     return Principal(kind=PrincipalKind.PERSON, id=ctx.user_id, key_id=key)
 
 
-def said_by(step: Step, principal: Principal) -> Step:
-    """A principal-authored input as the context that appends it said it:
-    its principal is that context's (`principal_of`), key included, whatever
-    the caller wrote, so no one speaks, or pays, or asks, in another's name
-    or past their key's cap. Any other step is answered as it is."""
+def said_by(step: Step, principal: Principal, *, steers: bool = True) -> Step:
+    """A message a person or a program wrote as the context that appends it
+    said it: its principal is that context's (`principal_of`), key
+    included, whatever the caller wrote, so no one speaks, or pays, or asks,
+    in another's name or past their key's cap. It is a participant's when
+    its author does not steer the session (`steers`): data, which wakes
+    nothing. Any other step is answered as it is."""
     header = step.header
-    if not principal_authored(step) or not isinstance(header, InputHeader):
+    if not person_written(step) or not isinstance(header, InputHeader):
         return step
-    if header.principal == principal:
+    said = {"principal": principal, "participant": not steers}
+    if not steers:
+        said["waking"] = False
+    if all(getattr(header, name) == value for name, value in said.items()):
         return step
-    return step.model_copy(update={"header": header.model_copy(update={"principal": principal})})
+    return step.model_copy(update={"header": header.model_copy(update=said)})
+
+
+def switched_by(step: Step, principal: Principal) -> Step:
+    """A switch of the session's steerer or of who sees it as the context
+    that appends it made it: its `by` is that context's principal, whatever
+    the caller wrote. Any other step is answered as it is."""
+    header = step.header
+    if not isinstance(header, SwitchedHeader):
+        return step
+    if header.steer is not None and header.steer.by != principal:
+        steer = header.steer.model_copy(update={"by": principal})
+        return step.model_copy(update={"header": header.model_copy(update={"steer": steer})})
+    if header.visibility is not None and header.visibility.by != principal:
+        seen = header.visibility.model_copy(update={"by": principal})
+        return step.model_copy(update={"header": header.model_copy(update={"visibility": seen})})
+    return step
 
 
 def decided_by(step: Step, user_id: UUID, role: Role) -> Step:

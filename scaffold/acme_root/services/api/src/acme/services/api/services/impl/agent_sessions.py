@@ -2,9 +2,11 @@ from uuid import UUID
 
 from acme.integrations.model_providers.types import Usage
 from acme.om.agent_sessions import AgentSessionsManagerInterface
-from acme.om.agent_sessions.types.agent_session import AgentSession
+from acme.om.agent_sessions.types.agent_session import AgentSession, Among, SessionStatus
 from acme.om.agents import AgentsManagerInterface
+from acme.om.agents.loop import LoopManagerInterface
 from acme.om.agents.types.request import Start
+from acme.om.attribution import AttributionManagerInterface
 from acme.om.base import utcnow
 from acme.om.context import TenantContext
 from acme.om.exceptions import NotFound
@@ -14,10 +16,12 @@ from acme.om.steps.types.content import TextBlock
 from acme.om.steps.types.header import (
     ControlCommand,
     ControlHeader,
+    InputHeader,
     LoopEndedHeader,
     ModelResponseHeader,
     Park,
     ParkedHeader,
+    SwitchedHeader,
     ToolRequestHeader,
     ToolResponseHeader,
     WorkspaceSnapshot,
@@ -25,18 +29,27 @@ from acme.om.steps.types.header import (
 from acme.om.steps.types.step import Step, StepType
 from acme.om.tools import ToolsManagerInterface
 from acme.om.tools.rules import named_snapshot
+from acme.om.tools.types.call import JobCompletion
+from acme.om.windows import WindowsManagerInterface
 from acme.services.api.services.agent_sessions import AgentSessionsServiceInterface
 from acme.services.api.types.agent_sessions import (
+    AgentSessionPageView,
     AgentSessionView,
+    ArtifactPageView,
     ControlRequest,
+    DeadlineRequest,
     DecisionRequest,
+    GiveBackRequest,
+    JobCompletionRequest,
     MessageRequest,
     ParkView,
+    PrincipalRequest,
     SnapshotView,
     StartSessionRequest,
     StepPageView,
     StepUsageView,
     StepView,
+    VisibilityRequest,
 )
 from acme.services.api.types.common import clamp_limit
 
@@ -46,6 +59,7 @@ def park_view(park: Park | None) -> ParkView | None:
 
 
 def session_view(session: AgentSession) -> AgentSessionView:
+    child = session.parent_id is not None
     return AgentSessionView(
         id=session.id,
         title=session.title,
@@ -56,6 +70,10 @@ def session_view(session: AgentSession) -> AgentSessionView:
         created_at=session.created_at,
         created_by=session.created_by,
         archived_at=session.archived_at,
+        visibility=session.visibility,
+        participants=list(session.participants),
+        steerer=None if child else session.steerer or session.created_by,
+        parent_id=session.parent_id,
     )
 
 
@@ -97,7 +115,16 @@ def step_view(step: Step) -> StepView:
         command=header.command if isinstance(header, ControlHeader) else None,
         park=park_view(header.park) if isinstance(header, ParkedHeader) else None,
         outcome=header.outcome if isinstance(header, LoopEndedHeader) else None,
+        cause=header.cause if isinstance(header, LoopEndedHeader) else None,
         snapshot=snapshot_view(named_snapshot(step)),
+        author=header.principal.id if isinstance(header, InputHeader) else None,
+        participant=isinstance(header, InputHeader) and header.participant,
+        steerer=header.steer.steerer.id
+        if isinstance(header, SwitchedHeader) and header.steer
+        else None,
+        visibility=header.visibility.visibility
+        if isinstance(header, SwitchedHeader) and header.visibility
+        else None,
     )
 
 
@@ -112,11 +139,17 @@ class AgentSessionsServiceImpl(AgentSessionsServiceInterface):
         agents: AgentsManagerInterface,
         steps: StepsManagerInterface,
         tools: ToolsManagerInterface,
+        attribution: AttributionManagerInterface,
+        loop: LoopManagerInterface,
+        windows: WindowsManagerInterface,
     ) -> None:
+        self._windows = windows
         self._sessions = sessions
         self._agents = agents
         self._steps = steps
         self._tools = tools
+        self._attribution = attribution
+        self._loop = loop
 
     async def start_session(
         self, ctx: TenantContext, body: StartSessionRequest, session_id: UUID
@@ -126,6 +159,30 @@ class AgentSessionsServiceImpl(AgentSessionsServiceInterface):
 
     async def get_session(self, ctx: TenantContext, session_id: UUID) -> AgentSessionView:
         return session_view(await self._sessions.get_session(ctx, session_id))
+
+    async def list_sessions(
+        self,
+        ctx: TenantContext,
+        among: Among,
+        status: SessionStatus | None,
+        after: UUID | None,
+        limit: int,
+    ) -> AgentSessionPageView:
+        page = await self._sessions.get_sessions(ctx, status, after, clamp_limit(limit), among)
+        return AgentSessionPageView(
+            items=[session_view(session) for session in page.items], has_more=page.has_more
+        )
+
+    async def add_participant(
+        self, ctx: TenantContext, session_id: UUID, user_id: UUID
+    ) -> AgentSessionView:
+        return session_view(await self._sessions.add_participant(ctx, session_id, user_id))
+
+    async def switch_visibility(
+        self, ctx: TenantContext, session_id: UUID, body: VisibilityRequest
+    ) -> AgentSessionView:
+        switched = await self._sessions.switch_visibility(ctx, session_id, body.visibility)
+        return session_view(switched)
 
     async def send_message(
         self, ctx: TenantContext, session_id: UUID, body: MessageRequest, step_id: UUID
@@ -175,9 +232,53 @@ class AgentSessionsServiceImpl(AgentSessionsServiceInterface):
         await self._sessions.project_status(ctx, session_id)
         return step_view(decided)
 
+    async def set_deadline(
+        self, ctx: TenantContext, session_id: UUID, body: DeadlineRequest
+    ) -> AgentSessionView:
+        await self._agents.set_deadline(ctx, session_id, body.deadline)
+        return session_view(await self._sessions.get_session(ctx, session_id))
+
+    async def assign_principal(
+        self, ctx: TenantContext, session_id: UUID, body: PrincipalRequest | None
+    ) -> AgentSessionView:
+        steerer = None if body is None else body.steerer
+        await self._attribution.assign_principal(ctx, session_id, steerer)
+        return session_view(await self._sessions.get_session(ctx, session_id))
+
+    async def take_over(self, ctx: TenantContext, session_id: UUID) -> AgentSessionView:
+        return session_view(await self._loop.take_over(ctx, session_id))
+
+    async def give_back(
+        self, ctx: TenantContext, session_id: UUID, body: GiveBackRequest
+    ) -> AgentSessionView:
+        return session_view(await self._loop.give_back(ctx, session_id, body.summary))
+
+    async def complete_job(
+        self, ctx: TenantContext, session_id: UUID, key: UUID, body: JobCompletionRequest
+    ) -> AgentSessionView:
+        completion = JobCompletion(
+            key=key, handle=body.handle, text=body.text, failure=body.failure
+        )
+        return session_view(await self._loop.complete_job(ctx, session_id, completion))
+
     async def get_steps(
         self, ctx: TenantContext, session_id: UUID, after_seq: int, limit: int
     ) -> StepPageView:
         await self._sessions.get_session(ctx, session_id)
         page = await self._steps.get_steps(ctx, session_id, after_seq, clamp_limit(limit))
         return StepPageView(items=[step_view(step) for step in page.items], has_more=page.has_more)
+
+    async def get_artifact(
+        self, ctx: TenantContext, session_id: UUID, artifact_id: UUID, start: int, limit: int
+    ) -> ArtifactPageView:
+        # The session first, so one marked deleted keeps its artifacts closed
+        # as it keeps its history.
+        await self._sessions.get_session(ctx, session_id)
+        page = await self._windows.get_artifact(ctx, session_id, artifact_id, start, limit)
+        return ArtifactPageView(
+            artifact_id=page.artifact_id,
+            start=page.offset,
+            text=page.text,
+            characters=page.characters,
+            has_more=page.has_more,
+        )

@@ -15,9 +15,14 @@ The status moves on the steps alone:
   the next request delivers it with whatever wakes the session next;
 - a control that clears the park makes a parked session pending, for a
   run to take up: `unlock` and `cancel` clear any park, `resume` a pause,
-  and `approve` or `deny` a person's;
+  and `approve` or `deny` a person's. A hand-over a person holds is the
+  exception: an unlock clears it only when its holder sends it in person
+  (`clears`), so neither another member, nor a program on an API key, nor
+  the engine takes the environment from them; a cancel still ends it;
 - a principal's message clears a park on a question (`QUESTION`): it is
-  the answer the park waits for, and the resumed loop delivers it.
+  the answer the park waits for, and the resumed loop delivers it;
+- a switch a person makes to the session itself, its standing text, its
+  steerer, or who sees it, says nothing of a run.
 
 An archived session records what arrives and wakes for nothing else. A
 principal's message unarchives it, and wakes it as any input does. A
@@ -33,7 +38,9 @@ The cache keeps attribution's two answers beside the status, folded over
 the same steps (`attribution.rules.fold`): the speaker, which each model
 request records, and the untrusted mark, which the first data sets for
 good. Whether it holds private data is folded the same way: an input that
-carries it from another session, a child's report, sets it for good."""
+carries it from another session, a child's report, sets it for good. Who
+sees the session is folded too, its creator's latest switch of it, and
+who steers it, the latest move of the steer."""
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, replace
@@ -43,6 +50,8 @@ from uuid import UUID
 
 from acme.om.agent_sessions.types.agent_session import AgentSession, SessionStatus
 from acme.om.attribution.rules import fold, principal_authored
+from acme.om.attribution.types.authority import Visibility
+from acme.om.context import Permission, TenantContext
 from acme.om.steps.types.header import (
     ControlCommand,
     ControlHeader,
@@ -55,8 +64,9 @@ from acme.om.steps.types.header import (
     Park,
     ParkedHeader,
     ParkReason,
+    SwitchedHeader,
 )
-from acme.om.steps.types.step import Actor, Origin, Step, StepType, switches_standing
+from acme.om.steps.types.step import Actor, Origin, Step, StepType, switches_session
 
 EVERY_PARK = frozenset(ParkReason)
 
@@ -67,7 +77,8 @@ UNPARKS: dict[ControlCommand, frozenset[ParkReason]] = {
     ControlCommand.APPROVE: frozenset({ParkReason.PERSON}),
     ControlCommand.DENY: frozenset({ParkReason.PERSON}),
 }
-"""The parks each control clears. A control not named here clears none."""
+"""The parks each control clears. A control not named here clears none,
+and a hand-over its holder holds clears only as `clears` says."""
 
 QUESTION = Park(reason=ParkReason.PERSON, unlock="answer")
 """The park of a loop whose agent asked its person a question, or stood
@@ -81,6 +92,30 @@ STOPPED = frozenset({LoopOutcome.ERRORED, LoopOutcome.CANCELLED})
 """The outcomes after which a loop wakes on nothing it already held: an
 error no park can clear would meet the same input again, and a principal
 who cancelled did not ask for another run."""
+
+
+def clears(park: Park, control: Step) -> bool:
+    """Whether a control clears `park`: its command clears the park's reason
+    (`UNPARKS`), and a hand-over that names its holder is unlocked by that
+    holder alone, in person, never on an API key: the engine's own unlock,
+    another member's, and a program's clear nothing. A cancel ends any
+    park, a held hand-over too."""
+    header = control.header
+    if not isinstance(header, ControlHeader):
+        return False
+    if park.reason not in UNPARKS.get(header.command, frozenset()):
+        return False
+    if park.reason is not ParkReason.HANDOVER or park.holder is None:
+        return True
+    if header.command is ControlCommand.CANCEL:
+        return True
+    sender = header.principal
+    return (
+        control.actor is Actor.PERSON
+        and sender is not None
+        and sender.key_id is None
+        and sender.id == park.holder
+    )
 
 
 @dataclass(frozen=True)
@@ -115,18 +150,15 @@ def after_step(state: Projection, step: Step) -> Projection:
             delivering_request=None,
         )
     if isinstance(header, ControlHeader):
-        cleared = state.park is not None and state.park.reason in UNPARKS.get(
-            header.command, frozenset()
-        )
+        cleared = state.park is not None and clears(state.park, step)
         if cleared:
             return replace(state, status=SessionStatus.PENDING, park=None)
         return state
     if isinstance(header, ParkedHeader):
         return replace(state, status=SessionStatus.PARKED, park=header.park)
-    if step.type is StepType.SNAPSHOTTED or switches_standing(step):
+    if step.type is StepType.SNAPSHOTTED or switches_session(step):
         # Taken whenever its caller takes one, a loop's end included, or
-        # pinned by the session's maker through the inbox: it says nothing
-        # of a run.
+        # switched by a person through the inbox: it says nothing of a run.
         return state
     if isinstance(header, LoopEndedHeader):
         waiting = state.pending_input is not None and header.outcome not in STOPPED
@@ -182,6 +214,8 @@ def projected(
     return AgentSession.model_validate(
         {
             **session.model_dump(),
+            "visibility": seen_as(session, unread),
+            "steerer": steered_by(session.steerer, unread),
             "status": state.status,
             "park": state.park,
             "pending_input": state.pending_input,
@@ -198,6 +232,45 @@ def projected(
     )
 
 
+def seen_as(session: AgentSession, steps: Iterable[Step]) -> Visibility:
+    """Who sees a session once `steps` are read: its creator's latest switch
+    among them, or what it held. A switch anyone else wrote counts for
+    nothing, and a sub-agent's, which is seen as its root is, neither."""
+    visibility = session.visibility
+    for step in steps:
+        header = step.header
+        if not isinstance(header, SwitchedHeader) or header.visibility is None:
+            continue
+        if header.visibility.by.id == session.created_by and session.root_id == session.id:
+            visibility = header.visibility.visibility
+    return visibility
+
+
+def steered_by(steerer: UUID | None, steps: Iterable[Step]) -> UUID | None:
+    """Who steers a session once `steps` are read, as its latest recorded
+    move of the steer names them: a person by id."""
+    for step in steps:
+        header = step.header
+        if isinstance(header, SwitchedHeader) and header.steer is not None:
+            steerer = header.steer.steerer.id
+    return steerer
+
+
+def sees(ctx: TenantContext, root: AgentSession) -> bool:
+    """Whether a person sees a session and opens its content, read off the
+    root of its tree, since a sub-agent is seen as its root is: one who
+    holds `manage_sessions`, for audit; any member of the org when it is
+    org-wide; and when it is private, its creator and its participants. The
+    steerer is always one of them: its creator, a participant it was
+    handed to, or a holder of `manage_sessions` who took it."""
+    return (
+        ctx.has(Permission.MANAGE_SESSIONS)
+        or root.visibility is Visibility.ORG_WIDE
+        or ctx.user_id == root.created_by
+        or ctx.user_id in root.participants
+    )
+
+
 def held_private(held: bool, steps: Iterable[Step]) -> bool:
     """Whether a session holds private data once `steps` are read: it held
     it, or an input among them carries it from the session that wrote it,
@@ -208,12 +281,12 @@ def held_private(held: bool, steps: Iterable[Step]) -> bool:
 
 
 def announces(before: AgentSession, after: AgentSession, steps: Sequence[Step]) -> bool:
-    """Whether a projection is announced: its status, its park, or its
-    archive flag changed, or a loop ended among the steps it read. A step
-    is never announced on its own."""
+    """Whether a projection is announced: its status, its park, its
+    archive flag, its visibility, or its steerer changed, or a loop ended
+    among the steps it read. A step is never announced on its own."""
     return (
-        (before.status, before.park, before.archived_at)
-        != (after.status, after.park, after.archived_at)
+        (before.status, before.park, before.archived_at, before.visibility, before.steerer)
+        != (after.status, after.park, after.archived_at, after.visibility, after.steerer)
     ) or any(step.type is StepType.LOOP_ENDED and step.seq > before.status_seq for step in steps)
 
 
@@ -224,7 +297,8 @@ def lineage(source: AgentSession | None, session: AgentSession) -> dict[str, Any
 
     A root starts on its own: depth 1, no speaker, unmarked. A session that
     came from another carries its mark, and holds private data where its
-    source does, since its objective may carry it. A child also joins its
+    source does, since its objective may carry it; for the same reason it
+    is private where its source is. A child also joins its
     parent's tree one level down and may call only the tools both its kind
     and its parent may, a deferred toolset's counted loaded or not: no
     child holds more than its parent. `load_toolset` adds no power, so a
@@ -234,10 +308,12 @@ def lineage(source: AgentSession | None, session: AgentSession) -> dict[str, Any
     is attribution's (`attribution.rules.inherited`)."""
     if source is None:
         return {"root_id": session.id, "depth": 1, "speaker": None, "untrusted": False}
+    private = Visibility.PRIVATE in (session.visibility, source.visibility)
     taken = {
         "speaker": None,
         "untrusted": source.untrusted,
         "holds_private": session.holds_private or source.holds_private,
+        "visibility": Visibility.PRIVATE if private else session.visibility,
     }
     if session.parent_id is None:
         return {**taken, "root_id": session.id, "depth": 1}

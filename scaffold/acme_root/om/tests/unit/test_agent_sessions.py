@@ -22,18 +22,30 @@ from contracts.step_storage import (
 from contracts.tools import stand_ins
 
 from acme.infra.impl.local import InfraLocalImpl
-from acme.om.agent_sessions.impl.manager import AgentSessionsManagerImpl, AgentSessionsOptions
+from acme.om.agent_sessions.impl.manager import (
+    UPDATED,
+    AgentSessionsManagerImpl,
+    AgentSessionsOptions,
+)
 from acme.om.agent_sessions.rules import Projection, after_step, announces, projected
 from acme.om.agent_sessions.storage import AgentSessionStorageInterface
 from acme.om.agent_sessions.storage.impl.memory import AgentSessionStorageMemoryImpl
 from acme.om.agent_sessions.types.agent_session import AgentSession, SessionStatus
+from acme.om.attribution.types.authority import AuthorityMode, Visibility
+from acme.om.attribution.types.principal import Principal, PrincipalKind
 from acme.om.base import new_id, utcnow
 from acme.om.context import AppContext, AppType, RequestContext, Role, TenantContext
 from acme.om.exceptions import NotAuthorized, NotFound, PreconditionFailed, ValidationFailed
 from acme.om.outbox.storage.impl.memory import OutboxStorageMemoryImpl
 from acme.om.outbox.types.row import OutboxRow
 from acme.om.root import Managers, build_managers
-from acme.om.steps.impl.manager import StepsManagerImpl, StepsOptions, no_registry
+from acme.om.steps.impl.manager import (
+    StepsManagerImpl,
+    StepsOptions,
+    no_registry,
+    no_session,
+    no_steerer,
+)
 from acme.om.steps.types.header import (
     ControlCommand,
     ControlHeader,
@@ -196,6 +208,34 @@ def test_a_control_clears_the_parks_it_names_and_no_other(
         expected = PENDING if reason in cleared else parked_state(reason)
         assert after == expected, (command, reason)
     assert after_step(IDLE, control(command)) == IDLE
+
+
+def test_a_held_hand_over_is_cleared_by_its_holders_own_unlock_in_person_or_a_cancel() -> None:
+    """In history order, so a control that lands after a take-over is read
+    against the hand-over whatever its sender saw: the engine's unlock,
+    another member's, and the holder's on an API key clear nothing."""
+    holder, other = new_id(), new_id()
+    held = Projection(
+        SessionStatus.PARKED,
+        Park(reason=ParkReason.HANDOVER, unlock="give_back", holder=holder),
+        archived=False,
+    )
+
+    def sent(by: UUID, actor: Actor = Actor.PERSON, key: UUID | None = None) -> Step:
+        sender = Principal(kind=PrincipalKind.PERSON, id=by, key_id=key)
+        header = ControlHeader(command=ControlCommand.UNLOCK, principal=sender)
+        return a_step(StepType.CONTROL, header).model_copy(update={"actor": actor})
+
+    for step in (
+        control(ControlCommand.UNLOCK),
+        sent(other),
+        sent(holder, Actor.PROGRAM, key=new_id()),
+    ):
+        assert after_step(held, step) == held, step.actor
+    assert after_step(held, sent(holder)) == PENDING
+    assert after_step(held, control(ControlCommand.CANCEL)) == PENDING
+    unheld = parked_state(ParkReason.HANDOVER)
+    assert after_step(unheld, control(ControlCommand.UNLOCK)) == PENDING, "one parked before"
 
 
 def test_an_archived_session_records_events_and_a_message_unarchives_it() -> None:
@@ -511,7 +551,8 @@ async def test_only_an_idle_session_is_archived_and_a_message_brings_it_back(
 async def test_a_viewer_reads_and_writes_nothing(managers: Managers) -> None:
     org = make_org()
     member, viewer = context(Role.MEMBER, org), context(Role.VIEWER, org)
-    session = await managers.agent_sessions.create_session(member, make_session())
+    seen = make_session(visibility=Visibility.ORG_WIDE)
+    session = await managers.agent_sessions.create_session(member, seen)
     assert await managers.agent_sessions.get_session(viewer, session.id) == session
     with pytest.raises(NotAuthorized):
         await managers.agent_sessions.create_session(viewer, make_session())
@@ -558,6 +599,52 @@ async def test_a_deleted_session_is_hidden_from_every_read_and_comes_back_whole(
     assert (await steps.get_steps(ctx, sid, 0, 10)).items == history
     assert await sessions.restore_session(ctx, sid) == restored, "not marked: as it is"
     assert await kinds(managers, ctx, sid) == ["created", "deleted", "updated"]
+
+
+async def test_a_deleted_session_comes_back_only_for_one_who_sees_it(managers: Managers) -> None:
+    """A member who does not see a private session finds none to restore, as
+    they find none to read, and it stays deleted; its creator restores it."""
+    org = make_org()
+    ctx, other = context(Role.MEMBER, org), context(Role.MEMBER, org)
+    sessions = managers.agent_sessions
+    sid = (await sessions.create_session(ctx, make_session())).id
+    await sessions.delete_session(ctx, sid)
+
+    with pytest.raises(NotFound):
+        await sessions.restore_session(other, sid)
+    with pytest.raises(NotFound):
+        await sessions.get_session(ctx, sid)
+    assert (await sessions.restore_session(ctx, sid)).deleted_at is None
+    assert await kinds(managers, ctx, sid) == ["created", "deleted", "updated"]
+
+
+async def test_a_switch_of_visibility_and_a_move_of_the_steer_are_each_announced(
+    managers: Managers,
+) -> None:
+    """Who sees a session and who steers it are on its view, so a switch by
+    its creator and a hand-off to a participant each announce its new
+    version."""
+    org = make_org()
+    ctx, mia = context(Role.MEMBER, org), context(Role.MEMBER, org)
+    sessions = managers.agent_sessions
+    sid = (await sessions.create_session(ctx, make_session())).id
+    await managers.attribution.open_authority(ctx, sid, AuthorityMode.STEADY)
+    await sessions.add_participant(ctx, sid, mia.user_id)
+
+    async def updates() -> int:
+        events = await managers.events.get_events(ctx, 0, 100)
+        return sum(e.kind == UPDATED and e.target_id == sid for e in events)
+
+    joined = await updates()
+    switched = await sessions.switch_visibility(ctx, sid, Visibility.ORG_WIDE)
+    after_switch = await updates()
+    await managers.attribution.assign_principal(ctx, sid, mia.user_id)
+    handed = await sessions.get_session(ctx, sid)
+
+    assert switched.visibility is Visibility.ORG_WIDE
+    assert after_switch == joined + 1, "the switch is announced"
+    assert handed.steerer == mia.user_id
+    assert await updates() == joined + 2, "the hand-off is announced"
 
 
 async def test_only_an_idle_session_is_deleted(managers: Managers) -> None:
@@ -637,6 +724,8 @@ def purging(
             managers.tenancy,
             StepsOptions(purge_batch=batch),
             instructs=no_registry,
+            steers=no_steerer,
+            opens=no_session,
         ),
         managers.tenancy,
         managers.outbox,
