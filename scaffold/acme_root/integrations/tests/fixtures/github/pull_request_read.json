@@ -1,0 +1,20 @@
+{
+  "id": 3012,
+  "number": 12,
+  "html_url": "https://github.com/octo-org/widgets/pull/12",
+  "state": "open",
+  "title": "Handle the empty cart",
+  "body": "The totals test passes on an empty cart.",
+  "merged_at": null,
+  "changed_files": 2,
+  "head": {
+    "ref": "agent/fix-totals",
+    "sha": "9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b",
+    "repo": {"full_name": "octo-org/widgets"}
+  },
+  "base": {
+    "ref": "main",
+    "sha": "4c4fd1b7a9d3c6e2f1a0b9c8d7e6f5a4b3c2d1e0",
+    "repo": {"full_name": "octo-org/widgets"}
+  }
+}

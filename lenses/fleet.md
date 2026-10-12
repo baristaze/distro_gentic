@@ -4,9 +4,10 @@ Group id: `fleet`. Covers The Agents a Platform Ships, Failure at Fleet
 Scale, and Operations of `distro_gentic_spec.md`.
 
 This group judges the agents a platform ships, what the fleet does when
-things fail, and how the platform is operated: the shipped kinds and
-the platform assistant, a provider outage at scale, the sweep and its
-duties, operational skills, the dashboard, and the telemetry round trip.
+things fail, and how the platform is operated: the shipped kinds, the
+platform assistant, the reviewer, and the operator, a provider outage at
+scale, the sweep and its duties, operational skills, the dashboard, and
+the telemetry round trip.
 It leaves the outage signal itself to `money`, each sweep duty's own rule
 to the lens that states it (FLT-08 names them), and how an agent kind is
 defined to the engine.
@@ -271,5 +272,54 @@ into the steps.
 run's request id; a host that mints its own.
 
 **Severity.** medium
+
+**Check.** review
+
+## FLT-14 The reviewer reads and never changes what it reviews
+
+**Principle.** The reviewer reads a pull request through the forge's
+integration: its diff, its checks, and its files at its head. It
+answers through its result tool with findings, each with a file, a
+line, and a grade, and the gate checks that each one is a finding it
+noted on a line that is there. It has no workspace and changes no code.
+It comments on the pull request only through the forge's integration,
+where its kind's policy allows: a person approves each comment.
+
+**Source.** The Agents a Platform Ships.
+
+**Look for.** The reviewer kind's tools and their classes, its
+workspace, its result tool, and the gate its result passes.
+
+**Violation.** A reviewer tool that writes a file, runs code, pushes, or
+starts a session; a reviewer with a workspace; a review accepted on a
+finding the session never noted, or one off its file.
+
+**Severity.** high
+
+**Shape.** `scaffold/acme_root/om/src/acme/om/platform_agents/kinds.py`
+and `scaffold/acme_root/om/src/acme/om/platform_agents/impl/gate.py`
+
+**Check.** review
+
+## FLT-15 The operator only reads
+
+**Principle.** The operator reads the tenant's operations on its
+person's own permissions: its sessions and what they wait on, each
+loop's place on the work queue, its hosts and what they offer, and its
+budgets and what they spent. Every tool it holds reads, so it changes
+nothing. A fix it finds leaves as a self-contained objective, which a
+person hands to an engineer.
+
+**Source.** The Agents a Platform Ships.
+
+**Look for.** The operator kind's tools and their classes, its authority,
+and how a fix it finds leaves it.
+
+**Violation.** An operator tool of any class but read, a hand-off among
+them; an operator with a workspace or with steady authority.
+
+**Severity.** high
+
+**Shape.** `scaffold/acme_root/om/src/acme/om/platform_agents/rules.py`
 
 **Check.** review

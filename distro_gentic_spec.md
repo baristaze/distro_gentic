@@ -1009,6 +1009,29 @@ kinds the same way, as data, and the models and the rhythm follow.
   engineering work to an engineer session with a self-contained
   objective, then steps back. Its authority is delegated, and it has no
   workspace, repository, or shell.
+- The **reviewer** reads a pull request through the forge's
+  integration: its diff, its checks, and its files at its head. It
+  answers with a review through its result tool: findings, each with a
+  file, a line, and a grade, and the gate checks that each one is a
+  finding it noted on a line that is there. It changes no code. It has no
+  workspace, and it comments on the pull request only through the
+  forge's integration, where its kind's policy allows: a person approves
+  each comment. It asks the largest model size of its own turns, since a
+  review is worth the defects it finds.
+- The **operator** reads the tenant's operations on its person's own
+  permissions: its sessions and what they wait on, each loop's place on
+  the work queue, its hosts and what they offer, and its budgets and
+  what they spent. Every tool it holds reads, so it changes nothing. A
+  fix it finds leaves as a self-contained objective, which a person
+  hands to an engineer.
+
+A role of roles is a kind like any other: a lead, whose toolsets include
+starting the others as sub-agents. A lead that takes a change through
+review starts an engineer on it, then a reviewer on the pull request the
+engineer opened, and answers with both reports. A child holds no tool
+its lead may not call, each call passes its own kind's policy and the
+lead's, and each spends from its own share, so the lead adds no power
+and no noun.
 
 The assistant's corpus is what the guideline's knowledge map lists for
 the tenant's users ([The Knowledge Map][g-kmap]), so internal text never

@@ -27,6 +27,7 @@ from acme.integrations.events import (
     PostedMessage,
     Provenance,
     ProvidedEvent,
+    PullRequestRead,
 )
 from acme.integrations.events.slack_wire import CHAT, MARK_EVENT, message_id, read_delivery
 from acme.integrations.exceptions import DeliveryRefused, ProviderRefused, ProviderUnavailable
@@ -167,6 +168,12 @@ class SlackImpl(IntegrationInterface):
         *,
         installation: str,
     ) -> OpenedPullRequest:
+        raise ProviderRefused("the chat holds no repository")
+
+    async def read_pull_request(self, address: str, *, installation: str) -> PullRequestRead:
+        raise ProviderRefused("the chat holds no repository")
+
+    async def read_file(self, address: str, path: str, ref: str, *, installation: str) -> bytes:
         raise ProviderRefused("the chat holds no repository")
 
     async def _call(

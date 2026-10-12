@@ -95,10 +95,12 @@ def kept_in(fill: Fill, eligibility: Eligibility) -> Fill:
 SIZED = (
     MatrixRow(key=MatrixKey(size=ModelSize.L), fills=(SONNET, SOL)),
     MatrixRow(key=MatrixKey(size=ModelSize.S), fills=(HAIKU, LUNA)),
+    MatrixRow(key=MatrixKey(size=ModelSize.XL, role=MAIN), fills=(OPUS, SOL)),
 )
-"""A row for each size the platform's kinds ask, L of their own turns and S
-of their compaction, on the fills of those roles: every version names a
-row for each."""
+"""A row for each size the platform's kinds ask: L of their own turns and S
+of their compaction, on the fills of those roles, and XL of the
+reviewer's own turns, narrowed to that role: every version names a row
+for each."""
 
 CATCH_ALL = (
     MatrixRow(key=MatrixKey(role=MAIN), fills=(SONNET, SOL)),

@@ -9,6 +9,7 @@ the queue, run on a fresh executor with no model call."""
 
 import hashlib
 import json
+import re
 from collections.abc import Collection
 from datetime import timedelta
 from pathlib import Path
@@ -19,9 +20,11 @@ from contracts.doubles import context
 from contracts.evidence import ScriptedExecutor
 from contracts.evidence_storage import make_policy
 from contracts.factories import make_org
+from contracts.hosts_storage import make_credential, make_host
 from contracts.loops import reply, said
 from contracts.platform_agents import (
     CORPUS,
+    Later,
     Platform,
     an_engineer,
     an_engineer_starts_two_sub_agents_and_wakes_on_each_report,
@@ -51,7 +54,9 @@ from acme.infra.workspaces import (
     Workspace,
 )
 from acme.infra.workspaces.host import WorkspaceHostImpl
-from acme.integrations.model_providers.calls import ModelCall
+from acme.integrations.events import ChangedFile, CheckRun, PullRequestRead
+from acme.integrations.events.twin import IntegrationTwinImpl, twin_installation
+from acme.integrations.model_providers.calls import ModelCall, ModelReply
 from acme.om import base
 from acme.om.agent_sessions.limits import Limits
 from acme.om.agent_sessions.types.agent_session import SessionStatus
@@ -87,6 +92,10 @@ from acme.om.exceptions import (
     UnsafeConfiguration,
     ValidationFailed,
 )
+from acme.om.hosts.impl.manager import HostsOptions
+from acme.om.hosts.types.pool import HostPool
+from acme.om.intake.tools import FORGE
+from acme.om.models.types.fill import MAIN, SUMMARIZER, ModelSize
 from acme.om.platform_agents import kinds, rules
 from acme.om.platform_agents.catalog import (
     PlatformAgents,
@@ -102,19 +111,29 @@ from acme.om.platform_agents.kinds import (
     ENGINEER_SHARE,
     ENGINEER_V6,
     ENGINEER_V7,
+    OPERATOR_KIND,
     PLANNER_KIND,
     PLATFORM_ASSISTANT_KIND,
+    REVIEWER_KIND,
+    REVIEWER_SHARE,
     SHIPPED,
 )
 from acme.om.platform_agents.tools import (
     MAX_EDIT,
     MAX_MATCH_TEXT,
+    MAX_VIEW,
     EditFileImpl,
     SearchCodeImpl,
 )
 from acme.om.platform_agents.types.validation import ValidationStart, ValidationStatus
 from acme.om.root import ProductKinds, build_managers, engine_tools
-from acme.om.steps.types.header import LoopOutcome, ToolFailure
+from acme.om.steps.types.content import TextBlock, ToolResultBlock
+from acme.om.steps.types.header import (
+    LoopOutcome,
+    ParkReason,
+    ToolFailure,
+    ToolResponseHeader,
+)
 from acme.om.steps.types.step import Step
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.tenancy.rules import permissions_of
@@ -167,6 +186,8 @@ def shipped_catalog() -> tuple[ToolInterface, ...]:
         workspaces=unbound,  # pyright: ignore[reportArgumentType]
         intake=unbound,  # pyright: ignore[reportArgumentType]
         knowledge=unbound,  # pyright: ignore[reportArgumentType]
+        integrations=unbound,  # pyright: ignore[reportArgumentType]
+        budgets=unbound,  # pyright: ignore[reportArgumentType]
     )
 
 
@@ -228,12 +249,18 @@ def test_every_shipped_agent_is_a_profile_that_sets_its_powers() -> None:
         ("planner", 1),
         ("platform_assistant", 1),
         ("platform_assistant", 2),
+        ("reviewer", 1),
+        ("operator", 1),
     ]
     for kind in SHIPPED:
         assert set(kind.tools) <= set(classes), f"{kind.name} names a tool the catalog lacks"
         assert kind.prompts, f"{kind.name} carries its prompts"
     delivering = {kind.name for kind in SHIPPED if kind.done_rule is DoneRule.RESULT_TOOL}
-    assert delivering == {"engineer"}, "only the engineer changes a work product"
+    assert delivering == {"engineer", "reviewer"}, "the engineer and the reviewer deliver"
+    # Only the engineer changes a work product: the reviewer delivers a
+    # review, and nothing it holds writes.
+    assert {classes[tool] for tool in REVIEWER_KIND.tools} == {"read", "integration"}
+    assert REVIEWER_KIND.result_tool == kinds.SUBMIT_REVIEW
     assert kinds.VALIDATE in ENGINEER_KIND.tools
     assert ENGINEER_KIND.isolation.mode is IsolationMode.CONTAINER
     assert {classes[tool] for tool in ENGINEER_KIND.tools} >= {"write", "execute"}
@@ -369,14 +396,17 @@ tool, and its tree has room for one child."""
 
 def test_every_shipped_kind_a_spawn_can_start_names_a_share() -> None:
     """A spawn refuses a kind that names no share. The engineer and analysis
-    split their work into sub-agents of either kind, and a product's kind
-    may spawn the engineer, so each one's latest version names a share; the
-    planner and the assistant are started by a person and name none."""
+    split their work into sub-agents of either kind, a product's kind may
+    spawn the engineer, and a lead spawns the reviewer on the pull request
+    another kind opened, so each one's latest version names a share; the
+    planner, the assistant, and the operator are started by a person and
+    name none."""
     catalog = AgentKindCatalog(kinds=SHIPPED)
     latest = [catalog.latest(name) for name in dict.fromkeys(kind.name for kind in SHIPPED)]
-    spawned = [kind for kind in latest if SPAWN_SUB_AGENT in kind.tools]
-    assert [kind.name for kind in spawned] == [kinds.ENGINEER, kinds.ANALYSIS]
-    assert [kind.share for kind in spawned] == [ENGINEER_SHARE, ANALYSIS_SHARE]
+    spawning = [kind for kind in latest if SPAWN_SUB_AGENT in kind.tools]
+    assert [kind.name for kind in spawning] == [kinds.ENGINEER, kinds.ANALYSIS]
+    spawned = [*spawning, REVIEWER_KIND]
+    assert [kind.share for kind in spawned] == [ENGINEER_SHARE, ANALYSIS_SHARE, REVIEWER_SHARE]
     for kind in spawned:
         assert kind.share is not None and (kind.share.cost_micros or 0) > 0, kind.name
     assert all(kind.share is None for kind in latest if kind not in spawned)
@@ -395,6 +425,29 @@ async def test_a_products_kind_spawns_the_engineer_under_its_share(tmp_path: Pat
     page = await platform.managers.budgets.get_budgets(platform.owner, None, 50)
     own = BudgetScope(kind=BudgetScopeKind.SESSION, key=str(child.id))
     assert [budget.amount for budget in page.items if budget.scope == own] == [ENGINEER_SHARE]
+
+
+async def test_a_lead_spawns_the_reviewer_under_its_share(tmp_path: Path) -> None:
+    """A lead that holds the reviewer's tools starts it as a sub-agent, on
+    a pull request its objective names, under the reviewer's share."""
+    lead = LEAD.model_copy(
+        update={
+            "name": "review_lead",
+            "tools": (*REVIEWER_KIND.tools, kinds.SUBMIT_RESULT),
+        }
+    )
+    platform = platform_over(tmp_path, kinds=(lead,))
+    lead_id = await platform.start(lead.name)
+    asked = Spawn(
+        id=new_id(), kind=kinds.REVIEWER, title="the review", objective="Review acme/widgets#12."
+    )
+
+    child = await platform.managers.agents.spawn(platform.owner, lead_id, asked)
+
+    assert (child.kind, child.kind_version) == (kinds.REVIEWER, REVIEWER_KIND.version)
+    page = await platform.managers.budgets.get_budgets(platform.owner, None, 50)
+    own = BudgetScope(kind=BudgetScopeKind.SESSION, key=str(child.id))
+    assert [budget.amount for budget in page.items if budget.scope == own] == [REVIEWER_SHARE]
 
 
 # Each shipped kind reaches an accepted end; the engineer's success only on
@@ -486,6 +539,8 @@ RENDERED = {
         kinds.PLATFORM_ASSISTANT,
         2,
     ): "763da40ce8397d462e984d71769c53e04a1fbbeb5cf3201941cd4745ec504467",
+    (kinds.REVIEWER, 1): "c1a92e4a377c940c269ee3e8c5e81572ba581f4473f664324d11bd3fe9593396",
+    (kinds.OPERATOR, 1): "edb2ed24dffcbcd62dfaa4c05d94378097d0daf296a99cbde2ec3f65373665d4",
 }
 """Each shipped kind at the version a session starts on, and the digest of
 its request's first two layers: its system text and its tools. A kind
@@ -507,7 +562,14 @@ async def test_each_shipped_kind_renders_its_versions_bytes_with_a_break_after_i
 ) -> None:
     platform, _, work = evidenced
     project_id = await in_project(platform.storage.get_project_storage(), platform.owner.org_id)
-    for kind in (ENGINEER_KIND, ANALYSIS_KIND, PLANNER_KIND, PLATFORM_ASSISTANT_KIND):
+    for kind in (
+        ENGINEER_KIND,
+        ANALYSIS_KIND,
+        PLANNER_KIND,
+        PLATFORM_ASSISTANT_KIND,
+        REVIEWER_KIND,
+        OPERATOR_KIND,
+    ):
         before = len(platform.anthropic.calls)
         if kind is ENGINEER_KIND:
             session_id = await an_engineer(platform, work, project_id)
@@ -605,9 +667,34 @@ NAMED_ONE_BY_ONE: dict[tuple[str, int], tuple[str, ...]] = {
         "draft_tool_policy",
         "hand_off_to_engineer",
     ),
+    (kinds.REVIEWER, 1): (
+        "read_pull_request",
+        "read_pull_request_file",
+        "note_finding",
+        "submit_review",
+        "comment",
+        "search_knowledge",
+        "read_knowledge",
+        "read_artifact",
+    ),
+    (kinds.OPERATOR, 1): (
+        "read_session",
+        "list_sessions",
+        "read_wait",
+        "list_projects",
+        "read_project",
+        "list_automations",
+        "read_automation",
+        "list_hosts",
+        "read_spend",
+        "search_knowledge",
+        "read_knowledge",
+        "read_artifact",
+    ),
 }
-"""Each shipped kind's tools as it named them one by one, before it was
-built from toolsets."""
+"""Each shipped kind's tools by name: as it named them one by one before it
+was built from toolsets, and those of a kind built from them from its first
+version."""
 
 
 def tool_block(catalog: tuple[ToolInterface, ...], names: Collection[str]) -> str:
@@ -729,10 +816,10 @@ def test_an_assistant_with_a_workspace_or_steady_authority_is_refused_at_boot(
 ) -> None:
     classes = classes_of(shipped_catalog())
     with_workspace = PLATFORM_ASSISTANT_KIND.model_copy(
-        update={"version": 2, "isolation": ENGINEER_KIND.isolation}
+        update={"version": 3, "isolation": ENGINEER_KIND.isolation}
     )
     steady = PLATFORM_ASSISTANT_KIND.model_copy(
-        update={"version": 2, "authority": AuthorityMode.STEADY}
+        update={"version": 3, "authority": AuthorityMode.STEADY}
     )
     assert rules.reach_refusal(with_workspace, classes) is not None
     assert rules.reach_refusal(steady, classes) is not None
@@ -1413,3 +1500,557 @@ async def test_a_pattern_of_more_than_one_line_is_refused_before_it_runs(
     response = await called(tools, search, ctx, workspace, pattern="needle")
     assert [m["text"] for m in json.loads(result_text(response))["matches"]] == ["needle"]
     assert search.runs == 1
+
+
+# The reviewer and the operator are templates as data: each is built from
+# the platform's toolsets, asks sizes, and is versioned in the catalog.
+
+
+def test_the_reviewer_and_the_operator_are_built_from_toolsets_and_ask_sizes() -> None:
+    catalog = AgentKindCatalog(kinds=SHIPPED)
+    assert catalog.latest(kinds.REVIEWER) == REVIEWER_KIND
+    assert catalog.latest(kinds.OPERATOR) == OPERATOR_KIND
+    assert REVIEWER_KIND.toolsets == (
+        kinds.REVIEW_TOOLSET,
+        kinds.KNOWLEDGE_TOOLSET,
+        kinds.ARTIFACTS_TOOLSET,
+    )
+    assert OPERATOR_KIND.toolsets == (
+        kinds.RECORDS_TOOLSET,
+        kinds.OPERATIONS_TOOLSET,
+        kinds.KNOWLEDGE_TOOLSET,
+        kinds.ARTIFACTS_TOOLSET,
+    )
+    for kind in (REVIEWER_KIND, OPERATOR_KIND):
+        assert set(kind.toolsets) <= set(kinds.TOOLSETS), kind.name
+        held = {tool for toolset in kind.toolsets for tool in toolset.tools}
+        # The reviewer names the forge's comment alone; the operator names
+        # nothing alone.
+        alone = {kinds.COMMENT} if kind is REVIEWER_KIND else set()
+        assert set(kind.tools) == held | alone, kind.name
+    asked = {kind.name: {ask.role: ask.size for ask in kind.asks} for kind in SHIPPED}
+    assert asked[kinds.REVIEWER] == {MAIN: ModelSize.XL, SUMMARIZER: ModelSize.S}
+    assert asked[kinds.OPERATOR] == {MAIN: ModelSize.L, SUMMARIZER: ModelSize.S}
+    # A product builds its own kinds from the same toolsets.
+    lead = a_product_kind(kinds.SUB_AGENTS_TOOLSET, name="lead")
+    assert ProductKinds(agents=(lead,)).agents == (lead,)
+
+
+# The reviewer reads a recorded pull request through the forge, notes its
+# findings with file and line, and delivers its review through its result
+# tool; nothing it holds writes what it reviews.
+
+REVIEWED = "acme/widgets#12"
+REVIEWED_HEAD = "9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b"
+CART = (
+    "def total(cart):\n"
+    "    prices = [item.price for item in cart]\n"
+    "    return sum(prices) / len(prices)\n"
+)
+RECORDED = PullRequestRead(
+    address=REVIEWED,
+    url="https://forge.example/acme/widgets/pull/12",
+    title="Average the cart",
+    body="The total is the average price.",
+    state="open",
+    head=REVIEWED_HEAD,
+    head_ref="sessions/average",
+    base_ref="main",
+    files=(
+        ChangedFile(
+            path="src/cart.py",
+            status="modified",
+            patch=(
+                "@@ -1,2 +1,3 @@\n def total(cart):\n     prices = [item.price for item in cart]\n"
+                "+    return sum(prices) / len(prices)"
+            ),
+        ),
+    ),
+    checks=(CheckRun(name="unit", status="completed", conclusion="failure"),),
+    provenance="real",
+)
+"""A pull request as the forge answers a read of it."""
+
+
+async def reviewing(tmp_path: Path) -> tuple[Platform, IntegrationTwinImpl]:
+    """The platform over a forge that holds the recorded pull request, whose
+    installation the owner's tenant connected."""
+    forge = IntegrationTwinImpl(FORGE)
+    forge.record_pull_request(RECORDED, {"src/cart.py": CART.encode()})
+    platform = platform_over(tmp_path, forge=forge)
+    await platform.connect(FORGE, twin_installation("acme"))
+    return platform, forge
+
+
+def submitting(claim: Claim) -> Later:
+    """The reviewer's turn that submits its review, citing every id its
+    reads and its findings answered."""
+
+    def turn(call: ModelCall) -> ModelReply:
+        cited: list[str] = []
+        for message in call.messages:
+            for block in message.blocks:
+                if not isinstance(block, ToolResultBlock):
+                    continue
+                for part in block.parts:
+                    if isinstance(part, TextBlock) and part.text.startswith("{"):
+                        found = json.loads(part.text).get("id")
+                        if found is not None:
+                            cited.append(found)
+        return reply(calls(kinds.SUBMIT_REVIEW, "use_review", claim=claim.value, evidence=cited))
+
+    return turn
+
+
+NAMED_ID = re.compile(r"submit_review cites: ([0-9a-f-]{36})")
+"""The id a failed read of a review names, which a failed review cites."""
+
+
+def giving_up(reason: str) -> Later:
+    """The reviewer's turn that says why it could not review, and submits
+    the review as failed, citing the id each failed read named."""
+
+    def turn(call: ModelCall) -> ModelReply:
+        cited = [
+            found
+            for message in call.messages
+            for block in message.blocks
+            if isinstance(block, ToolResultBlock)
+            for part in block.parts
+            if isinstance(part, TextBlock)
+            for found in NAMED_ID.findall(part.text)
+        ]
+        return reply(
+            said(reason),
+            calls(kinds.SUBMIT_REVIEW, "use_review", claim=Claim.FAILED.value, evidence=cited),
+        )
+
+    return turn
+
+
+async def test_a_reviewer_answers_its_findings_with_file_and_line_through_its_result_tool(
+    tmp_path: Path,
+) -> None:
+    platform, forge = await reviewing(tmp_path)
+    session_id = await platform.start(kinds.REVIEWER)
+    await platform.say(session_id, f"Review {REVIEWED}.")
+    platform.anthropic.add(
+        reply(calls(kinds.READ_PULL_REQUEST, "use_read", on=REVIEWED)),
+        reply(
+            calls(
+                kinds.READ_PULL_REQUEST_FILE,
+                "use_file",
+                on=REVIEWED,
+                path="src/cart.py",
+                head=REVIEWED_HEAD,
+            ),
+            calls(
+                kinds.NOTE_FINDING,
+                "use_finding",
+                on=REVIEWED,
+                path="src/cart.py",
+                head=REVIEWED_HEAD,
+                line=3,
+                grade="high",
+                text="An empty cart divides by zero, so its total raises.",
+            ),
+        ),
+        submitting(Claim.SUCCEEDED),
+    )
+
+    run = await platform.managers.loop.run(platform.owner, session_id)
+
+    assert run.outcome is LoopOutcome.SUCCEEDED
+    # It asks XL of its main role: the size's model reviews.
+    assert platform.anthropic.calls[0].model == "claude-opus-5-5"
+    failure, text = await platform.answer(session_id, "use_read")
+    read = json.loads(text)
+    assert failure is None
+    assert (read["on"], read["head"]) == (REVIEWED, REVIEWED_HEAD)
+    assert [(f["path"], f["patch"] is not None) for f in read["files"]] == [("src/cart.py", True)]
+    assert read["checks"] == [{"name": "unit", "status": "completed", "conclusion": "failure"}]
+    _, text = await platform.answer(session_id, "use_file")
+    assert json.loads(text)["text"] == CART
+    failure, text = await platform.answer(session_id, "use_finding")
+    finding = json.loads(text)
+    assert failure is None
+    assert (finding["path"], finding["line"], finding["head"], finding["grade"]) == (
+        "src/cart.py",
+        3,
+        REVIEWED_HEAD,
+        "high",
+    )
+    # The review is accepted, verified: the gate read the read and the
+    # finding it cites in the session's own history.
+    failure, text = await platform.answer(session_id, "use_review")
+    assert failure is None and "accepted, verified" in text
+    assert UUID(finding["id"]) != UUID(read["id"])
+    # The forge was read, and nothing was written to it.
+    assert forge.posted == [] and forge.refs == {} and forge.pull_requests == []
+
+
+async def test_a_finding_off_the_file_and_a_review_citing_no_read_are_refused(
+    tmp_path: Path,
+) -> None:
+    platform, _ = await reviewing(tmp_path)
+    session_id = await platform.start(kinds.REVIEWER)
+    await platform.say(session_id, f"Review {REVIEWED}.")
+    at = {"on": REVIEWED, "head": REVIEWED_HEAD, "grade": "low", "text": "Name it."}
+    platform.anthropic.add(
+        reply(
+            calls(kinds.NOTE_FINDING, "use_past", path="src/cart.py", line=40, **at),
+            calls(kinds.NOTE_FINDING, "use_out", path="../secrets.txt", line=1, **at),
+            calls(kinds.NOTE_FINDING, "use_kept", path="src/cart.py", line=1, **at),
+        ),
+        # A success that cites a finding and no read of the pull request.
+        submitting(Claim.SUCCEEDED),
+        reply(
+            calls(
+                kinds.SUBMIT_REVIEW,
+                "use_made_up",
+                claim="succeeded",
+                evidence=[str(new_id())],
+            )
+        ),
+        reply(said("I could not review it.")),
+    )
+
+    await platform.managers.loop.run(platform.owner, session_id)
+
+    failure, text = await platform.answer(session_id, "use_past")
+    assert failure is ToolFailure.INVALID_INPUT and "holds 3 lines" in text
+    failure, _ = await platform.answer(session_id, "use_out")
+    assert failure is ToolFailure.INVALID_INPUT
+    failure, _ = await platform.answer(session_id, "use_kept")
+    assert failure is None
+    failure, text = await platform.answer(session_id, "use_review")
+    assert failure is ToolFailure.DENIED and "its read of the pull request" in text
+    failure, text = await platform.answer(session_id, "use_made_up")
+    assert failure is ToolFailure.DENIED and "names no read or finding of this session" in text
+
+
+async def test_a_reviewers_malformed_input_is_refused_before_anything_is_read(
+    tmp_path: Path,
+) -> None:
+    platform, _ = await reviewing(tmp_path)
+    session_id = await platform.start(kinds.REVIEWER)
+    await platform.say(session_id, f"Review {REVIEWED}.")
+    at = {"on": REVIEWED, "head": REVIEWED_HEAD, "grade": "low", "text": "Name it."}
+    platform.anthropic.add(
+        reply(
+            calls(
+                kinds.NOTE_FINDING,
+                "use_ref",
+                path="src/cart.py",
+                line=1,
+                **{**at, "head": f"x{REVIEWED_HEAD}"},
+            ),
+            calls(kinds.NOTE_FINDING, "use_zero", path="src/cart.py", line=0, **at),
+            calls(
+                kinds.NOTE_FINDING,
+                "use_grade",
+                path="src/cart.py",
+                line=1,
+                **{**at, "grade": "blocker"},
+            ),
+            calls(kinds.READ_PULL_REQUEST, "use_lines", on=f"{REVIEWED}\nacme/other#1"),
+        ),
+        reply(said("I could not read it.")),
+    )
+
+    await platform.managers.loop.run(platform.owner, session_id)
+
+    for malformed in ("use_ref", "use_zero", "use_grade", "use_lines"):
+        failure, _ = await platform.answer(session_id, malformed)
+        assert failure is ToolFailure.INVALID_INPUT, malformed
+
+
+async def test_a_reviewer_cannot_change_what_it_reviews(tmp_path: Path) -> None:
+    """The reviewer has no workspace and holds no tool that writes a file,
+    runs code, or pushes: a call to one is refused, and its comment on the
+    pull request waits for a person, whatever it asks."""
+    platform, forge = await reviewing(tmp_path)
+    classes = classes_of(shipped_catalog())
+    assert REVIEWER_KIND.isolation.mode is IsolationMode.NONE
+    assert {classes[tool] for tool in REVIEWER_KIND.tools} == {ToolClass.READ, "integration"}
+    session_id = await platform.start(kinds.REVIEWER)
+    await platform.say(session_id, f"Fix what you find in {REVIEWED}, and say so on it.")
+    platform.anthropic.add(
+        reply(
+            calls(kinds.WRITE_FILE, "use_write", path="src/cart.py", text="fixed"),
+            calls(kinds.EDIT_FILE, "use_edit", path="src/cart.py", old_text="a", new_text="b"),
+            calls(kinds.RUN_COMMAND, "use_shell", argv=["git", "push"]),
+            calls(kinds.OPEN_PULL_REQUEST, "use_open", title="Fix the cart"),
+        ),
+        reply(calls(kinds.COMMENT, "use_comment", on=REVIEWED, text="Fixed it.")),
+    )
+
+    await platform.managers.loop.run(platform.owner, session_id)
+
+    for use_id, tool in (
+        ("use_write", kinds.WRITE_FILE),
+        ("use_edit", kinds.EDIT_FILE),
+        ("use_shell", kinds.RUN_COMMAND),
+        ("use_open", kinds.OPEN_PULL_REQUEST),
+    ):
+        failure, text = await platform.answer(session_id, use_id)
+        assert failure is ToolFailure.INVALID_INPUT
+        assert f"there is no tool named {tool!r}" in text
+    # Its comment waits for a person's approval; nothing reached the forge.
+    held = await platform.managers.agent_sessions.get_session(platform.owner, session_id)
+    assert held.park is not None and held.park.reason is ParkReason.PERSON
+    assert forge.posted == [] and forge.refs == {} and forge.pull_requests == []
+
+
+@pytest.mark.parametrize(
+    ("connects", "on", "failure", "why"),
+    [
+        # Of a tenant that connected no installation of the forge.
+        (False, REVIEWED, ToolFailure.DENIED, "no installation of the forge this tenant connected"),
+        # A pull request the forge does not hold.
+        (True, "acme/widgets#99", ToolFailure.PERMANENT, "holds no pull request acme/widgets#99"),
+    ],
+)
+async def test_a_reviewer_that_cannot_read_its_pull_request_fails_citing_that_read(
+    tmp_path: Path, connects: bool, on: str, failure: ToolFailure, why: str
+) -> None:
+    forge = IntegrationTwinImpl(FORGE)
+    forge.record_pull_request(RECORDED, {"src/cart.py": CART.encode()})
+    platform = platform_over(tmp_path, forge=forge)
+    if connects:
+        await platform.connect(FORGE, twin_installation("acme"))
+    session_id = await platform.start(kinds.REVIEWER)
+    await platform.say(session_id, f"Review {on}.")
+    reason = f"I could not review {on}: the forge would not read it to me."
+    platform.anthropic.add(
+        reply(calls(kinds.READ_PULL_REQUEST, "use_read", on=on)),
+        giving_up(reason),
+    )
+
+    run = await platform.managers.loop.run(platform.owner, session_id)
+
+    read_failure, text = await platform.answer(session_id, "use_read")
+    assert read_failure is failure and why in text
+    # The failed read names its id, the review cites it, and the gate finds
+    # it among the session's own reads: the run ends failed at once, with
+    # its reason, after no more calls than the read and the review.
+    (named,) = NAMED_ID.findall(text)
+    review_failure, verdict = await platform.answer(session_id, "use_review")
+    assert review_failure is None and "accepted, verified" in verdict
+    assert run.outcome is LoopOutcome.FAILED
+    assert len(platform.anthropic.calls) == 2
+    history = await platform.history(session_id)
+    assert reason in [step.as_text() for step in history]
+    assert UUID(named) in {step.id for step in history}
+    assert forge.posted == []
+
+
+async def kept_whole(platform: Platform, session_id: UUID, use_id: str) -> tuple[str, str]:
+    """What the window shows at once of a long answer to the call `use_id`,
+    its head, and the whole answer it keeps as an artifact."""
+    for step in await platform.history(session_id):
+        header = step.header
+        if not isinstance(header, ToolResponseHeader) or header.artifact is None:
+            continue
+        (result,) = step.content.blocks
+        assert isinstance(result, ToolResultBlock)
+        if result.tool_use_id != use_id:
+            continue
+        head = result.parts[0]
+        assert isinstance(head, TextBlock)
+        pages: list[str] = []
+        while True:
+            page = await platform.managers.windows.get_artifact(
+                platform.owner, session_id, header.artifact.id, len("".join(pages)), 100_000
+            )
+            pages.append(page.text)
+            if not page.has_more:
+                return head.text, "".join(pages)
+    raise AssertionError(f"no answer to {use_id} kept as an artifact")
+
+
+async def test_a_pull_request_too_large_for_one_answer_keeps_its_id_and_head_whole(
+    tmp_path: Path,
+) -> None:
+    """A mass rename of 1,500 files, its body past what one answer holds:
+    the read lists the files that fit, counts the rest, and cuts nothing
+    else, so its id and its head are whole for the review to cite."""
+    renamed = tuple(
+        ChangedFile(
+            path=f"src/generated/client_{n:04d}.py",
+            status="renamed",
+            patch="@@ -1 +1 @@\n-old\n+new",
+        )
+        for n in range(1500)
+    )
+    forge = IntegrationTwinImpl(FORGE)
+    forge.record_pull_request(
+        RECORDED.model_copy(update={"files": renamed, "body": "x" * 60_000}), {}
+    )
+    platform = platform_over(tmp_path, forge=forge)
+    await platform.connect(FORGE, twin_installation("acme"))
+    session_id = await platform.start(kinds.REVIEWER)
+    await platform.say(session_id, f"Review {REVIEWED}.")
+    platform.anthropic.add(
+        reply(calls(kinds.READ_PULL_REQUEST, "use_read", on=REVIEWED)),
+        reply(said("It renames 1,500 files.")),
+    )
+
+    await platform.managers.loop.run(platform.owner, session_id)
+
+    failure, _ = await platform.answer(session_id, "use_read")
+    shown, whole = await kept_whole(platform, session_id, "use_read")
+    assert failure is None and len(whole) <= MAX_VIEW
+    read = json.loads(whole)
+    assert UUID(read["id"]) in {step.id for step in await platform.history(session_id)}
+    assert read["head"] == REVIEWED_HEAD
+    listed = len(read["files"])
+    assert 0 < listed < len(renamed)
+    assert read["files_left_out"] == len(renamed) - listed and read["complete"] is False
+    assert [f["path"] for f in read["files"]] == [f.path for f in renamed[:listed]]
+    assert read["patches_left_out"] == sum(f["patch"] is None for f in read["files"])
+    assert len(read["body"]) < 11_000 and "[cut:" in read["body"]
+    # What the window shows at once holds the id, the head, and the count.
+    for field in ("id", "head", "files_left_out"):
+        assert f'"{field}":{json.dumps(read[field])}' in shown, field
+
+
+@pytest.mark.parametrize(
+    ("kind", "tool", "authorization_class"),
+    [
+        (kinds.REVIEWER, kinds.WRITE_FILE, ToolClass.WRITE),
+        (kinds.REVIEWER, kinds.RUN_COMMAND, ToolClass.EXECUTE),
+        (kinds.REVIEWER, SPAWN_SUB_AGENT, ToolClass.SPAWN),
+        (kinds.OPERATOR, kinds.HAND_OFF, ToolClass.SPAWN),
+        (kinds.OPERATOR, kinds.COMMENT, ToolClass.INTEGRATION),
+        (kinds.OPERATOR, kinds.DRAFT_TOOL_POLICY, "configuration"),
+    ],
+)
+def test_a_reviewer_or_an_operator_that_reaches_further_is_refused(
+    kind: str, tool: str, authorization_class: str
+) -> None:
+    shipped = REVIEWER_KIND if kind == kinds.REVIEWER else OPERATOR_KIND
+    reaching = shipped.model_copy(update={"version": 2, "tools": (*shipped.tools, tool)})
+    classes = {**classes_of(shipped_catalog()), tool: authorization_class}
+    refusal = rules.reach_refusal(reaching, classes)
+    assert refusal is not None and tool in refusal
+    for other in (
+        shipped.model_copy(update={"version": 2, "isolation": ENGINEER_KIND.isolation}),
+        shipped.model_copy(
+            update={
+                "version": 2,
+                "authority": AuthorityMode.STEADY
+                if shipped.authority is AuthorityMode.DELEGATED
+                else AuthorityMode.DELEGATED,
+            }
+        ),
+    ):
+        assert rules.reach_refusal(other, classes_of(shipped_catalog())) is not None
+    assert rules.reach_refusal(shipped, classes_of(shipped_catalog())) is None
+
+
+def test_a_review_cites_only_its_own_reads_and_findings() -> None:
+    read, finding, failed, other = new_id(), new_id(), new_id(), new_id()
+    calls_of = {
+        read: rules.Call(tool=kinds.READ_PULL_REQUEST, answered=True),
+        finding: rules.Call(tool=kinds.NOTE_FINDING, answered=True),
+        failed: rules.Call(
+            tool=kinds.NOTE_FINDING, answered=True, failure=ToolFailure.INVALID_INPUT
+        ),
+        other: rules.Call(tool=kinds.LIST_FILES, answered=True),
+    }
+    succeeded = rules.review_verdict(Claim.SUCCEEDED, {read, finding}, calls_of)
+    assert succeeded.accepted and succeeded.verified
+    assert succeeded.outcome is LoopOutcome.SUCCEEDED
+    for cited in ({finding}, {read, failed}, {read, other}, {read, new_id()}):
+        assert not rules.review_verdict(Claim.SUCCEEDED, cited, calls_of).accepted, cited
+    # A review it could not finish is a result, citing the reads that show
+    # why, a failed one among them; never one that names no read of its own.
+    gave_up = rules.review_verdict(Claim.FAILED, {failed}, calls_of)
+    assert gave_up.accepted and gave_up.outcome is LoopOutcome.FAILED
+    assert not rules.review_verdict(Claim.FAILED, {other}, calls_of).accepted
+
+
+# The operator reads why a session waits from the records, and acts on
+# nothing: every tool it holds reads.
+
+
+async def test_an_operator_answers_why_a_session_waits_from_the_records(tmp_path: Path) -> None:
+    platform = platform_over(tmp_path)
+    hosts = platform.managers.hosts
+    now = utcnow()
+    pool = await hosts.create_pool(
+        platform.owner,
+        HostPool(
+            id=new_id(),
+            created_at=now,
+            updated_at=now,
+            created_by=platform.owner.user_id,
+            updated_by=platform.owner.user_id,
+            name="build",
+            region="eu-west",
+        ),
+    )
+    silent_since = now - 2 * HostsOptions().online_window
+    host = make_host(pool.id).model_copy(update={"name": "host-1", "last_seen_at": silent_since})
+    await platform.storage.get_hosts_storage().enroll(
+        platform.owner.org_id, host, make_credential(host.id), ()
+    )
+    waiting = await platform.start(kinds.ENGINEER)
+    await hosts.place_session(platform.owner, waiting, pool.id)
+    asking = await platform.start(kinds.OPERATOR)
+    await platform.say(asking, "Why has my engineer not started?")
+    answer = "It waits for a host of build: host-1, its only one, is offline."
+    platform.anthropic.add(
+        reply(
+            calls(kinds.LIST_SESSIONS, "use_list", status="idle"),
+            calls(kinds.READ_WAIT, "use_wait", session_id=str(waiting)),
+            calls(kinds.LIST_HOSTS, "use_hosts"),
+            calls(kinds.READ_SPEND, "use_spend"),
+        ),
+        reply(said(answer)),
+    )
+
+    run = await platform.managers.loop.run(platform.owner, asking)
+
+    assert run.outcome is LoopOutcome.SUCCEEDED
+    _, text = await platform.answer(asking, "use_list")
+    assert str(waiting) in {s["session_id"] for s in json.loads(text)["sessions"]}
+    failure, text = await platform.answer(asking, "use_wait")
+    wait = json.loads(text)
+    assert failure is None
+    assert (wait["runs_in"], wait["hosts_online"], wait["waits_for_a_host"]) == ("build", 0, True)
+    failure, text = await platform.answer(asking, "use_hosts")
+    (listed,) = json.loads(text)["pools"]
+    assert failure is None and listed["name"] == "build"
+    (offline,) = listed["hosts"]
+    assert (offline["name"], offline["online"]) == ("host-1", False)
+    assert offline["offers"]["os"] == host.advertisement.os
+    failure, text = await platform.answer(asking, "use_spend")
+    assert failure is None and "budgets" in json.loads(text)
+    assert answer in [step.as_text() for step in await platform.history(asking)]
+
+
+async def test_every_tool_the_operator_holds_reads(tmp_path: Path) -> None:
+    classes = classes_of(shipped_catalog())
+    assert {classes[tool] for tool in OPERATOR_KIND.tools} == {ToolClass.READ}
+    assert OPERATOR_KIND.isolation.mode is IsolationMode.NONE
+    assert OPERATOR_KIND.authority is AuthorityMode.DELEGATED
+    decided = {rule.authorization_class: rule.decision for rule in OPERATOR_KIND.policy.rules}
+    assert decided == {ToolClass.READ: Decision.ALLOW}
+    platform = platform_over(tmp_path)
+    session_id = await platform.start(kinds.OPERATOR)
+    session = await platform.managers.agent_sessions.get_session(platform.owner, session_id)
+    assert {classes[tool] for tool in session.tools} == {ToolClass.READ}
+    # A version of it that holds a tool past reading is refused at boot,
+    # whoever declares it.
+    acting = OPERATOR_KIND.model_copy(
+        update={"version": 2, "tools": (*OPERATOR_KIND.tools, kinds.HAND_OFF)}
+    )
+    with pytest.raises(UnsafeConfiguration, match="operator v2: hand_off_to_engineer"):
+        build_managers(
+            StorageMemoryImpl(),
+            InfraLocalImpl(tmp_path),
+            agent_kinds=(acting,),
+            platform_agents=PlatformAgents(corpus=CORPUS),
+        )

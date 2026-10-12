@@ -106,4 +106,8 @@ service context, then hands what the router answered to
 pull request or pushes a branch binds it to its session. A tool that acts
 as the platform's account records the act before it acts, under a mark
 the system carries on what it makes, and then under the system's id for
-it: `comment` (`tools.py`) is the one the session runner ships.
+it: `comment` (`tools.py`) is the one the session runner ships, and the
+platform's agents ship it to a process that wires none. A tool that
+reaches the forge, to act or to read a pull request, reaches it only
+through an installation the session's own tenant connected
+(`connected`).
