@@ -28,6 +28,10 @@ class Brief(RootModel[str]):
     root: Annotated[str, Field(max_length=20000, min_length=1, title='Brief')]
 
 
+class Playbook(RootModel[str]):
+    root: Annotated[str, Field(max_length=64, min_length=1, pattern='^[a-z0-9]+(-[a-z0-9]+)*$', title='Playbook')]
+
+
 class Title(RootModel[str]):
     root: Annotated[str, Field(max_length=200, min_length=1, title='Title')]
 
@@ -825,6 +829,33 @@ class InvitationState(StrEnum):
     revoked = 'revoked'
 
 
+class InvocationView(BaseModel):
+    """
+    A version brought into a session. `pinned` marks the manual the
+    session was made with, whose brief is its standing text; every other
+    invocation's brief arrived as its invoker's message.
+    """
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    id: Annotated[UUID, Field(title='Id')]
+    invoked_by: Annotated[UUID, Field(title='Invoked By')]
+    name: Annotated[str, Field(title='Name')]
+    pinned: Annotated[bool, Field(title='Pinned')]
+    playbook_id: Annotated[UUID, Field(title='Playbook Id')]
+    session_id: Annotated[UUID, Field(title='Session Id')]
+    version: Annotated[int, Field(title='Version')]
+
+
+class InvokeRequest(BaseModel):
+    """
+    The session a person brings the name's latest version into, one they
+    may instruct.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    session_id: Annotated[UUID, Field(title='Session Id')]
+
+
 class IsolationMode(StrEnum):
     """
     The isolation levels a host can run a workspace at, strongest first.
@@ -1360,6 +1391,37 @@ class Permission(StrEnum):
     write = 'write'
     manage_members = 'manage_members'
     manage_keys = 'manage_keys'
+
+
+class PinRequest(BaseModel):
+    """
+    A kind's manual: the name whose latest version is pinned to `kind`,
+    for the tenant's sessions of it, or with `project_id` those of one
+    project, where it wins over the tenant's.
+    """
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    kind: Annotated[str, Field(max_length=200, min_length=1, title='Kind')]
+    name: Annotated[str, Field(max_length=64, min_length=1, pattern='^[a-z0-9]+(-[a-z0-9]+)*$', title='Name')]
+    project_id: Annotated[UUID | None, Field(title='Project Id')] = None
+
+
+class PinView(BaseModel):
+    """
+    A version pinned to a kind as its manual. Each session of the kind
+    made after it was pinned holds it; one made before keeps its own.
+    """
+    created_at: Annotated[AwareDatetime, Field(title='Created At')]
+    created_by: Annotated[UUID, Field(title='Created By')]
+    id: Annotated[UUID, Field(title='Id')]
+    kind: Annotated[str, Field(title='Kind')]
+    name: Annotated[str, Field(title='Name')]
+    playbook_id: Annotated[UUID, Field(title='Playbook Id')]
+    project_id: Annotated[UUID | None, Field(title='Project Id')]
+    updated_at: Annotated[AwareDatetime, Field(title='Updated At')]
+    updated_by: Annotated[UUID, Field(title='Updated By')]
+    version: Annotated[int, Field(title='Version')]
 
 
 class PlaceSessionRequest(BaseModel):
@@ -2331,7 +2393,9 @@ class WorkStatus(StrEnum):
 class ActionBody(BaseModel):
     """
     `start_session`: start a session of `agent_kind` titled `title` in the
-    tenant's project `project_id`. `message_session`: send the brief to the
+    tenant's project `project_id`, and invoke the tenant's `playbook` of
+    that name into it first, its latest version at each firing, when one is
+    named; a name with no version is refused. `message_session`: send the brief to the
     standing session `session_id`; an enabled one is refused, since nothing
     would hold its run to `run_cap_micros`. The brief is the creator's word. Any
     other kind is one the product declares, which takes its `params` and no
@@ -2344,6 +2408,7 @@ class ActionBody(BaseModel):
     brief: Annotated[Brief | None, Field(title='Brief')] = None
     kind: Annotated[str, Field(pattern='^[a-z][a-z0-9_]{0,63}$', title='Kind')]
     params: Annotated[dict[str, JsonValue] | None, Field(title='Params')] = None
+    playbook: Annotated[Playbook | None, Field(title='Playbook')] = None
     project_id: Annotated[UUID | None, Field(title='Project Id')] = None
     session_id: Annotated[UUID | None, Field(title='Session Id')] = None
     title: Annotated[Title | None, Field(title='Title')] = None
@@ -2354,6 +2419,7 @@ class ActionView(BaseModel):
     brief: Annotated[str | None, Field(title='Brief')]
     kind: Annotated[str, Field(title='Kind')]
     params: Annotated[dict[str, JsonValue], Field(title='Params')]
+    playbook: Annotated[str | None, Field(title='Playbook')]
     project_id: Annotated[UUID | None, Field(title='Project Id')]
     session_id: Annotated[UUID | None, Field(title='Session Id')]
     title: Annotated[str | None, Field(title='Title')]

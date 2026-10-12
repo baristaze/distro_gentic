@@ -640,9 +640,25 @@ what is needed, the steps, the safety requirements, the approval gates,
 the success measures, and what is forbidden. They follow the [Agent
 Skills](https://agentskills.io/specification) format, with their gates
 in a namespaced metadata extension, so a brief runs in any agent that
-reads the standard. Only a person publishes a playbook. A principal or
-an automation invokes one, and its gates compile into the session's
-policy, where they can only narrow it.
+reads the standard. Only a person publishes a playbook. A principal
+invokes one into a session they may instruct, from the API, the command
+line, or the session's page, and an automation's start invokes one into
+the session it starts. Its brief arrives as that principal's message,
+and its gates compile into the session's policy, where they can only
+narrow it.
+
+A person who manages the tenant may also pin a playbook to an [agent
+kind][e-kinds], for the tenant or for one project, as the kind's
+**manual**: the standing instructions of every session of that kind.
+It is one noun, invoked as a procedure or pinned as a manual. Each
+session of the kind made after the pin, a sub-agent and a hand-over
+among them, pins the manual's brief as its [standing text][e-rendering]:
+whole in the system layer of every request, before and after every
+compaction, and cached with the kind's prompts. Its gates narrow the
+session's policy as an invoked playbook's do. A pin names one version,
+and a session keeps the manual it was made with: a later pin reaches
+only the sessions made after it. A brief longer than the standing text
+holds is refused when it is pinned.
 
 **Knowledge** is recalled into a session when its trigger matches, so a
 new session does not rediscover its environment. It renders as data. An
@@ -657,8 +673,9 @@ must-not on one subject, a tool no kind it reaches holds, a retry with
 no stopping condition, a brief longer than a session holds whole. A
 finding advises and never refuses the publish; it is kept with the
 version it read. Afterwards, an operator reads which levers the
-sessions that stalled reached, against the sessions that did not reach
-them, from the steps' headers alone.
+sessions that stalled reached, the manual each was made with among
+them, against the sessions that did not reach them, from the steps'
+headers alone.
 
 ### Notifications
 
@@ -1182,6 +1199,7 @@ threat model each deployment writes.
 [e-provider-errors]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#provider-errors
 [e-roles]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#roles-and-fills
 [e-kinds]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#agent-kinds
+[e-rendering]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#rendering
 [e-history]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#history
 [e-snapshots]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#workspace-snapshots
 [e-deviations]: https://github.com/baristaze/agentic_core/blob/main/agentic_core_spec.md#deviations-from-the-guideline

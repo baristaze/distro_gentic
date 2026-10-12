@@ -71,7 +71,8 @@ runs passes the [trust](../../om/src/acme/om/trust/README.md) layer
 first: its audit entry is written with this runner as its executor, and
 a call whose secret would cross its session's wall is refused. Then the
 gates of the session's [playbooks](../../om/src/acme/om/playbooks/README.md)
-hold it, and only narrow what policy let through. A session's first loop
+hold it, the manual its kind's pin gave it among them, and only narrow
+what policy let through. A session's first loop
 recalls the [knowledge](../../om/src/acme/om/knowledge/README.md) its
 subject triggers before its first model call. A call of a session the
 tenant's automation principal started runs on that principal's grant

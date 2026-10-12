@@ -245,6 +245,9 @@ class RunnerContainer:
             product_kinds=ports.kinds,
             models_layer=matrix.layer,
             tools_layer=layers,
+            # A spawn and a hand-off make sessions here, each with its kind's
+            # manual.
+            agents_layer=playbooks.agents,
             transport_layer=placed,
             placement_options=placing,
             cloud_pool_options=cloud_pool_options(settings),
@@ -261,6 +264,7 @@ class RunnerContainer:
                 managers,
                 project_required=settings.environment != LOCAL,
                 actions=ports.kinds.actions,
+                playbooks=lambda: playbooks.build(managers),
             )
         )
         refuse_open_money(settings.environment, managers)

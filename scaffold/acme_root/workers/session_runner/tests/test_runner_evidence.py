@@ -19,6 +19,7 @@ from acme.om.evidence.impl.gate import ResultGateEvidenceImpl
 from acme.om.evidence.impl.manager import EvidenceManagerImpl
 from acme.om.evidence.impl.ports import WorkProductMemoryImpl
 from acme.om.exceptions import UnsafeConfiguration
+from acme.om.playbooks.impl.agents import AgentsManagerManualImpl
 from acme.om.root import PlatformPorts
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.workspaces.impl.executor import ExecutorWorkspacesImpl
@@ -63,7 +64,10 @@ def test_the_runners_container_builds_the_evidence_gate(tmp_path: Path) -> None:
         (runner(tmp_path, work_product=work), WorkProductMemoryImpl),
         (runner(tmp_path), WorkProductWorkspacesImpl),
     ):
-        agents = container.managers.agents
+        # Each session is made with its kind's manual, by the engine's agents.
+        manual = container.managers.agents
+        assert isinstance(manual, AgentsManagerManualImpl)
+        agents = manual._inner  # pyright: ignore[reportPrivateUsage]
         assert isinstance(agents, AgentsManagerImpl)
         gate = agents._gate  # pyright: ignore[reportPrivateUsage]
         assert isinstance(gate, ResultGateEvidenceImpl)

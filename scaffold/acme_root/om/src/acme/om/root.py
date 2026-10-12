@@ -603,6 +603,7 @@ def build_managers(
     result_gate: ResultGateInterface | None = None,
     tools_options: ToolsOptions | None = None,
     tools_layer: Callable[[ToolsManagerInterface], ToolsManagerInterface] | None = None,
+    agents_layer: Callable[[AgentsManagerInterface], AgentsManagerInterface] | None = None,
     budget_gate: BudgetGateInterface | None = None,
     stream_sink: StreamSinkInterface | None = None,
     tool_catalog: tuple[ToolInterface, ...] = (),
@@ -711,6 +712,11 @@ def build_managers(
     `tools_layer` wraps the tools manager before the loop and the root take
     it: a layer above the engine holds its own rules around every call, and
     sees each call the engine runs. None takes the tools manager as it is.
+    `agents_layer` wraps the agents manager before anything that makes a
+    session takes it: the projects, the platform's agents, the spawn tool,
+    and the root's own. A layer above the engine sees each session made, a
+    start, a spawn, or a hand-off, before the engine makes it. None takes
+    the agents manager as it is.
 
     `product_kinds` is what a product adds to the platform's kinds
     (`PlatformPorts.kinds`): its agent kinds, tools, classes, and their
@@ -1265,7 +1271,7 @@ def build_managers(
         tools = tools_layer(tools)
     # A child's report reaches its parent through windows, which bounds it,
     # and a fork's copy of its parent's workspace is taken through the tools.
-    agents = AgentsManagerImpl(
+    agents: AgentsManagerInterface = AgentsManagerImpl(
         storage.get_agent_storage(),
         agent_sessions,
         steps,
@@ -1281,6 +1287,8 @@ def build_managers(
         secret_tools=frozenset(tool.spec.name for tool in catalog if tool.spec.secrets),
         tools=tools,
     )
+    if agents_layer is not None:
+        agents = agents_layer(agents)
     idempotency = IdempotencyManagerImpl(
         storage.get_idempotency_storage(), idempotency_options or IdempotencyOptions()
     )

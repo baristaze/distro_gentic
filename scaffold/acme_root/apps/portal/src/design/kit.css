@@ -3226,3 +3226,14 @@ select.acme-field {
   max-width: 820px;
   margin: 0 auto;
 }
+
+/* A playbook invoked by its name, from the session's header. */
+.acme-invoke-playbook {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+}
+
+.acme-invoke-playbook .acme-label {
+  justify-self: stretch;
+}

@@ -10,8 +10,9 @@ the validation sessions' station columns leave the table with every session
 this release wrote kept, a platform automation this release writes reads as
 the previous release's after a downgrade, which drops the automations of a
 product's kind, a refused validation session goes back to queued, kept,
-when its reason's column leaves, and a playbook version the release before
-wrote reads as never checked by the lever checks."""
+when its reason's column leaves, a playbook version the release before
+wrote reads as never checked by the lever checks, and an invocation it
+wrote reads as a principal's, never a session's manual."""
 
 import asyncio
 import json
@@ -693,4 +694,33 @@ async def test_a_version_the_release_before_wrote_reads_as_never_checked(
     stored = await PlaybookStoragePostgresImpl(pg_sessions).read_playbook(org, playbook.id)
     assert stored is not None and stored.findings is None
     assert await in_tenant(core, org, "SELECT findings IS NULL FROM core.playbooks") == [(True,)]
+    assert await check(DatabaseRole.CORE, core) == []
+
+
+BEFORE_PINS = "202610112033"
+"""The core head before a playbook was pinned to a kind as its manual."""
+
+
+async def test_an_invocation_the_release_before_wrote_reads_as_no_manual(
+    pg_sessions: LoginSessions, migrated: dict[DatabaseRole, str]
+) -> None:
+    """At the release before, an invocation is written with no `pinned`
+    column, as it still is through a roll. It reads as a principal's: its
+    brief was a message, and the session's standing text holds none of it."""
+    core = migrated[DatabaseRole.CORE]
+    org, session, playbook = new_id(), new_id(), make_playbook()
+    await downgrade(DatabaseRole.CORE, core, BEFORE_PINS)
+    await in_tenant(
+        core,
+        org,
+        "INSERT INTO core.playbook_invocations (id, org_id, created_at, session_id,"
+        " playbook_id, name, version, invoked_by) VALUES"
+        f" ('{new_id()}', '{org}', now(), '{session}', '{playbook.id}', '{playbook.name}', 1,"
+        f" '{new_id()}')",
+    )
+
+    await upgrade(DatabaseRole.CORE, core)
+
+    (stored,) = await PlaybookStoragePostgresImpl(pg_sessions).read_invocations(org, session, 10)
+    assert not stored.pinned
     assert await check(DatabaseRole.CORE, core) == []

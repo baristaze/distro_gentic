@@ -18,7 +18,7 @@ const saved: AutomationView = {
   id: "a1",
   name: "Triage",
   trigger: { kind: "event", integrations: ["forge"], arrivals: ["comment"], effects: [], every: null },
-  action: { kind: "message_session", brief: "Look.", agent_kind: null, title: null, project_id: null, session_id: SESSION, params: {} },
+  action: { kind: "message_session", brief: "Look.", agent_kind: null, title: null, project_id: null, session_id: SESSION, params: {}, playbook: null },
   limits: { cost_cap_micros: 3_000_000, run_cap_micros: 1_000_000, period: "PT1H", rate: 5, concurrency: 2, queue: true, queue_depth: 7, hop_limit: 2 },
   runs_as: "automation_principal",
   own_events: true,
@@ -97,6 +97,25 @@ describe("automationRequest", () => {
       },
     });
   });
+  it("keeps the playbook a saved start invokes through an edit, and refuses a name no publish could have", () => {
+    const start: AutomationView = {
+      ...saved,
+      action: { kind: "start_session", brief: "Look.", agent_kind: "assistant", title: "Triage", project_id: null, session_id: null, params: {}, playbook: "triage-a-comment" },
+    };
+    const made = automationRequest(draftOf(start) ?? EMPTY_DRAFT, { kept: start });
+    expect("request" in made && made.request.action).toEqual({
+      kind: "start_session",
+      brief: "Look.",
+      agent_kind: "assistant",
+      title: "Triage",
+      project_id: null,
+      session_id: null,
+      playbook: "triage-a-comment",
+    });
+    expect(actionLine(start.action, [])).toBe("start a session of the kind assistant, invoking triage-a-comment");
+    const renamed = automationRequest({ ...(draftOf(start) ?? EMPTY_DRAFT), playbook: "Triage A Comment" });
+    expect("problem" in renamed && renamed.problem).toBe("A playbook's name is lowercase words joined by hyphens, as it was published.");
+  });
 });
 
 it("shows a row in words", () => {
@@ -111,7 +130,7 @@ it("shows a row in words", () => {
 });
 
 it("shows a product's own action by its kind, and offers no form to edit it", () => {
-  const product: AutomationView = { ...saved, action: { kind: "run_job", brief: null, agent_kind: null, title: null, project_id: null, session_id: null, params: { steps: 2 } } };
+  const product: AutomationView = { ...saved, action: { kind: "run_job", brief: null, agent_kind: null, title: null, project_id: null, session_id: null, params: { steps: 2 }, playbook: null } };
   expect(actionLine(product.action, [])).toBe("run the product's action run_job");
   expect(draftOf(product)).toBeNull();
 });

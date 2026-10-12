@@ -22,6 +22,10 @@ uv run acme project credential <id> --username reader   # the token is asked for
 uv run acme project list
 uv run acme automation create triage.json   # the automation as the API takes it
 uv run acme automation list
+uv run acme playbook invoke <session-id> release-check   # its brief as your message
+uv run acme playbook pin engineer release-check --project <id>   # the kind's manual
+uv run acme playbook pins
+uv run acme playbook unpin engineer --project <id>
 uv run acme listen                  # who did what to which record
 uv run acme logout
 ```
