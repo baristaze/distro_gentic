@@ -117,6 +117,12 @@ reason = "a host runs the items it holds through the engine's container transpor
 
 [[tool.distro-check.exception]]
 rule = "PLC-10"
+path = "apps/host/src/acme/apps/host/mcp.py"
+adr = "docs/adr/2057-a-tenants-mcp-server-is-a-connector-its-kinds-load-and-one-inside-the-wall-runs-on-its-host.md"
+reason = "a host starts an MCP server its owner names through the engine's MCP client on its own machine, and reaches the platform through the client alone"
+
+[[tool.distro-check.exception]]
+rule = "PLC-10"
 path = "apps/host/src/acme/apps/host/bases.py"
 adr = "docs/adr/2051-a-projects-environment-is-built-once-where-its-workspaces-run.md"
 reason = "a host builds a workspace's base through the engine's provider and transport on its own disk, keeps it in its own store, and reaches the platform through the client alone"

@@ -6,6 +6,8 @@ requires-python = ">=3.14"
 dependencies = [
     "acme-client",
     "acme-infra",
+    # The MCP client, which starts a server the owner names for one call.
+    "acme-integrations",
     "typer>=0.15",
 ]
 
@@ -15,6 +17,7 @@ acme-host = "acme.apps.host.main:main"
 [tool.uv.sources]
 acme-client = { workspace = true }
 acme-infra = { workspace = true }
+acme-integrations = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

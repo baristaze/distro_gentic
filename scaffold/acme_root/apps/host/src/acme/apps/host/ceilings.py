@@ -1,7 +1,9 @@
 """The owner's ceilings: limits the host's owner sets in a file on the host
 and the platform cannot raise. The projects it serves, its minimum
 isolation, its egress, the paths it lets a result read, whether it
-accepts people's commands, and how many items it runs at once. They are read from `ceilings.toml` at startup,
+accepts people's commands, how many items it runs at once, and the MCP
+servers it starts, each by the name a tenant's connector calls it. They
+are read from `ceilings.toml` at startup,
 held frozen, and changed by nothing the platform sends: no call answers
 with them and no item carries them, so a compromised control plane still
 cannot widen what the host does.
@@ -18,14 +20,26 @@ egress = ["github.com:443", "pypi.org:443"]           # or "open"
 readable = ["/srv/work"]
 people_commands = false
 items_at_once = 4
+
+[mcp_servers.tracker]                                 # a server this host starts
+command = "/usr/local/bin/tracker-mcp"
+args = ["--read-only"]
+env = { TRACKER_URL = "https://tracker.internal" }
+credential = "tracker-token"                          # a secret of the host's own store
+credential_env = "TRACKER_TOKEN"
 ```
+
+A server is named here whole, its program, its arguments, and its
+environment, so an item names a server and nothing it runs.
 """
 
 import posixpath
+import re
 import tomllib
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 from uuid import UUID
 
@@ -50,6 +64,26 @@ snapshots go. They run no command, and nothing of the workspace leaves the
 host, so only the tenant fence applies."""
 
 
+SERVER_NAME = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
+ENV_NAME = re.compile(r"^[A-Z_][A-Z0-9_]*$")
+SERVER_KEYS = frozenset({"command", "args", "env", "cwd", "credential", "credential_env"})
+
+
+@dataclass(frozen=True)
+class HostServer:
+    """An MCP server the owner lets this host start: its program, its
+    arguments, the variables its environment holds and nothing else, and
+    the credential it takes, a secret of the host's own store by name,
+    placed in `credential_env`."""
+
+    command: str
+    args: tuple[str, ...] = ()
+    env: tuple[tuple[str, str], ...] = ()
+    cwd: str | None = None
+    credential: str | None = None
+    credential_env: str | None = None
+
+
 @dataclass(frozen=True)
 class Ceilings:
     """None is the open ceiling: every project of the host's tenant, or any
@@ -61,6 +95,7 @@ class Ceilings:
     readable: tuple[str, ...] = ()
     people_commands: bool = False
     items_at_once: int = 4
+    mcp_servers: Mapping[str, HostServer] = field(default_factory=lambda: MappingProxyType({}))
 
 
 @dataclass(frozen=True)
@@ -91,7 +126,15 @@ def load(path: Path) -> Ceilings:
         raise BadSetting(f"the owner's ceilings cannot be read from {path}: {error}") from None
     except tomllib.TOMLDecodeError as error:
         raise BadSetting(f"ceilings: {error}") from None
-    known = {"projects", "min_isolation", "egress", "readable", "people_commands", "items_at_once"}
+    known = {
+        "projects",
+        "min_isolation",
+        "egress",
+        "readable",
+        "people_commands",
+        "items_at_once",
+        "mcp_servers",
+    }
     unknown = set(raw) - known
     if unknown:
         raise BadSetting(f"ceilings: unknown {', '.join(sorted(unknown))}")
@@ -125,7 +168,56 @@ def load(path: Path) -> Ceilings:
         readable=tuple(posixpath.normpath(path) for path in readable),
         people_commands=people,
         items_at_once=at_once,
+        mcp_servers=_servers(raw.get("mcp_servers", {})),
     )
+
+
+def _servers(raw: Any) -> Mapping[str, HostServer]:
+    """The MCP servers the owner names, each whole."""
+    if not isinstance(raw, dict):
+        raise BadSetting("ceilings: mcp_servers is a table of servers by name")
+    servers: dict[str, HostServer] = {}
+    for name, table in raw.items():
+        where = f"ceilings: mcp_servers.{name}"
+        if not SERVER_NAME.fullmatch(name) or not isinstance(table, dict):
+            raise BadSetting(f"{where} is a table under a lower-case name")
+        unknown = set(table) - SERVER_KEYS
+        if unknown:
+            raise BadSetting(f"{where}: unknown {', '.join(sorted(unknown))}")
+        command = table.get("command")
+        if not isinstance(command, str) or not command:
+            raise BadSetting(f"{where} names its command")
+        env = table.get("env", {})
+        if not isinstance(env, dict) or not all(
+            isinstance(key, str) and ENV_NAME.fullmatch(key) and isinstance(value, str)
+            for key, value in env.items()
+        ):
+            raise BadSetting(f"{where}: env is a table of variables and their values")
+        credential, variable = table.get("credential"), table.get("credential_env")
+        if (credential is None) != (variable is None):
+            raise BadSetting(
+                f"{where} names its credential and the variable it lands in, or neither"
+            )
+        if credential is not None and (not isinstance(credential, str) or not credential):
+            raise BadSetting(f"{where}: credential is the name of a secret of this host")
+        if variable is not None and (
+            not isinstance(variable, str) or not ENV_NAME.fullmatch(variable)
+        ):
+            raise BadSetting(f"{where}: credential_env is a variable's name")
+        if variable is not None and variable in env:
+            raise BadSetting(f"{where}: env names the credential's variable")
+        cwd = table.get("cwd")
+        if cwd is not None and (not isinstance(cwd, str) or not posixpath.isabs(cwd)):
+            raise BadSetting(f"{where}: cwd is an absolute path")
+        servers[name] = HostServer(
+            command=command,
+            args=tuple(_strings(table.get("args", []), f"mcp_servers.{name}.args")),
+            env=tuple(sorted(env.items())),
+            cwd=cwd,
+            credential=credential,
+            credential_env=variable,
+        )
+    return MappingProxyType(servers)
 
 
 def ask_of(item: ClaimedWorkView) -> Ask:

@@ -9,7 +9,7 @@ from uuid import uuid4
 
 import pytest
 
-from acme.apps.host.ceilings import Ceilings, ask_of, load, refusals
+from acme.apps.host.ceilings import Ceilings, HostServer, ask_of, load, refusals
 from acme.apps.host.config import BadSetting
 from acme.client.types import ClaimedWorkView, IsolationMode
 
@@ -73,6 +73,42 @@ def test_the_owners_file_is_read_and_a_missing_one_starts_nothing(tmp_path: Path
         "lanes = []\n",
         "items_at_once = 0\n",
         "items_at_once = true\n",
+    ):
+        path.write_text(wrong)
+        with pytest.raises(BadSetting):
+            load(path)
+
+
+def test_the_owner_names_each_mcp_server_whole_and_nothing_else_starts(tmp_path: Path) -> None:
+    path = tmp_path / "ceilings.toml"
+    path.write_text(
+        "[mcp_servers.tracker]\n"
+        'command = "/usr/local/bin/tracker-mcp"\n'
+        'args = ["--read-only"]\n'
+        'env = { TRACKER_URL = "https://tracker.internal" }\n'
+        'credential = "tracker-token"\n'
+        'credential_env = "TRACKER_TOKEN"\n'
+    )
+    assert dict(load(path).mcp_servers) == {
+        "tracker": HostServer(
+            command="/usr/local/bin/tracker-mcp",
+            args=("--read-only",),
+            env=(("TRACKER_URL", "https://tracker.internal"),),
+            credential="tracker-token",
+            credential_env="TRACKER_TOKEN",
+        )
+    }
+    path.write_text("")
+    assert dict(load(path).mcp_servers) == {}, "none unless the owner names one"
+    for wrong in (
+        "[mcp_servers.Tracker]\ncommand = 'x'\n",
+        "[mcp_servers.tracker]\nargs = []\n",
+        "[mcp_servers.tracker]\ncommand = 'x'\ncredential = 'token'\n",
+        "[mcp_servers.tracker]\ncommand = 'x'\ncredential = 't'\ncredential_env = 'lower'\n",
+        "[mcp_servers.tracker]\ncommand = 'x'\nenv = { A = 1 }\n",
+        "[mcp_servers.tracker]\ncommand = 'x'\ncwd = 'relative'\n",
+        "[mcp_servers.tracker]\ncommand = 'x'\nshell = true\n",
+        "[mcp_servers.tracker]\ncommand = 'x'\ncredential = 't'\ncredential_env = 'T'\nenv = { T = 'v' }\n",
     ):
         path.write_text(wrong)
         with pytest.raises(BadSetting):

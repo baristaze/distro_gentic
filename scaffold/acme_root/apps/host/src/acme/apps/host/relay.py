@@ -44,6 +44,7 @@ from pydantic import ValidationError
 from acme.apps.host.agent import ExecutorInterface
 from acme.apps.host.bases import BaseUnbuilt, HostBases
 from acme.apps.host.ceilings import Ask
+from acme.apps.host.mcp import HostServers
 from acme.apps.host.snapshots import HostSnapshots, SnapshotHeldSecret, SnapshotLost
 from acme.client.client import WIRE_FAILURES, ApiClient, ApiError
 from acme.client.types import ClaimedWorkView, ExecDetailView, OutputStream
@@ -71,6 +72,9 @@ log = logging.getLogger(__name__)
 
 EXEC = "EXEC"
 WORKSPACE = "WORKSPACE"
+MCP_CALL = "mcp_call"
+"""The operation of an `exec` item that calls a tool of a server this host
+runs (`mcp.HostServers`)."""
 STOPS = frozenset({"cancel", "interrupt", "deadline", "revoke"})
 """The control messages that end an item. Each but `revoke` is answered
 with how far the item got; a revoked lease is no longer the host's to
@@ -173,6 +177,7 @@ class ExecutorRelayImpl(ExecutorInterface):
         snapshot_modes: Callable[[], frozenset[IsolationMode]] = frozenset,
         kept_whole: frozenset[IsolationMode] = frozenset(),
         broker: CredentialBrokerInterface | None = None,
+        servers: HostServers | None = None,
         base_options: Mapping[str, Any] | None = None,
         flush_seconds: float = 0.25,
         part_bytes: int = 32_000,
@@ -191,6 +196,7 @@ class ExecutorRelayImpl(ExecutorInterface):
         self._probed_snapshots = snapshot_modes
         self._kept_whole = kept_whole
         self._broker = broker
+        self._servers = servers
         self._flush_seconds = flush_seconds
         self._part_bytes = part_bytes
         self._renew_seconds = renew_seconds
@@ -255,6 +261,9 @@ class ExecutorRelayImpl(ExecutorInterface):
             refused = _result(refused=("refused_by_host", 403), detail=why)
             await self._push(item_id, refused, running.held_until)
             return
+        if detail.request.get("operation") == MCP_CALL:
+            await self._call_server(item_id, running, detail)
+            return
         transport = self._transports.get(spec.mode)
         if transport is None:
             why = f"this host runs no {spec.mode.value} workspace"
@@ -290,6 +299,44 @@ class ExecutorRelayImpl(ExecutorInterface):
                 stderr="".join(running.printed["stderr"]),
             )
         await self._push(item_id, result, running.held_until)
+
+    async def _call_server(self, item_id: UUID, running: Running, detail: ExecDetailView) -> None:
+        """A call of a tool of a server this host runs: it needs no workspace
+        and no transport. The server starts for the call, and a stop ends
+        it with its process."""
+        renewal = asyncio.ensure_future(self._renew(item_id, running))
+        result: dict[str, Any] | None = None
+        try:
+            if running.stopped is None:
+                running.operation = asyncio.ensure_future(self._answered(detail))
+                await asyncio.wait({running.operation})
+                result = _ended(running.operation)
+        finally:
+            renewal.cancel()
+        if running.stopped == "revoke":
+            log.info("item %s: its lease was revoked, so nothing is pushed", item_id)
+            return
+        if result is None:
+            result = _result(stopped=running.stopped or "cancel")
+        await self._push(item_id, result, running.held_until)
+
+    async def _answered(self, detail: ExecDetailView) -> dict[str, Any]:
+        """The server's answer, its own word that the tool failed as an exit
+        of 1, and the secret it carried, by name."""
+        if self._servers is None:
+            return _result(
+                refused=("capability_missing", 501), detail="this host runs no MCP server"
+            )
+        try:
+            answer = await self._servers.call(detail)
+        except TimeoutError:
+            return _result(timed_out=True, detail="the server did not answer in time")
+        used = self._servers.credential_of(str(detail.request.get("server", "")))
+        return _result(
+            exit_code=1 if answer.is_error else 0,
+            stdout=answer.text,
+            secrets=[used] if used is not None else [],
+        )
 
     async def _held(self, detail: ExecDetailView, spec: IsolationSpec) -> Workspace:
         """The workspace an item runs in, as this host holds it. One its own

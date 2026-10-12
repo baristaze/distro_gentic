@@ -254,7 +254,7 @@ class TransportRelayImpl(TransportInterface):
         call = self._call(workspace, request, key, effect.value, deadline, epoch)
         progress = await self._through(workspace, call, self._occurrence(call), None)
         outcome, output = _ended(progress)
-        if outcome.stopped is StopKind.DEADLINE:
+        if outcome.stopped is StopKind.DEADLINE or outcome.timed_out:
             raise ToolFailed(ToolFailure.TIMEOUT, f"{request.server} did not answer in time")
         _completed(outcome, output)
         return McpAnswer(text=output.stdout, is_error=outcome.exit_code not in (0, None))

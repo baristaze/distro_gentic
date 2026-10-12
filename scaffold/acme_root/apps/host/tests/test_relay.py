@@ -37,6 +37,7 @@ from host_support import (
 from acme.apps.host import main as host_main
 from acme.apps.host.agent import HostAgent
 from acme.apps.host.ceilings import Ceilings
+from acme.apps.host.mcp import HostServers
 from acme.apps.host.relay import ExecutorRelayImpl
 from acme.client.client import ApiClient
 from acme.client.types import IsolationMode as HostMode
@@ -100,13 +101,15 @@ async def relay_to(
     wire: httpx.AsyncBaseTransport | None = None,
     now: Callable[[], datetime] | None = None,
     flush_seconds: float = 0.0,
+    servers: HostServers | None = None,
 ) -> Relayed:
     """A host of the tenant's pool that holds a session's workspace, a
     directory it runs commands in through the engine's local transport, and
     the runner's relay to it. With `serves`, the host's ceilings serve that
     project alone, and the session belongs to `project_id`. With `wire`, the
     host reaches the platform through it, and with `now` it reads its time.
-    It sends what a command prints at once, or `flush_seconds` apart."""
+    It sends what a command prints at once, or `flush_seconds` apart, and
+    starts the MCP servers `servers` names."""
     pool = await api.pool()
     where = tmp_path / "workspace"
     where.mkdir()
@@ -120,6 +123,7 @@ async def relay_to(
         },
         flush_seconds=flush_seconds,
         renew_seconds=0.2,
+        servers=servers,
     )
     host = HostAgent(
         api.settings(tmp_path / "home", await api.token(pool.id)),
@@ -204,7 +208,7 @@ def command(epoch: int, *argv: str, seconds: float = 30) -> CommandSpec:
     )
 
 
-async def claims(host: HostAgent, until: asyncio.Future[CommandResult]) -> list[UUID]:
+async def claims(host: HostAgent, until: asyncio.Future[Any]) -> list[UUID]:
     """The host's loop while the runner waits: the exec items it was
     handed, by the relay's id."""
     handed: list[UUID] = []
