@@ -18,15 +18,18 @@ from acme.om.billing.prices import PriceBookInterface
 from acme.om.billing.storage import AccountStorageInterface, MoneyLedgerStorageInterface
 from acme.om.billing.types.account import AccountRequest, FundingMode
 from acme.om.billing.types.plan import PLANS, UNITS, PlanCatalog
-from acme.om.context import TenantContext
+from acme.om.context import Role, TenantContext
 from acme.om.models.layer import ModelsLayer
 from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.root import Managers
 from acme.om.storage.impl.memory import StorageMemoryImpl
 from acme.om.storage.root import StorageInterface
+from acme.om.tenancy.types.org import Org
 from acme.om.tools.manager import ToolsManagerInterface
 from acme.om.tools.tool import ToolInterface
 from acme.om.windows.gate import CallGateInterface
+from contracts.doubles import context
+from contracts.factories import make_org
 from contracts.loops import ASSISTANT, DELIVERY, Clock, Loop, loop_over
 
 
@@ -41,6 +44,7 @@ class Money:
     prices: PriceBookInterface
     payments: PaymentProviderTwinImpl
     pager: OperatorPagerMemoryImpl
+    tenant: Org | None = None
 
     async def open(
         self,
@@ -50,6 +54,10 @@ class Money:
         key_ref: str | None = None,
         zone: str = "UTC",
     ) -> None:
+        if self.tenant is not None:
+            # A fresh tenant's org, where tenancy reads it: billing wakes the
+            # tenant's sessions under the tenant's own service context.
+            await self.loop.storage.get_tenancy_storage().write_org(self.tenant.id, self.tenant)
         request = AccountRequest(funding=funding, key_ref=key_ref, plan_id=plan, zone=zone)
         await self.billing.open_account(self.loop.owner, request)
 
@@ -84,6 +92,10 @@ def money_over(
     pager = OperatorPagerMemoryImpl()
     book = prices or PriceBookTableImpl()
     built: list[tuple[MoneyGateImpl, MoneyCallGateImpl]] = []
+    tenant = None
+    if owner is None:
+        tenant = make_org()
+        owner = context(Role.OWNER, tenant)
 
     def gates(managers: Managers, clock: Clock) -> CallGateInterface:
         gate = MoneyGateImpl(
@@ -134,4 +146,4 @@ def money_over(
         UNITS,
         loop.clock,
     )
-    return Money(loop, accounts, ledger, gate, calls, billing, book, payments, pager)
+    return Money(loop, accounts, ledger, gate, calls, billing, book, payments, pager, tenant)

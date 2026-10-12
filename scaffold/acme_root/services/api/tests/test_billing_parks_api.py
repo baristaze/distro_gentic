@@ -5,7 +5,8 @@ the way it does in use. A call far above its session's norm is approved by
 a person who approves such calls, a budget a call passes is raised for its
 window by a person who sets budgets, and funds that cover no call are
 topped up by a payment the provider confirmed, or granted by an operator
-who may write. Each route answers the ledger entry it posted, the session
+who may write; a payment wakes every session parked on the funds, those
+the payer does not see among them. Each route answers the ledger entry it posted, the session
 pending with its park gone and the work that runs it queued, and the next
 run goes on to its end.
 
@@ -145,26 +146,26 @@ class Case:
     def say(self, *turns: ModelReply) -> None:
         self.model.add(*turns)
 
-    async def started(self) -> str:
-        """A session the member started and spoke to: its loop waits for a run."""
-        member = self[Role.MEMBER]
+    async def started(self, by: Role = Role.MEMBER) -> str:
+        """A session the person started and spoke to: its loop waits for a run."""
+        person = self[by]
         made = await self.client.post(
             "/v1/agent-sessions",
-            headers=created(member),
+            headers=created(person),
             json={"kind": "steward", "title": "t", "project_id": PROJECT_ID},
         )
         assert made.status_code == 201, made.text
         session_id = made.json()["id"]
         spoken = await self.client.post(
             f"/v1/agent-sessions/{session_id}/messages",
-            headers=created(member),
+            headers=created(person),
             json={"text": "Count the dropped objects."},
         )
         assert spoken.status_code == 201, spoken.text
         return session_id
 
-    async def run(self, session_id: str) -> Any:
-        ctx = await self.ctx(self[Role.MEMBER])
+    async def run(self, session_id: str, by: Role = Role.MEMBER) -> Any:
+        ctx = await self.ctx(self[by])
         return await self.container.managers.loop.run(ctx, UUID(session_id))
 
     async def parked_on(self, session_id: str) -> dict[str, Any]:
@@ -184,7 +185,9 @@ class Case:
         ledger = self.container.storage.get_money_ledger_storage()
         return len(await ledger.read_entries(self.org_id, kind=kind, limit=50))
 
-    async def runs_again(self, session_id: str, cleared: httpx.Response, runs: int) -> None:
+    async def runs_again(
+        self, session_id: str, cleared: httpx.Response, runs: int, by: Role = Role.MEMBER
+    ) -> None:
         """The route posted its entry, and the session is pending, its park
         gone, with one more run asked for; the next run goes on to the
         loop's end, and the model's last turn was read."""
@@ -195,7 +198,7 @@ class Case:
         assert (session.json()["status"], session.json()["park"]) == ("pending", None)
         assert self.runs_of(session_id) == runs + 1, "the work that runs the session is queued"
         self.say(reply(said("Three dropped.")))
-        run = await self.run(session_id)
+        run = await self.run(session_id, by)
         assert (run.end, run.outcome) == (RunEnd.ENDED, LoopOutcome.SUCCEEDED), run
         assert self.model.remaining == 0
 
@@ -383,6 +386,38 @@ async def test_funds_that_cover_no_call_are_topped_up_by_a_payment_the_provider_
     assert again.json()["id"] == paid.json()["id"], "one payment credits once"
     assert await case.entries(EntryKind.CREDIT) == 1
     await case.runs_again(session_id, paid, runs)
+
+
+async def test_a_payment_wakes_the_sessions_on_the_funds_the_payer_does_not_see_too(
+    case: Case,
+) -> None:
+    await case.seat("prepaid")
+    theirs = await case.started(by=Role.OWNER)
+    hidden = await case.client.put(
+        f"/v1/agent-sessions/{theirs}/visibility",
+        headers=case[Role.OWNER],
+        json={"visibility": "private"},
+    )
+    assert hidden.status_code == 200, hidden.text
+    mine = await case.started()
+    await case.run(theirs, by=Role.OWNER)
+    await case.run(mine)
+    for session_id in (theirs, mine):
+        assert (await case.parked_on(session_id))["unlock"] == FUNDS_UNLOCK
+    unseen = await case.client.get(f"/v1/agent-sessions/{theirs}", headers=case[Role.MEMBER])
+    assert unseen.status_code == 404, "the payer does not see the owner's private session"
+    payload, signature = case.payments.confirm(case.org_id, PLENTY, utcnow())
+    runs = {session_id: case.runs_of(session_id) for session_id in (theirs, mine)}
+
+    paid = await case.client.post(
+        "/v1/billing/payments",
+        headers={**created(case[Role.MEMBER]), "Payment-Signature": signature},
+        content=payload,
+    )
+
+    assert paid.json()["kind"] == "credit", paid.text
+    await case.runs_again(theirs, paid, runs[theirs], by=Role.OWNER)
+    await case.runs_again(mine, paid, runs[mine])
 
 
 async def test_funds_that_cover_no_call_are_granted_by_an_operator_who_may_write(

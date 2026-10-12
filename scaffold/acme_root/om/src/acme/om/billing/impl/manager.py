@@ -159,6 +159,10 @@ class BillingManagerImpl(BillingManagerInterface):
         confirmation = self._payments.verify_confirmation(payload, signature, now)
         if confirmation.org_id != ctx.org_id:
             raise NotAuthorized("the payment confirms another tenant's credit")
+        # The tenant's own context, the one its sessions are woken under: the
+        # credit is room for every session of the org, those the payer does
+        # not see among them, and the payer stays its attribution.
+        tenant = await self._tenancy.service_context(ctx, ctx.org_id, ctx.user_id)
         credit = await self._ledger.post_credit(
             ctx.org_id,
             Credit(
@@ -171,7 +175,7 @@ class BillingManagerImpl(BillingManagerInterface):
         )
         # Credit is room in a bucket, never a limit: the sessions parked on
         # the budget ask their gates again, and a limit still binds.
-        await self._sessions.wake_parked(ctx, ParkReason.BUDGET)
+        await self._sessions.wake_parked(tenant, ParkReason.BUDGET)
         return credit
 
     async def grant_units(
