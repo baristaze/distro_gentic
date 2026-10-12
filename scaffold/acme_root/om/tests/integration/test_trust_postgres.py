@@ -75,8 +75,12 @@ async def test_a_calls_audit_entry_and_an_operators_reads_over_postgres(
     platform = trusted(tmp_path, storage=storage, owner=owner)
     session_id = await platform.start()
     platform.placement.walled.add(session_id)
-    asker = platform.member()
-    await platform.say(session_id, PLAN, asker)
+    # The owner asks, then hands the steer to a member: the call runs under
+    # its steerer, and the one whose message it answers pays.
+    await platform.say(session_id, PLAN)
+    steerer = platform.member()
+    await platform.managers.agent_sessions.add_participant(owner, session_id, steerer.user_id)
+    await platform.managers.attribution.assign_principal(owner, session_id, steerer.user_id)
     platform.anthropic.add(reply(said("Looking."), use("lookup")), reply(said("Noted.")))
 
     run = await platform.loops.run(owner, session_id)
@@ -86,10 +90,10 @@ async def test_a_calls_audit_entry_and_an_operators_reads_over_postgres(
     (entry,) = [e for e in events if e.kind == CALL_AUDITED]
     audit = CallAudit.model_validate(entry.payload)
     assert audit.executor == platform.placement.host
-    assert audit.principal == Principal(kind=PrincipalKind.PERSON, id=owner.user_id)
-    assert audit.spender == Principal(kind=PrincipalKind.PERSON, id=asker.user_id)
+    assert audit.principal == Principal(kind=PrincipalKind.PERSON, id=steerer.user_id)
+    assert audit.spender == Principal(kind=PrincipalKind.PERSON, id=owner.user_id)
     assert audit.actor.agent is not None and audit.actor.agent.session_id == session_id
-    assert entry.actor_id == owner.user_id, "written under the context the call ran under"
+    assert entry.actor_id == steerer.user_id, "written under the context the call ran under"
 
     plane = platform.trust.trust_operator
     support = OperatorContext(
