@@ -52,7 +52,8 @@ marked **archived** wakes for nothing; one marked **deleted** is hidden
 from every read until it is restored.
 
 Readers: `list_sessions` (by status, park reason, or project, newest
-first), `read_session` (where one stands and what its park waits on),
+first, each session with the sub-agents under it), `read_session` (where
+one stands and what its park waits on),
 `read_wait` (its place in the queue and its hosts).
 
 ## Why a session is parked

@@ -22,6 +22,7 @@ from contracts.agent_session_storage import make_session
 from contracts.evidence_storage import make_record, make_validation
 from contracts.intake_storage import make_binding
 from contracts.step_storage import (
+    make_message,
     make_request,
     make_response,
     make_tool_request,
@@ -320,6 +321,59 @@ async def test_what_a_session_waits_on_a_person_for_is_read_per_session_and_acro
         (holding["id"], 5),
     ]
     assert rest.json()["next_cursor"] is None
+
+
+async def test_a_call_a_sub_agent_holds_is_listed_to_whom_its_root_is_visible_alone(
+    client: httpx.AsyncClient, owner: dict[str, str], container: AppContainer
+) -> None:
+    """A private session's sub-agent of a sub-agent holds a call, and the
+    session itself is idle: the approvals across the tenant list the call to
+    the session's creator, and to no member who does not see the session,
+    nor to another tenant, until its creator makes it org-wide."""
+    root = await start(client, owner, "the dropped object")
+    ctx = await context_of(container, owner)
+    sessions, steps = container.managers.agent_sessions, container.managers.steps
+    parent = await sessions.create_session(
+        ctx, make_session(parent=await sessions.get_session(ctx, UUID(root["id"])))
+    )
+    held = await sessions.create_session(ctx, make_session(parent=parent))
+    asker = Principal(kind=PrincipalKind.PERSON, id=ctx.user_id)
+    (message,) = await steps.append_inputs(ctx, held.id, [make_message(held.id, principal=asker)])
+    epoch = await steps.begin_run(ctx, held.id)
+    request = make_request(held.id, message.id, (message.id,))
+    response = make_response(held.id, message.id, request.id)
+    call = make_tool_request(held.id, message.id, response.id)
+    await steps.append_steps(ctx, held.id, epoch, [request, response, call])
+    await sessions.park(ctx, held.id, epoch, message.id, APPROVAL)
+    me = await client.get("/v1/orgs/current", headers=owner)
+    await add_member(container, UUID(me.json()["id"]), "mia@example.test", Role.MEMBER)
+    member = await sign_in_as(client, "mia@example.test", UUID(me.json()["id"]))
+    _, other = await container.managers.tenancy.bootstrap(
+        seed_request(), "Other", "other", "owner@other.test", "Other"
+    )
+    stranger = await sign_in_as(client, "owner@other.test", other.id)
+
+    async def listed(headers: dict[str, str]) -> set[str]:
+        answered = await client.get("/v1/approvals", headers=headers)
+        assert answered.status_code == 200, answered.text
+        return {item["session_id"] for item in answered.json()["items"]}
+
+    assert (await client.get(f"/v1/agent-sessions/{root['id']}", headers=owner)).json()[
+        "status"
+    ] == "idle"
+    assert await listed(owner) == {str(held.id)}
+    assert await listed(member) == set(), "a member who does not see the session"
+    assert await listed(stranger) == set(), "another tenant"
+
+    shared = await client.put(
+        f"/v1/agent-sessions/{root['id']}/visibility",
+        headers=owner,
+        json={"visibility": "org_wide"},
+    )
+
+    assert shared.status_code == 200, shared.text
+    assert await listed(member) == {str(held.id)}
+    assert await listed(stranger) == set()
 
 
 async def test_a_sessions_tool_calls_carry_their_decision_and_answer_and_its_usage_sums(

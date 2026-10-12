@@ -443,17 +443,36 @@ class AgentSessionsServiceImpl(AgentSessionsServiceInterface):
         self, ctx: TenantContext, cursor: str | None, limit: int
     ) -> ApprovalPageView:
         after = decode_cursor(APPROVALS, cursor) if cursor else None
-        page = await self._sessions.get_sessions(
-            ctx, SessionStatus.PARKED, after, clamp_limit(limit)
-        )
+        # A sub-agent holds its calls under a root in any status, an idle one
+        # included: each root the person sees is read with its whole tree.
+        page = await self._sessions.get_sessions(ctx, None, after, clamp_limit(limit))
         held: list[ApprovalView] = []
-        for session in page.items:
-            if waits_on_approval(session.park):
-                held += approvals_of(session, await self._history(ctx, session.id))
+        for root in page.items:
+            for session in await self._tree(ctx, root):
+                if waits_on_approval(session.park):
+                    held += approvals_of(session, await self._history(ctx, session.id))
         last = page.items[-1].id if page.items and page.has_more else None
         return ApprovalPageView(
             items=held, next_cursor=None if last is None else encode_cursor(APPROVALS, last)
         )
+
+    async def _tree(self, ctx: TenantContext, root: AgentSession) -> list[AgentSession]:
+        """A root and every sub-agent under it, each parent before its
+        children, read through the engine's children of each parent, which
+        answers only for a parent the person sees."""
+        tree = [root]
+        index = 0
+        while index < len(tree):
+            parent = tree[index]
+            index += 1
+            after: UUID | None = None
+            while True:
+                page = await self._sessions.get_children(ctx, parent.id, after, LIMIT_MAX)
+                tree.extend(page.items)
+                if not page.has_more or not page.items:
+                    break
+                after = page.items[-1].id
+        return tree
 
     async def get_bounds(self, ctx: TenantContext, session_id: UUID) -> BoundsView:
         kind = await self._agents.kind_of(ctx, session_id)
