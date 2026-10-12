@@ -23,6 +23,7 @@ from acme.apps.host.agent import HostAgent
 from acme.apps.host.ceilings import Ceilings
 from acme.apps.host.config import Settings
 from acme.apps.host.main import host_transports, host_workspaces
+from acme.apps.host.mcp import HostServers
 from acme.apps.host.probe import Probe, Probes, platform_and_clock
 from acme.apps.host.relay import ExecutorRelayImpl
 from acme.client.client import ApiClient
@@ -258,11 +259,13 @@ async def directory_host(
     *,
     name: str = "host-1",
     ceilings: Ceilings | None = None,
+    servers: HostServers | None = None,
 ) -> tuple[HostAgent, Path]:
     """A host of the pool, started, that makes a directory per workspace
     under its root and runs commands there; its root is answered with it.
     Its ceilings take any project and any egress, and read its root alone,
-    unless the case names its own."""
+    unless the case names its own. It starts the MCP servers `servers`
+    names."""
     root = where / "workspaces"
     transport = TransportLocalImpl(where / "records", SecretsLocalImpl(None), BrokerNullImpl())
     host = await started_host(
@@ -279,6 +282,7 @@ async def directory_host(
         IsolationMode.directory,
         {ProviderMode.HOST: transport},
         {ProviderMode.HOST: WorkspaceHostImpl(root)},
+        servers=servers,
     )
     return host, root
 
@@ -307,6 +311,8 @@ async def started_host(
     mode: IsolationMode,
     transports: Mapping[ProviderMode, TransportInterface],
     workspaces: Mapping[ProviderMode, WorkspaceProviderInterface],
+    *,
+    servers: HostServers | None = None,
 ) -> HostAgent:
     """A host of the pool, enrolled and started, that probes `mode` alone."""
     agents: list[HostAgent] = []
@@ -316,6 +322,7 @@ async def started_host(
         workspaces,
         flush_seconds=0.0,
         renew_seconds=0.2,
+        servers=servers,
     )
     host = HostAgent(
         replace(settings, enrollment_token=await api.token(pool_id)),
