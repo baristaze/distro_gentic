@@ -309,6 +309,7 @@ def wired(
         principal_context=principals,
         tool_catalog=catalog,
         tools_layer=layers,
+        agents_layer=playbooks.agents,
     )
     trust.build(managers)
 

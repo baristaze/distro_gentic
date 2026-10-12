@@ -27,3 +27,4 @@ class PlaybookInvocations(IdentifiableMixin, CreatedMixin, Base):
     name: Mapped[str]
     version: Mapped[int]
     invoked_by: Mapped[UUID]
+    pinned: Mapped[bool]
