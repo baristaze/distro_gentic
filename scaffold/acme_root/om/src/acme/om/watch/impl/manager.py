@@ -275,6 +275,8 @@ class WatchManagerImpl(WatchManagerInterface):
             raise NotHandedOver(
                 f"the agent holds session {session_id}'s workspace; take control first"
             )
+        if session.park.holder not in (None, ctx.user_id):
+            raise NotAuthorized(f"session {session_id} is held by another person")
         if await self._relay.binding_of(ctx, session_id) is None:
             raise NoWorkspaceHost(f"no host holds session {session_id}'s workspace")
         workspace = await self._workspaces.get_workspace(ctx, session_id)
@@ -326,6 +328,8 @@ class WatchManagerImpl(WatchManagerInterface):
         await self._person(ctx, session_id)
         session = await self._sessions.get_session(ctx, session_id)
         if session.park is not None and session.park.reason is ParkReason.HANDOVER:
+            if session.park.holder not in (None, ctx.user_id):
+                raise NotAuthorized(f"session {session_id} is held by another person")
             cursor = await self._steps.get_cursor(ctx, session_id)
             running = [
                 item

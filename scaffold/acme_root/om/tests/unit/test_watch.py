@@ -712,11 +712,33 @@ async def test_a_hand_over_is_its_holders_alone(watched: Watched) -> None:
         await watched.watch.take_control(admin, watched.session_id)
     with pytest.raises(NotAuthorized):
         await watched.watch.give_back(admin, watched.session_id, "Mine now.")
+    with pytest.raises(NotAuthorized):
+        await watched.watch.run_command(
+            admin, watched.session_id, HandCommand(key=new_id(), argv=("ls",))
+        )
 
     session = await watched.managers.agent_sessions.get_session(watched.owner, watched.session_id)
     assert session.park is not None and session.park.holder == watched.person.user_id
     back = await watched.watch.give_back(watched.person, watched.session_id, "Done by hand.")
     assert back.park is None
+
+
+async def test_another_person_stops_no_command_of_a_hand_over_they_do_not_hold(
+    watched: Watched,
+) -> None:
+    await watched.watch.take_control(watched.person, watched.session_id)
+    command = HandCommand(key=new_id(), argv=("make", "flash"))
+    await watched.watch.run_command(watched.person, watched.session_id, command)
+    assert await claim(watched) is not None
+    admin = in_person(watched.owner, Role.ADMIN)
+
+    with pytest.raises(NotAuthorized):
+        await watched.watch.give_back(admin, watched.session_id, "Mine now.", stop=True)
+    running = await watched.managers.relay.running(
+        request(), watched.owner.org_id, watched.session_id
+    )
+    assert [item.key for item in running] == [command.key]
+    assert await watched.managers.relay.controls(request(), watched.host, None) == []
 
 
 async def test_control_is_taken_by_a_person_in_person_who_may_instruct(
