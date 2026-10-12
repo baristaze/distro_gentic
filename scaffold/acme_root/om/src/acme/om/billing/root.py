@@ -69,6 +69,7 @@ def build_billing(
         storage.get_money_ledger_storage(),
         managers.budgets,
         managers.agent_sessions,
+        managers.tenancy,
         payments,
         managers.outbox,
         plans,

@@ -337,6 +337,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/orgs/{org_id}/grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Grant Units
+         * @description Units granted the tenant for its life, and why; its sessions parked
+         *     on its funds run again. An org that is gone is `404`.
+         */
+        post: operations["grant_units_v1_admin_orgs__org_id__grants_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/orgs/{org_id}/hosts/{host_id}/standing": {
         parameters: {
             query?: never;
@@ -899,6 +920,27 @@ export interface paths {
          * @description The control as stored, out of band: it never waits behind a message.
          */
         post: operations["send_control_v1_agent_sessions__session_id__controls_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/agent-sessions/{session_id}/cost-approval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve Call
+         * @description The session's next call past its norm, let through up to the cost
+         *     named; the session parked on it runs again.
+         */
+        post: operations["approve_call_v1_agent_sessions__session_id__cost_approval_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1553,6 +1595,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/billing/payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm Payment
+         * @description The credit of a payment the provider confirmed: the body is the
+         *     provider's confirmation, byte for byte, and `Payment-Signature` its
+         *     signature. `delivery_refused` when the signature does not check out.
+         */
+        post: operations["confirm_payment_v1_billing_payments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/budgets": {
         parameters: {
             query?: never;
@@ -1609,6 +1673,27 @@ export interface paths {
          */
         put: operations["change_amount_v1_budgets__budget_id__amount_put"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/budgets/{budget_id}/raises": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Raise Once
+         * @description The budget raised for the window open now; its own amount is
+         *     unchanged. The sessions parked on a budget run again.
+         */
+        post: operations["raise_once_v1_budgets__budget_id__raises_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4805,6 +4890,15 @@ export interface components {
             kind: components["schemas"]["ControlKind"];
         };
         /**
+         * CostApprovalRequest
+         * @description A person's yes to the session's next call past its norm, up to a
+         *     reference cost in millionths.
+         */
+        CostApprovalRequest: {
+            /** Up To Micros */
+            up_to_micros: number;
+        };
+        /**
          * CreateBudgetRequest
          * @description A budget over a scope and a window, in reference cost (millionths),
          *     native tokens, or both. A person's and a project's scope is keyed by its
@@ -7719,6 +7813,18 @@ export interface components {
             /** Unlock */
             unlock: string;
         };
+        /**
+         * RaiseRequest
+         * @description A raise of a budget for the window open now: reference cost in
+         *     millionths, native tokens, or both. A unit left out is not raised, and
+         *     a raise raises one at least.
+         */
+        RaiseRequest: {
+            /** Cost Micros */
+            cost_micros?: number | null;
+            /** Tokens */
+            tokens?: number | null;
+        };
         /** RenameProjectRequest */
         RenameProjectRequest: {
             /** Name */
@@ -8893,6 +8999,16 @@ export interface components {
             kind: components["schemas"]["TriggerKind"];
         };
         /**
+         * UnitsGrantRequest
+         * @description Units the platform grants the tenant for its life, and why.
+         */
+        UnitsGrantRequest: {
+            /** Reason */
+            reason: string;
+            /** Units */
+            units: number;
+        };
+        /**
          * UpdateIdentityRequest
          * @description Where the person is, as an IANA name ("Europe/Istanbul"): the portal
          *     sends the browser's own on sign-in, and a time shown or sent to the
@@ -9893,6 +10009,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OperatorEventView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    grant_units_v1_admin_orgs__org_id__grants_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                "idempotency-key"?: string | null;
+            };
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UnitsGrantRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedgerEntryView"];
                 };
             };
             /** @description Validation Error */
@@ -11019,6 +11175,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StepView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_call_v1_agent_sessions__session_id__cost_approval_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                "idempotency-key"?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CostApprovalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedgerEntryView"];
                 };
             };
             /** @description Validation Error */
@@ -12427,6 +12623,40 @@ export interface operations {
             };
         };
     };
+    confirm_payment_v1_billing_payments_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Payment-Signature"?: string | null;
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedgerEntryView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_budgets_v1_budgets_get: {
         parameters: {
             query?: {
@@ -12564,6 +12794,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BudgetView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    raise_once_v1_budgets__budget_id__raises_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "x-app"?: string | null;
+                "x-app-version"?: string | null;
+                "idempotency-key"?: string | null;
+            };
+            path: {
+                budget_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RaiseRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LedgerEntryView"];
                 };
             };
             /** @description Validation Error */

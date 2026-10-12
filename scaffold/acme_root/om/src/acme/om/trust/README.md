@@ -48,6 +48,8 @@ of](../../../../README.md).
 - **Save a provider key.** The provider is asked first whether it takes
   the key. A key saved gets a new reference and becomes the live one;
   the key it replaces is marked rotated, and its value leaves the store.
+  The sessions parked on a missing or refused key to that provider wake,
+  and their next call goes out on it.
 - **Serve a client.** A client built on a key is kept by the key's
   reference, and served with it. The live reference is read on every
   call, so a client built on a rotated key is never served again.

@@ -117,7 +117,9 @@ class TrustManagerInterface(ABC):
         tenant's configuration may: probed first, and refused (`KeyRefused`) when the provider
         does not take it. A key saved mints a new reference and becomes the
         live one; the key it replaces is marked rotated and its value leaves
-        the store. Answers the record, which never holds the value."""
+        the store. Then the sessions of the org parked on a missing or
+        refused key to `provider` are woken. Answers the record, which never
+        holds the value."""
         ...
 
     @abstractmethod

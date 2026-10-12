@@ -2,17 +2,20 @@
 the newest first, of one kind, one hold, or one session when asked, and
 whether the read was cut at its limit. It takes `OperatorContext` and the
 read permission, names the tenant, and is logged with the tenant and the
-operator; a tenant's credential never reaches it."""
+operator; a tenant's credential never reaches it. An operator who may
+write grants the tenant units for its life, under an Idempotency-Key, so a
+retry grants once, and the tenant's sessions parked on its funds wake."""
 
 from uuid import UUID
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
 
 from acme.om.billing.types.ledger import EntryKind
 from acme.services.api.gateway.admin import OperatorCtx
+from acme.services.api.gateway.idempotency import OperatorIdem
 from acme.services.api.gateway.resolve import LedgersService
 from acme.services.api.types.common import LIMIT_DEFAULT
-from acme.services.api.types.ledgers import LedgerPageView
+from acme.services.api.types.ledgers import LedgerEntryView, LedgerPageView, UnitsGrantRequest
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -32,4 +35,19 @@ async def get_ledger(
     approvals) when named. `has_more` says the read was cut at its limit."""
     return await service.get_entries(
         admin, org_id, kind=kind, hold_id=hold_id, session_id=session_id, limit=limit
+    )
+
+
+@router.post("/orgs/{org_id}/grants", response_model=LedgerEntryView, status_code=201)
+async def grant_units(
+    admin: OperatorCtx,
+    service: LedgersService,
+    org_id: UUID,
+    body: UnitsGrantRequest,
+    idem: OperatorIdem,
+) -> Response:
+    """Units granted the tenant for its life, and why; its sessions parked
+    on its funds run again. An org that is gone is `404`."""
+    return await idem.run(
+        201, lambda attempt: service.grant_units(admin, org_id, body, attempt.target_id)
     )

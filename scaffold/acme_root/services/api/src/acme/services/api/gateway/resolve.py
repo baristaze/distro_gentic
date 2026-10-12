@@ -13,6 +13,7 @@ from acme.services.api.services import (
     AgentSessionsServiceInterface,
     AutomationsServiceInterface,
     BenchmarksServiceInterface,
+    BillingServiceInterface,
     BudgetsServiceInterface,
     ConnectorsServiceInterface,
     EventsServiceInterface,
@@ -117,6 +118,10 @@ def budgets_service(connection: HTTPConnection) -> BudgetsServiceInterface:
     return services_of(connection).get_budgets_service()
 
 
+def billing_service(connection: HTTPConnection) -> BillingServiceInterface:
+    return services_of(connection).get_billing_service()
+
+
 def intake_service(connection: HTTPConnection) -> IntakeServiceInterface:
     return services_of(connection).get_intake_service()
 
@@ -185,6 +190,7 @@ RelayService = Annotated[RelayServiceInterface, Depends(relay_service)]
 WatchService = Annotated[WatchServiceInterface, Depends(watch_service)]
 AutomationsService = Annotated[AutomationsServiceInterface, Depends(automations_service)]
 BudgetsService = Annotated[BudgetsServiceInterface, Depends(budgets_service)]
+BillingService = Annotated[BillingServiceInterface, Depends(billing_service)]
 IntakeService = Annotated[IntakeServiceInterface, Depends(intake_service)]
 NotificationsService = Annotated[NotificationsServiceInterface, Depends(notifications_service)]
 MatrixService = Annotated[MatrixServiceInterface, Depends(matrix_service)]

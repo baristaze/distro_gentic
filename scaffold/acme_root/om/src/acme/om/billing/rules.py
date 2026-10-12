@@ -31,7 +31,7 @@ from acme.om.billing.types.ledger import (
 from acme.om.billing.types.plan import PlanCatalog, UnitScale
 from acme.om.budgets.rules import EPOCH, HOLD_RETRY, breaches, window_bounds
 from acme.om.budgets.types.amount import Amount
-from acme.om.budgets.types.breach import Refusal
+from acme.om.budgets.types.breach import BreachAction, Refusal
 from acme.om.budgets.types.budget import Budget, BudgetWindow, WindowKind
 from acme.om.budgets.types.hold import HoldLine, Settlement, Tally
 from acme.om.exceptions import SpenderUnknown
@@ -47,6 +47,14 @@ open holds reserve: their settlements."""
 
 PRICE_UNLOCK = "price"
 """A budget park's unlock when no price gives the call a cost in units."""
+
+PRICE_RETRY = timedelta(minutes=5)
+"""How soon a park on a price tries again: a price arrives with a release
+of the price table, and nothing tells a parked session it came."""
+
+OPERATOR = "an operator of the platform"
+"""Who prices a model: the price table is the platform's, and no tenant's
+member sets it."""
 
 ANOMALY_UNLOCK = "anomaly"
 """A person park's unlock when a call's expected cost is far above its
@@ -528,14 +536,32 @@ def far_above(cost: int | None, recent: Sequence[int], guard: AnomalyGuard) -> b
 # The parks, and what a person is told.
 
 
+def price_park(now: datetime, price_retry: timedelta = PRICE_RETRY) -> Park:
+    """A call no price gives a cost parks on the budget, and tries again
+    after a wait: an operator prices the model in a release, and the next
+    try reads the price. Its cause says who acts."""
+    return Park(
+        reason=ParkReason.BUDGET,
+        unlock=PRICE_UNLOCK,
+        retry_at=now + price_retry,
+        cause=f"the call's model has no price: {OPERATOR} prices it",
+    )
+
+
+def priced_out(refusal: Refusal) -> bool:
+    """Whether a limit refused a call because no price gives it a cost: a
+    price, not a raise, clears it."""
+    return any(breach.action is BreachAction.PRICE for breach in refusal.breaches)
+
+
 def shortfall_park(shortfall: Shortfall, now: datetime, hold_retry: timedelta = HOLD_RETRY) -> Park:
     """A shortfall parks on the budget: a spend limit. When open holds
     reserve the room it lacks, their settlements can free it, so it tries
     again soon, never after the period's end. Otherwise it tries again at
     the next billing period when that covers the call, or waits for a
-    person."""
+    person. A call with no price waits for one (`price_park`)."""
     if shortfall.units is None:
-        return Park(reason=ParkReason.BUDGET, unlock=PRICE_UNLOCK)
+        return price_park(now)
     if shortfall.short <= shortfall.reserved:
         soon = now + hold_retry
         retry_at = soon if shortfall.resets_at is None else min(soon, shortfall.resets_at)
@@ -564,8 +590,17 @@ class Notice(Platform):
 def notice_of(park: Park) -> Notice:
     """A park in a person's words. A rate limit and a spend limit are told
     apart, always: the provider's pace is never a budget to top up, and a
-    budget is never a provider's pace to wait out."""
+    budget is never a provider's pace to wait out. A key or an account the
+    provider refused is neither: it is told by its cause, which names who
+    fixes it."""
     match park.reason:
+        case ParkReason.PROVIDER if park.cause is not None:
+            when = (
+                "The session waits until then."
+                if park.retry_at is None
+                else "The session tries again on its own, and takes the fix at its next try."
+            )
+            return Notice(limit=LimitKind.PERSON, text=f"{_sentence(park.cause)} {when}")
         case ParkReason.PROVIDER:
             return Notice(
                 limit=LimitKind.RATE,
@@ -591,7 +626,10 @@ def notice_of(park: Park) -> Notice:
         case ParkReason.BUDGET if park.unlock == PRICE_UNLOCK:
             return Notice(
                 limit=LimitKind.SPEND,
-                text="This call has no price to bill it by. It waits until the model is priced.",
+                text=(
+                    f"This call has no price to bill it by: {OPERATOR} prices the model. "
+                    "The session tries again on its own, and takes the price at its next try."
+                ),
             )
         case ParkReason.BUDGET:
             when = "a person raises it" if park.retry_at is None else "its window resets"
@@ -606,3 +644,8 @@ def notice_of(park: Park) -> Notice:
             )
         case _:
             return Notice(limit=LimitKind.OTHER, text=f"The session waits: {park.reason.value}.")
+
+
+def _sentence(text: str) -> str:
+    """A cause as a sentence: its first letter capitalized, and a full stop."""
+    return f"{text[:1].upper()}{text[1:].rstrip('.')}."

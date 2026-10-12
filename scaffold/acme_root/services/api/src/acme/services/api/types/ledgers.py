@@ -1,12 +1,16 @@
 """Wire types of a tenant's ledger, as an operator reads it: one entry of
 whichever kind, its common fields first and each kind's own beside them,
-and one read of them."""
+and one read of them; and units an operator grants the tenant."""
 
 from datetime import datetime
 from uuid import UUID
 
+from pydantic import Field
+
 from acme.om.billing.types.ledger import EntryKind
-from acme.services.api.types.common import View
+from acme.om.billing.types.plan import MAX_NAME
+from acme.services.api.types.billing import MOST
+from acme.services.api.types.common import RequestBody, View
 
 
 class LedgerEntryView(View):
@@ -45,3 +49,10 @@ class LedgerPageView(View):
 
     items: list[LedgerEntryView]
     has_more: bool
+
+
+class UnitsGrantRequest(RequestBody):
+    """Units the platform grants the tenant for its life, and why."""
+
+    units: int = Field(gt=0, le=MOST)
+    reason: str = Field(min_length=1, max_length=MAX_NAME)

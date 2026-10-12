@@ -2500,6 +2500,23 @@
         "title": "ControlView",
         "type": "object"
       },
+      "CostApprovalRequest": {
+        "additionalProperties": false,
+        "description": "A person's yes to the session's next call past its norm, up to a\nreference cost in millionths.",
+        "properties": {
+          "up_to_micros": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 1000000000000000.0,
+            "title": "Up To Micros",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "up_to_micros"
+        ],
+        "title": "CostApprovalRequest",
+        "type": "object"
+      },
       "CreateBudgetRequest": {
         "additionalProperties": false,
         "description": "A budget over a scope and a window, in reference cost (millionths),\nnative tokens, or both. A person's and a project's scope is keyed by its\nid; a tenant's is the tenant itself, so its key is left out or names the\ntenant. A span window has a length in seconds, and no other window has.",
@@ -8630,6 +8647,40 @@
         "title": "QuestionView",
         "type": "object"
       },
+      "RaiseRequest": {
+        "additionalProperties": false,
+        "description": "A raise of a budget for the window open now: reference cost in\nmillionths, native tokens, or both. A unit left out is not raised, and\na raise raises one at least.",
+        "properties": {
+          "cost_micros": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 1000000000000000.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Micros"
+          },
+          "tokens": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 1000000000000000.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tokens"
+          }
+        },
+        "title": "RaiseRequest",
+        "type": "object"
+      },
       "RenameProjectRequest": {
         "additionalProperties": false,
         "properties": {
@@ -11285,6 +11336,30 @@
         "title": "TriggerView",
         "type": "object"
       },
+      "UnitsGrantRequest": {
+        "additionalProperties": false,
+        "description": "Units the platform grants the tenant for its life, and why.",
+        "properties": {
+          "reason": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "units": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 1000000000000000.0,
+            "title": "Units",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "units",
+          "reason"
+        ],
+        "title": "UnitsGrantRequest",
+        "type": "object"
+      },
       "UpdateIdentityRequest": {
         "additionalProperties": false,
         "description": "Where the person is, as an IANA name (\"Europe/Istanbul\"): the portal\nsends the browser's own on sign-in, and a time shown or sent to the\nperson is in it; with none sent, in UTC. A name that is not one is\n422.",
@@ -13767,6 +13842,126 @@
           }
         },
         "summary": "List Events",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/orgs/{org_id}/grants": {
+      "post": {
+        "description": "Units granted the tenant for its life, and why; its sessions parked\non its funds run again. An org that is gone is `404`.",
+        "operationId": "grant_units_v1_admin_orgs__org_id__grants_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnitsGrantRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LedgerEntryView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Grant Units",
         "tags": [
           "admin"
         ]
@@ -17060,6 +17255,126 @@
         "summary": "Send Control",
         "tags": [
           "agent_sessions"
+        ]
+      }
+    },
+    "/v1/agent-sessions/{session_id}/cost-approval": {
+      "post": {
+        "description": "The session's next call past its norm, let through up to the cost\nnamed; the session parked on it runs again.",
+        "operationId": "approve_call_v1_agent_sessions__session_id__cost_approval_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CostApprovalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LedgerEntryView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve Call",
+        "tags": [
+          "billing"
         ]
       }
     },
@@ -20792,6 +21107,104 @@
         ]
       }
     },
+    "/v1/billing/payments": {
+      "post": {
+        "description": "The credit of a payment the provider confirmed: the body is the\nprovider's confirmation, byte for byte, and `Payment-Signature` its\nsignature. `delivery_refused` when the signature does not check out.",
+        "operationId": "confirm_payment_v1_billing_payments_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Payment-Signature",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Payment-Signature"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LedgerEntryView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm Payment",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
     "/v1/budgets": {
       "get": {
         "description": "The tenant's budgets by id, after the id `after` names.",
@@ -21221,6 +21634,126 @@
         "summary": "Change Amount",
         "tags": [
           "budgets"
+        ]
+      }
+    },
+    "/v1/budgets/{budget_id}/raises": {
+      "post": {
+        "description": "The budget raised for the window open now; its own amount is\nunchanged. The sessions parked on a budget run again.",
+        "operationId": "raise_once_v1_budgets__budget_id__raises_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "budget_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Budget Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-app-version",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-App-Version"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 255,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RaiseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LedgerEntryView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Raise Once",
+        "tags": [
+          "billing"
         ]
       }
     },

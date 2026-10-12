@@ -5,9 +5,10 @@ from uuid import UUID
 
 from acme.integrations.payments import PaymentProviderInterface
 from acme.om.agent_sessions import AgentSessionsManagerInterface
-from acme.om.base import new_id, utcnow
+from acme.om.base import EMPTY_UUID, new_id, utcnow
 from acme.om.billing.manager import BillingManagerInterface
 from acme.om.billing.rules import (
+    FUNDS_UNLOCK,
     anomaly_park,
     bucket_key,
     funding_of,
@@ -39,10 +40,17 @@ from acme.om.budgets.rules import window_bounds
 from acme.om.budgets.types.amount import Amount
 from acme.om.budgets.types.hold import HoldLine, Tally
 from acme.om.context import OperatorContext, OperatorPermission, Permission, TenantContext
-from acme.om.exceptions import NotAuthorized, NotFound, TenantMismatch, ValidationFailed
+from acme.om.exceptions import (
+    InvalidCredential,
+    NotAuthorized,
+    NotFound,
+    TenantMismatch,
+    ValidationFailed,
+)
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import OutboxRow, versioned_row
 from acme.om.steps.types.header import ParkReason
+from acme.om.tenancy import TenancyManagerInterface
 from acme.om.tenancy.rules import check_time_zone
 
 log = logging.getLogger(__name__)
@@ -65,6 +73,7 @@ class BillingManagerImpl(BillingManagerInterface):
         ledger: MoneyLedgerStorageInterface,
         budgets: BudgetsManagerInterface,
         sessions: AgentSessionsManagerInterface,
+        tenancy: TenancyManagerInterface,
         payments: PaymentProviderInterface,
         relay: OutboxRelayInterface,
         plans: PlanCatalog,
@@ -75,6 +84,7 @@ class BillingManagerImpl(BillingManagerInterface):
         self._ledger = ledger
         self._budgets = budgets
         self._sessions = sessions
+        self._tenancy = tenancy
         self._payments = payments
         self._relay = relay
         self._plans = plans
@@ -165,17 +175,34 @@ class BillingManagerImpl(BillingManagerInterface):
         return credit
 
     async def grant_units(
-        self, ctx: OperatorContext, org_id: UUID, units: int, reason: str
+        self,
+        ctx: OperatorContext,
+        org_id: UUID,
+        units: int,
+        reason: str,
+        *,
+        grant_id: UUID | None = None,
     ) -> Grant:
         ctx.require(OperatorPermission.WRITE)
+        # The tenant's own context, the one its sessions are woken under: an
+        # org that is gone has none, and is granted nothing.
+        try:
+            tenant = await self._tenancy.service_context(ctx, org_id, EMPTY_UUID)
+        except InvalidCredential:
+            raise NotFound(f"org {org_id} not found") from None
         grant = Grant(
-            id=new_id(),
+            id=grant_id or new_id(),
             created_at=self._clock(),
             units=units,
             reason=reason,
             granted_by=ctx.identity_id,
         )
-        return await self._ledger.post_grant(org_id, grant)
+        granted = await self._ledger.post_grant(org_id, grant)
+        log.info("operator %s granted org %s %d units", ctx.identity_id, org_id, granted.units)
+        # Granted units are room in a bucket, never a limit: the sessions
+        # parked on the funds ask their gates again.
+        await self._sessions.wake_parked(tenant, ParkReason.BUDGET, FUNDS_UNLOCK)
+        return granted
 
     async def get_entries(
         self,
@@ -196,7 +223,14 @@ class BillingManagerImpl(BillingManagerInterface):
         log.info("operator %s read the ledger of org %s", ctx.identity_id, org_id)
         return EntryPage(items=tuple(entries[:bounded]), has_more=len(entries) > bounded)
 
-    async def raise_once(self, ctx: TenantContext, budget_id: UUID, amount: Amount) -> WindowRaise:
+    async def raise_once(
+        self,
+        ctx: TenantContext,
+        budget_id: UUID,
+        amount: Amount,
+        *,
+        raise_id: UUID | None = None,
+    ) -> WindowRaise:
         ctx.require(SETS_BILLING)
         budget = await self._budgets.get_budget(ctx, budget_id)
         account = await self._read(ctx.org_id)
@@ -205,7 +239,7 @@ class BillingManagerImpl(BillingManagerInterface):
         raised = await self._ledger.post_raise(
             ctx.org_id,
             WindowRaise(
-                id=new_id(),
+                id=raise_id or new_id(),
                 created_at=now,
                 budget_id=budget.id,
                 window_start=start,
@@ -218,14 +252,19 @@ class BillingManagerImpl(BillingManagerInterface):
         return raised
 
     async def approve_call(
-        self, ctx: TenantContext, session_id: UUID, up_to_micros: int
+        self,
+        ctx: TenantContext,
+        session_id: UUID,
+        up_to_micros: int,
+        *,
+        approval_id: UUID | None = None,
     ) -> Approval:
         ctx.require(SETS_BILLING)
         session = await self._sessions.get_session(ctx, session_id)
         approval = await self._ledger.post_approval(
             ctx.org_id,
             Approval(
-                id=new_id(),
+                id=approval_id or new_id(),
                 created_at=self._clock(),
                 session_id=session.id,
                 up_to_micros=up_to_micros,

@@ -27,7 +27,7 @@ from acme.om.trust.keys import KeyProbeInterface
 from acme.om.trust.manager import TrustManagerInterface
 from acme.om.trust.owners import SecretOwners
 from acme.om.trust.placement import PlacementInterface
-from acme.om.trust.rules import call_audit, first_crossing
+from acme.om.trust.rules import call_audit, first_crossing, key_unlocks
 from acme.om.trust.storage import TrustStorageInterface
 from acme.om.trust.types.identities import CallAudit
 from acme.om.trust.types.provider_key import KeyStatus, ProviderKey, key_secret_name
@@ -269,6 +269,10 @@ class TrustManagerImpl(TrustManagerInterface):
             await self._secrets.delete(
                 ctx.org_id, key_secret_name(rotated.id), deadline=ctx.deadline
             )
+        # The sessions that wait for a key to this provider, the org's missing
+        # or refused one, go on with this one.
+        for unlock in key_unlocks(provider):
+            await self._sessions.wake_parked(ctx, ParkReason.PROVIDER, unlock)
         return key
 
     async def get_provider_keys(self, ctx: TenantContext, limit: int) -> tuple[ProviderKey, ...]:

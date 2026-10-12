@@ -126,6 +126,7 @@ def money_over(
         ledger,
         loop.managers.budgets,
         loop.managers.agent_sessions,
+        loop.managers.tenancy,
         payments,
         loop.managers.outbox,
         plans,

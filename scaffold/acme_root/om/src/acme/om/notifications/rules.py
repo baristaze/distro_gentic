@@ -11,6 +11,9 @@ take it:
 - The account's funds: top up; the members who set budgets.
 - A call far above its session's norm: approve it; the members who
   approve such calls.
+- A key the org holds none of, to a provider its call needs: save one;
+  the members who save the org's keys. The text says why it waits, and
+  who acts.
 - A question the agent asked its person: answer it with a message; its
   requester, or, when they hold no place now, the members who manage the
   tenant. The text quotes the question.
@@ -18,12 +21,14 @@ take it:
   session; the same people.
 
 A link names a route the API serves: a call's decision, the session's
-messages, the session's controls, and a budget's amount. An action no
-route serves yet (topping up, approving a call past its norm) carries
-none, and its text names the park instead.
+messages, the session's controls, a budget's amount, a call's approval
+past its norm, and a provider's key. Topping up is paid at the payment
+provider, which no route of the API is, so it carries none, and its text
+names the park instead.
 
-A park on a price waits for the platform's operator, whom no tenant's
-member stands in for, and tells nobody here."""
+A park on a price, or on a key or an account the platform's operator
+fixes, waits for that operator, whom no tenant's member stands in for,
+and tells nobody here. Each tries again by itself."""
 
 import html
 import json
@@ -48,7 +53,7 @@ from acme.om.tenancy.types.membership import Membership
 from acme.om.tools.native.ask_person import ASK_PERSON
 from acme.om.workspaces.rules import AUTHORITY, FETCHED, SCHEMED, WWW
 
-NOTIFIED = frozenset({ParkReason.PERSON, ParkReason.BUDGET})
+NOTIFIED = frozenset({ParkReason.PERSON, ParkReason.BUDGET, ParkReason.PROVIDER})
 """The reasons whose park can wait on a person of the tenant."""
 
 SETS_BUDGETS = Permission.MANAGE_MEMBERS
@@ -58,6 +63,13 @@ APPROVES_CALLS = Permission.MANAGE_MEMBERS
 """What approving a call past its session's norm asks, as billing holds it
 (`approve_call`)."""
 
+SAVES_KEYS = Permission.MANAGE_MEMBERS
+"""What saving the org's key to a provider asks, as trust holds it
+(`save_provider_key`)."""
+
+MISSING_KEY = "key"
+"""The cause a provider park names when the org holds no key to it."""
+
 
 def needs_person(park: Park) -> bool:
     """Whether a park waits on a person of the tenant: nothing clears it by
@@ -66,7 +78,18 @@ def needs_person(park: Park) -> bool:
         return False
     if park.reason is ParkReason.PERSON:
         return True
+    if park.reason is ParkReason.PROVIDER:
+        return missing_key(park) is not None
     return as_budget(park.unlock) is not None or park.unlock in (OWN_AMOUNT_UNLOCK, FUNDS_UNLOCK)
+
+
+def missing_key(park: Park) -> str | None:
+    """The provider a provider park waits for the org's key to, when it
+    waits for one: the loop names it, then the cause."""
+    provider, _, cause = park.unlock.partition(":")
+    if park.reason is not ParkReason.PROVIDER or cause != MISSING_KEY or not provider:
+        return None
+    return provider
 
 
 def as_budget(unlock: str) -> UUID | None:
@@ -123,10 +146,18 @@ def budget_link(budget_id: UUID) -> str:
     return f"/v1/budgets/{budget_id}/amount"
 
 
+def approval_link(session_id: UUID) -> str:
+    return f"/v1/agent-sessions/{session_id}/cost-approval"
+
+
+def key_link(provider: str) -> str:
+    return f"/v1/provider-keys/{provider}"
+
+
 NO_ROUTE = ""
-"""The link of an action no route of the API serves yet: topping up the
-account, and approving a call past its norm. Each such ask names its park
-in its text; it takes a link when its route comes."""
+"""The link of an action no route of the API serves: topping up the
+account, which the payment provider takes. Such an ask names its park in
+its text."""
 
 
 ANSWER_QUESTION = "answer_question"
