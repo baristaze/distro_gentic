@@ -6,9 +6,12 @@ playbook the tenant pinned to its kind, in its project or else for the
 tenant, record that version as the session's pinned invocation, and send
 its brief as the session's standing text: so its gates hold from the
 session's first call, and its text renders whole in the system layer of
-every request. A session that stands already is passed through as it is,
-so one made before a pin, or a re-pin, keeps the manual it was made with.
-Every other operation is the engine's, unchanged."""
+every request. A repeat of a make sends the version the session
+recorded, which the engine lands once, so a make cut off after the
+session's row still pins its text; a session that stands with none
+recorded is passed through as it is. So one made before a pin, or a
+re-pin, keeps the manual it was made with. Every other operation is the
+engine's, unchanged."""
 
 from collections.abc import Callable
 from datetime import datetime
@@ -115,13 +118,14 @@ class AgentsManagerManualImpl(AgentsManagerInterface):
     async def _manual(self, ctx: TenantContext, session_id: UUID, kind: str, origin: UUID) -> str:
         """The brief a new session pins as its standing text, its version
         recorded first as the session's pinned invocation, so its gates
-        hold before the session can make a call; empty when the session
-        stands already or its kind has no pin. A retry of a make that
-        recorded one pins that version, whatever the pin names now.
-        `origin` is the session whose project the new one stands in."""
+        hold before the session can make a call. A repeat of a make that
+        recorded one sends that version, whatever the pin names now, also
+        when the session's row stands: the first may have stopped before
+        its standing text, and the engine's standing step lands once.
+        Empty when the session stands with none recorded, or its kind has
+        no pin. `origin` is the session whose project the new one stands
+        in."""
         ctx.require(Permission.WRITE)
-        if await self._session_rows.read_session(ctx.org_id, session_id) is not None:
-            return ""
         recorded = [
             invocation
             for invocation in await self._storage.read_invocations(
@@ -132,6 +136,8 @@ class AgentsManagerManualImpl(AgentsManagerInterface):
         if recorded:
             playbook = await self._storage.read_playbook(ctx.org_id, recorded[0].playbook_id)
             return "" if playbook is None else skill_md(playbook)
+        if await self._session_rows.read_session(ctx.org_id, session_id) is not None:
+            return ""
         playbook = await self._pinned(ctx, kind, origin)
         if playbook is None:
             return ""

@@ -50,9 +50,11 @@ hand-over. The project is the session's own for a start, and its
 origin's for a spawn or a hand-over. The version is recorded as the
 session's invocation, marked pinned, before the engine makes the
 session, so its gates hold from the first call. A retry of the make
-pins the version it recorded. A session that stands already is passed
-through untouched, so one made before a pin, or a re-pin, keeps the
-manual it was made with. A standing text the maker sends follows the
+pins the version it recorded, also when the first stopped after the
+session's row: the layer sends that version's text again, and the
+engine's standing step lands once. A session that stands with none
+recorded is passed through untouched. So one made before a pin, or a
+re-pin, keeps the manual it was made with. A standing text the maker sends follows the
 manual, the two held to one bound.
 
 **A manual's gates are an invoked playbook's.** They join the session's

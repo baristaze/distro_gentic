@@ -20,8 +20,9 @@ from acme.integrations.model_providers.anthropic import request_body
 from acme.integrations.model_providers.calls import ModelCall, ModelReply
 from acme.om.agents.types.request import MAX_STANDING, Spawn, Start
 from acme.om.agents.types.run import RunEnd
+from acme.om.attribution.types.authority import AuthorityMode, SessionAuthority
 from acme.om.base import new_id
-from acme.om.context import CredentialKind, RequestContext, Role, build_context
+from acme.om.context import CredentialKind, RequestContext, Role, TenantContext, build_context
 from acme.om.exceptions import (
     NotAuthorized,
     NotFound,
@@ -190,6 +191,53 @@ async def test_a_retried_start_pins_once_and_keeps_the_version_it_recorded(
         loop.owner.org_id, session_id, 10
     )
     assert (invocation.version, invocation.pinned) == (1, True)
+
+
+async def test_a_make_cut_off_past_the_sessions_row_and_retried_pins_its_manual_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    loop, playbooks = pinned(tmp_path)
+    version = await playbooks.publish(loop.owner, manual())
+    await playbooks.pin(loop.owner, ASSISTANT.name, version.name)
+    root = await started(loop)
+    loop.anthropic.add(reply(said("A sub-agent will find it.")))
+    await loop.loops.run(loop.owner, root)
+
+    class Stopped(Exception):
+        pass
+
+    open_authority = loop.managers.attribution.open_authority
+    cut: set[UUID] = set()
+
+    async def cut_once(
+        ctx: TenantContext, session_id: UUID, mode: AuthorityMode
+    ) -> SessionAuthority:
+        # Each session's first make stops after its row, before its
+        # standing text: the engine finishes it by repeating the make.
+        if session_id not in cut:
+            cut.add(session_id)
+            raise Stopped
+        return await open_authority(ctx, session_id, mode)
+
+    monkeypatch.setattr(loop.managers.attribution, "open_authority", cut_once)
+    start = Start(id=new_id(), kind=ASSISTANT.name, title="the ledger")
+    spawn = Spawn(id=new_id(), kind=ASSISTANT.name, title="a part", objective="Sum it.")
+    with pytest.raises(Stopped):
+        await loop.managers.agents.start_session(loop.owner, start)
+    with pytest.raises(Stopped):
+        await loop.managers.agents.spawn(loop.owner, root, spawn)
+    for _ in range(2):
+        assert (await loop.managers.agents.start_session(loop.owner, start)).id == start.id
+        assert (await loop.managers.agents.spawn(loop.owner, root, spawn)).id == spawn.id
+
+    for session_id in (start.id, spawn.id):
+        steps = await loop.history(session_id)
+        (switched,) = [step for step in steps if step.type is StepType.SWITCHED]
+        assert switched.as_text() == skill_md(version), session_id
+        (invocation,) = await loop.storage.get_playbook_storage().read_invocations(
+            loop.owner.org_id, session_id, 10
+        )
+        assert (invocation.version, invocation.pinned) == (1, True)
 
 
 async def test_a_project_pin_wins_over_the_tenants_and_a_sub_agent_takes_its_kinds(
