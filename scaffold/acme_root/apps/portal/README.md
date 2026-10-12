@@ -9,10 +9,18 @@ chip and switch, settings, and one realtime channel.
 
 A signed-in page sits beside the left bar. From the top: the org chip,
 Search (⌘K), New session, Automations, Knowledge with its count of
-suggestions to review, the product's entries, and the sessions grouped by
-what they ask: Needs you, Running, and Recent, each sub-agent under its
-parent. The user chip at the foot holds Settings, Profile, the theme, the
-keyboard shortcuts, and Sign out. ⌘B folds the bar; its edge drags to resize.
+suggestions to review, the product's entries, and the person's own
+sessions, the ones they made or take part in, grouped by what they ask:
+Needs you, Running, and Recent, each sub-agent under its parent. The user
+chip at the foot holds Settings, Profile, the theme, the keyboard
+shortcuts, and Sign out. ⌘B folds the bar; its edge drags to resize.
+
+Sessions (`/sessions`) shows the person's own first, and the org's
+org-wide ones in a second view (`?view=org`), where a member joins one. A
+session's header says who steers it and who sees it. Its creator makes it
+private or org-wide, and its steerer hands the steer to one who takes
+part. A participant who does not steer writes a suggestion, which reaches
+the agent as data.
 
 What is set up once lives in Settings (`/settings`, ⌘,), out of the bar a
 person scans every day. There, Settings' own bar takes the left bar's
@@ -70,8 +78,8 @@ conversation only when it is their own
   search, and their keys.
 - `src/features/<name>/`: one folder per screen, a pure model, a
   view-model hook, and a page. `home/` is the composer that starts a
-  session on an agent and a project. `sessions/` is All sessions, with its
-  filters; `session/` is
+  session on an agent and a project. `sessions/` is Sessions, with its two
+  views and its filters; `session/` is
   one session's page: its thread, timeline, tools, evidence, changes, and
   children, live while it runs, and a playbook invoked into it by name
   from its header. The org's records and settings each have
@@ -192,3 +200,19 @@ settles the card. Then the check plays the scene: the engineer's answer
 starts two analysis sub-agents, and the check follows each child's row
 until it is done, reads each report, and finds the tree's bounds in the
 Sub-agents tab: 2 of the 10 sub-agents it may start.
+
+The sharing check runs on the stack the sessions check runs on, with the
+sharing script, which holds a turn for each of its two sessions:
+
+```bash
+uv run --package acme-api python services/api/tests/portal_check.py script .local/model-script.json --scene sharing
+ACME_PORTAL_URL=http://127.0.0.1:5173 pnpm --filter @acme/portal e2e e2e/sharing.spec.ts
+```
+
+The seeded owner starts a session and makes it org-wide; the seeded member
+starts one, which stays private. The member finds the owner's in the
+org's view and joins it, and never their own private one there; in the
+session they write a suggestion. The owner's role sees every session for
+an audit: the API lists the member's private one to them, and the org's
+view still shows none of it. The owner reads the suggestion, hands the
+steer to the member, and the page then says the member steers.
