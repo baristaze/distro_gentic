@@ -1,11 +1,12 @@
-"""Storage of the playbooks swimlane: every published version, and the
-playbooks each session invoked. Every operation takes org_id first."""
+"""Storage of the playbooks swimlane: every published version, the
+playbooks each session invoked, and the versions pinned to kinds as their
+manuals. Every operation takes org_id first."""
 
 from abc import ABC, abstractmethod
 from uuid import UUID
 
 from acme.om.outbox.types.row import OutboxRow
-from acme.om.playbooks.types.playbook import Playbook, PlaybookInvocation
+from acme.om.playbooks.types.playbook import Playbook, PlaybookInvocation, PlaybookPin
 
 
 class PlaybookStorageInterface(ABC):
@@ -40,6 +41,37 @@ class PlaybookStorageInterface(ABC):
         self, org_id: UUID, session_id: UUID, limit: int
     ) -> list[PlaybookInvocation]:
         """The session's invocations, oldest first."""
+        ...
+
+    @abstractmethod
+    async def put_pin(
+        self, org_id: UUID, pin: PlaybookPin, outbox_rows: tuple[OutboxRow, ...]
+    ) -> None:
+        """The pin by its id, written or rewritten, with the rows that
+        announce it, in one commit. `UniqueKeyTaken` when the tenant pinned
+        the kind, in the project or in none, under another id; another
+        tenant's id is `TenantMismatch`."""
+        ...
+
+    @abstractmethod
+    async def read_pin(
+        self, org_id: UUID, kind: str, project_id: UUID | None
+    ) -> PlaybookPin | None:
+        """The kind's pin in the project, or the tenant's when `project_id`
+        is None: exactly that one, never the other."""
+        ...
+
+    @abstractmethod
+    async def read_pins(self, org_id: UUID, limit: int) -> list[PlaybookPin]:
+        """The tenant's pins, by kind, the tenant's before a project's."""
+        ...
+
+    @abstractmethod
+    async def delete_pin(
+        self, org_id: UUID, pin_id: UUID, outbox_rows: tuple[OutboxRow, ...]
+    ) -> bool:
+        """The pin gone, with the rows that announce it, in one commit; False,
+        with nothing landed, when it was gone already."""
         ...
 
     @abstractmethod

@@ -1,15 +1,17 @@
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 
+from acme.om.outbox.storage.tables.outbox_rows import OutboxRows
 from acme.om.outbox.types.row import OutboxRow
 from acme.om.playbooks.storage import PlaybookStorageInterface
 from acme.om.playbooks.storage.tables.playbook_invocations import PlaybookInvocations
+from acme.om.playbooks.storage.tables.playbook_pins import PlaybookPins
 from acme.om.playbooks.storage.tables.playbooks import Playbooks
-from acme.om.playbooks.types.playbook import Playbook, PlaybookInvocation
+from acme.om.playbooks.types.playbook import Playbook, PlaybookInvocation, PlaybookPin
 from acme.om.storage.impl.pg_base import PgStorageBase, delete_batch, deleted
-from acme.om.storage.utils.translation import to_model, to_values
+from acme.om.storage.utils.translation import to_model, to_row, to_values
 
 
 class PlaybookStoragePostgresImpl(PgStorageBase, PlaybookStorageInterface):
@@ -77,9 +79,60 @@ class PlaybookStoragePostgresImpl(PgStorageBase, PlaybookStorageInterface):
             rows = (await session.execute(stmt)).scalars().all()
             return [to_model(row, PlaybookInvocation) for row in rows]
 
+    async def put_pin(
+        self, org_id: UUID, pin: PlaybookPin, outbox_rows: tuple[OutboxRow, ...]
+    ) -> None:
+        await self._upsert(PlaybookPins, org_id, pin, outbox_rows)
+
+    async def read_pin(
+        self, org_id: UUID, kind: str, project_id: UUID | None
+    ) -> PlaybookPin | None:
+        stmt = select(PlaybookPins).where(
+            PlaybookPins.org_id == org_id,
+            PlaybookPins.kind == kind,
+            PlaybookPins.project_id.is_(None)
+            if project_id is None
+            else PlaybookPins.project_id == project_id,
+        )
+        async with self._session_for(stmt, org_id=org_id) as session:
+            row = (await session.execute(stmt)).scalar_one_or_none()
+            return None if row is None else to_model(row, PlaybookPin)
+
+    async def read_pins(self, org_id: UUID, limit: int) -> list[PlaybookPin]:
+        stmt = (
+            select(PlaybookPins)
+            .where(PlaybookPins.org_id == org_id)
+            .order_by(
+                PlaybookPins.kind,
+                PlaybookPins.project_id.is_not(None),
+                PlaybookPins.project_id,
+            )
+            .limit(limit)
+        )
+        async with self._session_for(stmt, org_id=org_id) as session:
+            rows = (await session.execute(stmt)).scalars().all()
+            return [to_model(row, PlaybookPin) for row in rows]
+
+    async def delete_pin(
+        self, org_id: UUID, pin_id: UUID, outbox_rows: tuple[OutboxRow, ...]
+    ) -> bool:
+        stmt = (
+            delete(PlaybookPins)
+            .where(PlaybookPins.org_id == org_id, PlaybookPins.id == pin_id)
+            .returning(PlaybookPins.id)
+        )
+        async with self._session_for(PlaybookPins, org_id=org_id) as session:
+            if (await session.execute(stmt)).scalar_one_or_none() is None:
+                await session.rollback()
+                return False
+            for outbox_row in outbox_rows:
+                session.add(to_row(outbox_row, OutboxRows, org_id=org_id))
+            await session.commit()
+            return True
+
     async def purge_tenant(self, org_id: UUID, limit: int) -> int:
         gone = 0
-        for table in (PlaybookInvocations, Playbooks):
+        for table in (PlaybookPins, PlaybookInvocations, Playbooks):
             stmt = delete_batch(table, table.org_id == org_id, limit=limit)
             async with self._session_for(stmt, org_id=org_id) as session:
                 gone += deleted(await session.execute(stmt))

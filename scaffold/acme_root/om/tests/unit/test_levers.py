@@ -52,6 +52,7 @@ from acme.om.playbooks.types.playbook import (
     PlaybookDraft,
     PlaybookGate,
 )
+from acme.om.projects.impl.policies import SessionProjectsBoundImpl
 from acme.om.tenancy.rules import operator_permissions_of
 from acme.om.tools.types.policy import Decision
 from acme.om.trust.types.shape import shape_of
@@ -161,6 +162,8 @@ def publisher(platform: Wired) -> PlaybooksManagerImpl:
         managers.outbox,
         PlaybooksOptions(session_bound=BOUND),
         REACH.model_copy(update={"tools": REACH.tools | set(GATED)}),
+        managers.kinds,
+        SessionProjectsBoundImpl(storage.get_project_storage()),
     )
 
 

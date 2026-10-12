@@ -73,7 +73,8 @@ conversation only when it is their own
   session on an agent and a project. `sessions/` is All sessions, with its
   filters; `session/` is
   one session's page: its thread, timeline, tools, evidence, changes, and
-  children, live while it runs. The org's records and settings each have
+  children, live while it runs, and a playbook invoked into it by name
+  from its header. The org's records and settings each have
   their own: `projects/`, `models/` (the org's own provider keys and its
   model for each role), `automations/`, `playbooks/`, `knowledge/`,
   `audit/`, `usage/`, and `settings/` (the overview, the profile, the

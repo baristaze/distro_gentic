@@ -16,6 +16,8 @@ import type {
   ExecutionPageView,
   GiveBackRequest,
   HandRunView,
+  InvocationView,
+  InvokeRequest,
   QuestionView,
   SessionControl,
   SessionStatus,
@@ -311,6 +313,15 @@ export function useSessionActions(id: string) {
     restore: useMutation({
       mutationFn: () => api.post<AgentSessionView>(`${path(id)}/restore`),
       onSettled: listed,
+    }),
+    /** A playbook's latest version brought into the session: its brief
+     * arrives as the person's message, and its gates hold from now on. */
+    invoke: useMutation({
+      mutationFn: (name: string) =>
+        api.post<InvocationView>(`/v1/playbooks/${encodeURIComponent(name)}/invocations`, { session_id: id } satisfies InvokeRequest, {
+          idempotencyKey: crypto.randomUUID(),
+        }),
+      onSettled: settled,
     }),
   };
 }

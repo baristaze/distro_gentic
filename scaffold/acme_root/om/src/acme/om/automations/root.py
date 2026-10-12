@@ -12,6 +12,11 @@ policies. `actions` are the product's own kinds of action
 automation hands it the same, and a kind named as one of the platform's,
 or twice, is refused here, at boot.
 
+`playbooks` answers the playbooks a start invokes into the session it
+starts: the process's playbooks manager, which a root builds after the
+managers, so the edge is bound at call time. None keeps none, and a start
+that names one is refused.
+
 `principal_context` is the transition that gives an automation's creator
 their live context at each firing; None takes the tenancy manager's
 members, as the engine's own root does. Either way the tenant's automation
@@ -32,6 +37,7 @@ from acme.om.automations.manager import AutomationsManagerInterface
 from acme.om.automations.storage import AutomationStorageInterface
 from acme.om.base import utcnow
 from acme.om.context import CredentialKind, RequestContext, TenantContext, build_context
+from acme.om.playbooks import PlaybooksManagerInterface
 from acme.om.root import Managers, ProductActions, no_actions
 from acme.om.storage.root import StorageInterface
 from acme.om.tenancy.rules import permissions_of
@@ -70,6 +76,7 @@ def build_automations(
     options: AutomationsOptions | None = None,
     clock: Callable[[], datetime] = utcnow,
     actions: ProductActions = no_actions,
+    playbooks: Callable[[], PlaybooksManagerInterface] | None = None,
 ) -> AutomationsManagerInterface:
     held = storage.get_automation_storage()
     return AutomationsManagerImpl(
@@ -86,4 +93,5 @@ def build_automations(
         clock,
         project_required=project_required,
         actions=AutomationActions(actions(lambda: managers)),
+        playbooks=playbooks,
     )

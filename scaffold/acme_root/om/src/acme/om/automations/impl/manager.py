@@ -38,6 +38,8 @@ from acme.om.exceptions import NotAuthorized, NotFound, PlatformException, Valid
 from acme.om.intake.rules import in_person
 from acme.om.outbox import OutboxRelayInterface
 from acme.om.outbox.types.row import outbox_row, versioned_row
+from acme.om.playbooks import PlaybooksManagerInterface
+from acme.om.playbooks.types.playbook import Playbook
 from acme.om.projects import ProjectsManagerInterface
 from acme.om.steps.rules import message_step
 from acme.om.steps.types.content import Content, TextBlock
@@ -86,11 +88,14 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         *,
         project_required: bool,
         actions: AutomationActions | None = None,
+        playbooks: Callable[[], PlaybooksManagerInterface] | None = None,
     ) -> None:
         """`project_required` refuses a start that names no project: what
         every stack but a local one sets, so no per-project policy is
         skipped by a session an automation starts. `actions` are the
-        product's own kinds of action; None declares none."""
+        product's own kinds of action; None declares none. `playbooks`
+        answers the playbooks a start invokes; None keeps none, so a start
+        that names one is refused when it is saved and when it fires."""
         self._storage = storage
         self._agents = agents
         self._projects = projects
@@ -104,6 +109,7 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         self._options = options
         self._clock = clock
         self._actions = actions or AutomationActions(())
+        self._playbooks = playbooks
 
     async def create_automation(self, ctx: TenantContext, automation: Automation) -> Automation:
         ctx.require(Permission.WRITE)
@@ -112,6 +118,7 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         await self._check_principal(ctx, automation)
         await self._check_kind(ctx, automation)
         await self._check_project(ctx, automation)
+        await self._check_playbook(ctx, automation)
         now = self._clock()
         made = Automation.model_validate(
             {
@@ -141,6 +148,7 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         await self._check_principal(ctx, automation)
         await self._check_kind(ctx, automation)
         await self._check_project(ctx, automation)
+        await self._check_playbook(ctx, automation)
         # The editor is its creator from here on: one that runs as its
         # creator is its creator's to edit, and one that runs as the
         # principal fires on its creator's role, which is the editor's that
@@ -339,9 +347,10 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
     ) -> AutomationRun:
         """The action of a started run, as its creator. A started session is
         held to the run's reservation by a budget on its tree before anything
-        wakes it; the event reaches it as data, and the brief as the
-        creator's message. A product's action is its kind's to run. A
-        message to a standing session is refused before it gets here."""
+        wakes it; the playbook it invokes arrives first, the event reaches
+        it as data, and the brief as the creator's message. A product's
+        action is its kind's to run. A message to a standing session is
+        refused before it gets here."""
         action = automation.action
         kind = self._actions.get(action.kind)
         if kind is not None:
@@ -349,6 +358,11 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         assert action.kind == ActionKind.START_SESSION  # `_admit` refuses a message
         assert action.brief is not None and action.agent_kind is not None
         assert action.title is not None
+        # The playbook's version is read before anything is made: a name
+        # with none refuses the run, and no session is started.
+        playbook = (
+            None if action.playbook is None else await self._playbook(creator, action.playbook)
+        )
         start = Start(
             id=derived_id(run.id, run.created_at, "session"),
             kind=action.agent_kind,
@@ -374,6 +388,10 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
         )
         await self._budgets.create_budget(ctx, budget)
         session_id, budget_id = session.id, budget.id
+        if playbook is not None and self._playbooks is not None:
+            # Its gates hold before anything else arrives, and its brief is
+            # the creator's message, as an invocation in person is.
+            await self._playbooks().invoke_version(creator, session_id, playbook.id)
         inputs: list[Step] = []
         if run.event_text:
             inputs.append(self._event_step(ctx, run, session_id))
@@ -582,6 +600,25 @@ class AutomationsManagerImpl(AutomationsManagerInterface):
     def _unknown_kind(self, automation: Automation) -> bool:
         kind = automation.action.kind
         return kind not in PLATFORM_ACTIONS and self._actions.get(kind) is None
+
+    async def _check_playbook(self, ctx: TenantContext, automation: Automation) -> None:
+        """A start that invokes a playbook names one the tenant published:
+        otherwise it is `ValidationFailed`, so no automation is written
+        whose firings would all be refused."""
+        name = automation.action.playbook
+        if name is None:
+            return
+        try:
+            await self._playbook(ctx, name)
+        except NotFound as missing:
+            raise ValidationFailed(f"no playbook {name} is published to invoke") from missing
+
+    async def _playbook(self, ctx: TenantContext, name: str) -> Playbook:
+        """The name's latest version; none, or no playbooks in this
+        process, is `NotFound`."""
+        if self._playbooks is None:
+            raise NotFound(f"no playbook {name} is kept in this process")
+        return await self._playbooks().get_playbook(ctx, name)
 
     async def _check_project(self, ctx: TenantContext, automation: Automation) -> None:
         """A start's project is one of the caller's tenant: another tenant's

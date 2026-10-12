@@ -41,7 +41,7 @@ const AUTOMATION: AutomationView = {
   id: "a1",
   name: "Nightly dependency update",
   trigger: { kind: "schedule", every: "P1D", integrations: [], arrivals: [], effects: [] },
-  action: { kind: "start_session", brief: "Update dependencies.", agent_kind: "engineer", title: "Update dependencies", project_id: null, session_id: null, params: {} },
+  action: { kind: "start_session", brief: "Update dependencies.", agent_kind: "engineer", title: "Update dependencies", project_id: null, session_id: null, params: {}, playbook: null },
   limits: { cost_cap_micros: 5_000_000, run_cap_micros: 1_000_000, period: "P1D", rate: 10, concurrency: 1, queue: false, queue_depth: 50, hop_limit: 3 },
   runs_as: "creator",
   own_events: false,
