@@ -3186,7 +3186,7 @@ class MatrixKeyBody(BaseModel):
     What a row answers: each key it names must equal the question's, and a
     key left out matches every value. The row that names none matches every
     question. A row that names a model size answers only a role a kind asks
-    that size of, and before a row that names the role.
+    that size of: after a row that names the kind, and before the rest.
     """
     model_config = ConfigDict(
         extra='forbid',

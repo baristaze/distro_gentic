@@ -21,14 +21,14 @@ def answer(rows: Sequence[MatrixRow], query: MatrixQuery, admits: Admits) -> tup
     row left with none answers nothing and a less specific one answers. An
     empty answer when no row is left."""
     best: tuple[Fill, ...] = ()
-    best_key: tuple[int, tuple[bool, ...]] | None = None
+    best_key: tuple[int, int, tuple[bool, ...]] | None = None
     for row in rows:
         if not row.key.matches(query):
             continue
         fills = tuple(fill for fill in row.fills if admits(fill))
         if not fills:
             continue
-        specificity = row.key.specificity
+        specificity = row.key.specificity(query)
         if best_key is None or specificity > best_key:
             best, best_key = fills, specificity
     return best
