@@ -5,7 +5,7 @@
 // records the session's evidence as an executor would, since the local stack
 // runs none, and reads the chat and, in the panel, the evidence on the
 // session's page. A person of another org then finds no row of it in the
-// left bar or in All sessions, and nothing of it at its address.
+// left bar or in Sessions, and nothing of it at its address.
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
@@ -75,7 +75,7 @@ test("a member starts a session on Home, sees it run and finish in the left bar,
   await expect(strangerBar.getByText(title)).toHaveCount(0);
   console.log(`another org's left bar: ${(await strangerBar.locator(".acme-sidebar-scroll").innerText()).trim()}`);
   await stranger.goto("/sessions");
-  await expect(stranger.getByRole("heading", { level: 1, name: "All sessions" })).toBeVisible();
+  await expect(stranger.getByRole("heading", { level: 1, name: "Sessions" })).toBeVisible();
   await expect(stranger.getByRole("main").getByText("No sessions yet.")).toBeVisible();
   await stranger.goto(`/sessions/${sessionId}?pane=evidence`);
   await expect(stranger.getByRole("heading", { level: 1 })).toHaveText("No session here");

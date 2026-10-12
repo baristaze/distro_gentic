@@ -67,7 +67,7 @@ export const PLATFORM: PortalProduct = {
     {
       path: "/sessions",
       element: <SessionsPage />,
-      handle: { about: "All sessions of the org, filtered by status, by whose, by agent, and by title; `?needs=you` shows the ones waiting on you" },
+      handle: { about: "Sessions: the person's own first, then the org's org-wide ones to join (`?view=org`), filtered by status, by agent, and by title; `?needs=you` shows the ones waiting on a person" },
     },
     {
       path: "/sessions/:sessionId",
