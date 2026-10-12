@@ -69,9 +69,11 @@ keeps its kind's tools. This is a change to the engine's scaffold: the
 next move of the base merges over it.
 
 **Each call checks the review, then the pin.** A call first reads the
-connector. A tool no review serves now, at the definition the session
-holds, is refused. So a person who withdraws a tool, or reviews it
-again, stops it at its next call in every session. Then the engine's
+connector. A tool no review serves now, at the definition, the class,
+and the effect the session holds, is refused. So a person who withdraws
+a tool, or reviews it again, stops it at its next call in every
+session, and a tool reviewed again as destructive never runs unattended
+in a session that pinned it as a read. Then the engine's
 client lists the server again, and a moved definition is refused before
 the call reaches it. What the server answers is the tool's output: data.
 

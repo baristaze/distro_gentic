@@ -413,6 +413,75 @@ async def test_a_withdrawn_tool_stops_at_its_next_call_in_a_session_that_pinned_
     assert tools == ["lookup"], "a connector with no tool reviewed is pinned by no session"
 
 
+@pytest.mark.parametrize("inside", [False, True], ids=["cloud", "host"])
+async def test_a_stricter_review_stops_a_pinned_tool_at_its_next_call(
+    tmp_path: Path, words: Served, inside: bool
+) -> None:
+    """A tool a session pinned as a read, reviewed again at the same
+    definition as destructive, runs unattended in no session: the pinned
+    one is refused, and a new one waits for a person."""
+    host = HostCalls(McpAnswer(text="cat: a feline."))
+    at = tenant(tmp_path, inside=inside, host=host)
+    owner = at.loop.owner
+    place = {"host_server": "words"} if inside else {"url": words.url}
+    draft = ConnectorDraft(name="words", summary="Look words up.", **place)
+    connector = await at.connectors.connect_server(owner, draft)
+    definition = (
+        definition_of(McpListedTool(name="lookup", description="Looks a word up."))
+        if inside
+        else next(
+            each.definition
+            for each in await at.connectors.listing(owner, connector.id)
+            if each.definition.name == "lookup"
+        )
+    )
+
+    async def reviewed(authorization_class: ToolClass, effect: Effect) -> None:
+        tool = ReviewedTool(
+            server_tool="lookup",
+            definition_hash=definition_hash(definition),
+            authorization_class=authorization_class,
+            effect=effect,
+        )
+        await at.connectors.review(
+            owner,
+            connector.id,
+            ConnectorReview(tools=(tool,), definitions=(definition,) if inside else None),
+        )
+
+    await reviewed(ToolClass.READ, Effect.READ_ONLY)
+    await at.connectors.attach(owner, connector.id, ConnectorAttachment(kind="operator"))
+    pinned = await at.loop.start("operator")
+    steps = await asked(
+        at,
+        pinned,
+        "Look.",
+        reply(call("load_toolset", toolset="words")),
+        reply(call("words__lookup", word="cat")),
+        reply(said("Found.")),
+    )
+    assert failure_of(responses(steps)[-1]) is None, "a read runs unattended"
+    sent = len(host.sent)
+
+    await reviewed(ToolClass.DESTRUCTIVE, Effect.UNSAFE)
+
+    steps = await asked(
+        at, pinned, "Again.", reply(call("words__lookup", word="cat")), reply(said("No."))
+    )
+    refused = responses(steps)[-1]
+    assert failure_of(refused) is ToolFailure.PERMANENT
+    assert "reviewed it again as destructive" in result_text(refused)
+    assert len(host.sent) == sent, "the refused call reached no server"
+    later = await at.loop.start("operator")
+    await at.loop.say(later, "Look.")
+    at.loop.anthropic.add(
+        reply(call("load_toolset", toolset="words")), reply(call("words__lookup", word="cat"))
+    )
+    run = await at.loop.loops.run(owner, later)
+    assert run.end is RunEnd.PARKED, "a destructive call waits for a person"
+    assert len(host.sent) == sent
+
+
 # Check 3: the credential reaches the server, and no step and no log line.
 
 

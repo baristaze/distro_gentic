@@ -251,14 +251,27 @@ def toolset_of(connector: PinnedConnector) -> Toolset:
 def still_reviewed(connector: Connector | None, pinned_tool: ConnectorTool) -> str | None:
     """Why a session's pinned tool is no longer served, or None when it is: the
     connector is gone, or no tool of its current review is the one pinned,
-    at the same definition. A person who withdraws a tool, or reviews it
-    again at another definition, stops its calls in every session that
-    pinned it, at their next call."""
+    at the same definition, class, and effect. A person who withdraws a
+    tool, or reviews it again at another definition, class, or effect,
+    stops its calls in every session that pinned it, at their next call:
+    the session holds the class and the effect that decide whether a call
+    waits for a person, so a stricter review never reaches it as the
+    looser one."""
     if connector is None:
         return f"{pinned_tool.name}: its connector is gone"
     for tool in connector.tools:
         if tool.name == pinned_tool.name and tool.definition_hash == pinned_tool.definition_hash:
-            return None
+            if (
+                tool.authorization_class == pinned_tool.authorization_class
+                and tool.effect == pinned_tool.effect
+            ):
+                return None
+            return (
+                f"{pinned_tool.name}: {connector.name} reviewed it again as "
+                f"{tool.authorization_class.value} and {tool.effect.value}; this session "
+                f"holds it as {pinned_tool.authorization_class.value} and "
+                f"{pinned_tool.effect.value}"
+            )
     return (
         f"{pinned_tool.name}: no review of {connector.name} serves it at the definition "
         "this session holds"
