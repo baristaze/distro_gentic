@@ -275,7 +275,7 @@ async def test_a_park_on_a_key_or_an_account_says_who_acts_and_wakes_once_it_is_
     and nothing tells the engine: the park says who must act, an operator
     for the platform's key and an admin for the org's, and tries again by
     itself, so the next run after the fix goes on."""
-    loop = loop_over(tmp_path, models_layer=ModelsLayer(credentials=OwnKey().over) if own else None)
+    loop = loop_over(tmp_path, models_layer=keyed(OwnKey().over) if own else None)
     session_id = await loop.start()
     await loop.say(session_id, "What is the total?")
     loop.anthropic.add(ScriptedFailure(kind=kind, status=status, message=message))

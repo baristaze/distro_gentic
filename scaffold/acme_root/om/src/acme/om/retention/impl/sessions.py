@@ -15,8 +15,10 @@ from acme.om.agent_sessions import AgentSessionsManagerInterface
 from acme.om.agent_sessions.types.agent_session import (
     AgentSession,
     AgentSessionPage,
+    Among,
     SessionStatus,
 )
+from acme.om.attribution.types.authority import Visibility
 from acme.om.attribution.types.principal import AgentRef
 from acme.om.context import TenantContext
 from acme.om.exceptions import NotFound
@@ -65,9 +67,27 @@ class AgentSessionsRetainedImpl(AgentSessionsManagerInterface):
         return await self._inner.get_ancestors(ctx, session_id)
 
     async def get_sessions(
-        self, ctx: TenantContext, status: SessionStatus | None, after: UUID | None, limit: int
+        self,
+        ctx: TenantContext,
+        status: SessionStatus | None,
+        after: UUID | None,
+        limit: int,
+        among: Among = Among.VISIBLE,
     ) -> AgentSessionPage:
-        return await self._inner.get_sessions(ctx, status, after, limit)
+        return await self._inner.get_sessions(ctx, status, after, limit, among)
+
+    async def is_visible(self, ctx: TenantContext, session_id: UUID) -> bool:
+        return await self._inner.is_visible(ctx, session_id)
+
+    async def add_participant(
+        self, ctx: TenantContext, session_id: UUID, user_id: UUID
+    ) -> AgentSession:
+        return await self._inner.add_participant(ctx, session_id, user_id)
+
+    async def switch_visibility(
+        self, ctx: TenantContext, session_id: UUID, visibility: Visibility
+    ) -> AgentSession:
+        return await self._inner.switch_visibility(ctx, session_id, visibility)
 
     async def project_status(self, ctx: TenantContext, session_id: UUID) -> AgentSession:
         return await self._inner.project_status(ctx, session_id)
@@ -90,8 +110,10 @@ class AgentSessionsRetainedImpl(AgentSessionsManagerInterface):
     async def wake_session(self, ctx: TenantContext, session_id: UUID, park: Park) -> AgentSession:
         return await self._inner.wake_session(ctx, session_id, park)
 
-    async def wake_parked(self, ctx: TenantContext, reason: ParkReason) -> int:
-        return await self._inner.wake_parked(ctx, reason)
+    async def wake_parked(
+        self, ctx: TenantContext, reason: ParkReason, unlock: str | None = None
+    ) -> int:
+        return await self._inner.wake_parked(ctx, reason, unlock)
 
     async def archive_session(self, ctx: TenantContext, session_id: UUID) -> AgentSession:
         return await self._inner.archive_session(ctx, session_id)

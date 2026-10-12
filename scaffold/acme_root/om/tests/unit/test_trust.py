@@ -23,9 +23,9 @@ from acme.infra.transports.redaction import forms, marker
 from acme.infra.transports.twin import TwinReply
 from acme.integrations.model_providers.absent import ModelProviderAbsentImpl
 from acme.integrations.model_providers.types import ProviderName
-from acme.om.agents.loop_rules import PRINCIPAL_UNLOCK
 from acme.om.agents.types.request import Spawn, Start
 from acme.om.agents.types.run import RunEnd
+from acme.om.attribution.rules import PRINCIPAL_PARK
 from acme.om.attribution.types.principal import AgentRef, Principal, PrincipalKind
 from acme.om.base import new_id, utcnow
 from acme.om.context import Role
@@ -210,7 +210,7 @@ async def test_a_lapsed_principal_parks_the_call_until_a_person_takes_the_sessio
     parked = await platform.loops.run(platform.owner, session_id)
 
     assert parked.end is RunEnd.PARKED and parked.park is not None
-    assert (parked.park.reason, parked.park.unlock) == (ParkReason.PERSON, PRINCIPAL_UNLOCK)
+    assert (parked.park.reason, parked.park.unlock) == (ParkReason.PERSON, PRINCIPAL_PARK.unlock)
     assert platform.lookup.ran_as == [] and await audits(platform) == []
 
     # A message from someone else lends the call no authority: the session
@@ -220,7 +220,7 @@ async def test_a_lapsed_principal_parks_the_call_until_a_person_takes_the_sessio
     again = await platform.loops.run(platform.owner, session_id)
     assert again.end is RunEnd.IDLE
     session = await platform.managers.agent_sessions.get_session(platform.owner, session_id)
-    assert session.park is not None and session.park.unlock == PRINCIPAL_UNLOCK
+    assert session.park is not None and session.park.unlock == PRINCIPAL_PARK.unlock
     assert platform.lookup.ran_as == []
 
     # A viewer takes nothing over.
@@ -256,7 +256,7 @@ async def test_a_take_over_resumes_the_sessions_children_parked_on_its_principal
 
     parked = await platform.loops.run(platform.owner, child.id)
 
-    assert parked.park is not None and parked.park.unlock == PRINCIPAL_UNLOCK
+    assert parked.park is not None and parked.park.unlock == PRINCIPAL_PARK.unlock
     other = platform.member()
     with pytest.raises(ValidationFailed):
         await platform.managers.attribution.assign_principal(other, child.id)
