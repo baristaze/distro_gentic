@@ -13,7 +13,7 @@ import pytest
 from contracts.doubles import context
 from contracts.factories import make_org
 from contracts.histories import History
-from contracts.loops import reply, said
+from contracts.loops import ASSISTANT, DELIVERY, reply, said
 from contracts.matrix import (
     CATCH_ALL,
     EU,
@@ -33,7 +33,7 @@ from pydantic import SecretStr
 from acme.infra.base import SYSTEM_SCOPE
 from acme.integrations.model_providers.calls import ModelCall, StreamPart
 from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl, ScriptedFailure
-from acme.integrations.model_providers.types import ErrorKind, ProviderName
+from acme.integrations.model_providers.types import Effort, ErrorKind, ProviderName
 from acme.om.agents.types.request import Start
 from acme.om.agents.types.run import RunEnd
 from acme.om.attribution.types.principal import Principal, PrincipalKind
@@ -57,7 +57,17 @@ from acme.om.matrix.types.matrix import (
 )
 from acme.om.matrix.types.record import ModelRef
 from acme.om.matrix.types.tenant import FillOptions
-from acme.om.models.types.fill import MAIN, SUMMARIZER, Eligibility, Fill, SwitchReason
+from acme.om.models.types.fill import (
+    MAIN,
+    SUMMARIZER,
+    Eligibility,
+    Fill,
+    FillSwitch,
+    ModelAsk,
+    ModelSize,
+    RoleFill,
+    SwitchReason,
+)
 from acme.om.placement.rules import DEFAULT_TIER
 from acme.om.placement.types.share import FairShare
 from acme.om.privacy.types.session_privacy import StorageMode
@@ -82,11 +92,13 @@ async def loop_once(fleet: Fleet, session_id: UUID, text: str = "What is the tot
     return ran.end
 
 
-async def switches(fleet: Fleet, session_id: UUID) -> list[SwitchedHeader]:
+async def switches(fleet: Fleet, session_id: UUID) -> list[FillSwitch]:
+    """The fill switches a session's history records; a toolset's load and
+    a standing switch carry none."""
     return [
-        step.header
+        step.header.fills
         for step in await fleet.loop.history(session_id)
-        if isinstance(step.header, SwitchedHeader)
+        if isinstance(step.header, SwitchedHeader) and step.header.fills is not None
     ]
 
 
@@ -249,7 +261,7 @@ async def test_a_tenant_that_keeps_nothing_in_one_region_resolves_only_to_fills_
 
     assert parked is RunEnd.PARKED, "its last eligible fallback failed too"
     (fell,) = await switches(fleet, session_id)
-    assert (fell.fills.from_fill, fell.fills.to_fill) == (sol_eu, sonnet_eu)
+    assert (fell.from_fill, fell.to_fill) == (sol_eu, sonnet_eu)
     fills = await fleet.loop.managers.models.get_fill_set(fleet.owner, session_id)
     assert fills.eligibility == EU, "the fill set holds what the tenant requires"
     assert (fills.roles[0].fill, fills.roles[0].fallbacks) == (sonnet_eu, ())
@@ -303,10 +315,7 @@ async def test_a_tightened_retention_reaches_a_running_sessions_fills_at_its_nex
 
     assert await loop_once(fleet, session_id, "And the average?") is RunEnd.PARKED
 
-    moved = {
-        (s.fills.from_fill, s.fills.to_fill, s.fills.reason)
-        for s in await switches(fleet, session_id)
-    }
+    moved = {(s.from_fill, s.to_fill, s.reason) for s in await switches(fleet, session_id)}
     assert moved == {
         (SONNET, sonnet_eu, SwitchReason.POLICY),
         (HAIKU, haiku_eu, SwitchReason.POLICY),
@@ -498,8 +507,8 @@ async def test_a_retired_model_switches_at_the_next_loop_with_a_switched_step(
     assert await loop_once(fleet, session_id, "And the average?") is RunEnd.ENDED
 
     (switched,) = await switches(fleet, session_id)
-    assert (switched.fills.from_fill, switched.fills.to_fill) == (SONNET, OPUS)
-    assert switched.fills.reason is SwitchReason.RETIRED
+    assert (switched.from_fill, switched.to_fill) == (SONNET, OPUS)
+    assert switched.reason is SwitchReason.RETIRED
     at = [step.type for step in await fleet.loop.history(session_id)]
     last_request = max(i for i, kind in enumerate(at) if kind is StepType.MODEL_REQUEST)
     assert at.index(StepType.SWITCHED) < last_request, "switched before the loop's first call"
@@ -513,6 +522,49 @@ async def test_a_retired_model_switches_at_the_next_loop_with_a_switched_step(
     assert (await fleet.loop.managers.models.get_fill_set(fleet.owner, fresh)).fill_for(
         MAIN
     ) == OPUS
+
+
+async def test_a_kinds_ask_is_answered_by_its_roles_row_at_the_effort_a_fill_lists(
+    tmp_path: Path,
+) -> None:
+    ask = ModelAsk(role=MAIN, size=ModelSize.L, effort=Effort.XHIGH)
+    asking = ASSISTANT.model_copy(update={"name": "asking", "asks": (ask,)})
+    fleet = await fleet_over(tmp_path, kinds=(ASSISTANT, DELIVERY, asking))
+    sonnet = SONNET.model_copy(update={"efforts": (Effort.HIGH, Effort.XHIGH)})
+    await fleet.publish((MatrixRow(key=MatrixKey(role=MAIN), fills=(sonnet, SOL)), *CATCH_ALL[1:]))
+    session_id = await fleet.loop.start("asking")
+    fleet.loop.anthropic.add(reply(said("The total is 12.")))
+    assert await loop_once(fleet, session_id) is RunEnd.ENDED
+
+    fills = await fleet.loop.managers.models.get_fill_set(fleet.owner, session_id)
+    main, summarizer = fills.roles
+    assert served(main) == [(SONNET.name, Effort.XHIGH), (SOL.name, SOL.effort)], (
+        "the role's row, each fill at the effort asked where it lists it"
+    )
+    assert (main.ask, summarizer.ask) == (ask, None), "the ask kept beside its fill"
+    assert summarizer.fill == HAIKU, "a role asked nothing takes its row as it is"
+    assert [call.effort for call in fleet.loop.anthropic.calls] == [Effort.XHIGH]
+
+    # A switch at the start of a loop keeps the ask's effort.
+    opus = OPUS.model_copy(update={"efforts": (Effort.HIGH, Effort.XHIGH)})
+    await fleet.publish((MatrixRow(key=MatrixKey(role=MAIN), fills=(opus,)), *CATCH_ALL[1:]))
+    await fleet.matrix.matrix_operator.retire_model(fleet.admin, ModelRef.of(SONNET))
+    fleet.loop.anthropic.add(reply(said("The average is 3."), model=OPUS.model))
+    assert await loop_once(fleet, session_id, "And the average?") is RunEnd.ENDED
+    (switched,) = await switches(fleet, session_id)
+    assert switched.to_fill == opus.at(Effort.XHIGH)
+    assert fleet.loop.anthropic.calls[-1].effort is Effort.XHIGH
+
+    # A kind that asks nothing runs each fill at its own effort.
+    plain = await fleet.loop.start()
+    fleet.loop.anthropic.add(reply(said("The total is 12."), model=OPUS.model))
+    assert await loop_once(fleet, plain) is RunEnd.ENDED
+    assert fleet.loop.anthropic.calls[-1].effort is OPUS.effort
+
+
+def served(role: RoleFill) -> list[tuple[str, Effort | None]]:
+    """Each fill of a role, its fallbacks after it: the model and its effort."""
+    return [(f.name, f.effort) for f in (role.fill, *role.fallbacks)]
 
 
 async def test_a_version_naming_a_retired_model_is_never_published(tmp_path: Path) -> None:

@@ -14,6 +14,7 @@ from acme.integrations.model_providers import ModelProviderInterface
 from acme.integrations.model_providers.scripted import ModelProviderScriptedImpl
 from acme.integrations.model_providers.types import Effort, ProviderName
 from acme.om.agents.impl.loop import LoopOptions
+from acme.om.agents.types.kind import AgentKind
 from acme.om.base import new_id
 from acme.om.billing.types.account import FundingMode
 from acme.om.context import (
@@ -36,7 +37,7 @@ from acme.om.trust.impl.keys import KeyProbeTwinImpl
 from acme.om.trust.impl.placement import PlacementCloudImpl
 from acme.om.trust.root import TrustLayer, TrustManagers
 from acme.om.trust.types.identities import Executor, ExecutorKind
-from contracts.loops import Loop
+from contracts.loops import ASSISTANT, DELIVERY, Loop
 from contracts.money import Money, money_over
 
 SONNET = Fill(
@@ -169,10 +170,11 @@ async def fleet_over(
     loop_options: LoopOptions | None = None,
     storage: StorageInterface | None = None,
     owner: TenantContext | None = None,
+    kinds: tuple[AgentKind, ...] = (ASSISTANT, DELIVERY),
 ) -> Fleet:
     """`storage` None is the memory storage, and `owner` None a fresh
     tenant's owner, whose account opens on `funding`; a suite over Postgres
-    hands in both."""
+    hands in both. `kinds` go to the loop."""
     storage = storage or StorageMemoryImpl()
     keyed: dict[str, ModelProviderScriptedImpl] = {}
 
@@ -202,6 +204,7 @@ async def fleet_over(
         loop_options=loop_options,
         models_layer=layer.layer,
         tools_layer=trust.tools,
+        kinds=kinds,
     )
     trusted = trust.build(money.loop.managers)
     built = layer.build(money.loop.managers)

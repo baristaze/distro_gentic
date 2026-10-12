@@ -8,15 +8,20 @@ is one of the kinds of thing [Acme is made of](../../../../README.md).
 - **Model role**: a job a call names, never a model: the agent's own
   turns (`main`), the summary that keeps a long session readable
   (`summarizer`), or one a product adds, such as a title.
+- **Model size**: how much model a job needs, from XS to XL, never which
+  model.
+- **Ask**: what an agent kind asks of one of its model roles: a model
+  size, and how hard the model works.
 - **Fill**: what does a model role's job: a provider, a model, how hard it
-  works, how long an answer may be, the shape of the answer, how much it
-  reads at once, and what it offers, such as keeping no data or running
-  in one region.
+  works and the levels its model takes, how long an answer may be, the
+  shape of the answer, how much it reads at once, and what it offers,
+  such as keeping no data or running in one region.
 - **Fill set**: a session's fills, one per model role, with the fallbacks
   each declares, in order. It has versions: the first is the session's,
   and each switch makes the next.
-- **Resolver**: what picks a session's fills, from a table a product
-  sets, or a layer's own. The engine never picks a model itself.
+- **Resolver**: what picks a session's fills, from tables a product
+  sets, one by model role and one by model size, or a layer's own. The
+  engine never picks a model itself.
 - **Prices**: whether a model has a price of its own in the one source
   of prices, the budgets' list table. The resolver asks before it picks
   a model, so a model with no row is never picked.
@@ -24,7 +29,9 @@ is one of the kinds of thing [Acme is made of](../../../../README.md).
 ## What can happen
 
 - **Resolve.** A session's model roles get their fills once, within what
-  the session requires, and keep them.
+  the session requires, and keep them. A role its kind asks a size of
+  gets that size's fills, at the effort asked where the model takes it;
+  any other role gets its own row's.
 - **Renew.** At the start of each loop, a fill that is gone switches to
   the one that serves its role now. The table never retires a model; a
   layer's resolver may.
@@ -45,7 +52,11 @@ is one of the kinds of thing [Acme is made of](../../../../README.md).
 
 ## The rules
 
-- **A call names a model role, never a model.**
+- **A call names a model role, never a model.** A kind never names one
+  either: it asks a size.
+- **An ask never widens what a fill allows.** A fill runs at an asked
+  effort only when its model takes it, and the fill set keeps the ask
+  beside what it got.
 - **A switch is never silent.** Each one is a step in the history first,
   then a new version of the fill set. No version comes without its step,
   and none is rewritten.

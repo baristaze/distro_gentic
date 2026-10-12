@@ -7,6 +7,7 @@ one place it names, and a search of the code answers within its bound and
 inside the workspace alone; and a validation session is platform work on
 the queue, run on a fresh executor with no model call."""
 
+import hashlib
 import json
 from datetime import timedelta
 from pathlib import Path
@@ -49,6 +50,7 @@ from acme.infra.workspaces import (
     Workspace,
 )
 from acme.infra.workspaces.host import WorkspaceHostImpl
+from acme.integrations.model_providers.calls import ModelCall
 from acme.om import base
 from acme.om.agent_sessions.limits import Limits
 from acme.om.agent_sessions.types.agent_session import SessionStatus
@@ -99,6 +101,7 @@ from acme.om.platform_agents.kinds import (
     ENGINEER_SHARE,
     ENGINEER_V6,
     ENGINEER_V7,
+    PLANNER_KIND,
     PLATFORM_ASSISTANT_KIND,
     SHIPPED,
 )
@@ -468,6 +471,51 @@ async def test_analysis_the_planner_and_the_assistant_end_by_their_answer(
         assert run.outcome is LoopOutcome.SUCCEEDED, kind
         steps = await platform.history(session_id)
         assert answer in [step.as_text() for step in steps], kind
+
+
+RENDERED = {
+    (kinds.ENGINEER, 8): "e770e86cab582f5b35e92a2d43c08f99a64f9bbf70dd6c550244ba89ddf1c41c",
+    (kinds.ANALYSIS, 4): "c9a61f57d9a0a3b83956ac4ea13d9479812107a42b3531840121ee944c8f0ceb",
+    (kinds.PLANNER, 1): "6dee9c1af1944f29fc8cd2eae1ecdc105b8d76cd46ebc3c11cdba87cc5c06b85",
+    (
+        kinds.PLATFORM_ASSISTANT,
+        2,
+    ): "763da40ce8397d462e984d71769c53e04a1fbbeb5cf3201941cd4745ec504467",
+}
+"""Each shipped kind at the version a session starts on, and the digest of
+its request's first two layers: its system text and its tools. A kind
+version pins those bytes, the prefix its sessions share in the cache, so a
+change to either is a new version of the kind."""
+
+
+def layers_of(call: ModelCall) -> str:
+    """The digest of a request's system text and its tools."""
+    layers = {
+        "system": [block.text for block in call.system],
+        "tools": [tool.model_dump(mode="json") for tool in call.tools],
+    }
+    return hashlib.sha256(json.dumps(layers, sort_keys=True).encode()).hexdigest()
+
+
+async def test_each_shipped_kind_renders_its_versions_bytes_with_a_break_after_its_prompts(
+    evidenced: tuple[Platform, ScriptedExecutor, WorkProductMemoryImpl],
+) -> None:
+    platform, _, work = evidenced
+    project_id = await in_project(platform.storage.get_project_storage(), platform.owner.org_id)
+    for kind in (ENGINEER_KIND, ANALYSIS_KIND, PLANNER_KIND, PLATFORM_ASSISTANT_KIND):
+        before = len(platform.anthropic.calls)
+        if kind is ENGINEER_KIND:
+            session_id = await an_engineer(platform, work, project_id)
+        else:
+            session_id = await platform.start(kind.name)
+            await platform.say(session_id, "Go on.")
+        platform.anthropic.add(reply(said("Done.")))
+        await platform.managers.loop.run(platform.owner, session_id)
+        call = platform.anthropic.calls[before]
+        assert layers_of(call) == RENDERED[(kind.name, kind.version)], kind.name
+        prompts = [prompt for prompt in kind.prompts if prompt]
+        assert [block.text for block in call.system[: len(prompts)]] == prompts, kind.name
+        assert call.system_break == len(prompts), f"{kind.name} caches the end of its prompts"
 
 
 async def test_the_engineer_starts_two_sub_agents_and_wakes_on_each_report(

@@ -57,7 +57,7 @@ from acme.om.steps.types.header import (
     ParkedHeader,
     ParkReason,
 )
-from acme.om.steps.types.step import Actor, Origin, Step, StepType
+from acme.om.steps.types.step import Actor, Origin, Step, StepType, switches_standing
 
 EVERY_PARK = frozenset(ParkReason)
 
@@ -124,9 +124,10 @@ def after_step(state: Projection, step: Step) -> Projection:
         return state
     if isinstance(header, ParkedHeader):
         return replace(state, status=SessionStatus.PARKED, park=header.park)
-    if step.type is StepType.SNAPSHOTTED:
-        # Taken whenever its caller takes one, a loop's end included: it
-        # says nothing of a run.
+    if step.type is StepType.SNAPSHOTTED or switches_standing(step):
+        # Taken whenever its caller takes one, a loop's end included, or
+        # pinned by the session's maker through the inbox: it says nothing
+        # of a run.
         return state
     if isinstance(header, LoopEndedHeader):
         waiting = state.pending_input is not None and header.outcome not in STOPPED
@@ -226,7 +227,10 @@ def lineage(source: AgentSession | None, session: AgentSession) -> dict[str, Any
     came from another carries its mark, and holds private data where its
     source does, since its objective may carry it. A child also joins its
     parent's tree one level down and may call only the tools both its kind
-    and its parent may: no child holds more than its parent. A session
+    and its parent may, a deferred toolset's counted loaded or not: no
+    child holds more than its parent. `load_toolset` adds no power, so a
+    run's registry offers it to a child whose tools wait for a load,
+    whatever the cut kept. A session
     handed over roots a tree of its own. Whose authority it runs under, and who pays,
     is attribution's (`attribution.rules.inherited`)."""
     if source is None:
