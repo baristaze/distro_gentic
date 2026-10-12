@@ -13,13 +13,16 @@ calls, and holds its workspace warm for a while after a loop.
 
 ## What it holds
 
-- **Toolsets**: the platform's tools in eight groups a kind takes whole.
+- **Toolsets**: the platform's tools in ten groups a kind takes whole.
   `files` lists, reads, and searches a workspace; `code` changes its
   files and runs commands; `knowledge` searches and reads what the team
   knows; `delivery` validates, opens the pull request, and submits the
   result; `sub_agents` starts sub-agents and waits for them; `records`
-  is the assistant's readers; `handoff` hands work to an engineer; and
-  `artifacts` reads back a result kept outside the window. Every shipped
+  is the assistant's readers; `handoff` hands work to an engineer;
+  `artifacts` reads back a result kept outside the window; `review`
+  reads a pull request and its files at its head, notes findings, and
+  submits a review; and `operations` reads the tenant's hosts and its
+  budgets' spend. Every shipped
   kind is built from them, and names alone a tool whose toolset would
   give it more than it may call: analysis runs commands and edits
   nothing. A kind built from toolsets renders the same tool definitions
@@ -28,7 +31,8 @@ calls, and holds its workspace warm for a while after a loop.
   changes one of them
   ([ADR 2055](../../../../../docs/adr/2055-a-kind-is-built-from-toolsets-asks-a-size-and-holds-its-workspace-for-its-own-grace.md)).
 - **Model sizes**: every shipped kind asks L of its own turns and S of
-  its compaction, the sizes of the models those roles ran on before. The
+  its compaction, the sizes of the models those roles ran on before,
+  but the reviewer, which asks XL of its own turns. The
   [matrix](../matrix/README.md) answers an ask by its size's row, so a
   product's new kind gets a model with no edit to the matrix.
 - **A warm grace**: how long a kind's workspace stays held after a loop,
@@ -79,6 +83,24 @@ calls, and holds its workspace warm for a while after a loop.
   engineer. It has no workspace, repository, or shell. A session keeps
   the version of the assistant it started on, so the one before its
   readers is still shipped.
+- **The reviewer** reads one pull request through the forge's
+  integration: its files and their patches, the checks at its head, and
+  a file at its head. It notes each finding with a file, a line, and a
+  grade, and submits its review through its result tool, citing its
+  reads and findings. It has no workspace and holds no tool that writes
+  a file, runs code, or pushes; it comments on the pull request through
+  the forge's `comment`, which a person approves. It names a share, so a
+  lead may start it as a sub-agent on a pull request another kind opened
+  ([ADR 2058](../../../../../docs/adr/2058-a-reviewer-and-an-operator-ship-as-kinds-and-each-only-reads-what-it-judges.md)).
+- **The operator** reads the tenant's operations on its person's own
+  permissions: its sessions and what they wait on, its hosts and what
+  each offers, its budgets and what they spent, and its projects and
+  automations. Every tool it holds reads. A fix it finds leaves as an
+  objective a person hands to an engineer.
+- **A lead** is any kind whose toolsets include `sub_agents`: it starts
+  the others, such as an engineer on a change and the reviewer on its
+  pull request, and answers with their reports. It is no kind of its
+  own here.
 - **The assistant's readers**, each a tool that reads through the asking
   person's own context: `list_sessions`, by status, park reason, and
   project, newest first; `read_session`, where one stands, each call it
@@ -101,6 +123,17 @@ calls, and holds its workspace warm for a while after a loop.
 
 ## What can happen
 
+- **Review a pull request.** A person, an automation, or a lead starts
+  a reviewer with the pull request named in its objective. It reads the
+  pull request through an installation of the forge its tenant
+  connected, and a file at its head; one of another tenant's is refused
+  before anything is read. `note_finding` reads the file at that head
+  first and refuses a line past its end or a path outside the
+  repository. `submit_review` ends the loop once the gate accepts it.
+- **Ask the operator.** A person asks why something waits or runs slow.
+  It reads first, with the assistant's readers, `list_hosts`, and
+  `read_spend`, then says what it waits on, what clears it, who may
+  clear it, and where, and writes any engineering fix as an objective.
 - **Ask the assistant.** A person types in an assistant's session. It
   searches the corpus, reads live state, drafts, or hands work on, and
   answers. Asked why something waits, it reads first, then says what it
@@ -175,6 +208,18 @@ calls, and holds its workspace warm for a while after a loop.
   two tools of one name, is refused when the process starts, and so is a
   product's slot that names a tool the catalog does not hold, one past
   reading and handing on, or one the assistant holds already.
+- **The operator only reads, and the reviewer reads and comments.** The
+  operator's authority is delegated and the reviewer's steady; neither
+  has a workspace. Every tool the operator holds reads, and every tool
+  the reviewer holds reads but the forge's comment. A version of either
+  that reaches further, whoever declares it, is refused when the process
+  starts, over the whole catalog, the engine's tools included.
+- **A review counts only on its own reads and findings.** A reviewer's
+  result cites calls of its own session to read the pull request, read
+  its files, or note a finding. A success cites only calls that answered
+  without failing, a read of the pull request among them; a failure is
+  a result once it cites them. The gate reads them from the session's
+  history; a history past what it reads is refused.
 - **A reader reads what its person may.** Each runs under the context of
   the person who spoke last, read again for the call, so another
   tenant's record, or one marked deleted, is not found, as one that never
@@ -193,6 +238,8 @@ calls, and holds its workspace warm for a while after a loop.
   is read from the project's repository by the platform, and its
   protected paths come from its base, whatever the delivered commit
   holds there.
+- **A finding lands on a line that is there.** Its file is read at the
+  head it names before it is noted.
 - **A kind version pins its tool definitions.** A kind rebuilt from
   toolsets with the same tools keeps its version; one whose tools change
   is a new version.
@@ -217,7 +264,11 @@ held-workspace sweep reads each session's kind's warm grace from the slot
 (`ProductKinds.warm_grace`). The tools that read a manager take it late,
 once the root has built it; the engineer's pull request also takes the
 intake the process builds over those managers, and with none it opens
-nothing. The automations the assistant reads are built over the managers
+nothing. The reviewer's reads take that intake too, and the root's
+integrations, which answer the forge; the forge's `comment` joins the
+platform's tools unless the process wires its own. The root wraps the
+result gate it builds with the review's gate (`impl/gate.py`), which
+judges a reviewer's results and hands every other on unchanged. The automations the assistant reads are built over the managers
 too, by the session runner, and a process with none refuses those
 readers. The maintenance
 worker's `VALIDATION` handler runs a validation session

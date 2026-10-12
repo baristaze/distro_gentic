@@ -61,6 +61,7 @@ The shape of a kind is the four profiles in
 | `om/tests/unit/test_platform_agents.py` | the kind in `test_every_shipped_agent_is_a_profile_that_sets_its_powers`, and the cases of step 5 |
 | `om/tests/unit/test_matrix.py` (with `--roles`) | the case of step 5 for its roles |
 | `om/tests/contracts/matrix.py` (with `--roles`) | `CATCH_ALL` and the default roles of `publish` serve the kind's roles, since a role added to a shipped kind joins the required set of every version, and the unit and integration matrix suites refuse a default publish that lacks it |
+| `om/tests/contracts/matrix.py` (a model size no shipped kind asked before) | `SIZED` holds a row for the size, since a version is published only with a row for each size a shipped kind asks |
 | `om/src/<name>/om/platform_agents/README.md` | the kind, in What it holds |
 | `om/README.md`, `llms.txt` | the count and the list of the kinds the platform ships |
 
@@ -124,11 +125,13 @@ The shape of a kind is the four profiles in
    A `result_tool` kind names its result tool among its tools.
 4. The profile sets its powers: `isolation` is `WORKSPACE` or
    `NO_WORKSPACE`, and its `policy` is `allowing(...)` the classes it
-   needs and no more. A delegated kind with a workspace or a shell is
-   refused at boot by `refuse_reach` in `catalog.py` for the assistant;
-   a new delegated kind a person talks to is held the same way: add it
-   to `refuse_reach`, shape `PLATFORM_ASSISTANT`. Its prompt says what
-   it does and what it answers, never how policy treats it.
+   needs and no more. A kind that may only read, or read and hand on,
+   is held to it at boot by its reach: the classes it may make, its
+   authority, and no workspace, in `REACHES` in `rules.py`, which
+   `refuse_reach` in `catalog.py` checks for every version of it over
+   the whole catalog. A new kind a person talks to that acts on nothing
+   takes a reach of its own, shape `OPERATOR`. Its prompt says what it
+   does and what it answers, never how policy treats it.
 5. The tests hold, over `SHIPPED`, with the helpers of
    `om/tests/contracts/platform_agents.py` (`platform_over`,
    `Platform.start`, `calls`):

@@ -2,9 +2,9 @@
 
 What each thing in Acme is, what owns it, the states it moves through,
 and what moves it between them. It is written for the people who run
-their part of the platform, and the platform assistant explains from it.
-Each section names the assistant's reader that shows the thing live. A
-reader shows only what the asking person may read.
+their part of the platform, and the platform assistant and the operator
+explain from it. Each section names the reader that shows the thing
+live. A reader shows only what the asking person may read.
 
 ## The org and its people
 
@@ -122,11 +122,13 @@ of it.
 
 A **host pool** is a set of the org's own machines, inside its wall. A
 **host** joins a pool with an enrollment token an admin issued, and it
-is online while it calls in. A session **placed** in a pool runs there;
-with no host online it waits, and it never moves to the cloud unless a
-person moves it. A **workspace** lives on the host that prepared it, so
-the session runs there: while that host is offline, the session waits
-for it, even with other hosts of the pool online.
+is online while it calls in. It **offers** what it found it can do when
+it started: its operating system and shell, its capabilities, and the
+isolation it can give a workspace. A session **placed** in a pool runs
+there; with no host online it waits, and it never moves to the cloud
+unless a person moves it. A **workspace** lives on the host that
+prepared it, so the session runs there: while that host is offline, the
+session waits for it, even with other hosts of the pool online.
 
 A session of the cloud whose agent works in a VM runs on a **machine of
 the cloud pool**: a virtual machine of its own, which runs the host
@@ -135,10 +137,11 @@ machine starts; when it is kept by snapshots, each loop's end keeps the
 machine's whole disk, and the next loop waits while a machine starts
 from it.
 
-Reader: `read_wait` (the loop's item: queued or running, its lane, since
+Readers: `read_wait` (the loop's item: queued or running, its lane, since
 when, its attempts, and the org's loops running ahead of it; where the
 session runs, which of the pool's hosts are online, and the host that
-holds its workspace, whether it is online, and since when).
+holds its workspace, whether it is online, and since when); `list_hosts`
+(the org's pools, each host, whether it is online, and what it offers).
 
 ## Tools and who agrees to them
 
@@ -161,6 +164,9 @@ sessions, a person, a project, a team, or the whole org, over its life
 or per period. Every model call asks the **gate** first. When the gate
 refuses, the session parks on `budget` until the budget is raised or
 resets.
+
+Reader: `read_spend` (each budget, what it bounds, its amount and
+window, what the window spent so far, and what calls running now hold).
 
 ## Automations
 
