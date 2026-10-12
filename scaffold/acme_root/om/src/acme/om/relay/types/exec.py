@@ -74,8 +74,23 @@ class ListRequest(Platform):
     limit: int = Field(gt=0)
 
 
+class McpRequest(Platform):
+    """A call of a tool of an MCP server the host runs, by the name its
+    owner gives the server. The host lists the server's tools, calls this
+    one only when it lists it as `definition` holds it, the definition a
+    person reviewed, and answers the server's text. Its credential is the
+    host's own, never sent."""
+
+    operation: Literal[ExecOperation.MCP_CALL] = ExecOperation.MCP_CALL
+    server: str = Field(min_length=1, max_length=64)
+    tool: str = Field(min_length=1)
+    arguments: FrozenMapping = Field(default_factory=dict, validate_default=True)
+    definition: FrozenMapping
+
+
 ExecRequest = Annotated[
-    RunRequest | ReadRequest | WriteRequest | ListRequest, Field(discriminator="operation")
+    RunRequest | ReadRequest | WriteRequest | ListRequest | McpRequest,
+    Field(discriminator="operation"),
 ]
 """What one item does: the session's content, sealed at rest, opened for the
 host that holds the item and for nobody else."""

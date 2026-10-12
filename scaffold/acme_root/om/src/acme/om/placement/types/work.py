@@ -23,12 +23,14 @@ HostIsolation = Literal["vm", "container", "directory"]
 
 class ExecOperation(StrEnum):
     """The one thing an `exec` item does in its workspace: an operation of
-    the engine's transport."""
+    the engine's transport, or a call of a server the host runs."""
 
     RUN = "run"  # a command
     READ_FILE = "read_file"
     WRITE_FILE = "write_file"
     LIST_FILES = "list_files"
+    # A call of a tool of an MCP server the host runs, beside the workspace.
+    MCP_CALL = "mcp_call"
 
 
 class ExecPayload(Platform):

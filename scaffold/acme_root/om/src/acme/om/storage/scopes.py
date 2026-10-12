@@ -163,6 +163,8 @@ TABLE_SCOPES: dict[str, TableScope] = {
     "playbook_invocations": TableScope(ScopeKind.ORG),
     "knowledge_entries": TableScope(ScopeKind.ORG),
     "knowledge_recalls": TableScope(ScopeKind.ORG),
+    "connectors": TableScope(ScopeKind.ORG),
+    "session_connectors": TableScope(ScopeKind.ORG),
     "billing_accounts": TableScope(ScopeKind.ORG),
     "ledger_entries": TableScope(ScopeKind.ORG),
     "ledger_counts": TableScope(ScopeKind.ORG),

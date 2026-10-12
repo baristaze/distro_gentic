@@ -32,6 +32,8 @@ from acme.om.budgets.storage.impl.postgres import (
 )
 from acme.om.cloud_pool.storage import CloudPoolStorageInterface
 from acme.om.cloud_pool.storage.impl.postgres import CloudPoolStoragePostgresImpl
+from acme.om.connectors.storage import ConnectorStorageInterface
+from acme.om.connectors.storage.impl.postgres import ConnectorStoragePostgresImpl
 from acme.om.events.storage import EventStorageInterface
 from acme.om.events.storage.impl.postgres import EventStoragePostgresImpl
 from acme.om.evidence.storage import EvidenceStorageInterface
@@ -248,6 +250,7 @@ class StoragePostgresImpl(StorageInterface):
         self._automation = AutomationStoragePostgresImpl(sessions)
         self._playbook = PlaybookStoragePostgresImpl(sessions)
         self._knowledge = KnowledgeStoragePostgresImpl(sessions)
+        self._connector = ConnectorStoragePostgresImpl(sessions)
         self._notification = NotificationStoragePostgresImpl(sessions)
         self._platform_agents = PlatformAgentsStoragePostgresImpl(sessions)
         self._benchmarks = BenchmarkStoragePostgresImpl(sessions)
@@ -348,6 +351,9 @@ class StoragePostgresImpl(StorageInterface):
 
     def get_knowledge_storage(self) -> KnowledgeStorageInterface:
         return self._knowledge
+
+    def get_connector_storage(self) -> ConnectorStorageInterface:
+        return self._connector
 
     def get_notification_storage(self) -> NotificationStorageInterface:
         return self._notification

@@ -10,6 +10,7 @@ from acme.om.benchmarks.storage import BenchmarkStorageInterface
 from acme.om.billing.storage import AccountStorageInterface, MoneyLedgerStorageInterface
 from acme.om.budgets.storage import BudgetStorageInterface, LedgerStorageInterface
 from acme.om.cloud_pool.storage import CloudPoolStorageInterface
+from acme.om.connectors.storage import ConnectorStorageInterface
 from acme.om.events.storage import EventStorageInterface
 from acme.om.evidence.storage import EvidenceStorageInterface
 from acme.om.hosts.storage import HostsStorageInterface
@@ -135,6 +136,9 @@ class StorageInterface(ABC):
 
     @abstractmethod
     def get_knowledge_storage(self) -> KnowledgeStorageInterface: ...
+
+    @abstractmethod
+    def get_connector_storage(self) -> ConnectorStorageInterface: ...
 
     @abstractmethod
     def get_platform_agents_storage(self) -> PlatformAgentsStorageInterface: ...

@@ -361,6 +361,7 @@ arrive twice, so the second copy gets the first one's answer.
 - [Playbooks](src/acme/om/playbooks/README.md)
 - [Knowledge](src/acme/om/knowledge/README.md)
 - [Levers](src/acme/om/levers/README.md)
+- [Connectors](src/acme/om/connectors/README.md)
 - [Notifications](src/acme/om/notifications/README.md)
 - [The platform's agents](src/acme/om/platform_agents/README.md)
 - [Workspaces](src/acme/om/workspaces/README.md)

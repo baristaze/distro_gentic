@@ -19,6 +19,8 @@ from acme.om.budgets.storage import BudgetStorageInterface, LedgerStorageInterfa
 from acme.om.budgets.storage.impl.memory import BudgetStorageMemoryImpl, LedgerStorageMemoryImpl
 from acme.om.cloud_pool.storage import CloudPoolStorageInterface
 from acme.om.cloud_pool.storage.impl.memory import CloudPoolStorageMemoryImpl
+from acme.om.connectors.storage import ConnectorStorageInterface
+from acme.om.connectors.storage.impl.memory import ConnectorStorageMemoryImpl
 from acme.om.events.storage import EventStorageInterface
 from acme.om.events.storage.impl.memory import EventStorageMemoryImpl
 from acme.om.evidence.storage import EvidenceStorageInterface
@@ -117,6 +119,7 @@ class StorageMemoryImpl(StorageInterface):
         self._automation = AutomationStorageMemoryImpl(self._outbox)
         self._playbook = PlaybookStorageMemoryImpl(self._outbox)
         self._knowledge = KnowledgeStorageMemoryImpl(self._outbox)
+        self._connector = ConnectorStorageMemoryImpl(self._outbox)
         self._notification = NotificationStorageMemoryImpl()
         self._platform_agents = PlatformAgentsStorageMemoryImpl(self._outbox)
         self._benchmarks = BenchmarkStorageMemoryImpl()
@@ -217,6 +220,9 @@ class StorageMemoryImpl(StorageInterface):
 
     def get_knowledge_storage(self) -> KnowledgeStorageInterface:
         return self._knowledge
+
+    def get_connector_storage(self) -> ConnectorStorageInterface:
+        return self._connector
 
     def get_notification_storage(self) -> NotificationStorageInterface:
         return self._notification
